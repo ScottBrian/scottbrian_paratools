@@ -7,7 +7,7 @@ ThreadComm
 You can use the ThreadComm class to set up a two way communication link
 between two threads. This allows one thread to send and receive messages
 with another thread. The messages can be anything, such as strings, numbers,
-lists, or any other type of object. Yu can send messages via the send_msg
+lists, or any other type of object. You can send messages via the send_msg
 method and receive messages via the recv_msg method. You can also send a
 message and wait for a reply with the send_rcv_msg.
 
@@ -61,9 +61,6 @@ from typing import (Any, Final, Optional, Type, TYPE_CHECKING, Union)
 
 import logging
 
-logger = logging.getLogger(__name__)
-logging.getLogger(__name__).addHandler(logging.NullHandler())
-
 
 ###############################################################################
 # ThreadComm class exceptions
@@ -107,12 +104,15 @@ class ThreadComm:
             self.max_msgs = max_msgs
         else:
             self.max_msgs = ThreadComm.MAX_MSGS_DEFAULT
-        self.main_send = queue.Queue(maxsize=self.max_msgs)
-        self.main_recv = queue.Queue(maxsize=self.max_msgs)
+        self.main_send: queue.Queue[Any] = queue.Queue(maxsize=self.max_msgs)
+        self.main_recv: queue.Queue[Any] = queue.Queue(maxsize=self.max_msgs)
 
         self.main_thread_id = threading.get_ident()
         self.child_thread_id: Any = 0
-        logger.info(f'ThreadComm created by thread ID {self.main_thread_id}')
+        self.logger = logging.getLogger(__name__)
+        self.debug_logging_enabled = self.logger.isEnabledFor(logging.DEBUG)
+        self.logger.info('ThreadComm created by thread ID '
+                         f'{self.main_thread_id}')
 
     ###########################################################################
     # repr
@@ -221,15 +221,15 @@ class ThreadComm:
         """
         try:
             if self.main_thread_id == threading.get_ident():  # if main
-                logger.info(f'ThreadComm main {self.main_thread_id} sending '
+                self.logger.info(f'ThreadComm main {self.main_thread_id} sending '
                             f'msg to child {self.child_thread_id}')
                 self.main_send.put(msg, timeout=timeout)  # send to child
             else:  # else not main
-                logger.info(f'ThreadComm child {self.child_thread_id} '
+                self.logger.info(f'ThreadComm child {self.child_thread_id} '
                             f'sending msg to main {self.main_thread_id}')
                 self.main_recv.put(msg, timeout=timeout)  # send to main
         except queue.Full:
-            logger.error('Raise ThreadCommSendFailed')
+            self.logger.error('Raise ThreadCommSendFailed')
             raise ThreadCommSendFailed('send method unable to send the '
                                        'message because the send queue '
                                        'is full with the maximum '
@@ -255,15 +255,15 @@ class ThreadComm:
         """
         try:
             if self.main_thread_id == threading.get_ident():  # if main
-                logger.info(f'ThreadComm main {self.main_thread_id} receiving '
+                self.logger.info(f'ThreadComm main {self.main_thread_id} receiving '
                             f'msg from child {self.child_thread_id}')
                 return self.main_recv.get(timeout=timeout)  # recv from child
             else:  # else child
-                logger.info(f'ThreadComm child {self.child_thread_id} '
+                self.logger.info(f'ThreadComm child {self.child_thread_id} '
                             f'receiving msg from main {self.main_thread_id}')
                 return self.main_send.get(timeout=timeout)  # recv from main
         except queue.Empty:
-            logger.error('Raise ThreadCommRecvTimedOut')
+            self.logger.error('Raise ThreadCommRecvTimedOut')
             raise ThreadCommRecvTimedOut('recv processing timed out '
                                          'waiting for a message to '
                                          'arrive.')

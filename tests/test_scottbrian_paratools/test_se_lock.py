@@ -1362,7 +1362,7 @@ class RequestValidator:
         print('self.mean_interval:', self.mean_interval)
         assert self.max_interval <= self.mean_interval
 
-    def validate_sync_ec(self):
+    def validate_sync_ec(self) -> None:
         num_short_early = 0
         num_short_early_1pct = 0
         num_short_early_5pct = 0
@@ -1467,7 +1467,7 @@ class RequestValidator:
 
         assert self.target_interval <= self.mean_interval
 
-    def validate_sync_lb(self):
+    def validate_sync_lb(self) -> None:
         amt_added_per_send = self.target_interval - self.send_interval
         num_sends_before_trigger = (math.floor(self.lb_threshold /
                                                amt_added_per_send))
@@ -1763,7 +1763,7 @@ class RequestValidator:
         assert requests == self.requests
         self.idx = idx
 
-    def callback3(self, *, idx: int):
+    def callback3(self, *, idx: int) -> None:
         """Queue the callback for request0.
 
         Args:

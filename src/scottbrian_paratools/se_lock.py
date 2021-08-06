@@ -45,7 +45,7 @@ import threading
 # from datetime import timedelta
 # from typing import (Any, Callable, cast, Dict, Final, NamedTuple, Optional,
 #                     Tuple, Type, TYPE_CHECKING, TypeVar, Union)
-from typing import (Final, NamedTuple, Type, TYPE_CHECKING)
+from typing import (Any, Final, List, NamedTuple, Type, TYPE_CHECKING)
 # import functools
 # from wrapt.decorators import decorator  # type: ignore
 # from scottbrian_utils.diag_msg import diag_msg
@@ -112,7 +112,7 @@ class SELock:
         #######################################################################
         self.se_lock_lock = threading.Lock()
         self.owner_count = 0  # 0 is free, >0 is share count, -1 is exclusive
-        self.wait_q = []
+        self.wait_q: List[SELock.LockWaiter] = []
 
     ###########################################################################
     # len
@@ -240,7 +240,7 @@ class SELock:
 ###############################################################################
 class SELockShare:
     """Class for SELockShared."""
-    def __init__(self, se_lock) -> None:
+    def __init__(self, se_lock: SELock) -> None:
         """Initialize shared lock context manager.
 
         Args:
@@ -253,7 +253,7 @@ class SELockShare:
         """Context manager enter method."""
         self.se_lock.obtain(SELock.SHARE)
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Context manager exit method.
 
         Args:
@@ -271,7 +271,7 @@ class SELockShare:
 class SELockExcl:
     """Class for SELockExcl."""
 
-    def __init__(self, se_lock) -> None:
+    def __init__(self, se_lock: SELock) -> None:
         """Initialize exclusive lock context manager.
 
         Args:
@@ -284,7 +284,7 @@ class SELockExcl:
         """Context manager enter method."""
         self.se_lock.obtain(SELock.EXCL)
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Context manager exit method.
 
         Args:

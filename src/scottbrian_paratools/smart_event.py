@@ -117,7 +117,7 @@ class ThreadAlreadyRegistered(SmartEventError):
     pass
 
 
-class BothAlphaBetaNotRegistered(SmartEventError):
+class NotPaired(SmartEventError):
     """SmartEvent exception for alpha or beta thread not registered."""
     pass
 
@@ -174,8 +174,8 @@ class SmartEvent:
     class ThreadEvent:
         """ThreadEvent class contains thread, events, and flags."""
         name: str
-        thread: threading.Thread = None
-        event: threading.Event = None
+        thread: threading.Thread = None  # type: ignore
+        event: threading.Event = None  # type: ignore
         code: Any = None
         waiting: bool = False
         sync_wait: bool = False
@@ -834,9 +834,9 @@ class SmartEvent:
     # pause_until
     ###########################################################################
     def pause_until(self,
-                   cond: WUCond,
-                   timeout: Optional[Union[int, float]] = None
-                   ) -> None:
+                    cond: WUCond,
+                    timeout: Optional[Union[int, float]] = None
+                    ) -> None:
         """Wait until a specific condition is met.
 
         Args:
@@ -877,11 +877,25 @@ class SmartEvent:
         # Handle ThreadsReady
         #######################################################################
         if cond == WUCond.ThreadsReady:
+            # In the following while, the check for
+            # self._both_threads_registered must be performed first to
+            # avoid an error trying to call is_alive on a NoneType
+            # object because the thread object has not yet been stored into
+            # self.alpha or self.beta
             while not (self._both_threads_registered
                        and self.alpha.thread.is_alive()
                        and self.beta.thread.is_alive()):
                 if timeout and (timeout < (time.time() - start_time)):
-                    self.logger.debug('raising  WaitUntilTimeout')
+                    if self.beta.thread is not None:
+                        alive = self.beta.thread.is_alive()
+                    else:
+                        alive = 'not initialized'
+                    self.logger.debug('raising  WaitUntilTimeout for '
+                                      '_both_threads_registered = '
+                                      f'{self._both_threads_registered}, '
+                                      'alpha.thread.is_alive() = '
+                                      f'{self.alpha.thread.is_alive()}, '
+                                      f'beta.thread.is_alive() = {alive}')
                     raise WaitUntilTimeout(
                         'The pause_until method timed out. '
                         f'Call sequence: {get_formatted_call_sequence()}')
@@ -985,7 +999,7 @@ class SmartEvent:
         """Get the current and remote ThreadEvent objects.
 
         Raises:
-            BothAlphaBetaNotRegistered: Both threads must be registered before
+            NotPaired: Both threads must be registered before
                                           any SmartEvent services can be
                                           called.
             DetectedOpFromForeignThread: Any SmartEvent services must be
@@ -999,8 +1013,8 @@ class SmartEvent:
 
         """
         if not self._both_threads_registered:
-            self.logger.debug('raising BothAlphaBetaNotRegistered')
-            raise BothAlphaBetaNotRegistered(
+            self.logger.debug('raising NotPaired')
+            raise NotPaired(
                 'Both threads must be registered before any '
                 'SmartEvent services can be called. '
                 f'Call sequence: {get_formatted_call_sequence(1,2)}')
