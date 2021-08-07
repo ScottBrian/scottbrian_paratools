@@ -258,6 +258,7 @@ class SmartEventDesc:
     name: str
     thread: threading.Thread = None  # type: ignore
     paired_with: str = ''
+    residual_with: str = ''
 
 def verify_registry(descs: List[SmartEventDesc]) -> None:
     """Verify that SmartEvent.registry is correct.
@@ -274,6 +275,10 @@ def verify_registry(descs: List[SmartEventDesc]) -> None:
         if desc.paired_with:
             assert (SmartEvent.registry[desc.paired_with]
                     is desc.smart_event.remote_smart_event)
+        elif desc.residual_with:
+            assert (desc.smart_event.remote_smart_event.name
+                    == desc.residual_with)
+            assert not desc.smart_event.remote_smart_event.thread.is_alive()
         else:
             assert desc.smart_event.remote_smart_event is None
 
@@ -310,19 +315,48 @@ def verify_smart_event_init(s_event_desc: SmartEventDesc) -> None:
 ###############################################################################
 # outer_f1
 ###############################################################################
-def outer_f1() -> None:
-    """Outer function to test SmartEvent."""
+def outer_f1(cmds: Any,
+             alpha_smart_event: SmartEvent,
+             alpha_thread: threading.Thread,
+             beta_smart_event: List[Union[int, SmartEvent]]
+             ) -> None:
+    """Outer function to test SmartEvent.
+
+    Args:
+        cmds: Cmds object to tell alpha when to go
+        alpha_smart_event: alpha SmartEvent to use for verification
+        alpha_thread: alpha thread to use for verification
+        beta_smart_event: used to tell alpha the beta SmartEvent
+
+    """
     logger.debug('outer_f1 entered')
     s_event = SmartEvent(name='beta')
-    desc = SmartEventDesc(smart_event=s_event,
-                          name='beta',
-                          thread=threading.current_thread(),
-                          paired_with='')
-    verify_registry([desc])
+
+    beta_smart_event[0] = s_event
+
+    # tell alpha OK to verify (i.e., beta_smart_event set with s_event)
+    cmds.queue_cmd('alpha', 'go')
+
+    alpha_desc = SmartEventDesc(smart_event=alpha_smart_event,
+                                name='alpha',
+                                thread=alpha_thread,
+                                paired_with='')
+
+    beta_desc = SmartEventDesc(smart_event=s_event,
+                               name='beta',
+                               thread=threading.current_thread(),
+                               paired_with='')
+    assert len(SmartEvent.registry) == 2
+    verify_registry([alpha_desc, beta_desc])
+
+
 
     s_event.pair_with(remote_name='alpha')
-    desc.paired_with = 'alpha'
-    verify_registry([desc])
+
+    alpha_desc.paired_with = 'beta'
+    beta_desc.paired_with = 'alpha'
+    assert len(SmartEvent.registry) == 2
+    verify_registry([alpha_desc, beta_desc])
 
     assert s_event.sync(log_msg='outer beta sync point 1')
     assert s_event.wait(log_msg='outer f1 wait 12')
@@ -338,25 +372,60 @@ def outer_f1() -> None:
 ###############################################################################
 class OuterThreadApp(threading.Thread):
     """Outer thread app for test."""
-    def __init__(self):
-        """Initialize the object."""
+    def __init__(self,
+                 cmds: Any,
+                 alpha_smart_event: SmartEvent,
+                 alpha_thread: threading.Thread,
+                 beta_smart_event: List[Union[int, SmartEvent]]):
+        """Initialize the object.
+
+        Args:
+            cmds: Cmds object to tell alpha when to go
+            alpha_smart_event: alpha SmartEvent to use for verification
+            alpha_thread: alpha thread to use for verification
+            beta_smart_event: used to tell alpha the beta SmartEvent
+
+        """
         super().__init__()
         self.s_event = SmartEvent(name='beta')
-        desc = SmartEventDesc(smart_event=self.s_event,
-                              name='beta',
-                              thread=self,
-                              paired_with='')
-        verify_registry([desc])
+        self.cmds = cmds
+        self.alpha_s_event = alpha_smart_event
+        self.alpha_thread = alpha_thread
+        beta_smart_event[0] = self.s_event
+
+        alpha_desc = SmartEventDesc(smart_event=self.alpha_s_event,
+                                    name='alpha',
+                                    thread=self.alpha_thread,
+                                    paired_with='')
+
+        beta_desc = SmartEventDesc(smart_event=self.s_event,
+                                   name='beta',
+                                   thread=self,
+                                   paired_with='')
+        assert len(SmartEvent.registry) == 2
+        verify_registry([alpha_desc, beta_desc])
 
     def run(self):
         """Run the test."""
         print('beta run started')
+
+        alpha_desc = SmartEventDesc(smart_event=self.alpha_s_event,
+                                    name='alpha',
+                                    thread=self.alpha_thread,
+                                    paired_with='')
+        beta_desc = SmartEventDesc(smart_event=self.s_event,
+                                   name='beta',
+                                   thread=threading.current_thread(),
+                                   paired_with='')
+        assert len(SmartEvent.registry) == 2
+        verify_registry([alpha_desc, beta_desc])
+
         self.s_event.pair_with(remote_name='alpha')
-        desc = SmartEventDesc(smart_event=self.s_event,
-                              name='beta',
-                              thread=threading.current_thread(),
-                              paired_with='alpha')
-        verify_registry([desc])
+
+        alpha_desc.paired_with = 'beta'
+        beta_desc.paired_with = 'alpha'
+        assert len(SmartEvent.registry) == 2
+        verify_registry([alpha_desc, beta_desc])
 
         assert self.s_event.sync(log_msg='outer beta sync point 1')
         assert self.s_event.wait(log_msg='outer f1 wait 12')
@@ -376,11 +445,11 @@ class OuterThreadEventApp(threading.Thread, SmartEvent):
         """Initialize the object."""
         threading.Thread.__init__(self)
         SmartEvent.__init__(self, name='beta')
-        desc = SmartEventDesc(smart_event=self,
+        beta_desc = SmartEventDesc(smart_event=self,
                               name='beta',
                               thread=self,
                               paired_with='')
-        verify_registry([desc])
+        verify_registry([beta_desc])
 
         # the following will fail with timeout because run has not yet
         # been started
@@ -391,11 +460,11 @@ class OuterThreadEventApp(threading.Thread, SmartEvent):
         """Run the test."""
         print('beta run started')
         self.pair_with(remote_name='alpha')
-        desc = SmartEventDesc(smart_event=self,
+        beta_desc = SmartEventDesc(smart_event=self,
                               name='beta',
                               thread=threading.current_thread(),
                               paired_with='alpha')
-        verify_registry([desc])
+        verify_registry([beta_desc])
 
         assert self.sync(log_msg='outer beta sync point 1')
         assert self.wait(log_msg='outer f1 wait 12')
@@ -457,11 +526,11 @@ class TestSmartEventBasic:
         smart_event = SmartEvent(name='alpha')
 
         assert len(SmartEvent.registry) == 1
-        desc1 = SmartEventDesc(smart_event=smart_event,
-                               name='alpha',
-                               thread=threading.current_thread(),
-                               paired_with='')
-        verify_registry([desc1])
+        alpha_desc = SmartEventDesc(smart_event=smart_event,
+                                    name='alpha',
+                                    thread=threading.current_thread(),
+                                    paired_with='')
+        verify_registry([alpha_desc])
 
         # not OK to instantiate a new smart_event with same name
         with pytest.raises(NameAlreadyInUse):
@@ -491,7 +560,7 @@ class TestSmartEventBasic:
         # make sure everything still the same
         assert len(SmartEvent.registry) == 1
 
-        verify_registry([desc1])
+        verify_registry([alpha_desc])
 
     ###########################################################################
     # test_smart_event_pairing_with_errors
@@ -506,17 +575,19 @@ class TestSmartEventBasic:
             """
             logger.debug(f'{name} f1 entered')
             s_event = SmartEvent(name=name)
+            beta_smart_events[0] = s_event
+            cmds.queue_cmd('alpha', 'go')
 
             assert len(SmartEvent.registry) == 2
-            desca = SmartEventDesc(smart_event=smart_event,
-                                   name='alpha',
-                                   thread=alpha_t,
-                                   paired_with='')
-            descb = SmartEventDesc(smart_event=s_event,
-                                   name=name,
-                                   thread=threading.current_thread(),
-                                   paired_with='')
-            verify_registry([desca, descb])
+            alpha_desc_f1 = SmartEventDesc(smart_event=smart_event,
+                                           name='alpha',
+                                           thread=alpha_t,
+                                           paired_with='')
+            beta_desc_f1 = SmartEventDesc(smart_event=s_event,
+                                          name=name,
+                                          thread=threading.current_thread(),
+                                          paired_with='')
+            verify_registry([alpha_desc_f1, beta_desc_f1])
 
             # not OK to pair with self
             with pytest.raises(PairWithSelfNotAllowed):
@@ -525,9 +596,9 @@ class TestSmartEventBasic:
             s_event.pair_with(remote_name='alpha')
 
             assert len(SmartEvent.registry) == 2
-            desca.paired_with = name
-            descb.paired_with = 'alpha'
-            verify_registry([desca, descb])
+            alpha_desc_f1.paired_with = name
+            beta_desc_f1.paired_with = 'alpha'
+            verify_registry([alpha_desc_f1, beta_desc_f1])
 
             # not OK to pair with remote a second time
             with pytest.raises(AlreadyPairedWithRemote):
@@ -537,17 +608,19 @@ class TestSmartEventBasic:
 
             logger.debug(f'{name} f1 exiting')
 
+        cmds = Cmds()
+        beta_smart_events: List[Union[int, SmartEvent]] = [0]
         alpha_t = threading.current_thread()
         beta_t = threading.Thread(target=f1, arg=('beta',))
 
         smart_event = SmartEvent(name='alpha')
 
         assert len(SmartEvent.registry) == 1
-        desc1 = SmartEventDesc(smart_event=smart_event,
-                               name='alpha',
-                               thread=threading.current_thread(),
-                               paired_with='')
-        verify_registry([desc1])
+        alpha_desc = SmartEventDesc(smart_event=smart_event,
+                                    name='alpha',
+                                    thread=threading.current_thread(),
+                                    paired_with='')
+        verify_registry([alpha_desc])
 
         beta_t.start()
 
@@ -555,15 +628,21 @@ class TestSmartEventBasic:
         with pytest.raises(PairWithSelfNotAllowed):
             smart_event.pair_with(remote_name='alpha')
 
+        _ = cmds.get_cmd('alpha')
+
+        assert len(SmartEvent.registry) == 2
+        beta_desc = SmartEventDesc(smart_event=beta_smart_events[0],
+                                   name='beta',
+                                   thread=beta_t,
+                                   paired_with='')
+        verify_registry([alpha_desc, beta_desc])
+
         smart_event.pair_with(remote_name='beta')
 
         assert len(SmartEvent.registry) == 2
-        desc1.paired_with = 'beta'
-        desc2 = SmartEventDesc(smart_event=smart_event.remote_smart_event,
-                               name='beta',
-                               thread=beta_t,
-                               paired_with='alpha')
-        verify_registry([desc1, desc2])
+        alpha_desc.paired_with = 'beta'
+        beta_desc.paired_with = 'alpha'
+        verify_registry([alpha_desc, beta_desc])
 
         # not OK to pair with remote a second time
         with pytest.raises(AlreadyPairedWithRemote):
@@ -577,7 +656,7 @@ class TestSmartEventBasic:
         # so everything will still show paired, even both alpha and beta
         # SmartEvents. Alpha SmartEvent will detect that beta is no longer
         # alive if a function is attempted.
-        verify_registry([desc1, desc2])
+        verify_registry([alpha_desc, beta_desc])
 
         #######################################################################
         # second case - f1 with same name beta
@@ -585,15 +664,25 @@ class TestSmartEventBasic:
         beta_t2 = threading.Thread(target=f1, arg=('beta',))
         beta_t2.start()
 
-        smart_event.pair_with(remote_name='beta')
-
-        desc2 = SmartEventDesc(smart_event=smart_event.remote_smart_event,
-                               name='beta',
-                               thread=beta_t2,
-                               paired_with='alpha')
+        _ = cmds.get_cmd('alpha')
 
         assert len(SmartEvent.registry) == 2
-        verify_registry([desc1, desc2])
+        alpha_desc.paired_with = ''
+        alpha_desc.residual_with = 'beta'
+        beta_desc = SmartEventDesc(smart_event=beta_smart_events[0],
+                                   name='beta',
+                                   thread=beta_t2,
+                                   paired_with='')
+        verify_registry([alpha_desc, beta_desc])
+
+        smart_event.pair_with(remote_name='beta')
+
+        alpha_desc.paired_with = 'beta'
+        alpha_desc.residual_with = ''
+        beta_desc.paired_with = 'alpha'
+
+        assert len(SmartEvent.registry) == 2
+        verify_registry([alpha_desc, beta_desc])
 
         smart_event.sync(log_msg='alpha sync point 1 again')
 
@@ -603,7 +692,7 @@ class TestSmartEventBasic:
         # so everything will still show paired, even both alpha and beta
         # SmartEvents. Alpha SmartEvent will detect that beta is no longer
         # alive if a function is attempted.
-        verify_registry([desc1, desc2])
+        verify_registry([alpha_desc, beta_desc])
 
         #######################################################################
         # third case, use different name for f1. Should clean up old beta
@@ -612,17 +701,25 @@ class TestSmartEventBasic:
         beta_t3 = threading.Thread(target=f1, arg=('charlie',))
         beta_t3.start()
 
+        _ = cmds.get_cmd('alpha')
+
+        assert len(SmartEvent.registry) == 2
+        alpha_desc.paired_with = ''
+        alpha_desc.residual_with = 'beta'
+        beta_desc = SmartEventDesc(smart_event=beta_smart_events[0],
+                                   name='charlie',
+                                   thread=beta_t3,
+                                   paired_with='')
+        verify_registry([alpha_desc, beta_desc])
         smart_event.pair_with(remote_name='charlie')
 
-        desc2 = SmartEventDesc(smart_event=smart_event.remote_smart_event,
-                               name='charlie',
-                               thread=beta_t3,
-                               paired_with='alpha')
+        beta_desc.paired_with = 'alpha'
 
         assert len(SmartEvent.registry) == 2
         assert 'beta' not in SmartEvent.registry.keys()
-        desc1.paired_with = 'charlie'
-        verify_registry([desc1, desc2])
+        alpha_desc.paired_with = 'charlie'
+        alpha_desc.residual_with = ''
+        verify_registry([alpha_desc, beta_desc])
 
         smart_event.sync(log_msg='alpha sync point 1 again')
 
@@ -632,7 +729,7 @@ class TestSmartEventBasic:
         # so everything will still show paired, even both alpha and charlie
         # SmartEvents. Alpha SmartEvent will detect that charlie is no longer
         # alive if a function is attempted.
-        verify_registry([desc1, desc2])
+        verify_registry([alpha_desc, beta_desc])
 
     ###########################################################################
     # test_smart_event_pairing_with_multiple_threads
@@ -649,16 +746,16 @@ class TestSmartEventBasic:
             s_event = SmartEvent(name=name)
 
             assert len(SmartEvent.registry) == 2
-            desca = SmartEventDesc(smart_event=smart_event,
-                                   name='alpha',
-                                   thread=alpha_t,
-                                   paired_with='')
-            descb = SmartEventDesc(smart_event=s_event,
-                                   name=name,
-                                   thread=threading.current_thread(),
-                                   paied_with='')
+            alpha_desc_f1 = SmartEventDesc(smart_event=smart_event,
+                                           name='alpha',
+                                           thread=alpha_t,
+                                           paired_with='')
+            beta_desc_f1 = SmartEventDesc(smart_event=s_event,
+                                          name=name,
+                                          thread=threading.current_thread(),
+                                          paired_with='')
             
-            verify_registry([desca, descb])
+            verify_registry([alpha_desc_f1, beta_desc_f1])
 
             # not OK to pair with self
             with pytest.raises(PairWithSelfNotAllowed):
@@ -667,9 +764,9 @@ class TestSmartEventBasic:
             s_event.pair_with(remote_name='alpha')
 
             assert len(SmartEvent.registry) == 2
-            desca.paired_with = name
-            descb.paired_with = 'alpha'
-            verify_registry([desca, descb])
+            alpha_desc_f1.paired_with = name
+            beta_desc_f1.paired_with = 'alpha'
+            verify_registry([alpha_desc_f1, beta_desc_f1])
 
             # not OK to pair with remote a second time
             with pytest.raises(AlreadyPairedWithRemote):
@@ -689,23 +786,26 @@ class TestSmartEventBasic:
             s_event = SmartEvent(name=name)
 
             assert len(SmartEvent.registry) == 4
-            desca1 = SmartEventDesc(smart_event=smart_event,
-                                    name='alpha',
-                                    thread=alpha_t,
-                                    paired_with='beta')
-            desca2 = SmartEventDesc(smart_event=smart_event2,
-                                    name='alpha2',
-                                    thread=alpha_t,
-                                    paired_with='')
-            descb1 = SmartEventDesc(smart_event=smart_event.remote_smart_event,
-                                    name='beta',
-                                    thread=beta_t,
-                                    paired_with='alpha')
-            descb2 = SmartEventDesc(smart_event=s_event,
-                                    name=name,
-                                    thread=threading.current_thread(),
-                                    paired_with = '')
-            verify_registry([desca1, desca2, descb1, descb2])
+            alpha_desc_f2 = SmartEventDesc(smart_event=smart_event,
+                                           name='alpha',
+                                           thread=alpha_t,
+                                           paired_with='beta')
+            alpha2_desc_f2 = SmartEventDesc(smart_event=smart_event2,
+                                            name='alpha2',
+                                            thread=alpha_t,
+                                            paired_with='')
+            beta_desc_f2 = SmartEventDesc(
+                smart_event=smart_event.remote_smart_event,
+                name='beta',
+                thread=beta_t,
+                paired_with='alpha')
+            charlie_desc_f2 = SmartEventDesc(
+                smart_event=s_event,
+                name=name,
+                thread=threading.current_thread(),
+                paired_with='')
+            verify_registry([alpha_desc_f2, alpha2_desc_f2,
+                             beta_desc_f2, charlie_desc_f2])
 
             # not OK to pair with self
             with pytest.raises(PairWithSelfNotAllowed):
@@ -717,9 +817,10 @@ class TestSmartEventBasic:
             s_event.pair_with(remote_name='alpha2')
 
             assert len(SmartEvent.registry) == 4
-            desca2.paired_with = name
-            descb2.paired_with = 'alpha2'
-            verify_registry([desca1, desca2, descb1, descb2])
+            alpha2_desc_f2.paired_with = name
+            charlie_desc_f2.paired_with = 'alpha2'
+            verify_registry([alpha_desc_f2, alpha2_desc_f2,
+                             beta_desc_f2, charlie_desc_f2])
 
             # not OK to pair with remote a second time
             with pytest.raises(AlreadyPairedWithRemote):
@@ -736,23 +837,23 @@ class TestSmartEventBasic:
         smart_event = SmartEvent(name='alpha')
 
         assert len(SmartEvent.registry) == 1
-        desc1 = SmartEventDesc(smart_event=smart_event,
-                               name='alpha',
-                               thread=threading.current_thread(),
-                               paired_with='')
-        verify_registry([desc1])
+        alpha_desc = SmartEventDesc(smart_event=smart_event,
+                                    name='alpha',
+                                    thread=threading.current_thread(),
+                                    paired_with='')
+        verify_registry([alpha_desc])
 
         beta_t.start()
 
         smart_event.pair_with(remote_name='beta')
 
         assert len(SmartEvent.registry) == 2
-        desc1.paired_with='beta'
-        desc2 = SmartEventDesc(smart_event=smart_event.remote_smart_event,
-                               name='beta',
-                               thread=beta_t,
-                               paired_with='alpha')
-        verify_registry([desc1, desc2])
+        alpha_desc.paired_with = 'beta'
+        beta_desc = SmartEventDesc(smart_event=smart_event.remote_smart_event,
+                                   name='beta',
+                                   thread=beta_t,
+                                   paired_with='alpha')
+        verify_registry([alpha_desc, beta_desc])
 
         #######################################################################
         # pair with charlie
@@ -761,23 +862,24 @@ class TestSmartEventBasic:
         smart_event2 = SmartEvent(name='alpha2')
 
         assert len(SmartEvent.registry) == 3
-        desc3 = SmartEventDesc(smart_event=smart_event2,
-                               name='alpha2',
-                               thread=threading.current_thread(),
-                               paired_with='')
-        verify_registry([desc1, desc2, desc3])
+        alpha2_desc = SmartEventDesc(smart_event=smart_event2,
+                                     name='alpha2',
+                                     thread=threading.current_thread(),
+                                     paired_with='')
+        verify_registry([alpha_desc, beta_desc, alpha2_desc])
 
         charlie_t.start()
 
         smart_event.pair_with(remote_name='charlie')
 
         assert len(SmartEvent.registry) == 4
-        desc3.paired_with = 'charlie'
-        desc4 = SmartEventDesc(smart_event=smart_event2.remote_smart_event,
-                               name='charlie',
-                               thread=charlie_t,
-                               paired_with='alpha2')
-        verify_registry([desc1, desc2, desc3, desc4])
+        alpha2_desc.paired_with = 'charlie'
+        charlie_desc = SmartEventDesc(
+            smart_event=smart_event2.remote_smart_event,
+            name='charlie',
+            thread=charlie_t,
+            paired_with='alpha2')
+        verify_registry([alpha_desc, beta_desc, alpha2_desc, charlie_desc])
 
         smart_event.sync(log_msg='alpha sync point 1')
 
@@ -790,47 +892,481 @@ class TestSmartEventBasic:
         # at this point, f1 and f2 have ended. But, the registry will not have
         # changed, so everything will still show paired, even all
         # SmartEvents. Any SmartEvents requests will detect that
-        # their pairs are no longer active.
+        # their pairs are no longer active and will trigger cleanup to run to
+        # remove any not alive entries from the registry. The SmartEvent
+        # objects for not alive threads remain pointed to by the alive
+        # entries so that they may still report RemoteThreadNotAlive.
         assert len(SmartEvent.registry) == 4
-        verify_registry([desc1, desc2, desc3, desc4])
+        verify_registry([alpha_desc, beta_desc, alpha2_desc, charlie_desc])
 
-        # try to pair with old beta - should clean things up and wait
+        # cause cleanup via a sync request
+        with pytest.raises(RemoteThreadNotAlive):
+            smart_event.sync(log_msg='mainline sync point 3')
+
+        alpha_desc.paired_with = ''
+        alpha_desc.residual_with = 'beta'
+        alpha2_desc.paired_with = ''
+        alpha2_desc.residual_with = 'charlie'
+        assert len(SmartEvent.registry) == 2
+        verify_registry([alpha_desc, alpha2_desc])
+
+        # try to pair with old beta - should timeout
         with pytest.raises(PairWithTimedOut):
             smart_event.pair_with(remote_name='beta', timeout=1)
 
-        desc1.paired_with = ''
-        desc3.paired_with = ''
-        assert len(SmartEvent.registry) == 2
-        verify_registry([desc1, desc3])
-
-        # try to pair with old charlie - should clean things up and wait
+        # try to pair with old charlie - should timeout
         with pytest.raises(PairWithTimedOut):
-            smart_event2.pair_with(remote_name='charlie', timeout=1)
+            smart_event.pair_with(remote_name='charlie', timeout=1)
 
         assert len(SmartEvent.registry) == 2
-        verify_registry([desc1, desc3])
-
-
+        verify_registry([alpha_desc, alpha2_desc])
 
     ###########################################################################
-    # test_smart_event_register_threads_f1
+    # test_smart_event_pairing_cleanup
     ###########################################################################
-    def test_smart_event_register_threads_f1(self) -> None:
+    def test_smart_event_pairing_cleanup(self) -> None:
+        """Test register_thread during instantiation."""
+
+        def f1(name: str, remote_name: str, idx: int) -> None:
+            """Func to test instantiate SmartEvent.
+
+            Args:
+                name: name to use for s_event
+                remote_name: name to pair with
+                idx: index into beta_smart_events
+
+            """
+            logger.debug(f'{name} f1 entered')
+            s_event = SmartEvent(name=name)
+
+            beta_smart_events[idx] = s_event
+
+            cmds.queue_cmd('alpha', 'go')
+
+            desca = SmartEventDesc(smart_event=smart_event,
+                                   name=remote_name,
+                                   thread=alpha_t,
+                                   paired_with='')
+            descb = SmartEventDesc(smart_event=s_event,
+                                   name=name,
+                                   thread=threading.current_thread(),
+                                   paied_with='')
+
+            verify_registry([desca, descb])
+
+            s_event.pair_with(remote_name=remote_name)
+
+            desca.paired_with = name
+            descb.paired_with = remote_name
+            verify_registry([desca, descb])
+
+            s_event.sync(log_msg=f'{name} f1 sync point 1')
+
+            logger.debug(f'{name} f1 exiting')
+
+        #######################################################################
+        # mainline start
+        #######################################################################
+        cmds = Cmds()
+        beta_smart_events: List[Union[int, SmartEvent]] = [0, 1, 2, 3, 4]
+        #######################################################################
+        # create 1 alpha thread and 4 beta threads
+        #######################################################################
+        alpha_t = threading.current_thread()
+        beta_t1 = threading.Thread(target=f1, args=('beta1', 'alpha1', 1))
+        beta_t2 = threading.Thread(target=f1, args=('beta2', 'alpha2', 2))
+        beta_t3 = threading.Thread(target=f1, args=('beta3', 'alpha3', 3))
+        beta_t4 = threading.Thread(target=f1, args=('beta4', 'alpha4', 4))
+
+        #######################################################################
+        # create first alpha SmartEvent and desc, and verify
+        #######################################################################
+        smart_event1 = SmartEvent(name='alpha1')
+
+        assert len(SmartEvent.registry) == 1
+        desc_alpha1 = SmartEventDesc(smart_event=smart_event1,
+                                     name='alpha1',
+                                     thread=threading.current_thread(),
+                                     paired_with='')
+        verify_registry([desc_alpha1])
+
+        #######################################################################
+        # create second alpha SmartEvent and desc, and verify
+        #######################################################################
+        smart_event2 = SmartEvent(name='alpha2')
+
+        assert len(SmartEvent.registry) == 2
+        desc_alpha2 = SmartEventDesc(smart_event=smart_event2,
+                                     name='alpha2',
+                                     thread=threading.current_thread(),
+                                     paired_with='')
+        verify_registry([desc_alpha1, desc_alpha2])
+
+        #######################################################################
+        # create third alpha SmartEvent and desc, and verify
+        #######################################################################
+        smart_event3 = SmartEvent(name='alpha3')
+
+        assert len(SmartEvent.registry) == 3
+        desc_alpha3 = SmartEventDesc(smart_event=smart_event3,
+                                     name='alpha3',
+                                     thread=threading.current_thread(),
+                                     paired_with='')
+        verify_registry([desc_alpha1, desc_alpha2, desc_alpha3])
+
+        #######################################################################
+        # create fourth alpha SmartEvent and desc, and verify
+        #######################################################################
+        smart_event4 = SmartEvent(name='alpha4')
+
+        assert len(SmartEvent.registry) == 4
+        desc_alpha4 = SmartEventDesc(smart_event=smart_event4,
+                                     name='alpha4',
+                                     thread=threading.current_thread(),
+                                     paired_with='')
+        verify_registry([desc_alpha1, desc_alpha2, desc_alpha3, desc_alpha4])
+
+        #######################################################################
+        # start first beta thread, and verify
+        #######################################################################
+        beta_t1.start()
+
+        _ = cmds.get_cmd('alpha')
+
+        assert len(SmartEvent.registry) == 5
+        desc_alpha1.paired_with = ''
+        desc_beta1 = SmartEventDesc(
+            smart_event=beta_smart_events[1],
+            name='beta1',
+            thread=beta_t1,
+            paired_with='')
+        verify_registry([desc_alpha1, desc_alpha2, desc_alpha3, desc_alpha4,
+                         desc_beta1])
+
+        smart_event1.pair_with(remote_name='beta1')
+
+        assert len(SmartEvent.registry) == 5
+        desc_alpha1.paired_with = 'beta1'
+        desc_beta1.paired_with = 'alpha1'
+        verify_registry([desc_alpha1, desc_alpha2, desc_alpha3, desc_alpha4,
+                         desc_beta1])
+
+        #######################################################################
+        # start second beta thread, and verify
+        #######################################################################
+        beta_t2.start()
+
+        _ = cmds.get_cmd('alpha')
+
+        assert len(SmartEvent.registry) == 6
+        desc_alpha2.paired_with = ''
+        desc_beta2 = SmartEventDesc(
+            smart_event=beta_smart_events[2],
+            name='beta2',
+            thread=beta_t2,
+            paired_with='')
+        verify_registry([desc_alpha1, desc_alpha2, desc_alpha3, desc_alpha4,
+                         desc_beta1, desc_beta2])
+
+        smart_event2.pair_with(remote_name='beta2')
+
+        assert len(SmartEvent.registry) == 6
+        desc_alpha2.paired_with = 'beta2'
+        desc_beta2.paired_with = 'alpha2'
+        verify_registry([desc_alpha1, desc_alpha2, desc_alpha3, desc_alpha4,
+                         desc_beta1, desc_beta2])
+
+        #######################################################################
+        # start third beta thread, and verify
+        #######################################################################
+        beta_t3.start()
+
+        _ = cmds.get_cmd('alpha')
+
+        assert len(SmartEvent.registry) == 7
+        desc_alpha3.paired_with = ''
+        desc_beta3 = SmartEventDesc(
+            smart_event=beta_smart_events[3],
+            name='beta3',
+            thread=beta_t3,
+            paired_with='')
+        verify_registry([desc_alpha1, desc_alpha2, desc_alpha3, desc_alpha4,
+                         desc_beta1, desc_beta2, desc_beta3])
+
+        smart_event3.pair_with(remote_name='beta3')
+
+        assert len(SmartEvent.registry) == 7
+        desc_alpha3.paired_with = 'beta3'
+        desc_beta3.paired_with = 'alpha3'
+        verify_registry([desc_alpha1, desc_alpha2, desc_alpha3, desc_alpha4,
+                         desc_beta1, desc_beta2, desc_beta3])
+
+        #######################################################################
+        # start fourth beta thread, and verify
+        #######################################################################
+        beta_t4.start()
+
+        _ = cmds.get_cmd('alpha')
+
+        assert len(SmartEvent.registry) == 8
+        desc_alpha4.paired_with = ''
+        desc_beta4 = SmartEventDesc(
+            smart_event=beta_smart_events[4],
+            name='beta4',
+            thread=beta_t4,
+            paired_with='')
+        verify_registry([desc_alpha1, desc_alpha2, desc_alpha3, desc_alpha4,
+                         desc_beta1, desc_beta2, desc_beta3, desc_beta4])
+
+        smart_event4.pair_with(remote_name='beta4')
+
+        assert len(SmartEvent.registry) == 8
+        desc_alpha4.paired_with = 'beta4'
+        desc_beta4.paired_with = 'alpha4'
+        verify_registry([desc_alpha1, desc_alpha2, desc_alpha3, desc_alpha4,
+                         desc_beta1, desc_beta2, desc_beta3, desc_beta4])
+
+        #######################################################################
+        # let beta1 finish
+        #######################################################################
+        smart_event1.sync(log_msg='alpha1 sync point 1')
+
+        beta_t1.join()
+
+        #######################################################################
+        # verify nothing has changed in the registry
+        #######################################################################
+        verify_registry([desc_alpha1, desc_alpha2, desc_alpha3, desc_alpha4,
+                         desc_beta1, desc_beta2, desc_beta3, desc_beta4])
+
+        #######################################################################
+        # replace old beta1 w new beta1 - should cleanup registry old beta1
+        #######################################################################
+        beta_t1 = threading.Thread(target=f1, args=('beta1', 'alpha1', 1))
+
+        beta_t1.start()
+
+        _ = cmds.get_cmd('alpha')
+
+        desc_alpha1.paired_with = ''
+        desc_alpha1.residual_with = 'beta1'
+
+        desc_beta1 = SmartEventDesc(
+            smart_event=beta_smart_events[1],
+            name='beta1',
+            thread=beta_t1,
+            paired_with='')
+
+        assert len(SmartEvent.registry) == 8
+
+        verify_registry([desc_alpha1, desc_alpha2, desc_alpha3, desc_alpha4,
+                         desc_beta1, desc_beta2, desc_beta3, desc_beta4])
+
+        smart_event1.pair_with(remote_name='beta1')
+
+        desc_alpha1.paired_with = 'beta1'
+        desc_alpha1.residual_with = ''
+        desc_beta1.paired_with = 'alpha1'
+
+        assert len(SmartEvent.registry) == 8
+
+        verify_registry([desc_alpha1, desc_alpha2, desc_alpha3, desc_alpha4,
+                         desc_beta1, desc_beta2, desc_beta3, desc_beta4])
+
+        #######################################################################
+        # let beta2 and beta4 finish
+        #######################################################################
+        smart_event2.sync(log_msg='alpha2 sync point 1')
+        smart_event4.sync(log_msg='alpha4 sync point 1')
+
+        beta_t2.join()
+        beta_t4.join()
+
+        #######################################################################
+        # verify nothing has changed in the registry
+        #######################################################################
+        verify_registry([desc_alpha1, desc_alpha2, desc_alpha3, desc_alpha4,
+                         desc_beta1, desc_beta2, desc_beta3, desc_beta4])
+
+        #######################################################################
+        # replace old beta2 w new beta2 - should cleanup old beta2 and beta4
+        #######################################################################
+        beta_t2 = threading.Thread(target=f1, args=('beta2', 'alpha2', 2))
+
+        beta_t2.start()
+
+        _ = cmds.get_cmd('alpha')
+
+        desc_alpha2.paired_with = ''
+        desc_alpha2.residual_with = 'beta2'
+
+        desc_alpha4.paired_with = ''
+        desc_alpha4.residual_with = 'beta4'
+
+        desc_beta2 = SmartEventDesc(
+            smart_event=beta_smart_events[2],
+            name='beta2',
+            thread=beta_t2,
+            paired_with='')
+
+        # beta2 replaced, beta4 should be gone
+        assert len(SmartEvent.registry) == 7
+
+        verify_registry([desc_alpha1, desc_alpha2, desc_alpha3, desc_alpha4,
+                         desc_beta1, desc_beta2, desc_beta3])
+
+        smart_event2.pair_with(remote_name='beta2')
+
+        assert len(SmartEvent.registry) == 7
+        desc_alpha2.paired_with = 'beta2'
+        desc_alpha2.residual_with = ''
+        desc_beta2.paired_with = 'alpha2'
+
+        verify_registry([desc_alpha1, desc_alpha2, desc_alpha3, desc_alpha4,
+                         desc_beta1, desc_beta2, desc_beta3])
+
+        # should get not alive for beta4
+        with pytest.raises(RemoteThreadNotAlive):
+            smart_event4.sync(log_msg='mainline sync point 2')
+
+        # should still be the same
+        verify_registry([desc_alpha1, desc_alpha2, desc_alpha3, desc_alpha4,
+                         desc_beta1, desc_beta2, desc_beta3])
+
+        #######################################################################
+        # get a new beta4 going
+        #######################################################################
+        beta_t4 = threading.Thread(target=f1, args=('beta4', 'alpha4', 4))
+
+        beta_t4.start()
+
+        _ = cmds.get_cmd('alpha')
+
+        desc_alpha4.paired_with = ''
+        desc_alpha4.residual_with = 'beta4'
+
+        desc_beta2 = SmartEventDesc(
+            smart_event=beta_smart_events[4],
+            name='beta4',
+            thread=beta_t4,
+            paired_with='')
+
+        # beta4 replaced
+        assert len(SmartEvent.registry) == 8
+
+        verify_registry([desc_alpha1, desc_alpha2, desc_alpha3, desc_alpha4,
+                         desc_beta1, desc_beta2, desc_beta3, desc_beta4])
+
+        smart_event4.pair_with(remote_name='beta4')
+
+        assert len(SmartEvent.registry) == 8
+        desc_alpha4.paired_with = 'beta4'
+        desc_alpha4.residual_with = ''
+        desc_beta4.paired_with = 'alpha4'
+
+        verify_registry([desc_alpha1, desc_alpha2, desc_alpha3, desc_alpha4,
+                         desc_beta1, desc_beta2, desc_beta3, desc_beta4])
+
+        #######################################################################
+        # let beta2 and beta3 finish
+        #######################################################################
+        smart_event2.sync(log_msg='alpha2 sync point 1')
+        smart_event3.sync(log_msg='alpha3 sync point 1')
+
+        beta_t2.join()
+        beta_t3.join()
+
+        #######################################################################
+        # verify nothing has changed in the registry
+        #######################################################################
+        assert len(SmartEvent.registry) == 8
+        verify_registry([desc_alpha1, desc_alpha2, desc_alpha3, desc_alpha4,
+                         desc_beta1, desc_beta2, desc_beta3, desc_beta4])
+
+        #######################################################################
+        # trigger cleanup for beta2 and beta3
+        #######################################################################
+        with pytest.raises(RemoteThreadNotAlive):
+            smart_event3.sync(log_msg='mainline sync point 2')
+
+        #######################################################################
+        # verify beta2 and beta3 cleaned up
+        #######################################################################
+        desc_alpha2.paired_with = ''
+        desc_alpha2.residual_with = 'beta2'
+
+        desc_alpha3.paired_with = ''
+        desc_alpha3.residual_with = 'beta3'
+
+        assert len(SmartEvent.registry) == 6
+        verify_registry([desc_alpha1, desc_alpha2, desc_alpha3, desc_alpha4,
+                         desc_beta1, desc_beta4])
+
+        #######################################################################
+        # should get not alive for beta2 and beta3
+        #######################################################################
+        with pytest.raises(RemoteThreadNotAlive):
+            smart_event2.sync(log_msg='mainline sync point 3')
+
+        with pytest.raises(RemoteThreadNotAlive):
+            smart_event3.sync(log_msg='mainline sync point 3')
+
+        assert len(SmartEvent.registry) == 6
+        verify_registry([desc_alpha1, desc_alpha2, desc_alpha3, desc_alpha4,
+                         desc_beta1, desc_beta4])
+
+        #######################################################################
+        # get a new beta3 going
+        #######################################################################
+        beta_t3 = threading.Thread(target=f1, args=('beta3', 'alpha3', 3))
+
+        beta_t3.start()
+
+        _ = cmds.get_cmd('alpha')
+
+        desc_alpha3.paired_with = ''
+        desc_alpha3.residual_with = 'beta4'
+
+        desc_beta3 = SmartEventDesc(
+            smart_event=beta_smart_events[3],
+            name='beta3',
+            thread=beta_t3,
+            paired_with='')
+
+        # beta3 replaced
+        assert len(SmartEvent.registry) == 7
+
+        verify_registry([desc_alpha1, desc_alpha2, desc_alpha3, desc_alpha4,
+                         desc_beta1, desc_beta3, desc_beta4])
+
+        smart_event3.pair_with(remote_name='beta3')
+
+        assert len(SmartEvent.registry) == 7
+        desc_alpha3.paired_with = 'beta3'
+        desc_alpha3.residual_with = ''
+        desc_beta3.paired_with = 'alpha3'
+
+        verify_registry([desc_alpha1, desc_alpha2, desc_alpha3, desc_alpha4,
+                         desc_beta1, desc_beta3, desc_beta4])
+
+    ###########################################################################
+    # test_smart_event_foreign_op_detection
+    ###########################################################################
+    def test_smart_event_foreign_op_detection(self) -> None:
         """Test register_thread with f1."""
         #######################################################################
-        # mainline and f1 - mainline sets beta
+        # mainline and f1 - mainline pairs with beta
         #######################################################################
         logger.debug('start test 1')
-        current_thread = threading.current_thread()
-        logger.debug(f'mainline current thread is {current_thread}')
 
-        def f1(s_event, ml_thread):
-            print('f1 entered')
+        def f1():
+            print('beta f1 entered')
+            s_event = SmartEvent(name='beta')
             my_c_thread = threading.current_thread()
-            assert s_event.alpha.thread is ml_thread
-            assert s_event.alpha.thread is alpha_t
-            assert s_event.beta.thread is my_c_thread
-            assert s_event.beta.thread is threading.current_thread()
+            assert s_event.thread is my_c_thread
+            assert s_event.thread is threading.current_thread()
+
+            s_event.pair_with(remote_name='alpha')
 
             s_event.sync(log_msg='f1 beta sync point 1')
 
@@ -869,15 +1405,18 @@ class TestSmartEventBasic:
 
         def foreign1(s_event):
             logger.debug('foreign1 entered')
-            with pytest.raises(WaitUntilTimeout):
-                s_event.pause_until(WUCond.ThreadsReady, timeout=0.002)
-            with pytest.raises(NotPaired):
+
+            with pytest.raises(DetectedOpFromForeignThread):
+                s_event.resume()
+
+            with pytest.raises(DetectedOpFromForeignThread):
+                s_event.pair_with(remote_name='beta')
+
+            with pytest.raises(DetectedOpFromForeignThread):
+                s_event.pair_with(remote_name='beta', timeout=1)
+
+            with pytest.raises(DetectedOpFromForeignThread):
                 s_event.pause_until(WUCond.RemoteWaiting, timeout=0.02)
-
-            cmds.queue_cmd('alpha', Cmd.Exit)
-
-            logger.debug('foreign1 about to pause_until ThreadsReady')
-            s_event.pause_until(WUCond.ThreadsReady, timeout=10)
 
             with pytest.raises(DetectedOpFromForeignThread):
                 s_event.pause_until(WUCond.RemoteWaiting, timeout=0.02)
@@ -885,30 +1424,21 @@ class TestSmartEventBasic:
                 s_event.pause_until(WUCond.RemoteWaiting)
             with pytest.raises(DetectedOpFromForeignThread):
                 s_event.wait()
-            with pytest.raises(DetectedOpFromForeignThread):
-                s_event.resume()
+
             with pytest.raises(DetectedOpFromForeignThread):
                 s_event.sync()
 
             logger.debug('foreign1 exiting')
 
         cmds = Cmds()
+
+        smart_event1 = SmartEvent(name='alpha')
+
         alpha_t = threading.current_thread()
-        smart_event1 = SmartEvent(alpha=threading.current_thread())
-
-        logger.debug(f'id(smart_event1.alpha.event) = '
-                     f'{id(smart_event1.alpha.event)}')
-        logger.debug(f'id(smart_event1.beta.event) = '
-                     f'{id(smart_event1.beta.event)}')
-
+        my_f1_thread = threading.Thread(target=f1)
         my_foreign1_thread = threading.Thread(target=foreign1,
                                               args=(smart_event1,))
-        my_foreign1_thread.start()
-        my_f1_thread = threading.Thread(target=f1,
-                                        args=(smart_event1,
-                                              threading.current_thread()))
-        with pytest.raises(WaitUntilTimeout):
-            smart_event1.pause_until(WUCond.ThreadsReady, timeout=0.002)
+
         with pytest.raises(NotPaired):
             smart_event1.pause_until(WUCond.RemoteWaiting, timeout=-0.002)
         with pytest.raises(NotPaired):
@@ -920,32 +1450,21 @@ class TestSmartEventBasic:
         with pytest.raises(NotPaired):
             smart_event1.pause_until(WUCond.RemoteWaiting)
 
-        _ = cmds.get_cmd('alpha')
-
-        logger.debug('mainline about to register beta thread')
-        smart_event1.register_thread(beta=my_f1_thread)
-        logger.debug('mainline back from registering beta thread')
-
-        with pytest.raises(WaitUntilTimeout):
-            smart_event1.pause_until(WUCond.ThreadsReady, timeout=0.005)
+        logger.debug('mainline about to start beta thread')
 
         my_f1_thread.start()
-        smart_event1.pause_until(WUCond.ThreadsReady, timeout=1)
+
+        smart_event1.pair_with(remote_name='beta')
 
         smart_event1.sync(log_msg='mainline sync point 1')
 
-        logger.debug('about to pause_until RemoteWaiting')
-        with pytest.raises(WaitUntilTimeout):
-            smart_event1.pause_until(WUCond.RemoteWaiting, timeout=0.002)
-        with pytest.raises(WaitUntilTimeout):
-            smart_event1.pause_until(WUCond.RemoteWaiting, timeout=0.01)
-        with pytest.raises(WaitUntilTimeout):
-            smart_event1.pause_until(WUCond.RemoteWaiting, timeout=0.02)
-        with pytest.raises(WaitUntilTimeout):
-            smart_event1.pause_until(WUCond.RemoteWaiting, timeout=1)
-
         cmds.queue_cmd('beta', Cmd.Wait)
 
+        my_foreign1_thread.start()  # attempt to resume beta (should fail)
+
+        my_foreign1_thread.join()
+
+        logger.debug('about to pause_until RemoteWaiting')
         smart_event1.pause_until(WUCond.RemoteWaiting)
         smart_event1.pause_until(WUCond.RemoteWaiting, timeout=0.001)
         smart_event1.pause_until(WUCond.RemoteWaiting, timeout=0.01)
@@ -959,6 +1478,7 @@ class TestSmartEventBasic:
         cmds.queue_cmd('beta', Cmd.Resume)
 
         smart_event1.sync(log_msg='mainline sync point 2')
+
         assert smart_event1.wait()
 
         cmds.queue_cmd('beta', Cmd.Exit)
@@ -977,11 +1497,7 @@ class TestSmartEventBasic:
         with pytest.raises(RemoteThreadNotAlive):
             smart_event1.sync(log_msg='mainline sync point 3')
 
-        assert smart_event1.alpha.thread is alpha_t
-        assert smart_event1.beta.thread is my_f1_thread
-
-        del smart_event1
-        del my_f1_thread
+        assert smart_event1.thread is alpha_t
 
     ###########################################################################
     # test_smart_event_outer_thread_f1
@@ -993,14 +1509,38 @@ class TestSmartEventBasic:
         #######################################################################
         logger.debug('mainline starting')
 
-        smart_event = SmartEvent(alpha=threading.current_thread())
-        f1_thread = threading.Thread(target=outer_f1, args=(smart_event,))
+        cmds = Cmds()
+        beta_smart_event: List[Union[int, SmartEvent]] = [0]
+        smart_event = SmartEvent(name='alpha')
+        alpha_t = threading.current_thread()
+        f1_thread = threading.Thread(target=outer_f1, args=(cmds,
+                                                            smart_event
+                                                            alpha_t
+                                                            beta_smart_event))
 
-        logger.debug('mainline about to register beta thread')
-        smart_event.register_thread(beta=f1_thread)
+        assert len(SmartEvent.registry) == 1
+        desc_alpha = SmartEventDesc(smart_event=smart_event,
+                                    name='alpha',
+                                    thread=threading.current_thread(),
+                                    paired_with='')
+        verify_registry([desc_alpha])
 
         f1_thread.start()
-        smart_event.pause_until(WUCond.ThreadsReady)
+
+        _ = cmds.get_cmd('alpha')
+
+        desc_beta = SmartEventDesc(smart_event=beta_smart_event[0],
+                                   name='beta',
+                                   thread=f1_thread,
+                                   paired_with='')
+
+        assert len(SmartEvent.registry) == 2
+        verify_registry([desc_alpha, desc_beta])
+
+        smart_event.pair_with(remote_name='beta')
+        desc_alpha.paired_with = 'beta'
+        desc_beta.paired_with = 'alpha'
+        verify_registry([desc_alpha, desc_beta])
 
         smart_event.sync(log_msg='mainline sync point 1')
 
@@ -1014,6 +1554,8 @@ class TestSmartEventBasic:
 
         f1_thread.join()
 
+        verify_registry([desc_alpha, desc_beta])
+
         logger.debug('mainline exiting')
 
     ###########################################################################
@@ -1026,7 +1568,7 @@ class TestSmartEventBasic:
         #######################################################################
         logger.debug('mainline starting')
 
-        smart_event = SmartEvent(alpha=threading.current_thread())
+        smart_event = SmartEvent(name='alpha')
         thread_app = OuterThreadApp(smart_event)
 
         logger.debug('mainline about to register beta thread')
