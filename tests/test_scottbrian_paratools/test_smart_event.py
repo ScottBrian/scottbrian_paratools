@@ -17,6 +17,8 @@ from scottbrian_paratools.smart_event import (SmartEvent,
                                               DuplicateThreadSpecified,
                                               ThreadAlreadyRegistered,
                                               NotPaired,
+                                              PairWithSelfNotAllowed,
+                                              PairWithTimedOut,
                                               DetectedOpFromForeignThread,
                                               RemoteThreadNotAlive,
                                               WaitUntilTimeout,
@@ -261,21 +263,21 @@ class SmartEventDesc:
     paired_with: str = ''
 
 def verify_registry(descs: List[SmartEventDesc]) -> None:
-    """Verify that SmartEvent.registry is correct.
+    """Verify that SmartEvent._registry is correct.
 
     Args:
         descs: one or more SmartEventDesc objects to verify
 
     """
-    assert len(SmartEvent.registry) == len(descs)
+    assert len(SmartEvent._registry) == len(descs)
 
     for desc in descs:
-        assert (SmartEvent.registry[desc.name] is desc.smart_event)
+        assert (SmartEvent._registry[desc.name] is desc.smart_event)
 
         verify_smart_event_init(s_event_desc=desc)
 
         if desc.paired_with:
-            assert (SmartEvent.registry[desc.paired_with]
+            assert (SmartEvent._registry[desc.paired_with]
                     is desc.smart_event.remote)
         else:
             assert desc.smart_event.remote is None
@@ -630,7 +632,7 @@ class TestSmartEventBasic:
         cmds = Cmds()
         beta_smart_events: List[Union[int, SmartEvent]] = [0]
         alpha_t = threading.current_thread()
-        beta_t = threading.Thread(target=f1, arg=('beta',))
+        beta_t = threading.Thread(target=f1, args=('beta',))
 
         smart_event = SmartEvent(name='alpha')
 
