@@ -84,7 +84,7 @@ The smart_event module contains:
 ###############################################################################
 # Standard Library
 ###############################################################################
-# from dataclasses import dataclass
+from dataclasses import dataclass
 from enum import Enum
 import logging
 import threading
@@ -110,8 +110,26 @@ class SmartEventError(Exception):
     pass
 
 
-class NameAlreadyInUse(SmartEventError):
-    """SmartEvent exception for using a name already in use."""
+class AlreadyPairedWithRemote(SmartEventError):
+    """SmartEvent exception for pair_with that is already paired."""
+
+
+class ConflictDeadlockDetected(SmartEventError):
+    """SmartEvent exception for conflicting requests."""
+    pass
+
+
+class DetectedOpFromForeignThread(SmartEventError):
+    """SmartEvent exception for attempted op from unregistered thread."""
+    pass
+
+
+class ErrorInRegistry(SmartEventError):
+    """SmartEvent exception for registry error."""
+
+
+class InconsistentFlagSettings(SmartEventError):
+    """SmartEvent exception for flag setting that are not valid."""
     pass
 
 
@@ -119,12 +137,14 @@ class IncorrectNameSpecified(SmartEventError):
     """SmartEvent exception for a name that is not a str."""
 
 
-class AlreadyPairedWithRemote(SmartEventError):
-    """SmartEvent exception for pair_with that is already paired."""
+class NameAlreadyInUse(SmartEventError):
+    """SmartEvent exception for using a name already in use."""
+    pass
 
 
-class PairWithMismatch(SmartEventError):
-    """SmartEvent exception for pair_with target already paired."""
+class NotPaired(SmartEventError):
+    """SmartEvent exception for alpha or beta thread not registered."""
+    pass
 
 
 class PairWithSelfNotAllowed(SmartEventError):
@@ -135,42 +155,12 @@ class PairWithTimedOut(SmartEventError):
     """SmartEvent exception for pair_with that timed out."""
 
 
-class ErrorInRegistry(SmartEventError):
-    """SmartEvent exception for registry error."""
-
-
-class IncorrectThreadSpecified(SmartEventError):
-    """SmartEvent exception for incorrect thread specification."""
-    pass
-
-
-class DuplicateThreadSpecified(SmartEventError):
-    """SmartEvent exception for duplicate thread specification."""
-    pass
-
-
-class ThreadAlreadyRegistered(SmartEventError):
-    """SmartEvent exception for thread already registered."""
-    pass
-
-
-class NotPaired(SmartEventError):
-    """SmartEvent exception for alpha or beta thread not registered."""
-    pass
-
-
-class DetectedOpFromForeignThread(SmartEventError):
-    """SmartEvent exception for attempted op from unregistered thread."""
-    pass
+class RemotePairedWithOther(SmartEventError):
+    """SmartEvent exception for pair_with target already paired."""
 
 
 class RemoteThreadNotAlive(SmartEventError):
     """SmartEvent exception for alpha or beta thread not alive."""
-    pass
-
-
-class WaitUntilTimeout(SmartEventError):
-    """SmartEvent exception for pause_until timeout."""
     pass
 
 
@@ -179,13 +169,8 @@ class WaitDeadlockDetected(SmartEventError):
     pass
 
 
-class ConflictDeadlockDetected(SmartEventError):
-    """SmartEvent exception for conflicting requests."""
-    pass
-
-
-class InconsistentFlagSettings(SmartEventError):
-    """SmartEvent exception for flag setting that are not valid."""
+class WaitUntilTimeout(SmartEventError):
+    """SmartEvent exception for pause_until timeout."""
     pass
 
 
@@ -212,9 +197,13 @@ class SmartEvent:
     _registry: dict[str, "SmartEvent"] = {}
 
     ###########################################################################
-    # Lock for processing wait, resume, and sync requests
+    # SharedPairStatus Data Class
     ###########################################################################
-    _wait_check_lock = threading.Lock()
+    @dataclass
+    class SharedPairStatus:
+        """Shared area for status between paired SmartEvents."""
+        status_lock = threading.Lock()
+        sync_cleanup = False
 
     ###########################################################################
     # __init__
@@ -240,6 +229,8 @@ class SmartEvent:
         self.event = threading.Event()
         self.remote = None
 
+        self.status = None
+
         self.code: Any = None
         self.wait_wait: bool = False
         self.sync_wait: bool = False
@@ -247,9 +238,6 @@ class SmartEvent:
         self.deadlock: bool = False
         self.conflict: bool = False
 
-        self._sync_detected = False
-        self._deadlock_detected = False
-        self.sync_cleanup = False
         self.logger = logging.getLogger(__name__)
         self.debug_logging_enabled = self.logger.isEnabledFor(logging.DEBUG)
 
@@ -327,11 +315,18 @@ class SmartEvent:
             IncorrectNameSpecified: The name for SmartEvent must be of type
                                       str.
             NameAlreadyInUse: An entry for a SmartEvent with name = *name*
-                                is already registered.
+                                is already registered and paired with
+                                *remote name*.
 
         Notes:
             1) Any old entries for SmartEvents whose threads are not alive
-               are removed when this method is called.
+               are removed when this method is called by calling
+               _clean_up_registry().
+            2) Once a thread become not alive, it can not be resurrected.
+               The SmartEvent is bound to the thread it starts with. If the
+               remote SmartEvent thread that the SmartEvent is paired with
+               becomes not alive, we allow this SmartEvent to pair with a new
+               SmartEvent on a new thread.
 
         """
         with self._registry_lock:
@@ -344,10 +339,14 @@ class SmartEvent:
                                              ' of type str.')
 
             # Make sure name not already taken
-            if self.name in self._registry:
+            if (self.name in self._registry
+                    and self._registry[self.name].thread.is_alive()
+                    and self._registry[self.name].remote is not None
+                    and self._registry[self.name].remote.thread.is_alive()):
                 raise NameAlreadyInUse(
                     f'An entry for a SmartEvent with name = {self.name} is '
-                    f'already registered.')
+                    'already registered and paired with '
+                    f'{self._registry[self.name].remote.name}.')
 
             # Add new SmartEvent or replace old entry of same name
             self._registry[self.name] = self
@@ -371,6 +370,11 @@ class SmartEvent:
         for key, item in self._registry.items():
             if not item.thread.is_alive():
                 keys_to_del.append(key)
+
+            # if (item.remote is not None
+            #         and not item.remote.thread.is_alive()):
+            #     keys_to_del.append(key)
+
             if key != item.name:
                 raise ErrorInRegistry(f'Registry item with key {key} '
                                       f'has non-matching item.name '
@@ -412,7 +416,7 @@ class SmartEvent:
             IncorrectNameSpecified: Attempted SmartEvent pair_with()
                                       with incorrect remote name of
                                       {remote_name}.
-            PairWithMismatch: {self.name} detected that remote
+            RemotePairedWithOther: {self.name} detected that remote
                                 {remote_name} is already paired with
                                 {self.remote.remote.name}.
             PairWithSelfNotAllowed: {self.name} attempted to pair
@@ -471,22 +475,31 @@ class SmartEvent:
 
         # check to make sure not already paired (even to same remote)
         if self.remote is not None:
-            raise AlreadyPairedWithRemote('A pair_with request by '
-                                          f'{self.name} with target of '
-                                          f'remote_name = {remote_name} '
-                                          f'can not be done since '
-                                          f'{self.name} is already paired '
-                                          f'with {self.remote.name}.')
+            if self.remote.thread.is_alive():
+                raise AlreadyPairedWithRemote('A pair_with request by '
+                                              f'{self.name} with target of '
+                                              f'remote_name = {remote_name} '
+                                              f'can not be done since '
+                                              f'{self.name} is already paired '
+                                              f'with {self.remote.name}.')
+            else:
+                # we wait until now to clean the residual entry so that
+                # any attempts to use SmartEvent will fail with
+                # RemoteThreadNotAlive instead of NotPaired
+                self.remote = None  # clean up residual not alive remote
 
         while True:
             # we hold the lock during most of this path to allow us to
             # back out of the pair by setting self.remote to None without
-            # having to worry the the remote saw it with a value
+            # having to worry that the remote saw it with a value
             with self._registry_lock:
                 # Remove any old entries
                 self._clean_up_registry()
 
                 # find target in registry
+                # we check to see whether the remote point to us, and if not
+                # we need to keep trying until we time out in case we are
+                # waiting for the remote old to get cleaned up
                 if self.remote is None:  # if target not yet found
                     for key, item in self._registry.items():
                         if (key == remote_name
@@ -498,6 +511,14 @@ class SmartEvent:
                 if self.remote is not None:
                     if self.remote.remote is not None:
                         if self.remote.remote.name == self.name:
+                            # If the remote has already created the
+                            # shared status area, use it. Otherwise, we
+                            # create it and the remote will use that.
+                            if self.remote.status is not None:
+                                self.status = self.remote.status
+                            else:
+                                self.status = self.SharedPairStatus()
+
                             break  # we are now paired
                         else:
                             diag_remote_name = self.remote.remote.name
@@ -506,7 +527,7 @@ class SmartEvent:
                                               f'with {remote_name} because '
                                               f'{remote_name} is paired with '
                                               f'{diag_remote_name}.')
-                            raise PairWithMismatch(
+                            raise RemotePairedWithOther(
                                 f'{self.name} detected that remote '
                                 f'{remote_name} is already paired with '
                                 f'{diag_remote_name}.')
@@ -598,7 +619,7 @@ class SmartEvent:
                               f'{caller_info} {log_msg}')
 
         while True:
-            with self._wait_check_lock:
+            with self.status.status_lock:
                 self._check_remote()
                 ###############################################################
                 # Cases where we loop until remote is ready:
@@ -759,19 +780,19 @@ class SmartEvent:
         #######################################################################
         ret_code = True
         while True:
-            with self._wait_check_lock:
+            with self.status.status_lock:
                 if not (self.conflict or self.remote.conflict):
                     if self.sync_wait:  # we are phase 1
                         if self.remote.sync_wait:  # remote in phase 1
                             # we now go to phase 2
                             self.sync_wait = False
-                            self.sync_cleanup = True
-                        elif self.sync_cleanup:  # remote in phase 2
+                            self.status.sync_cleanup = True
+                        elif self.status.sync_cleanup:  # remote in phase 2
                             self.sync_wait = False
-                            self.sync_cleanup = False
+                            self.status.sync_cleanup = False
                             break
                     else:  # we are phase 2
-                        if not self.sync_cleanup:  # remote exited phase 2
+                        if not self.status.sync_cleanup:  # remote exited phase 2
                             break
 
                 if not (self.timeout_specified
@@ -803,7 +824,7 @@ class SmartEvent:
                         f'{self.name} and a wait request was '
                         f'made by thread  {self.remote.name}.')
 
-                self._check_remote(current, remote)
+                self._check_remote()
 
                 if timeout and (timeout < (time.time() - start_time)):
                     self.logger.debug(f'{self.name} timeout of a sync() '
@@ -918,7 +939,7 @@ class SmartEvent:
             # the other thread has already detected those
             # conditions, set the flags, left, and is back with a new
             # request.
-            with self._wait_check_lock:
+            with self.status.status_lock:
                 # Now that we have the lock we need to determine whether
                 # we were resumed between the call and getting the lock
                 if ret_code or self.remote.event.is_set():
@@ -954,7 +975,7 @@ class SmartEvent:
                         or self.deadlock
                         or self.conflict):
                     if (self.remote.sync_wait
-                            and not (self.sync_cleanup
+                            and not (self.status.sync_cleanup
                                      or self.remote.conflict)):
                         self.remote.conflict = True
                         self.conflict = True
@@ -1131,6 +1152,10 @@ class SmartEvent:
                               'RemoteThreadNotAlive.'
                               'Call sequence:'
                               f' {get_formatted_call_sequence()}')
+            with self._registry_lock:
+                # Remove any old entries
+                self._clean_up_registry()
+
             raise RemoteThreadNotAlive(
                 f'The current thread has detected that {self.remote.name} '
                 'thread is not alive.')
