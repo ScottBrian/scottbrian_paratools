@@ -187,6 +187,182 @@ WUCond = Enum('WUCond',
 class SmartEvent:
     """Provides a coordination mechanism between two threads."""
 
+    ###########################################################################
+    # States of a SmartEvent
+    #     reg | alive | remote | rem reg  | rem alive | r->N/s/o
+    #  1)  no |  no   |  None  |    n/a   |     n/a    | n/a
+    #  2)  no |  no   |  yes   |    no    |     no     | None
+    #  3)  no |  no   |  yes   |    no    |     no     | self
+    #  4)  no |  no   |  yes   |    no    |     no     | other
+    #
+    #  5)  no |  yes  |  None  |    n/a   |     n/a    | n/a
+    #  6)  no |  yes  |  yes   |    no    |     no     | None
+    #  7)  no |  yes  |  yes   |    no    |     no     | self
+    #  8)  no |  yes  |  yes   |    no    |     no     | other
+
+    #  9) yes |  no   |  None  |    n/a   |     n/a    | n/a
+    # 10) yes |  no   |  yes   |    no    |     no     | None
+    # 11) yes |  no   |  yes   |    no    |     no     | self
+    # 12) yes |  no   |  yes   |    no    |     no     | other
+    #
+    # 13) yes |  yes  |  None  |    n/a   |     n/a    | n/a
+    # 14) yes |  yes  |  yes   |    no    |     no     | None
+    # 15) yes |  yes  |  yes   |    no    |     no     | self
+    # 16) yes |  yes  |  yes   |    no    |     no     | other
+    #
+    # 17)  no |  no   |  None  |    n/a   |     n/a    | n/a
+    # 18)  no |  no   |  yes   |    no    |     yes    | None
+    # 19)  no |  no   |  yes   |    no    |     yes    | self
+    # 20)  no |  no   |  yes   |    no    |     yes    | other
+    #
+    # 21)  no |  yes  |  None  |    n/a   |     n/a    | n/a
+    # 22)  no |  yes  |  yes   |    no    |     yes    | None
+    # 23)  no |  yes  |  yes   |    no    |     yes    | self
+    # 24)  no |  yes  |  yes   |    no    |     yes    | other
+
+    # 25) yes |  no   |  None  |    n/a   |     n/a    | n/a
+    # 26) yes |  no   |  yes   |    no    |     yes    | None
+    # 27) yes |  no   |  yes   |    no    |     yes    | self
+    # 28) yes |  no   |  yes   |    no    |     yes    | other
+    #
+    # 29) yes |  yes  |  None  |    n/a   |     n/a    | n/a
+    # 30) yes |  yes  |  yes   |    no    |     yes    | None
+    # 31) yes |  yes  |  yes   |    no    |     yes    | self
+    # 32) yes |  yes  |  yes   |    no    |     yes    | other
+    #
+    # 33)  no |  no   |  None  |    n/a   |     n/a    | n/a
+    # 34)  no |  no   |  yes   |    yes   |     no     | None
+    # 35)  no |  no   |  yes   |    yes   |     no     | self
+    # 36)  no |  no   |  yes   |    yes   |     no     | other
+    #
+    # 37)  no |  yes  |  None  |    n/a   |     n/a    | n/a
+    # 38)  no |  yes  |  yes   |    yes   |     no     | None
+    # 39)  no |  yes  |  yes   |    yes   |     no     | self
+    # 40)  no |  yes  |  yes   |    yes   |     no     | other
+
+    # 41) yes |  no   |  None  |    n/a   |     n/a    | n/a
+    # 42) yes |  no   |  yes   |    yes   |     no     | None
+    # 43) yes |  no   |  yes   |    yes   |     no     | self
+    # 44) yes |  no   |  yes   |    yes   |     no     | other
+    #
+    # 45) yes |  yes  |  None  |    n/a   |     n/a    | n/a
+    # 46) yes |  yes  |  yes   |    yes   |     no     | None
+    # 47) yes |  yes  |  yes   |    yes   |     no     | self
+    # 48) yes |  yes  |  yes   |    yes   |     no     | other
+    #
+    # 49)  no |  no   |  None  |    n/a   |     n/a    | n/a
+    # 50)  no |  no   |  yes   |    yes   |     yes    | None
+    # 51)  no |  no   |  yes   |    yes   |     yes    | self
+    # 52)  no |  no   |  yes   |    yes   |     yes    | other
+    #
+    # 53)  no |  yes  |  None  |    n/a   |     n/a    | n/a
+    # 54)  no |  yes  |  yes   |    yes   |     yes    | None
+    # 55)  no |  yes  |  yes   |    yes   |     yes    | self
+    # 56)  no |  yes  |  yes   |    yes   |     yes    | other
+
+    # 57) yes |  no   |  None  |    n/a   |     n/a    | n/a
+    # 58) yes |  no   |  yes   |    yes   |     yes    | None
+    # 59) yes |  no   |  yes   |    yes   |     yes    | self
+    # 60) yes |  no   |  yes   |    yes   |     yes    | other
+    #
+    # 61) yes |  yes  |  None  |    n/a   |     n/a    | n/a
+    # 62) yes |  yes  |  yes   |    yes   |     yes    | None
+    # 63) yes |  yes  |  yes   |    yes   |     yes    | self
+    # 64) yes |  yes  |  yes   |    yes   |     yes    | other
+    #
+    # Notes:
+    # 1) Either a) thread ended after register (instantiation) and before
+    # doing pair_with, or b) thread ended after a subsequent pair_with
+    # (the remote is set to None) did not connect with the target
+    # because the target failed to respond. In either case, the SmartEvent
+    # was unregistered during clean up triggered by another instantiation,
+    # pair_with, or RemoteThreadNotAlive error.
+    #
+    # 2) Thread ended and was unregistered during cleanup. Remote was
+    # still alive and went on to do case 1b.
+    #
+    # 3) Both threads ended and were unregistered during a cleanup.
+    #
+    # 4) Thread ended, remote went on to pair_with another thread and ended.
+    # Both unregistered during cleanup.
+    #
+    # 5) SmartEvent instantiation started, but not yet completed to the
+    # point of doing the registration. This would not be observable from
+    # anywhere except perhaps from looking at the dictionaries in the
+    # frames.
+    #
+    # 6) 7) and 8) SmartEvent alive and paired implies being registered,
+    # so these cases are not possible except for a code error case.
+    #
+    # 9) Same as case 1 before cleanup is triggered.
+    #
+    # 10) Same as case 2 before cleanup is triggered, remote cleaned up.
+    #
+    # 11) Same as case 3 before cleanup is triggered, remote cleaned up.
+    #
+    # 12) Same as case 4 before cleanup is triggered, remote cleaned up.
+    #
+    # 13) SmartEvent alive and registered, not yet paired with remote.
+    #
+    # 14) SmartEvent alive, registered, in pair_with when remote ended before
+    # doing pair_with and cleanup was triggered by some other thread. This is
+    # a transitory state that will resolve when the pair_with times out.
+    #
+    # 15) Thread is alive and is paired to residual remote which ended and
+    # was cleaned up.
+    #
+    # 16) This case can not happen except for a code error or during window
+    # where current thread is in pair_with and remote was trying to pair with
+    # other1 and then failed when it saw other1 was paired with other2. If
+    # current is in pair_with, it will soon raise RemotePairedWithOther.
+    #
+    # 17) 21) 25) 29) Repeats of #1, 5, 9, 13, respectively.
+    #
+    # 18) 19) 20) 22) 23) 24) 26) 27) 28) 30) 31) 32) All not possible for
+    # remote to be alive and unregistered after the current thread was able
+    # to pair with it, except for coding error.
+    #
+    # 33) 37) 41) 45) Repeats of #1, 5, 9, 13, respectively.
+    #
+    # 34) 35) 36) same as #2, 3, 4 except remote not yet cleaned up.
+    #
+    # 38) 39) 40) same as #6, 7, 8, not possible.
+    #
+    # 42) 43) 44) same as 10, 11, 12 except remote also not yet cleaned up.
+    #
+    # 46) same as 14 except remote not yet cleaned up.
+    #
+    # 47) same as 15 except remote not yet cleaned up.
+    #
+    # 48) same as 16 except remote not yet cleaned up.
+    #
+    # 49) 53) 57) 61) repeats of 1, 5, 9, 13.
+    #
+    # 50) Same as 2 except remote tried to pair with other but other did not
+    # respond, so remote has its remote as None (set by pair_with when
+    # cleaning the residual remote).
+    #
+    # 51) same as 3, except remote stays alive and points back to current
+    # residually.
+    #
+    # 52) same as 4, except remote stays alive and is paired to other.
+    #
+    # 54) 55) 56) same as #6, 7, 8, not possible.
+    #
+    # 58) 59) 60) same as 50) 51) 52) except current not yet cleaned up.
+    #
+    # 62) current thread in pair_up, remote has not yet called pair_with
+    #
+    # 63) This is the expected normal operational state where both threads
+    # are active, registered, and paired
+    #
+    # 64) current is in pair_with waiting for remote to respond, but remote
+    # has paired with other. Current will soon discover that remote
+    # is paired with other and raise RemotePairedWithOther.
+
+    ###########################################################################
+    # Constants
+    ###########################################################################
     pause_until_TIMEOUT: Final[int] = 16
     pair_with_TIMEOUT: Final[int] = 60
 
