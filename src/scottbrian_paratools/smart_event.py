@@ -189,6 +189,9 @@ class SmartEvent:
 
     ###########################################################################
     # States of a SmartEvent
+    #
+    #     current              | remote
+    # -------------------------|-----------------------------------------------
     #     reg | alive | remote | rem reg  | rem alive | r->N/s/o
     #  1)  no |  no   |  None  |    n/a   |     n/a    | n/a
     #  2)  no |  no   |  yes   |    no    |     no     | None
@@ -359,6 +362,78 @@ class SmartEvent:
     # 64) current is in pair_with waiting for remote to respond, but remote
     # has paired with other. Current will soon discover that remote
     # is paired with other and raise RemotePairedWithOther.
+    #
+    # Based on the above, the basic states can be summarized as:
+    # 1) alive/registered
+    # 2) not_alive/registered
+    # 3) not_alive/unregistered
+    #
+    # the basic states flows are: action: instantiate
+    #                             -> 1
+    #                                action thread ends
+    #                                -> 2
+    #                                   action cleanup
+    #                                   -> 3
+    # Note that once a thread ends, it can not be resurrected.
+    #
+    # The enhanced states include a paired component
+    # 1, 2, and 3 can be paired with None or with a 1, 2, or 3 (12
+    # combinations). We will denote the states with the pairing as:
+    #     current_state:None or current_state:remote_state
+    #
+    # Note that a remote can become not alive and the current SmartEvent,
+    # if alive, can pair with a new alive remote.
+    #
+    # The enhanced flow:
+    # instantiate -> 1:None
+    #
+    # 1:None -> pair_with remote_n -> 1:1
+    #        -> current ends -> 2:None
+    #
+    # 1:1 -> remote ends -> 1:2
+    #     -> current ends -> 2:1
+    #
+    # 1:2 -> cleanup -> 1:3
+    #     -> current ends -> 2:2
+    #     -> current pairs with new remote_n+1 -> 1:1
+    #     -> current pairs, but remote does not pair -> 1:None
+    #
+    # 1:3 -> current ends -> 2:3
+    #     -> current pairs with new remote_n+1 -> 1:1
+    #     -> current pairs, but remote does not pair -> 1:None
+    #
+    # 2:None -> cleanup -> 3:None
+    #
+    # 2:1 -> cleanup -> 3:1
+    #     -> remote ends -> 2:2
+    #     -> remote pairs with new -> 2:1 (no change, except remote no
+    #                                      longer points back to current,
+    #                                      instead points to new remote)
+    #     -> remote pairs with new that fails to complete -> 2:1 (no change,
+    #                                      except remote no longer points
+    #                                      back to current, instead points
+    #                                      to None)
+    #
+    # 2:2 -> cleanup -> 3:3
+    #
+    # 2:3 -> cleanup -> 3:3
+    #
+    # 3:None (end state - no action can change this)
+    #
+    # 3:1 -> remote ends -> 3:2
+    #     -> remote pairs with new -> 3:1 (no change, except remote no
+    #                                      longer points back to current,
+    #                                      instead points to new remote)
+    #     -> remote pairs with new that fails to complete -> 3:1 (no change,
+    #                                      except remote no longer points
+    #                                      back to current, instead points
+    #                                      to None)
+    #
+    # 3:2 -> cleanup -> 3:3
+    #
+    # 3:3 (end state - no action can change this
+    #
+    ###########################################################################
 
     ###########################################################################
     # Constants
@@ -515,16 +590,12 @@ class SmartEvent:
                                              ' of type str.')
 
             # Make sure name not already taken
-            if (self.name in self._registry
-                    and self._registry[self.name].thread.is_alive()
-                    and self._registry[self.name].remote is not None
-                    and self._registry[self.name].remote.thread.is_alive()):
+            if self.name in self._registry:
                 raise NameAlreadyInUse(
                     f'An entry for a SmartEvent with name = {self.name} is '
-                    'already registered and paired with '
-                    f'{self._registry[self.name].remote.name}.')
+                    'already registered.')
 
-            # Add new SmartEvent or replace old entry of same name
+            # Add new SmartEvent
             self._registry[self.name] = self
 
     ###########################################################################
