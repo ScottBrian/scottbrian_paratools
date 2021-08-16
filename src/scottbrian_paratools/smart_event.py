@@ -459,9 +459,11 @@ class SmartEvent:
     ###########################################################################
     # __init__
     ###########################################################################
-    def __init__(self, *,
-                 name: str,
-                 ) -> None:
+    def __init__(
+            self, *,
+            name: str,
+            thread: Optional[threading.Thread] = threading.current_thread()
+            ) -> None:
         """Initialize an instance of the SmartEvent class.
 
         Args:
@@ -476,7 +478,7 @@ class SmartEvent:
             raise IncorrectNameSpecified('Attempted SmartEvent instantiation '
                                          f'with incorrect name of {name}.')
         self.name = name
-        self.thread = threading.current_thread()
+        self.thread = thread
         self.event = threading.Event()
         self.remote = None
 
@@ -612,6 +614,8 @@ class SmartEvent:
             1) Must be called holding _registry_lock
 
         """
+        self.logger.debug(f'entered by {self.name}, call seq: '
+                          f'{get_formatted_call_sequence(latest=1, depth=1)}')
         # Remove any old entries
         keys_to_del = []
         for key, item in self._registry.items():
@@ -629,6 +633,7 @@ class SmartEvent:
 
         for key in keys_to_del:
             del self._registry[key]
+            self.logger.debug(f'{key} removed from registry')
 
     ###########################################################################
     # pair_with
@@ -706,10 +711,11 @@ class SmartEvent:
         caller_info = ''
         if log_msg and self.debug_logging_enabled:
             caller_info = get_formatted_call_sequence(latest=1, depth=1)
-            self.logger.debug(f'pair_with() entered by {self.name} to '
-                              f'pair with remote_name = {remote_name}. '
+            self.logger.debug(f'entered by {self.name} to '
+                              f'pair with {remote_name}. '
                               f'{caller_info} {log_msg}')
 
+        self._verify_current_remote(skip_pair_check=True)
         if not isinstance(remote_name, str):
             raise IncorrectNameSpecified('Attempted SmartEvent pair_with() '
                                          f'with incorrect remote name of'
@@ -757,7 +763,7 @@ class SmartEvent:
 
                 if self.remote is not None:
                     if self.remote.remote is not None:
-                        if self.remote.remote.name == self.name:
+                        if self.remote.remote is self:  # if us
                             # If the remote has already created the
                             # shared status area, use it. Otherwise, we
                             # create it and the remote will use that.
@@ -767,7 +773,7 @@ class SmartEvent:
                                 self.status = self.SharedPairStatus()
 
                             break  # we are now paired
-                        else:
+                        elif self.remote.remote.thread.is_alive():
                             diag_remote_name = self.remote.remote.name
                             self.remote = None
                             self.logger.debug(f'{self.name} unable to pair '
@@ -794,8 +800,8 @@ class SmartEvent:
 
         # if caller specified a log message to issue
         if log_msg and self.debug_logging_enabled:
-            self.logger.debug(f'pair_with() exiting - {self.name} now '
-                              f'paired with remote_name = {remote_name}. '
+            self.logger.debug(f'exiting - {self.name} now '
+                              f'paired with {remote_name}. '
                               f'{caller_info} {log_msg}')
 
     ###########################################################################
@@ -1039,7 +1045,7 @@ class SmartEvent:
                             self.status.sync_cleanup = False
                             break
                     else:  # we are phase 2
-                        if not self.status.sync_cleanup:  # remote exited phase 2
+                        if not self.status.sync_cleanup:  # remote exited ph 2
                             break
 
                 if not (self.timeout_specified
@@ -1404,14 +1410,20 @@ class SmartEvent:
                 self._clean_up_registry()
 
             raise RemoteThreadNotAlive(
-                f'The current thread has detected that {self.remote.name} '
+                f'{self.name} has detected that {self.remote.name} '
                 'thread is not alive.')
 
     ###########################################################################
     # _verify_current_remote
     ###########################################################################
-    def _verify_current_remote(self) -> None:
+    def _verify_current_remote(self,
+                               skip_pair_check: Optional[bool] = False
+                               ) -> None:
         """Get the current and remote ThreadEvent objects.
+
+        Args:
+            skip_pair_check: used by pair_with since the pairing in
+                               not yet done
 
         Raises:
             NotPaired: Both threads must be paired before any SmartEvent
@@ -1436,9 +1448,10 @@ class SmartEvent:
                 f'Call sequence: {get_formatted_call_sequence(1,2)}')
 
         # make sure that remote exists and it points back to us
-        if (self.remote is None
-                or self.remote.remote is None
-                or self.remote.remote.name != self.name):
+        if (not skip_pair_check
+                and (self.remote is None
+                     or self.remote.remote is None
+                     or self.remote.remote.name != self.name)):
             self.logger.debug(f'{self.name} raising NotPaired')
             raise NotPaired(
                 'Both threads must be paired before any '
