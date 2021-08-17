@@ -462,7 +462,7 @@ class SmartEvent:
     def __init__(
             self, *,
             name: str,
-            thread: Optional[threading.Thread] = threading.current_thread()
+            thread: Optional[threading.Thread] = None
             ) -> None:
         """Initialize an instance of the SmartEvent class.
 
@@ -478,7 +478,12 @@ class SmartEvent:
             raise IncorrectNameSpecified('Attempted SmartEvent instantiation '
                                          f'with incorrect name of {name}.')
         self.name = name
-        self.thread = thread
+
+        if thread:
+            self.thread = thread
+        else:
+            self.thread = threading.current_thread()
+
         self.event = threading.Event()
         self.remote = None
 

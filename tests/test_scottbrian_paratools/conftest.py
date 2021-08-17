@@ -1,7 +1,6 @@
 """conftest.py module for testing."""
 
 import threading
-import time
 import traceback
 import pytest
 from typing import Any, cast
