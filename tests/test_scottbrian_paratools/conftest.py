@@ -104,6 +104,9 @@ def thread_exc(monkeypatch: Any) -> "ExcHook":
 
     yield exc_hook
 
+    # clean the registry in SmartEvent class
+    SmartEvent._registry = {}
+
     # the following check ensures that the test case waited via join for
     # any started threads to come home
     assert threading.active_count() == 1
