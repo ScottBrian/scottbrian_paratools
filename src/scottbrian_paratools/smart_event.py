@@ -619,11 +619,13 @@ class SmartEvent:
             1) Must be called holding _registry_lock
 
         """
-        self.logger.debug(f'entered by {self.name}, call seq: '
-                          f'{get_formatted_call_sequence(latest=1, depth=1)}')
+        # self.logger.debug(
+        # f'entered by {self.name}, call seq: '
+        # f'{get_formatted_call_sequence(latest=1, depth=1)}')
         # Remove any old entries
         keys_to_del = []
         for key, item in self._registry.items():
+            # self.logger.debug(f'key {key} item {item}')
             if not item.thread.is_alive():
                 keys_to_del.append(key)
 
@@ -1413,6 +1415,8 @@ class SmartEvent:
             with self._registry_lock:
                 # Remove any old entries
                 self._clean_up_registry()
+
+            self.wait_wait = False
 
             raise RemoteThreadNotAlive(
                 f'{self.name} has detected that {self.remote.name} '

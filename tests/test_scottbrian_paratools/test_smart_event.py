@@ -343,9 +343,12 @@ class SmartEventDescs:
     ###########################################################################
     # __init__
     ###########################################################################
-    def __init__(self):
+    def __init__(self, in_descs: Any = None):
         """Initialize object."""
-        self.descs: Dict[str, SmartEventDesc] = {}
+        self._descs_lock = threading.RLock()
+        self.descs: Union[Dict[str, SmartEventDesc], None] = None
+        if in_descs is None:
+            self.descs = {}
 
     ###########################################################################
     # add_desc
@@ -357,35 +360,37 @@ class SmartEventDescs:
             desc: the desc to add
 
         """
-        self.cleanup_registry()
-        desc.state = SmartEventDesc.STATE_ALIVE_REGISTERED
-        self.descs[desc.name] = desc
-        self.verify_registry()
+        with self._descs_lock:
+            self.cleanup_registry()
+            desc.state = SmartEventDesc.STATE_ALIVE_REGISTERED
+            self.descs[desc.name] = desc
+            self.verify_registry()
 
     ###########################################################################
     # thread_end
     ###########################################################################
     def thread_end(self,
-                    name: str) -> None:
+                   name: str) -> None:
         """Update SmartEventDescs to show a thread ended.
 
         Args:
             name: name of SmartEvent for desc to be updated
 
         """
-        # Note that this action does not cause registry cleanup
-        # make sure thread is not alive
-        assert not self.descs[name].s_event.thread.is_alive()
+        with self._descs_lock:
+            # Note that this action does not cause registry cleanup
+            # make sure thread is not alive
+            assert not self.descs[name].s_event.thread.is_alive()
 
-        # make sure we are transitioning correctly
-        assert (self.descs[name].state
-                == SmartEventDesc.STATE_ALIVE_REGISTERED)
-        self.descs[name].state = SmartEventDesc.STATE_NOT_ALIVE_REGISTERED
+            # make sure we are transitioning correctly
+            assert (self.descs[name].state
+                    == SmartEventDesc.STATE_ALIVE_REGISTERED)
+            self.descs[name].state = SmartEventDesc.STATE_NOT_ALIVE_REGISTERED
 
-        #######################################################################
-        # verify the registry
-        #######################################################################
-        self.verify_registry()
+            ###################################################################
+            # verify the registry
+            ###################################################################
+            self.verify_registry()
 
     ###########################################################################
     # cleanup
@@ -398,12 +403,13 @@ class SmartEventDescs:
         # registered, or when a pair_with is done. This action is called
         # here for the other cases that trigger cleanup, such as
         # getting a RemoteThreadNotAlive error.
-        self.cleanup_registry()
+        with self._descs_lock:
+            self.cleanup_registry()
 
-        #######################################################################
-        # verify the registry
-        #######################################################################
-        self.verify_registry()
+            ###################################################################
+            # verify the registry
+            ###################################################################
+            self.verify_registry()
 
     ###########################################################################
     # paired
@@ -419,58 +425,61 @@ class SmartEventDescs:
                    null if name1 became unpaired
 
         """
-
-        self.cleanup_registry()
-        # make sure we can allow the pair
-        assert self.descs[name1].s_event.thread.is_alive()
-        assert (self.descs[name1].state
-                == SmartEventDesc.STATE_ALIVE_REGISTERED)
-        assert name1 in SmartEvent._registry
-        assert name1 in self.descs
-
-        # note that name2 will normally be the SmartEventDesc
-        # that we are pairing with, but it could be None in the case
-        # where we are doing a second or subsequent pairing but the
-        # remote fails to to do the pair, which means we lose the
-        # residual name2 SmartEventDesc
-        if name2:
-            assert self.descs[name2].s_event.thread.is_alive()
-            assert (self.descs[name2].state
+        with self._descs_lock:
+            self.cleanup_registry()
+            # make sure we can allow the pair
+            assert self.descs[name1].s_event.thread.is_alive()
+            assert (self.descs[name1].state
                     == SmartEventDesc.STATE_ALIVE_REGISTERED)
-            assert name2 in SmartEvent._registry
-            assert name2 in self.descs
-            self.descs[name1].paired_with = self.descs[name2]
-            self.descs[name2].paired_with = self.descs[name1]
-        else:
-            self.descs[name1].paired_with = None
+            assert name1 in SmartEvent._registry
+            assert name1 in self.descs
 
-        #######################################################################
-        # verify the registry
-        #######################################################################
-        self.verify_registry()
+            # note that name2 will normally be the SmartEventDesc
+            # that we are pairing with, but it could be None in the case
+            # where we are doing a second or subsequent pairing but the
+            # remote fails to to do the pair, which means we lose the
+            # residual name2 SmartEventDesc
+            if name2:
+                assert name2 in SmartEvent._registry
+                assert self.descs[name2].s_event.thread.is_alive()
+                assert (self.descs[name2].state
+                        == SmartEventDesc.STATE_ALIVE_REGISTERED)
+                assert name2 in SmartEvent._registry
+                assert name2 in self.descs
+                self.descs[name1].paired_with = self.descs[name2]
+                self.descs[name2].paired_with = self.descs[name1]
+            else:
+                self.descs[name1].paired_with = None
+
+            ###################################################################
+            # verify the registry
+            ###################################################################
+            self.verify_registry()
 
     ###########################################################################
     # verify_registry
     ###########################################################################
     def verify_registry(self):
-        num_registered = 0
-        for key, item in self.descs.items():
-            if (item.state == SmartEventDesc.STATE_ALIVE_REGISTERED
-                    or item.state
-                    == SmartEventDesc.STATE_NOT_ALIVE_REGISTERED):
-                num_registered += 1
-            item.verify_state()
+        with self._descs_lock:
+            num_registered = 0
+            for key, item in self.descs.items():
+                if (item.state == SmartEventDesc.STATE_ALIVE_REGISTERED
+                        or item.state
+                        == SmartEventDesc.STATE_NOT_ALIVE_REGISTERED):
+                    num_registered += 1
+                item.verify_state()
 
-        assert len(SmartEvent._registry) == num_registered
+            assert len(SmartEvent._registry) == num_registered
 
     ###########################################################################
-    # verify_registry
+    # cleanup_registry
     ###########################################################################
     def cleanup_registry(self):
         for key, item in self.descs.items():
             if item.state == SmartEventDesc.STATE_NOT_ALIVE_REGISTERED:
                 assert not item.s_event.thread.is_alive()
                 item.state = SmartEventDesc.STATE_NOT_ALIVE_UNREGISTERED
+
 
 ###############################################################################
 # outer_f1
@@ -587,7 +596,9 @@ class OuterThreadEventApp(threading.Thread, SmartEvent):
 
         logger.debug('beta run exiting')
 
-
+###############################################################################
+# TestSmartEventBasic class
+###############################################################################
 class TestSmartEventBasic:
     """Test class for SmartEvent basic tests."""
 
@@ -680,7 +691,7 @@ class TestSmartEventBasic:
             smart_event2 = SmartEvent(name='alpha')
 
         with pytest.raises(IncorrectNameSpecified):
-            smart_event2 = SmartEvent(name=42)
+            smart_event2 = SmartEvent(name=42)  # type: ignore
 
         # try wait, resume, and pause_until without having been paired
         with pytest.raises(NotPaired):
@@ -1623,10 +1634,10 @@ class TestSmartEventBasic:
         assert smart_event.remote.thread is my_f1_thread
 
     ###########################################################################
-    # test_smart_event_register_threads_thread_app
+    # test_smart_event_inner_thread_app
     ###########################################################################
-    def test_smart_event_register_threads_thread_app(self) -> None:
-        """Test register_thread with thread_app."""
+    def test_smart_event_inner_thread_app(self) -> None:
+        """Test SmartEvent with thread_app."""
         #######################################################################
         # ThreadApp
         #######################################################################
@@ -1635,8 +1646,7 @@ class TestSmartEventBasic:
 
             def __init__(self,
                          alpha_smart_event: SmartEvent,
-                         alpha_thread: threading.Thread,
-                         beta_smart_events: List[Union[int, SmartEvent]]
+                         alpha_thread: threading.Thread
                          ) -> None:
                 """Initialize the object.
 
@@ -1647,44 +1657,26 @@ class TestSmartEventBasic:
 
                 """
                 super().__init__()
-                self.s_event = SmartEvent(name='beta')
+                self.s_event = SmartEvent(name='beta', thread=self)
                 self.alpha_s_event = alpha_smart_event
                 self.alpha_thread = alpha_thread
-                beta_smart_events[0] = self.s_event
-
-                alpha_desc = SmartEventDesc(smart_event=self.alpha_s_event,
-                                            name='alpha',
-                                            thread=self.alpha_thread,
-                                            paired_with='')
-
-                beta_desc = SmartEventDesc(smart_event=self.s_event,
-                                           name='beta',
-                                           thread=self,
-                                           paired_with='')
-
-                verify_registry([alpha_desc, beta_desc])
 
             def run(self):
                 """Run the tests."""
                 logger.debug('run started')
 
-                alpha_desc = SmartEventDesc(smart_event=self.alpha_s_event,
-                                            name='alpha',
-                                            thread=self.alpha_thread,
-                                            paired_with='')
-
-                beta_desc = SmartEventDesc(smart_event=self.s_event,
-                                           name='beta',
-                                           thread=self,
-                                           paired_with='')
-
-                verify_registry([alpha_desc, beta_desc])
+                # normally, the add_desc is done just after the
+                # instantiation, but
+                # in this case the thread is not made alive until now, and the
+                # add_desc checks that the thread is alive
+                descs.add_desc(SmartEventDesc(name='beta',
+                                              s_event=self.s_event,
+                                              thread=self))
 
                 self.s_event.pair_with(remote_name='alpha')
-                alpha_desc.paired_with = 'beta'
-                beta_desc.paired_with = 'alpha'
-                verify_registry([alpha_desc, beta_desc])
+                descs.paired('alpha', 'beta')
 
+                assert self.s_event.remote is self.alpha_s_event
                 assert (self.s_event.remote.thread
                         is self.alpha_thread)
                 assert self.s_event.remote.thread is alpha_t
@@ -1716,6 +1708,9 @@ class TestSmartEventBasic:
         descs = SmartEventDescs()
         alpha_t = threading.current_thread()
         smart_event1 = SmartEvent(name='alpha')
+        descs.add_desc(SmartEventDesc(name='alpha',
+                                      s_event=smart_event1))
+
         my_taa_thread = MyThread(smart_event1, alpha_t)
 
         my_taa_thread.start()
@@ -1740,9 +1735,24 @@ class TestSmartEventBasic:
         smart_event1.sync(log_msg='mainline sync point 4')
 
         my_taa_thread.join()
+        descs.thread_end('beta')
 
         with pytest.raises(RemoteThreadNotAlive):
             smart_event1.resume()
+        descs.cleanup()
+
+        with pytest.raises(RemoteThreadNotAlive):
+            smart_event1.wait()
+
+        with pytest.raises(RemoteThreadNotAlive):
+            smart_event1.pause_until(WUCond.RemoteWaiting)
+
+        with pytest.raises(RemoteThreadNotAlive):
+            smart_event1.pause_until(WUCond.RemoteResume)
+
+        with pytest.raises(PairWithTimedOut):
+            smart_event1.pair_with(remote_name='beta', timeout=1)
+        descs.paired('alpha')
 
         with pytest.raises(NotPaired):
             smart_event1.wait()
@@ -1754,13 +1764,18 @@ class TestSmartEventBasic:
             smart_event1.pause_until(WUCond.RemoteResume)
 
         assert smart_event1.thread is alpha_t
-        assert smart_event1.remoteg.thread is my_taa_thread
+        assert smart_event1.remote is None
 
         del smart_event1
         del my_taa_thread
 
+    ###########################################################################
+    # test_smart_event_inner_thread_app2
+    ###########################################################################
+    def test_smart_event_inner_thread_app2(self) -> None:
+        """Test SmartEvent with thread_app."""
         #######################################################################
-        # mainline and ThreadApp - thread_app sets beta
+        # mainline and ThreadApp - mainline provide beta SmartEvent
         #######################################################################
         class MyThread2(threading.Thread):
             def __init__(self,
@@ -1768,13 +1783,25 @@ class TestSmartEventBasic:
                          alpha_t1: threading.Thread):
                 super().__init__()
                 self.s_event = s_event
-                self.s_event.register_thread(beta=self)
+                # not really a good idea to set the thread - this test case
+                # may not be realistic - need to consider whether the idea
+                # of passing in a pre-instantiated SmartEvent (which gets
+                # its thread set during instantiation) is something we want
+                # to support given that we have to change the thread
+                self.s_event.thread = self
                 self.alpha_t1 = alpha_t1
 
             def run(self):
                 print('run started')
+                # normally, the add_desc is done just after the
+                # instantiation, but
+                # in this case the thread is not made alive until now, and the
+                # add_desc checks that the thread is alive
+                descs.add_desc(SmartEventDesc(name='beta',
+                                              s_event=self.s_event,
+                                              thread=self))
 
-                self.s_event.pair_with(remote_name='alpha')
+                self.s_event.pair_with(remote_name='alpha2')
 
                 assert self.s_event.remote.thread is self.alpha_t1
                 assert self.s_event.remote.thread is alpha_t
@@ -1788,18 +1815,22 @@ class TestSmartEventBasic:
                     self.s_event.wait()
 
                 assert self.s_event.wait()
-                self.s_event.pause_until(WUCond.ThreadsReady)
                 self.s_event.pause_until(WUCond.RemoteWaiting)
                 self.s_event.pause_until(WUCond.RemoteWaiting, timeout=2)
 
                 self.s_event.resume()
 
-        smart_event2 = SmartEvent()
+        descs = SmartEventDescs()
+        smart_event2 = SmartEvent(name='alpha2')
+        descs.add_desc(SmartEventDesc(name='alpha2',
+                                      s_event=smart_event2))
 
-        my_tab_thread = MyThread2(smart_event2, alpha_t)
+        smart_event3 = SmartEvent(name='beta')
+        alpha_t = threading.current_thread()
+        my_tab_thread = MyThread2(smart_event3, alpha_t)
         my_tab_thread.start()
 
-        smart_event2.pair_with(remote_name='alpha')
+        smart_event2.pair_with(remote_name='beta')
 
         smart_event2.pause_until(WUCond.RemoteWaiting)
         with pytest.raises(WaitDeadlockDetected):
@@ -1808,27 +1839,29 @@ class TestSmartEventBasic:
         assert smart_event2.wait()
 
         my_tab_thread.join()
+        descs.thread_end('beta')
 
         with pytest.raises(RemoteThreadNotAlive):
             smart_event2.resume()
+        descs.cleanup()
 
-        with pytest.raises(NotPaired):
+        with pytest.raises(RemoteThreadNotAlive):
             smart_event2.wait()
 
-        with pytest.raises(NotPaired):
+        with pytest.raises(RemoteThreadNotAlive):
             smart_event2.pause_until(WUCond.RemoteWaiting)
 
-        with pytest.raises(NotPaired):
+        with pytest.raises(RemoteThreadNotAlive):
             smart_event2.pause_until(WUCond.RemoteResume)
 
         assert smart_event2.thread is alpha_t
         assert smart_event2.remote.thread is my_tab_thread
 
     ###########################################################################
-    # test_smart_event_register_threads_thread_event_app
+    # test_smart_event_inner_thread_event_app
     ###########################################################################
-    def test_smart_event_register_threads_thread_event_app(self) -> None:
-        """Test register_thread with thread_event_app."""
+    def test_smart_event_inner_thread_event_app(self) -> None:
+        """Test SmartEvent with thread_event_app."""
         #######################################################################
         # mainline and ThreadEventApp - mainline sets alpha and beta
         #######################################################################
@@ -1836,20 +1869,28 @@ class TestSmartEventBasic:
             def __init__(self,
                          alpha_t1: threading.Thread):
                 threading.Thread.__init__(self)
-                SmartEvent.__init__(self)
+                SmartEvent.__init__(self, name='beta', thread=self)
                 self.alpha_t1 = alpha_t1
-                with pytest.raises(WaitUntilTimeout):
-                    self.pause_until(WUCond.ThreadsReady, timeout=0.1)
 
             def run(self):
                 logger.debug('run started')
-                self.pause_until(WUCond.ThreadsReady, timeout=0.1)
-                assert self.alpha.thread is self.alpha_t1
-                assert self.alpha.thread is alpha_t
-                assert self.beta.thread is self
+                # normally, the add_desc is done just after the
+                # instantiation, but
+                # in this case the thread is not made alive until now, and the
+                # add_desc checks that the thread is alive
+                descs.add_desc(SmartEventDesc(name='beta',
+                                              s_event=self,
+                                              thread=self))
+                cmds.queue_cmd('alpha')
+                self.pair_with(remote_name='alpha')
+                descs.paired('alpha', 'beta')
+
+                assert self.remote.thread is self.alpha_t1
+                assert self.remote.thread is alpha_t
+                assert self.thread is self
                 my_run_thread = threading.current_thread()
-                assert self.beta.thread is my_run_thread
-                assert self.beta.thread is threading.current_thread()
+                assert self.thread is my_run_thread
+                assert self.thread is threading.current_thread()
 
                 assert self.wait()
                 self.pause_until(WUCond.RemoteWaiting, timeout=2)
@@ -1858,50 +1899,79 @@ class TestSmartEventBasic:
                 self.resume()
                 logger.debug('run exiting')
 
+        cmds = Cmds()
         descs = SmartEventDescs()
         alpha_t = threading.current_thread()
 
         my_te1_thread = MyThreadEvent1(alpha_t)
-        with pytest.raises(WaitUntilTimeout):
-            my_te1_thread.pause_until(WUCond.ThreadsReady, timeout=0.005)
+        with pytest.raises(DetectedOpFromForeignThread):
+            my_te1_thread.pause_until(WUCond.RemoteWaiting,
+                                      timeout=0.005)
 
-        my_te1_thread.register_thread(alpha=alpha_t)
-        with pytest.raises(WaitUntilTimeout):
-            my_te1_thread.pause_until(WUCond.ThreadsReady, timeout=0.005)
+        with pytest.raises(DetectedOpFromForeignThread):
+            my_te1_thread.wait(timeout=0.005)
 
-        my_te1_thread.register_thread(beta=my_te1_thread)
-        with pytest.raises(WaitUntilTimeout):
-            my_te1_thread.pause_until(WUCond.ThreadsReady, timeout=0.005)
+        with pytest.raises(DetectedOpFromForeignThread):
+            my_te1_thread.resume(timeout=0.005)
 
-        assert my_te1_thread.alpha.thread is alpha_t
-        assert my_te1_thread.beta.thread is my_te1_thread
+        with pytest.raises(DetectedOpFromForeignThread):
+            my_te1_thread.sync(timeout=0.005)
+
+        with pytest.raises(DetectedOpFromForeignThread):
+            my_te1_thread.pair_with(remote_name='alpha', timeout=0.5)
+
+        assert my_te1_thread.remote is None
+        assert my_te1_thread.thread is my_te1_thread
 
         my_te1_thread.start()
-        my_te1_thread.pause_until(WUCond.ThreadsReady)
-        my_te1_thread.resume()
-        with pytest.raises(WaitDeadlockDetected):
-            my_te1_thread.wait()
 
-        assert my_te1_thread.wait()
+        cmds.get_cmd('alpha')
+        smart_event = SmartEvent(name='alpha')
+        descs.add_desc(SmartEventDesc(name='alpha',
+                                      s_event=smart_event))
+
+        with pytest.raises(NotPaired):
+            smart_event.sync()
+
+        with pytest.raises(NotPaired):
+            smart_event.wait()
+
+        with pytest.raises(NotPaired):
+            smart_event.resume()
+
+        smart_event.pair_with(remote_name='beta')
+
+        smart_event.resume()
+        with pytest.raises(WaitDeadlockDetected):
+            smart_event.wait()
+
+        assert smart_event.wait()
 
         my_te1_thread.join()
+        descs.thread_end('beta')
 
         with pytest.raises(RemoteThreadNotAlive):
-            my_te1_thread.resume()
+            smart_event.resume()
 
-        with pytest.raises(NotPaired):
-            my_te1_thread.wait()
+        with pytest.raises(RemoteThreadNotAlive):
+            smart_event.wait()
 
-        with pytest.raises(NotPaired):
-            my_te1_thread.pause_until(WUCond.RemoteWaiting)
+        with pytest.raises(RemoteThreadNotAlive):
+            smart_event.pause_until(WUCond.RemoteWaiting)
 
-        with pytest.raises(NotPaired):
-            my_te1_thread.pause_until(WUCond.RemoteResume)
+        with pytest.raises(RemoteThreadNotAlive):
+            smart_event.pause_until(WUCond.RemoteResume)
 
-        assert my_te1_thread.alpha.thread is alpha_t
-        assert my_te1_thread.beta.thread is my_te1_thread
+        assert my_te1_thread.remote is not None
+        assert my_te1_thread.remote.thread is not None
+        assert my_te1_thread.remote.thread is alpha_t
+        assert my_te1_thread.thread is my_te1_thread
 
-        del my_te1_thread
+    ###########################################################################
+    # test_smart_event_inner_thread_event_app2
+    ###########################################################################
+    def test_smart_event_inner_thread_event_app2(self) -> None:
+        """Test SmartEvent with thread_event_app."""
 
         #######################################################################
         # mainline and ThreadApp - mainline sets alpha thread_app sets beta
@@ -1910,224 +1980,142 @@ class TestSmartEventBasic:
             def __init__(self,
                          alpha_t1: threading.Thread):
                 threading.Thread.__init__(self)
-                SmartEvent.__init__(self, beta=self)
+                SmartEvent.__init__(self, name='beta', thread=self)
                 self.alpha_t1 = alpha_t1
-                with pytest.raises(WaitUntilTimeout):
-                    self.pause_until(WUCond.ThreadsReady, timeout=0.005)
 
             def run(self):
                 logger.debug('run started')
-                self.pause_until(WUCond.ThreadsReady, timeout=0.005)
-                assert self.alpha.thread is self.alpha_t1
-                assert self.alpha.thread is alpha_t
-                assert self.beta.thread is self
+
+                assert self.remote is None
+                assert self.thread is self
+
                 my_run_thread = threading.current_thread()
-                assert self.beta.thread is my_run_thread
-                assert self.beta.thread is threading.current_thread()
+                assert self.thread is my_run_thread
+                assert self.thread is threading.current_thread()
+
+                # normally, the add_desc is done just after the
+                # instantiation, but
+                # in this case the thread is not made alive until now, and the
+                # add_desc checks that the thread is alive
+                descs.add_desc(SmartEventDesc(name='beta',
+                                              s_event=self,
+                                              thread=self))
+
+                cmds.queue_cmd('alpha')
+                self.pair_with(remote_name='alpha')
+                assert self.remote.thread is self.alpha_t1
+                assert self.remote.thread is alpha_t
+
+                descs.paired('alpha', 'beta')
+
                 with pytest.raises(WaitDeadlockDetected):
                     self.wait()
                 assert self.wait()
                 self.resume()
                 logger.debug('run exiting')
 
+        cmds = Cmds()
+        descs = SmartEventDescs()
+        alpha_t = threading.current_thread()
         my_te2_thread = MyThreadEvent2(alpha_t)
-        with pytest.raises(WaitUntilTimeout):
-            my_te2_thread.pause_until(WUCond.ThreadsReady, timeout=0.005)
-        my_te2_thread.register_thread(alpha=alpha_t)
-        with pytest.raises(WaitUntilTimeout):
-            my_te2_thread.pause_until(WUCond.ThreadsReady, timeout=0.005)
+
         my_te2_thread.start()
 
-        my_te2_thread.pause_until(WUCond.ThreadsReady)
+        cmds.get_cmd('alpha')
+        smart_event = SmartEvent(name='alpha')
+        descs.add_desc(SmartEventDesc(name='alpha',
+                                      s_event=smart_event))
 
-        my_te2_thread.pause_until(WUCond.RemoteWaiting, timeout=2)
+        smart_event.pair_with(remote_name='beta')
+
+        smart_event.pause_until(WUCond.RemoteWaiting, timeout=2)
         with pytest.raises(WaitDeadlockDetected):
-            my_te2_thread.wait()
+            smart_event.wait()
 
-        my_te2_thread.resume()
-        assert my_te2_thread.wait()
+        assert smart_event.resume()
+        assert smart_event.wait()
 
         my_te2_thread.join()
+        descs.thread_end('beta')
 
         with pytest.raises(RemoteThreadNotAlive):
-            my_te2_thread.resume()
-
-        with pytest.raises(NotPaired):
-            my_te2_thread.wait()
-
-        with pytest.raises(NotPaired):
-            my_te2_thread.pause_until(WUCond.RemoteWaiting, timeout=2)
-
-        with pytest.raises(NotPaired):
-            my_te2_thread.pause_until(WUCond.RemoteResume, timeout=2)
-
-        assert my_te2_thread.alpha.thread is alpha_t
-        assert my_te2_thread.beta.thread is my_te2_thread
-
-        del my_te2_thread
-
-        #######################################################################
-        # mainline and ThreadApp - thread_app sets alpha and beta
-        #######################################################################
-        class MyThreadEvent3(threading.Thread, SmartEvent):
-            def __init__(self,
-                         alpha_t1: threading.Thread):
-                threading.Thread.__init__(self)
-                SmartEvent.__init__(self, alpha=alpha_t)
-                with pytest.raises(WaitUntilTimeout):
-                    self.pause_until(WUCond.ThreadsReady, timeout=0.005)
-                self.register_thread(beta=self)
-                with pytest.raises(WaitUntilTimeout):
-                    self.pause_until(WUCond.ThreadsReady, timeout=0.001)
-                self.alpha_t1 = alpha_t1
-
-            def run(self):
-                logger.debug('run started')
-                self.pause_until(WUCond.ThreadsReady, timeout=0.001)
-                assert self.alpha.thread is self.alpha_t1
-                assert self.alpha.thread is alpha_t
-                assert self.beta.thread is self
-                my_run_thread = threading.current_thread()
-                assert self.beta.thread is my_run_thread
-                assert self.beta.thread is threading.current_thread()
-
-                self.pause_until(WUCond.RemoteResume, timeout=2)
-                assert self.wait()
-                self.pause_until(WUCond.RemoteWaiting, timeout=2)
-                with pytest.raises(WaitDeadlockDetected):
-                    self.wait()
-                self.resume()
-                logger.debug('run exiting')
-
-        my_te3_thread = MyThreadEvent3(alpha_t)
-        with pytest.raises(WaitUntilTimeout):
-            my_te3_thread.pause_until(WUCond.ThreadsReady, timeout=0.005)
-        my_te3_thread.start()
-
-        my_te3_thread.pause_until(WUCond.ThreadsReady, timeout=2)
-        my_te3_thread.resume()
-        with pytest.raises(WaitDeadlockDetected):
-            my_te3_thread.wait()
-        assert my_te3_thread.wait()
-
-        my_te3_thread.join()
+            smart_event.resume()
 
         with pytest.raises(RemoteThreadNotAlive):
-            my_te3_thread.resume()
-
-        with pytest.raises(NotPaired):
-            my_te3_thread.wait(timeout=3)
-
-        with pytest.raises(NotPaired):
-            my_te3_thread.pause_until(WUCond.RemoteWaiting)
-
-        with pytest.raises(NotPaired):
-            my_te3_thread.pause_until(WUCond.RemoteResume)
-
-        assert my_te3_thread.alpha.thread is alpha_t
-        assert my_te3_thread.beta.thread is my_te3_thread
-
-        del my_te3_thread
-
-        #######################################################################
-        # mainline and ThreadApp - thread_app sets alpha and beta alternative
-        #######################################################################
-        class MyThreadEvent4(threading.Thread, SmartEvent):
-            def __init__(self,
-                         alpha_t1: threading.Thread):
-                threading.Thread.__init__(self)
-                SmartEvent.__init__(self, alpha=alpha_t, beta=self)
-                with pytest.raises(WaitUntilTimeout):
-                    self.pause_until(WUCond.ThreadsReady, timeout=0.001)
-                self.alpha_t1 = alpha_t1
-
-            def run(self):
-                logger.debug('run started')
-                self.pause_until(WUCond.ThreadsReady, timeout=0.001)
-                assert self.alpha.thread is self.alpha_t1
-                assert self.alpha.thread is alpha_t
-                assert self.beta.thread is self
-                my_run_thread = threading.current_thread()
-                assert self.beta.thread is my_run_thread
-                assert self.beta.thread is threading.current_thread()
-                with pytest.raises(WaitDeadlockDetected):
-                    self.wait()
-                assert self.wait()
-                self.resume()
-                logger.debug('run exiting')
-
-        my_te4_thread = MyThreadEvent4(alpha_t)
-        my_te4_thread.start()
-
-        my_te4_thread.pause_until(WUCond.RemoteWaiting)
-        with pytest.raises(WaitDeadlockDetected):
-            my_te4_thread.wait()
-
-        my_te4_thread.resume()
-        assert my_te4_thread.wait()
-
-        my_te4_thread.join()
+            smart_event.wait()
 
         with pytest.raises(RemoteThreadNotAlive):
-            my_te4_thread.resume()
+            smart_event.pause_until(WUCond.RemoteWaiting, timeout=2)
 
-        with pytest.raises(NotPaired):
-            my_te4_thread.wait()
+        with pytest.raises(RemoteThreadNotAlive):
+            smart_event.pause_until(WUCond.RemoteResume, timeout=2)
 
-        with pytest.raises(NotPaired):
-            my_te4_thread.pause_until(WUCond.RemoteWaiting)
-
-        with pytest.raises(NotPaired):
-            my_te4_thread.pause_until(WUCond.RemoteResume)
-
-        assert my_te4_thread.alpha.thread is alpha_t
-        assert my_te4_thread.beta.thread is my_te4_thread
+        assert smart_event.thread is alpha_t
+        assert smart_event.remote.thread is my_te2_thread
 
     ###########################################################################
-    # test_smart_event_register_threads_two_f_threads
+    # test_smart_event_two_f_threads
     ###########################################################################
-    def test_smart_event_register_threads_two_f_threads(self) -> None:
+    def test_smart_event_two_f_threads(self) -> None:
         """Test register_thread with thread_event_app."""
         #######################################################################
         # two threads - mainline sets alpha and beta
         #######################################################################
         def fa1():
             logger.debug('fa1 entered')
-            s_event = SmartEvent()
             my_fa_thread = threading.current_thread()
+            s_event = SmartEvent(name='fa1')
+            descs.add_desc(SmartEventDesc(name='fa1',
+                                          s_event=s_event,
+                                          thread=my_fa_thread))
+
             assert s_event.thread is my_fa_thread
-            assert SmartEvent.threads['alpha'] is my_fa_thread
-            s_event.pause_until(WUCond.ThreadsReady)
+
+            s_event.pair_with(remote_name='fb1')
+            descs.paired('fa1', 'fb1')
+
             logger.debug('fa1 about to wait')
             s_event.wait()
             logger.debug('fa1 back from wait')
+            s_event.pause_until(WUCond.RemoteWaiting, timeout=2)
             s_event.resume()
 
-        def fb1(s_event):
+        def fb1():
             logger.debug('fb1 entered')
-            s_event = SmartEvent()
             my_fb_thread = threading.current_thread()
+            s_event = SmartEvent(name='fb1')
+            descs.add_desc(SmartEventDesc(name='fb1',
+                                          s_event=s_event,
+                                          thread=my_fb_thread))
+
             assert s_event.thread is my_fb_thread
-            assert SmartEvent.threads['alpha'] is my_fb_thread
+
+            s_event.pair_with(remote_name='fa1')
 
             logger.debug('fb1 about to resume')
             s_event.resume()
             s_event.wait()
 
-            _ = cmds.get_cmd('beta')
+            # tell mainline we are out of the wait - OK to do descs fa1 end
+            cmds.queue_cmd('alpha')
+
+            # wait for mainline to give to go ahead after doing descs fa1 end
+            cmds.get_cmd('beta')
 
             with pytest.raises(RemoteThreadNotAlive):
                 s_event.resume()
 
-            with pytest.raises(NotPaired):
+            descs.cleanup()
+
+            with pytest.raises(RemoteThreadNotAlive):
                 s_event.wait()
 
-            with pytest.raises(NotPaired):
+            with pytest.raises(RemoteThreadNotAlive):
                 s_event.pause_until(WUCond.RemoteWaiting)
 
-            with pytest.raises(WaitUntilTimeout):
-                s_event.pause_until(WUCond.ThreadsReady, timeout=0.1)
-
+        #######################################################################
+        # mainline
+        #######################################################################
         cmds = Cmds()
         descs = SmartEventDescs()
         fa1_thread = threading.Thread(target=fa1)
@@ -2140,26 +2128,35 @@ class TestSmartEventBasic:
         fb1_thread.start()
 
         fa1_thread.join()
+        cmds.get_cmd('alpha')
+        descs.thread_end('fa1')
 
         cmds.queue_cmd('beta', 'go')
 
         fb1_thread.join()
+        descs.thread_end('fb1')
 
-        del fa1_thread
-        del fb1_thread
+    ###########################################################################
+    # test_smart_event_two_f_threads2
+    ###########################################################################
+    def test_smart_event_two_f_threads2(self) -> None:
+        """Test register_thread with thread_event_app."""
 
         #######################################################################
         # two threads - fa2 and fb2 set their own threads
         #######################################################################
-        def fa2(s_event):
+        def fa2():
             logger.debug('fa2 entered')
-            s_event = SmartEvent()
+            s_event = SmartEvent(name='fa2')
             my_fa_thread = threading.current_thread()
 
             assert s_event.thread is my_fa_thread
-            assert SmartEvent.threads['alpha'] is my_fa_thread
+            descs.add_desc(SmartEventDesc(name='fa2',
+                                          s_event=s_event,
+                                          thread=my_fa_thread))
 
-            s_event.pause_until(WUCond.ThreadsReady)
+            s_event.pair_with(remote_name='fb2')
+
             logger.debug('fa2 about to deadlock')
             with pytest.raises(WaitDeadlockDetected):
                 logger.debug('fa2 about to wait')
@@ -2167,7 +2164,7 @@ class TestSmartEventBasic:
                 logger.debug('fa2 back from wait')
 
             logger.debug('fa2 about to pause_until')
-            s_event.pause_until(WUCond.ThreadsReady, timeout=2)
+            s_event.pause_until(WUCond.RemoteWaiting, timeout=2)
             logger.debug('fa2 about to resume')
             s_event.resume()
 
@@ -2176,13 +2173,17 @@ class TestSmartEventBasic:
 
         def fb2():
             logger.debug('fb2 entered')
-            s_event = SmartEvent()
+            s_event = SmartEvent(name='fb2')
             my_fb_thread = threading.current_thread()
+            descs.add_desc(SmartEventDesc(name='fb2',
+                                          s_event=s_event,
+                                          thread=my_fb_thread))
 
             assert s_event.thread is my_fb_thread
-            assert SmartEvent.threads['beta'] is my_fb_thread
 
-            s_event.pause_until(WUCond.ThreadsReady)
+            s_event.pair_with(remote_name='fa2')
+            descs.paired('fa2', 'fb2')
+
             logger.debug('fb2 about to deadlock')
             with pytest.raises(WaitDeadlockDetected):
                 logger.debug('fb2 about to wait')
@@ -2190,24 +2191,31 @@ class TestSmartEventBasic:
                 logger.debug('fb2 back from wait')
 
             logger.debug('fb2 about to pause_until')
-            s_event.pause_until(WUCond.ThreadsReady, timeout=2)
             logger.debug('fb2 about to wait')
             s_event.wait()
             s_event.resume()
 
-            _ = cmds.get_cmd('beta')
+            # tell mainline we are out of the wait - OK to do descs fa1 end
+            cmds.queue_cmd('alpha')
+
+            # wait for mainline to give to go ahead after doing descs fa1 end
+            cmds.get_cmd('beta')
 
             logger.debug('fb2 about to try resume for RemoteThreadNotAlive')
             with pytest.raises(RemoteThreadNotAlive):
                 s_event.resume()
 
-            logger.debug('fb2 about to try wait for NotPaired')
-            s_event.alpha.clear()  # undo the last resume by fa1
-            with pytest.raises(NotPaired):
+            descs.cleanup()
+
+            logger.debug('fb2 about to try wait for RemoteThreadNotAlive')
+
+            with pytest.raises(RemoteThreadNotAlive):
                 s_event.wait()
 
             logger.debug('fb2 exiting')
 
+        cmds = Cmds()
+        descs = SmartEventDescs()
         fa2_thread = threading.Thread(target=fa2)
 
         fb2_thread = threading.Thread(target=fb2)
@@ -2217,9 +2225,14 @@ class TestSmartEventBasic:
 
         fa2_thread.join()
 
+        cmds.get_cmd('alpha')
+
+        descs.thread_end('fa2')
+
         cmds.queue_cmd('beta', 'go')
 
         fb2_thread.join()
+        descs.thread_end('fb2')
 
 
 ###############################################################################
