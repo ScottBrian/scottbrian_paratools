@@ -492,7 +492,7 @@ class SmartEvent:
         self.code: Any = None
         self.wait_wait: bool = False
         self.sync_wait: bool = False
-        self.timeout_specified: bool = False
+        self.wait_timeout_specified: bool = False
         self.deadlock: bool = False
         self.conflict: bool = False
 
@@ -500,6 +500,15 @@ class SmartEvent:
         self.debug_logging_enabled = self.logger.isEnabledFor(logging.DEBUG)
 
         self._register()
+
+    ###########################################################################
+    # _reset
+    ###########################################################################
+    def _reset(self) -> None:
+        """Reset the SmartEvent flags."""
+        self.sync_wait = False
+        self.wait_timeout_specified = False
+        self.wait_wait = False
 
     ###########################################################################
     # repr
@@ -718,7 +727,7 @@ class SmartEvent:
         caller_info = ''
         if log_msg and self.debug_logging_enabled:
             caller_info = get_formatted_call_sequence(latest=1, depth=1)
-            self.logger.debug(f'entered by {self.name} to '
+            self.logger.debug(f'pair_with() entered by {self.name} to '
                               f'pair with {remote_name}. '
                               f'{caller_info} {log_msg}')
 
@@ -807,7 +816,7 @@ class SmartEvent:
 
         # if caller specified a log message to issue
         if log_msg and self.debug_logging_enabled:
-            self.logger.debug(f'exiting - {self.name} now '
+            self.logger.debug(f'pair_with() exiting - {self.name} now '
                               f'paired with {remote_name}. '
                               f'{caller_info} {log_msg}')
 
@@ -1055,8 +1064,8 @@ class SmartEvent:
                         if not self.status.sync_cleanup:  # remote exited ph 2
                             break
 
-                if not (self.timeout_specified
-                        or self.remote.timeout_specified
+                if not (self.wait_timeout_specified
+                        or self.remote.wait_timeout_specified
                         or self.conflict):
                     if (self.remote.wait_wait
                         and not (self.event.is_set()
@@ -1073,10 +1082,10 @@ class SmartEvent:
                         f'self.event.is_set() = {self.event.is_set()}, '
                         f'self.remote.deadlock = {self.remote.deadlock}, '
                         f'self.remote.conflict = {self.remote.conflict}, '
-                        f'self.remote.timeout_specified = '
-                        f'{self.remote.timeout_specified}, '
-                        f'self.timeout_specified = '
-                        f'{self.timeout_specified}')
+                        f'self.remote.wait_timeout_specified = '
+                        f'{self.remote.wait_timeout_specified}, '
+                        f'self.wait_timeout_specified = '
+                        f'{self.wait_timeout_specified}')
                     self.sync_wait = False
                     self.conflict = False
                     raise ConflictDeadlockDetected(
@@ -1178,10 +1187,10 @@ class SmartEvent:
 
         if timeout and (timeout > 0):
             t_out = min(0.1, timeout)
-            self.timeout_specified = True
+            self.wait_timeout_specified = True
         else:
             t_out = 0.1
-            self.timeout_specified = False
+            self.wait_timeout_specified = False
 
         caller_info = ''
         if log_msg and self.debug_logging_enabled:
@@ -1204,6 +1213,7 @@ class SmartEvent:
                 # we were resumed between the call and getting the lock
                 if ret_code or self.remote.event.is_set():
                     self.wait_wait = False
+                    self.wait_timeout_specified = False
                     self.remote.event.clear()  # be ready for next wait
                     ret_code = True
                     break
@@ -1230,8 +1240,8 @@ class SmartEvent:
                 # deal with the earlier deadlock. We can simply ignore
                 # it for now.
 
-                if not (self.timeout_specified
-                        or self.remote.timeout_specified
+                if not (self.wait_timeout_specified
+                        or self.remote.wait_timeout_specified
                         or self.deadlock
                         or self.conflict):
                     if (self.remote.sync_wait
@@ -1251,6 +1261,7 @@ class SmartEvent:
                 if self.conflict:
                     self.wait_wait = False
                     self.conflict = False
+                    self.wait_timeout_specified = False
                     self.logger.debug(f'{self.name} raising '
                                       'ConflictDeadlockDetected')
                     raise ConflictDeadlockDetected(
@@ -1264,6 +1275,7 @@ class SmartEvent:
                 if self.deadlock:
                     self.wait_wait = False
                     self.deadlock = False
+                    self.wait_timeout_specified = False
                     self.logger.debug(f'{self.name} raising '
                                       'WaitDeadlockDetected')
                     raise WaitDeadlockDetected(
@@ -1279,6 +1291,7 @@ class SmartEvent:
                                       'self.sync_wait ='
                                       f' {self.sync_wait}')
                     self.wait_wait = False
+                    self.wait_timeout_specified = False
                     ret_code = False
                     break
 
@@ -1403,6 +1416,9 @@ class SmartEvent:
                               f'sync_wait: {self.remote.sync_wait}, '
                               f'deadlock: {self.remote.deadlock}, '
                               f'conflict: {self.remote.conflict}, ')
+
+            self._reset()  # reset flags
+
             raise InconsistentFlagSettings(
                 f'Thread {self.name} detected remote {self.remote.name} '
                 f'SmartEvent flag settings are not valid.')
@@ -1416,7 +1432,7 @@ class SmartEvent:
                 # Remove any old entries
                 self._clean_up_registry()
 
-            self.wait_wait = False
+            self._reset()  # reset flags
 
             raise RemoteThreadNotAlive(
                 f'{self.name} has detected that {self.remote.name} '
