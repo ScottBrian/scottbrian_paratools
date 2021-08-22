@@ -89,8 +89,7 @@ from enum import Enum
 import logging
 import threading
 import time
-from typing import (Any, Dict, Final, Optional, Tuple, Type,
-                    TYPE_CHECKING, Union)
+from typing import Any, Final, Optional, Type, TYPE_CHECKING, Union
 
 ###############################################################################
 # Third Party
@@ -468,6 +467,10 @@ class SmartEvent:
 
         Args:
             name: name to be used to refer to this SmartEvent
+            thread: specifies the thread to use instead of the current
+                      thread - needed when SmartEvent is instantiate in a
+                      class that inherits threading.Thread in which case
+                      thread=self is required
 
         Raises:
             IncorrectNameSpecified: Attempted SmartEvent instantiation
@@ -485,9 +488,9 @@ class SmartEvent:
             self.thread = threading.current_thread()
 
         self.event = threading.Event()
-        self.remote = None
+        self.remote: Union[SmartEvent, Any] = None
 
-        self.status = None
+        self.status: Union[SmartEvent.SharedPairStatus, Any] = None
 
         self.code: Any = None
         self.wait_wait: bool = False
@@ -628,9 +631,6 @@ class SmartEvent:
             1) Must be called holding _registry_lock
 
         """
-        # self.logger.debug(
-        # f'entered by {self.name}, call seq: '
-        # f'{get_formatted_call_sequence(latest=1, depth=1)}')
         # Remove any old entries
         keys_to_del = []
         for key, item in self._registry.items():
@@ -657,7 +657,7 @@ class SmartEvent:
     def pair_with(self, *,
                   remote_name: str,
                   log_msg: Optional[str] = None,
-                  timeout: Optional[Union[int, float]] = pair_with_TIMEOUT
+                  timeout: Union[int, float] = pair_with_TIMEOUT
                   ) -> None:
         """Establish a connection with the remote thread.
 
@@ -1092,7 +1092,6 @@ class SmartEvent:
                         'A sync request was made by thread '
                         f'{self.name} and a wait request was '
                         f'made by thread  {self.remote.name}.')
-
                 self._check_remote()
 
                 if timeout and (timeout < (time.time() - start_time)):
@@ -1281,7 +1280,6 @@ class SmartEvent:
                     raise WaitDeadlockDetected(
                         'Both threads are deadlocked, each waiting on '
                         'the other to resume their event.')
-
                 self._check_remote()
 
                 if timeout and (timeout < (time.time() - start_time)):
@@ -1375,8 +1373,8 @@ class SmartEvent:
         #######################################################################
         elif cond == WUCond.RemoteResume:
             self._verify_current_remote()
-            while not self.remote.event.is_set():
 
+            while not self.remote.event.is_set():
                 self._check_remote()
 
                 if timeout and (timeout < (time.time() - start_time)):
@@ -1406,6 +1404,7 @@ class SmartEvent:
         # 3) sync_wait False and deadlock or conflict are True
         # 4) sync_wait and deadlock
         # 5) deadlock True and conflict True
+
         if ((self.remote.deadlock and self.remote.conflict)
                 or (self.remote.wait_wait and self.remote.sync_wait)
                 or ((self.remote.deadlock or self.remote.conflict)

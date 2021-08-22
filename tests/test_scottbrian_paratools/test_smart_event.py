@@ -1,10 +1,9 @@
 """test_smart_event.py module."""
 
 from enum import Enum
-from dataclasses import dataclass
 import time
 import pytest
-from typing import Any, cast, Dict, Final, List, NamedTuple, Optional, Union
+from typing import Any, cast, Dict, Final, List, Optional, Union
 import threading
 import queue
 import re
@@ -281,9 +280,6 @@ class Cmds:
             who: alpha when cmd is for alpha, beta when cmd is for beta
             cmd: command to place on queue
 
-        Raises:
-            ValueError: who must be alpha or beta
-
         """
         with self.cmd_lock:
             if who not in self.cmd_array:
@@ -293,30 +289,20 @@ class Cmds:
                                 block=True,
                                 timeout=0.5)
 
-        # if who == 'alpha':
-        #     self.alpha_cmd.put(cmd,
-        #                        block=True,
-        #                        timeout=0.5)
-        # elif who == 'beta':
-        #     self.beta_cmd.put(cmd,
-        #                       block=True,
-        #                       timeout=0.5)
-        # else:
-        #     raise ValueError
-
     def get_cmd(self,
-            who: str,
-            timeout: Optional[Union[float, int]] = 3) -> Any:
+                who: str,
+                timeout: Optional[Union[float, int]] = 3) -> Any:
         """Get the next command for alpha to do.
 
         Args:
             who: alpha to get cmd for alpha to do, beta for cmd for beta to do
+            timeout: number of seconds allowed for cmd response
 
         Returns:
             the cmd to perform
 
         Raises:
-            ValueError: who must be alpha or beta
+            CmdTimedOut: {who} timed out waiting for cmd
 
         """
         with self.cmd_lock:
@@ -334,19 +320,6 @@ class Cmds:
             if timeout < (time.time() - start_time):
                 raise CmdTimedOut(f'{who} timed out waiting for cmd')
 
-
-        # while True:
-        #     try:
-        #         if who == 'alpha':
-        #             cmd = self.alpha_cmd.get(block=True, timeout=0.1)
-        #         elif who == 'beta':
-        #             cmd = self.beta_cmd.get(block=True, timeout=0.1)
-        #         else:
-        #             raise ValueError
-        #         return cmd
-        #     except queue.Empty:
-        #         continue
-
     def pause(self, seconds: Union[int, float], iter: int) -> None:
         """Sleep for the number of input seconds relative to start_time.
 
@@ -357,8 +330,6 @@ class Cmds:
         """
         while iter != self.iteration:
             time.sleep(0.1)
-
-        # self.previous_start_time = self.start_time
 
         remaining_seconds = seconds - (time.time() - self.start_time)
         if remaining_seconds > 0:
@@ -386,6 +357,7 @@ class Cmds:
         self.clock_in_use = False
         return ret_duration
 
+
 ###############################################################################
 # verify_registry
 ###############################################################################
@@ -403,6 +375,16 @@ class SmartEventDesc:
                  thread: Optional[threading.Thread] = None,  # type: ignore
                  state: Optional[int] = 0,  # 0 is unknown
                  paired_with: Optional[Any] = None) -> None:
+        """Initialize the SmartEventDesc.
+
+        Args:
+            name: name of the SmartEvent
+            s_event: the SmartEvent being tracked by this desc
+            thread: the thread associated with this SmartEvent
+            state: describes whether the SmartEvent is alive and registered
+            paired_with: names the SmartEvent paired with this one, if one
+
+        """
         self.name = name
         self.s_event = s_event
         if thread is not None:
@@ -414,6 +396,7 @@ class SmartEventDesc:
         self.paired_with = paired_with
 
     def verify_state(self) -> None:
+        """Verify the state of the SmartEvent."""
         self.verify_smart_event_desc()
         if self.paired_with is not None:
             self.paired_with.verify_smart_event_desc()
@@ -483,18 +466,22 @@ class SmartEventDescs:
     ###########################################################################
     # add_desc
     ###########################################################################
-    def add_desc(self, desc: SmartEventDesc) -> None:
+    def add_desc(self,
+            desc: SmartEventDesc,
+            verify: bool = True) -> None:
         """Add desc to collection.
 
         Args:
             desc: the desc to add
+            verify: specify False when verification should not be done
 
         """
         with self._descs_lock:
             self.cleanup_registry()
             desc.state = SmartEventDesc.STATE_ALIVE_REGISTERED
             self.descs[desc.name] = desc
-            self.verify_registry()
+            if verify:
+                self.verify_registry()
 
     ###########################################################################
     # thread_end
@@ -527,7 +514,6 @@ class SmartEventDescs:
     ###########################################################################
     def cleanup(self) -> None:
         """Perform cleanup for SmartEventDescs."""
-
         # Cleanup applies to all of the descs and is done
         # when first thing when a new SmartEvent is instantiated and
         # registered, or when a pair_with is done. This action is called
@@ -546,13 +532,15 @@ class SmartEventDescs:
     ###########################################################################
     def paired(self,
                name1: Optional[str] = '',
-               name2: Optional[str] = '') -> None:
+               name2: Optional[str] = '',
+               verify: bool = True) -> None:
         """Update SmartEventDescs to show paired status.
 
         Args:
             name1: name of SmartEvent for desc that is paired with name2
             name2: name of SmartEvent for desc that is paired with name1, or
                    null if name1 became unpaired
+            verify: specify False when verification should not be done
 
         """
         with self._descs_lock:
@@ -584,12 +572,14 @@ class SmartEventDescs:
             ###################################################################
             # verify the registry
             ###################################################################
-            self.verify_registry()
+            if verify:
+                self.verify_registry()
 
     ###########################################################################
     # verify_registry
     ###########################################################################
     def verify_registry(self):
+        """Verify the registry."""
         with self._descs_lock:
             num_registered = 0
             for key, item in self.descs.items():
@@ -605,6 +595,7 @@ class SmartEventDescs:
     # cleanup_registry
     ###########################################################################
     def cleanup_registry(self):
+        """Cleanup the registry."""
         for key, item in self.descs.items():
             if item.state == SmartEventDesc.STATE_NOT_ALIVE_REGISTERED:
                 assert not item.s_event.thread.is_alive()
@@ -700,6 +691,7 @@ class OuterThreadEventApp(threading.Thread, SmartEvent):
         """Initialize the object.
 
         Args:
+            cmds: used to send cmds between threads
             descs: tracks set of SmartEventDesc items
 
         """
@@ -813,7 +805,6 @@ class TestSmartEventBasic:
     ###########################################################################
     def test_smart_event_instantiate_with_errors(self) -> None:
         """Test register_thread alpha first."""
-        alpha_t = threading.current_thread()
 
         descs = SmartEventDescs()
 
@@ -825,10 +816,10 @@ class TestSmartEventBasic:
 
         # not OK to instantiate a new smart_event with same name
         with pytest.raises(NameAlreadyInUse):
-            smart_event2 = SmartEvent(name='alpha')
+            _ = SmartEvent(name='alpha')
 
         with pytest.raises(IncorrectNameSpecified):
-            smart_event2 = SmartEvent(name=42)  # type: ignore
+            _ = SmartEvent(name=42)  # type: ignore
 
         # try wait, resume, and pause_until without having been paired
         with pytest.raises(NotPaired):
@@ -921,6 +912,7 @@ class TestSmartEventBasic:
         # so everything will still show paired, even both alpha and beta
         # SmartEvents. Alpha SmartEvent will detect that beta is no longer
         # alive if a function is attempted.
+
         descs.verify_registry()
 
         #######################################################################
@@ -973,6 +965,16 @@ class TestSmartEventBasic:
         # so everything will still show paired, even both alpha and charlie
         # SmartEvents. Alpha SmartEvent will detect that charlie is no longer
         # alive if a function is attempted.
+
+        # change name in SmartEvent, then register a new entry to force the
+        # ErrorInRegistry error
+        smart_event.remote.name = 'bad_name'
+        with pytest.raises(ErrorInRegistry):
+            _ = SmartEvent(name='alpha2')
+
+        # restore the good name to allow verify_registry to succeed
+        smart_event.remote.name = 'charlie'
+
         descs.verify_registry()
 
     ###########################################################################
@@ -1030,7 +1032,7 @@ class TestSmartEventBasic:
             # not OK to pair with self
             with pytest.raises(PairWithSelfNotAllowed):
                 s_event.pair_with(remote_name=name)
-                
+
             with pytest.raises(PairWithTimedOut):
                 s_event.pair_with(remote_name='alpha', timeout=1)
 
@@ -1145,6 +1147,101 @@ class TestSmartEventBasic:
             smart_event2.pair_with(remote_name='nobody', timeout=1)
 
         descs.verify_registry()
+
+    ###########################################################################
+    # test_smart_event_pairing_with_multiple_threads
+    ###########################################################################
+    def test_smart_event_remote_pair_with_other_error(self) -> None:
+        """Test pair_with error case."""
+        def f1() -> None:
+            """Func to test pair_with SmartEvent."""
+            logger.debug('beta f1 entered')
+            s_event = SmartEvent(name='beta')
+
+            descs.add_desc(SmartEventDesc(name='beta',
+                                          s_event=s_event))
+
+            cmds.queue_cmd('alpha', 'go')
+            with pytest.raises(RemotePairedWithOther):
+                s_event.pair_with(remote_name='alpha')
+
+            cmds.get_cmd('beta')
+            logger.debug(f'beta f1 exiting')
+
+        def f2() -> None:
+            """Func to test pair_with SmartEvent."""
+            logger.debug('charlie f2 entered')
+            s_event = SmartEvent(name='charlie')
+
+            descs.add_desc(SmartEventDesc(name='charlie',
+                                          s_event=s_event),
+                           verify=False)
+
+            cmds.queue_cmd('alpha', 'go')
+            s_event.pair_with(remote_name='alpha')
+            descs.paired('alpha', 'charlie', verify=False)
+
+            cmds.queue_cmd('alpha', 'go')
+
+            s_event.sync(log_msg='charlie f1 sync point 1')
+
+            logger.debug(f'charlie f2 exiting')
+
+        #######################################################################
+        # mainline
+        #######################################################################
+        descs = SmartEventDescs()
+
+        cmds = Cmds()
+
+        beta_t = threading.Thread(target=f1)
+        charlie_t = threading.Thread(target=f2)
+
+        smart_event = SmartEvent(name='alpha')
+
+        descs.add_desc(SmartEventDesc(name='alpha',
+                                      s_event=smart_event))
+
+        beta_t.start()
+
+        cmds.get_cmd('alpha')
+
+        beta_se = SmartEvent._registry['beta']
+
+        # make sure beta has alpha as target of pair_with
+        while beta_se.remote is None:
+            time.sleep(1)
+
+        #######################################################################
+        # pair with charlie
+        #######################################################################
+        charlie_t.start()
+
+        cmds.get_cmd('alpha')
+
+        smart_event.pair_with(remote_name='charlie')
+
+        cmds.get_cmd('alpha')
+
+        cmds.queue_cmd('beta')
+
+        # wait for beta to raise RemotePairedWithOther and end
+        beta_t.join()
+
+        descs.thread_end(name='beta')
+
+        # sync up with charlie to allow charlie to exit
+        smart_event.sync(log_msg='alpha sync point 1')
+
+        charlie_t.join()
+
+        descs.thread_end(name='charlie')
+
+        # cause cleanup via a sync request
+        with pytest.raises(RemoteThreadNotAlive):
+            smart_event.sync(log_msg='mainline sync point 3')
+
+        descs.cleanup()
 
     ###########################################################################
     # test_smart_event_pairing_cleanup
@@ -1810,7 +1907,6 @@ class TestSmartEventBasic:
                 Args:
                     alpha_smart_event: alpha SmartEvent to use for verification
                     alpha_thread: alpha thread to use for verification
-                    beta_smart_events: used to tell alpha the beta SmartEvent
 
                 """
                 super().__init__()
@@ -2140,7 +2236,6 @@ class TestSmartEventBasic:
     ###########################################################################
     def test_smart_event_inner_thread_event_app2(self) -> None:
         """Test SmartEvent with thread_event_app."""
-
         #######################################################################
         # mainline and ThreadApp - mainline sets alpha thread_app sets beta
         #######################################################################
@@ -2309,7 +2404,6 @@ class TestSmartEventBasic:
     ###########################################################################
     def test_smart_event_two_f_threads2(self) -> None:
         """Test register_thread with thread_event_app."""
-
         #######################################################################
         # two threads - fa2 and fb2 set their own threads
         #######################################################################
@@ -3674,7 +3768,8 @@ class TestSmartEventLogger:
         cmds.get_cmd('alpha')
         exp_log_msgs.add_alpha_pair_with_msg('alpha pair beta 2',
                                              ['alpha', 'beta'])
-        smart_event.pair_with(remote_name='beta')
+        smart_event.pair_with(remote_name='beta',
+                              log_msg='alpha pair beta 2')
         descs.paired('alpha', 'beta')
 
         exp_log_msgs.add_alpha_sync_msg('mainline sync point 1')
@@ -3886,6 +3981,7 @@ class TestCombos:
         self.action_loop(action1=action_arg1,
                          action2=action_arg2,
                          cmds=cmds,
+                         descs=descs,
                          exp_log_msgs=exp_log_msgs,
                          thread_exc1=thread_exc)
 
@@ -3944,6 +4040,7 @@ class TestCombos:
                                      args=(action_arg1,
                                            action_arg2,
                                            cmds,
+                                           descs,
                                            exp_log_msgs,
                                            thread_exc))
 
@@ -4098,7 +4195,7 @@ class TestCombos:
                 """
                 threading.Thread.__init__(self)
                 SmartEvent.__init__(self,
-                                    name='alpha',
+                                    name='beta',
                                     thread=self)
 
                 self.cmds = cmds
@@ -4184,12 +4281,14 @@ class TestCombos:
             UnrecognizedCmd: beta send mainline an unrecognized command
 
         """
+        cmds.get_cmd('alpha')  # go1
         smart_event = SmartEvent(name='alpha')
         descs.add_desc(SmartEventDesc(name='alpha',
                                       s_event=smart_event,
                                       thread=threading.current_thread()))
-        cmds.get_cmd('alpha')
+        cmds.queue_cmd('beta')  # go2
         smart_event.pair_with(remote_name='beta')
+        cmds.get_cmd('alpha')  # go3
 
         actions = []
         actions.append(action1)
@@ -4289,8 +4388,8 @@ class TestCombos:
                 logger.debug(l_msg)
                 l_msg = (f'{smart_event.name} timeout '
                          r'of a resume\(\) request with '
-                         r'current.event.is_set\(\) = True and '
-                         'remote.deadlock = False')
+                         r'self.event.is_set\(\) = True and '
+                         'self.remote.deadlock = False')
                 exp_log_msgs.add_msg(l_msg)
 
                 assert not smart_event.event.is_set()
@@ -4378,6 +4477,10 @@ class TestCombos:
                 else:
                     raise UnrecognizedCmd
 
+        # clear the codes to allow verify registry to work
+        smart_event.code = None
+        smart_event.remote.code = None
+
 
 ###############################################################################
 # thread_func1
@@ -4409,9 +4512,11 @@ def thread_func1(cmds: Cmds,
     descs.add_desc(SmartEventDesc(name='beta',
                                   s_event=s_event,
                                   thread=threading.current_thread()))
-    cmds.queue_cmd('alpha')
+    cmds.queue_cmd('alpha', 'go1')
+    cmds.get_cmd('beta')  # go2
     s_event.pair_with(remote_name='alpha')
     descs.paired('alpha', 'beta')
+    cmds.queue_cmd('alpha', 'go3')
 
     while True:
         beta_cmd = cmds.get_cmd('beta')
@@ -4458,7 +4563,8 @@ def thread_func1(cmds: Cmds,
             logger.debug(l_msg)
             l_msg = (f'{s_event.name} timeout of a '
                      r'wait\(\) request with '
-                     'current.waiting = True and current.sync_wait = False')
+                     'self.wait_wait = True and '
+                     'self.sync_wait = False')
             exp_log_msgs.add_msg(l_msg)
 
             start_time = time.time()
@@ -4574,6 +4680,7 @@ class ExpLogMsgs:
             req: one of 'pair_with', 'sync', 'resume', or 'wait'
             ret_code: bool
             code: code for resume or None
+            pair: names the two threads that are in the paired log message
 
         """
         l_enter_msg = req + r'\(\) entered '
