@@ -6,6 +6,7 @@ import pytest
 from typing import Any, cast
 
 from scottbrian_paratools.smart_event import SmartEvent
+from scottbrian_paratools.smart_event import ThreadPair
 
 import logging
 
@@ -105,7 +106,10 @@ def thread_exc(monkeypatch: Any) -> "ExcHook":
     yield exc_hook
 
     # clean the registry in SmartEvent class
-    SmartEvent._registry = {}
+    # SmartEvent._registry = {}
+
+    # clean the registry in ThreadPair class
+    ThreadPair._registry = {}
 
     # the following check ensures that the test case waited via join for
     # any started threads to come home

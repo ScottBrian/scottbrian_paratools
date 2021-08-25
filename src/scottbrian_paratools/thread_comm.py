@@ -15,20 +15,21 @@ message and wait for a reply with the send_rcv_msg.
 
 >>> from scottbrian_utils.thread_comm import ThreadComm
 >>> import threading
->>> import time
->>> thread_comm = ThreadComm()
->>> def f1(in_thread_comm):
-...     time.sleep(3)
+>>> thread_comm = ThreadComm(name='alpha')
+>>> def f1():
+...     beta_thread_comm = ThreadComm(name='beta')
+...     beta_thread_comm.pair_with(remote_name='alpha')
 ...     while True:
-...         msg = in_thread_comm.recv_msg()
+...         msg = beta_thread_comm.recv_msg()
 ...         if msg == 42:
 ...             print(f'f1 received message {msg}')
-...             in_thread_comm.send_msg(17)
+...             beta_thread_comm.send_msg(17)
 ...         elif msg == 'exit':
 ...             print(f'received message {msg}')
 ...             break
->>> f1_thread = threading.Thread(target=f1, args=(thread_comm,)
+>>> f1_thread = threading.Thread(target=f1)
 >>> f1_thread.start()
+>>> thread_comm.pair_with(remote_name='beta')
 >>> print(f'mainline about to send {42}')
 mainline about to send 42
 
@@ -38,7 +39,6 @@ f1 received message 42
 >>> print(f'mainline sent {42} and received {msg}')
 mainline sent 42 and received 17
 
->>> time.sleep(3)
 >>> thread_comm.send('exit')
 received message exit
 
@@ -52,14 +52,22 @@ The thread_comm module contains:
        c. send_recv
 
 """
-# import time
-import threading
+###############################################################################
+# Standard Library
+###############################################################################
+from dataclasses import dataclass
+import logging
 import queue
+import threading
 from typing import (Any, Final, Optional, Type, TYPE_CHECKING, Union)
 
-# from scottbrian_utils.diag_msg import diag_msg
+###############################################################################
+# Third Party
+###############################################################################
 
-import logging
+###############################################################################
+# Local
+###############################################################################
 
 
 ###############################################################################
@@ -70,13 +78,18 @@ class ThreadCommError(Exception):
     pass
 
 
-class ThreadCommSendFailed(ThreadCommError):
-    """ThreadComm exception failure to send message."""
+class ThreadCommIncorrectNameSpecified(ThreadCommError):
+    """ThreadComm exception for incorrect name."""
     pass
 
 
 class ThreadCommRecvTimedOut(ThreadCommError):
     """ThreadComm exception for timeout waiting for message."""
+    pass
+
+
+class ThreadCommSendFailed(ThreadCommError):
+    """ThreadComm exception failure to send message."""
     pass
 
 
@@ -86,26 +99,61 @@ class ThreadCommRecvTimedOut(ThreadCommError):
 class ThreadComm:
     """Provides a communication link between threads."""
 
+    ###########################################################################
+    # Constants
+    ###########################################################################
     MAX_MSGS_DEFAULT: Final[int] = 16
 
+    ###########################################################################
+    # Registry
+    ###########################################################################
+    _registry_lock = threading.Lock()
+    _registry: dict[str, "ThreadComm"] = {}
+
+    ###########################################################################
+    # SharedPairStatus Data Class
+    ###########################################################################
+    @dataclass
+    class SharedPairStatus:
+        """Shared area for status between paired ThreaddComm objects."""
+        status_lock = threading.Lock()
+        sync_cleanup = False
+
+    ###########################################################################
+    # __init__
+    ###########################################################################
     def __init__(self,
+                 name: str,
                  max_msgs: Optional[int] = None
                  ) -> None:
         """Initialize an instance of the ThreadComm class.
 
         Args:
+            name: identifies this ThreadComm instance
             max_msgs: Number of messages that can be placed onto the send
                         queue until being received. Once the max has
                         been reached, no more sends will be allowed
                         until messages are received from the queue. The
                         default is 16
+
+        Raises:
+            ThreadCommIncorrectNameSpecified: Attempted ThreadComm
+                                                instantiation with incorrect
+                                                name of {name}.
+
         """
+        if not isinstance(name, str):
+            raise ThreadCommIncorrectNameSpecified(
+                'Attempted ThreadComm instantiation with incorrect '
+                f'name of {name}.')
+        self.name = name
         if max_msgs:
             self.max_msgs = max_msgs
         else:
             self.max_msgs = ThreadComm.MAX_MSGS_DEFAULT
-        self.main_send: queue.Queue[Any] = queue.Queue(maxsize=self.max_msgs)
-        self.main_recv: queue.Queue[Any] = queue.Queue(maxsize=self.max_msgs)
+        self.send_msg_q: queue.Queue[Any] = queue.Queue(maxsize=self.max_msgs)
+        self.remote: Union[ThreadComm, Any] = None
+        self.remote.send_msg_q: queue.Queue[Any] = queue.Queue(maxsize=self.max_msgs)
 
         self.main_thread_id = threading.get_ident()
         self.child_thread_id: Any = 0
@@ -223,11 +271,11 @@ class ThreadComm:
             if self.main_thread_id == threading.get_ident():  # if main
                 self.logger.info(f'ThreadComm main {self.main_thread_id} sending '
                             f'msg to child {self.child_thread_id}')
-                self.main_send.put(msg, timeout=timeout)  # send to child
+                self.send_msg_q.put(msg, timeout=timeout)  # send to child
             else:  # else not main
                 self.logger.info(f'ThreadComm child {self.child_thread_id} '
                             f'sending msg to main {self.main_thread_id}')
-                self.main_recv.put(msg, timeout=timeout)  # send to main
+                self.remote.send_msg_q.put(msg, timeout=timeout)  # send to main
         except queue.Full:
             self.logger.error('Raise ThreadCommSendFailed')
             raise ThreadCommSendFailed('send method unable to send the '
@@ -257,11 +305,11 @@ class ThreadComm:
             if self.main_thread_id == threading.get_ident():  # if main
                 self.logger.info(f'ThreadComm main {self.main_thread_id} receiving '
                             f'msg from child {self.child_thread_id}')
-                return self.main_recv.get(timeout=timeout)  # recv from child
+                return self.remote.send_msg_q.get(timeout=timeout)  # recv from child
             else:  # else child
                 self.logger.info(f'ThreadComm child {self.child_thread_id} '
                             f'receiving msg from main {self.main_thread_id}')
-                return self.main_send.get(timeout=timeout)  # recv from main
+                return self.send_msg_q.get(timeout=timeout)  # recv from main
         except queue.Empty:
             self.logger.error('Raise ThreadCommRecvTimedOut')
             raise ThreadCommRecvTimedOut('recv processing timed out '
@@ -343,6 +391,6 @@ class ThreadComm:
 
         """
         if self.main_thread_id == threading.get_ident():
-            return not self.main_recv.empty()
+            return not self.remote.send_msg_q.empty()
         else:
-            return not self.main_send.empty()
+            return not self.send_msg_q.empty()
