@@ -41,7 +41,7 @@ message from f1 beta is 42
 f1 beta exiting
 
 
-The thred_pair module contains:
+The thread_pair module contains:
 
     1) ThreadPair class with methods:
 

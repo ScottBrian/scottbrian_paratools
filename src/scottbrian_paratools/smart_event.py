@@ -452,8 +452,8 @@ class SmartEvent(ThreadPair):
         self.deadlock: bool = False
         self.conflict: bool = False
 
-        self.logger = logging.getLogger(__name__)
-        self.debug_logging_enabled = self.logger.isEnabledFor(logging.DEBUG)
+        # self.logger = logging.getLogger(__name__)
+        # self.debug_logging_enabled = self.logger.isEnabledFor(logging.DEBUG)
 
     ###########################################################################
     # _reset
