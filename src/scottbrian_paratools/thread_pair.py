@@ -4,9 +4,9 @@
 ThreadPair
 ==========
 
-The ThreadPair class is used as a base class for SmartEvent and ThreadComm.
+The ThreadPair class is used as a base class for ThreadPair and ThreadComm.
 
-:Example: create a SmartEvent for mainline and a thread to use
+:Example: create a ThreadPair for mainline and a thread to use
 
 >>> from scottbrian_paratools.thread_pair import ThreadPair
 >>> import threading
@@ -67,7 +67,7 @@ from scottbrian_utils.diag_msg import get_formatted_call_sequence
 
 
 ###############################################################################
-# SmartEvent class exceptions
+# ThreadPair class exceptions
 ###############################################################################
 class ThreadPairError(Exception):
     """Base class for exceptions in this module."""
@@ -75,42 +75,46 @@ class ThreadPairError(Exception):
 
 
 class ThreadPairAlreadyPairedWithRemote(ThreadPairError):
-    """SmartEvent exception for pair_with that is already paired."""
+    """ThreadPair exception for pair_with that is already paired."""
     pass
 
 class ThreadPairDetectedOpFromForeignThread(ThreadPairError):
-    """SmartEvent exception for attempted op from unregistered thread."""
+    """ThreadPair exception for attempted op from unregistered thread."""
     pass
 
 
 class ThreadPairErrorInRegistry(ThreadPairError):
-    """SmartEvent exception for registry error."""
+    """ThreadPair exception for registry error."""
 
 
 class ThreadPairIncorrectNameSpecified(ThreadPairError):
-    """SmartEvent exception for a name that is not a str."""
+    """ThreadPair exception for a name that is not a str."""
 
 
 class ThreadPairNameAlreadyInUse(ThreadPairError):
-    """SmartEvent exception for using a name already in use."""
+    """ThreadPair exception for using a name already in use."""
     pass
 
 
 class ThreadPairNotPaired(ThreadPairError):
-    """SmartEvent exception for alpha or beta thread not registered."""
+    """ThreadPair exception for alpha or beta thread not registered."""
     pass
 
 
 class ThreadPairPairWithSelfNotAllowed(ThreadPairError):
-    """SmartEvent exception for pair_with target is self."""
+    """ThreadPair exception for pair_with target is self."""
 
 
 class ThreadPairPairWithTimedOut(ThreadPairError):
-    """SmartEvent exception for pair_with that timed out."""
+    """ThreadPair exception for pair_with that timed out."""
+
+
+class ThreadPairRemoteThreadNotAlive(ThreadPairError):
+    """ThreadPair exception for remote thread not alive."""
 
 
 class ThreadPairRemotePairedWithOther(ThreadPairError):
-    """SmartEvent exception for pair_with target already paired."""
+    """ThreadPair exception for pair_with target already paired."""
 
 
 ###############################################################################
@@ -128,7 +132,7 @@ class ThreadPair:
     # Registry
     ###########################################################################
     _registry_lock = threading.Lock()
-    _registry: dict[str, "SmartEvent"] = {}
+    _registry: dict[str, "ThreadPair"] = {}
 
     ###########################################################################
     # __init__
@@ -148,13 +152,14 @@ class ThreadPair:
                       thread=self is required
 
         Raises:
-            ThreadPairIncorrectNameSpecified: Attempted SmartEvent instantiation
+            ThreadPairIncorrectNameSpecified: Attempted ThreadPair instantiation
                                       with incorrect name of {name}.
 
         """
         if not isinstance(name, str):
-            raise ThreadPairIncorrectNameSpecified('Attempted SmartEvent instantiation '
-                                         f'with incorrect name of {name}.')
+            raise ThreadPairIncorrectNameSpecified(
+                'Attempted ThreadPair instantiation '
+                f'with incorrect name of {name}.')
         self.name = name
 
         if thread:
@@ -178,7 +183,7 @@ class ThreadPair:
         Returns:
             The representation as how the class is instantiated
 
-        :Example: instantiate a SmartEvent and call repr
+        :Example: instantiate a ThreadPair and call repr
 
         >>> from scottbrian_paratools.smart_event import ThreadPair
         >>> thread_pair = ThreadPair(name='alpha')
@@ -187,7 +192,7 @@ class ThreadPair:
 
         """
         if TYPE_CHECKING:
-            __class__: Type[SmartEvent]
+            __class__: Type[ThreadPair]
         classname = self.__class__.__name__
         parms = f'name="{self.name}"'
 
@@ -238,6 +243,7 @@ class ThreadPair:
     ###########################################################################
     # _clean_up_registry
     ###########################################################################
+    #@classmethod
     def _clean_up_registry(self) -> None:
         """Clean up any old not alive items in the registry.
 
@@ -444,15 +450,13 @@ class ThreadPair:
     def _verify_current_remote(self,
                                skip_pair_check: Optional[bool] = False
                                ) -> None:
-        """Get the current and remote ThreadEvent objects.
+        """Check the current and remote ThreadEvent objects.
 
         Args:
             skip_pair_check: used by pair_with since the pairing in
                                not yet done
 
         Raises:
-            ThreadPairNotPaired: Both threads must be paired before any ThreadPair
-                         services can be called.
             ThreadPairDetectedOpFromForeignThread: Any ThreadPair services must be
                                            called from the thread that
                                            originally instantiated the
@@ -460,7 +464,7 @@ class ThreadPair:
 
         """
         # We check for foreign thread first before checking for pairing
-        # since we do not want a user who attempts to use SmartEvent from
+        # since we do not want a user who attempts to use ThreadPair from
         # a different thread to get a ThreadPairNotPaired error first and think
         # that the fix it to simply call pair_with from the foreign
         # thread.
@@ -468,17 +472,65 @@ class ThreadPair:
             self.logger.debug(f'{self.name } raising '
                               'ThreadPairDetectedOpFromForeignThread')
             raise ThreadPairDetectedOpFromForeignThread(
-                'Any SmartEvent services must be called from the thread '
-                'that originally instantiated the SmartEvent. '
+                'Any ThreadPair services must be called from the thread '
+                'that originally instantiated the ThreadPair. '
                 f'Call sequence: {get_formatted_call_sequence(1,2)}')
 
         # make sure that remote exists and it points back to us
-        if (not skip_pair_check
-                and (self.remote is None
-                     or self.remote.remote is None
-                     or self.remote.remote.name != self.name)):
-            self.logger.debug(f'{self.name} raising ThreadPairNotPaired')
+        if not skip_pair_check:
+            self.verify_paired()
+
+    ###########################################################################
+    # _check_remote
+    ###########################################################################
+    def _check_remote(self) -> None:
+        """Check whether remote is alive.
+
+        Raises:
+            ThreadPairRemoteThreadNotAlive: The remote thread is not alive.
+
+        """
+        self.verify_paired()
+        if not self.remote.thread.is_alive():
+            self.logger.debug(f'{self.name} raising '
+                              'ThreadPairRemoteThreadNotAlive.'
+                              'Call sequence:'
+                              f' {get_formatted_call_sequence()}')
+            with self._registry_lock:
+                # Remove any old entries
+                self._clean_up_registry()
+
+            raise ThreadPairRemoteThreadNotAlive(
+                f'{self.name} has detected that {self.remote.name} '
+                'thread is not alive.')
+
+    ###########################################################################
+    # verify_paired
+    ###########################################################################
+    def verify_paired(self) -> None:
+        """Verify that we are paired.
+
+        Raises:
+            ThreadPairNotPaired: Both threads must be paired before any
+                                   ThreadPair services can be called.
+
+        """
+        # make sure that remote exists and it points back to us
+        if (self.remote is None
+                or self.remote.remote is None
+                or self.remote.remote.name != self.name):
+            # collect diag info and raise error
+            diag_remote_remote = None
+            diag_name = None
+            if self.remote is not None:
+                diag_remote_remote = self.remote.remote
+                if self.remote.remote is not None:
+                    diag_name = self.remote.remote.name
+            self.logger.debug(f'{self.name} raising ThreadPairNotPaired. '
+                              f'Remote = {self.remote}, '
+                              f'remote.remote = {diag_remote_remote}, '
+                              f'remote name = {diag_name}')
             raise ThreadPairNotPaired(
                 'Both threads must be paired before any '
-                'SmartEvent services can be called. '
-                f'Call sequence: {get_formatted_call_sequence(1,2)}')
+                'ThreadPair services can be called. '
+                f'Call sequence: {get_formatted_call_sequence(1, 2)}')

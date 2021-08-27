@@ -99,7 +99,8 @@ from typing import Any, Final, Optional, Type, TYPE_CHECKING, Union
 # Local
 ###############################################################################
 from scottbrian_utils.diag_msg import get_formatted_call_sequence
-from scottbrian_paratools.thread_pair import ThreadPair
+from scottbrian_paratools.thread_pair import (ThreadPair,
+                                              ThreadPairRemoteThreadNotAlive)
 
 
 ###############################################################################
@@ -1223,17 +1224,8 @@ class SmartEvent(ThreadPair):
                 f'Thread {self.name} detected remote {self.remote.name} '
                 f'SmartEvent flag settings are not valid.')
 
-        if not self.remote.thread.is_alive():
-            self.logger.debug(f'{self.name} raising '
-                              'SmartEventRemoteThreadNotAlive.'
-                              'Call sequence:'
-                              f' {get_formatted_call_sequence()}')
-            with self._registry_lock:
-                # Remove any old entries
-                self._clean_up_registry()
-
+        try:
+            ThreadPair._check_remote(self)
+        except ThreadPairRemoteThreadNotAlive:
             self._reset()  # reset flags
-
-            raise SmartEventRemoteThreadNotAlive(
-                f'{self.name} has detected that {self.remote.name} '
-                'thread is not alive.')
+            raise

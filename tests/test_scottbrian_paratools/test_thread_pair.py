@@ -31,6 +31,7 @@ from scottbrian_paratools.thread_pair import (
     ThreadPairNotPaired,
     ThreadPairPairWithSelfNotAllowed,
     ThreadPairPairWithTimedOut,
+    ThreadPairRemoteThreadNotAlive,
     ThreadPairRemotePairedWithOther)
 
 import logging
@@ -833,7 +834,7 @@ class TestThreadPairBasic:
 
             cmds.queue_cmd('alpha', 'go')
 
-            t_pair.sync(log_msg=f'{name} f1 sync point 1')
+            cmds.get_cmd('beta')
 
             logger.debug(f'{name} f1 exiting')
 
@@ -866,7 +867,7 @@ class TestThreadPairBasic:
 
             cmds.queue_cmd('alpha', 'go')
 
-            t_pair.sync(log_msg=f'{name} f1 sync point 1')
+            cmds.get_cmd('charlie')
 
             logger.debug(f'{name} f2 exiting')
 
@@ -907,13 +908,13 @@ class TestThreadPairBasic:
 
         cmds.get_cmd('alpha')
 
-        thread_pair.sync(log_msg='alpha sync point 1')
+        cmds.queue_cmd('beta')
 
         beta_t.join()
 
         descs.thread_end(name='beta')
 
-        thread_pair2.sync(log_msg='alpha sync point 2')
+        cmds.queue_cmd('charlie')
 
         charlie_t.join()
 
@@ -928,9 +929,8 @@ class TestThreadPairBasic:
         # entries so that they may still report ThreadPairRemoteThreadNotAlive.
         descs.verify_registry()
 
-        # cause cleanup via a sync request
-        with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair.sync(log_msg='mainline sync point 3')
+        # cause cleanup by calling cleanup directly
+        thread_pair._clean_up_registry()
 
         descs.cleanup()
 
@@ -1003,7 +1003,7 @@ class TestThreadPairBasic:
 
             cmds.queue_cmd('alpha', 'go')
 
-            t_pair.sync(log_msg='charlie f1 sync point 1')
+            cmds.get_cmd('charlie')
 
             logger.debug(f'charlie f2 exiting')
 
@@ -1051,15 +1051,14 @@ class TestThreadPairBasic:
         descs.thread_end(name='beta')
 
         # sync up with charlie to allow charlie to exit
-        thread_pair.sync(log_msg='alpha sync point 1')
+        cmds.queue_cmd('charlie')
 
         charlie_t.join()
 
         descs.thread_end(name='charlie')
 
-        # cause cleanup via a sync request
-        with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair.sync(log_msg='mainline sync point 3')
+        # cause cleanup by calling cleanup directly
+        thread_pair._clean_up_registry()
 
         descs.cleanup()
 
@@ -1086,13 +1085,12 @@ class TestThreadPairBasic:
             cmds.queue_cmd('alpha')
 
             t_pair.pair_with(remote_name=remote_name,
-                              log_msg=f'f1 {name} pair with {remote_name} '
-                                      f'for idx {idx}')
+                             log_msg=f'f1 {name} pair with {remote_name} '
+                                     f'for idx {idx}')
 
-            t_pair.sync(log_msg=f'{name} f1 sync point 1')
+            cmds.queue_cmd('alpha')
 
-            assert t_pair.sync(timeout=3,
-                                log_msg=f'{name} f1 sync point 2')
+            cmds.get_cmd(name)
 
             logger.debug(f'{name} f1 exiting')
 
@@ -1148,7 +1146,7 @@ class TestThreadPairBasic:
 
         thread_pair0.pair_with(remote_name='beta0')
 
-        thread_pair0.sync(log_msg='alpha0 sync point 1')
+        cmds.get_cmd('alpha')
         descs.paired('alpha0', 'beta0')
 
         #######################################################################
@@ -1160,7 +1158,7 @@ class TestThreadPairBasic:
 
         thread_pair1.pair_with(remote_name='beta1')
 
-        thread_pair1.sync(log_msg='alpha1 sync point 1')
+        cmds.get_cmd('alpha')
         descs.paired('alpha1', 'beta1')
 
         #######################################################################
@@ -1172,7 +1170,7 @@ class TestThreadPairBasic:
 
         thread_pair2.pair_with(remote_name='beta2')
 
-        thread_pair2.sync(log_msg='alpha2 sync point 1')
+        cmds.get_cmd('alpha')
         descs.paired('alpha2', 'beta2')
 
         #######################################################################
@@ -1184,13 +1182,13 @@ class TestThreadPairBasic:
 
         thread_pair3.pair_with(remote_name='beta3')
 
-        thread_pair3.sync(log_msg='alpha3 sync point 1')
+        cmds.get_cmd('alpha')
         descs.paired('alpha3', 'beta3')
 
         #######################################################################
         # let beta0 finish
         #######################################################################
-        thread_pair0.sync(log_msg='alpha0 sync point 1')
+        cmds.queue_cmd('beta0')
 
         beta_t0.join()
 
@@ -1207,17 +1205,17 @@ class TestThreadPairBasic:
 
         thread_pair0.pair_with(remote_name='beta0')
 
-        thread_pair0.sync(log_msg='alpha0 sync point 1')
+        cmds.get_cmd('alpha')
         descs.paired('alpha0', 'beta0')
 
         #######################################################################
         # let beta1 and beta3 finish
         #######################################################################
-        thread_pair1.sync(log_msg='alpha1 sync point 2')
+        cmds.queue_cmd('beta1')
         beta_t1.join()
         descs.thread_end(name='beta1')
 
-        thread_pair3.sync(log_msg='alpha3 sync point 3')
+        cmds.queue_cmd('beta3')
         beta_t3.join()
         descs.thread_end(name='beta3')
 
@@ -1232,12 +1230,13 @@ class TestThreadPairBasic:
 
         thread_pair1.pair_with(remote_name='beta1')
 
-        thread_pair1.sync(log_msg='alpha1 sync point 1')
+        cmds.get_cmd('alpha')
         descs.paired('alpha1', 'beta1')
 
         # should get not alive for beta3
         with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair3.sync(log_msg='mainline sync point 4')
+            thread_pair3._check_remote()
+        descs.cleanup()
 
         # should still be the same
         descs.verify_registry()
@@ -1253,25 +1252,27 @@ class TestThreadPairBasic:
 
         thread_pair3.pair_with(remote_name='beta3')
 
-        thread_pair3.sync(log_msg='alpha3 sync point 1')
+        cmds.get_cmd('alpha')
         descs.paired('alpha3', 'beta3')
 
         #######################################################################
         # let beta1 and beta2 finish
         #######################################################################
-        thread_pair1.sync(log_msg='alpha1 sync point 5')
+        cmds.queue_cmd('beta1')
         beta_t1.join()
         descs.thread_end(name='beta1')
 
-        thread_pair2.sync(log_msg='alpha2 sync point 6')
+        cmds.queue_cmd('beta2')
         beta_t2.join()
         descs.thread_end(name='beta2')
 
         #######################################################################
         # trigger cleanup for beta1 and beta2
         #######################################################################
+        # should get not alive for beta1
         with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair2.sync(log_msg='alpha2 sync point 7')
+            thread_pair1._check_remote()
+        descs.cleanup()
 
         descs.cleanup()
 
@@ -1279,15 +1280,15 @@ class TestThreadPairBasic:
         # should get ThreadPairRemoteThreadNotAlive for beta1 and beta2
         #######################################################################
         with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair1.sync(log_msg='alpha1 sync point 8')
+            thread_pair1._check_remote()
 
         with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair2.sync(log_msg='alpha 2 sync point 9')
+            thread_pair2._check_remote()
 
         descs.verify_registry()
 
         #######################################################################
-        # get a new beta2 going
+        # get a new beta2 going and then allow to end
         #######################################################################
         beta_t2 = threading.Thread(target=f1, args=('beta2', 'alpha2', 2))
 
@@ -1297,24 +1298,24 @@ class TestThreadPairBasic:
 
         thread_pair2.pair_with(remote_name='beta2')
 
-        thread_pair2.sync(log_msg='alpha2 sync point 1')
+        cmds.get_cmd('alpha')
         descs.paired('alpha2', 'beta2')
 
-        thread_pair2.sync(log_msg='alpha2 sync point 2')
+        cmds.queue_cmd('beta2')
         beta_t2.join()
         descs.thread_end(name='beta2')
 
         #######################################################################
         # let beta0 complete
         #######################################################################
-        thread_pair0.sync(log_msg='alpha0 sync point 2')
+        cmds.queue_cmd('beta0')
         beta_t0.join()
         descs.thread_end(name='beta0')
 
         #######################################################################
         # let beta3 complete
         #######################################################################
-        thread_pair3.sync(log_msg='alpha0 sync point 2')
+        cmds.queue_cmd('beta3')
         beta_t3.join()
         descs.thread_end(name='beta3')
 
