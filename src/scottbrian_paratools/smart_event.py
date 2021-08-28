@@ -679,7 +679,7 @@ class SmartEvent(ThreadPair):
         """
         start_time = time.time()  # start the clock
 
-        self._verify_current_remote()
+        self.verify_current_remote()
 
         # if caller specified a log message to issue
         caller_info = ''
@@ -691,7 +691,7 @@ class SmartEvent(ThreadPair):
 
         while True:
             with self.status.status_lock:
-                self._check_remote()
+                self.check_remote()
                 ###############################################################
                 # Cases where we loop until remote is ready:
                 # 1) Remote waiting and event already resumed. This is a case
@@ -703,7 +703,7 @@ class SmartEvent(ThreadPair):
                 #    raise the SmartEventWaitDeadlockDetected error. The remote could
                 #    recover, in which case this resume will complete,
                 #    or the thread could become inactive, in which case
-                #    resume will see that and raise (via _check_remote
+                #    resume will see that and raise (via check_remote
                 #    method) the SmartEventRemoteThreadNotAlive error.
                 # 3) Remote not waiting and event resumed. This case
                 #    indicates that a resume was previously done ahead of the
@@ -825,7 +825,7 @@ class SmartEvent(ThreadPair):
         >>> f1_thread.join()
 
         """
-        self._verify_current_remote()
+        self.verify_current_remote()
         caller_info = ''
         if log_msg and self.debug_logging_enabled:
             caller_info = get_formatted_call_sequence(latest=1, depth=1)
@@ -894,7 +894,7 @@ class SmartEvent(ThreadPair):
                         'A sync request was made by thread '
                         f'{self.name} and a wait request was '
                         f'made by thread  {self.remote.name}.')
-                self._check_remote()
+                self.check_remote()
 
                 if timeout and (timeout < (time.time() - start_time)):
                     self.logger.debug(f'{self.name} timeout of a sync() '
@@ -984,7 +984,7 @@ class SmartEvent(ThreadPair):
         >>> f1_thread.join()
 
         """
-        self._verify_current_remote()
+        self.verify_current_remote()
 
         if timeout and (timeout > 0):
             t_out = min(0.1, timeout)
@@ -1082,7 +1082,7 @@ class SmartEvent(ThreadPair):
                     raise SmartEventWaitDeadlockDetected(
                         'Both threads are deadlocked, each waiting on '
                         'the other to resume their event.')
-                self._check_remote()
+                self.check_remote()
 
                 if timeout and (timeout < (time.time() - start_time)):
                     self.logger.debug(f'{self.name} timeout of a wait() '
@@ -1148,7 +1148,7 @@ class SmartEvent(ThreadPair):
         # Handle RemoteWaiting
         #######################################################################
         if cond == WUCond.RemoteWaiting:
-            self._verify_current_remote()
+            self.verify_current_remote()
             while True:
                 # make sure we are waiting for a new resume, meaning that
                 # the event is not resumed and we are not doing a sync_wait
@@ -1159,7 +1159,7 @@ class SmartEvent(ThreadPair):
                         and not self.remote.sync_wait):
                     return
 
-                self._check_remote()
+                self.check_remote()
 
                 if timeout and (timeout < (time.time() - start_time)):
                     self.logger.debug(f'{self.name} raising '
@@ -1174,10 +1174,10 @@ class SmartEvent(ThreadPair):
         # Handle RemoteResume
         #######################################################################
         elif cond == WUCond.RemoteResume:
-            self._verify_current_remote()
+            self.verify_current_remote()
 
             while not self.remote.event.is_set():
-                self._check_remote()
+                self.check_remote()
 
                 if timeout and (timeout < (time.time() - start_time)):
                     self.logger.debug(f'{self.name} raising '
@@ -1189,9 +1189,9 @@ class SmartEvent(ThreadPair):
                 time.sleep(t_out)
 
     ###########################################################################
-    # _check_remote
+    # check_remote
     ###########################################################################
-    def _check_remote(self) -> None:
+    def check_remote(self) -> None:
         """Check the remote flags for consistency and whether remote is alive.
 
         Raises:
@@ -1225,7 +1225,7 @@ class SmartEvent(ThreadPair):
                 f'SmartEvent flag settings are not valid.')
 
         try:
-            ThreadPair._check_remote(self)
+            ThreadPair.check_remote(self)
         except ThreadPairRemoteThreadNotAlive:
             self._reset()  # reset flags
             raise

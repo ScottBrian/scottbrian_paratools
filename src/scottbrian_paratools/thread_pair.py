@@ -355,7 +355,7 @@ class ThreadPair:
                               f'pair with {remote_name}. '
                               f'{caller_info} {log_msg}')
 
-        self._verify_current_remote(skip_pair_check=True)
+        self.verify_current_remote(skip_pair_check=True)
         if not isinstance(remote_name, str):
             raise ThreadPairIncorrectNameSpecified('Attempted ThreadPair pair_with() '
                                          f'with incorrect remote name of'
@@ -445,9 +445,9 @@ class ThreadPair:
                               f'{caller_info} {log_msg}')
 
     ###########################################################################
-    # _verify_current_remote
+    # verify_current_remote
     ###########################################################################
-    def _verify_current_remote(self,
+    def verify_current_remote(self,
                                skip_pair_check: Optional[bool] = False
                                ) -> None:
         """Check the current and remote ThreadEvent objects.
@@ -481,9 +481,9 @@ class ThreadPair:
             self.verify_paired()
 
     ###########################################################################
-    # _check_remote
+    # check_remote
     ###########################################################################
-    def _check_remote(self) -> None:
+    def check_remote(self) -> None:
         """Check whether remote is alive.
 
         Raises:

@@ -475,6 +475,8 @@ def outer_f1(cmds: Cmds,
 
     t_pair.pair_with(remote_name='alpha')
 
+    cmds.get_cmd('beta')
+
     logger.debug('outer f1 exiting')
 
 
@@ -515,6 +517,8 @@ class OuterThreadApp(threading.Thread):
         self.t_pair.pair_with(remote_name='alpha')
         self.descs.paired('alpha', 'beta')
 
+        self.cmds.get_cmd('beta')
+
         logger.debug('beta run exiting')
 
 
@@ -553,6 +557,8 @@ class OuterThreadEventApp(threading.Thread, ThreadPair):
 
         self.pair_with(remote_name='alpha', timeout=3)
         self.descs.paired('alpha', 'beta')
+
+        self.cmds.get_cmd('beta')
 
         logger.debug('beta run exiting')
 
@@ -1235,7 +1241,7 @@ class TestThreadPairBasic:
 
         # should get not alive for beta3
         with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair3._check_remote()
+            thread_pair3.check_remote()
         descs.cleanup()
 
         # should still be the same
@@ -1271,7 +1277,7 @@ class TestThreadPairBasic:
         #######################################################################
         # should get not alive for beta1
         with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair1._check_remote()
+            thread_pair1.check_remote()
         descs.cleanup()
 
         descs.cleanup()
@@ -1280,10 +1286,10 @@ class TestThreadPairBasic:
         # should get ThreadPairRemoteThreadNotAlive for beta1 and beta2
         #######################################################################
         with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair1._check_remote()
+            thread_pair1.check_remote()
 
         with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair2._check_remote()
+            thread_pair2.check_remote()
 
         descs.verify_registry()
 
@@ -1330,77 +1336,28 @@ class TestThreadPairBasic:
         logger.debug('start test 1')
 
         def f1():
-            print('beta f1 entered')
+            logger.debug('beta f1 entered')
             t_pair = ThreadPair(name='beta')
 
             descs.add_desc(ThreadPairDesc(name='beta',
                                           thread_pair=t_pair))
 
+            cmds.queue_cmd('alpha')
             my_c_thread = threading.current_thread()
             assert t_pair.thread is my_c_thread
             assert t_pair.thread is threading.current_thread()
 
             t_pair.pair_with(remote_name='alpha')
 
-            t_pair.sync(log_msg='f1 beta sync point 1')
+            cmds.get_cmd('beta')
 
-            logger.debug('f1 beta about to enter cmd loop')
-
-            while True:
-                beta_cmd = cmds.get_cmd('beta')
-                if beta_cmd == Cmd.Exit:
-                    break
-
-                logger.debug(f'thread_func1 received cmd: {beta_cmd}')
-
-                if beta_cmd == Cmd.Wait:
-                    assert t_pair.wait()
-
-                elif beta_cmd == Cmd.Resume:
-                    with pytest.raises(ThreadPairWaitUntilTimeout):
-                        t_pair.pause_until(WUCond.RemoteWaiting,
-                                            timeout=0.002)
-                    with pytest.raises(ThreadPairWaitUntilTimeout):
-                        t_pair.pause_until(WUCond.RemoteWaiting, timeout=0.01)
-                    with pytest.raises(ThreadPairWaitUntilTimeout):
-                        t_pair.pause_until(WUCond.RemoteWaiting, timeout=0.02)
-
-                    t_pair.sync(log_msg='f1 beta sync point 2')
-
-                    t_pair.pause_until(WUCond.RemoteWaiting)
-                    t_pair.pause_until(WUCond.RemoteWaiting, timeout=0.001)
-                    t_pair.pause_until(WUCond.RemoteWaiting, timeout=0.01)
-                    t_pair.pause_until(WUCond.RemoteWaiting, timeout=0.02)
-                    t_pair.pause_until(WUCond.RemoteWaiting, timeout=-0.02)
-                    t_pair.pause_until(WUCond.RemoteWaiting, timeout=-1)
-                    t_pair.pause_until(WUCond.RemoteWaiting, timeout=0)
-
-                    t_pair.resume()
+            logger.debug('beta f1 exiting')
 
         def foreign1(t_pair):
             logger.debug('foreign1 entered')
 
             with pytest.raises(ThreadPairDetectedOpFromForeignThread):
-                t_pair.resume()
-
-            with pytest.raises(ThreadPairDetectedOpFromForeignThread):
-                t_pair.pair_with(remote_name='beta')
-
-            with pytest.raises(ThreadPairDetectedOpFromForeignThread):
-                t_pair.pair_with(remote_name='beta', timeout=1)
-
-            with pytest.raises(ThreadPairDetectedOpFromForeignThread):
-                t_pair.pause_until(WUCond.RemoteWaiting, timeout=0.02)
-
-            with pytest.raises(ThreadPairDetectedOpFromForeignThread):
-                t_pair.pause_until(WUCond.RemoteWaiting, timeout=0.02)
-            with pytest.raises(ThreadPairDetectedOpFromForeignThread):
-                t_pair.pause_until(WUCond.RemoteWaiting)
-            with pytest.raises(ThreadPairDetectedOpFromForeignThread):
-                t_pair.wait()
-
-            with pytest.raises(ThreadPairDetectedOpFromForeignThread):
-                t_pair.sync()
+                t_pair.verify_current_remote()
 
             logger.debug('foreign1 exiting')
 
@@ -1417,66 +1374,33 @@ class TestThreadPairBasic:
                                               args=(thread_pair1,))
 
         with pytest.raises(ThreadPairNotPaired):
-            thread_pair1.pause_until(WUCond.RemoteWaiting, timeout=-0.002)
-        with pytest.raises(ThreadPairNotPaired):
-            thread_pair1.pause_until(WUCond.RemoteWaiting, timeout=0)
-        with pytest.raises(ThreadPairNotPaired):
-            thread_pair1.pause_until(WUCond.RemoteWaiting, timeout=0.002)
-        with pytest.raises(ThreadPairNotPaired):
-            thread_pair1.pause_until(WUCond.RemoteWaiting, timeout=0.2)
-        with pytest.raises(ThreadPairNotPaired):
-            thread_pair1.pause_until(WUCond.RemoteWaiting)
+            thread_pair1.check_remote()
 
         logger.debug('mainline about to start beta thread')
 
         my_f1_thread.start()
 
+        cmds.get_cmd('alpha')
+
         thread_pair1.pair_with(remote_name='beta')
         descs.paired('alpha', 'beta')
-
-        thread_pair1.sync(log_msg='mainline sync point 1')
-
-        cmds.queue_cmd('beta', Cmd.Wait)
 
         my_foreign1_thread.start()  # attempt to resume beta (should fail)
 
         my_foreign1_thread.join()
 
-        logger.debug('about to pause_until RemoteWaiting')
-        thread_pair1.pause_until(WUCond.RemoteWaiting)
-        thread_pair1.pause_until(WUCond.RemoteWaiting, timeout=0.001)
-        thread_pair1.pause_until(WUCond.RemoteWaiting, timeout=0.01)
-        thread_pair1.pause_until(WUCond.RemoteWaiting, timeout=0.02)
-        thread_pair1.pause_until(WUCond.RemoteWaiting, timeout=-0.02)
-        thread_pair1.pause_until(WUCond.RemoteWaiting, timeout=-1)
-        thread_pair1.pause_until(WUCond.RemoteWaiting, timeout=0)
-
-        thread_pair1.resume()
-
-        cmds.queue_cmd('beta', Cmd.Resume)
-
-        thread_pair1.sync(log_msg='mainline sync point 2')
-
-        assert thread_pair1.wait()
-
-        cmds.queue_cmd('beta', Cmd.Exit)
+        cmds.queue_cmd('beta')  # tell beta to end
 
         my_f1_thread.join()
         descs.thread_end(name='beta')
 
         with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair1.resume()
-
-        with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair1.wait()
-
-        with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair1.pause_until(WUCond.RemoteWaiting)
-
-        with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair1.sync(log_msg='mainline sync point 3')
+            thread_pair1.check_remote()
+        descs.cleanup()
 
         assert thread_pair1.thread is alpha_t
+
+        descs.verify_registry()
 
     ###########################################################################
     # test_thread_pair_outer_thread_f1
@@ -1503,15 +1427,7 @@ class TestThreadPairBasic:
         thread_pair.pair_with(remote_name='beta')
         descs.paired('alpha', 'beta')
 
-        thread_pair.sync(log_msg='mainline sync point 1')
-
-        thread_pair.resume(log_msg='alpha resume 12')
-
-        thread_pair.sync(log_msg='mainline sync point 2')
-
-        thread_pair.wait(log_msg='alpha wait 23')
-
-        thread_pair.sync(log_msg='mainline sync point 3')
+        cmds.queue_cmd('beta')
 
         f1_thread.join()
         descs.thread_end(name='beta')
@@ -1541,15 +1457,7 @@ class TestThreadPairBasic:
         cmds.get_cmd('alpha')
         thread_pair.pair_with(remote_name='beta', timeout=3)
 
-        thread_pair.sync(log_msg='mainline sync point 1')
-
-        thread_pair.resume(log_msg='alpha resume 12')
-
-        thread_pair.sync(log_msg='mainline sync point 2')
-
-        thread_pair.wait(log_msg='alpha wait 23')
-
-        thread_pair.sync(log_msg='mainline sync point 3')
+        cmds.queue_cmd('beta')
 
         thread_app.join()
         descs.thread_end(name='beta')
@@ -1578,135 +1486,13 @@ class TestThreadPairBasic:
 
         thread_pair.pair_with(remote_name='beta', timeout=3)
 
-        thread_pair.sync(log_msg='mainline sync point 1')
-
-        thread_pair.resume(log_msg='alpha resume 12')
-
-        thread_pair.sync(log_msg='mainline sync point 2')
-
-        thread_pair.wait(log_msg='alpha wait 23')
-
-        thread_pair.sync(log_msg='mainline sync point 3')
+        cmds.queue_cmd('beta')
 
         thread_event_app.join()
 
         descs.thread_end(name='beta')
 
         logger.debug('mainline exiting')
-
-    ###########################################################################
-    # test_thread_pair_wait_deadlock_detection
-    ###########################################################################
-    def test_thread_pair_wait_deadlock_detection(self) -> None:
-        """Test deadlock detection with f1."""
-        #######################################################################
-        # f1
-        #######################################################################
-
-        def f1(ml_thread):
-            logger.debug('beta f1 beta entered')
-            t_pair = ThreadPair(name='beta')
-
-            descs.add_desc(ThreadPairDesc(name='beta',
-                                          thread_pair=t_pair))
-
-            my_c_thread = threading.current_thread()
-
-            cmds.get_cmd('beta')
-
-            t_pair.pair_with(remote_name='alpha')
-            assert t_pair.remote.thread is ml_thread
-            assert t_pair.remote.thread is alpha_t
-            assert t_pair.thread is my_c_thread
-            assert t_pair.thread is threading.current_thread()
-
-            t_pair.sync(log_msg='beta f1 thread sync point 1')
-
-            with pytest.raises(ThreadPairWaitDeadlockDetected):
-                t_pair.wait()
-
-            t_pair.sync(log_msg='beta f1 thread sync point 2')
-
-            t_pair.wait()  # clear the resume that comes after the deadlock
-
-            t_pair.sync(log_msg='beta f1 thread sync point 3')
-
-            t_pair.pause_until(WUCond.RemoteWaiting, timeout=2)
-            with pytest.raises(ThreadPairWaitDeadlockDetected):
-                t_pair.wait()
-
-            t_pair.sync(log_msg='beta f1 thread sync point 4')
-
-            t_pair.resume()
-
-        #######################################################################
-        # mainline start
-        #######################################################################
-        cmds = Cmds()
-        descs = ThreadPairDescs()
-        alpha_t = threading.current_thread()
-        thread_pair = ThreadPair(name='alpha')
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair))
-
-        my_f1_thread = threading.Thread(target=f1, args=(alpha_t,))
-
-        with pytest.raises(ThreadPairNotPaired):
-            thread_pair.pause_until(WUCond.RemoteWaiting, timeout=-0.002)
-        with pytest.raises(ThreadPairNotPaired):
-            thread_pair.pause_until(WUCond.RemoteWaiting, timeout=0)
-        with pytest.raises(ThreadPairNotPaired):
-            thread_pair.pause_until(WUCond.RemoteWaiting, timeout=0.002)
-        with pytest.raises(ThreadPairNotPaired):
-            thread_pair.pause_until(WUCond.RemoteWaiting, timeout=0.2)
-        with pytest.raises(ThreadPairNotPaired):
-            thread_pair.pause_until(WUCond.RemoteWaiting)
-
-        my_f1_thread.start()
-
-        with pytest.raises(ThreadPairNotPaired):
-            thread_pair.pause_until(WUCond.RemoteWaiting)
-
-        # tell f1 to proceed to pair_with
-        cmds.queue_cmd('beta', Cmd.Exit)
-
-        thread_pair.pair_with(remote_name='beta', timeout=3)
-        descs.paired('alpha', 'beta')
-
-        thread_pair.sync(log_msg='mainline sync point 1')
-
-        with pytest.raises(ThreadPairWaitDeadlockDetected):
-            thread_pair.wait()
-
-        thread_pair.sync(log_msg='mainline sync point 2')
-
-        thread_pair.resume()
-
-        thread_pair.sync(log_msg='mainline sync point 3')
-
-        with pytest.raises(ThreadPairWaitDeadlockDetected):
-            thread_pair.wait()
-
-        thread_pair.sync(log_msg='mainline sync point 4')
-
-        assert thread_pair.wait()  # clear resume
-
-        my_f1_thread.join()
-        descs.thread_end(name='beta')
-
-        with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair.resume()
-
-        descs.cleanup()
-
-        with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair.wait()
-
-        with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair.sync(log_msg='mainline sync point 5')
-
-        assert thread_pair.thread is alpha_t
-        assert thread_pair.remote.thread is my_f1_thread
 
     ###########################################################################
     # test_thread_pair_inner_thread_app
@@ -1760,21 +1546,7 @@ class TestThreadPairBasic:
                 assert self.t_pair.thread is my_run_thread
                 assert self.t_pair.thread is threading.current_thread()
 
-                with pytest.raises(ThreadPairWaitUntilTimeout):
-                    self.t_pair.pause_until(WUCond.RemoteResume,
-                                             timeout=0.009)
-                self.t_pair.sync(log_msg='beta run sync point 1')
-                self.t_pair.pause_until(WUCond.RemoteResume, timeout=5)
-                self.t_pair.pause_until(WUCond.RemoteResume)
-
-                assert self.t_pair.wait(log_msg='beta run wait 12')
-
-                self.t_pair.sync(log_msg='beta run sync point 2')
-                self.t_pair.sync(log_msg='beta run sync point 3')
-
-                self.t_pair.resume()
-
-                self.t_pair.sync(log_msg='beta run sync point 4')
+                cmds.get_cmd('beta')
                 logger.debug('beta run exiting 45')
 
         #######################################################################
@@ -1795,150 +1567,24 @@ class TestThreadPairBasic:
 
         thread_pair1.pair_with(remote_name='beta')
 
-        thread_pair1.sync(log_msg='mainline sync point 1')
-
-        assert thread_pair1.resume(log_msg='mainline resume 12')
-
-        thread_pair1.sync(log_msg='mainline sync point 2')
-
-        with pytest.raises(ThreadPairWaitUntilTimeout):
-            thread_pair1.pause_until(WUCond.RemoteResume, timeout=0.009)
-
-        thread_pair1.sync(log_msg='mainline sync point 3')
-
-        thread_pair1.pause_until(WUCond.RemoteResume, timeout=5)
-        thread_pair1.pause_until(WUCond.RemoteResume)
-
-        assert thread_pair1.wait(log_msg='mainline wait 34')
-        thread_pair1.sync(log_msg='mainline sync point 4')
+        cmds.queue_cmd('beta')
 
         my_taa_thread.join()
         descs.thread_end('beta')
 
         with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair1.resume()
+            thread_pair1.check_remote()
         descs.cleanup()
-
-        with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair1.wait()
-
-        with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair1.pause_until(WUCond.RemoteWaiting)
-
-        with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair1.pause_until(WUCond.RemoteResume)
 
         with pytest.raises(ThreadPairPairWithTimedOut):
             thread_pair1.pair_with(remote_name='beta', timeout=1)
         descs.paired('alpha')
 
         with pytest.raises(ThreadPairNotPaired):
-            thread_pair1.wait()
-
-        with pytest.raises(ThreadPairNotPaired):
-            thread_pair1.pause_until(WUCond.RemoteWaiting)
-
-        with pytest.raises(ThreadPairNotPaired):
-            thread_pair1.pause_until(WUCond.RemoteResume)
+            thread_pair1.check_remote()
 
         assert thread_pair1.thread is alpha_t
         assert thread_pair1.remote is None
-
-        descs.verify_registry()
-
-    ###########################################################################
-    # test_thread_pair_inner_thread_app2
-    ###########################################################################
-    def test_thread_pair_inner_thread_app2(self) -> None:
-        """Test ThreadPair with thread_app."""
-        #######################################################################
-        # mainline and ThreadApp - mainline provide beta ThreadPair
-        #######################################################################
-        class MyThread2(threading.Thread):
-            def __init__(self,
-                         t_pair: ThreadPair,
-                         alpha_t1: threading.Thread):
-                super().__init__()
-                self.t_pair = t_pair
-                # not really a good idea to set the thread - this test case
-                # may not be realistic - need to consider whether the idea
-                # of passing in a pre-instantiated ThreadPair (which gets
-                # its thread set during instantiation) is something we want
-                # to support given that we have to change the thread
-                self.t_pair.thread = self
-                self.alpha_t1 = alpha_t1
-
-            def run(self):
-                print('run started')
-                # normally, the add_desc is done just after the
-                # instantiation, but
-                # in this case the thread is not made alive until now, and the
-                # add_desc checks that the thread is alive
-                descs.add_desc(ThreadPairDesc(name='beta',
-                                              thread_pair=self.t_pair,
-                                              thread=self))
-
-                cmds.queue_cmd('alpha')
-
-                self.t_pair.pair_with(remote_name='alpha2')
-
-                assert self.t_pair.remote.thread is self.alpha_t1
-                assert self.t_pair.remote.thread is alpha_t
-                assert self.t_pair.thread is self
-
-                my_run_thread = threading.current_thread()
-                assert self.t_pair.thread is my_run_thread
-                assert self.t_pair.thread is threading.current_thread()
-
-                with pytest.raises(ThreadPairWaitDeadlockDetected):
-                    self.t_pair.wait()
-
-                assert self.t_pair.wait()
-                self.t_pair.pause_until(WUCond.RemoteWaiting)
-                self.t_pair.pause_until(WUCond.RemoteWaiting, timeout=2)
-
-                self.t_pair.resume()
-
-        cmds = Cmds()
-        descs = ThreadPairDescs()
-        thread_pair2 = ThreadPair(name='alpha2')
-        descs.add_desc(ThreadPairDesc(name='alpha2',
-                                      thread_pair=thread_pair2))
-
-        thread_pair3 = ThreadPair(name='beta')
-        alpha_t = threading.current_thread()
-        my_tab_thread = MyThread2(thread_pair3, alpha_t)
-        my_tab_thread.start()
-
-        cmds.get_cmd('alpha')
-
-        thread_pair2.pair_with(remote_name='beta')
-        descs.paired('alpha2', 'beta')
-
-        thread_pair2.pause_until(WUCond.RemoteWaiting)
-        with pytest.raises(ThreadPairWaitDeadlockDetected):
-            thread_pair2.wait()
-        thread_pair2.resume()
-        assert thread_pair2.wait()
-
-        my_tab_thread.join()
-        descs.thread_end('beta')
-
-        with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair2.resume()
-        descs.cleanup()
-
-        with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair2.wait()
-
-        with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair2.pause_until(WUCond.RemoteWaiting)
-
-        with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair2.pause_until(WUCond.RemoteResume)
-
-        assert thread_pair2.thread is alpha_t
-        assert thread_pair2.remote.thread is my_tab_thread
 
         descs.verify_registry()
 
@@ -1977,11 +1623,7 @@ class TestThreadPairBasic:
                 assert self.thread is my_run_thread
                 assert self.thread is threading.current_thread()
 
-                assert self.wait()
-                self.pause_until(WUCond.RemoteWaiting, timeout=2)
-                with pytest.raises(ThreadPairWaitDeadlockDetected):
-                    self.wait()
-                self.resume()
+                cmds.get_cmd('beta')
                 logger.debug('run exiting')
 
         cmds = Cmds()
@@ -1990,17 +1632,7 @@ class TestThreadPairBasic:
 
         my_te1_thread = MyThreadEvent1(alpha_t)
         with pytest.raises(ThreadPairDetectedOpFromForeignThread):
-            my_te1_thread.pause_until(WUCond.RemoteWaiting,
-                                      timeout=0.005)
-
-        with pytest.raises(ThreadPairDetectedOpFromForeignThread):
-            my_te1_thread.wait(timeout=0.005)
-
-        with pytest.raises(ThreadPairDetectedOpFromForeignThread):
-            my_te1_thread.resume(timeout=0.005)
-
-        with pytest.raises(ThreadPairDetectedOpFromForeignThread):
-            my_te1_thread.sync(timeout=0.005)
+            my_te1_thread.verify_current_remote()
 
         with pytest.raises(ThreadPairDetectedOpFromForeignThread):
             my_te1_thread.pair_with(remote_name='alpha', timeout=0.5)
@@ -2016,126 +1648,23 @@ class TestThreadPairBasic:
                                       thread_pair=thread_pair))
 
         with pytest.raises(ThreadPairNotPaired):
-            thread_pair.sync()
-
-        with pytest.raises(ThreadPairNotPaired):
-            thread_pair.wait()
-
-        with pytest.raises(ThreadPairNotPaired):
-            thread_pair.resume()
+            thread_pair.verify_current_remote()
 
         thread_pair.pair_with(remote_name='beta')
 
-        thread_pair.resume()
-        with pytest.raises(ThreadPairWaitDeadlockDetected):
-            thread_pair.wait()
-
-        assert thread_pair.wait()
+        cmds.queue_cmd('beta')
 
         my_te1_thread.join()
         descs.thread_end('beta')
 
         with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair.resume()
-
-        with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair.wait()
-
-        with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair.pause_until(WUCond.RemoteWaiting)
-
-        with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair.pause_until(WUCond.RemoteResume)
+            thread_pair.check_remote()
+        descs.cleanup()
 
         assert my_te1_thread.remote is not None
         assert my_te1_thread.remote.thread is not None
         assert my_te1_thread.remote.thread is alpha_t
         assert my_te1_thread.thread is my_te1_thread
-
-    ###########################################################################
-    # test_thread_pair_inner_thread_event_app2
-    ###########################################################################
-    def test_thread_pair_inner_thread_event_app2(self) -> None:
-        """Test ThreadPair with thread_event_app."""
-        #######################################################################
-        # mainline and ThreadApp - mainline sets alpha thread_app sets beta
-        #######################################################################
-        class MyThreadEvent2(threading.Thread, ThreadPair):
-            def __init__(self,
-                         alpha_t1: threading.Thread):
-                threading.Thread.__init__(self)
-                ThreadPair.__init__(self, name='beta', thread=self)
-                self.alpha_t1 = alpha_t1
-
-            def run(self):
-                logger.debug('run started')
-
-                assert self.remote is None
-                assert self.thread is self
-
-                my_run_thread = threading.current_thread()
-                assert self.thread is my_run_thread
-                assert self.thread is threading.current_thread()
-
-                # normally, the add_desc is done just after the
-                # instantiation, but
-                # in this case the thread is not made alive until now, and the
-                # add_desc checks that the thread is alive
-                descs.add_desc(ThreadPairDesc(name='beta',
-                                              thread_pair=self,
-                                              thread=self))
-
-                cmds.queue_cmd('alpha')
-                self.pair_with(remote_name='alpha')
-                assert self.remote.thread is self.alpha_t1
-                assert self.remote.thread is alpha_t
-
-                descs.paired('alpha', 'beta')
-
-                with pytest.raises(ThreadPairWaitDeadlockDetected):
-                    self.wait()
-                assert self.wait()
-                self.resume()
-                logger.debug('run exiting')
-
-        cmds = Cmds()
-        descs = ThreadPairDescs()
-        alpha_t = threading.current_thread()
-        my_te2_thread = MyThreadEvent2(alpha_t)
-
-        my_te2_thread.start()
-
-        cmds.get_cmd('alpha')
-        thread_pair = ThreadPair(name='alpha')
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair))
-
-        thread_pair.pair_with(remote_name='beta')
-
-        thread_pair.pause_until(WUCond.RemoteWaiting, timeout=2)
-        with pytest.raises(ThreadPairWaitDeadlockDetected):
-            thread_pair.wait()
-
-        assert thread_pair.resume()
-        assert thread_pair.wait()
-
-        my_te2_thread.join()
-        descs.thread_end('beta')
-
-        with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair.resume()
-
-        with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair.wait()
-
-        with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair.pause_until(WUCond.RemoteWaiting, timeout=2)
-
-        with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair.pause_until(WUCond.RemoteResume, timeout=2)
-
-        assert thread_pair.thread is alpha_t
-        assert thread_pair.remote.thread is my_te2_thread
 
     ###########################################################################
     # test_thread_pair_two_f_threads
@@ -2159,10 +1688,8 @@ class TestThreadPairBasic:
             descs.paired('fa1', 'fb1')
 
             logger.debug('fa1 about to wait')
-            t_pair.wait()
-            logger.debug('fa1 back from wait')
-            t_pair.pause_until(WUCond.RemoteWaiting, timeout=2)
-            t_pair.resume()
+            cmds.get_cmd('fa1')
+            logger.debug('fa1 exiting')
 
         def fb1():
             logger.debug('fb1 entered')
@@ -2177,8 +1704,7 @@ class TestThreadPairBasic:
             t_pair.pair_with(remote_name='fa1')
 
             logger.debug('fb1 about to resume')
-            t_pair.resume()
-            t_pair.wait()
+            cmds.queue_cmd('fa1')
 
             # tell mainline we are out of the wait - OK to do descs fa1 end
             cmds.queue_cmd('alpha')
@@ -2187,15 +1713,9 @@ class TestThreadPairBasic:
             cmds.get_cmd('beta')
 
             with pytest.raises(ThreadPairRemoteThreadNotAlive):
-                t_pair.resume()
+                t_pair.check_remote()
 
             descs.cleanup()
-
-            with pytest.raises(ThreadPairRemoteThreadNotAlive):
-                t_pair.wait()
-
-            with pytest.raises(ThreadPairRemoteThreadNotAlive):
-                t_pair.pause_until(WUCond.RemoteWaiting)
 
         #######################################################################
         # mainline
@@ -2219,105 +1739,6 @@ class TestThreadPairBasic:
 
         fb1_thread.join()
         descs.thread_end('fb1')
-
-    ###########################################################################
-    # test_thread_pair_two_f_threads2
-    ###########################################################################
-    def test_thread_pair_two_f_threads2(self) -> None:
-        """Test register_thread with thread_event_app."""
-        #######################################################################
-        # two threads - fa2 and fb2 set their own threads
-        #######################################################################
-        def fa2():
-            logger.debug('fa2 entered')
-            t_pair = ThreadPair(name='fa2')
-            my_fa_thread = threading.current_thread()
-
-            assert t_pair.thread is my_fa_thread
-            descs.add_desc(ThreadPairDesc(name='fa2',
-                                          thread_pair=t_pair,
-                                          thread=my_fa_thread))
-
-            t_pair.pair_with(remote_name='fb2')
-
-            cmds.get_cmd('beta')
-            logger.debug('fa2 about to deadlock')
-            with pytest.raises(ThreadPairWaitDeadlockDetected):
-                logger.debug('fa2 about to wait')
-                t_pair.wait()
-                logger.debug('fa2 back from wait')
-
-            logger.debug('fa2 about to pause_until')
-            t_pair.pause_until(WUCond.RemoteWaiting, timeout=2)
-            logger.debug('fa2 about to resume')
-            t_pair.resume()
-
-            t_pair.wait()
-            logger.debug('fa2 exiting')
-
-        def fb2():
-            logger.debug('fb2 entered')
-            t_pair = ThreadPair(name='fb2')
-            my_fb_thread = threading.current_thread()
-            descs.add_desc(ThreadPairDesc(name='fb2',
-                                          thread_pair=t_pair,
-                                          thread=my_fb_thread))
-
-            assert t_pair.thread is my_fb_thread
-
-            t_pair.pair_with(remote_name='fa2')
-            descs.paired('fa2', 'fb2')
-
-            cmds.queue_cmd('beta')
-            logger.debug('fb2 about to deadlock')
-            with pytest.raises(ThreadPairWaitDeadlockDetected):
-                logger.debug('fb2 about to wait')
-                t_pair.wait()
-                logger.debug('fb2 back from wait')
-
-            logger.debug('fb2 about to pause_until')
-            logger.debug('fb2 about to wait')
-            t_pair.wait()
-            t_pair.resume()
-
-            # tell mainline we are out of the wait - OK to do descs fa1 end
-            cmds.queue_cmd('alpha')
-
-            # wait for mainline to give to go ahead after doing descs fa1 end
-            cmds.get_cmd('beta')
-
-            logger.debug('fb2 about to try resume for ThreadPairRemoteThreadNotAlive')
-            with pytest.raises(ThreadPairRemoteThreadNotAlive):
-                t_pair.resume()
-
-            descs.cleanup()
-
-            logger.debug('fb2 about to try wait for ThreadPairRemoteThreadNotAlive')
-
-            with pytest.raises(ThreadPairRemoteThreadNotAlive):
-                t_pair.wait()
-
-            logger.debug('fb2 exiting')
-
-        cmds = Cmds()
-        descs = ThreadPairDescs()
-        fa2_thread = threading.Thread(target=fa2)
-
-        fb2_thread = threading.Thread(target=fb2)
-
-        fa2_thread.start()
-        fb2_thread.start()
-
-        fa2_thread.join()
-
-        cmds.get_cmd('alpha')
-
-        descs.thread_end('fa2')
-
-        cmds.queue_cmd('beta', 'go')
-
-        fb2_thread.join()
-        descs.thread_end('fb2')
 
 
 ###############################################################################
