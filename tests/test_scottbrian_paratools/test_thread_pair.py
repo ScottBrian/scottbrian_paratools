@@ -1742,97 +1742,63 @@ class TestThreadPairBasic:
 
 
 ###############################################################################
-# TestResumeExc Class
+# TestTheta Class
 ###############################################################################
-class TestResumeExc:
-    """Test ThreadPair resume() exceptions."""
+class TestTheta:
+    """Test ThreadPair with two classes."""
     ###########################################################################
-    # test_thread_pair_sync_f1
+    # test_thread_pair_theta
     ###########################################################################
-    def test_thread_pair_resume_exc_f1(self) -> None:
-        """Test register_thread with f1."""
+    def test_thread_pair_theta(self) -> None:
+        """Test theta class."""
 
         def f1():
             logger.debug('f1 beta entered')
-            t_pair = ThreadPair(name='beta')
-            descs.add_desc(ThreadPairDesc(name='beta',
-                                          thread_pair=t_pair,
-                                          thread=threading.current_thread()))
+            f1_theta = Theta(name='beta')
+            descs.add_desc(ThetaDesc(name='beta',
+                                     theta=f1_theta,
+                                     thread=threading.current_thread()))
 
             cmds.queue_cmd('alpha')
 
-            t_pair.pair_with(remote_name='alpha')
+            f1_theta.pair_with(remote_name='alpha')
             descs.paired('alpha', 'beta')
-
-            t_pair.sync(log_msg='f1 beta sync point 1')
 
             cmds.queue_cmd('alpha', 'go')
             cmds.get_cmd('beta')
 
-            t_pair.sync(log_msg='f1 beta sync point 2')
+            assert f1_theta.var1 == 999
 
-            t_pair.resume(log_msg='f1 beta resume 3')
-
-            t_pair.sync(log_msg='f1 beta sync point 4')
+            f1_theta.var1 = 'theta'  # restore to init value to allow verify to work
 
             logger.debug('f1 beta exiting 5')
 
         logger.debug('mainline entered')
         cmds = Cmds()
         descs = ThreadPairDescs()
-        thread_pair1 = ThreadPair(name='alpha')
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair1,
-                                      thread=threading.current_thread()))
+        ml_theta = Theta(name='alpha')
+        descs.add_desc(ThetaDesc(name='alpha',
+                                 theta=ml_theta,
+                                 thread=threading.current_thread()))
 
         f1_thread = threading.Thread(target=f1)
 
         f1_thread.start()
 
         cmds.get_cmd('alpha')
-        thread_pair1.pair_with(remote_name='beta')
-
-        assert thread_pair1.sync(log_msg='mainline sync point 1')
+        ml_theta.pair_with(remote_name='beta')
 
         cmds.get_cmd('alpha')
 
-        thread_pair1.remote.deadlock = True
-        thread_pair1.remote.conflict = True
-        with pytest.raises(ThreadPairInconsistentFlagSettings):
-            thread_pair1.resume(log_msg='alpha error resume 1a')
-        thread_pair1.remote.deadlock = False
-        thread_pair1.remote.conflict = False
-
-        thread_pair1.remote.wait_wait = True
-        thread_pair1.remote.sync_wait = True
-        with pytest.raises(ThreadPairInconsistentFlagSettings):
-            thread_pair1.resume(log_msg='alpha error resume 1b')
-        thread_pair1.remote.wait_wait = False
-        thread_pair1.remote.sync_wait = False
-
-        thread_pair1.remote.deadlock = True
-        with pytest.raises(ThreadPairInconsistentFlagSettings):
-            thread_pair1.resume(log_msg='alpha error resume 1c')
-        thread_pair1.remote.deadlock = False
-
-        thread_pair1.remote.conflict = True
-        with pytest.raises(ThreadPairInconsistentFlagSettings):
-            thread_pair1.resume(log_msg='alpha error resume 1d')
-        thread_pair1.remote.conflict = False
+        ml_theta.remote.var1 = 999
 
         cmds.queue_cmd('beta', 'go')
-
-        thread_pair1.sync(log_msg='mainline sync point 2')
-
-        thread_pair1.wait(log_msg='mainline wait 3')
-
-        thread_pair1.sync(log_msg='mainline sync point 4')
 
         f1_thread.join()
         descs.thread_end('beta')
 
         with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair1.resume(log_msg='mainline sync point 5')
+            ml_theta.check_remote()
 
         descs.cleanup()
 
@@ -1840,976 +1806,256 @@ class TestResumeExc:
 
 
 ###############################################################################
-# TestSync Class
+# TestSigma Class
 ###############################################################################
-class TestSync:
-    """Test ThreadPair sync function."""
-
+class TestSigma:
+    """Test ThreadPair with two classes."""
     ###########################################################################
-    # test_thread_pair_sync_f1
+    # test_thread_pair_sigma
     ###########################################################################
-    def test_thread_pair_sync_f1(self) -> None:
-        """Test register_thread with f1."""
+    def test_thread_pair_sigma(self) -> None:
+        """Test sigma class."""
 
         def f1():
             logger.debug('f1 beta entered')
+            f1_sigma = Sigma(name='beta')
+            descs.add_desc(SigmaDesc(name='beta',
+                                     sigma=f1_sigma,
+                                     thread=threading.current_thread()))
 
-            t_pair = ThreadPair(name='beta')
-            descs.add_desc(ThreadPairDesc(name='beta',
-                                          thread_pair=t_pair,
-                                          thread=threading.current_thread()))
             cmds.queue_cmd('alpha')
 
-            t_pair.pair_with(remote_name='alpha')
+            f1_sigma.pair_with(remote_name='alpha')
+            descs.paired('alpha', 'beta')
 
-            t_pair.sync(log_msg='f1 beta sync point 1')
+            cmds.queue_cmd('alpha', 'go')
+            cmds.get_cmd('beta')
 
-            t_pair.wait()
+            assert f1_sigma.var1 == 999
+            assert f1_sigma.remote.var1 == 17
 
-            t_pair.sync(log_msg='f1 beta sync point 2')
+            assert f1_sigma.var2 == 'sigma'
+            assert f1_sigma.remote.var2 == 'sigma'
 
-            t_pair.resume()
+            f1_sigma.var1 = 17  # restore to init value to allow verify to work
+            f1_sigma.remote.var2 = 'test1'
 
-            t_pair.sync(log_msg='f1 beta sync point 3')
+            logger.debug('f1 beta exiting 5')
 
-            t_pair.sync(log_msg='f1 beta sync point 4')
+        logger.debug('mainline entered')
+        cmds = Cmds()
+        descs = ThreadPairDescs()
+        ml_sigma = Sigma(name='alpha')
+        descs.add_desc(SigmaDesc(name='alpha',
+                                 sigma=ml_sigma,
+                                 thread=threading.current_thread()))
 
-            t_pair.wait()
+        f1_thread = threading.Thread(target=f1)
+
+        f1_thread.start()
+
+        cmds.get_cmd('alpha')
+        ml_sigma.pair_with(remote_name='beta')
+
+        cmds.get_cmd('alpha')
+
+        ml_sigma.remote.var1 = 999
+
+        cmds.queue_cmd('beta', 'go')
+
+        f1_thread.join()
+
+        assert ml_sigma.var2 == 'test1'
+        ml_sigma.var2 = 'sigma'  # restore for verify
+
+        descs.thread_end('beta')
+
+        with pytest.raises(ThreadPairRemoteThreadNotAlive):
+            ml_sigma.check_remote()
+
+        descs.cleanup()
+
+        logger.debug('mainline exiting')
+
+
+###############################################################################
+# TestOmega Class
+###############################################################################
+class TestOmega:
+    """Test ThreadPair with two classes."""
+    ###########################################################################
+    # test_thread_pair_omega
+    ###########################################################################
+    def test_thread_pair_omega(self) -> None:
+        """Test omega class."""
+
+        def f1():
+            logger.debug('f1 beta entered')
+            f1_omega = Omega(name='beta')
+            descs.add_desc(OmegaDesc(name='beta',
+                                     omega=f1_omega,
+                                     thread=threading.current_thread()))
+
+            cmds.queue_cmd('alpha')
+
+            f1_omega.pair_with(remote_name='alpha')
+            descs.paired('alpha', 'beta')
+
+            cmds.queue_cmd('alpha', 'go')
+            cmds.get_cmd('beta')
+
+            assert f1_omega.var1 == 999
+            assert f1_omega.remote.var1 == 42
+
+            assert f1_omega.var2 == 64.9
+            assert f1_omega.remote.var2 == 64.9
+
+            assert f1_omega.var3 == 'omega'
+            assert f1_omega.remote.var3 == 'omega'
+
+            f1_omega.var1 = 42  # restore to init value to allow verify to work
+            f1_omega.remote.var2 = 'test_omega'
+
+            logger.debug('f1 beta exiting 5')
+
+        logger.debug('mainline entered')
+        cmds = Cmds()
+        descs = ThreadPairDescs()
+        ml_omega = Omega(name='alpha')
+        descs.add_desc(OmegaDesc(name='alpha',
+                                 omega=ml_omega,
+                                 thread=threading.current_thread()))
+
+        f1_thread = threading.Thread(target=f1)
+
+        f1_thread.start()
+
+        cmds.get_cmd('alpha')
+        ml_omega.pair_with(remote_name='beta')
+
+        cmds.get_cmd('alpha')
+
+        ml_omega.remote.var1 = 999
+
+        cmds.queue_cmd('beta', 'go')
+
+        f1_thread.join()
+
+        assert ml_omega.var2 == 'test_omega'
+        ml_omega.var2 = 64.9  # restore for verify
+
+        descs.thread_end('beta')
+
+        with pytest.raises(ThreadPairRemoteThreadNotAlive):
+            ml_omega.check_remote()
+
+        descs.cleanup()
+
+        logger.debug('mainline exiting')
+
+
+###############################################################################
+# TestThetaSigma Class
+###############################################################################
+class TestThetaSigma:
+    """Test ThreadPair with two classes."""
+    ###########################################################################
+    # test_thread_pair_theta_sigma
+    ###########################################################################
+    def test_thread_pair_theta_sigma(self) -> None:
+        """Test theta and sigma."""
+
+        def f1():
+            logger.debug('f1 beta entered')
+            f1_theta = Theta(name='beta_theta')
+            theta_descs.add_desc(ThetaDesc(name='beta_theta',
+                                           theta=f1_theta,
+                                           thread=threading.current_thread()))
+
+            f1_sigma = Sigma(name='beta_sigma')
+            sigma_descs.add_desc(SigmaDesc(name='beta_sigma',
+                                           sigma=f1_sigma,
+                                           thread=threading.current_thread()))
+
+            cmds.queue_cmd('alpha')
+
+            f1_theta.pair_with(remote_name='alpha_theta')
+            theta_descs.paired('alpha_theta', 'beta_theta')
+
+            f1_sigma.pair_with(remote_name='alpha_sigma')
+            sigma_descs.paired('alpha_sigma', 'beta_sigma')
+
+            cmds.queue_cmd('alpha', 'go')
+            cmds.get_cmd('beta')
+
+            assert f1_theta.var1 == 999
+            assert f1_theta.remote.var1 == 'theta'
+
+            assert f1_sigma.var1 == 999
+            assert f1_sigma.remote.var1 == 17
+
+            assert f1_sigma.var2 == 'sigma'
+            assert f1_sigma.remote.var2 == 'sigma'
+
+            f1_theta.var1 = 'theta'  # restore to init value for verify
+            f1_theta.remote.var2 = 'test_theta'
+
+            f1_sigma.var1 = 17  # restore to init value to allow verify to work
+            f1_sigma.remote.var2 = 'test1'
 
             logger.debug('f1 beta exiting')
 
         logger.debug('mainline entered')
         cmds = Cmds()
-        descs = ThreadPairDescs()
-        thread_pair1 = ThreadPair(name='alpha')
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair1,
-                                      thread=threading.current_thread()))
+        theta_descs = ThreadPairDescs()
+        sigma_descs = ThreadPairDescs()
+
+        ml_theta = Theta(name='alpha_theta')
+
+        theta_descs.add_desc(ThetaDesc(name='alpha_theta',
+                                       theta=ml_theta,
+                                       thread=threading.current_thread()))
+
+        ml_sigma = Sigma(name='alpha_sigma')
+        sigma_descs.add_desc(SigmaDesc(name='alpha_sigma',
+                                       sigma=ml_sigma,
+                                       thread=threading.current_thread()))
 
         f1_thread = threading.Thread(target=f1)
 
         f1_thread.start()
 
         cmds.get_cmd('alpha')
-
-        thread_pair1.pair_with(remote_name='beta')
-        descs.paired('alpha', 'beta')
-
-        thread_pair1.sync(log_msg='mainline sync point 1')
-
-        thread_pair1.resume()
-
-        thread_pair1.sync(log_msg='mainline sync point 2')
-
-        thread_pair1.wait()
-
-        thread_pair1.sync(log_msg='mainline sync point 3')
-
-        thread_pair1.resume()
-
-        thread_pair1.sync(log_msg='mainline sync point 4')
-
-        f1_thread.join()
-        descs.thread_end('beta')
-
-        logger.debug('mainline exiting')
-
-    ###########################################################################
-    # test_thread_pair_sync_exc
-    ###########################################################################
-    def test_thread_pair_sync_exc(self,
-                                  thread_exc: Any) -> None:
-        """Test register_thread with f1.
-
-        Args:
-            thread_exc: capture thread exceptions
-        """
-
-        def f1():
-            logger.debug('f1 beta entered')
-
-            t_pair = ThreadPair(name='beta')
-            descs.add_desc(ThreadPairDesc(name='beta',
-                                          thread_pair=t_pair,
-                                          thread=threading.current_thread()))
-            cmds.queue_cmd('alpha')
-
-            t_pair.pair_with(remote_name='alpha')
-            descs.paired('alpha', 'beta')
-
-            assert t_pair.sync(log_msg='f1 beta sync point 1')
-
-            with pytest.raises(ThreadPairConflictDeadlockDetected):
-                t_pair.wait(log_msg='f1 beta wait 2')
-
-            assert t_pair.sync(log_msg='f1 beta sync point 3')
-
-            t_pair.resume(log_msg='f1 beta resume 4')
-
-            assert t_pair.sync(log_msg='f1 beta sync point 5')
-
-            assert t_pair.wait(log_msg='f1 beta wait 6')
-
-            t_pair.pause_until(WUCond.RemoteWaiting)
-
-            t_pair.resume()
-
-            assert t_pair.sync(log_msg='f1 beta sync point 8')
-
-            # When one thread issues a sync request, and the other issues a
-            # wait request, a conflict deadlock is recognized. The
-            # process is of conflict detection is that one side recognizes the
-            # conflict, sets a flag to tell the other side that the conflict
-            # exists, and then raises the ThreadPairConflictDeadlockDetected error.
-            # The other side, upon seeing the conflict flag set, will also
-            # raise the ThreadPairConflictDeadlockDetected error.
-            # We want to ensure that sync code that detects the conflict is
-            # exercised here which requires setting certain flags in a way
-            # that coaxes each side into behaving such that the sync
-            # detection code will run. We will do this as follows:
-
-            # make sure alpha is in sync code now looping in phase 1
-            while not t_pair.remote.sync_wait:
-                time.sleep(.1)
-
-            # make alpha think it is in sync phase 2 and continue looping
-            # until beta sets sync_cleanup from True back to False
-            with t_pair.status.status_lock:
-                t_pair.remote.sync_wait = False
-                t_pair.status.sync_cleanup = True
-
-            # pre-resume to set beta event and set alpha wait_wait to get beta
-            # thinking alpha is resumed and waiting and will eventually
-            # leave (i.e., get beta the think that alpha not in a sync
-            # deadlock)
-            t_pair.resume()
-            t_pair.remote.wait_wait = True
-
-            # Now issue the wait. There is no way to prove that alpha saw
-            # the deadlock first, but we will see later whether the code
-            # coverage will show that the sync detection code ran.
-            with pytest.raises(ThreadPairConflictDeadlockDetected):
-                t_pair.wait(log_msg='f1 beta wait 89')
-
-            t_pair.status.sync_cleanup = False
-
-            assert t_pair.sync(log_msg='f1 beta sync point 9')
-
-            logger.debug('f1 beta exiting 10')
-
-        logger.debug('mainline entered')
-        cmds = Cmds()
-        descs = ThreadPairDescs()
-        thread_pair1 = ThreadPair(name='alpha')
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair1,
-                                      thread=threading.current_thread()))
-
-        f1_thread = threading.Thread(target=f1)
-
-        f1_thread.start()
+        ml_theta.pair_with(remote_name='beta')
 
         cmds.get_cmd('alpha')
-        thread_pair1.pair_with(remote_name='beta')
 
-        assert thread_pair1.sync(log_msg='mainline sync point 1')
+        ml_theta.remote.var1 = 999
+        ml_sigma.remote.var1 = 999
 
-        # See the comments in f1 regarding the detection and handling of a
-        # confict deadlock. We need to force the code in the following
-        # scenario to behave such that beta will be the side that detects
-        # the conflict. This will be done as follows:
-
-        # make sure beta is looping in wait code
-        thread_pair1.pause_until(WUCond.RemoteWaiting)
-
-        # set remote.wait_wait to False to trick alpha in the folloiwng
-        # sync request to think alpha is NOT in wait request code so
-        # that alpha does not detect the conflict.
-        thread_pair1.remote.wait_wait = False
-
-        # Issue the sync request. If all goes well, beta will see the conflict
-        # first, set the conflict flag and then raise the
-        # ThreadPairConflictDeadlockDetected error. We can't prove that it worked out
-        # that way, but the coverage report will tell us whether the
-        # detection code in wait ran.
-        with pytest.raises(ThreadPairConflictDeadlockDetected):
-            thread_pair1.sync(log_msg='mainline sync point 2')
-
-        assert thread_pair1.sync(log_msg='mainline sync point 3')
-
-        assert thread_pair1.wait(log_msg='mainline wait 4')
-
-        assert thread_pair1.sync(log_msg='mainline sync point 5')
-
-        thread_pair1.resume(log_msg='mainline resume 6')
-
-        assert not thread_pair1.sync(log_msg='mainline sync point 7',
-                                     timeout=0.5)
-
-        assert thread_pair1.wait()
-
-        assert thread_pair1.sync(log_msg='mainline sync point 8')
-
-        # thread will ensure we see conflict first
-        with pytest.raises(ThreadPairConflictDeadlockDetected):
-            thread_pair1.sync(log_msg='mainline sync point 10')
-
-        logger.debug('mainline about to issue wait to clear trick pre-resume')
-        thread_pair1.wait()  # clear the trick pre-resume from beta
-
-        assert thread_pair1.sync(log_msg='mainline sync point 9')
+        cmds.queue_cmd('beta', 'go')
 
         f1_thread.join()
-        descs.thread_end('beta')
+
+        assert ml_theta.var2 == 'test_theta'
+        ml_theta.var2 = 'theta'  # restore for verify
+
+        assert ml_sigma.var2 == 'test1'
+        ml_sigma.var2 = 'sigma'  # restore for verify
+
+        theta_descs.thread_end('beta')
+        sigma_descs.thread_end('beta')
 
         with pytest.raises(ThreadPairRemoteThreadNotAlive):
-            thread_pair1.sync(log_msg='mainline sync point 10')
+            ml_theta.check_remote()
 
-        descs.cleanup()
+        with pytest.raises(ThreadPairRemoteThreadNotAlive):
+            ml_sigma.check_remote()
 
-        logger.debug('mainline exiting 9')
+        theta_descs.cleanup()
+        sigma_descs.cleanup()
 
-
-###############################################################################
-# TestWaitClear Class
-###############################################################################
-class TestWaitClear:
-    """Test ThreadPair clearing of event set flag."""
-    ###########################################################################
-    # test_thread_pair_f1_clear
-    ###########################################################################
-    def test_thread_pair_f1_clear(self) -> None:
-        """Test smart event timeout with f1 thread."""
-
-        def f1():
-            logger.debug('f1 entered')
-            t_pair = ThreadPair(name='beta')
-            descs.add_desc(ThreadPairDesc(name='beta',
-                                          thread_pair=t_pair,
-                                          thread=threading.current_thread()))
-            cmds.queue_cmd('alpha')
-
-            t_pair.pair_with(remote_name='alpha')
-            descs.paired('alpha', 'beta')
-
-            cmds.start_clock(iter=1)
-            assert t_pair.wait()
-            assert 2 <= cmds.duration() <= 3
-            assert not t_pair.remote.event.is_set()
-
-            cmds.start_clock(iter=2)
-            assert t_pair.wait()
-            assert 2 <= cmds.duration() <= 3
-            assert not t_pair.remote.event.is_set()
-
-            cmds.pause(2, iter=3)
-            t_pair.resume()
-            cmds.pause(2, iter=4)
-            t_pair.resume()
-
-        cmds = Cmds()
-        descs = ThreadPairDescs()
-        thread_pair = ThreadPair(name='alpha')
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair,
-                                      thread=threading.current_thread()))
-
-        beta_thread = threading.Thread(target=f1)
-        beta_thread.start()
-
-        cmds.get_cmd('alpha')
-        thread_pair.pair_with(remote_name='beta')
-
-        cmds.pause(2, iter=1)
-        thread_pair.resume()
-
-        cmds.pause(2, iter=2)
-        thread_pair.resume()
-
-        cmds.start_clock(iter=3)
-        assert thread_pair.wait()
-        assert 2 <= cmds.duration() <= 3
-        assert not thread_pair.remote.event.is_set()
-
-        cmds.start_clock(iter=4)
-        assert thread_pair.wait()
-        assert 2 <= cmds.duration() <= 3
-        assert not thread_pair.remote.event.is_set()
-
-        beta_thread.join()
-        descs.thread_end('beta')
-
-    ###########################################################################
-    # test_thread_pair_thread_app_clear
-    ###########################################################################
-    def test_thread_pair_thread_app_clear(self) -> None:
-        """Test smart event timeout with thread_app thread."""
-
-        class MyThread(threading.Thread):
-            def __init__(self) -> None:
-                super().__init__()
-                self.t_pair = ThreadPair(name='beta', thread=self)
-
-            def run(self):
-                logger.debug('ThreadApp run entered')
-
-                # t_pair = ThreadPair(name='beta')
-                descs.add_desc(ThreadPairDesc(name='beta',
-                                              thread_pair=self.t_pair,
-                                              thread=self))
-                cmds.queue_cmd('alpha')
-
-                self.t_pair.pair_with(remote_name='alpha')
-
-                assert not self.t_pair.remote.event.is_set()
-                assert not self.t_pair.event.is_set()
-
-                self.t_pair.sync(log_msg='beta run sync point 1')
-
-                cmds.start_clock(iter=1)
-
-                assert self.t_pair.wait(log_msg='beta run wait 12')
-
-                assert 2 <= cmds.duration() <= 3
-
-                assert not self.t_pair.remote.event.is_set()
-                assert not self.t_pair.event.is_set()
-
-                self.t_pair.sync(log_msg='beta run sync point 2')
-                cmds.start_clock(iter=2)
-
-                assert self.t_pair.wait(log_msg='beta run wait 23')
-                assert 2 <= cmds.duration() <= 3
-
-                assert not self.t_pair.remote.event.is_set()
-                assert not self.t_pair.event.is_set()
-                self.t_pair.sync(log_msg='beta run sync point 3')
-
-                cmds.pause(2, iter=3)
-                self.t_pair.resume(log_msg='beta run resume 34')
-
-                self.t_pair.sync(log_msg='beta run sync point 4')
-
-                cmds.pause(2, iter=4)
-                self.t_pair.resume(log_msg='beta run resume 45')
-
-                self.t_pair.sync(log_msg='beta run sync point 5')
-                logger.debug('beta run exiting 910')
-
-        cmds = Cmds()
-        descs = ThreadPairDescs()
-        thread_pair = ThreadPair(name='alpha')
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair,
-                                      thread=threading.current_thread()))
-
-        thread_app = MyThread()
-        thread_app.start()
-
-        cmds.get_cmd('alpha')
-        thread_pair.pair_with(remote_name='beta')
-        descs.paired('alpha', 'beta')
-
-        thread_pair.sync(log_msg='mainline sync point 1')
-
-        cmds.pause(2, iter=1)
-
-        thread_pair.resume(log_msg='mainline resume 12')
-
-        thread_pair.sync(log_msg='mainline sync point 2')
-
-        cmds.pause(2, iter=2)
-
-        thread_pair.resume(log_msg='mainline resume 23')
-        thread_pair.sync(log_msg='mainline sync point 3')
-        cmds.start_clock(iter=3)
-
-        assert thread_pair.wait(log_msg='mainline wait 34')
-
-        assert 2 <= cmds.duration() <= 3
-
-        assert not thread_pair.event.is_set()
-        assert not thread_pair.remote.event.is_set()
-
-        thread_pair.sync(log_msg='mainline sync point 4')
-        cmds.start_clock(iter=4)
-
-        assert thread_pair.wait(log_msg='mainline sync point 45')
-
-        assert 2 <= cmds.duration() <= 3
-
-        assert not thread_pair.event.is_set()
-        assert not thread_pair.remote.event.is_set()
-        thread_pair.sync(log_msg='mainline sync point 5')
-
-        thread_app.join()
-        descs.thread_end('beta')
-
-
-###############################################################################
-# TestThreadPairTimeout Class
-###############################################################################
-class TestThreadPairTimeout:
-    """Test ThreadPair timeout cases."""
-    ###########################################################################
-    # test_thread_pair_f1_wait_time_out
-    ###########################################################################
-    def test_thread_pair_f1_wait_time_out(self) -> None:
-        """Test smart event wait timeout with f1 thread."""
-        def f1():
-            logger.debug('f1 entered')
-
-            t_pair = ThreadPair(name='beta')
-            descs.add_desc(ThreadPairDesc(name='beta',
-                                          thread_pair=t_pair,
-                                          thread=threading.current_thread()))
-            cmds.queue_cmd('alpha')
-
-            t_pair.pair_with(remote_name='alpha')
-            descs.paired('alpha', 'beta')
-
-            t_pair.sync(log_msg='f1 beta sync point 1')
-            assert t_pair.wait(timeout=2)
-            t_pair.sync(log_msg='f1 beta sync point 2')
-            s_time = time.time()
-            assert not t_pair.wait(timeout=0.5)
-            assert 0.5 <= time.time() - s_time <= 0.75
-            t_pair.sync(log_msg='f1 beta sync point 3')
-            t_pair.pause_until(WUCond.RemoteWaiting)
-            t_pair.resume(log_msg='f1 beta resume 34')
-            t_pair.sync(log_msg='f1 beta sync point 4')
-            t_pair.sync(log_msg='f1 beta sync point 5')
-
-        cmds = Cmds()
-        descs = ThreadPairDescs()
-        thread_pair = ThreadPair(name='alpha')
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair,
-                                      thread=threading.current_thread()))
-
-        beta_thread = threading.Thread(target=f1)
-
-        beta_thread.start()
-
-        cmds.get_cmd('alpha')
-        thread_pair.pair_with(remote_name='beta')
-
-        thread_pair.pause_until(WUCond.ThreadsReady)
-        thread_pair.sync(log_msg='mainline sync point 1')
-        thread_pair.pause_until(WUCond.RemoteWaiting)
-        thread_pair.resume(log_msg='mainline resume 12')
-        thread_pair.sync(log_msg='mainline sync point 2')
-        thread_pair.sync(log_msg='mainline sync point 3')
-        assert thread_pair.wait(timeout=2)
-        thread_pair.sync(log_msg='mainline sync point 4')
-        start_time = time.time()
-        assert not thread_pair.wait(timeout=0.75)
-        assert 0.75 <= time.time() - start_time <= 1
-        thread_pair.sync(log_msg='mainline sync point 5')
-
-        beta_thread.join()
-        descs.thread_end('beta')
-
-    ###########################################################################
-    # test_thread_pair_f1_resume_time_out
-    ###########################################################################
-    def test_thread_pair_f1_resume_time_out(self) -> None:
-        """Test smart event wait timeout with f1 thread."""
-
-        def f1() -> None:
-            """The remote thread for requests."""
-            logger.debug('f1 entered')
-
-            t_pair = ThreadPair(name='beta')
-            descs.add_desc(ThreadPairDesc(name='beta',
-                                          thread_pair=t_pair,
-                                          thread=threading.current_thread()))
-            cmds.queue_cmd('alpha')
-
-            t_pair.pair_with(remote_name='alpha')
-
-            # t_pair.sync(log_msg='f1 beta sync point 1')
-
-            # the first resume will set the flag ON and the flag will stay ON
-            # since there is no matching wait
-            assert not t_pair.event.is_set()
-            assert t_pair.resume(timeout=2)
-            assert t_pair.event.is_set()
-
-            # this second resume will timeout waiting for the flag to go OFF
-            cmds.start_clock(iter=1)
-            assert not t_pair.resume(timeout=0.5)
-            assert 0.5 <= cmds.duration() <= 0.75
-            assert t_pair.event.is_set()
-
-            t_pair.sync(log_msg='f1 beta sync point 1')
-            t_pair.sync(log_msg='f1 beta sync point 2')
-
-            # this first resume will complete within the timeout
-            t_pair.remote.wait_wait = True  # simulate waiting
-            t_pair.remote.deadlock = True  # simulate deadlock
-            cmds.start_clock(iter=2)
-            assert t_pair.resume(timeout=1)
-            assert 0.5 <= cmds.duration() <= 0.75
-
-            # t_pair.sync(log_msg='f1 beta sync point 3')
-            t_pair.sync(log_msg='f1 beta sync point 4')
-
-            # this resume will timeout
-            t_pair.remote.wait_wait = True  # simulate waiting
-            t_pair.remote.deadlock = True  # simulate deadlock
-
-            cmds.start_clock(iter=3)
-            assert not t_pair.resume(timeout=0.5)
-            assert 0.5 <= cmds.duration() <= 0.75
-
-            t_pair.sync(log_msg='f1 beta sync point 5')
-            t_pair.sync(log_msg='f1 beta sync point 6')
-
-            # this wait will clear the flag - use timeout to prevent f1 beta
-            # sync from raising ThreadPairConflictDeadlockDetected
-            assert t_pair.wait(log_msg='f1 beta wait 67',
-                                timeout=1)
-
-            t_pair.sync(log_msg='f1 beta sync point 7')
-
-            cmds.pause(0.5, iter=5)  # we purposely skipped 4
-            # clear the deadlock within the resume timeout to allow mainline
-            # resume to complete
-            t_pair.deadlock = False
-            t_pair.wait_wait = False
-
-            t_pair.sync(log_msg='f1 beta sync point 8')
-
-            cmds.pause(0.75, iter=6)
-            # clear the deadlock after resume timeout to cause ml to timeout
-            t_pair.deadlock = False
-            t_pair.wait_wait = False
-
-            t_pair.sync(log_msg='f1 beta sync point 9')
-
-        cmds = Cmds()
-        descs = ThreadPairDescs()
-        thread_pair = ThreadPair(name='alpha')
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair,
-                                      thread=threading.current_thread()))
-
-        beta_thread = threading.Thread(target=f1)
-
-        beta_thread.start()
-
-        cmds.get_cmd('alpha')
-        thread_pair.pair_with(remote_name='beta')
-        descs.paired('alpha', 'beta')
-
-        thread_pair.pause_until(WUCond.ThreadsReady)
-        thread_pair.sync(log_msg='mainline sync point 1')
-
-        # this wait will clear the flag - use timeout to prevent sync
-        # from raising ThreadPairConflictDeadlockDetected
-        assert thread_pair.remote.event.is_set()
-        assert thread_pair.wait(log_msg='mainline wait 12',
-                                timeout=1)
-
-        assert not thread_pair.wait_timeout_specified
-        thread_pair.sync(log_msg='mainline sync point 2')
-
-        cmds.pause(0.5, iter=2)  # we purposely skipped iter=1
-
-        # clear the deadlock within resume timeout to allow f1 resume to
-        # complete
-        thread_pair.deadlock = False
-        thread_pair.wait_wait = False
-
-        # thread_pair.sync(log_msg='mainline sync point 3')
-        thread_pair.sync(log_msg='mainline sync point 4')
-
-        cmds.pause(0.75, iter=3)
-
-        # clear the deadlock after the resume timeout to cause f1 to timeout
-        thread_pair.deadlock = False
-        thread_pair.wait_wait = False
-
-        thread_pair.sync(log_msg='mainline sync point 5')
-
-        # the first resume will set the flag ON and the flag will stay ON
-        # since there is no matching wait
-        assert thread_pair.resume(timeout=2)
-
-        # this second resume will timeout waiting for the flag to go OFF
-        cmds.start_clock(iter=4)
-        assert not thread_pair.resume(timeout=0.3)
-        assert 0.3 <= cmds.duration() <= 0.6
-
-        thread_pair.sync(log_msg='mainline sync point 6')
-        thread_pair.sync(log_msg='mainline sync point 7')
-
-        # this first resume will complete within the timeout
-        thread_pair.remote.wait_wait = True  # simulate waiting
-        thread_pair.remote.deadlock = True  # simulate deadlock
-        cmds.start_clock(iter=5)
-        assert thread_pair.resume(timeout=1)
-        assert 0.5 <= cmds.duration() <= 0.75
-
-        thread_pair.sync(log_msg='mainline sync point 8')
-
-        # this resume will timeout
-        thread_pair.remote.wait_wait = True  # simulate waiting
-        thread_pair.remote.deadlock = True  # simulate deadlock
-        cmds.start_clock(iter=6)
-        assert not thread_pair.resume(timeout=0.5)
-        assert 0.5 <= cmds.duration() <= 0.75
-
-        thread_pair.sync(log_msg='mainline sync point 9')
-
-        beta_thread.join()
-        descs.thread_end('beta')
-
-    ###########################################################################
-    # test_thread_pair_thread_app_time_out
-    ###########################################################################
-    def test_thread_pair_thread_app_time_out(self) -> None:
-        """Test smart event timeout with thread_app thread."""
-        class MyThread(threading.Thread):
-            def __init__(self):
-                super().__init__()
-                self.t_pair = ThreadPair(name='beta', thread=self)
-
-            def run(self):
-                logger.debug('ThreadApp run entered')
-
-                descs.add_desc(ThreadPairDesc(name='beta',
-                                              thread_pair=self.t_pair,
-                                              thread=self))
-                cmds.queue_cmd('alpha')
-
-                self.t_pair.pair_with(remote_name='alpha')
-                descs.paired('alpha', 'beta')
-
-                cmds.start_clock(iter=1)
-                assert not self.t_pair.wait(timeout=2)
-                assert 2 <= cmds.duration() < 3
-
-                assert self.t_pair.sync(log_msg='beta sync point 1')
-                assert self.t_pair.sync(log_msg='beta sync point 2')
-
-        cmds = Cmds()
-        descs = ThreadPairDescs()
-        thread_pair = ThreadPair(name='alpha')
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair,
-                                      thread=threading.current_thread()))
-
-        thread_app = MyThread()
-        thread_app.start()
-
-        cmds.get_cmd('alpha')
-        thread_pair.pair_with(remote_name='beta')
-
-        assert thread_pair.sync(log_msg='alpha sync point 1')
-
-        cmds.start_clock(iter=2)
-        assert not thread_pair.wait(timeout=2)
-        assert 2 <= cmds.duration() < 3
-
-        assert thread_pair.sync(log_msg='alpha sync point 2')
-
-        thread_app.join()
-        descs.thread_end('beta')
-
-
-###############################################################################
-# TestThreadPairCode Class
-###############################################################################
-class TestThreadPairCode:
-    """Test ThreadPair resume codes."""
-    ###########################################################################
-    # test_thread_pair_f1_event_code
-    ###########################################################################
-    def test_thread_pair_f1_event_code(self) -> None:
-        """Test smart event code with f1 thread."""
-        def f1():
-            logger.debug('f1 entered')
-
-            t_pair = ThreadPair(name='beta')
-            descs.add_desc(ThreadPairDesc(name='beta',
-                                          thread_pair=t_pair,
-                                          thread=threading.current_thread()))
-            cmds.queue_cmd('alpha')
-
-            t_pair.pair_with(remote_name='alpha')
-
-            assert not t_pair.remote.code
-            assert not t_pair.code
-            assert not t_pair.get_code()
-
-            t_pair.sync(log_msg='beta sync point 1')
-
-            assert t_pair.wait(timeout=2)
-            assert not t_pair.remote.code
-            assert t_pair.code == 42
-            assert 42 == t_pair.get_code()
-
-            t_pair.sync(log_msg='beta sync point 2')
-
-            t_pair.resume(code='forty-two')
-            assert t_pair.remote.code == 'forty-two'
-            assert t_pair.code == 42
-            assert 42 == t_pair.get_code()
-
-            t_pair.sync(log_msg='beta sync point 3')
-
-            assert t_pair.remote.code == 'forty-two'
-            assert t_pair.code == 42
-            assert 42 == t_pair.get_code()
-
-            assert not t_pair.wait(timeout=.5)
-
-            assert t_pair.remote.code == 'forty-two'
-            assert t_pair.code == 42
-            assert 42 == t_pair.get_code()
-
-            t_pair.sync(log_msg='beta sync point 4')
-            t_pair.sync(log_msg='beta sync point 5')
-
-            assert t_pair.remote.code == 'forty-two'
-            assert t_pair.code == 'twenty one'
-            assert 'twenty one' == t_pair.get_code()
-            assert t_pair.remote.event.is_set()
-
-        cmds = Cmds()
-        descs = ThreadPairDescs()
-        thread_pair = ThreadPair(name='alpha')
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair,
-                                      thread=threading.current_thread()))
-
-        beta_thread = threading.Thread(target=f1)
-
-        beta_thread.start()
-
-        cmds.get_cmd('alpha')
-        thread_pair.pair_with(remote_name='beta')
-        descs.paired('alpha', 'beta')
-
-        thread_pair.sync(log_msg='mainline sync point 1')
-
-        assert not thread_pair.get_code()
-        assert not thread_pair.code
-        assert not thread_pair.remote.code
-
-        thread_pair.resume(code=42)
-
-        assert not thread_pair.get_code()
-        assert not thread_pair.code
-        assert thread_pair.remote.code == 42
-
-        thread_pair.sync(log_msg='mainline sync point 2')
-
-        assert thread_pair.wait()
-
-        assert thread_pair.get_code() == 'forty-two'
-        assert thread_pair.code == 'forty-two'
-        assert thread_pair.remote.code == 42
-
-        thread_pair.sync(log_msg='mainline sync point 3')
-        thread_pair.sync(log_msg='mainline sync point 4')
-
-        thread_pair.resume(code='twenty one')
-
-        thread_pair.sync(log_msg='mainline sync point 5')
-
-        beta_thread.join()
-        thread_pair.code = None
-        thread_pair.remote.code = None
-
-        descs.thread_end('beta')
-
-    ###########################################################################
-    # test_thread_pair_thread_app_event_code
-    ###########################################################################
-    def test_thread_pair_thread_app_event_code(self) -> None:
-        """Test smart event code with thread_app thread."""
-
-        class MyThread(threading.Thread):
-            def __init__(self):
-                super().__init__()
-                self.t_pair = ThreadPair(name='beta', thread=self)
-
-            def run(self):
-                logger.debug('ThreadApp run entered')
-
-                descs.add_desc(ThreadPairDesc(name='beta',
-                                              thread_pair=self.t_pair,
-                                              thread=self))
-                cmds.queue_cmd('alpha')
-
-                self.t_pair.pair_with(remote_name='alpha')
-                descs.paired('alpha', 'beta')
-
-                assert self.t_pair.get_code() is None
-                assert not self.t_pair.wait(timeout=2, log_msg='beta wait 1')
-
-                self.t_pair.sync(log_msg='beta sync point 2')
-                self.t_pair.sync(log_msg='beta sync point 3')
-
-                assert self.t_pair.remote.event.is_set()
-                assert self.t_pair.code == 42
-                assert self.t_pair.get_code() == 42
-
-                self.t_pair.resume(log_msg='beta resume 4',
-                                    code='forty-two')
-
-        cmds = Cmds()
-        descs = ThreadPairDescs()
-        thread_pair = ThreadPair(name='alpha')
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair,
-                                      thread=threading.current_thread()))
-
-        thread_app = MyThread()
-        thread_app.start()
-
-        cmds.get_cmd('alpha')
-        thread_pair.pair_with(remote_name='beta')
-
-        thread_pair.pause_until(WUCond.ThreadsReady)
-
-        thread_pair.sync(log_msg='mainline sync point 2')
-        thread_pair.resume(code=42)
-        thread_pair.sync(log_msg='mainline sync point 3')
-
-        assert thread_pair.wait(log_msg='mainline wait 4')
-        assert thread_pair.get_code() == 'forty-two'
-
-        thread_app.join()
-
-        thread_pair.code = None
-        thread_pair.remote.code = None
-
-        descs.thread_end('beta')
-
-    ###########################################################################
-    # test_thread_pair_thread_event_app_event_code
-    ###########################################################################
-    def test_thread_pair_thread_event_app_event_code(self) -> None:
-        """Test smart event code with thread_event_app thread."""
-        class MyThread(threading.Thread, ThreadPair):
-            def __init__(self) -> None:
-                threading.Thread.__init__(self)
-                ThreadPair.__init__(self, name='beta', thread=self)
-
-            def run(self):
-                logger.debug('ThreadApp run entered')
-
-                descs.add_desc(ThreadPairDesc(name='beta',
-                                              thread_pair=self,
-                                              thread=self))
-                cmds.queue_cmd('alpha')
-
-                self.pair_with(remote_name='alpha')
-
-                assert not self.remote.code
-                assert not self.code
-                assert not self.get_code()
-
-                self.sync(log_msg='beta sync point 1')
-
-                assert not self.wait(timeout=0.5)
-
-                assert not self.remote.code
-                assert not self.code
-                assert not self.get_code()
-
-                self.sync(log_msg='beta sync point 2')
-                self.sync(log_msg='beta sync point 3')
-
-                assert not self.remote.code
-                assert self.code == 42
-                assert self.get_code() == 42
-
-                self.resume(code='forty-two')
-
-                assert self.remote.code == 'forty-two'
-                assert self.code == 42
-                assert self.get_code() == 42
-
-                self.sync(log_msg='beta sync point 4')
-                self.sync(log_msg='beta sync point 5')
-
-                assert self.remote.code == 'forty-two'
-                assert self.code == 42
-                assert self.get_code() == 42
-
-                assert self.wait(timeout=0.5, log_msg='beta wait 56')
-
-                assert self.remote.code == 'forty-two'
-                assert self.code == 42
-                assert self.get_code() == 42
-
-                self.sync(log_msg='beta sync point 6')
-
-        cmds = Cmds()
-        descs = ThreadPairDescs()
-        thread_event_app = MyThread()
-        thread_event_app.start()
-
-        cmds.get_cmd('alpha')
-
-        time.sleep(2)  # make beta loop in pair_with
-        thread_pair = ThreadPair(name='alpha')
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair,
-                                      thread=threading.current_thread()))
-
-        thread_pair.pair_with(remote_name='beta')
-        descs.paired('alpha', 'beta')
-
-        assert not thread_pair.code
-        assert not thread_pair.remote.code
-        assert not thread_pair.get_code()
-
-        thread_pair.sync(log_msg='mainline sync point 1')
-        thread_pair.sync(log_msg='mainline sync point 2')
-
-        assert not thread_pair.code
-        assert not thread_pair.remote.code
-        assert not thread_pair.get_code()
-
-        thread_pair.resume(code=42, log_msg='mainline resume for beta 56')
-
-        assert not thread_pair.code
-        assert thread_pair.remote.code == 42
-        assert not thread_pair.get_code()
-
-        thread_pair.sync(log_msg='mainline sync point 3')
-        thread_pair.sync(log_msg='mainline sync point 4')
-
-        assert thread_pair.code == 'forty-two'
-        assert thread_pair.remote.code == 42
-        assert thread_pair.get_code() == 'forty-two'
-
-        assert thread_pair.wait()
-
-        assert thread_pair.code == 'forty-two'
-        assert thread_pair.remote.code == 42
-        assert thread_pair.get_code() == 'forty-two'
-
-        thread_pair.sync(log_msg='mainline sync point 5')
-
-        assert thread_pair.code == 'forty-two'
-        assert thread_pair.remote.code == 42
-        assert thread_pair.get_code() == 'forty-two'
-
-        thread_pair.sync(log_msg='mainline sync point 6')
-
-        thread_event_app.join()
-
-        thread_pair.code = None
-        thread_pair.remote.code = None
-
-        descs.thread_end('beta')
+        logger.debug('mainline exiting')
 
 
 ###############################################################################
