@@ -780,7 +780,7 @@ class TestThreadPairBasic:
         thread_pair.pair_with(remote_name='charlie')
         descs.paired('alpha', 'charlie')
 
-        assert 'beta' not in ThreadPair._registry
+        assert 'beta' not in ThreadPair._registry[thread_pair.__class__.__name__]
 
         cmds.queue_cmd('beta')
 
@@ -1032,7 +1032,7 @@ class TestThreadPairBasic:
 
         cmds.get_cmd('alpha')
 
-        beta_se = ThreadPair._registry['beta']
+        beta_se = ThreadPair._registry[thread_pair.__class__.__name__]['beta']
 
         # make sure beta has alpha as target of pair_with
         while beta_se.remote is None:
@@ -1962,7 +1962,7 @@ class TestThetaSigma:
     ###########################################################################
     # test_thread_pair_theta_sigma
     ###########################################################################
-    def test_thread_pair_theta_sigma(self) -> None:
+    def test_thread_pair_theta_sigma_unique_names(self) -> None:
         """Test theta and sigma."""
 
         def f1():
@@ -2026,7 +2026,107 @@ class TestThetaSigma:
         f1_thread.start()
 
         cmds.get_cmd('alpha')
+        ml_theta.pair_with(remote_name='beta_theta')
+        ml_sigma.pair_with(remote_name='beta_sigma')
+
+        cmds.get_cmd('alpha')
+
+        ml_theta.remote.var1 = 999
+        ml_sigma.remote.var1 = 999
+
+        cmds.queue_cmd('beta', 'go')
+
+        f1_thread.join()
+
+        assert ml_theta.var2 == 'test_theta'
+        ml_theta.var2 = 'theta'  # restore for verify
+
+        assert ml_sigma.var2 == 'test1'
+        ml_sigma.var2 = 'sigma'  # restore for verify
+
+        theta_descs.thread_end('beta_theta')
+        sigma_descs.thread_end('beta_sigma')
+
+        with pytest.raises(ThreadPairRemoteThreadNotAlive):
+            ml_theta.check_remote()
+
+        with pytest.raises(ThreadPairRemoteThreadNotAlive):
+            ml_sigma.check_remote()
+
+        theta_descs.cleanup()
+        sigma_descs.cleanup()
+
+        logger.debug('mainline exiting')
+
+    ###########################################################################
+    # test_thread_pair_theta_sigma
+    ###########################################################################
+    def test_thread_pair_theta_sigma_same_names(self) -> None:
+        """Test theta and sigma."""
+
+        def f1():
+            logger.debug('f1 beta entered')
+            f1_theta = Theta(name='beta')
+            theta_descs.add_desc(ThetaDesc(name='beta',
+                                           theta=f1_theta,
+                                           thread=threading.current_thread()))
+
+            f1_sigma = Sigma(name='beta')
+            sigma_descs.add_desc(SigmaDesc(name='beta',
+                                           sigma=f1_sigma,
+                                           thread=threading.current_thread()))
+
+            cmds.queue_cmd('alpha')
+
+            f1_theta.pair_with(remote_name='alpha')
+            theta_descs.paired('alpha', 'beta')
+
+            f1_sigma.pair_with(remote_name='alpha')
+            sigma_descs.paired('alpha', 'beta')
+
+            cmds.queue_cmd('alpha', 'go')
+            cmds.get_cmd('beta')
+
+            assert f1_theta.var1 == 999
+            assert f1_theta.remote.var1 == 'theta'
+
+            assert f1_sigma.var1 == 999
+            assert f1_sigma.remote.var1 == 17
+
+            assert f1_sigma.var2 == 'sigma'
+            assert f1_sigma.remote.var2 == 'sigma'
+
+            f1_theta.var1 = 'theta'  # restore to init value for verify
+            f1_theta.remote.var2 = 'test_theta'
+
+            f1_sigma.var1 = 17  # restore to init value to allow verify to work
+            f1_sigma.remote.var2 = 'test1'
+
+            logger.debug('f1 beta exiting')
+
+        logger.debug('mainline entered')
+        cmds = Cmds()
+        theta_descs = ThreadPairDescs()
+        sigma_descs = ThreadPairDescs()
+
+        ml_theta = Theta(name='alpha')
+
+        theta_descs.add_desc(ThetaDesc(name='alpha',
+                                       theta=ml_theta,
+                                       thread=threading.current_thread()))
+
+        ml_sigma = Sigma(name='alpha')
+        sigma_descs.add_desc(SigmaDesc(name='alpha',
+                                       sigma=ml_sigma,
+                                       thread=threading.current_thread()))
+
+        f1_thread = threading.Thread(target=f1)
+
+        f1_thread.start()
+
+        cmds.get_cmd('alpha')
         ml_theta.pair_with(remote_name='beta')
+        ml_sigma.pair_with(remote_name='beta')
 
         cmds.get_cmd('alpha')
 
