@@ -78,6 +78,7 @@ class ThreadPairAlreadyPairedWithRemote(ThreadPairError):
     """ThreadPair exception for pair_with that is already paired."""
     pass
 
+
 class ThreadPairDetectedOpFromForeignThread(ThreadPairError):
     """ThreadPair exception for attempted op from unregistered thread."""
     pass
@@ -89,6 +90,10 @@ class ThreadPairErrorInRegistry(ThreadPairError):
 
 class ThreadPairIncorrectNameSpecified(ThreadPairError):
     """ThreadPair exception for a name that is not a str."""
+
+
+class ThreadPairIncorrectGroupNameSpecified(ThreadPairError):
+    """ThreadPair exception for a group_name that is not a str."""
 
 
 class ThreadPairNameAlreadyInUse(ThreadPairError):
@@ -131,11 +136,10 @@ class ThreadPair:
     ###########################################################################
     # Registry
     ###########################################################################
-    # The _registry is a dictionary of dictionaries. The first level is accessed via the name of the class, and the
-    # second level by name provided for instance by the caller of _register. The _registry lock protects the entire
+    # The _registry is a dictionary of dictionaries. The first level is accessed via the group_name, and the
+    # second level by name provided by the caller of _register. The _registry lock protects the entire
     # registry, meaning the top level.
     _registry_lock = threading.Lock()
-    # _registry: dict[str, "ThreadPair"] = {}
     _registry: dict[str, dict[str, "ThreadPair"]] = {}
 
     ###########################################################################
@@ -143,6 +147,7 @@ class ThreadPair:
     ###########################################################################
     def __init__(
             self, *,
+            group_name: str,
             name: str,
             thread: Optional[threading.Thread] = None
             ) -> None:
@@ -150,6 +155,7 @@ class ThreadPair:
 
         Args:
             name: name to be used to refer to this ThreadPair
+            group_name: name of group that the thread is to be associated with
             thread: specifies the thread to use instead of the current
                       thread - needed when ThreadPair is instantiated in a
                       class that inherits threading.Thread in which case
@@ -165,6 +171,12 @@ class ThreadPair:
                 'Attempted ThreadPair instantiation '
                 f'with incorrect name of {name}.')
         self.name = name
+
+        if not isinstance(group_name, str):
+            raise ThreadPairIncorrectGroupNameSpecified(
+                'Attempted ThreadPair instantiation '
+                f'with incorrect group_name of {group_name}.')
+        self.group_name = group_name
 
         if thread:
             self.thread = thread
@@ -198,7 +210,7 @@ class ThreadPair:
         if TYPE_CHECKING:
             __class__: Type[ThreadPair]
         classname = self.__class__.__name__
-        parms = f'name="{self.name}"'
+        parms = f'group_name="{self.group_name}", name="{self.name}"'
 
         return f'{classname}({parms})'
 
@@ -282,22 +294,25 @@ class ThreadPair:
 
         with ThreadPair._registry_lock:
             self.logger.debug(f'self.__class__.__name__ = {self.__class__.__name__}')
-            if self.__class__.__name__ not in ThreadPair._registry:  # first entry for this class
-                ThreadPair._registry[self.__class__.__name__] = {self.name: self}  # init registry for this class
-                self.logger.debug(f'{self.name} registered first entry for class {self.__class__.__name__}')
+            # if self.__class__.__name__ not in ThreadPair._registry:  # first entry for this class
+            #     ThreadPair._registry[self.__class__.__name__] = {self.name: self}  # init registry for this class
+            #     self.logger.debug(f'{self.name} registered first entry for class {self.__class__.__name__}')
+            if self.group_name not in ThreadPair._registry:  # first entry for this group
+                ThreadPair._registry[self.group_name] = {self.name: self}  # init registry for this class
+                self.logger.debug(f'{self.name} registered first entry for group {self.group_name}')
             else:
                 # Remove any old entries
                 self._clean_up_registry()
 
                 # Make sure name not already taken
-                if self.name in ThreadPair._registry[self.__class__.__name__]:
+                if self.name in ThreadPair._registry[self.group_name]:
                     raise ThreadPairNameAlreadyInUse(
                         f'An entry for a ThreadPair with name = {self.name} is '
                         'already registered.')
 
                 # Add new ThreadPair
-                ThreadPair._registry[self.__class__.__name__][self.name] = self
-                self.logger.debug(f'{self.name} registered not first entry for class {self.__class__.__name__}')
+                ThreadPair._registry[self.group_name][self.name] = self
+                self.logger.debug(f'{self.name} registered not first entry for group {self.group_name}')
 
     ###########################################################################
     # _clean_up_registry
@@ -316,7 +331,7 @@ class ThreadPair:
         """
         # Remove any old entries
         keys_to_del = []
-        for key, item in ThreadPair._registry[self.__class__.__name__].items():
+        for key, item in ThreadPair._registry[self.group_name].items():
             # self.logger.debug(f'key {key} item {item}')
             if not item.thread.is_alive():
                 keys_to_del.append(key)
@@ -331,8 +346,8 @@ class ThreadPair:
                                                 f'of {item.name}.')
 
         for key in keys_to_del:
-            del ThreadPair._registry[self.__class__.__name__][key]
-            self.logger.debug(f'{key} removed from registry for class {self.__class__.__name__}')
+            del ThreadPair._registry[self.group_name][key]
+            self.logger.debug(f'{key} removed from registry for group {self.group_name}')
 
     # ###########################################################################
     # # _clean_up_registry
@@ -417,8 +432,8 @@ class ThreadPair:
                ThreadPair is not already paired with another thread.
             2) Once the ''pair_with()'' request completes, the ThreadPair is
                ready to issue requests.
-            3) Unlike the other SmartEcvent requests, the ''pair_with()''
-               request is unable to detect when the remothe thread become not
+            3) Unlike the other SmartEvent requests, the ''pair_with()''
+               request is unable to detect when the remote thread becomes not
                alive. This is why the *timeout* argument is required, either
                explicitly or by default.
 
@@ -485,11 +500,11 @@ class ThreadPair:
                 self._clean_up_registry()
 
                 # find target in registry
-                # we check to see whether the remote point to us, and if not
+                # we check to see whether the remote points to us, and if not
                 # we need to keep trying until we time out in case we are
                 # waiting for the remote old to get cleaned up
                 if self.remote is None:  # if target not yet found
-                    for key, item in ThreadPair._registry[self.__class__.__name__].items():
+                    for key, item in ThreadPair._registry[self.group_name].items():
                         if (key == remote_name
                                 and (item.remote is None
                                      or item.remote.name == self.name)):

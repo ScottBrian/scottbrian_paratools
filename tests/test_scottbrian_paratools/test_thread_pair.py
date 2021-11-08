@@ -27,6 +27,7 @@ from scottbrian_paratools.thread_pair import (
     ThreadPairDetectedOpFromForeignThread,
     ThreadPairErrorInRegistry,
     ThreadPairIncorrectNameSpecified,
+    ThreadPairIncorrectGroupNameSpecified,
     ThreadPairNameAlreadyInUse,
     ThreadPairNotPaired,
     ThreadPairPairWithSelfNotAllowed,
@@ -260,6 +261,7 @@ def log_enabled_arg(request: Any) -> bool:
 class Theta(ThreadPair):
     """Theta test class."""
     def __init__(self,
+                 group_name: str,
                  name: str,
                  thread: Optional[threading.Thread] = None) -> None:
         """Initialize the Theta object.
@@ -269,7 +271,7 @@ class Theta(ThreadPair):
             thread: thread to use instead of threading.current_thread()
 
         """
-        ThreadPair.__init__(self, name=name, thread=thread)
+        ThreadPair.__init__(self, group_name=group_name, name=name, thread=thread)
         self.var1 = 'theta'
 
 
@@ -324,6 +326,7 @@ class ThetaDesc(ThreadPairDesc):
 class Sigma(ThreadPair):
     """Sigma test class."""
     def __init__(self,
+                 group_name: str,
                  name: str,
                  thread: Optional[threading.Thread] = None) -> None:
         """Initialize the Sigma object.
@@ -333,7 +336,7 @@ class Sigma(ThreadPair):
             thread: thread to use instead of threading.current_thread()
 
         """
-        ThreadPair.__init__(self, name=name, thread=thread)
+        ThreadPair.__init__(self, group_name=group_name, name=name, thread=thread)
         self.var1 = 17
         self.var2 = 'sigma'
 
@@ -390,6 +393,7 @@ class SigmaDesc(ThreadPairDesc):
 class Omega(ThreadPair):
     """Omega test class."""
     def __init__(self,
+                 group_name: str,
                  name: str,
                  thread: Optional[threading.Thread] = None) -> None:
         """Initialize the Omega object.
@@ -399,7 +403,7 @@ class Omega(ThreadPair):
             thread: thread to use instead of threading.current_thread()
 
         """
-        ThreadPair.__init__(self, name=name, thread=thread)
+        ThreadPair.__init__(self, group_name=group_name, name=name, thread=thread)
         self.var1 = 42
         self.var2 = 64.9
         self.var3 = 'omega'
@@ -466,7 +470,7 @@ def outer_f1(cmds: Cmds,
 
     """
     logger.debug('outer_f1 entered')
-    t_pair = ThreadPair(name='beta')
+    t_pair = ThreadPair(group_name='group1', name='beta')
     descs.add_desc(ThreadPairDesc(name='beta',
                                   thread_pair=t_pair))
 
@@ -499,7 +503,7 @@ class OuterThreadApp(threading.Thread):
         super().__init__()
         self.cmds = cmds
         self.descs = descs
-        self.t_pair = ThreadPair(name='beta', thread=self)
+        self.t_pair = ThreadPair(group_name='group1', name='beta', thread=self)
 
     def run(self) -> None:
         """Run the test."""
@@ -538,7 +542,7 @@ class OuterThreadEventApp(threading.Thread, ThreadPair):
 
         """
         threading.Thread.__init__(self)
-        ThreadPair.__init__(self, name='beta', thread=self)
+        ThreadPair.__init__(self, group_name='group1', name='beta', thread=self)
         self.cmds = cmds
         self.descs = descs
 
@@ -582,41 +586,41 @@ class TestThreadPairBasic:
         """
         descs = ThreadPairDescs()
 
-        thread_pair = ThreadPair(name='alpha')
+        thread_pair = ThreadPair(group_name='group1', name='alpha')
         descs.add_desc(ThreadPairDesc(name='alpha',
                                       thread_pair=thread_pair,
                                       thread=threading.current_thread()))
 
-        expected_repr_str = 'ThreadPair(name="alpha")'
+        expected_repr_str = 'ThreadPair(group_name="group1", name="alpha")'
 
         assert repr(thread_pair) == expected_repr_str
 
-        thread_pair2 = ThreadPair(name="AlphaDog")
+        thread_pair2 = ThreadPair(group_name="group1", name="AlphaDog")
         descs.add_desc(ThreadPairDesc(name='AlphaDog',
                                       thread_pair=thread_pair2,
                                       thread=threading.current_thread()))
 
-        expected_repr_str = 'ThreadPair(name="AlphaDog")'
+        expected_repr_str = 'ThreadPair(group_name="group1", name="AlphaDog")'
 
         assert repr(thread_pair2) == expected_repr_str
 
         def f1():
-            t_pair = ThreadPair(name='beta1')
+            t_pair = ThreadPair(group_name='group1', name='beta1')
             descs.add_desc(ThreadPairDesc(name='beta1',
                                           thread_pair=t_pair,
                                           thread=threading.current_thread()))
-            f1_expected_repr_str = 'ThreadPair(name="beta1")'
+            f1_expected_repr_str = 'ThreadPair(group_name="group1", name="beta1")'
             assert repr(t_pair) == f1_expected_repr_str
 
             cmds.queue_cmd('alpha', 'go')
             cmds.get_cmd('beta1')
 
         def f2():
-            t_pair = ThreadPair(name='beta2')
+            t_pair = ThreadPair(group_name='group1', name='beta2')
             descs.add_desc(ThreadPairDesc(name='beta2',
                                           thread_pair=t_pair,
                                           thread=threading.current_thread()))
-            f1_expected_repr_str = 'ThreadPair(name="beta2")'
+            f1_expected_repr_str = 'ThreadPair(group_name="group1", name="beta2")'
             assert repr(t_pair) == f1_expected_repr_str
             cmds.queue_cmd('alpha', 'go')
             cmds.get_cmd('beta2')
@@ -646,7 +650,7 @@ class TestThreadPairBasic:
 
         descs = ThreadPairDescs()
 
-        thread_pair = ThreadPair(name='alpha')
+        thread_pair = ThreadPair(group_name='group1', name='alpha')
 
         descs.add_desc(ThreadPairDesc(name='alpha',
                                       thread_pair=thread_pair,
@@ -654,10 +658,10 @@ class TestThreadPairBasic:
 
         # not OK to instantiate a new thread_pair with same name
         with pytest.raises(ThreadPairNameAlreadyInUse):
-            _ = ThreadPair(name='alpha')
+            _ = ThreadPair(group_name='group1', name='alpha')
 
         with pytest.raises(ThreadPairIncorrectNameSpecified):
-            _ = ThreadPair(name=42)  # type: ignore
+            _ = ThreadPair(group_name='group1', name=42)  # type: ignore
 
         # try to pair with unknown remote
         with pytest.raises(ThreadPairPairWithTimedOut):
@@ -683,7 +687,7 @@ class TestThreadPairBasic:
                 name: name to use for t_pair
             """
             logger.debug(f'{name} f1 entered')
-            t_pair = ThreadPair(name=name)
+            t_pair = ThreadPair(group_name='group1', name=name)
             descs.add_desc(ThreadPairDesc(name=name,
                                           thread_pair=t_pair))
 
@@ -709,7 +713,7 @@ class TestThreadPairBasic:
 
         beta_t = threading.Thread(target=f1, args=('beta',))
 
-        thread_pair = ThreadPair(name='alpha')
+        thread_pair = ThreadPair(group_name='group1', name='alpha')
 
         descs.add_desc(ThreadPairDesc(name='alpha',
                                       thread_pair=thread_pair,
@@ -770,7 +774,7 @@ class TestThreadPairBasic:
         # from the registry.
         #######################################################################
         with pytest.raises(ThreadPairNameAlreadyInUse):
-            thread_pair = ThreadPair(name='alpha')  # create fresh
+            thread_pair = ThreadPair(group_name='group1', name='alpha')  # create fresh
 
         beta_t3 = threading.Thread(target=f1, args=('charlie',))
         beta_t3.start()
@@ -780,7 +784,7 @@ class TestThreadPairBasic:
         thread_pair.pair_with(remote_name='charlie')
         descs.paired('alpha', 'charlie')
 
-        assert 'beta' not in ThreadPair._registry[thread_pair.__class__.__name__]
+        assert 'beta' not in ThreadPair._registry[thread_pair.group_name]
 
         cmds.queue_cmd('beta')
 
@@ -797,7 +801,7 @@ class TestThreadPairBasic:
         # ThreadPairErrorInRegistry error
         thread_pair.remote.name = 'bad_name'
         with pytest.raises(ThreadPairErrorInRegistry):
-            _ = ThreadPair(name='alpha2')
+            _ = ThreadPair(group_name='group1', name='alpha2')
 
         # restore the good name to allow verify_registry to succeed
         thread_pair.remote.name = 'charlie'
@@ -816,7 +820,7 @@ class TestThreadPairBasic:
                 name: name to use for t_pair
             """
             logger.debug(f'{name} f1 entered')
-            t_pair = ThreadPair(name=name)
+            t_pair = ThreadPair(group_name='group1', name=name)
 
             descs.add_desc(ThreadPairDesc(name=name,
                                           thread_pair=t_pair))
@@ -851,7 +855,7 @@ class TestThreadPairBasic:
                 name: name to use for t_pair
             """
             logger.debug(f'{name} f2 entered')
-            t_pair = ThreadPair(name=name)
+            t_pair = ThreadPair(group_name='group1', name=name)
 
             descs.add_desc(ThreadPairDesc(name=name,
                                           thread_pair=t_pair))
@@ -887,7 +891,7 @@ class TestThreadPairBasic:
         beta_t = threading.Thread(target=f1, args=('beta',))
         charlie_t = threading.Thread(target=f2, args=('charlie',))
 
-        thread_pair = ThreadPair(name='alpha')
+        thread_pair = ThreadPair(group_name='group1', name='alpha')
 
         descs.add_desc(ThreadPairDesc(name='alpha',
                                       thread_pair=thread_pair))
@@ -903,7 +907,7 @@ class TestThreadPairBasic:
         #######################################################################
         cmds.get_cmd('alpha')
 
-        thread_pair2 = ThreadPair(name='alpha2')
+        thread_pair2 = ThreadPair(group_name='group1', name='alpha2')
 
         descs.add_desc(ThreadPairDesc(name='alpha2',
                                       thread_pair=thread_pair2))
@@ -982,7 +986,7 @@ class TestThreadPairBasic:
         def f1() -> None:
             """Func to test pair_with ThreadPair."""
             logger.debug('beta f1 entered')
-            t_pair = ThreadPair(name='beta')
+            t_pair = ThreadPair(group_name='group1', name='beta')
 
             descs.add_desc(ThreadPairDesc(name='beta',
                                           thread_pair=t_pair))
@@ -997,7 +1001,7 @@ class TestThreadPairBasic:
         def f2() -> None:
             """Func to test pair_with ThreadPair."""
             logger.debug('charlie f2 entered')
-            t_pair = ThreadPair(name='charlie')
+            t_pair = ThreadPair(group_name='group1', name='charlie')
 
             descs.add_desc(ThreadPairDesc(name='charlie',
                                           thread_pair=t_pair),
@@ -1023,7 +1027,7 @@ class TestThreadPairBasic:
         beta_t = threading.Thread(target=f1)
         charlie_t = threading.Thread(target=f2)
 
-        thread_pair = ThreadPair(name='alpha')
+        thread_pair = ThreadPair(group_name='group1', name='alpha')
 
         descs.add_desc(ThreadPairDesc(name='alpha',
                                       thread_pair=thread_pair))
@@ -1032,7 +1036,7 @@ class TestThreadPairBasic:
 
         cmds.get_cmd('alpha')
 
-        beta_se = ThreadPair._registry[thread_pair.__class__.__name__]['beta']
+        beta_se = ThreadPair._registry[thread_pair.group_name]['beta']
 
         # make sure beta has alpha as target of pair_with
         while beta_se.remote is None:
@@ -1083,7 +1087,7 @@ class TestThreadPairBasic:
 
             """
             logger.debug(f'{name} f1 entered, remote {remote_name}, idx {idx}')
-            t_pair = ThreadPair(name=name)
+            t_pair = ThreadPair(group_name='group1', name=name)
 
             descs.add_desc(ThreadPairDesc(name=name,
                                           thread_pair=t_pair))
@@ -1118,28 +1122,28 @@ class TestThreadPairBasic:
         #######################################################################
         # create alpha0 ThreadPair and desc, and verify
         #######################################################################
-        thread_pair0 = ThreadPair(name='alpha0')
+        thread_pair0 = ThreadPair(group_name='group1', name='alpha0')
         descs.add_desc(ThreadPairDesc(name='alpha0',
                                       thread_pair=thread_pair0))
 
         #######################################################################
         # create alpha1 ThreadPair and desc, and verify
         #######################################################################
-        thread_pair1 = ThreadPair(name='alpha1')
+        thread_pair1 = ThreadPair(group_name='group1', name='alpha1')
         descs.add_desc(ThreadPairDesc(name='alpha1',
                                       thread_pair=thread_pair1))
 
         #######################################################################
         # create alpha2 ThreadPair and desc, and verify
         #######################################################################
-        thread_pair2 = ThreadPair(name='alpha2')
+        thread_pair2 = ThreadPair(group_name='group1', name='alpha2')
         descs.add_desc(ThreadPairDesc(name='alpha2',
                                       thread_pair=thread_pair2))
 
         #######################################################################
         # create alpha3 ThreadPair and desc, and verify
         #######################################################################
-        thread_pair3 = ThreadPair(name='alpha3')
+        thread_pair3 = ThreadPair(group_name='group1', name='alpha3')
         descs.add_desc(ThreadPairDesc(name='alpha3',
                                       thread_pair=thread_pair3))
 
@@ -1337,7 +1341,7 @@ class TestThreadPairBasic:
 
         def f1():
             logger.debug('beta f1 entered')
-            t_pair = ThreadPair(name='beta')
+            t_pair = ThreadPair(group_name='group1', name='beta')
 
             descs.add_desc(ThreadPairDesc(name='beta',
                                           thread_pair=t_pair))
@@ -1364,7 +1368,7 @@ class TestThreadPairBasic:
         cmds = Cmds()
         descs = ThreadPairDescs()
 
-        thread_pair1 = ThreadPair(name='alpha')
+        thread_pair1 = ThreadPair(group_name='group1', name='alpha')
         descs.add_desc(ThreadPairDesc(name='alpha',
                                       thread_pair=thread_pair1))
 
@@ -1415,7 +1419,7 @@ class TestThreadPairBasic:
         cmds = Cmds()
         descs = ThreadPairDescs()
 
-        thread_pair = ThreadPair(name='alpha')
+        thread_pair = ThreadPair(group_name='group1', name='alpha')
         descs.add_desc(ThreadPairDesc(name='alpha',
                                       thread_pair=thread_pair))
 
@@ -1446,7 +1450,7 @@ class TestThreadPairBasic:
         cmds = Cmds()
         descs = ThreadPairDescs()
 
-        thread_pair = ThreadPair(name='alpha')
+        thread_pair = ThreadPair(group_name='group1', name='alpha')
         descs.add_desc(ThreadPairDesc(name='alpha',
                                       thread_pair=thread_pair))
 
@@ -1475,7 +1479,7 @@ class TestThreadPairBasic:
         logger.debug('mainline starting')
         cmds = Cmds()
         descs = ThreadPairDescs()
-        thread_pair = ThreadPair(name='alpha')
+        thread_pair = ThreadPair(group_name='group1', name='alpha')
         descs.add_desc(ThreadPairDesc(name='alpha',
                                       thread_pair=thread_pair))
 
@@ -1517,7 +1521,7 @@ class TestThreadPairBasic:
 
                 """
                 super().__init__()
-                self.t_pair = ThreadPair(name='beta', thread=self)
+                self.t_pair = ThreadPair(group_name='group1', name='beta', thread=self)
                 self.alpha_t_pair = alpha_thread_pair
                 self.alpha_thread = alpha_thread
 
@@ -1555,7 +1559,7 @@ class TestThreadPairBasic:
         cmds = Cmds()
         descs = ThreadPairDescs()
         alpha_t = threading.current_thread()
-        thread_pair1 = ThreadPair(name='alpha')
+        thread_pair1 = ThreadPair(group_name='group1', name='alpha')
         descs.add_desc(ThreadPairDesc(name='alpha',
                                       thread_pair=thread_pair1))
 
@@ -1600,7 +1604,7 @@ class TestThreadPairBasic:
             def __init__(self,
                          alpha_t1: threading.Thread):
                 threading.Thread.__init__(self)
-                ThreadPair.__init__(self, name='beta', thread=self)
+                ThreadPair.__init__(self, group_name='group1', name='beta', thread=self)
                 self.alpha_t1 = alpha_t1
 
             def run(self):
@@ -1643,7 +1647,7 @@ class TestThreadPairBasic:
         my_te1_thread.start()
 
         cmds.get_cmd('alpha')
-        thread_pair = ThreadPair(name='alpha')
+        thread_pair = ThreadPair(group_name='group1', name='alpha')
         descs.add_desc(ThreadPairDesc(name='alpha',
                                       thread_pair=thread_pair))
 
@@ -1677,7 +1681,7 @@ class TestThreadPairBasic:
         def fa1():
             logger.debug('fa1 entered')
             my_fa_thread = threading.current_thread()
-            t_pair = ThreadPair(name='fa1')
+            t_pair = ThreadPair(group_name='group1', name='fa1')
             descs.add_desc(ThreadPairDesc(name='fa1',
                                           thread_pair=t_pair,
                                           thread=my_fa_thread))
@@ -1694,7 +1698,7 @@ class TestThreadPairBasic:
         def fb1():
             logger.debug('fb1 entered')
             my_fb_thread = threading.current_thread()
-            t_pair = ThreadPair(name='fb1')
+            t_pair = ThreadPair(group_name='group1', name='fb1')
             descs.add_desc(ThreadPairDesc(name='fb1',
                                           thread_pair=t_pair,
                                           thread=my_fb_thread))
@@ -1754,7 +1758,7 @@ class TestTheta:
 
         def f1():
             logger.debug('f1 beta entered')
-            f1_theta = Theta(name='beta')
+            f1_theta = Theta(group_name='group1', name='beta')
             descs.add_desc(ThetaDesc(name='beta',
                                      theta=f1_theta,
                                      thread=threading.current_thread()))
@@ -1776,7 +1780,7 @@ class TestTheta:
         logger.debug('mainline entered')
         cmds = Cmds()
         descs = ThreadPairDescs()
-        ml_theta = Theta(name='alpha')
+        ml_theta = Theta(group_name='group1', name='alpha')
         descs.add_desc(ThetaDesc(name='alpha',
                                  theta=ml_theta,
                                  thread=threading.current_thread()))
@@ -1818,7 +1822,7 @@ class TestSigma:
 
         def f1():
             logger.debug('f1 beta entered')
-            f1_sigma = Sigma(name='beta')
+            f1_sigma = Sigma(group_name='group1', name='beta')
             descs.add_desc(SigmaDesc(name='beta',
                                      sigma=f1_sigma,
                                      thread=threading.current_thread()))
@@ -1845,7 +1849,7 @@ class TestSigma:
         logger.debug('mainline entered')
         cmds = Cmds()
         descs = ThreadPairDescs()
-        ml_sigma = Sigma(name='alpha')
+        ml_sigma = Sigma(group_name='group1', name='alpha')
         descs.add_desc(SigmaDesc(name='alpha',
                                  sigma=ml_sigma,
                                  thread=threading.current_thread()))
@@ -1891,7 +1895,7 @@ class TestOmega:
 
         def f1():
             logger.debug('f1 beta entered')
-            f1_omega = Omega(name='beta')
+            f1_omega = Omega(group_name='group1', name='beta')
             descs.add_desc(OmegaDesc(name='beta',
                                      omega=f1_omega,
                                      thread=threading.current_thread()))
@@ -1921,7 +1925,7 @@ class TestOmega:
         logger.debug('mainline entered')
         cmds = Cmds()
         descs = ThreadPairDescs()
-        ml_omega = Omega(name='alpha')
+        ml_omega = Omega(group_name='group1', name='alpha')
         descs.add_desc(OmegaDesc(name='alpha',
                                  omega=ml_omega,
                                  thread=threading.current_thread()))
@@ -1967,12 +1971,12 @@ class TestThetaSigma:
 
         def f1():
             logger.debug('f1 beta entered')
-            f1_theta = Theta(name='beta_theta')
+            f1_theta = Theta(group_name='group1', name='beta_theta')
             theta_descs.add_desc(ThetaDesc(name='beta_theta',
                                            theta=f1_theta,
                                            thread=threading.current_thread()))
 
-            f1_sigma = Sigma(name='beta_sigma')
+            f1_sigma = Sigma(group_name='group1', name='beta_sigma')
             sigma_descs.add_desc(SigmaDesc(name='beta_sigma',
                                            sigma=f1_sigma,
                                            thread=threading.current_thread()))
@@ -2010,13 +2014,13 @@ class TestThetaSigma:
         theta_descs = ThreadPairDescs()
         sigma_descs = ThreadPairDescs()
 
-        ml_theta = Theta(name='alpha_theta')
+        ml_theta = Theta(group_name='group1', name='alpha_theta')
 
         theta_descs.add_desc(ThetaDesc(name='alpha_theta',
                                        theta=ml_theta,
                                        thread=threading.current_thread()))
 
-        ml_sigma = Sigma(name='alpha_sigma')
+        ml_sigma = Sigma(group_name='group1', name='alpha_sigma')
         sigma_descs.add_desc(SigmaDesc(name='alpha_sigma',
                                        sigma=ml_sigma,
                                        thread=threading.current_thread()))
@@ -2066,12 +2070,12 @@ class TestThetaSigma:
 
         def f1():
             logger.debug('f1 beta entered')
-            f1_theta = Theta(name='beta')
+            f1_theta = Theta(group_name='group1', name='beta')
             theta_descs.add_desc(ThetaDesc(name='beta',
                                            theta=f1_theta,
                                            thread=threading.current_thread()))
 
-            f1_sigma = Sigma(name='beta')
+            f1_sigma = Sigma(group_name='group1', name='beta')
             sigma_descs.add_desc(SigmaDesc(name='beta',
                                            sigma=f1_sigma,
                                            thread=threading.current_thread()))
@@ -2109,13 +2113,13 @@ class TestThetaSigma:
         theta_descs = ThreadPairDescs()
         sigma_descs = ThreadPairDescs()
 
-        ml_theta = Theta(name='alpha')
+        ml_theta = Theta(group_name='group1', name='alpha')
 
         theta_descs.add_desc(ThetaDesc(name='alpha',
                                        theta=ml_theta,
                                        thread=threading.current_thread()))
 
-        ml_sigma = Sigma(name='alpha')
+        ml_sigma = Sigma(group_name='group1', name='alpha')
         sigma_descs.add_desc(SigmaDesc(name='alpha',
                                        sigma=ml_sigma,
                                        thread=threading.current_thread()))
@@ -2180,7 +2184,7 @@ class TestThreadPairLogger:
             exp_log_msgs.add_msg('f1 entered')
             logger.debug('f1 entered')
 
-            t_pair = ThreadPair(name='beta')
+            t_pair = ThreadPair(group_name='group1', name='beta')
             descs.add_desc(ThreadPairDesc(name='beta',
                                           thread_pair=t_pair,
                                           thread=threading.current_thread()))
@@ -2226,7 +2230,7 @@ class TestThreadPairLogger:
         exp_log_msgs.add_msg(l_msg)
         logger.debug(l_msg)
 
-        thread_pair = ThreadPair(name='alpha')
+        thread_pair = ThreadPair(group_name='group1', name='alpha')
         descs.add_desc(ThreadPairDesc(name='alpha',
                                       thread_pair=thread_pair,
                                       thread=threading.current_thread()))
@@ -2289,7 +2293,7 @@ class TestThreadPairLogger:
             def __init__(self,
                          exp_log_msgs1: ExpLogMsgs):
                 super().__init__()
-                self.t_pair = ThreadPair(name='beta', thread=self)
+                self.t_pair = ThreadPair(group_name='group1', name='beta', thread=self)
                 self.exp_log_msgs = exp_log_msgs1
 
             def run(self):
@@ -2345,7 +2349,7 @@ class TestThreadPairLogger:
         exp_log_msgs.add_msg(l_msg)
         logger.debug(l_msg)
 
-        thread_pair = ThreadPair(name='alpha')
+        thread_pair = ThreadPair(group_name='group1', name='alpha')
         descs.add_desc(ThreadPairDesc(name='alpha',
                                       thread_pair=thread_pair,
                                       thread=threading.current_thread()))
@@ -2416,7 +2420,7 @@ class TestThreadPairLogger:
             def __init__(self,
                          exp_log_msgs1: ExpLogMsgs):
                 threading.Thread.__init__(self)
-                ThreadPair.__init__(self, name='beta', thread=self)
+                ThreadPair.__init__(self, group_name='group1', name='beta', thread=self)
                 self.exp_log_msgs = exp_log_msgs1
 
             def run(self):
@@ -2468,7 +2472,7 @@ class TestThreadPairLogger:
         exp_log_msgs.add_msg(l_msg)
         logger.debug(l_msg)
 
-        thread_pair = ThreadPair(name='alpha')
+        thread_pair = ThreadPair(group_name='group1', name='alpha')
         descs.add_desc(ThreadPairDesc(name='alpha',
                                       thread_pair=thread_pair,
                                       thread=threading.current_thread()))
@@ -2688,7 +2692,7 @@ class TestCombos:
 
                 """
                 super().__init__()
-                self.thread_pair = ThreadPair(name='beta', thread=self)
+                self.thread_pair = ThreadPair(group_name='group1', name='beta', thread=self)
                 self.cmds = cmds
                 self.exp_log_msgs = exp_log_msgs
 
@@ -2783,6 +2787,7 @@ class TestCombos:
                 """
                 threading.Thread.__init__(self)
                 ThreadPair.__init__(self,
+                                    group_name='group1',
                                     name='beta',
                                     thread=self)
 
@@ -2870,7 +2875,7 @@ class TestCombos:
 
         """
         cmds.get_cmd('alpha')  # go1
-        thread_pair = ThreadPair(name='alpha')
+        thread_pair = ThreadPair(group_name='group1', name='alpha')
         descs.add_desc(ThreadPairDesc(name='alpha',
                                       thread_pair=thread_pair,
                                       thread=threading.current_thread()))
@@ -3095,7 +3100,7 @@ def thread_func1(cmds: Cmds,
     logger.debug(l_msg)
 
     if t_pair is None:
-        t_pair = ThreadPair(name='beta')
+        t_pair = ThreadPair(group_name='group1', name='beta')
 
     descs.add_desc(ThreadPairDesc(name='beta',
                                   thread_pair=t_pair,
