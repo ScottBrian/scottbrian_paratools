@@ -281,6 +281,7 @@ class Theta(ThreadPair):
 class ThetaDesc(ThreadPairDesc):
     """Describes a Theta with name and thread to verify."""
     def __init__(self,
+                 group_name: Optional[str] = 'group1',
                  name: Optional[str] = '',
                  theta: Optional[Theta] = None,
                  thread: Optional[threading.Thread] = None,  # type: ignore
@@ -297,6 +298,7 @@ class ThetaDesc(ThreadPairDesc):
 
         """
         ThreadPairDesc.__init__(self,
+                                group_name=group_name,
                                 name=name,
                                 thread_pair=theta,
                                 thread=thread,
@@ -347,6 +349,7 @@ class Sigma(ThreadPair):
 class SigmaDesc(ThreadPairDesc):
     """Describes a Sigma with name and thread to verify."""
     def __init__(self,
+                 group_name: Optional[str] = 'group1',
                  name: Optional[str] = '',
                  sigma: Optional[Sigma] = None,
                  thread: Optional[threading.Thread] = None,  # type: ignore
@@ -363,6 +366,7 @@ class SigmaDesc(ThreadPairDesc):
 
         """
         ThreadPairDesc.__init__(self,
+                                group_name=group_name,
                                 name=name,
                                 thread_pair=sigma,
                                 thread=thread,
@@ -415,6 +419,7 @@ class Omega(ThreadPair):
 class OmegaDesc(ThreadPairDesc):
     """Describes a Omega with name and thread to verify."""
     def __init__(self,
+                 group_name: Optional[str] = 'group1',
                  name: Optional[str] = '',
                  omega: Optional[Omega] = None,
                  thread: Optional[threading.Thread] = None,  # type: ignore
@@ -431,6 +436,7 @@ class OmegaDesc(ThreadPairDesc):
 
         """
         ThreadPairDesc.__init__(self,
+                                group_name=group_name,
                                 name=name,
                                 thread_pair=omega,
                                 thread=thread,
@@ -1976,8 +1982,9 @@ class TestThetaSigma:
                                            theta=f1_theta,
                                            thread=threading.current_thread()))
 
-            f1_sigma = Sigma(group_name='group1', name='beta_sigma')
-            sigma_descs.add_desc(SigmaDesc(name='beta_sigma',
+            f1_sigma = Sigma(group_name='group2', name='beta_sigma')
+            sigma_descs.add_desc(SigmaDesc(group_name='group2',
+                                           name='beta_sigma',
                                            sigma=f1_sigma,
                                            thread=threading.current_thread()))
 
@@ -2020,8 +2027,9 @@ class TestThetaSigma:
                                        theta=ml_theta,
                                        thread=threading.current_thread()))
 
-        ml_sigma = Sigma(group_name='group1', name='alpha_sigma')
-        sigma_descs.add_desc(SigmaDesc(name='alpha_sigma',
+        ml_sigma = Sigma(group_name='group2', name='alpha_sigma')
+        sigma_descs.add_desc(SigmaDesc(group_name='group2',
+                                       name='alpha_sigma',
                                        sigma=ml_sigma,
                                        thread=threading.current_thread()))
 
@@ -2075,8 +2083,9 @@ class TestThetaSigma:
                                            theta=f1_theta,
                                            thread=threading.current_thread()))
 
-            f1_sigma = Sigma(group_name='group1', name='beta')
-            sigma_descs.add_desc(SigmaDesc(name='beta',
+            f1_sigma = Sigma(group_name='group2', name='beta')
+            sigma_descs.add_desc(SigmaDesc(group_name='group2',
+                                           name='beta',
                                            sigma=f1_sigma,
                                            thread=threading.current_thread()))
 
@@ -2119,8 +2128,9 @@ class TestThetaSigma:
                                        theta=ml_theta,
                                        thread=threading.current_thread()))
 
-        ml_sigma = Sigma(group_name='group1', name='alpha')
-        sigma_descs.add_desc(SigmaDesc(name='alpha',
+        ml_sigma = Sigma(group_name='group2', name='alpha')
+        sigma_descs.add_desc(SigmaDesc(group_name='group2',
+                                       name='alpha',
                                        sigma=ml_sigma,
                                        thread=threading.current_thread()))
 
@@ -2184,7 +2194,12 @@ class TestThreadPairLogger:
             exp_log_msgs.add_msg('f1 entered')
             logger.debug('f1 entered')
 
+            l_msg = '_registry_lock obtained, group_name = group1, thread_name = beta, class name = ThreadPair'
+            exp_log_msgs.add_msg(l_msg)
+            l_msg = 'beta registered not first entry for group group1'
+            exp_log_msgs.add_msg(l_msg)
             t_pair = ThreadPair(group_name='group1', name='beta')
+
             descs.add_desc(ThreadPairDesc(name='beta',
                                           thread_pair=t_pair,
                                           thread=threading.current_thread()))
@@ -2196,24 +2211,7 @@ class TestThreadPairLogger:
                               log_msg='beta pair_with alpha 1')
 
             descs.paired('alpha', 'beta')
-
-            exp_log_msgs.add_beta_sync_msg('beta sync point 1')
-            t_pair.sync(log_msg='beta sync point 1')
-
-            exp_log_msgs.add_beta_wait_msg('wait for mainline to post 12')
-            assert t_pair.wait(log_msg='wait for mainline to post 12')
-
-            exp_log_msgs.add_beta_sync_msg('beta sync point 2')
-            t_pair.sync(log_msg='beta sync point 2')
-
-            exp_log_msgs.add_beta_resume_msg('post mainline 23')
-            t_pair.resume(log_msg='post mainline 23')
-
-            exp_log_msgs.add_beta_sync_msg('beta sync point 3')
-            t_pair.sync(log_msg='beta sync point 3')
-
-            exp_log_msgs.add_beta_sync_msg('beta sync point 4')
-            t_pair.sync(log_msg='beta sync point 4')
+            cmds.get_cmd('beta')
 
         cmds = Cmds()
         descs = ThreadPairDescs()
@@ -2230,6 +2228,10 @@ class TestThreadPairLogger:
         exp_log_msgs.add_msg(l_msg)
         logger.debug(l_msg)
 
+        l_msg = '_registry_lock obtained, group_name = group1, thread_name = alpha, class name = ThreadPair'
+        exp_log_msgs.add_msg(l_msg)
+        l_msg = 'alpha registered first entry for group group1'
+        exp_log_msgs.add_msg(l_msg)
         thread_pair = ThreadPair(group_name='group1', name='alpha')
         descs.add_desc(ThreadPairDesc(name='alpha',
                                       thread_pair=thread_pair,
@@ -2245,24 +2247,7 @@ class TestThreadPairLogger:
         thread_pair.pair_with(remote_name='beta',
                               log_msg='alpha pair_with beta 1')
 
-        exp_log_msgs.add_alpha_sync_msg('mainline sync point 1')
-        thread_pair.sync(log_msg='mainline sync point 1')
-        thread_pair.pause_until(WUCond.RemoteWaiting)
-
-        exp_log_msgs.add_alpha_resume_msg('post beta 12')
-        thread_pair.resume(log_msg='post beta 12')
-
-        exp_log_msgs.add_alpha_sync_msg('mainline sync point 2')
-        thread_pair.sync(log_msg='mainline sync point 2')
-
-        exp_log_msgs.add_alpha_sync_msg('mainline sync point 3')
-        thread_pair.sync(log_msg='mainline sync point 3')
-
-        exp_log_msgs.add_alpha_wait_msg('wait for pre-post 23')
-        assert thread_pair.wait(log_msg='wait for pre-post 23')
-
-        exp_log_msgs.add_alpha_sync_msg('mainline sync point 4')
-        thread_pair.sync(log_msg='mainline sync point 4')
+        cmds.queue_cmd('beta')
 
         beta_thread.join()
         descs.thread_end('beta')

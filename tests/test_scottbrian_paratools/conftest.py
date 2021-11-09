@@ -569,7 +569,8 @@ class ExpLogMsgs:
                     req: str,
                     ret_code: Optional[bool] = None,
                     code: Optional[Any] = None,
-                    pair: Optional[List[str]] = None
+                    pair: Optional[List[str]] = None,
+                    group_name: Optional[str] = 'group1'
                     ) -> None:
         """Add an expected request message to the expected log messages.
 
@@ -586,7 +587,7 @@ class ExpLogMsgs:
         if code is not None:
             l_enter_msg += f'with code: {code} '
         if pair is not None:
-            l_enter_msg += f'by {pair[0]} to pair with {pair[1]}. '
+            l_enter_msg += f'by {pair[0]} to pair with {pair[1]} in group {group_name}. '
 
         l_exit_msg = req + r'\(\) exiting with ret_code '
         if ret_code is not None:

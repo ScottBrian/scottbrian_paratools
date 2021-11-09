@@ -293,7 +293,8 @@ class ThreadPair:
                 'The name for ThreadPair must be of type str.')
 
         with ThreadPair._registry_lock:
-            self.logger.debug(f'self.__class__.__name__ = {self.__class__.__name__}')
+            self.logger.debug(f'_registry_lock obtained, group_name = {self.group_name}, '
+                              f'thread_name = {self.name}, class name = {self.__class__.__name__}')
             # if self.__class__.__name__ not in ThreadPair._registry:  # first entry for this class
             #     ThreadPair._registry[self.__class__.__name__] = {self.name: self}  # init registry for this class
             #     self.logger.debug(f'{self.name} registered first entry for class {self.__class__.__name__}')
@@ -461,7 +462,7 @@ class ThreadPair:
         if log_msg and self.debug_logging_enabled:
             caller_info = get_formatted_call_sequence(latest=1, depth=1)
             self.logger.debug(f'pair_with() entered by {self.name} to '
-                              f'pair with {remote_name}. '
+                              f'pair with {remote_name} in group {self.group_name}. '
                               f'{caller_info} {log_msg}')
 
         self.verify_current_remote(skip_pair_check=True)
