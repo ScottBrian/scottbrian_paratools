@@ -284,30 +284,18 @@ class ThreadPairDesc:
     STATE_NOT_ALIVE_UNREGISTERED: Final[int] = 3
 
     def __init__(self,
-                 group_name: Optional[str] = 'group1',
-                 name: Optional[str] = '',
-                 thread_pair: Optional[Any] = None,
-                 thread: Optional[threading.Thread] = None,  # type: ignore
+                 thread_pair: Any,
                  state: Optional[int] = 0,  # 0 is unknown
                  paired_with: Optional[Any] = None) -> None:
         """Initialize the ThreadPairDesc.
 
         Args:
-            name: name of the ThreadPair
             thread_pair: the ThreadPair being tracked by this desc
-            thread: the thread associated with this ThreadPair
             state: describes whether the ThreadPair is alive and registered
             paired_with: names the ThreadPair paired with this one, if one
 
         """
-        self.group_name = group_name
-        self.name = name
         self.thread_pair = thread_pair
-        if thread is not None:
-            self.thread = thread
-        else:
-            self.thread = threading.current_thread()
-
         self.state = state
         self.paired_with = paired_with
 
@@ -322,34 +310,30 @@ class ThreadPairDesc:
     ###########################################################################
     def verify_thread_pair_desc(self) -> None:
         """Verify the ThreadPair object is initialized correctly."""
-        assert isinstance(self.thread, threading.Thread)
-        assert self.thread_pair.group_name == self.group_name
-        assert self.thread_pair.name == self.name
-        assert self.thread_pair.thread is self.thread
+        assert isinstance(self.thread_pair.thread, threading.Thread)
+        # assert self.thread_pair.thread is self.thread
         assert isinstance(self.thread_pair.debug_logging_enabled, bool)
 
         #######################################################################
         # verify state
         #######################################################################
         if self.state == ThreadPairDesc.STATE_ALIVE_REGISTERED:
-            assert self.thread.is_alive()
+            assert self.thread_pair.thread.is_alive()
             assert self.thread_pair.group_name in ThreadPair._registry
-            assert self.name in ThreadPair._registry[self.thread_pair.group_name]
-            assert ThreadPair._registry[self.thread_pair.group_name][self.name] is self.thread_pair
+            assert self.thread_pair.name in ThreadPair._registry[self.thread_pair.group_name]
+            assert ThreadPair._registry[self.thread_pair.group_name][self.thread_pair.name] is self.thread_pair
         elif self.state == ThreadPairDesc.STATE_NOT_ALIVE_REGISTERED:
-            assert not self.thread.is_alive()
+            assert not self.thread_pair.thread.is_alive()
             assert self.thread_pair.group_name in ThreadPair._registry
-            assert self.name in ThreadPair._registry[self.thread_pair.group_name]
-            assert ThreadPair._registry[self.thread_pair.group_name][self.name] is self.thread_pair
+            assert self.thread_pair.name in ThreadPair._registry[self.thread_pair.group_name]
+            assert ThreadPair._registry[self.thread_pair.group_name][self.thread_pair.name] is self.thread_pair
         elif self.state == ThreadPairDesc.STATE_NOT_ALIVE_UNREGISTERED:
-            assert not self.thread.is_alive()
+            assert not self.thread_pair.thread.is_alive()
             # the registry might have a new entry with the same name as a
             # residual ThreadPair, so we also need to check to make sure
             # the old ThreadPair is not in the registry
-            # assert (self.name not in ThreadPair._registry
-            #         or ThreadPair._registry[self.name] is not self.thread_pair)
-            assert (self.name not in ThreadPair._registry[self.thread_pair.group_name]
-                    or ThreadPair._registry[self.thread_pair.group_name][self.name] is not self.thread_pair)
+            assert (self.thread_pair.name not in ThreadPair._registry[self.thread_pair.group_name]
+                    or ThreadPair._registry[self.thread_pair.group_name][self.thread_pair.name] is not self.thread_pair)
 
         #######################################################################
         # verify paired with desc
@@ -393,7 +377,7 @@ class ThreadPairDescs:
         with self._descs_lock:
             self.cleanup_registry()
             desc.state = ThreadPairDesc.STATE_ALIVE_REGISTERED
-            self.descs[desc.name] = desc
+            self.descs[desc.thread_pair.name] = desc
             if verify:
                 self.verify_registry()
 
@@ -501,10 +485,10 @@ class ThreadPairDescs:
             for key, item in self.descs.items():
                 if (item.state == ThreadPairDesc.STATE_ALIVE_REGISTERED
                         or item.state == ThreadPairDesc.STATE_NOT_ALIVE_REGISTERED):
-                    if item.group_name in groups_counts:
-                        groups_counts[item.group_name] += 1
+                    if item.thread_pair.group_name in groups_counts:
+                        groups_counts[item.thread_pair.group_name] += 1
                     else:
-                        groups_counts[item.group_name] = 1
+                        groups_counts[item.thread_pair.group_name] = 1
                 item.verify_state()
 
             for key, item in groups_counts.items():

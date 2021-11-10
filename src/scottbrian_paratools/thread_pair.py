@@ -4,7 +4,7 @@
 ThreadPair
 ==========
 
-The ThreadPair class is used as a base class for ThreadPair and ThreadComm.
+The ThreadPair class is used as a base class for SmartEvent and ThreadComm.
 
 :Example: create a ThreadPair for mainline and a thread to use
 
@@ -147,15 +147,16 @@ class ThreadPair:
     ###########################################################################
     def __init__(
             self, *,
-            group_name: str,
             name: str,
+            group_name: Optional[str] = 'group1',
             thread: Optional[threading.Thread] = None
             ) -> None:
         """Initialize an instance of the ThreadPair class.
 
         Args:
             name: name to be used to refer to this ThreadPair
-            group_name: name of group that the thread is to be associated with
+            group_name: name of group that the thread is to be associated with. This is used to allow more than one
+                          pair in the same space.
             thread: specifies the thread to use instead of the current
                       thread - needed when ThreadPair is instantiated in a
                       class that inherits threading.Thread in which case

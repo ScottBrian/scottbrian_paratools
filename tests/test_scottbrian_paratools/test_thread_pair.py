@@ -298,10 +298,7 @@ class ThetaDesc(ThreadPairDesc):
 
         """
         ThreadPairDesc.__init__(self,
-                                group_name=group_name,
-                                name=name,
                                 thread_pair=theta,
-                                thread=thread,
                                 state=state,
                                 paired_with=paired_with)
 
@@ -366,10 +363,7 @@ class SigmaDesc(ThreadPairDesc):
 
         """
         ThreadPairDesc.__init__(self,
-                                group_name=group_name,
-                                name=name,
                                 thread_pair=sigma,
-                                thread=thread,
                                 state=state,
                                 paired_with=paired_with)
 
@@ -436,10 +430,7 @@ class OmegaDesc(ThreadPairDesc):
 
         """
         ThreadPairDesc.__init__(self,
-                                group_name=group_name,
-                                name=name,
                                 thread_pair=omega,
-                                thread=thread,
                                 state=state,
                                 paired_with=paired_with)
 
@@ -477,8 +468,7 @@ def outer_f1(cmds: Cmds,
     """
     logger.debug('outer_f1 entered')
     t_pair = ThreadPair(group_name='group1', name='beta')
-    descs.add_desc(ThreadPairDesc(name='beta',
-                                  thread_pair=t_pair))
+    descs.add_desc(ThreadPairDesc(thread_pair=t_pair))
 
     # tell alpha OK to verify (i.e., beta_thread_pair set with t_pair)
     cmds.queue_cmd('alpha', 'go')
@@ -518,9 +508,7 @@ class OuterThreadApp(threading.Thread):
         # normally, the add_desc is done just after the instantiation, but
         # in this case the thread is not made alive until now, and the
         # add_desc checks that the thread is alive
-        self.descs.add_desc(ThreadPairDesc(name='beta',
-                                           thread_pair=self.t_pair,
-                                           thread=self))
+        self.descs.add_desc(ThreadPairDesc(thread_pair=self.t_pair))
 
         self.cmds.queue_cmd('alpha')
 
@@ -559,9 +547,7 @@ class OuterThreadEventApp(threading.Thread, ThreadPair):
         # normally, the add_desc is done just after the instantiation, but
         # in this case the thread is not made alive until now, and the
         # add_desc checks that the thread is alive
-        self.descs.add_desc(ThreadPairDesc(name='beta',
-                                           thread_pair=self,
-                                           thread=self))
+        self.descs.add_desc(ThreadPairDesc(thread_pair=self))
 
         self.cmds.queue_cmd('alpha')
 
@@ -592,19 +578,15 @@ class TestThreadPairBasic:
         """
         descs = ThreadPairDescs()
 
-        thread_pair = ThreadPair(group_name='group1', name='alpha')
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair,
-                                      thread=threading.current_thread()))
+        thread_pair = ThreadPair(name='alpha')
+        descs.add_desc(ThreadPairDesc(thread_pair=thread_pair))
 
         expected_repr_str = 'ThreadPair(group_name="group1", name="alpha")'
 
         assert repr(thread_pair) == expected_repr_str
 
         thread_pair2 = ThreadPair(group_name="group1", name="AlphaDog")
-        descs.add_desc(ThreadPairDesc(name='AlphaDog',
-                                      thread_pair=thread_pair2,
-                                      thread=threading.current_thread()))
+        descs.add_desc(ThreadPairDesc(thread_pair=thread_pair2))
 
         expected_repr_str = 'ThreadPair(group_name="group1", name="AlphaDog")'
 
@@ -612,9 +594,7 @@ class TestThreadPairBasic:
 
         def f1():
             t_pair = ThreadPair(group_name='group1', name='beta1')
-            descs.add_desc(ThreadPairDesc(name='beta1',
-                                          thread_pair=t_pair,
-                                          thread=threading.current_thread()))
+            descs.add_desc(ThreadPairDesc(thread_pair=t_pair))
             f1_expected_repr_str = 'ThreadPair(group_name="group1", name="beta1")'
             assert repr(t_pair) == f1_expected_repr_str
 
@@ -623,9 +603,7 @@ class TestThreadPairBasic:
 
         def f2():
             t_pair = ThreadPair(group_name='group1', name='beta2')
-            descs.add_desc(ThreadPairDesc(name='beta2',
-                                          thread_pair=t_pair,
-                                          thread=threading.current_thread()))
+            descs.add_desc(ThreadPairDesc(thread_pair=t_pair))
             f1_expected_repr_str = 'ThreadPair(group_name="group1", name="beta2")'
             assert repr(t_pair) == f1_expected_repr_str
             cmds.queue_cmd('alpha', 'go')
@@ -658,9 +636,7 @@ class TestThreadPairBasic:
 
         thread_pair = ThreadPair(group_name='group1', name='alpha')
 
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair,
-                                      thread=threading.current_thread()))
+        descs.add_desc(ThreadPairDesc(thread_pair=thread_pair))
 
         # not OK to instantiate a new thread_pair with same name
         with pytest.raises(ThreadPairNameAlreadyInUse):
@@ -694,8 +670,7 @@ class TestThreadPairBasic:
             """
             logger.debug(f'{name} f1 entered')
             t_pair = ThreadPair(group_name='group1', name=name)
-            descs.add_desc(ThreadPairDesc(name=name,
-                                          thread_pair=t_pair))
+            descs.add_desc(ThreadPairDesc(thread_pair=t_pair))
 
             cmds.queue_cmd('alpha', 'go')
 
@@ -721,9 +696,7 @@ class TestThreadPairBasic:
 
         thread_pair = ThreadPair(group_name='group1', name='alpha')
 
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair,
-                                      thread=threading.current_thread()))
+        descs.add_desc(ThreadPairDesc(thread_pair=thread_pair))
         beta_t.start()
 
         # not OK to pair with self
@@ -828,8 +801,7 @@ class TestThreadPairBasic:
             logger.debug(f'{name} f1 entered')
             t_pair = ThreadPair(group_name='group1', name=name)
 
-            descs.add_desc(ThreadPairDesc(name=name,
-                                          thread_pair=t_pair))
+            descs.add_desc(ThreadPairDesc(thread_pair=t_pair))
 
             # not OK to pair with self
             with pytest.raises(ThreadPairPairWithSelfNotAllowed):
@@ -863,8 +835,7 @@ class TestThreadPairBasic:
             logger.debug(f'{name} f2 entered')
             t_pair = ThreadPair(group_name='group1', name=name)
 
-            descs.add_desc(ThreadPairDesc(name=name,
-                                          thread_pair=t_pair))
+            descs.add_desc(ThreadPairDesc(thread_pair=t_pair))
 
             # not OK to pair with self
             with pytest.raises(ThreadPairPairWithSelfNotAllowed):
@@ -899,8 +870,7 @@ class TestThreadPairBasic:
 
         thread_pair = ThreadPair(group_name='group1', name='alpha')
 
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair))
+        descs.add_desc(ThreadPairDesc(thread_pair=thread_pair))
 
         beta_t.start()
 
@@ -915,8 +885,7 @@ class TestThreadPairBasic:
 
         thread_pair2 = ThreadPair(group_name='group1', name='alpha2')
 
-        descs.add_desc(ThreadPairDesc(name='alpha2',
-                                      thread_pair=thread_pair2))
+        descs.add_desc(ThreadPairDesc(thread_pair=thread_pair2))
 
         charlie_t.start()
 
@@ -994,8 +963,7 @@ class TestThreadPairBasic:
             logger.debug('beta f1 entered')
             t_pair = ThreadPair(group_name='group1', name='beta')
 
-            descs.add_desc(ThreadPairDesc(name='beta',
-                                          thread_pair=t_pair))
+            descs.add_desc(ThreadPairDesc(thread_pair=t_pair))
 
             cmds.queue_cmd('alpha', 'go')
             with pytest.raises(ThreadPairRemotePairedWithOther):
@@ -1009,8 +977,7 @@ class TestThreadPairBasic:
             logger.debug('charlie f2 entered')
             t_pair = ThreadPair(group_name='group1', name='charlie')
 
-            descs.add_desc(ThreadPairDesc(name='charlie',
-                                          thread_pair=t_pair),
+            descs.add_desc(ThreadPairDesc(thread_pair=t_pair),
                            verify=False)
 
             cmds.queue_cmd('alpha', 'go')
@@ -1035,8 +1002,7 @@ class TestThreadPairBasic:
 
         thread_pair = ThreadPair(group_name='group1', name='alpha')
 
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair))
+        descs.add_desc(ThreadPairDesc(thread_pair=thread_pair))
 
         beta_t.start()
 
@@ -1095,8 +1061,7 @@ class TestThreadPairBasic:
             logger.debug(f'{name} f1 entered, remote {remote_name}, idx {idx}')
             t_pair = ThreadPair(group_name='group1', name=name)
 
-            descs.add_desc(ThreadPairDesc(name=name,
-                                          thread_pair=t_pair))
+            descs.add_desc(ThreadPairDesc(thread_pair=t_pair))
 
             cmds.queue_cmd('alpha')
 
@@ -1129,29 +1094,25 @@ class TestThreadPairBasic:
         # create alpha0 ThreadPair and desc, and verify
         #######################################################################
         thread_pair0 = ThreadPair(group_name='group1', name='alpha0')
-        descs.add_desc(ThreadPairDesc(name='alpha0',
-                                      thread_pair=thread_pair0))
+        descs.add_desc(ThreadPairDesc(thread_pair=thread_pair0))
 
         #######################################################################
         # create alpha1 ThreadPair and desc, and verify
         #######################################################################
         thread_pair1 = ThreadPair(group_name='group1', name='alpha1')
-        descs.add_desc(ThreadPairDesc(name='alpha1',
-                                      thread_pair=thread_pair1))
+        descs.add_desc(ThreadPairDesc(thread_pair=thread_pair1))
 
         #######################################################################
         # create alpha2 ThreadPair and desc, and verify
         #######################################################################
         thread_pair2 = ThreadPair(group_name='group1', name='alpha2')
-        descs.add_desc(ThreadPairDesc(name='alpha2',
-                                      thread_pair=thread_pair2))
+        descs.add_desc(ThreadPairDesc(thread_pair=thread_pair2))
 
         #######################################################################
         # create alpha3 ThreadPair and desc, and verify
         #######################################################################
         thread_pair3 = ThreadPair(group_name='group1', name='alpha3')
-        descs.add_desc(ThreadPairDesc(name='alpha3',
-                                      thread_pair=thread_pair3))
+        descs.add_desc(ThreadPairDesc(thread_pair=thread_pair3))
 
         #######################################################################
         # start beta0 thread, and verify
@@ -1349,8 +1310,7 @@ class TestThreadPairBasic:
             logger.debug('beta f1 entered')
             t_pair = ThreadPair(group_name='group1', name='beta')
 
-            descs.add_desc(ThreadPairDesc(name='beta',
-                                          thread_pair=t_pair))
+            descs.add_desc(ThreadPairDesc(thread_pair=t_pair))
 
             cmds.queue_cmd('alpha')
             my_c_thread = threading.current_thread()
@@ -1375,8 +1335,7 @@ class TestThreadPairBasic:
         descs = ThreadPairDescs()
 
         thread_pair1 = ThreadPair(group_name='group1', name='alpha')
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair1))
+        descs.add_desc(ThreadPairDesc(thread_pair=thread_pair1))
 
         alpha_t = threading.current_thread()
         my_f1_thread = threading.Thread(target=f1)
@@ -1426,8 +1385,7 @@ class TestThreadPairBasic:
         descs = ThreadPairDescs()
 
         thread_pair = ThreadPair(group_name='group1', name='alpha')
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair))
+        descs.add_desc(ThreadPairDesc(thread_pair=thread_pair))
 
         f1_thread = threading.Thread(target=outer_f1, args=(cmds, descs))
         f1_thread.start()
@@ -1457,8 +1415,7 @@ class TestThreadPairBasic:
         descs = ThreadPairDescs()
 
         thread_pair = ThreadPair(group_name='group1', name='alpha')
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair))
+        descs.add_desc(ThreadPairDesc(thread_pair=thread_pair))
 
         thread_app = OuterThreadApp(cmds=cmds, descs=descs)
 
@@ -1486,8 +1443,7 @@ class TestThreadPairBasic:
         cmds = Cmds()
         descs = ThreadPairDescs()
         thread_pair = ThreadPair(group_name='group1', name='alpha')
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair))
+        descs.add_desc(ThreadPairDesc(thread_pair=thread_pair))
 
         thread_event_app = OuterThreadEventApp(cmds=cmds, descs=descs)
         thread_event_app.start()
@@ -1539,9 +1495,7 @@ class TestThreadPairBasic:
                 # instantiation, but
                 # in this case the thread is not made alive until now, and the
                 # add_desc checks that the thread is alive
-                descs.add_desc(ThreadPairDesc(name='beta',
-                                              thread_pair=self.t_pair,
-                                              thread=self))
+                descs.add_desc(ThreadPairDesc(thread_pair=self.t_pair))
 
                 cmds.queue_cmd('alpha')
                 self.t_pair.pair_with(remote_name='alpha')
@@ -1566,8 +1520,7 @@ class TestThreadPairBasic:
         descs = ThreadPairDescs()
         alpha_t = threading.current_thread()
         thread_pair1 = ThreadPair(group_name='group1', name='alpha')
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair1))
+        descs.add_desc(ThreadPairDesc(thread_pair=thread_pair1))
 
         my_taa_thread = MyThread(thread_pair1, alpha_t)
 
@@ -1619,9 +1572,7 @@ class TestThreadPairBasic:
                 # instantiation, but
                 # in this case the thread is not made alive until now, and the
                 # add_desc checks that the thread is alive
-                descs.add_desc(ThreadPairDesc(name='beta',
-                                              thread_pair=self,
-                                              thread=self))
+                descs.add_desc(ThreadPairDesc(thread_pair=self))
                 cmds.queue_cmd('alpha')
                 self.pair_with(remote_name='alpha')
                 descs.paired('alpha', 'beta')
@@ -1654,8 +1605,7 @@ class TestThreadPairBasic:
 
         cmds.get_cmd('alpha')
         thread_pair = ThreadPair(group_name='group1', name='alpha')
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair))
+        descs.add_desc(ThreadPairDesc(thread_pair=thread_pair))
 
         with pytest.raises(ThreadPairNotPaired):
             thread_pair.verify_current_remote()
@@ -1688,9 +1638,7 @@ class TestThreadPairBasic:
             logger.debug('fa1 entered')
             my_fa_thread = threading.current_thread()
             t_pair = ThreadPair(group_name='group1', name='fa1')
-            descs.add_desc(ThreadPairDesc(name='fa1',
-                                          thread_pair=t_pair,
-                                          thread=my_fa_thread))
+            descs.add_desc(ThreadPairDesc(thread_pair=t_pair))
 
             assert t_pair.thread is my_fa_thread
 
@@ -1705,9 +1653,7 @@ class TestThreadPairBasic:
             logger.debug('fb1 entered')
             my_fb_thread = threading.current_thread()
             t_pair = ThreadPair(group_name='group1', name='fb1')
-            descs.add_desc(ThreadPairDesc(name='fb1',
-                                          thread_pair=t_pair,
-                                          thread=my_fb_thread))
+            descs.add_desc(ThreadPairDesc(thread_pair=t_pair))
 
             assert t_pair.thread is my_fb_thread
 
@@ -2200,9 +2146,7 @@ class TestThreadPairLogger:
             exp_log_msgs.add_msg(l_msg)
             t_pair = ThreadPair(group_name='group1', name='beta')
 
-            descs.add_desc(ThreadPairDesc(name='beta',
-                                          thread_pair=t_pair,
-                                          thread=threading.current_thread()))
+            descs.add_desc(ThreadPairDesc(thread_pair=t_pair))
             cmds.queue_cmd('alpha')
 
             exp_log_msgs.add_beta_pair_with_msg('beta pair_with alpha 1',
@@ -2233,9 +2177,7 @@ class TestThreadPairLogger:
         l_msg = 'alpha registered first entry for group group1'
         exp_log_msgs.add_msg(l_msg)
         thread_pair = ThreadPair(group_name='group1', name='alpha')
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair,
-                                      thread=threading.current_thread()))
+        descs.add_desc(ThreadPairDesc(thread_pair=thread_pair))
 
         beta_thread = threading.Thread(target=f1)
 
@@ -2280,43 +2222,26 @@ class TestThreadPairLogger:
                 super().__init__()
                 self.t_pair = ThreadPair(group_name='group1', name='beta', thread=self)
                 self.exp_log_msgs = exp_log_msgs1
+                l_msg = '_registry_lock obtained, group_name = group1, thread_name = beta, class name = ThreadPair'
+                self.exp_log_msgs.add_msg(l_msg)
+                l_msg = 'beta registered not first entry for group group1'
+                self.exp_log_msgs.add_msg(l_msg)
 
             def run(self):
                 l_msg = 'ThreadApp run entered'
                 self.exp_log_msgs.add_msg(l_msg)
                 logger.debug(l_msg)
 
-                descs.add_desc(ThreadPairDesc(name='beta',
-                                              thread_pair=self.t_pair,
-                                              thread=self))
+                descs.add_desc(ThreadPairDesc(thread_pair=self.t_pair))
                 cmds.queue_cmd('alpha')
 
                 self.exp_log_msgs.add_beta_pair_with_msg('beta pair alpha 2',
                                                          ['beta', 'alpha'])
                 self.t_pair.pair_with(remote_name='alpha',
                                        log_msg='beta pair alpha 2')
+                cmds.get_cmd('beta')
 
-                self.exp_log_msgs.add_beta_sync_msg('beta sync point 1')
-                self.t_pair.sync(log_msg='beta sync point 1')
 
-                self.exp_log_msgs.add_beta_wait_msg('wait 12')
-                assert self.t_pair.wait(log_msg='wait 12')
-
-                self.exp_log_msgs.add_beta_sync_msg('beta sync point 2')
-                self.t_pair.sync(log_msg='beta sync point 2')
-
-                self.t_pair.pause_until(WUCond.RemoteWaiting)
-
-                self.exp_log_msgs.add_beta_resume_msg('post mainline 34',
-                                                      True, 'forty-two')
-                self.t_pair.resume(code='forty-two',
-                                    log_msg='post mainline 34')
-
-                self.exp_log_msgs.add_beta_sync_msg('beta sync point 3')
-                self.t_pair.sync(log_msg='beta sync point 3')
-
-                self.exp_log_msgs.add_beta_sync_msg('beta sync point 4')
-                self.t_pair.sync(log_msg='beta sync point 4')
 
         cmds = Cmds()
         descs = ThreadPairDescs()
@@ -2328,16 +2253,19 @@ class TestThreadPairLogger:
         alpha_call_seq = ('test_thread_pair.py::TestThreadPairLogger.'
                           'test_thread_pair_thread_app_event_logger')
 
-        beta_call_seq = 'test_thread_pair.py::MyThread.run'
+        #beta_call_seq = 'test_thread_pair.py::MyThread.run'
+        beta_call_seq = 'test_thread_pair.py::run'
         exp_log_msgs = ExpLogMsgs(alpha_call_seq, beta_call_seq)
         l_msg = 'mainline starting'
         exp_log_msgs.add_msg(l_msg)
         logger.debug(l_msg)
 
+        l_msg = '_registry_lock obtained, group_name = group1, thread_name = alpha, class name = ThreadPair'
+        exp_log_msgs.add_msg(l_msg)
+        l_msg = 'alpha registered first entry for group group1'
+        exp_log_msgs.add_msg(l_msg)
         thread_pair = ThreadPair(group_name='group1', name='alpha')
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair,
-                                      thread=threading.current_thread()))
+        descs.add_desc(ThreadPairDesc(thread_pair=thread_pair))
 
         thread_app = MyThread(exp_log_msgs)
         thread_app.start()
@@ -2349,26 +2277,7 @@ class TestThreadPairLogger:
                               log_msg='alpha pair beta 2')
         descs.paired('alpha', 'beta')
 
-        exp_log_msgs.add_alpha_sync_msg('mainline sync point 1')
-        thread_pair.sync(log_msg='mainline sync point 1')
-
-        thread_pair.pause_until(WUCond.RemoteWaiting)
-
-        exp_log_msgs.add_alpha_resume_msg(
-            f'post thread {thread_pair.remote.name} 23', True, 42)
-        thread_pair.resume(log_msg=f'post thread {thread_pair.remote.name} 23',
-                           code=42)
-
-        exp_log_msgs.add_alpha_sync_msg('mainline sync point 2')
-        thread_pair.sync(log_msg='mainline sync point 2')
-
-        exp_log_msgs.add_alpha_wait_msg('wait for post from thread 34')
-        assert thread_pair.wait(log_msg='wait for post from thread 34')
-
-        exp_log_msgs.add_alpha_sync_msg('mainline sync point 3')
-        thread_pair.sync(log_msg='mainline sync point 3')
-        exp_log_msgs.add_alpha_sync_msg('mainline sync point 4')
-        thread_pair.sync(log_msg='mainline sync point 4')
+        cmds.queue_cmd('beta')
 
         thread_app.join()
 
@@ -2407,14 +2316,16 @@ class TestThreadPairLogger:
                 threading.Thread.__init__(self)
                 ThreadPair.__init__(self, group_name='group1', name='beta', thread=self)
                 self.exp_log_msgs = exp_log_msgs1
+                l_msg = '_registry_lock obtained, group_name = group1, thread_name = beta, class name = MyThread'
+                self.exp_log_msgs.add_msg(l_msg)
+                l_msg = 'beta registered not first entry for group group1'
+                self.exp_log_msgs.add_msg(l_msg)
 
             def run(self):
                 self.exp_log_msgs.add_msg('ThreadApp run entered')
                 logger.debug('ThreadApp run entered')
 
-                descs.add_desc(ThreadPairDesc(name='beta',
-                                              thread_pair=self,
-                                              thread=self))
+                descs.add_desc(ThreadPairDesc(thread_pair=self))
                 cmds.queue_cmd('alpha')
 
                 self.exp_log_msgs.add_beta_pair_with_msg('beta to alpha 3',
@@ -2423,23 +2334,7 @@ class TestThreadPairLogger:
                                log_msg='beta to alpha 3')
                 descs.paired('alpha', 'beta')
 
-                self.exp_log_msgs.add_beta_sync_msg('beta sync point 1')
-                self.sync(log_msg='beta sync point 1')
-
-                self.exp_log_msgs.add_beta_wait_msg(
-                    'wait for mainline to post 12')
-                assert self.wait(log_msg='wait for mainline to post 12')
-
-                self.exp_log_msgs.add_beta_sync_msg('beta sync point 2')
-                self.sync(log_msg='beta sync point 2')
-
-                self.pause_until(WUCond.RemoteWaiting)
-
-                self.exp_log_msgs.add_beta_resume_msg('post mainline 23')
-                self.resume(log_msg='post mainline 23')
-
-                self.exp_log_msgs.add_beta_sync_msg('beta sync point 3')
-                self.sync(log_msg='beta sync point 3')
+                cmds.get_cmd('beta')
 
         cmds = Cmds()
         descs = ThreadPairDescs()
@@ -2451,16 +2346,18 @@ class TestThreadPairLogger:
         alpha_call_seq = ('test_thread_pair.py::TestThreadPairLogger.'
                           'test_thread_pair_thread_event_app_event_logger')
 
-        beta_call_seq = 'test_thread_pair.py::MyThread.run'
+        beta_call_seq = 'test_thread_pair.py::run'
         exp_log_msgs = ExpLogMsgs(alpha_call_seq, beta_call_seq)
         l_msg = 'mainline starting'
         exp_log_msgs.add_msg(l_msg)
         logger.debug(l_msg)
 
+        l_msg = '_registry_lock obtained, group_name = group1, thread_name = alpha, class name = ThreadPair'
+        exp_log_msgs.add_msg(l_msg)
+        l_msg = 'alpha registered first entry for group group1'
+        exp_log_msgs.add_msg(l_msg)
         thread_pair = ThreadPair(group_name='group1', name='alpha')
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair,
-                                      thread=threading.current_thread()))
+        descs.add_desc(ThreadPairDesc(thread_pair=thread_pair))
 
         thread_event_app = MyThread(exp_log_msgs1=exp_log_msgs)
 
@@ -2473,24 +2370,7 @@ class TestThreadPairLogger:
         thread_pair.pair_with(remote_name='beta',
                               log_msg='alpha to beta 3')
 
-        exp_log_msgs.add_alpha_sync_msg('mainline sync point 1')
-        thread_pair.sync(log_msg='mainline sync point 1')
-
-        thread_pair.pause_until(WUCond.RemoteWaiting)
-
-        exp_log_msgs.add_alpha_resume_msg(
-            f'post thread {thread_event_app.name} 12')
-        thread_pair.resume(log_msg=f'post thread '
-                           f'{thread_event_app.name} 12')
-
-        exp_log_msgs.add_alpha_sync_msg('mainline sync point 2')
-        thread_pair.sync(log_msg='mainline sync point 2')
-
-        exp_log_msgs.add_alpha_wait_msg('wait for post from thread 23')
-        assert thread_pair.wait(log_msg='wait for post from thread 23')
-
-        exp_log_msgs.add_alpha_sync_msg('mainline sync point 3')
-        thread_pair.sync(log_msg='mainline sync point 3')
+        cmds.queue_cmd('beta')
 
         thread_event_app.join()
         descs.thread_end('beta')
@@ -2861,9 +2741,7 @@ class TestCombos:
         """
         cmds.get_cmd('alpha')  # go1
         thread_pair = ThreadPair(group_name='group1', name='alpha')
-        descs.add_desc(ThreadPairDesc(name='alpha',
-                                      thread_pair=thread_pair,
-                                      thread=threading.current_thread()))
+        descs.add_desc(ThreadPairDesc(thread_pair=thread_pair))
         cmds.queue_cmd('beta')  # go2
         thread_pair.pair_with(remote_name='beta')
         cmds.get_cmd('alpha')  # go3
@@ -3087,9 +2965,7 @@ def thread_func1(cmds: Cmds,
     if t_pair is None:
         t_pair = ThreadPair(group_name='group1', name='beta')
 
-    descs.add_desc(ThreadPairDesc(name='beta',
-                                  thread_pair=t_pair,
-                                  thread=threading.current_thread()))
+    descs.add_desc(ThreadPairDesc(thread_pair=t_pair))
     cmds.queue_cmd('alpha', 'go1')
     cmds.get_cmd('beta')  # go2
     t_pair.pair_with(remote_name='alpha')
