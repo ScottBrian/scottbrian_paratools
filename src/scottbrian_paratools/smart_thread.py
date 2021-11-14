@@ -47,6 +47,7 @@ The smart_thread module contains:
 ###############################################################################
 from dataclasses import dataclass
 import logging
+import queue
 import threading
 import time
 from typing import Any, Callable, Final, Optional, Type, TYPE_CHECKING, Union
@@ -137,6 +138,16 @@ class SmartThreadWaitUntilTimeout(SmartThreadError):
     pass
 
 
+class SmartThreadRecvTimedOut(SmartThreadError):
+    """SmartThread exception for timeout waiting for message."""
+    pass
+
+
+class SmartThreadSendFailed(SmartThreadError):
+    """SmartThread exception failure to send message."""
+    pass
+
+
 ###############################################################################
 # SmartThread class
 ###############################################################################
@@ -148,6 +159,7 @@ class SmartThread:
     ###########################################################################
     pair_with_TIMEOUT: Final[int] = 60
     register_TIMEOUT: Final[int] = 30
+    MAX_MSGS_DEFAULT: Final[int] = 16
 
     ###########################################################################
     # Registry
@@ -172,6 +184,7 @@ class SmartThread:
             self, *,
             name: str,
             target: Optional[Callable[..., Any]] = None,
+            max_msgs: Optional[int] = MAX_MSGS_DEFAULT,
             thread: Optional[threading.Thread] = None
             ) -> None:
         """Initialize an instance of the SmartThread class.
@@ -214,13 +227,17 @@ class SmartThread:
         self.deadlock: bool = False
         self.conflict: bool = False
 
+        self.max_msgs = max_msgs
+        self.msg_q: queue.Queue[Any] = queue.Queue(maxsize=self.max_msgs)
+        self.remote: Union[SmartThread, Any] = None
+
         self.logger = logging.getLogger(__name__)
         self.debug_logging_enabled = self.logger.isEnabledFor(logging.DEBUG)
 
         self._register()
 
-        if target:
-            self.thread.start()
+        # if target:
+        #     self.thread.start()
 
     ###########################################################################
     # repr
@@ -321,6 +338,195 @@ class SmartThread:
             del SmartThread._registry[key]
             self.logger.debug(f'{key} removed from registry')
 
+    ###########################################################################
+    # send_msg
+    ###########################################################################
+    def send_msg(self,
+                 msg: Any,
+                 remote: str,
+                 log_msg: Optional[str] = None,
+                 timeout: Optional[Union[int, float]] = 30) -> None:
+        """Send a msg.
+
+        Args:
+            msg: the msg to be sent
+            remote: name of thread to send the message to
+            timeout: number of seconds to wait for full queue to get free slot
+
+        Raises:
+            SmartThreadSendFailed: send_msg method unable to send the
+                                    message because the send queue
+                                    is full with the maximum
+                                    number of messages.
+
+        :Example: instantiate a SmartThread and send a message
+
+        >>> import scottbrian_utils.smart_thread as st
+        >>> import threading
+        >>> def f1(smart_thread: SmartThread) -> None:
+        ...     msg = smart_thread.recv_msg()
+        ...     if msg == 'hello thread':
+        ...         smart_thread.send_msg('hi')
+        >>> a_smart_thread = SmartThread()
+        >>> thread = threading.Thread(target=f1, args=(a_smart_thread,))
+        >>> thread.start()
+        >>> a_smart_thread.send_msg('hello thread')
+        >>> print(a_smart_thread.recv_msg())
+        hi
+
+        >>> thread.join()
+
+        """
+        start_time = time.time()  # start the clock
+
+        # if caller specified a log message to issue
+        caller_info = ''
+        if log_msg and self.debug_logging_enabled:
+            caller_info = get_formatted_call_sequence(latest=1, depth=1)
+            self.logger.debug(f'send_msg entered by {self.name} '
+                              f'{caller_info} {log_msg}')
+
+        self.verify_current_remote()
+        
+        while True:
+            with SmartThread._registry_lock:
+                if remote not in SmartThread._registry:
+                    if SmartThread.register_TIMEOUT < time.time() - start_time:  # remote has not yet registered
+                        raise SmartThreadRemoteNotRegisteredTimeout(
+                            f'{self.name} send_msg request timed out waiting for {remote} to register.')
+                    continue
+                else:
+                    self.remote = SmartThread._registry[remote]  # get remote SmartThread
+                    if self.remote.status is not None:
+                        self.status = self.remote.status
+                    else:
+                        self.status = self.SharedPairStatus()
+        try:
+            self.logger.info(f'{self.name} sending message to {remote}')
+            self.remote.msg_q.put(msg, timeout=timeout)  # place message on remote q
+        except queue.Full:
+            self.logger.error('Raise SmartThreadSendFailed')
+            raise SmartThreadSendFailed('send_msg method unable to send the '
+                                        'message because the send queue '
+                                        'is full with the maximum '
+                                        'number of messages.')
+
+    ###########################################################################
+    # recv_msg
+    ###########################################################################
+    def recv_msg(self,
+                 remote: str,
+                 log_msg: Optional[str] = None,
+                 timeout: Optional[Union[int, float]] = 30) -> Any:
+        """Receive a msg.
+
+        Args:
+            timeout: number of seconds to wait for message
+
+        Returns:
+            message unless timeout occurs
+
+        Raises:
+            SmartThreadRecvTimedOut: recv_msg processing timed out
+                                      waiting for a message to
+                                      arrive.
+
+        """
+        caller_info = ''
+        if log_msg and self.debug_logging_enabled:
+            caller_info = get_formatted_call_sequence(latest=1, depth=1)
+            self.logger.debug(f'recv_msg entered by {self.name} '
+                              f'{caller_info} {log_msg}')
+
+        try:
+            self.logger.info(f'{self.name} receiving msg from {remote}')
+            return self.msg_q.get(timeout=timeout)  # recv message from remote
+        except queue.Empty:
+            self.logger.error('Raise SmartThreadRecvTimedOut')
+            raise SmartThreadRecvTimedOut('recv_msg processing timed out '
+                                          'waiting for a message to '
+                                          'arrive.')
+
+    ###########################################################################
+    # send_recv
+    ###########################################################################
+    def send_recv(self,
+                  msg: Any,
+                  remote: str,
+                  timeout: Optional[Union[int, float]] = 30) -> Any:
+        """Send a message and wait for reply.
+
+        Args:
+            msg: the msg to be sent
+            timeout: Number of seconds to wait for reply
+
+        Returns:
+              message unless send q is full or timeout occurs during recv
+
+        :Example: instantiate a SmartThread and send a message
+
+        >>> import scottbrian_utils.smart_thread as st
+        >>> import threading
+        >>> def f1(smart_thread: SmartThread) -> None:
+        ...     msg = smart_thread.recv_msg()
+        ...     if msg == 'hello thread':
+        ...         smart_thread.send_msg('hi')
+        >>> a_smart_thread = SmartThread()
+        >>> thread = threading.Thread(target=f1, args=(a_smart_thread,))
+        >>> thread.start()
+        >>> a_smart_thread.send_msg('hello thread')
+        >>> print(a_smart_thread.recv_msg())
+        hi
+
+        >>> thread.join()
+
+        """
+        self.send_msg(msg, remote=remote, timeout=timeout)
+        return self.recv_msg(timeout=timeout)
+    
+    ###########################################################################
+    # msg_waiting
+    ###########################################################################
+    def msg_waiting(self) -> bool:
+        """Determine whether a message is waiting, ready to be received.
+
+        Returns:
+            True if message is ready to receive, False otherwise
+
+        :Example: instantiate a SmartThread and set the id to 5
+
+        >>> import scottbrian_utils.smart_thread as st
+        >>> class SmartThreadApp(threading.Thread):
+        ...     def __init__(self,
+        ...                  smart_thread: SmartThread,
+        ...                  event: threading.Event) -> None:
+        ...         super().__init__()
+        ...         self.smart_thread = smart_thread
+        ...         self.event = event
+        ...         self.smart_thread.set_child_thread_id()
+        ...     def run(self) -> None:
+        ...         self.smart_thread.send_msg('goodbye')
+        ...         self.event.set()
+        >>> smart_thread = SmartThread()
+        >>> event = threading.Event()
+        >>> smart_thread_app = SmartThreadApp(smart_thread, event)
+        >>> print(smart_thread.msg_waiting())
+        False
+
+        >>> smart_thread_app.start()
+        >>> event.wait()
+        >>> print(smart_thread.msg_waiting())
+        True
+
+        >>> print(smart_thread.recv_msg())
+        goodbye
+
+        """
+        if self.main_thread_id == threading.get_ident():
+            return not self.remote.send_msg_q.empty()
+        else:
+            return not self.msg_q.empty()
+    
     ###########################################################################
     # resume
     ###########################################################################

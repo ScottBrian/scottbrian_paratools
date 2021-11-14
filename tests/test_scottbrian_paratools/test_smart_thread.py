@@ -594,7 +594,7 @@ class TestSmartThreadBasic:
         logger.debug('mainline creating beta thread')
         # beta_thread = threading.Thread(name='beta', target=f1)
         beta_smart_thread = st.SmartThread(name='beta', target=f1)
-        # beta_smart_thread.start()
+        beta_smart_thread.thread.start()
 
         ####################################################################
         # Interact with beta
