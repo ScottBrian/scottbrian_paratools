@@ -578,9 +578,9 @@ class TestSmartThreadBasic:
 
             assert beta_smart_thread.wait(remote='alpha', log_msg='f1 wait 1')
             assert beta_smart_thread.sync(remote='alpha', log_msg='f1 sync 2')
-            assert beta_smart_thread.send_msg(msg='hi alpha, this is beta', remote='alpha', log_msg='f1 send_msg 3')
+            beta_smart_thread.send_msg(msg='hi alpha, this is beta', remote='alpha', log_msg='f1 send_msg 3')
             assert beta_smart_thread.recv_msg(remote='alpha', log_msg='f1 recv_msg 4') == 'hi beta, this is alpha'
-            beta_smart_thread.resume(remote='alpha', log_msg='f1 resume 5')
+            assert beta_smart_thread.resume(remote='alpha', log_msg='f1 resume 5')
 
             logger.debug('f1 exiting')
 
@@ -603,93 +603,96 @@ class TestSmartThreadBasic:
         assert alpha_smart_thread.resume(remote='beta', log_msg='ml resume 1')
         assert alpha_smart_thread.sync(remote='beta', log_msg='ml sync 2')
         assert alpha_smart_thread.recv_msg(remote='beta', log_msg='ml recv_msg 3') == 'hi alpha, this is beta'
-        assert alpha_smart_thread.send_msg(msg='hi beta, this is alpha', remote='beta', log_msg='ml send_msg 4')
-        alpha_smart_thread.wait(remote='beta', log_msg='f1 resume 5')
-        alpha_smart_thread.join(remote='beta', log_msg='ml join 6')
+        alpha_smart_thread.send_msg(msg='hi beta, this is alpha', remote='beta', log_msg='ml send_msg 4')
+        assert alpha_smart_thread.wait(remote='beta', log_msg='f1 resume 5')
+        # alpha_smart_thread.join(remote='beta', log_msg='ml join 6')
+        beta_smart_thread.thread.join()
 
         logger.debug('mainline exiting')
 
-    # ####################################################################################################################
-    # # Basic Scenario2
-    # ####################################################################################################################
-    # def test_smart_thread_basic_scenario2(self):
-    #     ####################################################################
-    #     # f1
-    #     ####################################################################
-    #     def f1():
-    #         logger.debug('f1 entered')
-    #
-    #         assert beta_smart_thread.wait(remote='alpha', log_msg='f1 wait 1')
-    #         assert beta_smart_thread.sync(remote='alpha', log_msg='f1 sync 2')
-    #         assert beta_smart_thread.send_msg(msg='hi alpha, this is beta', remote='alpha', log_msg='f1 send_msg 3')
-    #         assert beta_smart_thread.recv_msg(remote='alpha', log_msg='f1 recv_msg 4') == 'hi beta, this is alpha'
-    #         beta_smart_thread.resume(remote='alpha', log_msg='f1 resume 5')
-    #
-    #         assert beta_smart_thread.wait(remote='charlie', log_msg='f1 wait 6')
-    #         assert beta_smart_thread.sync(remote='charlie', log_msg='f1 sync 7')
-    #         assert beta_smart_thread.send_msg(msg='hi charlie, this is beta', remote='charlie', log_msg='f1 send_msg 8')
-    #         assert beta_smart_thread.recv_msg(remote='charlie', log_msg='f1 recv_msg 9') == 'hi beta, this is charlie'
-    #         assert beta_smart_thread.resume(remote='charlie', log_msg='f1 resume 10')
-    #
-    #         logger.debug('f1 exiting')
-    #
-    #     ####################################################################
-    #     # f2
-    #     ####################################################################
-    #     def f2():
-    #         logger.debug('f2 entered')
-    #
-    #         assert charlie_smart_thread.wait(remote='alpha', log_msg='f2 wait 1')
-    #         assert charlie_smart_thread.sync(remote='alpha', log_msg='f2 sync 2')
-    #         assert charlie_smart_thread.send_msg(msg='hi alpha, this is beta', remote='alpha', log_msg='f2 send_msg 3')
-    #         assert charlie_smart_thread.recv_msg(remote='alpha', log_msg='f2 recv_msg 4') == 'hi beta, this is alpha'
-    #         charlie_smart_thread.resume(remote='alpha', log_msg='f2 resume 5')
-    #
-    #         assert charlie_smart_thread.resume(remote='beta', log_msg='f2 resume 6')
-    #         assert charlie_smart_thread.sync(remote='beta', log_msg='f2 sync 7')
-    #         assert charlie_smart_thread.recv_msg(remote='beta', log_msg='f2 recv_msg 9') == 'hi charlie, this is beta'
-    #         assert charlie_smart_thread.send_msg(msg='hi beta, this is charlie', remote='charlie', log_msg='f2 send_msg 8')
-    #         assert charlie_smart_thread.wait(remote='beta', log_msg='f2 wait 10')
-    #
-    #         logger.debug('f2 exiting')
-    #
-    #     ####################################################################
-    #     # Create smart threads for the main thread (this thread), f1, and f2
-    #     ####################################################################
-    #     logger.debug('mainline entered')
-    #     logger.debug('mainline creating alpha thread')
-    #     alpha_smart_thread = st.SmartThread(name='alpha')
-    #
-    #     logger.debug('mainline creating beta thread')
-    #     beta_thread = threading.Thread(name='beta', target=f1)
-    #     beta_smart_thread = st.SmartThread(name='beta', thread=beta_thread)
-    #     beta_thread.start()
-    #     logger.debug('mainline creating charlie thread')
-    #     charlie_thread = threading.Thread(name='charlie', target=f2)
-    #     charlie_smart_thread = st.SmartThread(name='charlie', thread=charlie_thread)
-    #     charlie_thread.start()
-    #
-    #     ####################################################################
-    #     # Interact with beta and charlie
-    #     ####################################################################
-    #     logger.debug('mainline interacting with beta')
-    #     assert alpha_smart_thread.resume(remote='beta', log_msg='ml resume 1')
-    #     assert alpha_smart_thread.sync(remote='beta', log_msg='ml sync 2')
-    #     assert alpha_smart_thread.recv_msg(remote='beta', log_msg='ml recv_msg 3') == 'hi alpha, this is beta'
-    #     assert alpha_smart_thread.send_msg(msg='hi beta, this is alpha', remote='beta', log_msg='ml send_msg 4')
-    #     alpha_smart_thread.wait(remote='beta', log_msg='f1 resume 5')
-    #
-    #     logger.debug('mainline interacting with charlie')
-    #     assert alpha_smart_thread.resume(remote='charlie', log_msg='ml resume 6')
-    #     assert alpha_smart_thread.sync(remote='charlie', log_msg='ml sync 7')
-    #     assert alpha_smart_thread.recv_msg(remote='charlie', log_msg='ml recv_msg 8') == 'hi alpha, this is charlie'
-    #     assert alpha_smart_thread.send_msg(msg='hi charlie, this is alpha', remote='charlie', log_msg='ml send_msg 9')
-    #     alpha_smart_thread.wait(remote='charlie', log_msg='f1 resume 10')
-    #
-    #     alpha_smart_thread.join(remote='beta', log_msg='ml join 11')
-    #     alpha_smart_thread.join(remote='charlie', log_msg='ml join 12')
-    #
-    #     logger.debug('mainline exiting')
+    ####################################################################################################################
+    # Basic Scenario2
+    ####################################################################################################################
+    def test_smart_thread_basic_scenario2(self):
+        ####################################################################
+        # f1
+        ####################################################################
+        def f1():
+            logger.debug('f1 entered')
+            logger.debug(f'SmartThread._registry = {st.SmartThread._registry}')
+            assert beta_smart_thread.wait(remote='alpha', log_msg='f1 wait 1')
+            assert beta_smart_thread.sync(remote='alpha', log_msg='f1 sync 2')
+            beta_smart_thread.send_msg(msg='hi alpha, this is beta', remote='alpha', log_msg='f1 send_msg 3')
+            assert beta_smart_thread.recv_msg(remote='alpha', log_msg='f1 recv_msg 4') == 'hi beta, this is alpha'
+            assert beta_smart_thread.resume(remote='alpha', log_msg='f1 resume 5')
+
+            assert beta_smart_thread.wait(remote='charlie', log_msg='f1 wait 6')
+            assert beta_smart_thread.sync(remote='charlie', log_msg='f1 sync 7')
+            beta_smart_thread.send_msg(msg='hi charlie, this is beta', remote='charlie', log_msg='f1 send_msg 8')
+            assert beta_smart_thread.recv_msg(remote='charlie', log_msg='f1 recv_msg 9') == 'hi beta, this is charlie'
+            assert beta_smart_thread.resume(remote='charlie', log_msg='f1 resume 10')
+
+            logger.debug('f1 exiting')
+
+        ####################################################################
+        # f2
+        ####################################################################
+        def f2():
+            logger.debug('f2 entered')
+
+            assert charlie_smart_thread.wait(remote='alpha', log_msg='f2 wait 1')
+            assert charlie_smart_thread.sync(remote='alpha', log_msg='f2 sync 2')
+            charlie_smart_thread.send_msg(msg='hi alpha, this is charlie', remote='alpha', log_msg='f2 send_msg 3')
+            assert charlie_smart_thread.recv_msg(remote='alpha', log_msg='f2 recv_msg 4') == 'hi charlie, this is alpha'
+            assert charlie_smart_thread.resume(remote='alpha', log_msg='f2 resume 5')
+
+            assert charlie_smart_thread.resume(remote='beta', log_msg='f2 resume 6')
+            assert charlie_smart_thread.sync(remote='beta', log_msg='f2 sync 7')
+            assert charlie_smart_thread.recv_msg(remote='beta', log_msg='f2 recv_msg 9') == 'hi charlie, this is beta'
+            charlie_smart_thread.send_msg(msg='hi beta, this is charlie', remote='beta', log_msg='f2 send_msg 8')
+            assert charlie_smart_thread.wait(remote='beta', log_msg='f2 wait 10')
+
+            logger.debug('f2 exiting')
+
+        ####################################################################
+        # Create smart threads for the main thread (this thread), f1, and f2
+        ####################################################################
+        logger.debug('mainline entered')
+        logger.debug('mainline creating alpha thread')
+        alpha_smart_thread = st.SmartThread(name='alpha')
+
+        logger.debug('mainline creating beta thread')
+        # beta_thread = threading.Thread(name='beta', target=f1)
+        beta_smart_thread = st.SmartThread(name='beta', target=f1)
+        beta_smart_thread.thread.start()
+        logger.debug('mainline creating charlie thread')
+        # charlie_thread = threading.Thread(name='charlie', target=f2)
+        charlie_smart_thread = st.SmartThread(name='charlie', target=f2)
+        charlie_smart_thread.thread.start()
+
+        ####################################################################
+        # Interact with beta and charlie
+        ####################################################################
+        logger.debug('mainline interacting with beta')
+        assert alpha_smart_thread.resume(remote='beta', log_msg='ml resume 1')
+        assert alpha_smart_thread.sync(remote='beta', log_msg='ml sync 2')
+        assert alpha_smart_thread.recv_msg(remote='beta', log_msg='ml recv_msg 3') == 'hi alpha, this is beta'
+        alpha_smart_thread.send_msg(msg='hi beta, this is alpha', remote='beta', log_msg='ml send_msg 4')
+        assert alpha_smart_thread.wait(remote='beta', log_msg='f1 resume 5')
+
+        logger.debug('mainline interacting with charlie')
+        assert alpha_smart_thread.resume(remote='charlie', log_msg='ml resume 6')
+        assert alpha_smart_thread.sync(remote='charlie', log_msg='ml sync 7')
+        assert alpha_smart_thread.recv_msg(remote='charlie', log_msg='ml recv_msg 8') == 'hi alpha, this is charlie'
+        alpha_smart_thread.send_msg(msg='hi charlie, this is alpha', remote='charlie', log_msg='ml send_msg 9')
+        assert alpha_smart_thread.wait(remote='charlie', log_msg='f1 resume 10')
+
+        # alpha_smart_thread.join(remote='beta', log_msg='ml join 11')
+        beta_smart_thread.thread.join()
+        # alpha_smart_thread.join(remote='charlie', log_msg='ml join 12')
+        charlie_smart_thread.thread.join()
+
+        logger.debug('mainline exiting')
     #
     # ####################################################################################################################
     # # Basic Scenario3
