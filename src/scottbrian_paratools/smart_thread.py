@@ -190,7 +190,8 @@ class SmartThread:
             name: str,
             target: Optional[Callable[..., Any]] = None,
             max_msgs: Optional[int] = MAX_MSGS_DEFAULT,
-            thread: Optional[threading.Thread] = None
+            thread: Optional[threading.Thread] = None,
+            default_timeout: Optional[float] = None
             ) -> None:
         """Initialize an instance of the SmartThread class.
 
@@ -217,6 +218,8 @@ class SmartThread:
             self.thread = threading.Thread(target=target)
         else:
             self.thread = threading.current_thread()
+
+        self.default_timeout = default_timeout
 
         # self.remote: dict[str, "SmartThread"] = {}
         self.remote: Optional["SmartThread"] = None
@@ -544,7 +547,8 @@ class SmartThread:
     ###########################################################################
     def pair(self, *,
              remote: str,
-             start_time: float) -> None:
+             start_time: float,
+             timeout: Optional[float] = None) -> None:
         """Pair with remote.
 
         Args:
@@ -580,25 +584,91 @@ class SmartThread:
         >>> beta_smart_thread.join()
 
         """
+        t_out = (timeout or self.default_timeout)  # set t_out to None if timeout and default_timeout are both None
         while True:
             with SmartThread._registry_lock:
-                if remote not in SmartThread._registry:
-                    if SmartThread.register_TIMEOUT < time.time() - start_time:  # remote has not yet registered
-                        raise SmartThreadRemoteNotRegisteredTimeout(
-                            f'{self.name} resume request timed out waiting for {remote} to register.')
-                else:
-                    self.remote = SmartThread._registry[remote]  # get remote SmartThread
+                if remote in SmartThread._registry:
+                    self.remote = SmartThread._registry[remote]
                     if self.remote.remote and self.remote.remote.name == self.name:  # remote has us as its remote
                         if self.remote.status is not None:
                             self.status = self.remote.status
                         else:
                             self.status = self.SharedPairStatus()
                         break
-                    else:
-                        if SmartThread.register_TIMEOUT < time.time() - start_time:  # remote has not yet registered
-                            raise SmartThreadRemoteNotPairedTimeout(
-                                f'{self.name} resume request timed out waiting for {remote} to pair with us.')
-            time.sleep(0.2)
+                if t_out and t_out < time.time() - start_time:  # remote not yet registered or paired with us in time
+                    raise SmartThreadRemoteNotPairedTimeout(
+                        f'{self.name} timed out waiting for {remote} to register and pair.')
+
+            time.sleep(0.1)
+
+    ###########################################################################
+    # join
+    ###########################################################################
+    def join(self, *,
+             remote: str,
+             log_msg: Optional[str] = None,
+             timeout: Optional[float] = None) -> None:
+        """Pair with remote.
+
+        Args:
+            remote: name of thread that is to be resumed
+
+        Notes:
+            1) A ``resume()`` request can be done on an event that is not yet
+               being waited upon. This is referred as a **pre-resume**. The
+               remote thread doing a ``wait()`` request on a **pre-resume**
+               event will get back control immediately.
+            2) If the ``resume()`` request sees that the event has already
+               been resumed, it will loop and wait for the event to be cleared
+               under the assumption that the event was previously
+               **pre-resumed** and a wait is imminent. The ``wait()`` will
+               clear the event and the ``resume()`` request will simply resume
+               it again as a **pre-resume**.
+            3) If one thread makes a ``resume()`` request and the other thread
+               becomes not alive, the ``resume()`` request raises a
+               **SmartThreadRemoteThreadNotAlive** error.
+
+        :Example: instantiate SmartThread and ``resume()`` event that function
+                    waits on
+
+        >>> import scottbrian_paratools.smart_event as st
+        >>> def f1() -> None:
+        ...     print('f1 beta entered')
+        ...     beta_smart_thread.wait()
+        ...     print('f1 beta exiting')
+
+        >>> alpha_smart_thread = SmartThread(name='alpha')
+        >>> beta_smart_thread = SmartThread(name='beta', target=f1)
+        >>> alpha_smart_thread.resume()
+        >>> beta_smart_thread.join()
+
+        """
+        # if caller specified a log message to issue
+        caller_info = ''
+        if log_msg and self.debug_logging_enabled:
+            caller_info = get_formatted_call_sequence(latest=1, depth=1)
+            self.logger.debug(f'join() entered by {self.name} to join {remote} '
+                              f'{caller_info} {log_msg}')
+        self.verify_current_remote()
+        self.remote = None
+        remote_status = 'unknown'
+        with SmartThread._registry_lock:
+            if remote in SmartThread._registry:
+                self.remote = SmartThread._registry[remote]
+            else:
+                remote_status = 'unregistered'
+
+        if self.remote:
+            self.remote.thread.join(timeout=timeout)
+            if self.remote.thread.is_alive():
+                remote_status = 'alive'
+            else:
+                remote_status = 'not alive'
+
+        if log_msg and self.debug_logging_enabled:
+            caller_info = get_formatted_call_sequence(latest=1, depth=1)
+            self.logger.debug(f'join() by {self.name} to join {remote} exiting with remote status = {remote_status} '
+                              f'{caller_info} {log_msg}')
 
     ###########################################################################
     # resume
@@ -656,6 +726,8 @@ class SmartThread:
         """
         start_time = time.time()  # start the clock
 
+        timeout = None if (timeout and timeout <= 0) else timeout
+
         self.verify_current_remote()
 
         # if caller specified a log message to issue
@@ -666,7 +738,7 @@ class SmartThread:
             self.logger.debug(f'resume() entered{code_msg} by {self.name} to resume {remote} '
                               f'{caller_info} {log_msg}')
 
-        self.pair(remote=remote, start_time=start_time)
+        self.pair(remote=remote, start_time=start_time, timeout=timeout)
 
         ###############################################################
         # Cases where we loop until remote is ready:
@@ -805,15 +877,17 @@ class SmartThread:
         >>> f1_thread.join()
 
         """
+        start_time = time.time()
+
+        timeout = None if (timeout and timeout <= 0) else timeout
+
         self.verify_current_remote()
         caller_info = ''
         if log_msg and self.debug_logging_enabled:
             caller_info = get_formatted_call_sequence(latest=1, depth=1)
             self.logger.debug(f'sync() entered by {self.name} to sync with {remote} {caller_info} {log_msg}')
 
-        start_time = time.time()
-
-        self.pair(remote=remote, start_time=start_time)
+        self.pair(remote=remote, start_time=start_time, timeout=timeout)
 
         self.sync_wait = True
 
@@ -970,9 +1044,10 @@ class SmartThread:
         >>> f1_thread.join()
 
         """
-        self.verify_current_remote()
+        start_time = time.time()
 
-        if timeout and (timeout > 0):
+        timeout = None if (timeout and timeout <= 0) else timeout
+        if timeout:
             t_out = min(0.1, timeout)
             self.wait_timeout_specified = True
         else:
@@ -984,9 +1059,9 @@ class SmartThread:
             caller_info = get_formatted_call_sequence(latest=1, depth=1)
             self.logger.debug(f'wait() entered by {self.name} to wait for {remote} {caller_info} {log_msg}')
 
-        start_time = time.time()
+        self.verify_current_remote()
 
-        self.pair(remote=remote, start_time=start_time)
+        self.pair(remote=remote, start_time=start_time, timeout=timeout)
 
         self.wait_wait = True
 
@@ -1094,8 +1169,8 @@ class SmartThread:
     # verify_current_remote
     ###########################################################################
     def verify_current_remote(self,
-                               skip_pair_check: Optional[bool] = False
-                               ) -> None:
+                              skip_pair_check: Optional[bool] = False
+                              ) -> None:
         """Check the current and remote ThreadEvent objects.
 
         Args:
