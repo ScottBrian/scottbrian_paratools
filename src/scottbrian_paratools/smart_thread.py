@@ -46,6 +46,7 @@ The smart_thread module contains:
 # Standard Library
 ###############################################################################
 from dataclasses import dataclass
+from datetime import datetime, timezone, timedelta
 from enum import Enum
 import logging
 import queue
@@ -62,7 +63,7 @@ from typing import Any, Callable, Final, Optional, Type, TYPE_CHECKING, Union
 ###############################################################################
 from scottbrian_utils.diag_msg import get_formatted_call_sequence
 
-
+est_tz = timezone(timedelta(hours=-5))
 ###############################################################################
 # SmartThread class exceptions
 ###############################################################################
@@ -183,6 +184,45 @@ class SmartThreadRemoteMsgQMismatch(SmartThreadError):
     """SmartThread exception remote_array remote msg_q does not match remote.remote_array msg_q."""
     pass
 
+
+class SmartThreadResumeTimedOut(SmartThreadError):
+    """SmartThread exception resume timed out."""
+    pass
+
+
+class Timer:
+    def __init__(self,
+                 timeout: Optional[Union[int, float]] = None,
+                 default_timeout: Optional[Union[int, float]] = None) -> None:
+        """Initialize a timer object.
+
+        Args:
+            timeout: value to use for timeout
+            default_timeout: value to use if timeout is None
+
+        """
+        self.start_time = time.time()
+        # we have either a timeout <= 0 or None which means no timeout can happen, or we have
+        # a timeout with a positive value which we will use, or we will use the default timeout
+        # which could also be None, in which again means no timeout can happen
+        self._timeout = None if (timeout and timeout <= 0) else (timeout or default_timeout)
+
+    @property
+    def timeout(self):
+        if self._timeout:  # if not None
+            ret_timeout = max(0.01, self._timeout - (time.time() - self.start_time))  # make sure not negative
+        else:
+            ret_timeout = None
+        return ret_timeout  # return value of remaining time for timeout
+
+    def is_expired(self) -> bool:
+        """Return either True or False for the timer."""
+        if self.timeout and self.timeout < (time.time() - self.start_time):
+            return True
+        else:
+            return False  # time remaining, or timeout is None which never expires
+
+
 ThreadStatus = Enum('ThreadStatus',
                     'Initializing '
                     'Registered '
@@ -228,6 +268,7 @@ class SmartThread:
     class ConnectionStatusBlock:
         remote_smart_thread: "SmartThread"
         shared_pair_block: "SmartThread.SharedPairBlock"
+        remote_status: "ThreadStatus" = ThreadStatus.Registered
         msg_q: queue.Queue[Any] = queue.Queue()
         remote_msg_q: queue.Queue[Any] = None
         pair_status: PairStatus = PairStatus.NotReady
@@ -300,9 +341,9 @@ class SmartThread:
         self.remote: Optional[SmartThread.ConnectionStatusBlock] = None
         self.remote_array: dict[str, SmartThread.ConnectionStatusBlock] = {}  # known remotes from SmartThread._registry
 
-        # remote_array_last_update is initially set to -1.0 and the _registry_last_update is initially set to 0.0
+        # time_last_remote_update is initially set to -1.0 and the _registry_last_update is initially set to 0.0
         # which will cause each thread to initially refresh their remote_array when instantiated.
-        self.remote_array_last_update: float = -1.0  # last time that remote_array were refreshed
+        self.time_last_remote_update: float = -1.0  # last time that remote_array were refreshed
 
         self.logger = logging.getLogger(__name__)
         self.debug_logging_enabled = self.logger.isEnabledFor(logging.DEBUG)
@@ -365,8 +406,8 @@ class SmartThread:
                 'The name for SmartThread must be of type str.')
 
         with SmartThread._registry_lock:
-            self.logger.debug(f'_registry_lock obtained, '
-                              f'name = {self.name}, class name = {self.__class__.__name__}')
+            self.logger.debug(f'{self.name} obtained _registry_lock, '
+                              f'class name = {self.__class__.__name__}')
 
             # Remove any old entries
             self._clean_up_registry()
@@ -380,8 +421,10 @@ class SmartThread:
                     f'An entry for a SmartThread with name = {self.name} is '
                     'already registered for a different thread.')
 
-            SmartThread._registry_last_update = time.time()
-            self.remote_array_last_update = SmartThread._registry_last_update
+            SmartThread._registry_last_update = datetime.utcnow()
+            print_time = (SmartThread._registry_last_update
+                          + est_tz.utcoffset(SmartThread._registry_last_update)).strftime("%H:%M:%S.%f")
+            self.logger.debug(f'{self.name} did register update at {print_time}')
 
     ###########################################################################
     # _clean_up_registry
@@ -413,6 +456,11 @@ class SmartThread:
         for key in keys_to_del:
             del SmartThread._registry[key]
             self.logger.debug(f'{key} removed from registry')
+
+        SmartThread._registry_last_update = datetime.utcnow()
+        print_time = (SmartThread._registry_last_update
+                      + est_tz.utcoffset(SmartThread._registry_last_update)).strftime("%H:%M:%S.%f")
+        self.logger.debug(f'{self.name} did cleanup of registry at {print_time}')
 
     ###########################################################################
     # _refresh_remote_array
@@ -510,11 +558,22 @@ class SmartThread:
                         item.remote_msg_q = item.remote_smart_thread.remote_array[self.name].msg_q
                         # we may have a newly alive entry or one that has been alive and already paired
                         if item.remote_smart_thread.thread.is_alive():
+                            item.remote_status = ThreadStatus.Alive
                             item.pair_status = PairStatus.Ready
                         else:
+                            if item.remote_status == ThreadStatus.Alive:
+                                item.remote_status = ThreadStatus.Stopped
                             item.pair_status = PairStatus.NotReady
 
-        self.remote_array_last_update = time.time()
+            for key in remote_array_deletion_list:
+                del self.remote_array[key]
+                self.logger.debug(f'{key} removed from remote_array')
+
+            SmartThread._registry_last_update = datetime.utcnow()
+            self.time_last_remote_update = SmartThread._registry_last_update
+            print_time = (SmartThread._registry_last_update
+                          + est_tz.utcoffset(SmartThread._registry_last_update)).strftime("%H:%M:%S.%f")
+            self.logger.debug(f'{self.name} updated registry and remote_array at {print_time}')
 
     ###########################################################################
     # send_msg
@@ -523,12 +582,13 @@ class SmartThread:
                  msg: Any,
                  target_set: Union[str, set[str]],
                  log_msg: Optional[str] = None,
-                 timeout: Optional[Union[int, float]] = 10) -> None:
+                 timeout: Optional[Union[int, float]] = None) -> None:
         """Send a msg.
 
         Args:
             msg: the msg to be sent
             target_set: names to send the message to
+            log_msg: log message to issue
             timeout: number of seconds to wait for full queue to get free slot
 
         Raises:
@@ -555,7 +615,7 @@ class SmartThread:
         >>> thread.join()
 
         """
-        start_time = time.time()  # start the clock
+        timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
 
         # if caller specified a log message to issue
         caller_info = ''
@@ -565,31 +625,42 @@ class SmartThread:
 
         self.verify_current_remote()
 
-        if not isinstance(target_set, set):
+        if isinstance(target_set, str):
             target_set = {target_set}
-
+        
         work_target_set = target_set
-        self._refresh_remote_array()
 
         while work_target_set:
             for remote in work_target_set:
-                if self.remote_array_last_update < SmartThread._registry_last_update:
+                # we need to handle the case where a remote we want to send a message to is not
+                # yet registered and alive. We call _refresh_remote_array to get the latest changes
+                # but only if we see that the registry has changed (_registry_last_update).
+                if self.time_last_remote_update < SmartThread._registry_last_update:
                     self._refresh_remote_array()
 
-                if remote in self.remote_array and self.remote_array[remote].remote_smart_thread.thread.is_alive():
-                    try:
-                        self.logger.info(f'{self.name} sending message to {remote}')
-                        self.remote_array[remote].remote_msg_q.put(msg, timeout=timeout)  # place message on remote q
-                        work_target_set.remove(remote)
-                        break  # start the while loop again with one less remote
-                    except queue.Full:
-                        self.logger.error('Raise SmartThreadSendFailed')
-                        raise SmartThreadSendFailed(f'{self.name} send_msg method unable to send the '
-                                                    'message because the send queue '
-                                                    'is full with the maximum '
-                                                    'number of messages.')
+                if remote in self.remote_array:
+                    if self.remote_array[remote].remote_smart_thread.thread.is_alive():
+                        try:
+                            self.logger.info(f'{self.name} sending message to {remote}')
+                            # place message on remote q
+                            self.remote_array[remote].remote_msg_q.put(msg)
+                            work_target_set.remove(remote)
+                            break  # start the while loop again with one less remote
+                        except queue.Full:
+                            self.logger.error('Raise SmartThreadSendFailed')
+                            raise SmartThreadSendFailed(f'{self.name} send_msg method unable to send the '
+                                                        'message because the send queue '
+                                                        'is full with the maximum '
+                                                        'number of messages.')
+                    # we need to check the status for Alive or Stopped before raising the not alive error
+                    # since the thread could be registered but not yet started, in which case we need to give it 
+                    # more time
+                    elif (self.remote_array[remote].remote_smart_thread.status == ThreadStatus.Alive
+                          or self.remote_array[remote].remote_smart_thread.status == ThreadStatus.Stopped):
+                        raise SmartThreadRemoteThreadNotAlive(f'{self.name} send_msg detected {remote} thread '
+                                                              'is not alive.')
 
-            if timeout and (timeout < (time.time() - start_time)):
+            if timer.is_expired():
                 self.logger.debug(f'{self.name} timeout of a send_msg() ')
                 break
 
@@ -605,7 +676,7 @@ class SmartThread:
     def recv_msg(self,
                  remote: str,
                  log_msg: Optional[str] = None,
-                 timeout: Optional[Union[int, float]] = 10) -> Any:
+                 timeout: Optional[Union[int, float]] = None) -> Any:
         """Receive a msg.
 
         Args:
@@ -620,19 +691,48 @@ class SmartThread:
                                       arrive.
 
         """
+        timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
+
         caller_info = ''
         if log_msg and self.debug_logging_enabled:
             caller_info = get_formatted_call_sequence(latest=1, depth=1)
             self.logger.debug(f'recv_msg() entered: {self.name} <- {remote} '
                               f'{caller_info} {log_msg}')
 
-        try:
-            self.logger.info(f'{self.name} receiving msg from {remote}')
-            self.logger.debug(f'recv_msg id(self.msg_q) = {id(self.msg_q)}')
-            ret_msg = self.msg_q.get(timeout=timeout)  # recv message from remote
-        except queue.Empty:
-            self.logger.error(f'{self.name} raising SmartThreadRecvTimedOut waiting for {remote} ')
-            raise SmartThreadRecvTimedOut(f'recv_msg {self.name} timed out waiting for message from {remote}.')
+        while True:
+            # we need to handle the case where a remote we want to recv a message from is not
+            # yet registered and alive. We call _refresh_remote_array to get the latest changes
+            # but only if we see that the registry has changed (_registry_last_update).
+            if self.time_last_remote_update < SmartThread._registry_last_update:
+                self._refresh_remote_array()
+
+            if remote in self.remote_array:
+                # We don't check to ensure remote is alive since it may have sent us a message and then became
+                # not alive. So, we try to get the message first, and it it's not there then we will check to see
+                # whether the remote is alive
+                try:
+                    self.logger.info(f'{self.name} receiving msg from {remote}')
+                    ret_msg = self.remote_array[remote].msg_q.get()  # recv message from remote
+                    break
+                except queue.Empty:
+                    pass
+
+                # we need to check the status for Alive or Stopped before raising the not alive error
+                # since the thread could be registered but not yet started, in which case we need to give it
+                # more time
+                if ((not self.remote_array[remote].remote_smart_thread.thread.is_alive())
+                        and (self.remote_array[remote].remote_smart_thread.status == ThreadStatus.Alive
+                             or self.remote_array[remote].remote_smart_thread.status == ThreadStatus.Stopped)):
+                    raise SmartThreadRemoteThreadNotAlive(f'{self.name} send_msg detected {remote} thread '
+                                                          'is not alive.')
+
+            if timer.is_expired():
+                self.logger.error(f'{self.name} raising SmartThreadRecvTimedOut waiting for {remote} ')
+                raise SmartThreadRecvTimedOut(f'recv_msg {self.name} timed out waiting for message '
+                                              f'from {remote}.')
+
+            time.sleep(0.2)
+
         # if caller specified a log message to issue
         if log_msg and self.debug_logging_enabled:
             self.logger.debug(f'recv_msg() exiting: {self.name} <- {remote} {caller_info} {log_msg}')
@@ -646,7 +746,7 @@ class SmartThread:
                   msg: Any,
                   remote: str,
                   log_msg: Optional[str] = None,
-                  timeout: Optional[Union[int, float]] = 30) -> Any:
+                  timeout: Optional[Union[int, float]] = None) -> Any:
         """Send a message and wait for reply.
 
         Args:
@@ -674,17 +774,20 @@ class SmartThread:
         >>> thread.join()
 
         """
-        self.send_msg(msg, remote=remote, log_msg=log_msg, timeout=timeout)
-        return self.recv_msg(remote=remote, log_msg=log_msg, timeout=timeout)
+        timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
+
+        self.send_msg(msg, target_set={remote}, log_msg=log_msg, timeout=timer.timeout)
+
+        return self.recv_msg(remote=remote, log_msg=log_msg, timeout=timer.timeout)
     
     ###########################################################################
     # msg_waiting
     ###########################################################################
-    def msg_waiting(self) -> bool:
+    def msg_waiting(self) -> str:
         """Determine whether a message is waiting, ready to be received.
 
         Returns:
-            True if message is ready to receive, False otherwise
+            Name of remote whose message is waiting for us to pick up, empty string otherwise
 
         :Example: instantiate a SmartThread and set the id to 5
 
@@ -715,9 +818,17 @@ class SmartThread:
         goodbye
 
         """
-        return not self.msg_q.empty()
+        # We need to handle the case where a remote is ready to send us a message but we have not yet seen the remote,
+        # So, we need to call _refresh_remote_array to get the latest changes
+        # but only if we see that the registry has changed (_registry_last_update).
+        if self.time_last_remote_update < SmartThread._registry_last_update:
+            self._refresh_remote_array()
 
+        for key, item in self.remote_array.items():
+            if not item.msg_q.empty():
+                return key
 
+        return ""  # nothing found, return empty string
 
     ###########################################################################
     # join
@@ -725,11 +836,13 @@ class SmartThread:
     def join(self, *,
              target_set: Union[str, set[str]],
              log_msg: Optional[str] = None,
-             timeout: Optional[float] = None) -> None:
+             timeout: Optional[Union[int, float]] = None) -> None:
         """Join with remote targets.
 
         Args:
             target_set: thread names that are to be joined
+            log_msg: log message to issue
+            timeout: timeout to use instead of default timeout
 
         Notes:
             1) A ``resume()`` request can be done on an event that is not yet
@@ -761,36 +874,45 @@ class SmartThread:
         >>> beta_smart_thread.join()
 
         """
+        timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
+
         # if caller specified a log message to issue
         caller_info = ''
         if log_msg and self.debug_logging_enabled:
             caller_info = get_formatted_call_sequence(latest=1, depth=1)
             self.logger.debug(f'join() entered by {self.name} to join {remote} '
                               f'{caller_info} {log_msg}')
+
         self.verify_current_remote()
 
-        if not isinstance(target_set, list):
-            target_set = [target_set]
+        if isinstance(target_set, str):
+            target_set = {target_set}
 
-        for remote in target_set:
-            remote_status = 'unknown'
-            with SmartThread._registry_lock:
-                if remote in SmartThread._registry:
-                    SmartThread._registry[remote].status = ThreadStatus.Joining
-                    SmartThread._registry[remote].thread.join(timeout=timeout)
-                    if SmartThread._registry[remote].thread.is_alive():
-                        SmartThread._registry[remote].status = ThreadStatus.Alive
-                        remote_status = 'alive'
-                    else:
-                        SmartThread._registry[remote].status = ThreadStatus.Stopped
-                        remote_status = 'not alive'
-                else:
-                    remote_status = 'unregistered'
+        work_target_set = target_set
 
-                self._clean_up_registry()
+        while work_target_set:
+            for remote in work_target_set:
+                # we need to handle the case where a remote we want to join is not in out remote_array.
+                # We call _refresh_remote_array to get the latest changes
+                # but only if we see that the registry has changed (_registry_last_update).
+                if self.time_last_remote_update < SmartThread._registry_last_update:
+                    self._refresh_remote_array()
 
-            if log_msg and self.debug_logging_enabled:
-                self.logger.debug(f'join() by {self.name} to join {remote} result remote status = {remote_status}.')
+                if remote in self.remote_array:
+                    if self.remote_array[remote].remote_status == ThreadStatus.Alive:  # we think thread is alive
+                        self.remote_array[remote].remote_smart_thread.thread.join(timeout=0.1)
+                        if not self.remote_array[remote].remote_smart_thread.thread.is_alive():  # if now not alive
+                            SmartThread._registry[remote].status = ThreadStatus.Stopped
+                            self._clean_up_registry()
+                            self.logger.debug(f'{self.name} did successful join of {remote}.')
+                            work_target_set.remove(remote)
+                            break  # start the while loop again with one less remote
+
+            if timer.is_expired():
+                self.logger.debug(f'{self.name} timeout of a join() ')
+                break
+
+            time.sleep(0.2)
 
         if log_msg and self.debug_logging_enabled:
             self.logger.debug(f'join() by {self.name} to join {target_set} exiting. '
@@ -807,7 +929,7 @@ class SmartThread:
         """Resume a waiting or soon to be waiting thread.
 
         Args:
-            remote: name of thread that is to be resumed 
+            target_set: names of threads that are to be resumed
             log_msg: log msg to log
             timeout: number of seconds to allow for ``resume()`` to complete
             code: code that waiter can retrieve with ``get_code()``
@@ -850,9 +972,7 @@ class SmartThread:
         >>> beta_smart_thread.join()
 
         """
-        start_time = time.time()  # start the clock
-
-        timeout = None if (timeout and timeout <= 0) else timeout
+        timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
 
         self.verify_current_remote()
 
@@ -864,13 +984,8 @@ class SmartThread:
             self.logger.debug(f'resume() entered{code_msg} by {self.name} to resume {remote} '
                               f'{caller_info} {log_msg}')
 
-        final_ret_code = True
-
-        if not isinstance(target_set, list):
-            target_set = [target_set]
-
-        for remote in target_set:
-            self.pair(remote=remote, start_time=start_time, timeout=timeout)
+        if isinstance(target_set, str):
+            target_set = {target_set}
 
             ###############################################################
             # Cases where we loop until remote is ready:
@@ -919,33 +1034,55 @@ class SmartThread:
             #              sync
             #                                           wait
             ###############################################################
-            while True:
-                with self.status.status_lock:
-                    if not (self.remote.event.is_set()
-                            or self.remote.deadlock
-                            or (self.remote.conflict and self.remote.wait_wait)):
-                        if code:  # if caller specified a code for remote thread
-                            self.remote.code = code
-                        self.remote.event.set()  # wake remote thread
-                        ret_code = True
-                        break
 
-                    if timeout and (timeout < (time.time() - start_time)):
-                        self.logger.debug(f'{self.name} timeout of a resume() '
-                                          'request with self.remote.event.is_set() = '
-                                          f'{self.remote.event.is_set()} and '
-                                          'self.remote.deadlock = '
-                                          f'{self.remote.deadlock}')
-                        ret_code = False
-                        break
+        work_target_set = target_set
 
-                time.sleep(0.2)
-            final_ret_code = final_ret_code and ret_code
+        while work_target_set:
+            for remote in work_target_set:
+                # we need to handle the case where a remote we want to resume is not
+                # yet registered and alive. We call _refresh_remote_array to get the latest changes
+                # but only if we see that the registry has changed (_registry_last_update).
+                if self.time_last_remote_update < SmartThread._registry_last_update:
+                    self._refresh_remote_array()
+
+                if remote in self.remote_array:
+                    if self.remote_array[remote].remote_smart_thread.thread.is_alive():
+                        if self.remote_array[remote].pair_status == PairStatus.Ready:
+                            with self.remote_array[remote].shared_pair_block.status_lock:
+                                remote_cb = self.remote_array[remote].remote_smart_thread.remote_array[self.name]
+                                if not (remote_cb.event.is_set()
+                                        or remote_cb.deadlock
+                                        or (remote_cb.conflict and remote_cb.wait_wait)):
+                                    if code:  # if caller specified a code for remote thread
+                                        remote_cb.code = code
+                                    remote_cb.event.set()  # wake remote thread
+                                    work_target_set.remove(remote)
+                                    break  # start the while loop again with one less remote
+
+                    # we need to check the status for Alive or Stopped before raising the not alive error
+                    # since the thread could be registered but not yet started, in which case we need to give it
+                    # more time
+                    elif (self.remote_array[remote].remote_smart_thread.status == ThreadStatus.Alive
+                          or self.remote_array[remote].remote_smart_thread.status == ThreadStatus.Stopped):
+                        raise SmartThreadRemoteThreadNotAlive(f'{self.name} send_msg detected {remote} thread '
+                                                              'is not alive.')
+
+            if timer.is_expired():
+                self.logger.debug(f'{self.name} timeout of a resume() '
+                                  'request with self.remote.event.is_set() = '
+                                  f'{self.remote.event.is_set()} and '
+                                  'self.remote.deadlock = '
+                                  f'{self.remote.deadlock}')
+                self.logger.error(f'{self.name} raising SmartThreadResumeTimedOut waiting for {remote} ')
+                raise SmartThreadResumeTimedOut(f'{self.name} timed out waiting for {remote}.')
+
+            time.sleep(0.2)
+
         # if caller specified a log message to issue
         if log_msg and self.debug_logging_enabled:
             self.logger.debug(f'resume() by {self.name} to resume {remote} exiting with ret_code {ret_code} '
                               f'{caller_info} {log_msg}')
-        return final_ret_code
+        return True
 
     ###########################################################################
     # sync
@@ -1009,11 +1146,10 @@ class SmartThread:
         >>> f1_thread.join()
 
         """
-        start_time = time.time()
-
-        timeout = None if (timeout and timeout <= 0) else timeout
+        timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
 
         self.verify_current_remote()
+
         caller_info = ''
         if log_msg and self.debug_logging_enabled:
             caller_info = get_formatted_call_sequence(latest=1, depth=1)
@@ -1365,7 +1501,7 @@ class SmartThread:
         >>> f1_thread.join()
 
         """
-        start_time = time.time()
+        timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
 
         timeout = None if (timeout and timeout <= 0) else timeout
         if timeout:
