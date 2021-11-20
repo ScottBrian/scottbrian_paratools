@@ -460,17 +460,19 @@ class SmartThread:
 
             if key != item.name:
                 raise SmartThreadErrorInRegistry(f'Registry item with key {key} '
-                                                f'has non-matching item.name '
-                                                f'of {item.name}.')
+                                                 f'has non-matching item.name of {item.name}.')
 
+        changed = False
         for key in keys_to_del:
             del SmartThread._registry[key]
+            changed = True
             self.logger.debug(f'{key} removed from registry')
 
-        SmartThread._registry_last_update = datetime.utcnow()
-        print_time = (SmartThread._registry_last_update
-                      + est_tz.utcoffset(SmartThread._registry_last_update)).strftime("%H:%M:%S.%f")
-        self.logger.debug(f'{self.name} did cleanup of registry at {print_time}')
+        if changed:
+            SmartThread._registry_last_update = datetime.utcnow()
+            print_time = (SmartThread._registry_last_update
+                          + est_tz.utcoffset(SmartThread._registry_last_update)).strftime("%H:%M:%S.%f")
+            self.logger.debug(f'{self.name} did cleanup of registry at {print_time} - deleted {keys_to_del}')
 
     ###########################################################################
     # _refresh_remote_array
@@ -1178,8 +1180,6 @@ class SmartThread:
         if isinstance(target_set, str):
             target_set = {target_set}
 
-
-
         #######################################################################
         # States:
         # self.remote.waiting is normal wait. Raise Conflict if not timeout on
@@ -1210,6 +1210,7 @@ class SmartThread:
         #     deadlock: bool = False
         #     conflict: bool = False
         work_target_set = target_set
+        targets_to_set_sync_wait = work_target_set.copy()
 
         while work_target_set:
             for remote in work_target_set:
@@ -1220,7 +1221,9 @@ class SmartThread:
                     self._refresh_remote_array()
 
                 if remote in self.remote_array:
-                    self.remote_array[remote].sync_wait = True
+                    if remote in targets_to_set_sync_wait:
+                        self.remote_array[remote].sync_wait = True
+                        targets_to_set_sync_wait.remove(remote)
 
                     if not self.remote_array[remote].remote_smart_thread.thread.is_alive():
                         # we need to check the status for Alive or Stopped before raising the not alive error
@@ -1245,9 +1248,11 @@ class SmartThread:
                                         elif local_cb.shared_pair_block.sync_cleanup:  # remote in phase 2
                                             local_cb.sync_wait = False
                                             local_cb.shared_pair_block.sync_cleanup = False
+                                            work_target_set.remove(remote)
                                             break
                                     else:  # we are phase 2
                                         if not local_cb.shared_pair_block.sync_cleanup:  # remote exited ph 2
+                                            work_target_set.remove(remote)
                                             break
 
                                 if not (local_cb.wait_timeout_specified
