@@ -4,25 +4,25 @@
 SmartThread
 ===========
 
-The SmartThread class provides enhanced functionality for parallel processing. Support is provided to detect when a
-thread has terminated and will thus be unable to complete a task that another thread is waiting for. Also, a
-communications facility is provided to allow threads to talk among themselves.
+The SmartThread class provides messaging, wait/resume, and sync functions for threads in a multithreaded application.
+The functions have deadlock detection and will also detect when a thread becomes not alive.
 
-:Example: create a SmartThread for alpha and beta
+:Example: create a SmartThread for threads named alpha and beta
 
 >>> import scottbrian_paratools.smart_thread as st
 >>> def f1() -> None:
 ...     print('f1 beta entered')
-...     beta_thread.send_msg(msg='hi alpha, this is beta', remote='alpha')
+...     beta_thread.send_msg(targets='alpha', msg='hi alpha, this is beta')
 ...     beta_thread.wait('remote=alpha')
 ...     print('f1 beta exiting')
 >>> print('mainline entered')
 >>> alpha_thread = st.SmartThread(name='alpha')
 >>> beta_thread = st.SmartThread(name='beta', target=f1)
->>> msg_from_beta=alpha_thread.recv_msg(target='beta')
+>>> beta_thread.start()
+>>> msg_from_beta=alpha_thread.recv_msg(remote='beta')
 >>> print(msg_from_beta)
->>> alpha_thread.resume(remote='beta')
->>> alpha_thread.join(remote='beta')
+>>> alpha_thread.resume(targets='beta')
+>>> alpha_thread.join(targets='beta')
 >>> print('mainline exiting')
 mainline entered
 f1 beta entered
@@ -47,7 +47,7 @@ The smart_thread module contains:
 ###############################################################################
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
-from enum import Enum
+from enum import auto, Enum, Flag
 import logging
 import queue
 import threading
@@ -200,6 +200,11 @@ class SmartThreadSyncTimedOut(SmartThreadError):
     pass
 
 
+class SmartThreadArgsSpecificationRequiresTarget(SmartThreadError):
+    """SmartThread exception args specified without target."""
+    pass
+
+
 class Timer:
     def __init__(self,
                  timeout: Optional[Union[int, float]] = None,
@@ -233,12 +238,12 @@ class Timer:
             return False  # time remaining, or timeout is None which never expires
 
 
-ThreadStatus = Enum('ThreadStatus',
-                    'Initializing '
-                    'Registered '
-                    'Starting '
-                    'Alive '
-                    'Stopped ')
+class ThreadStatus(Flag):
+    Initializing = auto()
+    Registered = auto()
+    Starting = auto()
+    Alive = auto()
+    Stopped = auto()
 
 PairStatus = Enum('PairStatus',
                   'NotReady '
@@ -298,6 +303,7 @@ class SmartThread:
     def __init__(self, *,
                  name: str,
                  target: Optional[Callable[..., Any]] = None,
+                 args: Optional[tuple[...]] = None,
                  thread: Optional[threading.Thread] = None,
                  default_timeout: Optional[float] = DEFAULT_REQUEST_TIMEOUT
                  ) -> None:
@@ -308,6 +314,7 @@ class SmartThread:
             target: specifies that a thread is to be created and started
                       with the given target. Mutually exclusive with
                       thread specification.
+            args: args for the thread creation when target is specified
             thread: specifies the thread to use instead of the current
                       thread - needed when SmartThread is instantiated in a
                       class that inherits threading.Thread in which case
@@ -341,8 +348,16 @@ class SmartThread:
                 'Attempted SmartThread instantiation '
                 'with both target and thread specified.')
 
+        if (not target) and args:
+            raise SmartThreadArgsSpecificationRequiresTarget(
+                'Attempted SmartThread instantiation '
+                'with args specified with no target specified.')
+
         if target:
-            self.thread = threading.Thread(target=target)
+            if args:
+                self.thread = threading.Thread(target=target, args=args)
+            else:
+                self.thread = threading.Thread(target=target)
         elif thread:
             self.thread = thread
         else:
@@ -458,7 +473,7 @@ class SmartThread:
         keys_to_del = []
         for key, item in SmartThread._registry.items():
             self.logger.debug(f'key = {key}, item = {item}, item.thread.is_alive() = {item.thread.is_alive()}')
-            if (not item.thread.is_alive()) and (item.status == ThreadStatus.Stopped):
+            if (not item.thread.is_alive()) and (item.status & ThreadStatus.Stopped):
                 keys_to_del.append(key)
 
             if key != item.name:
@@ -604,11 +619,30 @@ class SmartThread:
                 self.logger.debug(f'{self.name} updated registry and remote_array at {print_time}')
 
     ###########################################################################
+    # start
+    ###########################################################################
+    def start(self) -> None:
+        """Start the thread.
+
+        :Example: instantiate a SmartThread and start the thread
+
+        >>> import scottbrian_utils.smart_thread as st
+        >>> import threading
+        >>> def f1() -> None:
+        ...     print('f1 beta entered')
+        >>> beta_smart_thread = SmartThread(name='beta', target=f1)
+        >>> beta_smart_thread.start()
+        f1 beta entered
+
+        """
+        self.thread.start()
+
+    ###########################################################################
     # send_msg
     ###########################################################################
     def send_msg(self,
-                 msg: Any,
                  targets: Union[str, set[str]],
+                 msg: Any,
                  log_msg: Optional[str] = None,
                  timeout: Optional[Union[int, float]] = None) -> None:
         """Send a msg.
@@ -655,7 +689,7 @@ class SmartThread:
 
         if isinstance(targets, str):
             targets = {targets}
-        
+
         work_targets = targets.copy()
 
         while work_targets:
@@ -684,10 +718,10 @@ class SmartThread:
                                                         'is full with the maximum '
                                                         'number of messages.')
                     # we need to check the status for Alive or Stopped before raising the not alive error
-                    # since the thread could be registered but not yet started, in which case we need to give it 
+                    # since the thread could be registered but not yet started, in which case we need to give it
                     # more time
-                    elif (self.remote_array[remote].remote_smart_thread.status == ThreadStatus.Alive
-                          or self.remote_array[remote].remote_smart_thread.status == ThreadStatus.Stopped):
+                    elif (self.remote_array[remote].remote_smart_thread.status & (ThreadStatus.Alive
+                                                                                  | ThreadStatus.Stopped)):
                         raise SmartThreadRemoteThreadNotAlive(f'{self.name} send_msg detected {remote} thread '
                                                               'is not alive.')
 
@@ -757,8 +791,8 @@ class SmartThread:
                 # since the thread could be registered but not yet started, in which case we need to give it
                 # more time
                 if ((not self.remote_array[remote].remote_smart_thread.thread.is_alive())
-                        and (self.remote_array[remote].remote_smart_thread.status == ThreadStatus.Alive
-                             or self.remote_array[remote].remote_smart_thread.status == ThreadStatus.Stopped)):
+                        and (self.remote_array[remote].remote_smart_thread.status & (ThreadStatus.Alive
+                                                                                     | ThreadStatus.Stopped))):
                     raise SmartThreadRemoteThreadNotAlive(f'{self.name} send_msg detected {remote} thread '
                                                           'is not alive.')
 
@@ -937,7 +971,7 @@ class SmartThread:
                     self._refresh_remote_array()
 
                 if remote in self.remote_array:
-                    if self.remote_array[remote].remote_status == ThreadStatus.Alive:  # we think thread is alive
+                    if self.remote_array[remote].remote_status & ThreadStatus.Alive:  # we think thread is alive
                         self.remote_array[remote].remote_smart_thread.thread.join(timeout=timer.timeout/len(work_targets))
                         if not self.remote_array[remote].remote_smart_thread.thread.is_alive():  # if now not alive
                             SmartThread._registry[remote].status = ThreadStatus.Stopped
@@ -1089,8 +1123,7 @@ class SmartThread:
                         # we need to check the status for Alive or Stopped before raising the not alive error
                         # since the thread could be registered but not yet started, in which case we need to give it
                         # more time
-                        if (local_cb.remote_smart_thread.status == ThreadStatus.Alive
-                                or local_cb.remote_smart_thread.status == ThreadStatus.Stopped):
+                        if local_cb.remote_smart_thread.status & (ThreadStatus.Alive | ThreadStatus.Stopped):
                             raise SmartThreadRemoteThreadNotAlive(f'{self.name} resume() detected {remote} thread '
                                                                   'is not alive.')
                     else:
@@ -1476,8 +1509,7 @@ class SmartThread:
                     # we need to check the status for Alive or Stopped before raising the not alive error
                     # since the thread could be registered but not yet started, in which case we need to give it
                     # more time
-                    if (local_cb.remote_smart_thread.status == ThreadStatus.Alive
-                            or local_cb.remote_smart_thread.status == ThreadStatus.Stopped):
+                    if local_cb.remote_smart_thread.status & (ThreadStatus.Alive | ThreadStatus.Stopped):
                         raise SmartThreadRemoteThreadNotAlive(f'{self.name} wait detected {remote} thread '
                                                               'is not alive.')
                 else:
