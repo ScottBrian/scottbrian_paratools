@@ -256,6 +256,7 @@ class SmartThread:
     pair_with_TIMEOUT: Final[int] = 60
     register_TIMEOUT: Final[int] = 30
     MAX_MSGS_DEFAULT: Final[int] = 16
+    DEFAULT_REQUEST_TIMEOUT: Final[float] = 30 
 
     ###########################################################################
     # Registry
@@ -280,6 +281,7 @@ class SmartThread:
         shared_pair_block: "SmartThread.SharedPairBlock"
         msg_q: queue.Queue[Any]
         event: threading.Event
+        sync_event: threading.Event
         remote_status: "ThreadStatus" = ThreadStatus.Registered
         remote_msg_q: queue.Queue[Any] = None
         pair_status: PairStatus = PairStatus.NotReady
@@ -297,7 +299,7 @@ class SmartThread:
                  name: str,
                  target: Optional[Callable[..., Any]] = None,
                  thread: Optional[threading.Thread] = None,
-                 default_timeout: Optional[float] = None
+                 default_timeout: Optional[float] = DEFAULT_REQUEST_TIMEOUT
                  ) -> None:
         """Initialize an instance of the SmartThread class.
 
@@ -347,6 +349,8 @@ class SmartThread:
             self.thread = threading.current_thread()
 
         self.default_timeout = default_timeout
+
+        self.sync_request = False
 
         # self.remote: Optional[SmartThread.ConnectionStatusBlock] = None
         self.remote_array: dict[str, SmartThread.ConnectionStatusBlock] = {}  # known remotes from SmartThread._registry
@@ -504,20 +508,6 @@ class SmartThread:
                will fail if the remote was part of the request
 
         """
-
-        # class ConnectionStatusBlock:
-        #     remote_smart_thread: "SmartThread"
-        #     shared_pair_block: "SmartThread.SharedPairBlock"
-        #     msg_q: queue.Queue[Any] = queue.Queue()
-        #     remote_msg_q: queue.Queue[Any] = None
-        #     pair_status: PairStatus = PairStatus.NotReady
-        #     event: threading.Event = threading.Event()
-        #     code: Any = None
-        #     wait_wait: bool = False
-        #     sync_wait: bool = False
-        #     wait_timeout_specified: bool = False
-        #     deadlock: bool = False
-        #     conflict: bool = False
         changed = False
         with SmartThread._registry_lock:
             # scan registry and adjust status
@@ -538,14 +528,16 @@ class SmartThread:
                             remote_smart_thread=item,
                             shared_pair_block=item.remote_array[self.name].shared_pair_block,
                             msg_q=queue.Queue(),
-                            event=threading.Event()
+                            event=threading.Event(),
+                            sync_event=threading.Event()
                         )
                     else:  # we are first to get started - create a new shared_pair_block
                         self.remote_array[key] = SmartThread.ConnectionStatusBlock(
                             remote_smart_thread=item,
                             shared_pair_block=SmartThread.SharedPairBlock(),
                             msg_q=queue.Queue(),
-                            event=threading.Event()
+                            event=threading.Event(),
+                            sync_event=threading.Event()
                         )
                     changed = True
 
@@ -659,7 +651,7 @@ class SmartThread:
             caller_info = get_formatted_call_sequence(latest=1, depth=1)
             self.logger.debug(f'send_msg() entered: {self.name} -> {targets} {caller_info} {log_msg}')
 
-        self.verify_current_remote()
+        self.verify_thread_is_current()
 
         if isinstance(targets, str):
             targets = {targets}
@@ -795,6 +787,8 @@ class SmartThread:
 
         Args:
             msg: the msg to be sent
+            remote: name of thread to send message to
+            log_msg: log message to write to the log
             timeout: Number of seconds to wait for reply
 
         Returns:
@@ -927,7 +921,7 @@ class SmartThread:
             self.logger.debug(f'join() entered by {self.name} to join {targets} '
                               f'{caller_info} {log_msg}')
 
-        self.verify_current_remote()
+        self.verify_thread_is_current()
 
         if isinstance(targets, str):
             targets = {targets}
@@ -944,7 +938,7 @@ class SmartThread:
 
                 if remote in self.remote_array:
                     if self.remote_array[remote].remote_status == ThreadStatus.Alive:  # we think thread is alive
-                        self.remote_array[remote].remote_smart_thread.thread.join(timeout=0.1)
+                        self.remote_array[remote].remote_smart_thread.thread.join(timeout=timer.timeout/len(work_targets))
                         if not self.remote_array[remote].remote_smart_thread.thread.is_alive():  # if now not alive
                             SmartThread._registry[remote].status = ThreadStatus.Stopped
                             self._clean_up_registry()
@@ -1018,12 +1012,12 @@ class SmartThread:
         """
         timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
 
-        self.verify_current_remote()
+        self.verify_thread_is_current()
 
         # if caller specified a log message to issue
         caller_info = ''
         if log_msg and self.debug_logging_enabled:
-            code_msg = f' with code: {code} ' if code else ' '
+            code_msg = f' with code: {code}' if code else ''
             caller_info = get_formatted_call_sequence(latest=1, depth=1)
             self.logger.debug(f'resume() entered{code_msg} by {self.name} to resume {targets} '
                               f'{caller_info} {log_msg}')
@@ -1058,7 +1052,7 @@ class SmartThread:
             #    deadlock nor conflict flags are True. This is the most
             #    expected case in a normally running system where the
             #    remote put something in action and is now waiting on a
-            #    response (via the resume) that the action is complete.
+            #    response (the resume) that the action is complete.
             # 2) Remote is not waiting, not sync_wait, and event not
             #    resumed. This is a case where we will do a pre-resume and
             #    the remote is expected to do the wait momentarily.
@@ -1090,26 +1084,44 @@ class SmartThread:
                     self._refresh_remote_array()
 
                 if remote in self.remote_array:
-                    if not self.remote_array[remote].remote_smart_thread.thread.is_alive():
+                    local_cb = self.remote_array[remote]
+                    if not local_cb.remote_smart_thread.thread.is_alive():
                         # we need to check the status for Alive or Stopped before raising the not alive error
                         # since the thread could be registered but not yet started, in which case we need to give it
                         # more time
-                        if (self.remote_array[remote].remote_smart_thread.status == ThreadStatus.Alive
-                                or self.remote_array[remote].remote_smart_thread.status == ThreadStatus.Stopped):
+                        if (local_cb.remote_smart_thread.status == ThreadStatus.Alive
+                                or local_cb.remote_smart_thread.status == ThreadStatus.Stopped):
                             raise SmartThreadRemoteThreadNotAlive(f'{self.name} resume() detected {remote} thread '
                                                                   'is not alive.')
                     else:
-                        if self.remote_array[remote].pair_status == PairStatus.Ready:
-                            with self.remote_array[remote].shared_pair_block.status_lock:
+                        if local_cb.pair_status == PairStatus.Ready:
+                            with local_cb.shared_pair_block.status_lock:
                                 remote_cb = self.remote_array[remote].remote_smart_thread.remote_array[self.name]
-                                if not (remote_cb.event.is_set()
-                                        or remote_cb.deadlock
-                                        or (remote_cb.conflict and remote_cb.wait_wait)):
-                                    if code:  # if caller specified a code for remote thread
-                                        remote_cb.code = code
-                                    remote_cb.event.set()  # wake remote thread
-                                    work_targets.remove(remote)
-                                    break  # start the while loop again with one less remote
+                                if self.sync_request:
+                                    if not (remote_cb.sync_event.is_set()  # has not completed previous wait
+                                            # following line: has not completed conflict where remote is the sync waiter
+                                            # and this side was the wait that did complete (raised error and recovered)
+                                            # and is now here with a resume. Note that if remote has not yet completed a
+                                            # conflict where it was the wait waiter, we can still proceed with the
+                                            # resume of the sync wait
+                                            or (remote_cb.conflict and remote_cb.sync_wait)):
+                                        remote_cb.sync_event.set()  # wake remote thread
+                                        work_targets.remove(remote)
+                                        break  # start the while loop again with one less remote
+                                else:
+                                    if not (remote_cb.event.is_set()  # has not completed previous wait
+                                            or remote_cb.deadlock  # has not completed previous wait deadlock case
+                                            # following line: has not completed conflict where remote is the waiter
+                                            # and this side was the sync that did complete (raised error and recovered)
+                                            # and is now here with a resume. Note that if remote has not yet completed a
+                                            # conflict where it was the sync_wait, we can still proceed with the resume
+                                            or (remote_cb.conflict and remote_cb.wait_wait)):
+
+                                        if code:  # if caller specified a code for remote thread
+                                            remote_cb.code = code
+                                        remote_cb.event.set()  # wake remote thread
+                                        work_targets.remove(remote)
+                                        break  # start the while loop again with one less remote
 
             if timer.is_expired():
                 self.logger.debug(f'{self.name} timeout of a resume() request')
@@ -1188,7 +1200,7 @@ class SmartThread:
         """
         timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
 
-        self.verify_current_remote()
+        self.verify_thread_is_current()
 
         caller_info = ''
         if log_msg and self.debug_logging_enabled:
@@ -1227,90 +1239,96 @@ class SmartThread:
         #     wait_timeout_specified: bool = False
         #     deadlock: bool = False
         #     conflict: bool = False
+
+        self.sync_request = True
+        self.resume(targets=targets, timeout=timer.timeout)
         work_targets = targets.copy()
-        targets_to_set_sync_wait = work_targets.copy()
+        # targets_to_set_sync_wait = work_targets.copy()
+        for remote in work_targets:
+            self.wait(remote=remote, timeout=timer.timeout)
 
-        while work_targets:
-            for remote in work_targets:
-                # we need to handle the case where a remote we want to resume is not
-                # yet registered and alive. We call _refresh_remote_array to get the latest changes
-                # but only if we see that the registry has changed (_registry_last_update).
-                if self.time_last_remote_update < SmartThread._registry_last_update:
-                    self._refresh_remote_array()
+        # while work_targets:
+        #     for remote in work_targets:
+        #         # we need to handle the case where a remote we want to resume is not
+        #         # yet registered and alive. We call _refresh_remote_array to get the latest changes
+        #         # but only if we see that the registry has changed (_registry_last_update).
+        #         if self.time_last_remote_update < SmartThread._registry_last_update:
+        #             self._refresh_remote_array()
+        #
+        #         if remote in self.remote_array:
+        #             if remote in targets_to_set_sync_wait:
+        #                 self.remote_array[remote].sync_wait = True
+        #                 targets_to_set_sync_wait.remove(remote)
+        #
+        #             if not self.remote_array[remote].remote_smart_thread.thread.is_alive():
+        #                 # we need to check the status for Alive or Stopped before raising the not alive error
+        #                 # since the thread could be registered but not yet started, in which case we need to give it
+        #                 # more time
+        #                 if (self.remote_array[remote].remote_smart_thread.status == ThreadStatus.Alive
+        #                         or self.remote_array[remote].remote_smart_thread.status == ThreadStatus.Stopped):
+        #                     raise SmartThreadRemoteThreadNotAlive(f'{self.name} resume() detected {remote} thread '
+        #                                                           'is not alive.')
+        #             else:
+        #                 if self.remote_array[remote].pair_status == PairStatus.Ready:
+        #                     with self.remote_array[remote].shared_pair_block.status_lock:
+        #                         local_cb = self.remote_array[remote]
+        #                         remote_cb = self.remote_array[remote].remote_smart_thread.remote_array[self.name]
+        #
+        #                         if not (local_cb.conflict or remote_cb.conflict):
+        #                             if local_cb.sync_wait:  # we are phase 1
+        #                                 if remote_cb.sync_wait:  # remote in phase 1
+        #                                     # we now go to phase 2
+        #                                     local_cb.sync_wait = False
+        #                                     local_cb.shared_pair_block.sync_cleanup = True
+        #                                 elif local_cb.shared_pair_block.sync_cleanup:  # remote in phase 2
+        #                                     local_cb.sync_wait = False
+        #                                     local_cb.shared_pair_block.sync_cleanup = False
+        #                                     work_targets.remove(remote)
+        #                                     break
+        #                             else:  # we are phase 2
+        #                                 if not local_cb.shared_pair_block.sync_cleanup:  # remote exited ph 2
+        #                                     work_targets.remove(remote)
+        #                                     break
+        #
+        #                         if not (local_cb.wait_timeout_specified
+        #                                 or remote_cb.wait_timeout_specified
+        #                                 or local_cb.conflict):
+        #                             if (remote_cb.wait_wait
+        #                                     and not (remote_cb.event.is_set()
+        #                                              or remote_cb.deadlock
+        #                                              or remote_cb.conflict)):
+        #                                 remote_cb.conflict = True
+        #                                 local_cb.conflict = True
+        #
+        #                         if local_cb.conflict:
+        #                             self.logger.debug(
+        #                                 f'{self.name} raising '
+        #                                 'SmartEventConflictDeadlockDetected. '
+        #                                 f'self.remote.wait_wait = {remote_cb.wait_wait}, '
+        #                                 f'self.event.is_set() = {local_cb.event.is_set()}, '
+        #                                 f'self.remote.deadlock = {remote_cb.deadlock}, '
+        #                                 f'self.remote.conflict = {remote_cb.conflict}, '
+        #                                 f'self.remote.wait_timeout_specified = '
+        #                                 f'{remote_cb.wait_timeout_specified}, '
+        #                                 f'self.wait_timeout_specified = '
+        #                                 f'{local_cb.wait_timeout_specified}')
+        #                             local_cb.sync_wait = False
+        #                             local_cb.conflict = False
+        #                             raise SmartThreadConflictDeadlockDetected(
+        #                                 'A sync request was made by thread '
+        #                                 f'{self.name} and a wait request was '
+        #                                 f'made by thread  {remote}.')
+        #
+        #     if timer.is_expired():
+        #         for remote in work_targets:
+        #             if remote in self.remote_array:
+        #                 self.remote_array[remote].sync_wait = False
+        #         self.logger.error(f'{self.name} raising SmartThreadSyncTimedOut waiting for {work_targets} ')
+        #         raise SmartThreadSyncTimedOut(f'{self.name} timed out waiting for {work_targets}.')
+        #
+        #     time.sleep(0.1)
 
-                if remote in self.remote_array:
-                    if remote in targets_to_set_sync_wait:
-                        self.remote_array[remote].sync_wait = True
-                        targets_to_set_sync_wait.remove(remote)
-
-                    if not self.remote_array[remote].remote_smart_thread.thread.is_alive():
-                        # we need to check the status for Alive or Stopped before raising the not alive error
-                        # since the thread could be registered but not yet started, in which case we need to give it
-                        # more time
-                        if (self.remote_array[remote].remote_smart_thread.status == ThreadStatus.Alive
-                                or self.remote_array[remote].remote_smart_thread.status == ThreadStatus.Stopped):
-                            raise SmartThreadRemoteThreadNotAlive(f'{self.name} resume() detected {remote} thread '
-                                                                  'is not alive.')
-                    else:
-                        if self.remote_array[remote].pair_status == PairStatus.Ready:
-                            with self.remote_array[remote].shared_pair_block.status_lock:
-                                local_cb = self.remote_array[remote]
-                                remote_cb = self.remote_array[remote].remote_smart_thread.remote_array[self.name]
-
-                                if not (local_cb.conflict or remote_cb.conflict):
-                                    if local_cb.sync_wait:  # we are phase 1
-                                        if remote_cb.sync_wait:  # remote in phase 1
-                                            # we now go to phase 2
-                                            local_cb.sync_wait = False
-                                            local_cb.shared_pair_block.sync_cleanup = True
-                                        elif local_cb.shared_pair_block.sync_cleanup:  # remote in phase 2
-                                            local_cb.sync_wait = False
-                                            local_cb.shared_pair_block.sync_cleanup = False
-                                            work_targets.remove(remote)
-                                            break
-                                    else:  # we are phase 2
-                                        if not local_cb.shared_pair_block.sync_cleanup:  # remote exited ph 2
-                                            work_targets.remove(remote)
-                                            break
-
-                                if not (local_cb.wait_timeout_specified
-                                        or remote_cb.wait_timeout_specified
-                                        or local_cb.conflict):
-                                    if (remote_cb.wait_wait
-                                            and not (remote_cb.event.is_set()
-                                                     or remote_cb.deadlock
-                                                     or remote_cb.conflict)):
-                                        remote_cb.conflict = True
-                                        local_cb.conflict = True
-
-                                if local_cb.conflict:
-                                    self.logger.debug(
-                                        f'{self.name} raising '
-                                        'SmartEventConflictDeadlockDetected. '
-                                        f'self.remote.wait_wait = {remote_cb.wait_wait}, '
-                                        f'self.event.is_set() = {local_cb.event.is_set()}, '
-                                        f'self.remote.deadlock = {remote_cb.deadlock}, '
-                                        f'self.remote.conflict = {remote_cb.conflict}, '
-                                        f'self.remote.wait_timeout_specified = '
-                                        f'{remote_cb.wait_timeout_specified}, '
-                                        f'self.wait_timeout_specified = '
-                                        f'{local_cb.wait_timeout_specified}')
-                                    local_cb.sync_wait = False
-                                    local_cb.conflict = False
-                                    raise SmartThreadConflictDeadlockDetected(
-                                        'A sync request was made by thread '
-                                        f'{self.name} and a wait request was '
-                                        f'made by thread  {remote}.')
-
-            if timer.is_expired():
-                for remote in work_targets:
-                    if remote in self.remote_array:
-                        self.remote_array[remote].sync_wait = False
-                self.logger.error(f'{self.name} raising SmartThreadSyncTimedOut waiting for {work_targets} ')
-                raise SmartThreadSyncTimedOut(f'{self.name} timed out waiting for {work_targets}.')
-
-            time.sleep(0.1)
-
+        self.sync_request = False
         if log_msg and self.debug_logging_enabled:
             self.logger.debug(f'sync() by {self.name} to sync with {targets} exiting '
                               f'{caller_info} {log_msg}')
@@ -1399,7 +1417,7 @@ class SmartThread:
             caller_info = get_formatted_call_sequence(latest=1, depth=1)
             self.logger.debug(f'wait() entered by {self.name} to wait for {remote} {caller_info} {log_msg}')
 
-        self.verify_current_remote()
+        self.verify_thread_is_current()
 
         while True:
             # we need to handle the case where a remote we want to wait for is not
@@ -1409,20 +1427,29 @@ class SmartThread:
                 self._refresh_remote_array()
 
             if remote in self.remote_array:
+                local_cb = self.remote_array[remote]
                 # We don't check to ensure remote is alive since it may have resumed and then became
                 # not alive. So, we try to get the event checked first, and it it's not set then we will check to see
                 # whether the remote is alive
                 if timer.timeout:
-                    self.remote_array[remote].wait_timeout_specified = True
+                    local_cb.wait_timeout_specified = True
                 else:
-                    self.remote_array[remote].wait_timeout_specified = False
+                    local_cb.wait_timeout_specified = False
 
-                self.remote_array[remote].wait_wait = True
-                if self.remote_array[remote].event.is_set():
-                    self.remote_array[remote].wait_wait = False
-                    self.remote_array[remote].wait_timeout_specified = False
-                    self.remote_array[remote].event.clear()  # be ready for next wait
-                    break
+                if self.sync_request:
+                    local_cb.sync_wait = True
+                    if self.remote_array[remote].sync_event.is_set():
+                        local_cb.sync_wait = False
+                        local_cb.wait_timeout_specified = False
+                        local_cb.sync_event.clear()  # be ready for next sync wait
+                        break
+                else:
+                    local_cb.wait_wait = True
+                    if self.remote_array[remote].event.is_set():
+                        local_cb.wait_wait = False
+                        local_cb.wait_timeout_specified = False
+                        local_cb.event.clear()  # be ready for next wait
+                        break
 
                 # Check for error conditions first before checking
                 # whether the remote is alive. If the remote detects a
@@ -1445,46 +1472,54 @@ class SmartThread:
                 # in a new wait and the remote has not yet woken up to
                 # deal with the earlier deadlock. We can simply ignore
                 # it for now.
-                if not self.remote_array[remote].remote_smart_thread.thread.is_alive():
+                if not local_cb.remote_smart_thread.thread.is_alive():
                     # we need to check the status for Alive or Stopped before raising the not alive error
                     # since the thread could be registered but not yet started, in which case we need to give it
                     # more time
-                    if (self.remote_array[remote].remote_smart_thread.status == ThreadStatus.Alive
-                            or self.remote_array[remote].remote_smart_thread.status == ThreadStatus.Stopped):
+                    if (local_cb.remote_smart_thread.status == ThreadStatus.Alive
+                            or local_cb.remote_smart_thread.status == ThreadStatus.Stopped):
                         raise SmartThreadRemoteThreadNotAlive(f'{self.name} wait detected {remote} thread '
                                                               'is not alive.')
                 else:
-                    if self.remote_array[remote].pair_status == PairStatus.Ready:
-                        with self.remote_array[remote].shared_pair_block.status_lock:
-                            if self.remote_array[remote].event.is_set():
-                                self.remote_array[remote].wait_wait = False
-                                self.remote_array[remote].wait_timeout_specified = False
-                                self.remote_array[remote].event.clear()  # be ready for next wait
-                                break
+                    if local_cb.pair_status == PairStatus.Ready:
+                        with local_cb.shared_pair_block.status_lock:
+                            if self.sync_request:
+                                if self.remote_array[remote].sync_event.is_set():
+                                    local_cb.sync_wait = False
+                                    local_cb.wait_timeout_specified = False
+                                    local_cb.sync_event.clear()  # be ready for next sync wait
+                                    break
+                            else:
+                                if local_cb.event.is_set():
+                                    local_cb.wait_wait = False
+                                    local_cb.wait_timeout_specified = False
+                                    local_cb.event.clear()  # be ready for next wait
+                                    break
 
                             remote_cb = self.remote_array[remote].remote_smart_thread.remote_array[self.name]
-                            if not (self.remote_array[remote].wait_timeout_specified
+                            if not (local_cb.wait_timeout_specified
                                     or remote_cb.wait_timeout_specified
-                                    or self.remote_array[remote].deadlock
-                                    or self.remote_array[remote].conflict):
+                                    or local_cb.deadlock
+                                    or local_cb.conflict):
+                                # the following checks apply to both sync_wait and wait_wait
                                 if (remote_cb.sync_wait
-                                        and not (self.remote_array[remote].shared_pair_block.sync_cleanup
+                                        and not (remote_cb.sync_event.is_set()  # local_cb.shared_pair_block.sync_cleanup
                                                  or remote_cb.conflict)):
                                     remote_cb.conflict = True
-                                    self.remote_array[remote].conflict = True
-                                    self.logger.debug(f'{self.name} detected conflict')
+                                    local_cb.conflict = True
+                                    self.logger.debug(f'{self.name} detected conflict with {remote}')
                                 elif (remote_cb.wait_wait
-                                        and not (self.remote_array[remote].event.is_set()
+                                        and not (local_cb.event.is_set()
                                                  or remote_cb.deadlock
                                                  or remote_cb.conflict)):
                                     remote_cb.deadlock = True
-                                    self.remote_array[remote].deadlock = True
-                                    self.logger.debug(f'{self.name} detected deadlock')
+                                    local_cb.deadlock = True
+                                    self.logger.debug(f'{self.name} detected deadlock with {remote}')
 
-                            if self.remote_array[remote].conflict:
-                                self.remote_array[remote].wait_wait = False
-                                self.remote_array[remote].conflict = False
-                                self.remote_array[remote].wait_timeout_specified = False
+                            if local_cb.conflict:
+                                local_cb.wait_wait = False
+                                local_cb.conflict = False
+                                local_cb.wait_timeout_specified = False
                                 self.logger.debug(f'{self.name} raising '
                                                   'SmartThreadConflictDeadlockDetected')
                                 raise SmartThreadConflictDeadlockDetected(
@@ -1495,10 +1530,10 @@ class SmartThread:
                                     'thread did not make a matching sync '
                                     'request.')
 
-                            if self.remote_array[remote].deadlock:
-                                self.remote_array[remote].wait_wait = False
-                                self.remote_array[remote].deadlock = False
-                                self.remote_array[remote].wait_timeout_specified = False
+                            if local_cb.deadlock:
+                                local_cb.wait_wait = False
+                                local_cb.deadlock = False
+                                local_cb.wait_timeout_specified = False
                                 self.logger.debug(f'{self.name} raising '
                                                   'SmartThreadWaitDeadlockDetected')
                                 raise SmartThreadWaitDeadlockDetected(
@@ -1506,11 +1541,17 @@ class SmartThread:
                                     'the other to resume their event.')
 
             if timer.is_expired():
-                self.logger.error(f'{self.name} raising SmartThreadRecvTimedOut waiting for {remote} with '
-                                  f'self.remote_array[remote].wait_wait = {self.remote_array[remote].wait_wait} and '
-                                  f'self.remote_array[remote].sync_wait = {self.remote_array[remote].sync_wait}')
-                self.remote_array[remote].wait_wait = False
-                self.remote_array[remote].wait_timeout_specified = False
+                if remote in self.remote_array:
+                    self.logger.error(f'{self.name} raising SmartThreadWaitTimedOut waiting for {remote} with '
+                                      f'self.remote_array[remote].wait_wait = {self.remote_array[remote].wait_wait} and '
+                                      f'self.remote_array[remote].sync_wait = {self.remote_array[remote].sync_wait}')
+                    self.remote_array[remote].sync_wait = False
+                    self.remote_array[remote].wait_wait = False
+                    self.remote_array[remote].wait_timeout_specified = False
+                else:
+                    self.logger.error(f'{self.name} raising SmartThreadWaitTimedOut waiting for {remote} which '
+                                      'is not found in the remote_array.')
+
                 raise SmartThreadWaitTimedOut(f'recv_msg {self.name} timed out waiting for resume '
                                               f'from {remote}.')
 
@@ -1586,7 +1627,7 @@ class SmartThread:
     #
     #     timeout = None if (timeout and timeout <= 0) else timeout
     #
-    #     self.verify_current_remote()
+    #     self.verify_thread_is_current()
     #     caller_info = ''
     #     if log_msg and self.debug_logging_enabled:
     #         caller_info = get_formatted_call_sequence(latest=1, depth=1)
@@ -1689,62 +1730,20 @@ class SmartThread:
 
 
     ###########################################################################
-    # verify_current_remote
+    # verify_thread_is_current
     ###########################################################################
-    def verify_current_remote(self,
-                              skip_pair_check: Optional[bool] = False
-                              ) -> None:
+    def verify_thread_is_current(self) -> None:
         """Check the current and remote ThreadEvent objects.
 
-        Args:
-            skip_pair_check: used by pair_with since the pairing in
-                               not yet done
-
         Raises:
-            SmartThreadDetectedOpFromForeignThread: Any SmartThread services must be
-                                           called from the thread that
-                                           originally instantiated the
-                                           SmartThread.
+            SmartThreadDetectedOpFromForeignThread: SmartThread services must be called from the thread that was
+                                                      originally assigned during instantiation of SmartThread.
 
         """
-        # We check for foreign thread first before checking for pairing
-        # since we do not want a user who attempts to use SmartThread from
-        # a different thread to get a SmartThreadNotPaired error first and think
-        # that the fix it to simply call pair_with from the foreign
-        # thread.
         if self.thread is not threading.current_thread():
-            self.logger.debug(f'{self.name } raising '
-                              'SmartThreadDetectedOpFromForeignThread')
+            self.logger.debug(f'{self.name } raising SmartThreadDetectedOpFromForeignThread. self.thread is '
+                              f'{self.thread},  threading.current_thread() is {threading.current_thread()}')
             raise SmartThreadDetectedOpFromForeignThread(
-                'Any SmartThread services must be called from the thread '
-                'that originally instantiated the SmartThread. '
+                'SmartThread services must be called from the thread '
+                'that was originally assigned during instantiation of SmartThread. '
                 f'Call sequence: {get_formatted_call_sequence(1,2)}')
-
-        # make sure that remote exists and it points back to us
-        # if not skip_pair_check:
-        #     self.verify_paired()
-
-    ###########################################################################
-    # check_remote
-    ###########################################################################
-    def check_remote(self,
-                     remote: str) -> None:
-        """Check whether remote is alive.
-
-        Raises:
-            SmartThreadRemoteThreadNotAlive: The remote thread is not alive.
-
-        """
-        # self.verify_paired()
-        if not self.remote.thread.is_alive():
-            self.logger.debug(f'{self.name} raising '
-                              'SmartThreadRemoteThreadNotAlive.'
-                              'Call sequence:'
-                              f' {get_formatted_call_sequence()}')
-            with SmartThread._registry_lock:
-                # Remove any old entries
-                self._clean_up_registry()
-
-            raise SmartThreadRemoteThreadNotAlive(
-                f'{self.name} has detected that {self.remote.name} '
-                'thread is not alive.')
