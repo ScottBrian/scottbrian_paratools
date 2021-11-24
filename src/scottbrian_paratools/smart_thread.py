@@ -175,13 +175,18 @@ class SmartThreadRemoteThreadMismatch(SmartThreadError):
     pass
 
 
-class SmartThreadSharedBlockMismatch(SmartThreadError):
+class SmartThreadStatusLockMismatch(SmartThreadError):
     """SmartThread exception remote_array shared block does not match remote.remote_array shared block."""
     pass
 
 
 class SmartThreadRemoteMsgQMismatch(SmartThreadError):
     """SmartThread exception remote_array remote msg_q does not match remote.remote_array msg_q."""
+    pass
+
+
+class SmartThreadJoinTimedOut(SmartThreadError):
+    """SmartThread exception join timed out."""
     pass
 
 
@@ -272,22 +277,15 @@ class SmartThread:
     _registry_last_update: datetime = datetime(2000, 1, 1, 12, 0, 1)
 
     ###########################################################################
-    # SharedPairStatus Data Class
+    # ConnectionStatusBlock
     ###########################################################################
-    @dataclass
-    class SharedPairBlock:
-        """Shared area for status between paired SmartThread objects."""
-        status_lock = threading.Lock()
-        sync_cleanup = False
-
     @dataclass
     class ConnectionStatusBlock:
         remote_smart_thread: "SmartThread"
-        shared_pair_block: "SmartThread.SharedPairBlock"
+        status_lock: threading.Lock
         msg_q: queue.Queue[Any]
         event: threading.Event
         sync_event: threading.Event
-        remote_status: "ThreadStatus" = ThreadStatus.Registered
         remote_msg_q: queue.Queue[Any] = None
         pair_status: PairStatus = PairStatus.NotReady
         code: Any = None
@@ -510,12 +508,10 @@ class SmartThread:
 
         Error cases:
             1) remote_array thread and registry thread do not match
-            2) remote_array shared_pair_block does not match remote shared_pair_block
 
 
         Expected cases:
-            1) remote_array does not have a registry entry - add the registry entry to the remote array and get a
-               shared_pair_block
+            1) remote_array does not have a registry entry - add the registry entry to the remote array
             2) remote_array entry does not have flag set to indicate thread became not alive, but registry does have
                the flag set - simply set the flag in the remote_array entry - request will fail if remote is part of
                the request
@@ -530,26 +526,28 @@ class SmartThread:
                 saved_status = item.status
                 if item.thread.is_alive():
                     item.status = ThreadStatus.Alive
-                # elif item.status == ThreadStatus.Alive:
-                #     item.status = ThreadStatus.Stopped
 
                 if saved_status != item.status:
                     changed = True
 
-                if (key not in self.remote_array) and (key != self.name):
+                if (key != self.name) and (key not in self.remote_array):
                     # we now add the remote_array entry for first time
-                    if self.name in item.remote_array:  # remote already knows about us - use its shared_pair_block
+                    if self.name in item.remote_array:  # remote already knows about us - use its status_lock
                         self.remote_array[key] = SmartThread.ConnectionStatusBlock(
                             remote_smart_thread=item,
-                            shared_pair_block=item.remote_array[self.name].shared_pair_block,
+                            status_lock=item.remote_array[self.name].status_lock,
                             msg_q=queue.Queue(),
                             event=threading.Event(),
                             sync_event=threading.Event()
                         )
-                    else:  # we are first to get started - create a new shared_pair_block
+                        self.remote_array[key].remote_msg_q = item.remote_array[self.name].msg_q
+                        item.remote_array[self.name].remote_msg_q = self.remote_array[key].msg_q
+                        self.remote_array[key].pair_status = PairStatus.Ready
+                        item.remote_array[self.name].pair_status = PairStatus.Ready
+                    else:  # we are first to get started - create a new status lock
                         self.remote_array[key] = SmartThread.ConnectionStatusBlock(
                             remote_smart_thread=item,
-                            shared_pair_block=SmartThread.SharedPairBlock(),
+                            status_lock=threading.Lock(),
                             msg_q=queue.Queue(),
                             event=threading.Event(),
                             sync_event=threading.Event()
@@ -571,40 +569,30 @@ class SmartThread:
                             f'{self.name} has id(item.remote_smart_thread.thread) '
                             f'{id(item.remote_smart_thread.thread)} '
                             f'and id(SmartThread._registry[key].thread) {id(SmartThread._registry[key].thread)}')
+                    # The following code checks to make sure the remote and us have the same shared items.
+                    # Note that if the remote does not know about us yet, it will eventually discover we are here when
+                    # it does a request that causes this method to get control. If the remote does know about us then
+                    # it means that it should have the same shared area.
                     if self.name in item.remote_smart_thread.remote_array:
-                        if (item.shared_pair_block
-                                is not item.remote_smart_thread.remote_array[self.name].shared_pair_block):
-                            raise SmartThreadSharedBlockMismatch(
-                                f'{self.name} has id(item.shared_pair_block) {id(item.shared_pair_block)} '
-                                f'and id(item.remote_smart_thread.remote_array[self.name].shared_pair_block) '
-                                f'{id(item.remote_smart_thread.remote_array[self.name].shared_pair_block)}')
+                        if (item.status_lock
+                                is not item.remote_smart_thread.remote_array[self.name].status_lock):
+                            raise SmartThreadStatusLockMismatch(
+                                f'{self.name} has id(item.status_lock) {id(item.status_lock)} '
+                                f'and id(item.remote_smart_thread.remote_array[self.name].status_lock) '
+                                f'{id(item.remote_smart_thread.remote_array[self.name].status_lock)}')
 
-                        if item.remote_msg_q:
-                            if item.remote_msg_q is not item.remote_smart_thread.remote_array[self.name].msg_q:
-                                raise SmartThreadRemoteMsgQMismatch(
-                                    f'{self.name} has id(item.remote_msg_q) {id(item.remote_msg_q)} '
-                                    f'and id(item.remote_smart_thread.remote_array[self.name].msg_q) '
-                                    f'{id(item.remote_smart_thread.remote_array[self.name].msg_q)}')
-                        else:
-                            item.remote_msg_q = item.remote_smart_thread.remote_array[self.name].msg_q
-                            # self.logger.debug(f'{self.name} set for {key} = item.remote_smart_thread.name = '
-                            #                   f'{item.remote_smart_thread.name} id(item.remote_msg_q) '
-                            #                   f'{id(item.remote_msg_q)} '
-                            #                   'id(item.remote_smart_thread.remote_array[self.name].msg_q) '
-                            #                   f'{id(item.remote_smart_thread.remote_array[self.name].msg_q)}')
-                            changed = True
-                        # we may have a newly alive entry or one that has been alive and already paired
-                        saved_remote_status = item.remote_status
-                        saved_pair_status = item.pair_status
-                        if item.remote_smart_thread.thread.is_alive():
-                            item.remote_status = ThreadStatus.Alive
-                            item.pair_status = PairStatus.Ready
-                        else:
-                            # if item.remote_status == ThreadStatus.Alive:
-                            #     item.remote_status = ThreadStatus.Stopped
-                            item.pair_status = PairStatus.NotReady
-                        if (saved_remote_status != item.remote_status) or (saved_pair_status != item.pair_status):
-                            changed = True
+                        # if item.remote_msg_q:
+                        if ((item.remote_msg_q is not item.remote_smart_thread.remote_array[self.name].msg_q)
+                                or (item.remote_smart_thread.remote_array[self.name].remote_msg_q
+                                    is not item.msg_q)):
+                            raise SmartThreadRemoteMsgQMismatch(
+                                f'{self.name} has '
+                                f'id(item.remote_msg_q) = {id(item.remote_msg_q)}, '
+                                'id(item.remote_smart_thread.remote_array[self.name].msg_q) = '
+                                f'{id(item.remote_smart_thread.remote_array[self.name].msg_q)},'
+                                'id(item.remote_smart_thread.remote_array[self.name].remote_msg_q) = '
+                                f'{id(item.remote_smart_thread.remote_array[self.name].remote_msg_q)}, '
+                                f'id(item.msg_q) = {id(item.msg_q)}')
 
             for key in remote_array_deletion_list:
                 del self.remote_array[key]
@@ -971,18 +959,24 @@ class SmartThread:
                     self._refresh_remote_array()
 
                 if remote in self.remote_array:
-                    if self.remote_array[remote].remote_status & ThreadStatus.Alive:  # we think thread is alive
-                        self.remote_array[remote].remote_smart_thread.thread.join(timeout=timer.timeout/len(work_targets))
-                        if not self.remote_array[remote].remote_smart_thread.thread.is_alive():  # if now not alive
-                            SmartThread._registry[remote].status = ThreadStatus.Stopped
-                            self._clean_up_registry()
-                            self.logger.debug(f'{self.name} did successful join of {remote}.')
-                            work_targets.remove(remote)
-                            break  # start the while loop again with one less remote
+                    # Note that if the remote thread was never started, the following join will raise an error.
+                    # If the thread is eventually started, we currently have no way to detect that and react.
+                    # We can only hope that a failed join in that case will be adequate.
+                    self.remote_array[remote].remote_smart_thread.thread.join(
+                        timeout=timer.timeout/len(work_targets))
+
+                    # we need to check to make sure the thread is not alive in case we timeout out
+                    if not self.remote_array[remote].remote_smart_thread.thread.is_alive():  # if now not alive
+                        SmartThread._registry[remote].status = ThreadStatus.Stopped  # indicate remove from registry
+                        self._clean_up_registry()  # remove this thread from the registry
+                        self.logger.debug(f'{self.name} did successful join of {remote}.')
+                        work_targets.remove(remote)
+                        break  # start the while loop again with one less remote
 
             if timer.is_expired():
                 self.logger.debug(f'{self.name} timeout of a join() ')
-                break
+                self.logger.error(f'{self.name} raising SmartThreadJoinTimedOut waiting for {work_targets} ')
+                raise SmartThreadJoinTimedOut(f'{self.name} timed out waiting for {work_targets}.')
 
             time.sleep(0.2)
 
@@ -1128,7 +1122,7 @@ class SmartThread:
                                                                   'is not alive.')
                     else:
                         if local_cb.pair_status == PairStatus.Ready:
-                            with local_cb.shared_pair_block.status_lock:
+                            with local_cb.status_lock:
                                 remote_cb = self.remote_array[remote].remote_smart_thread.remote_array[self.name]
                                 if self.sync_request:
                                     if not (remote_cb.sync_event.is_set()  # has not completed previous wait
@@ -1258,21 +1252,6 @@ class SmartThread:
         # sync_wait and flipped sync_cleanup to True
         #
         #######################################################################
-        # class ConnectionStatusBlock:
-        #     remote_smart_thread: "SmartThread"
-        #     shared_pair_block: "SmartThread.SharedPairBlock"
-        #     remote_status: "ThreadStatus" = ThreadStatus.Registered
-        #     msg_q: queue.Queue[Any] = queue.Queue()
-        #     remote_msg_q: queue.Queue[Any] = None
-        #     pair_status: PairStatus = PairStatus.NotReady
-        #     event: threading.Event = threading.Event()
-        #     code: Any = None
-        #     wait_wait: bool = False
-        #     sync_wait: bool = False
-        #     wait_timeout_specified: bool = False
-        #     deadlock: bool = False
-        #     conflict: bool = False
-
         self.sync_request = True
         self.resume(targets=targets, timeout=timer.timeout)
         work_targets = targets.copy()
@@ -1514,7 +1493,7 @@ class SmartThread:
                                                               'is not alive.')
                 else:
                     if local_cb.pair_status == PairStatus.Ready:
-                        with local_cb.shared_pair_block.status_lock:
+                        with local_cb.status_lock:
                             if self.sync_request:
                                 if self.remote_array[remote].sync_event.is_set():
                                     local_cb.sync_wait = False
@@ -1535,7 +1514,7 @@ class SmartThread:
                                     or local_cb.conflict):
                                 # the following checks apply to both sync_wait and wait_wait
                                 if (remote_cb.sync_wait
-                                        and not (remote_cb.sync_event.is_set()  # local_cb.shared_pair_block.sync_cleanup
+                                        and not (remote_cb.sync_event.is_set()
                                                  or remote_cb.conflict)):
                                     remote_cb.conflict = True
                                     local_cb.conflict = True
