@@ -497,19 +497,19 @@ class SmartThread:
         """Register SmartThread in the class registry.
 
         Raises:
-            SmartThreadIncorrectNameSpecified: The name for SmartThread must be of type str.
-            SmartThreadNameAlreadyInUse: An entry for a SmartThread with name = *name*
-                                           is already registered for a different thread.
+            SmartThreadIncorrectNameSpecified: The name for SmartThread
+              must be of type str.
+            SmartThreadNameAlreadyInUse: An entry for a SmartThread with
+              name = *name* is already registered for a different
+              thread.
 
         Notes:
-            1) Any old entries for SmartThreads whose threads are not alive
-               are removed when this method is called by calling
+            1) Any old entries for SmartThreads whose threads are not
+               alive are removed when this method is called by calling
                _clean_up_registry().
-            2) Once a thread become not alive, it can not be resurrected.
-               The SmartThread is bound to the thread it starts with. If the
-               remote SmartThread thread that the SmartThread is paired with
-               becomes not alive, we allow this SmartThread to pair with a new
-               SmartThread on a new thread.
+            2) Once a thread become not alive, it can not be
+               resurrected. The SmartThread is bound to the thread it
+               starts with.
 
         """
         # Make sure name is valid
@@ -534,18 +534,19 @@ class SmartThread:
                     'already registered for a different thread.')
 
             SmartThread._registry_last_update = datetime.utcnow()
-            self.logger.debug(f'{self.name} did register update at UTC '
-                              f'{SmartThread._registry_last_update.strftime("%H:%M:%S.%f")}')
+            self.logger.debug(
+                f'{self.name} did register update at UTC '
+                f'{SmartThread._registry_last_update.strftime("%H:%M:%S.%f")}')
 
-    ###########################################################################
+    ####################################################################
     # _clean_up_registry
-    ###########################################################################
+    ####################################################################
     def _clean_up_registry(self) -> None:
         """Clean up any old not alive items in the registry.
 
         Raises:
-            SmartThreadErrorInRegistry: Registry item with key {key} has non-matching
-                             item.name of {item.name}.
+            SmartThreadErrorInRegistry: Registry item with key {key} has
+              non-matching item.name of {item.name}.
 
         Notes:
             1) Must be called holding _registry_lock
@@ -554,13 +555,17 @@ class SmartThread:
         # Remove any old entries
         keys_to_del = []
         for key, item in SmartThread._registry.items():
-            self.logger.debug(f'key = {key}, item = {item}, item.thread.is_alive() = {item.thread.is_alive()}')
-            if (not item.thread.is_alive()) and (item.status & ThreadStatus.Stopped):
+            self.logger.debug(
+                f'key = {key}, item = {item}, '
+                f'item.thread.is_alive() = {item.thread.is_alive()}')
+            if ((not item.thread.is_alive())
+                    and (item.status & ThreadStatus.Stopped)):
                 keys_to_del.append(key)
 
             if key != item.name:
-                raise SmartThreadErrorInRegistry(f'Registry item with key {key} '
-                                                 f'has non-matching item.name of {item.name}.')
+                raise SmartThreadErrorInRegistry(
+                    f'Registry item with key {key} has non-matching '
+                    f'item.name of {item.name}.')
 
         changed = False
         for key in keys_to_del:
@@ -570,36 +575,46 @@ class SmartThread:
 
         if changed:
             SmartThread._registry_last_update = datetime.utcnow()
-            print_time = SmartThread._registry_last_update.strftime("%H:%M:%S.%f")
-            self.logger.debug(f'{self.name} did cleanup of registry at UTC {print_time} - deleted {keys_to_del}')
+            print_time = (SmartThread._registry_last_update
+                          .strftime("%H:%M:%S.%f"))
+            self.logger.debug(f'{self.name} did cleanup of registry at UTC '
+                              f'{print_time}, deleted {keys_to_del}')
 
     ###########################################################################
     # _refresh_remote_array
     ###########################################################################
     def _refresh_remote_array(self) -> None:
-        """Update the remote_array based on the current state of the _registry.
+        """Update the remote_array from the _registry.
 
         Notes:
-            1) A thread is registered during initialization and will initially not be alive until started.
-            2) If a request is made that includes a yet to be registered thread, or one that is not yet alive, the
-               request will loop until the remote thread becomes registered and alive.
-            3) After a thread is registered and is alive, if it fails and become not alive, it will remain in the
-               registry until with an flag set to indicate it was once alive. It will be removed when a join is done.
-               This flag will allow a request to know whether to wait for the thread to become alive, or to raise
-               an error for an attempted request on a thread that is no longer alive.
-            4) The remote_array will simply mirror what is in the registry.
+            1) A thread is registered during initialization and will
+               initially not be alive until started.
+            2) If a request is made that includes a yet to be registered
+               thread, or one that is not yet alive, the request will
+               loop until the remote thread becomes registered and
+               alive.
+            3) After a thread is registered and is alive, if it fails
+               and become not alive, it will remain in the registry
+               until its status is changed to Stopped to indicate it was
+               once alive. Its status is set to Stopped when a join is
+               done. This will allow a request to know whether to wait
+               for the thread to become alive, or to raise an error for
+               an attempted request on a thread that is no longer alive.
+            4) The remote_array will simply mirror what is in the
+               registry.
 
         Error cases:
             1) remote_array thread and registry thread do not match
 
 
         Expected cases:
-            1) remote_array does not have a registry entry - add the registry entry to the remote array
+            1) remote_array does not have a registry entry - add the
+               registry entry to the remote array
             2) remote_array entry does not have flag set to indicate thread became not alive, but registry does have
                the flag set - simply set the flag in the remote_array entry - request will fail if remote is part of
                the request
-            3) registry entry does not have a remote_array entry - join was done - remove remote_array entry - request
-               will fail if the remote was part of the request
+            3) registry entry does not have a remote_array entry -
+               remove remote_array entry
 
         """
         changed = False
@@ -615,66 +630,85 @@ class SmartThread:
 
                 if (key != self.name) and (key not in self.remote_array):
                     # we now add the remote_array entry for first time
-                    if self.name in item.remote_array:  # remote already knows about us - use its status_lock
-                        self.remote_array[key] = SmartThread.ConnectionStatusBlock(
-                            remote_smart_thread=item,
-                            status_lock=item.remote_array[self.name].status_lock,
-                            msg_q=queue.Queue(),
-                            event=threading.Event(),
-                            sync_event=threading.Event()
-                        )
-                        self.remote_array[key].remote_msg_q = item.remote_array[self.name].msg_q
-                        item.remote_array[self.name].remote_msg_q = self.remote_array[key].msg_q
-                        self.remote_array[key].pair_status = PairStatus.Ready
-                        item.remote_array[self.name].pair_status = PairStatus.Ready
-                    else:  # we are first to get started - create a new status lock
-                        self.remote_array[key] = SmartThread.ConnectionStatusBlock(
-                            remote_smart_thread=item,
-                            status_lock=threading.Lock(),
-                            msg_q=queue.Queue(),
-                            event=threading.Event(),
-                            sync_event=threading.Event()
-                        )
+                    if self.name in item.remote_array:
+                        # remote already knows about us - use its status_lock
+
+                        remote_cb = item.remote_array[self.name]
+                        self.remote_array[key] = (
+                            SmartThread.ConnectionStatusBlock(
+                                remote_smart_thread=item,
+                                status_lock=remote_cb.status_lock,
+                                msg_q=queue.Queue(),
+                                event=threading.Event(),
+                                sync_event=threading.Event()
+                            ))
+                        local_cb = self.remote_array[key]
+                        local_cb.remote_msg_q = remote_cb.msg_q
+                        remote_cb.remote_msg_q = local_cb.msg_q
+                        local_cb.pair_status = PairStatus.Ready
+                        remote_cb.pair_status = PairStatus.Ready
+                    else:
+                        # we are first to get started - create a new
+                        # status lock
+                        self.remote_array[key] = (
+                            SmartThread.ConnectionStatusBlock(
+                                remote_smart_thread=item,
+                                status_lock=threading.Lock(),
+                                msg_q=queue.Queue(),
+                                event=threading.Event(),
+                                sync_event=threading.Event()
+                            ))
                     changed = True
 
             # scan remote_array
             remote_array_deletion_list = []
             for key, item in self.remote_array.items():
-                if key not in SmartThread._registry:  # entry was removed from the registry
+                if key not in SmartThread._registry:
+                    # entry was removed from the registry
                     remote_array_deletion_list.append(key)
                 else:
-                    if item.remote_smart_thread is not SmartThread._registry[key]:
+                    if (item.remote_smart_thread
+                            is not SmartThread._registry[key]):
                         raise SmartThreadRemoteSmartThreadMismatch(
-                            f'{self.name} has id(item.remote_smart_thread) {id(item.remote_smart_thread)} '
-                            f'and id(SmartThread._registry[key]) {id(SmartThread._registry[key])}')
-                    if item.remote_smart_thread.thread is not SmartThread._registry[key].thread:
+                            f'{self.name} has id(item.remote_smart_thread) = '
+                            f'{id(item.remote_smart_thread)} '
+                            'and id(SmartThread._registry[key]) = '
+                            f'{id(SmartThread._registry[key])}')
+                    if (item.remote_smart_thread.thread
+                            is not SmartThread._registry[key].thread):
                         raise SmartThreadRemoteThreadMismatch(
-                            f'{self.name} has id(item.remote_smart_thread.thread) '
+                            f'{self.name} has '
+                            'id(item.remote_smart_thread.thread) = '
                             f'{id(item.remote_smart_thread.thread)} '
-                            f'and id(SmartThread._registry[key].thread) {id(SmartThread._registry[key].thread)}')
-                    # The following code checks to make sure the remote and us have the same shared items.
-                    # Note that if the remote does not know about us yet, it will eventually discover we are here when
-                    # it does a request that causes this method to get control. If the remote does know about us then
-                    # it means that it should have the same shared area.
+                            'and id(SmartThread._registry[key].thread) = '
+                            f'{id(SmartThread._registry[key].thread)}')
+                    # The following code checks to make sure the remote
+                    # and us have the same shared items. Note that if
+                    # the remote does not know about us yet, it will
+                    # eventually discover we are here when it does a
+                    # request that causes this method to get control.
+                    # If the remote does know about us then it means
+                    # that it should have the same shared items.
                     if self.name in item.remote_smart_thread.remote_array:
-                        if (item.status_lock
-                                is not item.remote_smart_thread.remote_array[self.name].status_lock):
+                        remote_cb = (item.remote_smart_thread
+                                     .remote_array[self.name])
+                        if item.status_lock is not remote_cb.status_lock:
                             raise SmartThreadStatusLockMismatch(
-                                f'{self.name} has id(item.status_lock) {id(item.status_lock)} '
-                                f'and id(item.remote_smart_thread.remote_array[self.name].status_lock) '
-                                f'{id(item.remote_smart_thread.remote_array[self.name].status_lock)}')
+                                f'{self.name} has id(item.status_lock) = '
+                                f'{id(item.status_lock)} and '
+                                f'remote_cb.status_lock = '
+                                f'{id(remote_cb.status_lock)}')
 
                         # if item.remote_msg_q:
-                        if ((item.remote_msg_q is not item.remote_smart_thread.remote_array[self.name].msg_q)
-                                or (item.remote_smart_thread.remote_array[self.name].remote_msg_q
-                                    is not item.msg_q)):
+                        if ((item.remote_msg_q is not remote_cb.msg_q)
+                                or (remote_cb.remote_msg_q is not item.msg_q)):
                             raise SmartThreadRemoteMsgQMismatch(
-                                f'{self.name} has '
-                                f'id(item.remote_msg_q) = {id(item.remote_msg_q)}, '
-                                'id(item.remote_smart_thread.remote_array[self.name].msg_q) = '
-                                f'{id(item.remote_smart_thread.remote_array[self.name].msg_q)},'
-                                'id(item.remote_smart_thread.remote_array[self.name].remote_msg_q) = '
-                                f'{id(item.remote_smart_thread.remote_array[self.name].remote_msg_q)}, '
+                                f'{self.name} has id(item.remote_msg_q) = '
+                                f'{id(item.remote_msg_q)}, '
+                                'id(remote_cb.msg_q) = '
+                                f'{id(remote_cb.msg_q)},'
+                                'id(remote_cb.remote_msg_q) = '
+                                f'{id(remote_cb.remote_msg_q)}, '
                                 f'id(item.msg_q) = {id(item.msg_q)}')
 
             for key in remote_array_deletion_list:
@@ -684,20 +718,23 @@ class SmartThread:
 
             if changed:
                 SmartThread._registry_last_update = datetime.utcnow()
-                self.time_last_remote_update = SmartThread._registry_last_update
-                print_time = SmartThread._registry_last_update.strftime("%H:%M:%S.%f")
-                self.logger.debug(f'{self.name} updated registry and remote_array at UTC {print_time}')
+                self.time_last_remote_update = (SmartThread
+                                                ._registry_last_update)
+                print_time = (SmartThread._registry_last_update
+                              .strftime("%H:%M:%S.%f"))
+                self.logger.debug(
+                    f'{self.name} updated registry and remote_array at UTC '
+                    f'{print_time}')
 
-    ###########################################################################
+    ####################################################################
     # start
-    ###########################################################################
+    ####################################################################
     def start(self) -> None:
         """Start the thread.
 
         :Example: instantiate a SmartThread and start the thread
 
         >>> import scottbrian_utils.smart_thread as st
-        >>> import threading
         >>> def f1() -> None:
         ...     print('f1 beta entered')
         >>> beta_smart_thread = SmartThread(name='beta', target=f1)
@@ -710,9 +747,9 @@ class SmartThread:
         if self.thread.is_alive():
             self.status = ThreadStatus.Alive
 
-    ###########################################################################
+    ####################################################################
     # send_msg
-    ###########################################################################
+    ####################################################################
     def send_msg(self,
                  targets: Union[str, set[str]],
                  msg: Any,
@@ -724,7 +761,8 @@ class SmartThread:
             msg: the msg to be sent
             targets: names to send the message to
             log_msg: log message to issue
-            timeout: number of seconds to wait for full queue to get free slot
+            timeout: number of seconds to wait for full queue to get
+                       free slot
 
         Raises:
             SmartThreadSendMsgFailed: send_msg method unable to send the
@@ -736,69 +774,84 @@ class SmartThread:
 
         >>> import scottbrian_utils.smart_thread as st
         >>> import threading
-        >>> def f1(smart_thread: SmartThread) -> None:
-        ...     msg = smart_thread.recv_msg()
-        ...     if msg == 'hello thread':
-        ...         smart_thread.send_msg('hi')
-        >>> a_smart_thread = SmartThread()
-        >>> thread = threading.Thread(target=f1, args=(a_smart_thread,))
-        >>> thread.start()
-        >>> a_smart_thread.send_msg('hello thread')
-        >>> print(a_smart_thread.recv_msg())
-        hi
-
-        >>> thread.join()
+        >>> def f1() -> None:
+        ...     print('f1 beta entered')
+        ...     msg = beta_smart_thread.recv_msg(remote='alpha')
+        ...     if msg == 'hello beta thread':
+        ...         beta_smart_thread.send_msg(targets='alpha',
+        ...                                    msg='hi alpha')
+        ...     print('f1 beta exiting')
+        >>> print('mainline alpha entered')
+        >>> alpha_smart_thread = SmartThread(name='alpha')
+        >>> beta_smart_thread = SmartThread(name='alpha', target=f1)
+        >>> beta_smart_thread.start()
+        >>> alpha_smart_thread.send_msg('hello beta thread')
+        >>> alpha_smart_thread.join(targets='beta')
+        >>> print(alpha_smart_thread.recv_msg(remote='beta'))
+        >>> print('mainline alpha exiting')
+        mainline alpha entered
+        f1 beta entered
+        f1 beta exiting
+        hi alpha
+        mainline alpha exiting
 
         """
-        timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
+        # get SetupBlock with targets in a set and a timer object
+        sb = self._common_setup(targets=targets, timeout=timeout)
 
         # if caller specified a log message to issue
         caller_info = ''
         if log_msg and self.debug_logging_enabled:
             caller_info = get_formatted_call_sequence(latest=1, depth=1)
-            self.logger.debug(f'send_msg() entered: {self.name} -> {targets} {caller_info} {log_msg}')
+            self.logger.debug(f'send_msg() entered: {self.name} -> {targets} '
+                              f'{caller_info} {log_msg}')
 
-        self.verify_thread_is_current()
-
-        if isinstance(targets, str):
-            targets = {targets}
-
-        work_targets = targets.copy()
+        work_targets = sb.targets.copy()
 
         while work_targets:
             for remote in work_targets:
-                # we need to handle the case where a remote we want to send a message to is not
-                # yet registered and alive. We call _refresh_remote_array to get the latest changes
-                # but only if we see that the registry has changed (_registry_last_update).
-                if self.time_last_remote_update < SmartThread._registry_last_update:
+                # we need to handle the case where a remote we want to
+                # send a message to is not yet registered and alive. We
+                # call _refresh_remote_array to get the latest changes
+                # but only if we see that the registry has changed
+                # (_registry_last_update).
+                if (self.time_last_remote_update
+                        < SmartThread._registry_last_update):
                     self._refresh_remote_array()
 
                 if remote in self.remote_array:
-                    if self.remote_array[remote].remote_smart_thread.thread.is_alive():
+                    local_cb = self.remote_array[remote]
+                    if not local_cb.remote_smart_thread.thread.is_alive():
+                        # we need to check the status for Alive or
+                        # Stopped before raising the not alive error
+                        # since the thread could be registered but not
+                        # yet started, in which case we need to give it
+                        # more time
+                        if (local_cb.remote_smart_thread.status
+                                & (ThreadStatus.Alive
+                                   | ThreadStatus.Stopped)):
+                            raise SmartThreadRemoteThreadNotAlive(
+                                f'{self.name} send_msg detected {remote} '
+                                'thread is not alive.')
+                    else:
                         try:
-                            self.logger.info(f'{self.name} sending message to {remote}')
+                            self.logger.info(
+                                f'{self.name} sending message to {remote}')
                             # place message on remote q
-                            self.remote_array[remote].remote_msg_q.put(msg)
-                            # self.logger.debug(f'{self.name} put msg = {msg} on '
-                            #                   f'id(self.remote_array[remote].remote_msg_q) '
-                            #                   f'{id(self.remote_array[remote].remote_msg_q)}')
+                            local_cb.remote_msg_q.put(msg)
+
+                            # start the while loop again with one less
+                            # remote
                             work_targets.remove(remote)
-                            break  # start the while loop again with one less remote
+                            break
                         except queue.Full:
                             self.logger.error('Raise SmartThreadSendMsgFailed')
-                            raise SmartThreadSendMsgFailed(f'{self.name} send_msg method unable to send the '
-                                                        'message because the send queue '
-                                                        'is full with the maximum '
-                                                        'number of messages.')
-                    # we need to check the status for Alive or Stopped before raising the not alive error
-                    # since the thread could be registered but not yet started, in which case we need to give it
-                    # more time
-                    elif (self.remote_array[remote].remote_smart_thread.status & (ThreadStatus.Alive
-                                                                                  | ThreadStatus.Stopped)):
-                        raise SmartThreadRemoteThreadNotAlive(f'{self.name} send_msg detected {remote} thread '
-                                                              'is not alive.')
+                            raise SmartThreadSendMsgFailed(
+                                f'{self.name} send_msg method unable to send '
+                                f'the message because the send queue is full '
+                                f'with the maximum number of messages.')
 
-            if timer.is_expired():
+            if sb.timer.is_expired():
                 self.logger.debug(f'{self.name} timeout of a send_msg() ')
                 break
 
@@ -806,11 +859,12 @@ class SmartThread:
 
         # if caller specified a log message to issue
         if log_msg and self.debug_logging_enabled:
-            self.logger.debug(f'send_msg() exiting: {self.name} -> {targets} {caller_info} {log_msg}')
+            self.logger.debug(f'send_msg() exiting: {self.name} -> '
+                              f'{sb.targets} {caller_info} {log_msg}')
 
-    ###########################################################################
+    ####################################################################
     # recv_msg
-    ###########################################################################
+    ####################################################################
     def recv_msg(self,
                  remote: str,
                  log_msg: Optional[str] = None,
@@ -827,8 +881,7 @@ class SmartThread:
 
         Raises:
             SmartThreadRecvMsgTimedOut: recv_msg processing timed out
-                                      waiting for a message to
-                                      arrive.
+              waiting for a message to arrive.
 
         """
         timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
@@ -840,45 +893,56 @@ class SmartThread:
                               f'{caller_info} {log_msg}')
 
         while True:
-            # we need to handle the case where a remote we want to recv a message from is not
-            # yet registered and alive. We call _refresh_remote_array to get the latest changes
-            # but only if we see that the registry has changed (_registry_last_update).
-            if self.time_last_remote_update < SmartThread._registry_last_update:
+            # we need to handle the case where a remote we want to recv
+            # a message from is not yet registered and alive. We call
+            # _refresh_remote_array to get the latest changes but only
+            # if we see that the registry has changed
+            # (_registry_last_update).
+            if (self.time_last_remote_update
+                    < SmartThread._registry_last_update):
                 self._refresh_remote_array()
 
             if remote in self.remote_array:
-                # We don't check to ensure remote is alive since it may have sent us a message and then became
-                # not alive. So, we try to get the message first, and it it's not there then we will check to see
-                # whether the remote is alive
+                local_cb = self.remote_array[remote]
+                # We don't check to ensure remote is alive since it may
+                # have sent us a message and then became not alive. So,
+                # we try to get the message first, and it it's not there
+                # we will check to see whether the remote is alive.
                 try:
-                    self.logger.info(f'{self.name} receiving msg from {remote}')
-                    ret_msg = self.remote_array[remote].msg_q.get()  # recv message from remote
-                    # self.logger.debug(f'{self.name} got msg = {ret_msg} from '
-                    #                   f'id(self.remote_array[remote].msg_q) '
-                    #                   f'{id(self.remote_array[remote].msg_q)}')
+                    self.logger.info(
+                        f'{self.name} receiving msg from {remote}')
+                    # recv message from remote
+                    ret_msg = local_cb.msg_q.get()
                     break
                 except queue.Empty:
                     pass
 
-                # we need to check the status for Alive or Stopped before raising the not alive error
-                # since the thread could be registered but not yet started, in which case we need to give it
-                # more time
-                if ((not self.remote_array[remote].remote_smart_thread.thread.is_alive())
-                        and (self.remote_array[remote].remote_smart_thread.status & (ThreadStatus.Alive
-                                                                                     | ThreadStatus.Stopped))):
-                    raise SmartThreadRemoteThreadNotAlive(f'{self.name} send_msg detected {remote} thread '
-                                                          'is not alive.')
+                # we need to check the status for Alive or Stopped
+                # before raising the not alive error since the thread
+                # could be registered but not yet started, in which case
+                # we need to give it more time
+                if ((not local_cb.remote_smart_thread.thread.is_alive())
+                        and (local_cb.remote_smart_thread.status
+                             & (ThreadStatus.Alive
+                                | ThreadStatus.Stopped))):
+                    raise SmartThreadRemoteThreadNotAlive(
+                        f'{self.name} send_msg detected {remote} thread is '
+                        'not alive.')
 
             if timer.is_expired():
-                self.logger.error(f'{self.name} raising SmartThreadRecvMsgTimedOut waiting for {remote} ')
-                raise SmartThreadRecvMsgTimedOut(f'recv_msg {self.name} timed out waiting for message '
-                                              f'from {remote}.')
+                self.logger.error(
+                    f'{self.name} raising SmartThreadRecvMsgTimedOut waiting '
+                    f'for {remote} ')
+                raise SmartThreadRecvMsgTimedOut(
+                    f'recv_msg {self.name} timed out waiting for message from '
+                    f'{remote}.')
 
             time.sleep(0.2)
 
         # if caller specified a log message to issue
         if log_msg and self.debug_logging_enabled:
-            self.logger.debug(f'recv_msg() exiting: {self.name} <- {remote} {caller_info} {log_msg}')
+            self.logger.debug(f'recv_msg() exiting: {self.name} <- {remote} '
+                              f'{caller_info} {log_msg}')
 
         return ret_msg
 
@@ -899,7 +963,8 @@ class SmartThread:
             timeout: Number of seconds to wait for reply
 
         Returns:
-              message unless send q is full or timeout occurs during recv
+              message unless send q is full or timeout occurs during
+                recv
 
         :Example: instantiate a SmartThread and send a message
 
@@ -925,9 +990,9 @@ class SmartThread:
 
         return self.recv_msg(remote=remote, log_msg=log_msg, timeout=timer.timeout)
     
-    ###########################################################################
+    ####################################################################
     # msg_waiting
-    ###########################################################################
+    ####################################################################
     def msg_waiting(self) -> str:
         """Determine whether a message is waiting, ready to be received.
 
@@ -975,9 +1040,9 @@ class SmartThread:
 
         return ""  # nothing found, return empty string
 
-    ###########################################################################
+    ####################################################################
     # join
-    ###########################################################################
+    ####################################################################
     def join(self, *,
              targets: Union[str, set[str]],
              log_msg: Optional[str] = None,
@@ -1087,9 +1152,9 @@ class SmartThread:
                 f'join() by {self.name} to join {sb.targets} exiting. '
                 f'{caller_info} {log_msg}')
 
-    ###########################################################################
+    ####################################################################
     # resume
-    ###########################################################################
+    ####################################################################
     def resume(self, *,
                targets: Union[str, set[str]],
                log_msg: Optional[str] = None,
