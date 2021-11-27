@@ -1019,60 +1019,73 @@ class SmartThread:
         >>> beta_smart_thread.join()
 
         """
-        timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
+        # get SetupBlock with targets in a set and a timer object
+        sb = self._common_setup(targets=targets, timeout=timeout)
 
         # if caller specified a log message to issue
         caller_info = ''
         if log_msg and self.debug_logging_enabled:
             caller_info = get_formatted_call_sequence(latest=1, depth=1)
-            self.logger.debug(f'join() entered by {self.name} to join {targets} '
-                              f'{caller_info} {log_msg}')
+            self.logger.debug(
+                f'join() entered by {self.name} to join {sb.targets} '
+                f'{caller_info} {log_msg}')
 
-        self.verify_thread_is_current()
-
-        if isinstance(targets, str):
-            targets = {targets}
-
-        work_targets = targets.copy()
+        work_targets = sb.targets.copy()
 
         while work_targets:
             for remote in work_targets:
-                # we need to handle the case where a remote we want to join is not in out remote_array.
-                # We call _refresh_remote_array to get the latest changes
-                # but only if we see that the registry has changed (_registry_last_update).
-                if self.time_last_remote_update < SmartThread._registry_last_update:
+                # we need to handle the case where a remote we want to
+                # join is not in out remote_array. We call
+                # _refresh_remote_array to get the latest changes but
+                # only if we see that the registry has changed
+                # (_registry_last_update).
+                if (self.time_last_remote_update
+                        < SmartThread._registry_last_update):
                     self._refresh_remote_array()
 
                 if remote in self.remote_array:
-                    # Note that if the remote thread was never started, the following join will raise an error.
-                    # If the thread is eventually started, we currently have no way to detect that and react.
-                    # We can only hope that a failed join in that case will be adequate.
-                    if timer.timeout:
-                        self.remote_array[remote].remote_smart_thread.thread.join(
-                            timeout=timer.timeout / len(work_targets))
+                    local_cb = self.remote_array[remote]
+                    # Note that if the remote thread was never started,
+                    # the following join will raise an error. If the
+                    # thread is eventually started, we currently have no
+                    # way to detect that and react. We can only hope
+                    # that a failed join in that case will be adequate.
+                    if sb.timer.timeout:
+                        local_cb.remote_smart_thread.thread.join(
+                            timeout=sb.timer.timeout / len(work_targets))
                     else:
-                        self.remote_array[remote].remote_smart_thread.thread.join()
+                        local_cb.remote_smart_thread.thread.join()
 
+                    # we need to check to make sure the thread is not
+                    # alive in case we timeout out
+                    if not local_cb.remote_smart_thread.thread.is_alive():
+                        # indicate remove from registry
+                        local_cb.remote_smart_thread.status = (ThreadStatus
+                                                               .Stopped)
+                        # remove this thread from the registry
+                        with SmartThread._registry_lock:
+                            self._clean_up_registry()
+                        self.logger.debug(
+                            f'{self.name} did successful join of {remote}.')
 
-
-                    # we need to check to make sure the thread is not alive in case we timeout out
-                    if not self.remote_array[remote].remote_smart_thread.thread.is_alive():  # if now not alive
-                        SmartThread._registry[remote].status = ThreadStatus.Stopped  # indicate remove from registry
-                        self._clean_up_registry()  # remove this thread from the registry
-                        self.logger.debug(f'{self.name} did successful join of {remote}.')
+                        # start the while loop again with one less remote
                         work_targets.remove(remote)
-                        break  # start the while loop again with one less remote
+                        break
 
-            if timer.is_expired():
+            if sb.timer.is_expired():
                 self.logger.debug(f'{self.name} timeout of a join() ')
-                self.logger.error(f'{self.name} raising SmartThreadJoinTimedOut waiting for {work_targets} ')
-                raise SmartThreadJoinTimedOut(f'{self.name} timed out waiting for {work_targets}.')
+                self.logger.error(
+                    f'{self.name} raising SmartThreadJoinTimedOut waiting '
+                    f'for {work_targets} ')
+                raise SmartThreadJoinTimedOut(
+                    f'{self.name} timed out waiting for {work_targets}.')
 
             time.sleep(0.2)
 
         if log_msg and self.debug_logging_enabled:
-            self.logger.debug(f'join() by {self.name} to join {targets} exiting. '
-                              f'{caller_info} {log_msg}')
+            self.logger.debug(
+                f'join() by {self.name} to join {sb.targets} exiting. '
+                f'{caller_info} {log_msg}')
 
     ###########################################################################
     # resume
@@ -1128,20 +1141,16 @@ class SmartThread:
         >>> beta_smart_thread.join()
 
         """
-        timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
-
-        self.verify_thread_is_current()
+        # get SetupBlock with targets in a set and a timer object
+        sb = self._common_setup(targets=targets, timeout=timeout)
 
         # if caller specified a log message to issue
         caller_info = ''
         if log_msg and self.debug_logging_enabled:
             code_msg = f' with code: {code}' if code else ''
             caller_info = get_formatted_call_sequence(latest=1, depth=1)
-            self.logger.debug(f'resume() entered{code_msg} by {self.name} to resume {targets} '
-                              f'{caller_info} {log_msg}')
-
-        if isinstance(targets, str):
-            targets = {targets}
+            self.logger.debug(f'resume() entered{code_msg} by {self.name} to '
+                              f'resume {targets} {caller_info} {log_msg}')
 
         ################################################################
         # Cases where we loop until remote is ready:
@@ -1151,11 +1160,11 @@ class SmartThread:
         #    happens, this resume will complete as a pre-resume.
         # 2) Remote waiting and deadlock. The remote was flagged as
         #    being in a deadlock and has not been given control to
-        #    raise the SmartThreadWaitDeadlockDetected error. The remote could
-        #    recover, in which case this resume will complete,
+        #    raise the SmartThreadWaitDeadlockDetected error. The remote
+        #    could recover, in which case this resume will complete,
         #    or the thread could become inactive, in which case
-        #    resume will see that and raise (via check_remote
-        #    method) the SmartThreadRemoteThreadNotAlive error.
+        #    resume will see that and raise the
+        #    SmartThreadRemoteThreadNotAlive error.
         # 3) Remote not waiting and event resumed. This case
         #    indicates that a resume was previously done ahead of the
         #    wait as a pre-resume. In that case an eventual wait is
@@ -1191,65 +1200,98 @@ class SmartThread:
         #                                           wait
         ###############################################################
 
-        work_targets = targets.copy()
+        work_targets = sb.targets.copy()
 
         while work_targets:
             for remote in work_targets:
-                # we need to handle the case where a remote we want to resume is not
-                # yet registered and alive. We call _refresh_remote_array to get the latest changes
-                # but only if we see that the registry has changed (_registry_last_update).
-                if self.time_last_remote_update < SmartThread._registry_last_update:
+                # we need to handle the case where a remote we want to
+                # resume is not yet registered and alive. We call
+                # _refresh_remote_array to get the latest changes but
+                # only if we see that the registry has changed
+                # (_registry_last_update).
+                if (self.time_last_remote_update
+                        < SmartThread._registry_last_update):
                     self._refresh_remote_array()
 
                 if remote in self.remote_array:
                     local_cb = self.remote_array[remote]
                     if not local_cb.remote_smart_thread.thread.is_alive():
-                        # we need to check the status for Alive or Stopped before raising the not alive error
-                        # since the thread could be registered but not yet started, in which case we need to give it
+                        # we need to check the status for Alive or
+                        # Stopped before raising the not alive error
+                        # since the thread could be registered but not
+                        # yet started, in which case we need to give it
                         # more time
-                        if local_cb.remote_smart_thread.status & (ThreadStatus.Alive | ThreadStatus.Stopped):
-                            raise SmartThreadRemoteThreadNotAlive(f'{self.name} resume() detected {remote} thread '
-                                                                  'is not alive.')
+                        if (local_cb.remote_smart_thread.status
+                                & (ThreadStatus.Alive | ThreadStatus.Stopped)):
+                            raise SmartThreadRemoteThreadNotAlive(
+                                f'{self.name} resume() detected {remote} '
+                                'thread is not alive.')
                     else:
                         if local_cb.pair_status == PairStatus.Ready:
                             with local_cb.status_lock:
-                                remote_cb = self.remote_array[remote].remote_smart_thread.remote_array[self.name]
+                                remote_cb = (local_cb.remote_smart_thread
+                                             .remote_array[self.name])
                                 if self.sync_request:
-                                    if not (remote_cb.sync_event.is_set()  # has not completed previous wait
-                                            # following line: has not completed conflict where remote is the sync waiter
-                                            # and this side was the wait that did complete (raised error and recovered)
-                                            # and is now here with a resume. Note that if remote has not yet completed a
-                                            # conflict where it was the wait waiter, we can still proceed with the
-                                            # resume of the sync wait
-                                            or (remote_cb.conflict and remote_cb.sync_wait)):
-                                        remote_cb.sync_event.set()  # wake remote thread
+                                    # for a sync request we check to see
+                                    # whether a previous sync is still
+                                    # in progress as indicated by the
+                                    # sync event being set. We also need
+                                    # to make sure there is not a
+                                    # pending conflict that the remote
+                                    # thread needs to clear. Note that
+                                    # we only worry about the conflict
+                                    # for sync - a wait conflict does
+                                    # not impede us here since we are
+                                    # using a different event block
+                                    if not (remote_cb.sync_event.is_set()
+                                            or (remote_cb.conflict
+                                                and remote_cb.sync_wait)):
+                                        # wake remote thread and start
+                                        # the while loop again with one
+                                        # less remote
+                                        remote_cb.sync_event.set()
                                         work_targets.remove(remote)
-                                        break  # start the while loop again with one less remote
+                                        break
                                 else:
-                                    if not (remote_cb.event.is_set()  # has not completed previous wait
-                                            or remote_cb.deadlock  # has not completed previous wait deadlock case
-                                            # following line: has not completed conflict where remote is the waiter
-                                            # and this side was the sync that did complete (raised error and recovered)
-                                            # and is now here with a resume. Note that if remote has not yet completed a
-                                            # conflict where it was the sync_wait, we can still proceed with the resume
-                                            or (remote_cb.conflict and remote_cb.wait_wait)):
+                                    # for a wait request we check to see
+                                    # whether a previous wait is still
+                                    # in progress as indicated by the
+                                    # wait event being set. We also need
+                                    # to make sure there is not a
+                                    # pending conflict that the remote
+                                    # thread needs to clear. Note that
+                                    # we only worry about the conflict
+                                    # for wait - a sync conflict does
+                                    # not impede us here since we are
+                                    # using a different event block
+                                    if not (remote_cb.event.is_set()
+                                            or (remote_cb.conflict
+                                                and remote_cb.wait_wait)):
 
-                                        if code:  # if caller specified a code for remote thread
+                                        # set the code, if one
+                                        if code:
                                             remote_cb.code = code
-                                        remote_cb.event.set()  # wake remote thread
+                                        # wake remote thread and start
+                                        # the while loop again with one
+                                        # less remote
+                                        remote_cb.event.set()
                                         work_targets.remove(remote)
-                                        break  # start the while loop again with one less remote
+                                        break
 
-            if timer.is_expired():
+            if sb.timer.is_expired():
                 self.logger.debug(f'{self.name} timeout of a resume() request')
-                self.logger.error(f'{self.name} raising SmartThreadResumeTimedOut waiting for {work_targets} ')
-                raise SmartThreadResumeTimedOut(f'{self.name} timed out waiting for {work_targets}.')
+                self.logger.error(
+                    f'{self.name} raising SmartThreadResumeTimedOut waiting '
+                    f'for {work_targets}')
+                raise SmartThreadResumeTimedOut(
+                    f'{self.name} timed out waiting for {work_targets}.')
 
             time.sleep(0.2)
 
         # if caller specified a log message to issue
         if log_msg and self.debug_logging_enabled:
-            self.logger.debug(f'resume() by {self.name} to resume {targets} exiting '
+            self.logger.debug(f'resume() by {self.name} to resume '
+                              f'{sb.targets} exiting '
                               f'{caller_info} {log_msg}')
 
     ####################################################################
