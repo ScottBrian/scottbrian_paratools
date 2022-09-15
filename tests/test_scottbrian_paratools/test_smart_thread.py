@@ -3,6 +3,7 @@
 ###############################################################################
 # Standard Library
 ###############################################################################
+from datetime import datetime
 from enum import Enum
 import logging
 import time
@@ -569,6 +570,12 @@ class TestSmartThreadErrors:
     # Basic Scenario1
     ####################################################################
     def test_smart_thread_instantiation_errors(self):
+        ################################################################
+        # f1
+        ################################################################
+        def f1():
+            logger.debug('f1 entered')
+            logger.debug('f1 exiting')
 
         ####################################################################
         # Create smart thread with bad name
@@ -579,6 +586,135 @@ class TestSmartThreadErrors:
 
         with pytest.raises(st.SmartThreadIncorrectNameSpecified):
             _ = st.SmartThread(name=1)
+
+        test_thread = threading.Thread(target=f1)
+        with pytest.raises(
+                st.SmartThreadMutuallyExclusiveTargetThreadSpecified):
+
+            _ = st.SmartThread(name='alpha', target=f1, thread=test_thread)
+
+        with pytest.raises(st.SmartThreadArgsSpecificationWithoutTarget):
+            _ = st.SmartThread(name='alpha', args=(1,))
+
+        alpha_thread = st.SmartThread(name='alpha')
+        alpha_thread.name = 1
+        with pytest.raises(st.SmartThreadIncorrectNameSpecified):
+            alpha_thread._register()
+
+        # we still have alpha with name changed to 1
+        # which will cause the following registry error
+        # when we try to create another thread
+        with pytest.raises(st.SmartThreadErrorInRegistry):
+            _ = st.SmartThread(name='alpha')
+
+        alpha_thread.name = 'alpha'  # restore name
+
+        with pytest.raises(st.SmartThreadNameAlreadyInUse):
+            _ = st.SmartThread(name='alpha')
+
+        logger.debug('mainline exiting')
+
+    def test_smart_thread_refresh_remote_array_errors(self):
+        ################################################################
+        # f1
+        ################################################################
+        def f1(name: str):
+            logger.debug('f1 entered')
+            beta_thread.send_msg(targets='alpha', msg='go now')
+            msg1 = beta_thread.recv_msg(remote='alpha', timeout=3)
+            logger.debug(f'{name} received msg: {msg1}')
+            logger.debug('f1 exiting')
+
+        ####################################################################
+        # Create smart thread with bad name
+        ####################################################################
+        logger.debug('mainline entered')
+
+        logger.debug('mainline creating alpha smart thread')
+        alpha_thread = st.SmartThread(name='alpha')
+
+        logger.debug('mainline creating beta smart thread')
+        beta_thread = st.SmartThread(name='beta', target=f1, args=('beta',))
+        beta_thread.start()
+
+        logger.debug('mainline alpha sending msg to beta')
+
+        alpha_thread.recv_msg(remote='beta', timeout=3)
+
+        logger.debug('mainline alpha corrupting remote array')
+        alpha_thread.remote_array['beta'].remote_smart_thread = alpha_thread
+        alpha_thread.time_last_remote_update = datetime(2000, 1, 1, 12, 0, 1)
+        logger.debug('mainline alpha sending msg to beta')
+        with pytest.raises(st.SmartThreadRemoteSmartThreadMismatch):
+            alpha_thread.send_msg(targets='beta',
+                                  msg='exit',
+                                  timeout=3)
+        logger.debug('mainline alpha restoring remote array')
+        alpha_thread.remote_array['beta'].remote_smart_thread = beta_thread
+        alpha_thread.send_msg(targets='beta',
+                              msg='exit',
+                              timeout=3)
+        alpha_thread.join(targets='beta')
+
+        logger.debug('mainline exiting')
+
+    def test_smart_thread_refresh_remote_array_errors2(self):
+        ################################################################
+        # f1
+        ################################################################
+        def f1(name: str):
+            logger.debug('f1 entered')
+            if name == 'beta':
+                msg1 = beta_thread.recv_msg(remote='alpha')
+            else:
+                charlie_thread.send_msg(targets='alpha', msg='go now')
+                msg1 = charlie_thread.recv_msg(remote='alpha', timeout=3)
+            logger.debug(f'{name} received msg: {msg1}')
+            logger.debug('f1 exiting')
+
+        ####################################################################
+        # Create smart thread with bad name
+        ####################################################################
+        logger.debug('mainline entered')
+
+        logger.debug('mainline creating alpha smart thread')
+        alpha_thread = st.SmartThread(name='alpha')
+
+        logger.debug('mainline creating beta smart thread')
+        beta_thread = st.SmartThread(name='beta', target=f1, args=('beta',))
+        beta_thread.start()
+
+        logger.debug('mainline alpha sending msg to beta')
+
+        alpha_thread.send_msg(targets='beta',
+                              msg='exit',
+                              timeout=3)
+        alpha_thread.join(targets='beta')
+
+        logger.debug('mainline creating charlie smart thread')
+        charlie_thread = st.SmartThread(name='charlie',
+                                        target=f1,
+                                        args=('charlie',))
+        charlie_thread.start()
+
+        logger.debug('mainline alpha sending msg to charlie')
+        msg = alpha_thread.recv_msg(remote='charlie', timeout=3)
+
+        logger.debug('mainline alpha corrupting remote array')
+        alpha_thread.remote_array['charlie'].remote_smart_thread = alpha_thread
+        alpha_thread.time_last_remote_update = datetime(2000, 1, 1, 12, 0, 1)
+        logger.debug('mainline alpha sending msg to charlie')
+        with pytest.raises(st.SmartThreadRemoteSmartThreadMismatch):
+            alpha_thread.send_msg(targets='charlie',
+                                  msg='exit',
+                                  timeout=3)
+        logger.debug('mainline alpha restoring remote array')
+        alpha_thread.remote_array['charlie'].remote_smart_thread = \
+            charlie_thread
+        alpha_thread.send_msg(targets='charlie',
+                              msg='exit',
+                              timeout=3)
+        alpha_thread.join(targets='charlie')
 
         logger.debug('mainline exiting')
 

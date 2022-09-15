@@ -67,6 +67,7 @@ from typing import (Any, Callable, ClassVar, Final, Optional, Type,
 # Local
 ########################################################################
 from scottbrian_utils.diag_msg import get_formatted_call_sequence
+from scottbrian_utils.timer import Timer
 
 
 ########################################################################
@@ -189,50 +190,6 @@ class SmartThreadSyncTimedOut(SmartThreadError):
 class SmartThreadArgsSpecificationWithoutTarget(SmartThreadError):
     """SmartThread exception args specified without target."""
     pass
-
-
-########################################################################
-# SmartThread class exceptions
-# this should go into utilities
-########################################################################
-class Timer:
-    def __init__(self,
-                 timeout: Optional[Union[int, float]] = None,
-                 default_timeout: Optional[Union[int, float]] = None) -> None:
-        """Initialize a timer object.
-
-        Args:
-            timeout: value to use for timeout
-            default_timeout: value to use if timeout is None
-
-        """
-        self.start_time = time.time()
-        # we have either a timeout <= 0 or None which means no timeout
-        # can happen, or we have a timeout with a positive value which
-        # we will use, or we will use the default timeout which could
-        # also be None, which again means no timeout can happen
-        if timeout and timeout <= 0:
-            self._timeout = None
-        else:
-            self._timeout = timeout or default_timeout
-
-    @property
-    def timeout(self):
-        if self._timeout:  # if not None
-            # make sure not negative
-            ret_timeout = max(0.01,
-                              self._timeout - (time.time() - self.start_time))
-        else:
-            ret_timeout = None
-        return ret_timeout  # return value of remaining time for timeout
-
-    def is_expired(self) -> bool:
-        """Return either True or False for the timer."""
-        if self.timeout and self.timeout < (time.time() - self.start_time):
-            return True  # we timed out
-        else:
-            # time remaining, or timeout is None which never expires
-            return False
 
 
 ########################################################################
@@ -849,7 +806,7 @@ class SmartThread:
                             self.logger.info(
                                 f'{self.name} sending message to {remote}')
                             # place message on remote q
-                            local_cb.remote_msg_q.put(msg)
+                            local_cb.remote_msg_q.put(msg, timeout=0.2)
 
                             # start the while loop again with one less
                             # remote
@@ -923,7 +880,7 @@ class SmartThread:
                     self.logger.info(
                         f'{self.name} receiving msg from {remote}')
                     # recv message from remote
-                    ret_msg = local_cb.msg_q.get()
+                    ret_msg = local_cb.msg_q.get(timeout=0.2)
                     break
                 except queue.Empty:
                     pass
@@ -1133,9 +1090,10 @@ class SmartThread:
                     # thread is eventually started, we currently have no
                     # way to detect that and react. We can only hope
                     # that a failed join in that case will be adequate.
-                    if sb.timer.timeout:
+                    if sb.timer.remaining_time():
                         local_cb.remote_smart_thread.thread.join(
-                            timeout=sb.timer.timeout / len(work_targets))
+                            timeout=(sb.timer.remaining_time()
+                                     / len(work_targets)))
                     else:
                         local_cb.remote_smart_thread.thread.join()
 
@@ -1448,11 +1406,11 @@ class SmartThread:
 
         self.sync_request = True
         self.resume(targets=sb.targets,
-                    timeout=sb.timer.timeout)
+                    timeout=sb.timer.remaining_time())
         work_targets = sb.targets.copy()
 
         for remote in work_targets:
-            self.wait(remote=remote, timeout=sb.timer.timeout)
+            self.wait(remote=remote, timeout=sb.timer.remaining_time())
 
         self.sync_request = False
         if log_msg and self.debug_logging_enabled:
@@ -1549,7 +1507,7 @@ class SmartThread:
                 # have resumed and then became not alive. So, we try to
                 # get the event checked first, and it it's not set then
                 # we will check to see whether the remote is alive
-                if sb.timer.timeout:
+                if sb.timer.remaining_time():
                     local_cb.wait_timeout_specified = True
                 else:
                     local_cb.wait_timeout_specified = False
