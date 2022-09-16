@@ -583,7 +583,7 @@ class SmartThread:
 
         """
         self.logger.debug(
-            f'{self.name} entered _refresh_remote_array ')
+            f'{self.name} entered _refresh_remote_array')
         changed = False
         with SmartThread._registry_lock:
             # scan registry and adjust status
@@ -714,6 +714,11 @@ class SmartThread:
         self.thread.start()
         if self.thread.is_alive():
             self.status = ThreadStatus.Alive
+
+        self.logger.debug(
+            f'{self.name} thread started, thread.is_alive() = '
+            f'{self.thread.is_alive()}, '
+            f'status: {self.status}')
 
     ####################################################################
     # send_msg
