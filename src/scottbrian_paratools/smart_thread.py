@@ -347,7 +347,15 @@ class SmartThread:
         """
         self.specified_args = locals()  # used for __repr__, see below
 
+        self.logger = logging.getLogger(__name__)
+
+        # Set a flag to use to make it easier to determine whether debug
+        # logging is enabled
+        self.debug_logging_enabled = self.logger.isEnabledFor(logging.DEBUG)
+
         self.status: ThreadStatus = ThreadStatus.Initializing
+        self.logger.debug(
+            f'status for thread {name} set to {self.status}')
 
         if not isinstance(name, str):
             raise SmartThreadIncorrectNameSpecified(
@@ -397,12 +405,6 @@ class SmartThread:
         # remote_array when instantiated.
         self.time_last_remote_update: datetime = datetime(2000, 1, 1, 12, 0, 0)
 
-        self.logger = logging.getLogger(__name__)
-
-        # Set a flag to use to make it easier to determine whether debug
-        # logging is enabled
-        self.debug_logging_enabled = self.logger.isEnabledFor(logging.DEBUG)
-
         # register this new SmartThread so others can find us
         self._register()
 
@@ -411,10 +413,14 @@ class SmartThread:
             # started (as opposed to being not alive and stopped because
             # the thread failed)
             self.status = ThreadStatus.Registered
+            self.logger.debug(
+                f'status for thread {name} set to {self.status}')
         else:  # thread is alive or possibly failed already
             # we will say alive for now and determine later if it has
             # failed
             self.status = ThreadStatus.Alive
+            self.logger.debug(
+                f'status for thread {name} set to {self.status}')
 
     ####################################################################
     # repr
@@ -515,7 +521,8 @@ class SmartThread:
         for key, item in SmartThread._registry.items():
             self.logger.debug(
                 f'key = {key}, item = {item}, '
-                f'item.thread.is_alive() = {item.thread.is_alive()}')
+                f'item.thread.is_alive() = {item.thread.is_alive()}, '
+                f'status: {item.status}')
             if ((not item.thread.is_alive())
                     and (item.status & ThreadStatus.Stopped)):
                 keys_to_del.append(key)
@@ -543,6 +550,145 @@ class SmartThread:
                           .strftime("%H:%M:%S.%f"))
             self.logger.debug(f'{self.name} did cleanup of registry at UTC '
                               f'{print_time}, deleted {keys_to_del}')
+
+    ####################################################################
+    # start
+    ####################################################################
+    def start(self) -> None:
+        """Start the thread.
+
+        :Example: instantiate a SmartThread and start the thread
+
+        >>> import scottbrian_utils.smart_thread as st
+        >>> def f1() -> None:
+        ...     print('f1 beta entered')
+        >>> beta_smart_thread = SmartThread(name='beta', target=f1)
+        >>> beta_smart_thread.start()
+        f1 beta entered
+
+        """
+        self.status = ThreadStatus.Starting
+        self.thread.start()
+        if self.thread.is_alive():
+            self.status = ThreadStatus.Alive
+
+        self.logger.debug(
+            f'{self.name} thread started, thread.is_alive() = '
+            f'{self.thread.is_alive()}, '
+            f'status: {self.status}')
+
+    ####################################################################
+    # join
+    ####################################################################
+    def join(self, *,
+             targets: Union[str, set[str]],
+             log_msg: Optional[str] = None,
+             timeout: Optional[Union[int, float]] = None) -> None:
+        """Join with remote targets.
+
+        Args:
+            targets: thread names that are to be joined
+            log_msg: log message to issue
+            timeout: timeout to use instead of default timeout
+
+        Notes:
+            1) A ``resume()`` request can be done on an event that is not yet
+               being waited upon. This is referred as a **pre-resume**. The
+               remote thread doing a ``wait()`` request on a **pre-resume**
+               event will get back control immediately.
+            2) If the ``resume()`` request sees that the event has already
+               been resumed, it will loop and wait for the event to be cleared
+               under the assumption that the event was previously
+               **pre-resumed** and a wait is imminent. The ``wait()`` will
+               clear the event and the ``resume()`` request will simply resume
+               it again as a **pre-resume**.
+            3) If one thread makes a ``resume()`` request and the other thread
+               becomes not alive, the ``resume()`` request raises a
+               **SmartThreadRemoteThreadNotAlive** error.
+
+        :Example: instantiate SmartThread and ``resume()`` event that function
+                    waits on
+
+        >>> import scottbrian_paratools.smart_event as st
+        >>> def f1() -> None:
+        ...     print('f1 beta entered')
+        ...     beta_smart_thread.wait()
+        ...     print('f1 beta exiting')
+
+        >>> alpha_smart_thread = SmartThread(name='alpha')
+        >>> beta_smart_thread = SmartThread(name='beta', target=f1)
+        >>> alpha_smart_thread.resume()
+        >>> beta_smart_thread.join()
+
+        """
+        # get SetupBlock with targets in a set and a timer object
+        sb = self._common_setup(targets=targets, timeout=timeout)
+
+        # if caller specified a log message to issue
+        caller_info = ''
+        if log_msg and self.debug_logging_enabled:
+            caller_info = get_formatted_call_sequence(latest=1, depth=1)
+            self.logger.debug(
+                f'join() entered by {self.name} to join {sb.targets} '
+                f'{caller_info} {log_msg}')
+
+        work_targets = sb.targets.copy()
+
+        while work_targets:
+            for remote in work_targets:
+                # we need to handle the case where a remote we want to
+                # join is not in out remote_array. We call
+                # _refresh_remote_array to get the latest changes but
+                # only if we see that the registry has changed
+                # (_registry_last_update).
+                if (self.time_last_remote_update
+                        < SmartThread._registry_last_update):
+                    self._refresh_remote_array()
+
+                if remote in self.remote_array:
+                    local_cb = self.remote_array[remote]
+                    # Note that if the remote thread was never started,
+                    # the following join will raise an error. If the
+                    # thread is eventually started, we currently have no
+                    # way to detect that and react. We can only hope
+                    # that a failed join in that case will be adequate.
+                    if sb.timer.remaining_time():
+                        local_cb.remote_smart_thread.thread.join(
+                            timeout=(sb.timer.remaining_time()
+                                     / len(work_targets)))
+                    else:
+                        local_cb.remote_smart_thread.thread.join()
+
+                    # we need to check to make sure the thread is not
+                    # alive in case we timed out
+                    if not local_cb.remote_smart_thread.thread.is_alive():
+                        # indicate remove from registry
+                        local_cb.remote_smart_thread.status = (ThreadStatus
+                                                               .Stopped)
+                        # remove this thread from the registry
+                        with SmartThread._registry_lock:
+                            self._clean_up_registry()
+                        self.logger.debug(
+                            f'{self.name} did successful join of {remote}.')
+
+                        # start the while loop again with one less remote
+                        work_targets.remove(remote)
+                        break
+
+            if sb.timer.is_expired():
+                self.logger.debug(f'{self.name} timeout of a join() ')
+                self.logger.error(
+                    f'{self.name} raising SmartThreadJoinTimedOut waiting '
+                    f'for {work_targets} ')
+                raise SmartThreadJoinTimedOut(
+                    f'{self.name} timed out waiting for {work_targets}.')
+
+            time.sleep(0.2)
+
+        if log_msg and self.debug_logging_enabled:
+            self.logger.debug(
+                f'join() by {self.name} to join {sb.targets} exiting. '
+                f'{caller_info} {log_msg}')
 
     ###########################################################################
     # _refresh_remote_array
@@ -686,39 +832,17 @@ class SmartThread:
 
             if changed:
                 SmartThread._registry_last_update = datetime.utcnow()
-                self.time_last_remote_update = (SmartThread
-                                                ._registry_last_update)
+
                 print_time = (SmartThread._registry_last_update
                               .strftime("%H:%M:%S.%f"))
                 self.logger.debug(
                     f'{self.name} updated registry and remote_array at UTC '
                     f'{print_time}')
-
-    ####################################################################
-    # start
-    ####################################################################
-    def start(self) -> None:
-        """Start the thread.
-
-        :Example: instantiate a SmartThread and start the thread
-
-        >>> import scottbrian_utils.smart_thread as st
-        >>> def f1() -> None:
-        ...     print('f1 beta entered')
-        >>> beta_smart_thread = SmartThread(name='beta', target=f1)
-        >>> beta_smart_thread.start()
-        f1 beta entered
-
-        """
-        self.status = ThreadStatus.Starting
-        self.thread.start()
-        if self.thread.is_alive():
-            self.status = ThreadStatus.Alive
-
-        self.logger.debug(
-            f'{self.name} thread started, thread.is_alive() = '
-            f'{self.thread.is_alive()}, '
-            f'status: {self.status}')
+            # update the time now that we know about any changes
+            # we must do this while still locked to avoid missing an
+            # update by the remote
+            self.time_last_remote_update = (SmartThread
+                                            ._registry_last_update)
 
     ####################################################################
     # send_msg
@@ -1019,119 +1143,6 @@ class SmartThread:
                 return key
 
         return ""  # nothing found, return empty string
-
-    ####################################################################
-    # join
-    ####################################################################
-    def join(self, *,
-             targets: Union[str, set[str]],
-             log_msg: Optional[str] = None,
-             timeout: Optional[Union[int, float]] = None) -> None:
-        """Join with remote targets.
-
-        Args:
-            targets: thread names that are to be joined
-            log_msg: log message to issue
-            timeout: timeout to use instead of default timeout
-
-        Notes:
-            1) A ``resume()`` request can be done on an event that is not yet
-               being waited upon. This is referred as a **pre-resume**. The
-               remote thread doing a ``wait()`` request on a **pre-resume**
-               event will get back control immediately.
-            2) If the ``resume()`` request sees that the event has already
-               been resumed, it will loop and wait for the event to be cleared
-               under the assumption that the event was previously
-               **pre-resumed** and a wait is imminent. The ``wait()`` will
-               clear the event and the ``resume()`` request will simply resume
-               it again as a **pre-resume**.
-            3) If one thread makes a ``resume()`` request and the other thread
-               becomes not alive, the ``resume()`` request raises a
-               **SmartThreadRemoteThreadNotAlive** error.
-
-        :Example: instantiate SmartThread and ``resume()`` event that function
-                    waits on
-
-        >>> import scottbrian_paratools.smart_event as st
-        >>> def f1() -> None:
-        ...     print('f1 beta entered')
-        ...     beta_smart_thread.wait()
-        ...     print('f1 beta exiting')
-
-        >>> alpha_smart_thread = SmartThread(name='alpha')
-        >>> beta_smart_thread = SmartThread(name='beta', target=f1)
-        >>> alpha_smart_thread.resume()
-        >>> beta_smart_thread.join()
-
-        """
-        # get SetupBlock with targets in a set and a timer object
-        sb = self._common_setup(targets=targets, timeout=timeout)
-
-        # if caller specified a log message to issue
-        caller_info = ''
-        if log_msg and self.debug_logging_enabled:
-            caller_info = get_formatted_call_sequence(latest=1, depth=1)
-            self.logger.debug(
-                f'join() entered by {self.name} to join {sb.targets} '
-                f'{caller_info} {log_msg}')
-
-        work_targets = sb.targets.copy()
-
-        while work_targets:
-            for remote in work_targets:
-                # we need to handle the case where a remote we want to
-                # join is not in out remote_array. We call
-                # _refresh_remote_array to get the latest changes but
-                # only if we see that the registry has changed
-                # (_registry_last_update).
-                if (self.time_last_remote_update
-                        < SmartThread._registry_last_update):
-                    self._refresh_remote_array()
-
-                if remote in self.remote_array:
-                    local_cb = self.remote_array[remote]
-                    # Note that if the remote thread was never started,
-                    # the following join will raise an error. If the
-                    # thread is eventually started, we currently have no
-                    # way to detect that and react. We can only hope
-                    # that a failed join in that case will be adequate.
-                    if sb.timer.remaining_time():
-                        local_cb.remote_smart_thread.thread.join(
-                            timeout=(sb.timer.remaining_time()
-                                     / len(work_targets)))
-                    else:
-                        local_cb.remote_smart_thread.thread.join()
-
-                    # we need to check to make sure the thread is not
-                    # alive in case we timeout out
-                    if not local_cb.remote_smart_thread.thread.is_alive():
-                        # indicate remove from registry
-                        local_cb.remote_smart_thread.status = (ThreadStatus
-                                                               .Stopped)
-                        # remove this thread from the registry
-                        with SmartThread._registry_lock:
-                            self._clean_up_registry()
-                        self.logger.debug(
-                            f'{self.name} did successful join of {remote}.')
-
-                        # start the while loop again with one less remote
-                        work_targets.remove(remote)
-                        break
-
-            if sb.timer.is_expired():
-                self.logger.debug(f'{self.name} timeout of a join() ')
-                self.logger.error(
-                    f'{self.name} raising SmartThreadJoinTimedOut waiting '
-                    f'for {work_targets} ')
-                raise SmartThreadJoinTimedOut(
-                    f'{self.name} timed out waiting for {work_targets}.')
-
-            time.sleep(0.2)
-
-        if log_msg and self.debug_logging_enabled:
-            self.logger.debug(
-                f'join() by {self.name} to join {sb.targets} exiting. '
-                f'{caller_info} {log_msg}')
 
     ####################################################################
     # resume
