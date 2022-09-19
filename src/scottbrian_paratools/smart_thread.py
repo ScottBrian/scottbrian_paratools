@@ -398,12 +398,13 @@ class SmartThread:
         # _refresh_remote_array.
         self.remote_array: dict[str, SmartThread.ConnectionStatusBlock] = {}
 
-        # time_last_remote_update is initially set to
+        # time_last_remote_check is initially set to
         # datetime(2000, 1, 1, 12, 0, 0) and the _registry_last_update
         # is initially set to datetime(2000, 1, 1, 12, 0, 1) which will
         # ensure that each thread will initially refresh their
         # remote_array when instantiated.
         self.time_last_remote_update: datetime = datetime(2000, 1, 1, 12, 0, 0)
+        self.time_last_remote_check: datetime = datetime(2000, 1, 1, 12, 0, 0)
 
         # register this new SmartThread so others can find us
         self._register()
@@ -568,6 +569,8 @@ class SmartThread:
 
         """
         self.status = ThreadStatus.Starting
+        self.logger.debug(
+            f'status for thread {self.name} set to {self.status}')
         self.thread.start()
         if self.thread.is_alive():
             self.status = ThreadStatus.Alive
@@ -641,7 +644,7 @@ class SmartThread:
                 # _refresh_remote_array to get the latest changes but
                 # only if we see that the registry has changed
                 # (_registry_last_update).
-                if (self.time_last_remote_update
+                if (self.time_last_remote_check
                         < SmartThread._registry_last_update):
                     self._refresh_remote_array()
 
@@ -733,69 +736,70 @@ class SmartThread:
         changed = False
         with SmartThread._registry_lock:
             # scan registry and adjust status
-            for key, item in SmartThread._registry.items():
-                saved_status = item.status
-                if item.thread.is_alive():
-                    item.status = ThreadStatus.Alive
+            for reg_thread_name, reg_smart_thread in (
+                    SmartThread._registry.items()):
+                saved_status = reg_smart_thread.status
+                if reg_smart_thread.thread.is_alive():
+                    reg_smart_thread.status = ThreadStatus.Alive
 
-                if saved_status != item.status:
+                if saved_status != reg_smart_thread.status:
                     changed = True
 
-                if (key != self.name) and (key not in self.remote_array):
+                if ((reg_thread_name != self.name)
+                        and (reg_thread_name not in self.remote_array)):
                     # we now add the remote_array entry for first time
-                    if self.name in item.remote_array:
-                        # remote already knows about us - use its status_lock
-
-                        remote_cb = item.remote_array[self.name]
-
-                        self.remote_array[key] = (
+                    if self.name in reg_smart_thread.remote_array:
+                        # remote already knows about us - create a
+                        # connection block for remote in our remote
+                        # array and use the existing status_lock
+                        self.remote_array[reg_thread_name] = (
                             SmartThread.ConnectionStatusBlock(
-                                remote_smart_thread=item,
-                                status_lock=remote_cb.status_lock,
-                                msg_q=queue.Queue(),
+                                remote_smart_thread=reg_smart_thread,
+                                status_lock=(
+                                    reg_smart_thread.remote_array[self.name]
+                                    .status_lock),
                                 event=threading.Event(),
-                                sync_event=threading.Event()
+                                sync_event=threading.Event(),
+                                msg_q=queue.Queue(),
+                                remote_msg_q=(
+                                    reg_smart_thread.remote_array[self.name]
+                                    .msg_q),
+                                pair_status=PairStatus.Ready
                             ))
-                        local_cb = self.remote_array[key]
-                        local_cb.remote_msg_q = remote_cb.msg_q
-                        remote_cb.remote_msg_q = local_cb.msg_q
-                        local_cb.pair_status = PairStatus.Ready
-                        remote_cb.pair_status = PairStatus.Ready
+                        reg_smart_thread.remote_array[
+                            self.name].remote_msg_q = (
+                            self.remote_array[reg_thread_name].msg_q)
+                        reg_smart_thread.remote_array[
+                            self.name].pair_status = PairStatus.Ready
                     else:
-                        # we are first to get started - create a new
-                        # status lock
-                        self.remote_array[key] = (
+                        # we are first to get started - create connection
+                        # block for remote in our remote array with a
+                        # new status lock
+                        self.remote_array[reg_thread_name] = (
                             SmartThread.ConnectionStatusBlock(
-                                remote_smart_thread=item,
+                                remote_smart_thread=reg_smart_thread,
                                 status_lock=threading.Lock(),
-                                msg_q=queue.Queue(),
                                 event=threading.Event(),
-                                sync_event=threading.Event()
+                                sync_event=threading.Event(),
+                                msg_q=queue.Queue()
                             ))
                     changed = True
 
             # scan remote_array
             remote_array_deletion_list = []
-            for key, item in self.remote_array.items():
-                if key not in SmartThread._registry:
+            for remray_name, status_block in self.remote_array.items():
+                if remray_name not in SmartThread._registry:
                     # entry was removed from the registry
-                    remote_array_deletion_list.append(key)
+                    remote_array_deletion_list.append(remray_name)
                 else:
-                    if (item.remote_smart_thread
-                            is not SmartThread._registry[key]):
+                    if (status_block.remote_smart_thread
+                            is not SmartThread._registry[remray_name]):
                         raise SmartThreadRemoteSmartThreadMismatch(
-                            f'{self.name} has id(item.remote_smart_thread) = '
-                            f'{id(item.remote_smart_thread)} '
-                            'and id(SmartThread._registry[key]) = '
-                            f'{id(SmartThread._registry[key])}')
-                    if (item.remote_smart_thread.thread
-                            is not SmartThread._registry[key].thread):
-                        raise SmartThreadRemoteThreadMismatch(
-                            f'{self.name} has '
-                            'id(item.remote_smart_thread.thread) = '
-                            f'{id(item.remote_smart_thread.thread)} '
-                            'and id(SmartThread._registry[key].thread) = '
-                            f'{id(SmartThread._registry[key].thread)}')
+                            f'{self.name} '
+                            'has id(status_block.remote_smart_thread) = '
+                            f'{id(status_block.remote_smart_thread)} '
+                            'and id(SmartThread._registry[remray_name]) = '
+                            f'{id(SmartThread._registry[remray_name])}')
                     # The following code checks to make sure the remote
                     # and us have the same shared items. Note that if
                     # the remote does not know about us yet, it will
@@ -803,46 +807,54 @@ class SmartThread:
                     # request that causes this method to get control.
                     # If the remote does know about us then it means
                     # that it should have the same shared items.
-                    if self.name in item.remote_smart_thread.remote_array:
-                        remote_cb = (item.remote_smart_thread
+                    if self.name in (status_block.remote_smart_thread
+                                     .remote_array):
+                        remote_cb = (status_block.remote_smart_thread
                                      .remote_array[self.name])
-                        if item.status_lock is not remote_cb.status_lock:
+                        if status_block.status_lock is not (
+                                remote_cb.status_lock):
                             raise SmartThreadStatusLockMismatch(
-                                f'{self.name} has id(item.status_lock) = '
-                                f'{id(item.status_lock)} and '
+                                f'{self.name} '
+                                'has id(status_block.status_lock) = '
+                                f'{id(status_block.status_lock)} and '
                                 f'remote_cb.status_lock = '
                                 f'{id(remote_cb.status_lock)}')
 
-                        # if item.remote_msg_q:
-                        if ((item.remote_msg_q is not remote_cb.msg_q)
-                                or (remote_cb.remote_msg_q is not item.msg_q)):
+                        if ((status_block.remote_msg_q is not (
+                                remote_cb.msg_q))
+                                or (remote_cb.remote_msg_q is not
+                                    status_block.msg_q)):
                             raise SmartThreadRemoteMsgQMismatch(
-                                f'{self.name} has id(item.remote_msg_q) = '
-                                f'{id(item.remote_msg_q)}, '
+                                f'{self.name} '
+                                'has id(status_block.remote_msg_q) = '
+                                f'{id(status_block.remote_msg_q)}, '
                                 'id(remote_cb.msg_q) = '
                                 f'{id(remote_cb.msg_q)},'
                                 'id(remote_cb.remote_msg_q) = '
                                 f'{id(remote_cb.remote_msg_q)}, '
-                                f'id(item.msg_q) = {id(item.msg_q)}')
+                                'id(status_block.msg_q) = '
+                                f'{id(status_block.msg_q)}')
 
-            for key in remote_array_deletion_list:
-                del self.remote_array[key]
+            for del_thread_name in remote_array_deletion_list:
+                del self.remote_array[del_thread_name]
                 changed = True
-                self.logger.debug(f'{key} removed from remote_array')
+                self.logger.debug(f'{del_thread_name} removed from remote_array')
 
             if changed:
                 SmartThread._registry_last_update = datetime.utcnow()
+                self.time_last_remote_update = (SmartThread
+                                                ._registry_last_update)
 
                 print_time = (SmartThread._registry_last_update
                               .strftime("%H:%M:%S.%f"))
                 self.logger.debug(
                     f'{self.name} updated registry and remote_array at UTC '
                     f'{print_time}')
-            # update the time now that we know about any changes
-            # we must do this while still locked to avoid missing an
-            # update by the remote
-            self.time_last_remote_update = (SmartThread
-                                            ._registry_last_update)
+            # Update time_last_remote_check now that we know about any
+            # changes. We must do this while still locked to avoid
+            # missing an update by the remote.
+            self.time_last_remote_check = (SmartThread
+                                           ._registry_last_update)
 
     ####################################################################
     # send_msg
@@ -912,7 +924,7 @@ class SmartThread:
                 # call _refresh_remote_array to get the latest changes
                 # but only if we see that the registry has changed
                 # (_registry_last_update).
-                if (self.time_last_remote_update
+                if (self.time_last_remote_check
                         < SmartThread._registry_last_update):
                     self._refresh_remote_array()
 
@@ -930,7 +942,7 @@ class SmartThread:
                             raise SmartThreadRemoteThreadNotAlive(
                                 f'{self.name} send_msg detected {remote} '
                                 'thread is not alive.')
-                    else:
+                    elif local_cb.pair_status == PairStatus.Ready:
                         try:
                             self.logger.info(
                                 f'{self.name} sending message to {remote}')
@@ -988,14 +1000,14 @@ class SmartThread:
             caller_info = get_formatted_call_sequence(latest=1, depth=1)
             self.logger.debug(f'recv_msg() entered: {self.name} <- {remote} '
                               f'{caller_info} {log_msg}')
-
+        log_msg_added = False
         while True:
             # we need to handle the case where a remote we want to recv
             # a message from is not yet registered and alive. We call
             # _refresh_remote_array to get the latest changes but only
             # if we see that the registry has changed
             # (_registry_last_update).
-            if (self.time_last_remote_update
+            if (self.time_last_remote_check
                     < SmartThread._registry_last_update):
                 self._refresh_remote_array()
 
@@ -1006,9 +1018,11 @@ class SmartThread:
                 # we try to get the message first, and if it's not there
                 # we will check to see whether the remote is alive.
                 try:
-                    self.logger.info(
-                        f'{self.name} receiving msg from {remote}')
                     # recv message from remote
+                    if not log_msg_added: # do only one log message
+                        self.logger.info(
+                            f'{self.name} receiving msg from {remote}')
+                        log_msg_added = True
                     ret_msg = local_cb.msg_q.get(timeout=0.2)
                     break
                 except queue.Empty:
@@ -1135,12 +1149,13 @@ class SmartThread:
         # call _refresh_remote_array to get the latest changes, but only
         # if we see that the registry has changed
         # (_registry_last_update).
-        if self.time_last_remote_update < SmartThread._registry_last_update:
+        if self.time_last_remote_check < SmartThread._registry_last_update:
             self._refresh_remote_array()
 
-        for key, item in self.remote_array.items():
-            if not item.msg_q.empty():
-                return key
+        for remray_name, status_block in (
+                self.remote_array.items()):
+            if not status_block.msg_q.empty():
+                return remray_name
 
         return ""  # nothing found, return empty string
 
@@ -1266,7 +1281,7 @@ class SmartThread:
                 # _refresh_remote_array to get the latest changes but
                 # only if we see that the registry has changed
                 # (_registry_last_update).
-                if (self.time_last_remote_update
+                if (self.time_last_remote_check
                         < SmartThread._registry_last_update):
                     self._refresh_remote_array()
 
@@ -1513,7 +1528,7 @@ class SmartThread:
             # _refresh_remote_array to get the latest changes but only
             # if we see that the registry has changed
             # (_registry_last_update).
-            if (self.time_last_remote_update
+            if (self.time_last_remote_check
                     < SmartThread._registry_last_update):
                 self._refresh_remote_array()
 
