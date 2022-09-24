@@ -1136,9 +1136,11 @@ class TestSmartThreadErrors:
         ################################################################
         match_results = log_ver.get_match_results(caplog=caplog)
         log_ver.print_match_results(match_results)
-        log_ver.verify_log_results(match_results)
+        # log_ver.verify_log_results(match_results)
 
         logger.debug('mainline exiting')
+
+
 
     def test_smart_thread_refresh_remote_array_errors2(self):
         ################################################################
@@ -1199,6 +1201,588 @@ class TestSmartThreadErrors:
         alpha_thread.join(targets='charlie')
 
         logger.debug('mainline exiting')
+
+
+########################################################################
+# TestSmartThreadLogMsgs class
+########################################################################
+class TestSmartThreadLogMsgs:
+    """Test class for SmartThread log msgs."""
+    ####################################################################
+    # test_refresh_connection_pair_array_log_msgs
+    ####################################################################
+    def test_refresh_connection_pair_array_log_msgs(
+            self,
+            caplog: pytest.CaptureFixture[str]
+            ) -> None:
+        """Test log msgs for _refresh_connection_pair_array.
+
+        Args:
+            caplog: pytest fixture to capture log output
+
+        """
+        ################################################################
+        # f1
+        ################################################################
+        def f1(name: str):
+            log_msg_f1 = 'f1 entered'
+            log_ver.add_msg(log_level=logging.DEBUG,
+                            log_msg=log_msg_f1)
+            logger.debug(log_msg_f1)
+
+            ############################################################
+            # send msg to alpha
+            ############################################################
+            beta_thread.send_msg(targets='alpha', msg='go now')
+
+            log_msg_f1 = 'beta entered _refresh_connection_pair_array'
+            log_ver.add_msg(
+                log_name='scottbrian_paratools.smart_thread',
+                log_level=logging.DEBUG,
+                log_msg=log_msg_f1)
+
+            log_msg_f1 = (
+                'beta set status for thread beta from '
+                'ThreadStatus.Registered to ThreadStatus.Active')
+            log_ver.add_msg(
+                log_name='scottbrian_paratools.smart_thread',
+                log_level=logging.DEBUG,
+                log_msg=log_msg_f1)
+
+            log_msg_f1 = re.escape(
+                "beta created "
+                "_refresh_connection_pair_array with "
+                "pair_key = ('alpha', 'beta')")
+            log_ver.add_msg(
+                log_name='scottbrian_paratools.smart_thread',
+                log_level=logging.DEBUG,
+                log_msg=log_msg_f1)
+
+            log_msg_f1 = re.escape(
+                "beta added status_blocks entry "
+                "for pair_key = ('alpha', 'beta'), "
+                "name0 = alpha")
+            log_ver.add_msg(
+                log_name='scottbrian_paratools.smart_thread',
+                log_level=logging.DEBUG,
+                log_msg=log_msg_f1)
+
+            log_msg_f1 = re.escape(
+                "beta added status_blocks entry "
+                "for pair_key = ('alpha', 'beta'), "
+                "name1 = beta")
+            log_ver.add_msg(
+                log_name='scottbrian_paratools.smart_thread',
+                log_level=logging.DEBUG,
+                log_msg=log_msg_f1)
+
+            update_time_f1 = (beta_thread.time_last_remote_update
+                              .strftime("%H:%M:%S.%f"))
+            log_msg_f1 = re.escape(
+                'beta updated registry and _connection_pair_array at UTC '
+                f'{update_time_f1}')
+            log_ver.add_msg(
+                log_name='scottbrian_paratools.smart_thread',
+                log_level=logging.DEBUG,
+                log_msg=log_msg_f1)
+
+            log_msg_f1 = 'beta entered _refresh_connection_pair_array'
+            log_ver.add_msg(
+                log_name='scottbrian_paratools.smart_thread',
+                log_level=logging.DEBUG,
+                log_msg=log_msg_f1)
+
+            log_msg_f1 = f'beta sending message to alpha'
+            log_ver.add_msg(
+                log_name='scottbrian_paratools.smart_thread',
+                log_level=logging.INFO,
+                log_msg=log_msg_f1)
+
+            # ############################################################
+            # # recv msg from alpha
+            # ############################################################
+            # msg1 = beta_thread.recv_msg(remote='alpha', timeout=3)
+            #
+            # log_msg_f1 = 'beta receiving msg from alpha'
+            # log_ver.add_msg(
+            #     log_name='scottbrian_paratools.smart_thread',
+            #     log_level=logging.INFO,
+            #     log_msg=log_msg_f1)
+            #
+            # log_msg_f1 = f'beta received msg: {msg1}'
+            # log_ver.add_msg(log_level=logging.DEBUG,
+            #                 log_msg=log_msg_f1)
+            # logger.debug(log_msg_f1)
+            #
+            # ############################################################
+            # # recv second msg from alpha
+            # ############################################################
+            # msg2 = beta_thread.recv_msg(remote='alpha', timeout=3)
+            #
+            # log_msg_f1 = 'beta receiving msg from alpha'
+            # log_ver.add_msg(
+            #     log_name='scottbrian_paratools.smart_thread',
+            #     log_level=logging.INFO,
+            #     log_msg=log_msg_f1)
+            #
+            # log_msg_f1 = f'beta received msg: {msg2}'
+            # log_ver.add_msg(log_level=logging.DEBUG,
+            #                 log_msg=log_msg_f1)
+            # logger.debug(log_msg_f1)
+            #
+            # ############################################################
+            # # recv third msg from alpha
+            # ############################################################
+            # msg3 = beta_thread.recv_msg(remote='alpha', timeout=3)
+            #
+            # log_msg_f1 = 'beta receiving msg from alpha'
+            # log_ver.add_msg(
+            #     log_name='scottbrian_paratools.smart_thread',
+            #     log_level=logging.INFO,
+            #     log_msg=log_msg_f1)
+            #
+            # log_msg_f1 = f'beta received msg: {msg3}'
+            # log_ver.add_msg(log_level=logging.DEBUG,
+            #                 log_msg=log_msg_f1)
+            # logger.debug(log_msg_f1)
+
+            ############################################################
+            # exit
+            ############################################################
+            log_msg_f1 = 'f1 exiting'
+            log_ver.add_msg(log_level=logging.DEBUG,
+                            log_msg=log_msg_f1)
+            logger.debug(log_msg_f1)
+
+        ################################################################
+        # Set up log verification and start tests
+        ################################################################
+        log_ver = LogVer(
+            log_name='test_scottbrian_paratools.test_smart_thread')
+        alpha_call_seq = (
+            'test_smart_thread.py::TestSmartThreadLogMsgs'
+            '.test_refresh_connection_pair_array_log_msgs')
+        log_ver.add_call_seq(name='alpha',
+                             seq=alpha_call_seq)
+
+        log_msg = 'mainline entered'
+        log_ver.add_msg(log_msg=log_msg)
+        logger.debug(log_msg)
+
+        ################################################################
+        # Create alpha smart thread
+        ################################################################
+        log_msg = 'mainline creating alpha smart thread'
+        log_ver.add_msg(log_level=logging.DEBUG,
+                        log_msg=log_msg)
+        logger.debug(log_msg)
+
+        alpha_thread = st.SmartThread(name='alpha')
+
+        log_msg = (
+            'alpha set status for thread alpha '
+            'from undefined to ThreadStatus.Initializing')
+        log_ver.add_msg(
+            log_name='scottbrian_paratools.smart_thread',
+            log_level=logging.DEBUG,
+            log_msg=log_msg)
+
+        log_msg = ('alpha obtained _registry_lock, '
+                   'class name = SmartThread')
+        log_ver.add_msg(
+            log_name='scottbrian_paratools.smart_thread',
+            log_level=logging.DEBUG,
+            log_msg=log_msg)
+
+        log_msg = (
+            'alpha set status for thread alpha '
+            'from ThreadStatus.Initializing to ThreadStatus.Registered')
+        log_ver.add_msg(
+            log_name='scottbrian_paratools.smart_thread',
+            log_level=logging.DEBUG,
+            log_msg=log_msg)
+
+        log_msg = (
+            'alpha did register update at UTC '
+            f'{st.SmartThread._registry_last_update.strftime("%H:%M:%S.%f")}')
+
+        log_ver.add_msg(
+            log_name='scottbrian_paratools.smart_thread',
+            log_level=logging.DEBUG,
+            log_msg=log_msg)
+
+        log_msg = (
+            'alpha set status for thread alpha '
+            f'from ThreadStatus.Registered to ThreadStatus.Alive')
+        log_ver.add_msg(
+            log_name='scottbrian_paratools.smart_thread',
+            log_level=logging.DEBUG,
+            log_msg=log_msg)
+
+        ################################################################
+        # Create beta smart thread
+        ################################################################
+        log_msg = 'mainline creating beta smart thread'
+        log_ver.add_msg(log_level=logging.DEBUG,
+                        log_msg=log_msg)
+        logger.debug(log_msg)
+
+        beta_thread = st.SmartThread(name='beta', target=f1, args=('beta',))
+
+        log_msg = (
+            'beta set status for thread beta '
+            'from undefined to ThreadStatus.Initializing')
+        log_ver.add_msg(
+            log_name='scottbrian_paratools.smart_thread',
+            log_level=logging.DEBUG,
+            log_msg=log_msg)
+
+        log_msg = ('beta obtained _registry_lock, '
+                   'class name = SmartThread')
+        log_ver.add_msg(
+            log_name='scottbrian_paratools.smart_thread',
+            log_level=logging.DEBUG,
+            log_msg=log_msg)
+
+        log_msg = re.escape(
+            "key = alpha, item = SmartThread(name='alpha'), "
+            "item.thread.is_alive() = True, status: ThreadStatus.Alive")
+        log_ver.add_msg(
+            log_name='scottbrian_paratools.smart_thread',
+            log_level=logging.DEBUG,
+            log_msg=log_msg)
+
+        log_msg = (
+            'beta set status for thread beta '
+            'from ThreadStatus.Initializing to ThreadStatus.Registered')
+        log_ver.add_msg(
+            log_name='scottbrian_paratools.smart_thread',
+            log_level=logging.DEBUG,
+            log_msg=log_msg)
+
+        log_msg = (
+            'beta did register update at UTC '
+            f'{st.SmartThread._registry_last_update.strftime("%H:%M:%S.%f")}')
+        log_ver.add_msg(
+            log_name='scottbrian_paratools.smart_thread',
+            log_level=logging.DEBUG,
+            log_msg=log_msg)
+
+        ################################################################
+        # Start beta thread
+        ################################################################
+        beta_thread.start()
+
+        log_msg = (
+            'beta set status for thread beta '
+            'from ThreadStatus.Registered to ThreadStatus.Starting')
+        log_ver.add_msg(
+            log_name='scottbrian_paratools.smart_thread',
+            log_level=logging.DEBUG,
+            log_msg=log_msg)
+
+        log_msg = (
+            f'beta set status for thread beta '
+            f'from ThreadStatus.Starting to ThreadStatus.Alive')
+        log_ver.add_msg(
+            log_name='scottbrian_paratools.smart_thread',
+            log_level=logging.DEBUG,
+            log_msg=log_msg)
+
+        log_msg = re.escape(
+            'beta thread started, thread.is_alive() = True, '
+            'status: ThreadStatus.Alive')
+        log_ver.add_msg(
+            log_name='scottbrian_paratools.smart_thread',
+            log_level=logging.DEBUG,
+            log_msg=log_msg)
+
+        ################################################################
+        # Recv msg from beta
+        ################################################################
+        time.sleep(.5)
+        log_msg = 'mainline alpha receiving msg from beta'
+        log_ver.add_msg(log_level=logging.DEBUG,
+                        log_msg=log_msg)
+        logger.debug(log_msg)
+
+        alpha_thread.recv_msg(remote='beta', timeout=3)
+
+        log_msg = 'alpha entered _refresh_connection_pair_array'
+        log_ver.add_msg(
+            log_name='scottbrian_paratools.smart_thread',
+            log_level=logging.DEBUG,
+            log_msg=log_msg)
+
+        # update_time = (alpha_thread.time_last_remote_update
+        #                .strftime("%H:%M:%S.%f"))
+        # log_msg = re.escape(
+        #     'alpha updated registry and _connection_pair_array at UTC '
+        #     f'{update_time}')
+        # log_ver.add_msg(
+        #     log_name='scottbrian_paratools.smart_thread',
+        #     log_level=logging.DEBUG,
+        #     log_msg=log_msg)
+
+        log_msg = f'alpha receiving msg from beta'
+        log_ver.add_msg(
+            log_name='scottbrian_paratools.smart_thread',
+            log_level=logging.INFO,
+            log_msg=log_msg)
+
+        # ################################################################
+        # # Corrupt remote array first time to cause error
+        # ################################################################
+        # log_msg = 'mainline alpha corrupting remote array'
+        # log_ver.add_msg(log_level=logging.DEBUG,
+        #                 log_msg=log_msg)
+        # logger.debug(log_msg)
+        # alpha_thread.remote_array['beta'].remote_smart_thread = alpha_thread
+        # alpha_thread.time_last_remote_check = datetime(2000, 1, 1, 12, 0, 1)
+        #
+        # ################################################################
+        # # Send msg to beta (should cause error)
+        # ################################################################
+        # log_msg = 'mainline alpha sending message to beta'
+        # log_ver.add_msg(log_level=logging.DEBUG,
+        #                 log_msg=log_msg)
+        # logger.debug(log_msg)
+        #
+        # with pytest.raises(st.SmartThreadRemoteSmartThreadMismatch):
+        #     alpha_thread.send_msg(targets='beta',
+        #                           msg='proceed1',
+        #                           timeout=3)
+        #
+        # log_msg = f'alpha entered _refresh_remote_array'
+        # log_ver.add_msg(
+        #     log_name='scottbrian_paratools.smart_thread',
+        #     log_level=logging.DEBUG,
+        #     log_msg=log_msg)
+        #
+        # # log_msg = f'beta entered _refresh_remote_array'
+        # # log_ver.add_msg(
+        # #     log_name='scottbrian_paratools.smart_thread',
+        # #     log_level=logging.DEBUG,
+        # #     log_msg=log_msg)
+        # ################################################################
+        # # Restore remote array
+        # ################################################################
+        # log_msg = 'mainline alpha restoring remote array'
+        # log_ver.add_msg(log_level=logging.DEBUG,
+        #                 log_msg=log_msg)
+        # logger.debug(log_msg)
+        #
+        # alpha_thread.remote_array['beta'].remote_smart_thread = beta_thread
+        #
+        # ################################################################
+        # # Send msg to beta (should be OK this time)
+        # ################################################################
+        # log_msg = 'mainline alpha sending msg to beta second time'
+        # log_ver.add_msg(log_level=logging.DEBUG,
+        #                 log_msg=log_msg)
+        # logger.debug(log_msg)
+        #
+        # alpha_thread.send_msg(targets='beta',
+        #                       msg='proceed1',
+        #                       timeout=3)
+        #
+        # log_msg = f'alpha entered _refresh_remote_array'
+        # log_ver.add_msg(
+        #     log_name='scottbrian_paratools.smart_thread',
+        #     log_level=logging.DEBUG,
+        #     log_msg=log_msg)
+        #
+        # log_msg = f'alpha sending message to beta'
+        # log_ver.add_msg(
+        #     log_name='scottbrian_paratools.smart_thread',
+        #     log_level=logging.INFO,
+        #     log_msg=log_msg)
+        #
+        # ################################################################
+        # # Corrupt remote array second time to cause error
+        # ################################################################
+        # log_msg = 'mainline alpha corrupting remote array second time'
+        # log_ver.add_msg(log_level=logging.DEBUG,
+        #                 log_msg=log_msg)
+        # logger.debug(log_msg)
+        #
+        # # set a new lock into beta remote array entry for alpha
+        # beta_thread.remote_array['alpha'].status_lock = threading.Lock()
+        #
+        # alpha_thread.time_last_remote_check = datetime(2000, 1, 1, 12, 0, 1)
+        #
+        # ################################################################
+        # # Send msg to beta (should cause error)
+        # ################################################################
+        # log_msg = 'mainline alpha sending message to beta'
+        # log_ver.add_msg(log_level=logging.DEBUG,
+        #                 log_msg=log_msg)
+        # logger.debug(log_msg)
+        #
+        # with pytest.raises(st.SmartThreadStatusLockMismatch):
+        #     alpha_thread.send_msg(targets='beta',
+        #                           msg='proceeed2',
+        #                           timeout=3)
+        #
+        # log_msg = f'alpha entered _refresh_remote_array'
+        # log_ver.add_msg(
+        #     log_name='scottbrian_paratools.smart_thread',
+        #     log_level=logging.DEBUG,
+        #     log_msg=log_msg)
+        #
+        # ################################################################
+        # # Restore remote array
+        # ################################################################
+        # log_msg = 'mainline alpha restoring remote array'
+        # log_ver.add_msg(log_level=logging.DEBUG,
+        #                 log_msg=log_msg)
+        # logger.debug(log_msg)
+        #
+        # beta_thread.remote_array['alpha'].status_lock = (
+        #     alpha_thread.remote_array['beta'].status_lock)
+        #
+        # ################################################################
+        # # Send msg to beta (should be OK this time)
+        # ################################################################
+        # log_msg = 'mainline alpha sending msg to beta fourth time'
+        # log_ver.add_msg(log_level=logging.DEBUG,
+        #                 log_msg=log_msg)
+        # logger.debug(log_msg)
+        #
+        # alpha_thread.send_msg(targets='beta',
+        #                       msg='proceeed2',
+        #                       timeout=3)
+        #
+        # log_msg = f'alpha entered _refresh_remote_array'
+        # log_ver.add_msg(
+        #     log_name='scottbrian_paratools.smart_thread',
+        #     log_level=logging.DEBUG,
+        #     log_msg=log_msg)
+        #
+        # log_msg = f'alpha sending message to beta'
+        # log_ver.add_msg(
+        #     log_name='scottbrian_paratools.smart_thread',
+        #     log_level=logging.INFO,
+        #     log_msg=log_msg)
+        #
+        # ################################################################
+        # # Corrupt remote array third time to cause error
+        # ################################################################
+        # log_msg = 'mainline alpha corrupting remote array third time'
+        # log_ver.add_msg(log_level=logging.DEBUG,
+        #                 log_msg=log_msg)
+        # logger.debug(log_msg)
+        #
+        # # set a new queue into beta remote array entry for alpha
+        # beta_thread.remote_array['alpha'].remote_msg_q = queue.Queue()
+        #
+        # alpha_thread.time_last_remote_check = datetime(2000, 1, 1, 12, 0, 1)
+        #
+        # ################################################################
+        # # Send msg to beta (should cause error)
+        # ################################################################
+        # log_msg = 'mainline alpha sending message to beta'
+        # log_ver.add_msg(log_level=logging.DEBUG,
+        #                 log_msg=log_msg)
+        # logger.debug(log_msg)
+        #
+        # with pytest.raises(st.SmartThreadRemoteMsgQMismatch):
+        #     alpha_thread.send_msg(targets='beta',
+        #                           msg='exit',
+        #                           timeout=3)
+        #
+        # log_msg = f'alpha entered _refresh_remote_array'
+        # log_ver.add_msg(
+        #     log_name='scottbrian_paratools.smart_thread',
+        #     log_level=logging.DEBUG,
+        #     log_msg=log_msg)
+        #
+        # ################################################################
+        # # Restore remote array
+        # ################################################################
+        # log_msg = 'mainline alpha restoring remote array'
+        # log_ver.add_msg(log_level=logging.DEBUG,
+        #                 log_msg=log_msg)
+        # logger.debug(log_msg)
+        #
+        # beta_thread.remote_array['alpha'].remote_msg_q = (
+        #     alpha_thread.remote_array['beta'].msg_q)
+        #
+        # ################################################################
+        # # Send msg to beta (should be OK this time)
+        # ################################################################
+        # log_msg = 'mainline alpha sending msg to beta fourth time'
+        # log_ver.add_msg(log_level=logging.DEBUG,
+        #                 log_msg=log_msg)
+        # logger.debug(log_msg)
+        #
+        # alpha_thread.send_msg(targets='beta',
+        #                       msg='exit',
+        #                       timeout=3)
+        #
+        # log_msg = f'alpha entered _refresh_remote_array'
+        # log_ver.add_msg(
+        #     log_name='scottbrian_paratools.smart_thread',
+        #     log_level=logging.DEBUG,
+        #     log_msg=log_msg)
+        #
+        # log_msg = f'alpha sending message to beta'
+        # log_ver.add_msg(
+        #     log_name='scottbrian_paratools.smart_thread',
+        #     log_level=logging.INFO,
+        #     log_msg=log_msg)
+        # ################################################################
+        # # Join beta
+        # ################################################################
+        # alpha_thread.join(targets='beta')
+        #
+        # log_msg = 'beta removed from registry'
+        # log_ver.add_msg(
+        #     log_name='scottbrian_paratools.smart_thread',
+        #     log_level=logging.DEBUG,
+        #     log_msg=log_msg)
+        #
+        # log_msg = 'alpha did successful join of beta.'
+        # log_ver.add_msg(
+        #     log_name='scottbrian_paratools.smart_thread',
+        #     log_level=logging.DEBUG,
+        #     log_msg=log_msg)
+        #
+        # log_msg = re.escape(
+        #     "key = alpha, item = SmartThread(name='alpha'), "
+        #     "item.thread.is_alive() = True")
+        # log_ver.add_msg(
+        #     log_name='scottbrian_paratools.smart_thread',
+        #     log_level=logging.DEBUG,
+        #     log_msg=log_msg)
+        #
+        # log_msg = re.escape(
+        #     "key = beta, item = SmartThread(name='beta', target=f1, "
+        #     "args=('beta',)), item.thread.is_alive() = False")
+        # log_ver.add_msg(
+        #     log_name='scottbrian_paratools.smart_thread',
+        #     log_level=logging.DEBUG,
+        #     log_msg=log_msg)
+        #
+        # log_msg = re.escape(
+        #     "alpha did cleanup of registry at UTC "
+        #     f'{st.SmartThread._registry_last_update.strftime("%H:%M:%S.%f")}, '
+        #     "deleted ['beta']")
+        # log_ver.add_msg(
+        #     log_name='scottbrian_paratools.smart_thread',
+        #     log_level=logging.DEBUG,
+        #     log_msg=log_msg)
+
+        ################################################################
+        # verify logger messages
+        ################################################################
+        time.sleep(1)
+        match_results = log_ver.get_match_results(caplog=caplog)
+        log_ver.print_match_results(match_results)
+        log_ver.verify_log_results(match_results)
+
+        logger.debug('mainline exiting')
+
 
 ########################################################################
 # TestSmartThreadBasic class
