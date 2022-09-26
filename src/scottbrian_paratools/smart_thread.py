@@ -209,6 +209,17 @@ class SetupBlock:
 
 
 ########################################################################
+# ThreadCreate Flags Class
+# These flags are used to indicate how the SmartThread was created
+# during initialization based on the arguments.
+########################################################################
+class ThreadCreate(Flag):
+    Current = auto()
+    Target = auto()
+    Thread = auto()
+
+
+########################################################################
 # ThreadStatus Flags Class
 # These flags are used to indicate the life cycle of a SmartThread.
 # Initializing is set in the __init__ method. The __init__ method calls
@@ -315,6 +326,7 @@ class SmartThread:
                  target: Optional[Callable[..., Any]] = None,
                  args: Optional[tuple[...]] = None,
                  thread: Optional[threading.Thread] = None,
+                 auto_start: Optional[bool] = True,
                  default_timeout: Optional[Union[int, float]] = None
                  ) -> None:
         """Initialize an instance of the SmartThread class.
@@ -335,6 +347,9 @@ class SmartThread:
                       in a class that inherits threading.Thread in which
                       case thread=self is required. Mutually exclusive
                       with *target*.
+            auto_start: specifies whether to start the thread. Valid for
+                          target or thread only. Ignored when neither
+                          target nor thread specified.
             default_timeout: the timeout value to use when a request is
                                made and a timeout for the request is not
                                specified. If default_timeout is
@@ -404,6 +419,7 @@ class SmartThread:
                 'without target specified.')
 
         if target:  # caller wants a thread created
+            self.thread_create = ThreadCreate.Target
             if args:
                 self.thread = threading.Thread(target=target,
                                                args=args,
@@ -412,9 +428,13 @@ class SmartThread:
                 self.thread = threading.Thread(target=target,
                                                name=name)
         elif thread:  # caller provided the thread to use
+            self.thread_create = ThreadCreate.Thread
             self.thread = thread
         else:  # caller is running on the thread to be used
+            self.thread_create = ThreadCreate.Current
             self.thread = threading.current_thread()
+
+        self.auto_start = auto_start
 
         self.default_timeout = default_timeout
 
@@ -438,6 +458,11 @@ class SmartThread:
 
         # register this new SmartThread so others can find us
         self._register()
+
+        self.auto_started = False
+        if self.auto_start and not self.thread.is_alive():
+            self.start()
+            self.auto_started = True
 
     ####################################################################
     # repr
