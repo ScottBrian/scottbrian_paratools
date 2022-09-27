@@ -118,6 +118,7 @@ def thread_exc(monkeypatch: Any) -> "ExcHook":
 
     # clean the registry in SmartThread class
     SmartThread._registry = {}
+    SmartThread._pair_array = {}
 
     # clean the registry in ThreadPair class
     # ThreadPair._registry = {}
