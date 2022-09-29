@@ -3,8 +3,11 @@
 ###############################################################################
 # Standard Library
 ###############################################################################
+from collections import deque
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+from itertools import combinations
 import logging
 import queue
 import random
@@ -47,6 +50,10 @@ class IncorrectActionSpecified(ErrorTstSmartThread):
 
 
 class UnrecognizedCmd(ErrorTstSmartThread):
+    """UnrecognizedCmd exception class."""
+    pass
+
+class InvalidConfigurationDetected(ErrorTstSmartThread):
     """UnrecognizedCmd exception class."""
     pass
 
@@ -1148,66 +1155,6 @@ class TestSmartThreadErrors:
 
 
 
-    def test_smart_thread_refresh_remote_array_errors2(self):
-        ################################################################
-        # f1
-        ################################################################
-        def f1(name: str):
-            logger.debug('f1 entered')
-            if name == 'beta':
-                msg1 = beta_thread.recv_msg(remote='alpha')
-            else:
-                charlie_thread.send_msg(targets='alpha', msg='go now')
-                msg1 = charlie_thread.recv_msg(remote='alpha', timeout=3)
-            logger.debug(f'{name} received msg: {msg1}')
-            logger.debug('f1 exiting')
-
-        ####################################################################
-        # Create smart thread with bad name
-        ####################################################################
-        logger.debug('mainline entered')
-
-        logger.debug('mainline creating alpha smart thread')
-        alpha_thread = st.SmartThread(name='alpha')
-
-        logger.debug('mainline creating beta smart thread')
-        beta_thread = st.SmartThread(name='beta', target=f1, args=('beta',))
-        beta_thread.start()
-
-        logger.debug('mainline alpha sending msg to beta')
-
-        alpha_thread.send_msg(targets='beta',
-                              msg='exit',
-                              timeout=3)
-        alpha_thread.join(targets='beta')
-
-        logger.debug('mainline creating charlie smart thread')
-        charlie_thread = st.SmartThread(name='charlie',
-                                        target=f1,
-                                        args=('charlie',))
-        charlie_thread.start()
-
-        logger.debug('mainline alpha sending msg to charlie')
-        msg = alpha_thread.recv_msg(remote='charlie', timeout=3)
-
-        logger.debug('mainline alpha corrupting remote array')
-        alpha_thread.remote_array['charlie'].remote_smart_thread = alpha_thread
-        alpha_thread.time_last_pair_array_update = datetime(2000, 1, 1, 12, 0, 1)
-        logger.debug('mainline alpha sending msg to charlie')
-        with pytest.raises(st.SmartThreadRemoteSmartThreadMismatch):
-            alpha_thread.send_msg(targets='charlie',
-                                  msg='exit',
-                                  timeout=3)
-        logger.debug('mainline alpha restoring remote array')
-        alpha_thread.remote_array['charlie'].remote_smart_thread = \
-            charlie_thread
-        alpha_thread.send_msg(targets='charlie',
-                              msg='exit',
-                              timeout=3)
-        alpha_thread.join(targets='charlie')
-
-        logger.debug('mainline exiting')
-
 
 ########################################################################
 # TestSmartThreadLogMsgs class
@@ -1216,143 +1163,42 @@ class TestSmartThreadErrors:
 # set_expected_log_msgs
 ########################################################################
 def set_create_expected_log_msgs(
-        smart_thread: st.SmartThread,
+        name,
         log_ver: LogVer,
         existing_threads: dict[str, st.SmartThread]
         ) -> None:
-    name = smart_thread.name
-    log_msg = (
-        f'{name} set status for thread {name} '
-        'from undefined to ThreadStatus.Initializing')
-    log_ver.add_msg(
-        log_name='scottbrian_paratools.smart_thread',
-        log_level=logging.DEBUG,
-        log_msg=log_msg)
 
-    log_msg = (f'{name} obtained _registry_lock, '
-               'class name = SmartThread')
-    log_ver.add_msg(
-        log_name='scottbrian_paratools.smart_thread',
-        log_level=logging.DEBUG,
-        log_msg=log_msg)
 
-    for a_name, a_thread in existing_threads.items():
-        if a_name == name:
-            continue
-        log_msg = re.escape(
-            f"key = {a_thread.name}, item = {a_thread}, "
-            f"item.thread.is_alive() = {a_thread.thread.is_alive()}, "
-            f"status: {a_thread.status}")
-        log_ver.add_msg(
-            log_name='scottbrian_paratools.smart_thread',
-            log_level=logging.DEBUG,
-            log_msg=log_msg)
 
-    log_msg = (
-        f'{name} set status for thread {name} '
-        'from ThreadStatus.Initializing to ThreadStatus.Registered')
-    log_ver.add_msg(
-        log_name='scottbrian_paratools.smart_thread',
-        log_level=logging.DEBUG,
-        log_msg=log_msg)
 
-    log_msg = f'{name} entered _refresh_pair_array'
-    log_ver.add_msg(
-        log_name='scottbrian_paratools.smart_thread',
-        log_level=logging.DEBUG,
-        log_msg=log_msg)
 
-    if ((smart_thread.thread_create & st.ThreadCreate.Current)
-            or not smart_thread.auto_start):
-        log_msg = (
-            f'{name} set status for thread {name} '
-            f'from ThreadStatus.Registered to ThreadStatus.Alive')
-        log_ver.add_msg(
-            log_name='scottbrian_paratools.smart_thread',
-            log_level=logging.DEBUG,
-            log_msg=log_msg)
 
-    for a_thread_name, a_thread in existing_threads.items():
-        if a_thread_name == name:
-            continue
-        if name < a_thread.name:
-            pair_key = (name, a_thread.name)
-        else:
-            pair_key = (a_thread.name, name)
 
-        log_msg = re.escape(
-            f"{name} created "
-            "_refresh_pair_array with "
-            f"pair_key = {pair_key}")
-        log_ver.add_msg(
-            log_name='scottbrian_paratools.smart_thread',
-            log_level=logging.DEBUG,
-            log_msg=log_msg)
 
-        for pair_name in pair_key:
-            log_msg = re.escape(
-                f"{name} added status_blocks entry "
-                f"for pair_key = {pair_key}, "
-                f"name = {pair_name}")
-            log_ver.add_msg(
-                log_name='scottbrian_paratools.smart_thread',
-                log_level=logging.DEBUG,
-                log_msg=log_msg)
 
-    update_time = (smart_thread.time_last_pair_array_update
-                   .strftime("%H:%M:%S.%f"))
-    log_msg = re.escape(
-        f'{name} updated _pair_array at UTC '
-        f'{update_time}')
-    log_ver.add_msg(
-        log_name='scottbrian_paratools.smart_thread',
-        log_level=logging.DEBUG,
-        log_msg=log_msg)
 
-    log_msg = (
-        f'{name} did register update at UTC '
-        f'{st.SmartThread._registry_last_update.strftime("%H:%M:%S.%f")}')
 
-    log_ver.add_msg(
-        log_name='scottbrian_paratools.smart_thread',
-        log_level=logging.DEBUG,
-        log_msg=log_msg)
 
-    if smart_thread.auto_started:
-        log_msg = (
-            f'{name} set status for thread {name} '
-            'from ThreadStatus.Registered to ThreadStatus.Starting')
-        log_ver.add_msg(
-            log_name='scottbrian_paratools.smart_thread',
-            log_level=logging.DEBUG,
-            log_msg=log_msg)
 
-        log_msg = (
-            f'{name} set status for thread {name} '
-            f'from ThreadStatus.Starting to ThreadStatus.Alive')
-        log_ver.add_msg(
-            log_name='scottbrian_paratools.smart_thread',
-            log_level=logging.DEBUG,
-            log_msg=log_msg)
-
-        log_msg = re.escape(
-            f'{name} thread started, '
-            f'thread.is_alive() = {smart_thread.thread.is_alive()}, '
-            'status: ThreadStatus.Alive')
-        log_ver.add_msg(
-            log_name='scottbrian_paratools.smart_thread',
-            log_level=logging.DEBUG,
-            log_msg=log_msg)
 
 
 def set_join_expected_log_msgs(
-        smart_thread: st.SmartThread,
+        name,
         log_ver: LogVer,
         targets: dict[str, st.SmartThread],
         existing_threads: dict[str, st.SmartThread]
         ) -> None:
 
-    name = smart_thread.name
+    for a_targ in targets.values():
+        log_msg = (
+            f'{name} set status for thread '
+            f'{a_targ.name} '
+            f'from {st.ThreadStatus.Alive} to '
+            f'{st.ThreadStatus.Stopped}')
+        log_ver.add_msg(
+            log_name='scottbrian_paratools.smart_thread',
+            log_level=logging.DEBUG,
+            log_msg=log_msg)
 
     for a_thread_name, a_thread in existing_threads.items():
         log_msg = re.escape(
@@ -1378,7 +1224,7 @@ def set_join_expected_log_msgs(
             log_msg=log_msg)
 
         for a_thread in existing_threads.values():
-            if a_thread.name == 'beta':
+            if a_thread.name == a_targ.name:
                 continue
             if a_targ.name < a_thread.name:
                 pair_key = (a_targ.name, a_thread.name)
@@ -1392,8 +1238,9 @@ def set_join_expected_log_msgs(
                 log_name='scottbrian_paratools.smart_thread',
                 log_level=logging.DEBUG,
                 log_msg=log_msg)
-            if not st.SmartThread._pair_array[
-                    pair_key].status_blocks:
+            if (pair_key in st.SmartThread._pair_array
+                    and not st.SmartThread._pair_array[
+                    pair_key].status_blocks):
                 log_msg = (
                     f'{name} removed _pair_array entry'
                     f' for pair_key = {pair_key}')
@@ -1403,7 +1250,7 @@ def set_join_expected_log_msgs(
                     log_msg=log_msg)
 
 
-    update_time = (smart_thread.time_last_pair_array_update
+    update_time = (existing_threads[name].time_last_pair_array_update
                    .strftime("%H:%M:%S.%f"))
     log_msg = re.escape(
         f'{name} updated _pair_array at UTC '
@@ -1429,6 +1276,143 @@ def set_join_expected_log_msgs(
         log_msg=log_msg)
 
 
+@dataclass
+class ThreadTracker:
+    is_alive: bool
+    is_auto_started: bool
+    status: st.ThreadStatus
+    thread_repr: str
+    # expected_last_reg_updates: deque
+
+
+class ConfigVerifier:
+    def __init__(self, log_ver: LogVer):
+        self.expected_registered: dict[str, ThreadTracker] = {}
+        self.expected_pairs: dict[tuple[str, str], list[str]] = {}
+        self.log_ver = log_ver
+
+    def add_thread(self,
+                   name: str,
+                   thread_alive: bool,
+                   auto_start: bool,
+                   expected_status: st.ThreadStatus,
+                   thread_repr: str,
+                   reg_update_time: datetime,
+                   pair_array_update_time: datetime
+                   ) -> None:
+
+        self.expected_registered[name] = ThreadTracker(
+            is_alive=thread_alive,
+            is_auto_started=auto_start,
+            status=expected_status,
+            thread_repr=thread_repr
+        )
+
+        if len(self.expected_registered) > 1:
+            pair_keys = combinations(self.expected_registered.keys(), 2)
+            for pair_key in pair_keys:
+                if name not in pair_key:
+                    continue
+                if pair_key not in self.expected_pairs:
+                    self.expected_pairs[pair_key] = [pair_key[0], pair_key[1]]
+                    self.add_log_msg(re.escape(
+                        f"{name} created "
+                        "_refresh_pair_array with "
+                        f"pair_key = {pair_key}"))
+
+                    for pair_name in pair_key:
+                        self.add_log_msg(re.escape(
+                            f"{name} added status_blocks entry "
+                            f"for pair_key = {pair_key}, "
+                            f"name = {pair_name}"))
+
+                # if pair_key already exists, we need to add name
+                # as a resurrected thread
+                else:  # we already have a pair_key, need to add name
+                    if not self.expected_pairs[pair_key]:
+                        raise InvalidConfigurationDetected(
+                            'Attempt to add thread to existing pair array '
+                            'that has an empty list')
+                    if name in self.expected_pairs[pair_key]:
+                        raise InvalidConfigurationDetected(
+                            'Attempt to add thread to pair array that already '
+                            'has the thread in the pair array')
+                    if name == pair_key[0]:
+                        other_name = pair_key[1]
+                    else:
+                        other_name = pair_key[0]
+                    if other_name not in self.expected_pairs[pair_key]:
+                        raise InvalidConfigurationDetected(
+                            'Attempt to add thread to pair array that did '
+                            'not have the other name in the pair array')
+                    # looks OK, just replace the list with a new list
+                    self.expected_pairs[pair_key] = [pair_key[0], pair_key[1]]
+                    self.add_log_msg(re.escape(
+                        f"{name} added status_blocks entry "
+                        f"for pair_key = {pair_key}, "
+                        f"name = {name}"))
+
+        ################################################################
+        # add log msgs
+        ################################################################
+        self.add_log_msg(
+            f'{name} set status for thread {name} '
+            'from undefined to ThreadStatus.Initializing')
+
+        self.add_log_msg(
+            f'{name} obtained _registry_lock, '
+            'class name = SmartThread')
+
+        for a_name, tracker in self.expected_registered.items():
+            # ignore the new thread for now - we are in reg cleanup just
+            # before we add the new thread
+            if a_name == name:
+                continue
+            self.add_log_msg(re.escape(
+                f"key = {a_name}, item = {tracker.thread_repr}, "
+                f"item.thread.is_alive() = {tracker.is_alive}, "
+                f"status: {tracker.status}"))
+
+        self.add_log_msg(
+            f'{name} set status for thread {name} '
+            'from ThreadStatus.Initializing to ThreadStatus.Registered')
+
+        self.add_log_msg(f'{name} entered _refresh_pair_array')
+
+        if self.expected_registered[name].is_alive:
+            self.add_log_msg(
+                f'{name} set status for thread {name} '
+                f'from ThreadStatus.Registered to ThreadStatus.Alive')
+
+        self.add_log_msg(re.escape(
+            f'{name} updated _pair_array at UTC '
+            f'{pair_array_update_time.strftime("%H:%M:%S.%f")}'))
+
+        self.add_log_msg(
+            f'{name} did register update at UTC '
+            f'{reg_update_time.strftime("%H:%M:%S.%f")}')
+
+        if self.expected_registered[name].is_auto_started:
+            self.add_log_msg(
+                f'{name} set status for thread {name} '
+                'from ThreadStatus.Registered to ThreadStatus.Starting')
+
+            self.add_log_msg(
+                f'{name} set status for thread {name} '
+                f'from ThreadStatus.Starting to ThreadStatus.Alive')
+
+            self.add_log_msg(re.escape(
+                f'{name} thread started, '
+                'thread.is_alive() = True, '
+                'status: ThreadStatus.Alive'))
+
+    def add_log_msg(self,
+                    new_log_msg: str) -> None:
+        self.log_ver.add_msg(
+            log_name='scottbrian_paratools.smart_thread',
+            log_level=logging.DEBUG,
+            log_msg=new_log_msg)
+
 class TestSmartThreadCombos:
     """Test class for SmartThread combos."""
     ####################################################################
@@ -1449,19 +1433,19 @@ class TestSmartThreadCombos:
         # f1
         ################################################################
         def f1(name: str):
-            log_msg_f1 = 'f1 entered'
+            log_msg_f1 = f'f1 entered for {name}'
             log_ver.add_msg(log_level=logging.DEBUG,
                             log_msg=log_msg_f1)
             logger.debug(log_msg_f1)
 
-            msgs.get_msg('beta')
+            msgs.get_msg(name)
 
             ############################################################
             # send msg to alpha
             ############################################################
-            test_threads["beta"].send_msg(targets='alpha', msg='go now')
+            alive_threads[name].send_msg(targets='alpha', msg='go now')
 
-            log_msg_f1 = f'beta sending message to alpha'
+            log_msg_f1 = f'{name} sending message to alpha'
             log_ver.add_msg(
                 log_name='scottbrian_paratools.smart_thread',
                 log_level=logging.INFO,
@@ -1518,7 +1502,7 @@ class TestSmartThreadCombos:
             ############################################################
             # exit
             ############################################################
-            log_msg_f1 = 'f1 exiting'
+            log_msg_f1 = f'f1 exiting for {name}'
             log_ver.add_msg(log_level=logging.DEBUG,
                             log_msg=log_msg_f1)
             logger.debug(log_msg_f1)
@@ -1546,14 +1530,16 @@ class TestSmartThreadCombos:
 
         random.seed(random_seed_arg)
 
-        num_threads = 2 # random.randint(2, 3)
+        num_threads = 3  # random.randint(2, 3)
 
         log_msg = f'num_threads: {num_threads}'
         log_ver.add_msg(log_msg=log_msg)
         logger.debug(log_msg)
 
         thread_names = ['alpha', 'beta', 'charlie', 'delta', 'echo']
-        test_threads = {}
+        alive_threads = {}
+        alive_names = []
+        exp_pairs = {}
 
         ################################################################
         # Create smart threads
@@ -1567,15 +1553,21 @@ class TestSmartThreadCombos:
 
             # alpha_thread = st.SmartThread(name='alpha')
             if thread_num == 0:
-                test_threads[name] = st.SmartThread(name=name)
+                alive_threads[name] = st.SmartThread(name=name)
             else:
-                test_threads[name] = st.SmartThread(name=name,
+                alive_threads[name] = st.SmartThread(name=name,
                                                     target=f1,
                                                     args=(name,))
+            alive_names.append(name)
+            alive_names.sort()
+            if len(alive_names) > 1:
+                pair_keys = list(itertools.combinations(alive_names, 2))
+                for pair_key in pair_keys:
+                    exp_pairs[pair_key] = [pair_key[0], pair_key[1]]
 
-            set_create_expected_log_msgs(test_threads[name],
+            set_create_expected_log_msgs(name,
                                          log_ver,
-                                         test_threads)
+                                         alive_threads)
 
         ################################################################
         # Create beta smart thread
@@ -1589,7 +1581,10 @@ class TestSmartThreadCombos:
         #
         # set_create_expected_log_msgs(beta_thread, log_ver, [alpha_thread])
 
-        msgs.queue_msg('beta')  # tell beta to proceed
+        for thread_name in alive_threads.keys():
+            if thread_name == 'alpha':
+                continue
+            msgs.queue_msg(thread_name)  # tell thread to proceed
 
         ################################################################
         # Start beta thread
@@ -1621,31 +1616,37 @@ class TestSmartThreadCombos:
         #     log_msg=log_msg)
 
         ################################################################
-        # Recv msg from beta
+        # Recv msgs from remotes
         ################################################################
-        time.sleep(.5)
-        log_msg = 'mainline alpha receiving msg from beta'
-        log_ver.add_msg(log_level=logging.DEBUG,
-                        log_msg=log_msg)
-        logger.debug(log_msg)
+        # time.sleep(.5)
+        for thread_name in alive_threads.keys():
+            if thread_name == 'alpha':
+                continue
+            log_msg = f'mainline alpha receiving msg from {thread_name}'
+            log_ver.add_msg(log_level=logging.DEBUG,
+                            log_msg=log_msg)
+            logger.debug(log_msg)
 
-        test_threads["alpha"].recv_msg(remote='beta', timeout=3)
+            alive_threads["alpha"].recv_msg(remote=thread_name, timeout=3)
 
-        log_msg = f'alpha receiving msg from beta'
-        log_ver.add_msg(
-            log_name='scottbrian_paratools.smart_thread',
-            log_level=logging.INFO,
-            log_msg=log_msg)
+            log_msg = f'alpha receiving msg from {thread_name}'
+            log_ver.add_msg(
+                log_name='scottbrian_paratools.smart_thread',
+                log_level=logging.INFO,
+                log_msg=log_msg)
 
         ################################################################
-        # Join beta
+        # Join remotes
         ################################################################
-        test_threads["alpha"].join(targets='beta')
-        targets = {"beta": test_threads["beta"]}
-        set_join_expected_log_msgs(test_threads["alpha"],
-                                   log_ver,
-                                   targets,
-                                   test_threads)
+        for thread_name in alive_threads.keys():
+            if thread_name == 'alpha':
+                continue
+            alive_threads["alpha"].join(targets=thread_name)
+            targets = {thread_name: alive_threads[thread_name]}
+            set_join_expected_log_msgs("alpha",
+                                       log_ver,
+                                       targets,
+                                       alive_threads)
 
         # log_msg = re.escape(
         #     "key = alpha, item = SmartThread(name='alpha'), "

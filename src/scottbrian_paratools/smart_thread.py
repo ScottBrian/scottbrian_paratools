@@ -49,6 +49,7 @@ The smart_thread module contains:
 ########################################################################
 # Standard Library
 ########################################################################
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from enum import auto, Enum, Flag
@@ -448,13 +449,10 @@ class SmartThread:
         # _refresh_remote_array.
         self.remote_array: dict[str, SmartThread.ConnectionStatusBlock] = {}
 
-        # time_last_remote_check is initially set to
-        # datetime(2000, 1, 1, 12, 0, 0) and the _registry_last_update
-        # is initially set to datetime(2000, 1, 1, 12, 0, 1) which will
-        # ensure that each thread will initially refresh their
-        # remote_array when instantiated.
-        self.time_last_pair_array_update: datetime = datetime(
-            2000, 1, 1, 12, 0, 0)
+        # The following deques are used for testing and diagnostic
+        # purposes only.
+        self.time_last_pair_array_update: deque[datetime] = deque(8)
+        self.time_last_registry_update: deque[datetime] = deque(8)
 
         # register this new SmartThread so others can find us
         self._register()
@@ -539,6 +537,8 @@ class SmartThread:
                     f'{self.name} set status for thread {self.name} '
                     f'from {saved_status} to {self.status}')
                 SmartThread._registry_last_update = datetime.utcnow()
+                self.time_last_registry_update.append(
+                    SmartThread._registry_last_update)
                 print_time = (SmartThread._registry_last_update
                               .strftime("%H:%M:%S.%f"))
                 self.logger.debug(
@@ -594,6 +594,8 @@ class SmartThread:
         if changed:
             self._refresh_pair_array()
             SmartThread._registry_last_update = datetime.utcnow()
+            self.time_last_registry_update.append(
+                SmartThread._registry_last_update)
             print_time = (SmartThread._registry_last_update
                           .strftime("%H:%M:%S.%f"))
             self.logger.debug(f'{self.name} did cleanup of registry at UTC '
@@ -716,8 +718,16 @@ class SmartThread:
                         # not alive in case we timed out
                         if not SmartThread._registry[remote].thread.is_alive():
                             # indicate remove from registry
-                            SmartThread._registry[remote].status = (
-                                ThreadStatus.Stopped)
+                            saved_status = SmartThread._registry[remote].status
+                            SmartThread._registry[
+                                remote].status = ThreadStatus.Stopped
+                            if saved_status != SmartThread._registry[
+                                    remote].status:
+                                self.logger.debug(
+                                    f'{self.name} set status for thread '
+                                    f'{remote} '
+                                    f'from {saved_status} to '
+                                    f'{SmartThread._registry[remote].status}')
                             # remove this thread from the registry
                             self._clean_up_registry()
                             self.logger.debug(
@@ -856,23 +866,17 @@ class SmartThread:
         # find removable entries in connection pair array
         connection_array_del_list = []
         for pair_key in SmartThread._pair_array.keys():
-            # remove name0 from status_blocks if not registered
-            if pair_key[0] not in SmartThread._registry:
-                _ = SmartThread._pair_array[
-                        pair_key].status_blocks.pop(pair_key[0], None)
-                self.logger.debug(
-                    f'{self.name} removed status_blocks entry'
-                    f' for pair_key = {pair_key}, name = {pair_key[0]}')
-                changed = True
-
-            # remove name1 from status_blocks if not registered
-            if pair_key[1] not in SmartThread._registry:
-                _ = SmartThread._pair_array[
-                        pair_key].status_blocks.pop(pair_key[1], None)
-                self.logger.debug(
-                    f'{self.name} removed status_blocks entry'
-                    f' for pair_key = {pair_key}, name = {pair_key[1]}')
-                changed = True
+            # remove thread(s) from status_blocks if not registered
+            for thread_name in pair_key:
+                if (thread_name not in SmartThread._registry
+                        and thread_name in SmartThread._pair_array[
+                            pair_key].status_blocks):
+                    _ = SmartThread._pair_array[
+                            pair_key].status_blocks.pop(thread_name, None)
+                    self.logger.debug(
+                        f'{self.name} removed status_blocks entry'
+                        f' for pair_key = {pair_key}, name = {thread_name}')
+                    changed = True
 
             # remove _connection_pair if both names are gone
             if not SmartThread._pair_array[
@@ -888,9 +892,8 @@ class SmartThread:
 
         if changed:
             SmartThread._pair_array_last_update = datetime.utcnow()
-            self.time_last_pair_array_update = (SmartThread
-                                            ._pair_array_last_update
-                                            )
+            self.time_last_pair_array_update.append(
+                SmartThread._pair_array_last_update)
 
             print_time = (SmartThread._pair_array_last_update
                           .strftime("%H:%M:%S.%f"))
