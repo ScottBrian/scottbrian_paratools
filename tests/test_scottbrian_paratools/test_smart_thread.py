@@ -1159,121 +1159,8 @@ class TestSmartThreadErrors:
 ########################################################################
 # TestSmartThreadLogMsgs class
 ########################################################################
-########################################################################
-# set_expected_log_msgs
-########################################################################
-def set_create_expected_log_msgs(
-        name,
-        log_ver: LogVer,
-        existing_threads: dict[str, st.SmartThread]
-        ) -> None:
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-def set_join_expected_log_msgs(
-        name,
-        log_ver: LogVer,
-        targets: dict[str, st.SmartThread],
-        existing_threads: dict[str, st.SmartThread]
-        ) -> None:
-
-    for a_targ in targets.values():
-        log_msg = (
-            f'{name} set status for thread '
-            f'{a_targ.name} '
-            f'from {st.ThreadStatus.Alive} to '
-            f'{st.ThreadStatus.Stopped}')
-        log_ver.add_msg(
-            log_name='scottbrian_paratools.smart_thread',
-            log_level=logging.DEBUG,
-            log_msg=log_msg)
-
-    for a_thread_name, a_thread in existing_threads.items():
-        log_msg = re.escape(
-            f"key = {a_thread_name}, item = {a_thread}, "
-            f"item.thread.is_alive() = {a_thread.thread.is_alive()}, "
-            f"status: {a_thread.status}")
-        log_ver.add_msg(
-            log_name='scottbrian_paratools.smart_thread',
-            log_level=logging.DEBUG,
-            log_msg=log_msg)
-
-    for a_targ in targets.values():
-        log_msg = f'{a_targ.name} removed from registry'
-        log_ver.add_msg(
-            log_name='scottbrian_paratools.smart_thread',
-            log_level=logging.DEBUG,
-            log_msg=log_msg)
-
-        log_msg = f'{name} entered _refresh_pair_array'
-        log_ver.add_msg(
-            log_name='scottbrian_paratools.smart_thread',
-            log_level=logging.DEBUG,
-            log_msg=log_msg)
-
-        for a_thread in existing_threads.values():
-            if a_thread.name == a_targ.name:
-                continue
-            if a_targ.name < a_thread.name:
-                pair_key = (a_targ.name, a_thread.name)
-            else:
-                pair_key = (a_thread.name, a_targ.name)
-            log_msg = re.escape(
-                f"{name} removed status_blocks entry "
-                f"for pair_key = {pair_key}, "
-                f"name = {a_targ.name}")
-            log_ver.add_msg(
-                log_name='scottbrian_paratools.smart_thread',
-                log_level=logging.DEBUG,
-                log_msg=log_msg)
-            if (pair_key in st.SmartThread._pair_array
-                    and not st.SmartThread._pair_array[
-                    pair_key].status_blocks):
-                log_msg = (
-                    f'{name} removed _pair_array entry'
-                    f' for pair_key = {pair_key}')
-                log_ver.add_msg(
-                    log_name='scottbrian_paratools.smart_thread',
-                    log_level=logging.DEBUG,
-                    log_msg=log_msg)
-
-
-    update_time = (existing_threads[name].time_last_pair_array_update
-                   .strftime("%H:%M:%S.%f"))
-    log_msg = re.escape(
-        f'{name} updated _pair_array at UTC '
-        f'{update_time}')
-    log_ver.add_msg(
-        log_name='scottbrian_paratools.smart_thread',
-        log_level=logging.DEBUG,
-        log_msg=log_msg)
-
-    log_msg = re.escape(
-        f"{name} did cleanup of registry at UTC "
-        f'{st.SmartThread._registry_last_update.strftime("%H:%M:%S.%f")}, '
-        f"deleted ['{a_targ.name}']")
-    log_ver.add_msg(
-        log_name='scottbrian_paratools.smart_thread',
-        log_level=logging.DEBUG,
-        log_msg=log_msg)
-
-    log_msg = f'{name} did successful join of {a_targ.name}.'
-    log_ver.add_msg(
-        log_name='scottbrian_paratools.smart_thread',
-        log_level=logging.DEBUG,
-        log_msg=log_msg)
 
 
 @dataclass
@@ -1282,6 +1169,7 @@ class ThreadTracker:
     is_auto_started: bool
     status: st.ThreadStatus
     thread_repr: str
+    pending_ops_count: int
     # expected_last_reg_updates: deque
 
 
@@ -1405,6 +1293,129 @@ class ConfigVerifier:
                 f'{name} thread started, '
                 'thread.is_alive() = True, '
                 'status: ThreadStatus.Alive'))
+
+    def del_thread(self,
+                   name: str,
+                   remotes: list[str],
+                   thread_alive: bool,
+                   auto_start: bool,
+                   expected_status: st.ThreadStatus,
+                   thread_repr: str,
+                   reg_update_times: deque,
+                   pair_array_update_times: deque
+                   ) -> None:
+
+        for remote in remotes:
+            self.expected_registered[remote].is_alive = False
+            self.expected_registered[remote].status = st.ThreadStatus.Stopped
+            self.add_log_msg(
+                f'{name} set status for thread '
+                f'{remote} '
+                f'from {st.ThreadStatus.Alive} to '
+                f'{st.ThreadStatus.Stopped}')
+
+            for thread_name, tracker in self.expected_registered.items():
+                self.add_log_msg(re.escape(
+                    f"key = {thread_name}, item = {tracker.thread_repr}, "
+                    f"item.thread.is_alive() = {tracker.is_alive}, "
+                    f"status: {tracker.status}"))
+
+            del self.expected_registered[remote]
+            self.add_log_msg(f'{remote} removed from registry')
+
+            self.add_log_msg(f'{name} entered _refresh_pair_array')
+
+            for pair_key in self.expected_pairs:
+                if remote not in pair_key:
+                    continue
+                if remote == pair_key[0]:
+                    other_name = pair_key[1]
+                else:
+                    other_name = pair_key[0]
+                if pair_key not in self.expected_pairs:
+                    raise InvalidConfigurationDetected(
+                        f'Expected pair_key entry for pair_key {pair_key} '
+                        f'was not found  while deleting remote {remote}')
+                if remote not in self.expected_pairs[pair_key]:
+                    raise InvalidConfigurationDetected(
+                        f'The expected_pairs for pair_key {pair_key} '
+                        'contains an entry of '
+                        f'{self.expected_pairs[pair_key]}  which does not '
+                        f'include the remote {remote} being deleted')
+                if other_name not in self.expected_pairs[pair_key]:
+                    if (other_name in self.expected_registered
+                            and self.expected_registered[
+                                other_name].pending_ops_count > 0):
+                        raise InvalidConfigurationDetected(
+                            f'The expected_pairs for pair_key {pair_key} '
+                            'contains an entry of '
+                            f'{self.expected_pairs[pair_key]}  which does not '
+                            f'include the other_name {other_name} but '
+                            f'should  because it has a non-zero '
+                            f'pending_ops_count')
+                    # ok to delete pair_key entry
+                    del self.expected_pairs[pair_key]
+                    self.add_log_msg(
+                        f'{name} removed _pair_array entry'
+                        f' for pair_key = {pair_key}')
+                elif self.expected_registered[
+                        other_name].pending_ops_count == 0:
+                    del self.expected_pairs[pair_key]
+                    self.add_log_msg(re.escape(
+                        f"{name} removed status_blocks entry "
+                        f"for pair_key = {pair_key}, "
+                        f"name = {other_name}"))
+                    self.add_log_msg(
+                        f'{name} removed _pair_array entry'
+                        f' for pair_key = {pair_key}')
+                else:
+                    self.expected_pairs[pair_key] = [other_name]
+                self.add_log_msg(re.escape(
+                    f"{name} removed status_blocks entry "
+                    f"for pair_key = {pair_key}, "
+                    f"name = {remote}"))
+
+            self.add_log_msg(re.escape(
+                f'{name} updated _pair_array at UTC '
+                f'{pair_array_update_times.pop().strftime("%H:%M:%S.%f")}')
+
+            self.add_log_msg(re.escape(
+                f"{name} did cleanup of registry at UTC "
+                f'{reg_update_times.pop().strftime("%H:%M:%S.%f")}, '
+                f"deleted ['{remote}']")
+
+            self.add_log_msg(f'{name} did successful join of {remote}.')
+
+    def validate_config(self):
+        # verify real registry matches expected_registered
+        for name, thread in st.SmartThread._registry:
+            if name not in self.expected_registered:
+                raise InvalidConfigurationDetected(
+                    f'SmartThread registry has entry for name {name} '
+                    f'that is missing from the expected_registry ')
+            if (self.expected_registered[name].is_alive
+                    != thread.thread.is_alive()):
+                raise InvalidConfigurationDetected(
+                    f'SmartThread registry has entry for name {name} '
+                    f'that has is_alive of {thread.thread.is_alive()} '
+                    f'which does not match the expected_registered '
+                    f'is_alive of {self.expected_registered[name].is_alive}')
+            if (self.expected_registered[name].status
+                    != thread.status):
+                raise InvalidConfigurationDetected(
+                    f'SmartThread registry has entry for name {name} '
+                    f'that has satus of {thread.status} '
+                    f'which does not match the expected_registered '
+                    f'status of {self.expected_registered[name].status}')
+
+        if self.expected_registered[other_name].pending_ops_count == 0:
+            pend_ops_cnt = self.expected_registered[
+                other_name].pending_ops_count
+            raise InvalidConfigurationDetected(
+                f'Expected pair_key entry for pair_key {pair_key} '
+                f'has other_name {other_name} in the '
+                f'expected_registered array but with a non-zero '
+                f'pending_ops_count of {pend_ops_cnt} ')
 
     def add_log_msg(self,
                     new_log_msg: str) -> None:
