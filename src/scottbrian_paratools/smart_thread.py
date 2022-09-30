@@ -451,8 +451,8 @@ class SmartThread:
 
         # The following deques are used for testing and diagnostic
         # purposes only.
-        self.time_last_pair_array_update: deque[datetime] = deque(8)
-        self.time_last_registry_update: deque[datetime] = deque(8)
+        self.time_last_pair_array_update: deque[datetime] = deque([], 8)
+        self.time_last_registry_update: deque[datetime] = deque([], 8)
 
         # register this new SmartThread so others can find us
         self._register()

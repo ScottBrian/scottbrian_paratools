@@ -1193,7 +1193,8 @@ class ConfigVerifier:
             is_alive=thread_alive,
             is_auto_started=auto_start,
             status=expected_status,
-            thread_repr=thread_repr
+            thread_repr=thread_repr,
+            pending_ops_count=0
         )
 
         if len(self.expected_registered) > 1:
@@ -1377,18 +1378,18 @@ class ConfigVerifier:
 
             self.add_log_msg(re.escape(
                 f'{name} updated _pair_array at UTC '
-                f'{pair_array_update_times.pop().strftime("%H:%M:%S.%f")}')
+                f'{pair_array_update_times.pop().strftime("%H:%M:%S.%f")}'))
 
             self.add_log_msg(re.escape(
                 f"{name} did cleanup of registry at UTC "
                 f'{reg_update_times.pop().strftime("%H:%M:%S.%f")}, '
-                f"deleted ['{remote}']")
+                f"deleted ['{remote}']"))
 
             self.add_log_msg(f'{name} did successful join of {remote}.')
 
     def validate_config(self):
         # verify real registry matches expected_registered
-        for name, thread in st.SmartThread._registry:
+        for name, thread in st.SmartThread._registry.items():
             if name not in self.expected_registered:
                 raise InvalidConfigurationDetected(
                     f'SmartThread registry has entry for name {name} '
@@ -1408,14 +1409,76 @@ class ConfigVerifier:
                     f'which does not match the expected_registered '
                     f'status of {self.expected_registered[name].status}')
 
-        if self.expected_registered[other_name].pending_ops_count == 0:
-            pend_ops_cnt = self.expected_registered[
-                other_name].pending_ops_count
-            raise InvalidConfigurationDetected(
-                f'Expected pair_key entry for pair_key {pair_key} '
-                f'has other_name {other_name} in the '
-                f'expected_registered array but with a non-zero '
-                f'pending_ops_count of {pend_ops_cnt} ')
+        # verify expected_registered matches real registry
+        for name, tracker in self.expected_registered.items():
+            if name not in st.SmartThread._registry:
+                raise InvalidConfigurationDetected(
+                    f'ConfigVerifier expected_registered has '
+                    f'entry for name {name} '
+                    f'that is missing from SmartThread._registry')
+
+        # verify pair_array matches expected_pairs
+        for pair_key in st.SmartThread._pair_array.keys():
+            if pair_key not in self.expected_pairs:
+                raise InvalidConfigurationDetected(
+                    f'ConfigVerifier found pair_key {pair_key}'
+                    f'in SmartThread._pair_array that is '
+                    f'not found in expected_pairs: ')
+            for name in st.SmartThread._pair_array[
+                    pair_key].status_blocks.keys():
+                if name not in self.expected_pairs[pair_key]:
+                    raise InvalidConfigurationDetected(
+                        f'ConfigVerifier found name {name} in '
+                        f'SmartThread._pair_array status_blocks for pair_key'
+                        f' {pair_key}, but is missing in expected_pairs: ')
+                if name not in self.expected_registered:
+                    raise InvalidConfigurationDetected(
+                        f'ConfigVerifier found name {name} in '
+                        f'SmartThread._pair_array status_blocks for pair_key'
+                        f' {pair_key}, but is missing in '
+                        f'expected_registered: ')
+                if len(self.expected_pairs[pair_key]) == 1:
+                    if self.expected_registered[name].pending_ops_count == 0:
+                        raise InvalidConfigurationDetected(
+                            f'ConfigVerifier found name {name} in '
+                            f'SmartThread._pair_array status_blocks for '
+                            f'pair_key  {pair_key}, but it is a single name '
+                            f'that has  a pending_ops_count of zero')
+
+                if (self.expected_registered[name].pending_ops_count == 0
+                        and not st.SmartThread._pair_array[
+                        pair_key].status_blocks[name].msg_q.empty()):
+                    raise InvalidConfigurationDetected(
+                        f'ConfigVerifier found name {name} in '
+                        'SmartThread._pair_array status_blocks for '
+                        f'pair_key  {pair_key}, and it has a '
+                        'pending_ops_count of zero, but the '
+                        'SmartThread._pair_array entry show the msg_q '
+                        'is not empty')
+                if (self.expected_registered[name].pending_ops_count != 0
+                        and st.SmartThread._pair_array[
+                        pair_key].status_blocks[name].msg_q.empty()):
+                    raise InvalidConfigurationDetected(
+                        f'ConfigVerifier found name {name} in '
+                        'SmartThread._pair_array status_blocks for '
+                        f'pair_key  {pair_key}, and it has a '
+                        'pending_ops_count of non-zero, but the '
+                        'SmartThread._pair_array entry show the msg_q '
+                        'is empty')
+        # verify expected_pairs matches pair_array
+        for pair_key in self.expected_pairs.keys():
+            if pair_key not in st.SmartThread._pair_array:
+                raise InvalidConfigurationDetected(
+                    f'ConfigVerifier found pair_key {pair_key} in '
+                    'expected_pairs but not in SmartThread._pair_array')
+            for name in self.expected_pairs[pair_key]:
+                if name not in st.SmartThread._pair_array[
+                        pair_key].status_blocks:
+                    raise InvalidConfigurationDetected(
+                        f'ConfigVerifier found name {name} in '
+                        f'expected_apirs for pair_key {pair_key}, but not in '
+                        'SmartThread._pair_array status_blocks')
+
 
     def add_log_msg(self,
                     new_log_msg: str) -> None:
@@ -1423,6 +1486,203 @@ class ConfigVerifier:
             log_name='scottbrian_paratools.smart_thread',
             log_level=logging.DEBUG,
             log_msg=new_log_msg)
+
+
+class TestSmartThreadConfigs:
+    """Test class for SmartThread configurations."""
+    ####################################################################
+    # test_refresh_pair_array_log_msgs
+    ####################################################################
+    def test_smart_thread_simple_config(
+            self,
+            random_seed_arg: int,
+            caplog: pytest.CaptureFixture[str]
+            ) -> None:
+        """Test simple configuration scenarios.
+
+        Args:
+            caplog: pytest fixture to capture log output
+
+        """
+        ################################################################
+        # f1
+        ################################################################
+        def f1(name: str):
+            log_msg_f1 = f'f1 entered for {name}'
+            log_ver.add_msg(log_level=logging.DEBUG,
+                            log_msg=log_msg_f1)
+            logger.debug(log_msg_f1)
+
+            msgs.get_msg(name)
+
+            ############################################################
+            # send msg to alpha
+            ############################################################
+            alive_threads[name].send_msg(targets='alpha', msg='go now')
+
+            log_msg_f1 = f'{name} sending message to alpha'
+            log_ver.add_msg(
+                log_name='scottbrian_paratools.smart_thread',
+                log_level=logging.INFO,
+                log_msg=log_msg_f1)
+
+            ############################################################
+            # exit
+            ############################################################
+            log_msg_f1 = f'f1 exiting for {name}'
+            log_ver.add_msg(log_level=logging.DEBUG,
+                            log_msg=log_msg_f1)
+            logger.debug(log_msg_f1)
+
+        ################################################################
+        # Set up log verification and start tests
+        ################################################################
+        log_ver = LogVer(
+            log_name='test_scottbrian_paratools.test_smart_thread')
+        alpha_call_seq = (
+            'test_smart_thread.py::TestSmartThreadLogMsgs'
+            '.test_refresh_pair_array_log_msgs')
+        log_ver.add_call_seq(name='alpha',
+                             seq=alpha_call_seq)
+
+        log_msg = 'mainline entered'
+        log_ver.add_msg(log_msg=log_msg)
+        logger.debug(log_msg)
+
+        log_msg = f'random_seed_arg: {random_seed_arg}'
+        log_ver.add_msg(log_msg=log_msg)
+        logger.debug(log_msg)
+
+        config_ver = ConfigVerifier(log_ver=log_ver)
+
+        msgs = Msgs()
+
+        random.seed(random_seed_arg)
+
+        num_threads = 1  # random.randint(2, 3)
+
+        log_msg = f'num_threads: {num_threads}'
+        log_ver.add_msg(log_msg=log_msg)
+        logger.debug(log_msg)
+
+        thread_names = ['alpha', 'beta', 'charlie', 'delta', 'echo']
+        f1_threads = {}
+        alive_names = []
+        exp_pairs = {}
+
+        ################################################################
+        # Create smart threads
+        ################################################################
+        for thread_num in range(num_threads):
+            name = thread_names[thread_num]
+            log_msg = f'mainline creating {name} smart thread'
+            log_ver.add_msg(log_level=logging.DEBUG,
+                            log_msg=log_msg)
+            logger.debug(log_msg)
+
+            # alpha_thread = st.SmartThread(name='alpha')
+            if thread_num == 0:
+                alpha_thread = st.SmartThread(name=name)
+                config_ver.add_thread(
+                    name=name,
+                    thread_alive=True,
+                    auto_start=False,
+                    expected_status=st.ThreadStatus.Alive,
+                    thread_repr=repr(alpha_thread),
+                    reg_update_time=alpha_thread.
+                        time_last_registry_update[-1],
+                    pair_array_update_time=alpha_thread.
+                        time_last_pair_array_update[-1]
+                )
+            else:
+                f1_threads[name] = st.SmartThread(name=name,
+                                                  target=f1,
+                                                  args=(name,))
+                config_ver.add_thread(
+                    name=name,
+                    thread_alive=True,
+                    auto_start=True,
+                    expected_status=st.ThreadStatus.Alive,
+                    thread_repr=repr(f1_threads[name]),
+                    reg_update_time=alpha_thread.
+                        time_last_registry_update[-1],
+                    pair_array_update_time=alpha_thread.
+                        time_last_pair_array_update[-1]
+                )
+
+        config_ver.validate_config()
+        # for thread_name in f1_threads.keys():
+        #     if thread_name == 'alpha':
+        #         continue
+        #     msgs.queue_msg(thread_name)  # tell thread to proceed
+
+        ################################################################
+        # Start beta thread
+        ################################################################
+        # beta_thread.start()
+        #
+        # log_msg = (
+        #     'beta set status for thread beta '
+        #     'from ThreadStatus.Registered to ThreadStatus.Starting')
+        # log_ver.add_msg(
+        #     log_name='scottbrian_paratools.smart_thread',
+        #     log_level=logging.DEBUG,
+        #     log_msg=log_msg)
+        #
+        # log_msg = (
+        #     f'beta set status for thread beta '
+        #     f'from ThreadStatus.Starting to ThreadStatus.Alive')
+        # log_ver.add_msg(
+        #     log_name='scottbrian_paratools.smart_thread',
+        #     log_level=logging.DEBUG,
+        #     log_msg=log_msg)
+        #
+        # log_msg = re.escape(
+        #     'beta thread started, thread.is_alive() = True, '
+        #     'status: ThreadStatus.Alive')
+        # log_ver.add_msg(
+        #     log_name='scottbrian_paratools.smart_thread',
+        #     log_level=logging.DEBUG,
+        #     log_msg=log_msg)
+
+        ################################################################
+        # Recv msgs from remotes
+        ################################################################
+        # time.sleep(.5)
+        # for thread_name in f1_threads.keys():
+        #     if thread_name == 'alpha':
+        #         continue
+        #     log_msg = f'mainline alpha receiving msg from {thread_name}'
+        #     log_ver.add_msg(log_level=logging.DEBUG,
+        #                     log_msg=log_msg)
+        #     logger.debug(log_msg)
+        #
+        #     alpha_thread.recv_msg(remote=thread_name, timeout=3)
+        #
+        #     log_msg = f'alpha receiving msg from {thread_name}'
+        #     log_ver.add_msg(
+        #         log_name='scottbrian_paratools.smart_thread',
+        #         log_level=logging.INFO,
+        #         log_msg=log_msg)
+
+        ################################################################
+        # Join remotes
+        ################################################################
+        # for thread_name in f1_threads.keys():
+        #     if thread_name == 'alpha':
+        #         continue
+        #     alpha_thread.join(targets=thread_name)
+        #     targets = {thread_name: f1_threads[thread_name]}
+
+        ################################################################
+        # verify logger messages
+        ################################################################
+        time.sleep(1)
+        match_results = log_ver.get_match_results(caplog=caplog)
+        log_ver.print_match_results(match_results)
+        log_ver.verify_log_results(match_results)
+
+        logger.debug('mainline exiting')
 
 class TestSmartThreadCombos:
     """Test class for SmartThread combos."""
