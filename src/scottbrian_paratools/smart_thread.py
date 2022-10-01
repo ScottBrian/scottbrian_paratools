@@ -878,6 +878,22 @@ class SmartThread:
                         f' for pair_key = {pair_key}, name = {thread_name}')
                     changed = True
 
+            # At this point, we may have removed a thread that was no
+            # longer registered. If only one thread remains, it should
+            # also be removed unless it has a message pending.
+            if len(SmartThread._pair_array[pair_key].status_blocks) == 1:
+                for thread_name in SmartThread._pair_array[
+                        pair_key].status_blocks:
+                    if SmartThread._pair_array[
+                            pair_key].status_blocks[thread_name].msg_q.empty():
+                        _ = SmartThread._pair_array[
+                            pair_key].status_blocks.pop(thread_name, None)
+                        self.logger.debug(
+                            f'{self.name} removed status_blocks entry'
+                            f' for pair_key = {pair_key}, name = '
+                            f'{thread_name}')
+                        changed = True
+                        break
             # remove _connection_pair if both names are gone
             if not SmartThread._pair_array[
                     pair_key].status_blocks:

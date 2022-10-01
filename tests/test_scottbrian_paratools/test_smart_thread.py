@@ -1178,6 +1178,59 @@ class ConfigVerifier:
         self.expected_registered: dict[str, ThreadTracker] = {}
         self.expected_pairs: dict[tuple[str, str], list[str]] = {}
         self.log_ver = log_ver
+        self.alpha_thread: st.SmartThread = self.create_alpha_thread()
+        self.f1_thread_names: dict[str, bool] = {
+            'beta': True,
+            'charlie': True,
+            'delta': True,
+            'echo': True,
+            'fox': True,
+            'george': True,
+            'henry': True,
+            'ida': True}
+
+    def create_alpha_thread(self) -> st.SmartThread:
+
+        alpha_thread = st.SmartThread(name='alpha')
+        self.add_thread(
+            name='alpha',
+            thread_alive=True,
+            auto_start=False,
+            expected_status=st.ThreadStatus.Alive,
+            thread_repr=repr(alpha_thread),
+            reg_update_time=alpha_thread.time_last_registry_update[-1],
+            pair_array_update_time=alpha_thread.time_last_pair_array_update[-1]
+        )
+        return alpha_thread
+
+    def create_f1_thread(self,
+                         target: Callable,
+                         auto_start: bool = True
+                         ) -> st.SmartThread:
+        name = ''
+        for thread_name, available in self.f1_thread_names.items():
+            if available:
+                name = thread_name
+                self.f1_thread_names[name] = False
+                break
+        f1_thread = st.SmartThread(name=name,
+                                   target=target,
+                                   args=(name,))
+        if auto_start:
+            exp_status = st.ThreadStatus.Alive
+        else:
+            exp_status = st.ThreadStatus.Registered
+        self.add_thread(
+            name=name,
+            thread_alive=auto_start,
+            auto_start=auto_start,
+            expected_status=exp_status,
+            thread_repr=repr(f1_thread),
+            reg_update_time=f1_thread.time_last_registry_update[-1],
+            pair_array_update_time=f1_thread.time_last_pair_array_update[-1]
+        )
+
+        return f1_thread, name
 
     def add_thread(self,
                    name: str,
@@ -1268,11 +1321,6 @@ class ConfigVerifier:
 
         self.add_log_msg(f'{name} entered _refresh_pair_array')
 
-        if self.expected_registered[name].is_alive:
-            self.add_log_msg(
-                f'{name} set status for thread {name} '
-                f'from ThreadStatus.Registered to ThreadStatus.Alive')
-
         self.add_log_msg(re.escape(
             f'{name} updated _pair_array at UTC '
             f'{pair_array_update_time.strftime("%H:%M:%S.%f")}'))
@@ -1294,14 +1342,15 @@ class ConfigVerifier:
                 f'{name} thread started, '
                 'thread.is_alive() = True, '
                 'status: ThreadStatus.Alive'))
+        else:
+            if self.expected_registered[name].is_alive:
+                self.add_log_msg(
+                    f'{name} set status for thread {name} '
+                    f'from ThreadStatus.Registered to ThreadStatus.Alive')
 
     def del_thread(self,
                    name: str,
                    remotes: list[str],
-                   thread_alive: bool,
-                   auto_start: bool,
-                   expected_status: st.ThreadStatus,
-                   thread_repr: str,
                    reg_update_times: deque,
                    pair_array_update_times: deque
                    ) -> None:
@@ -1326,6 +1375,7 @@ class ConfigVerifier:
 
             self.add_log_msg(f'{name} entered _refresh_pair_array')
 
+            pair_keys_to_delete = []
             for pair_key in self.expected_pairs:
                 if remote not in pair_key:
                     continue
@@ -1333,10 +1383,10 @@ class ConfigVerifier:
                     other_name = pair_key[1]
                 else:
                     other_name = pair_key[0]
-                if pair_key not in self.expected_pairs:
-                    raise InvalidConfigurationDetected(
-                        f'Expected pair_key entry for pair_key {pair_key} '
-                        f'was not found  while deleting remote {remote}')
+                # if pair_key not in self.expected_pairs:
+                #     raise InvalidConfigurationDetected(
+                #         f'Expected pair_key entry for pair_key {pair_key} '
+                #         f'was not found  while deleting remote {remote}')
                 if remote not in self.expected_pairs[pair_key]:
                     raise InvalidConfigurationDetected(
                         f'The expected_pairs for pair_key {pair_key} '
@@ -1355,26 +1405,26 @@ class ConfigVerifier:
                             f'should  because it has a non-zero '
                             f'pending_ops_count')
                     # ok to delete pair_key entry
-                    del self.expected_pairs[pair_key]
-                    self.add_log_msg(
-                        f'{name} removed _pair_array entry'
-                        f' for pair_key = {pair_key}')
+                    pair_keys_to_delete.append(pair_key)
                 elif self.expected_registered[
                         other_name].pending_ops_count == 0:
-                    del self.expected_pairs[pair_key]
+                    pair_keys_to_delete.append(pair_key)
                     self.add_log_msg(re.escape(
                         f"{name} removed status_blocks entry "
                         f"for pair_key = {pair_key}, "
                         f"name = {other_name}"))
-                    self.add_log_msg(
-                        f'{name} removed _pair_array entry'
-                        f' for pair_key = {pair_key}')
                 else:
                     self.expected_pairs[pair_key] = [other_name]
                 self.add_log_msg(re.escape(
                     f"{name} removed status_blocks entry "
                     f"for pair_key = {pair_key}, "
                     f"name = {remote}"))
+
+            for pair_key in pair_keys_to_delete:
+                del self.expected_pairs[pair_key]
+                self.add_log_msg(re.escape(
+                    f'{name} removed _pair_array entry'
+                    f' for pair_key = {pair_key}'))
 
             self.add_log_msg(re.escape(
                 f'{name} updated _pair_array at UTC '
@@ -1479,7 +1529,6 @@ class ConfigVerifier:
                         f'expected_apirs for pair_key {pair_key}, but not in '
                         'SmartThread._pair_array status_blocks')
 
-
     def add_log_msg(self,
                     new_log_msg: str) -> None:
         self.log_ver.add_msg(
@@ -1507,20 +1556,20 @@ class TestSmartThreadConfigs:
         ################################################################
         # f1
         ################################################################
-        def f1(name: str):
-            log_msg_f1 = f'f1 entered for {name}'
+        def f1(f1_name: str):
+            log_msg_f1 = f'f1 entered for {f1_name}'
             log_ver.add_msg(log_level=logging.DEBUG,
                             log_msg=log_msg_f1)
             logger.debug(log_msg_f1)
 
-            msgs.get_msg(name)
+            msgs.get_msg(f1_name)
 
             ############################################################
             # send msg to alpha
             ############################################################
-            alive_threads[name].send_msg(targets='alpha', msg='go now')
+            f1_threads[f1_name].send_msg(targets='alpha', msg='go now')
 
-            log_msg_f1 = f'{name} sending message to alpha'
+            log_msg_f1 = f'{f1_name} sending message to alpha'
             log_ver.add_msg(
                 log_name='scottbrian_paratools.smart_thread',
                 log_level=logging.INFO,
@@ -1529,7 +1578,7 @@ class TestSmartThreadConfigs:
             ############################################################
             # exit
             ############################################################
-            log_msg_f1 = f'f1 exiting for {name}'
+            log_msg_f1 = f'f1 exiting for {f1_name}'
             log_ver.add_msg(log_level=logging.DEBUG,
                             log_msg=log_msg_f1)
             logger.debug(log_msg_f1)
@@ -1565,56 +1614,18 @@ class TestSmartThreadConfigs:
         log_ver.add_msg(log_msg=log_msg)
         logger.debug(log_msg)
 
-        thread_names = ['alpha', 'beta', 'charlie', 'delta', 'echo']
         f1_threads = {}
-        alive_names = []
-        exp_pairs = {}
 
         ################################################################
-        # Create smart threads
+        # Create f1 threads
         ################################################################
         for thread_num in range(num_threads):
-            name = thread_names[thread_num]
-            log_msg = f'mainline creating {name} smart thread'
-            log_ver.add_msg(log_level=logging.DEBUG,
-                            log_msg=log_msg)
-            logger.debug(log_msg)
-
-            # alpha_thread = st.SmartThread(name='alpha')
-            if thread_num == 0:
-                alpha_thread = st.SmartThread(name=name)
-                config_ver.add_thread(
-                    name=name,
-                    thread_alive=True,
-                    auto_start=False,
-                    expected_status=st.ThreadStatus.Alive,
-                    thread_repr=repr(alpha_thread),
-                    reg_update_time=alpha_thread.
-                        time_last_registry_update[-1],
-                    pair_array_update_time=alpha_thread.
-                        time_last_pair_array_update[-1]
-                )
-            else:
-                f1_threads[name] = st.SmartThread(name=name,
-                                                  target=f1,
-                                                  args=(name,))
-                config_ver.add_thread(
-                    name=name,
-                    thread_alive=True,
-                    auto_start=True,
-                    expected_status=st.ThreadStatus.Alive,
-                    thread_repr=repr(f1_threads[name]),
-                    reg_update_time=alpha_thread.
-                        time_last_registry_update[-1],
-                    pair_array_update_time=alpha_thread.
-                        time_last_pair_array_update[-1]
-                )
+            f1_thread, name = config_ver.create_f1_thread(target=f1)
+            f1_threads[name] = f1_thread
 
         config_ver.validate_config()
-        # for thread_name in f1_threads.keys():
-        #     if thread_name == 'alpha':
-        #         continue
-        #     msgs.queue_msg(thread_name)  # tell thread to proceed
+        for thread_name in f1_threads.keys():
+            msgs.queue_msg(thread_name)  # tell thread to proceed
 
         ################################################################
         # Start beta thread
@@ -1648,32 +1659,34 @@ class TestSmartThreadConfigs:
         ################################################################
         # Recv msgs from remotes
         ################################################################
-        # time.sleep(.5)
-        # for thread_name in f1_threads.keys():
-        #     if thread_name == 'alpha':
-        #         continue
-        #     log_msg = f'mainline alpha receiving msg from {thread_name}'
-        #     log_ver.add_msg(log_level=logging.DEBUG,
-        #                     log_msg=log_msg)
-        #     logger.debug(log_msg)
-        #
-        #     alpha_thread.recv_msg(remote=thread_name, timeout=3)
-        #
-        #     log_msg = f'alpha receiving msg from {thread_name}'
-        #     log_ver.add_msg(
-        #         log_name='scottbrian_paratools.smart_thread',
-        #         log_level=logging.INFO,
-        #         log_msg=log_msg)
+        for thread_name in f1_threads.keys():
+            log_msg = f'mainline alpha receiving msg from {thread_name}'
+            log_ver.add_msg(log_level=logging.DEBUG,
+                            log_msg=log_msg)
+            logger.debug(log_msg)
+
+            config_ver.alpha_thread.recv_msg(remote=thread_name, timeout=3)
+
+            log_msg = f'alpha receiving msg from {thread_name}'
+            log_ver.add_msg(
+                log_name='scottbrian_paratools.smart_thread',
+                log_level=logging.INFO,
+                log_msg=log_msg)
 
         ################################################################
         # Join remotes
         ################################################################
-        # for thread_name in f1_threads.keys():
-        #     if thread_name == 'alpha':
-        #         continue
-        #     alpha_thread.join(targets=thread_name)
-        #     targets = {thread_name: f1_threads[thread_name]}
-
+        for thread_name in f1_threads.keys():
+            config_ver.alpha_thread.join(targets=thread_name)
+            copy_reg_deque = (
+                config_ver.alpha_thread.time_last_registry_update.copy())
+            copy_pair_deque = (
+                config_ver.alpha_thread.time_last_pair_array_update.copy())
+            config_ver.del_thread(
+                name='alpha',
+                remotes=[thread_name],
+                reg_update_times=copy_reg_deque,
+                pair_array_update_times=copy_pair_deque)
         ################################################################
         # verify logger messages
         ################################################################
