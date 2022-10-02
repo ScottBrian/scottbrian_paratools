@@ -13,7 +13,7 @@ import queue
 import random
 import re
 import time
-from typing import Any, Callable, cast, Final, Optional, Union
+from typing import Any, Callable, cast, Type, TYPE_CHECKING, Union
 import threading
 
 ###############################################################################
@@ -137,7 +137,7 @@ def action_arg2(request: Any) -> Any:
 
 
 ###############################################################################
-# timeout_arg fixtures
+# random_seed_arg
 ###############################################################################
 random_seed_arg_list = [1]
 
@@ -155,6 +155,42 @@ def random_seed_arg(request: Any) -> int:
     return request.param
 
 
+###############################################################################
+# num_threads_arg
+###############################################################################
+num_threads_arg_list = [1, 2, 3, 4, 5, 6, 7, 8]
+
+
+@pytest.fixture(params=num_threads_arg_list)  # type: ignore
+def num_threads_arg(request: Any) -> int:
+    """Number of threads to create.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return request.param
+
+
+###############################################################################
+# recv_msg_after_join_arg
+###############################################################################
+recv_msg_after_join_arg_list = [1, 2, 3]
+
+
+@pytest.fixture(params=recv_msg_after_join_arg_list)  # type: ignore
+def recv_msg_after_join_arg(request: Any) -> int:
+    """Which threads should exit before alpha recvs msg.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return request.param
 ###############################################################################
 # timeout_arg fixtures
 ###############################################################################
@@ -1175,9 +1211,11 @@ class ThreadTracker:
 
 class ConfigVerifier:
     def __init__(self, log_ver: LogVer):
+        self.specified_args = locals()  # used for __repr__, see below
         self.expected_registered: dict[str, ThreadTracker] = {}
         self.expected_pairs: dict[tuple[str, str], list[str]] = {}
         self.log_ver = log_ver
+        self.ops_lock = threading.Lock()
         self.alpha_thread: st.SmartThread = self.create_alpha_thread()
         self.f1_thread_names: dict[str, bool] = {
             'beta': True,
@@ -1188,6 +1226,30 @@ class ConfigVerifier:
             'george': True,
             'henry': True,
             'ida': True}
+
+    def __repr__(self) -> str:
+        """Return a representation of the class.
+
+        Returns:
+            The representation as how the class is instantiated
+
+        """
+        if TYPE_CHECKING:
+            __class__: Type[ConfigVerifier]
+        classname = self.__class__.__name__
+        parms = ""
+        comma = ''
+
+        for key, item in self.specified_args.items():
+            if item:  # if not None
+                if key in ('log_ver', ):
+                    if type(item) is str:
+                        parms += comma + f"{key}='{item}'"
+                    else:
+                        parms += comma + f"{key}={item}"
+                    comma = ', '  # after first item, now need comma
+
+        return f'{classname}({parms})'
 
     def create_alpha_thread(self) -> st.SmartThread:
 
@@ -1203,6 +1265,8 @@ class ConfigVerifier:
         )
         return alpha_thread
 
+
+
     def create_f1_thread(self,
                          target: Callable,
                          auto_start: bool = True
@@ -1215,7 +1279,7 @@ class ConfigVerifier:
                 break
         f1_thread = st.SmartThread(name=name,
                                    target=target,
-                                   args=(name,))
+                                   args=(name, self))
         if auto_start:
             exp_status = st.ThreadStatus.Alive
         else:
@@ -1437,6 +1501,27 @@ class ConfigVerifier:
 
             self.add_log_msg(f'{name} did successful join of {remote}.')
 
+    def inc_ops_count(self, targets: list[str]):
+        with self.ops_lock:
+            for target in targets:
+                self.expected_registered[target].pending_ops_count += 1
+
+    def dec_ops_count(self, target: str):
+        with self.ops_lock:
+            self.expected_registered[target].pending_ops_count -= 1
+            if self.expected_registered[target].pending_ops_count < 0:
+                raise InvalidConfigurationDetected(
+                    f'SmartThread dec_ops_count for for name'
+                    f' {target} was decremented below zero')
+
+    def set_is_alive(self, target: str, value: bool):
+        with self.ops_lock:
+            self.expected_registered[target].is_alive = value
+            if self.expected_registered[target].pending_ops_count < 0:
+                raise InvalidConfigurationDetected(
+                    f'SmartThread dec_ops_count for for name'
+                    f' {target} was decremented below zero')
+
     def validate_config(self):
         # verify real registry matches expected_registered
         for name, thread in st.SmartThread._registry.items():
@@ -1544,19 +1629,21 @@ class TestSmartThreadConfigs:
     ####################################################################
     def test_smart_thread_simple_config(
             self,
-            random_seed_arg: int,
+            num_threads_arg: int,
+            recv_msg_after_join_arg: int,
             caplog: pytest.CaptureFixture[str]
             ) -> None:
         """Test simple configuration scenarios.
 
         Args:
+            num_threads_arg: fixture for number of threads to create
             caplog: pytest fixture to capture log output
 
         """
         ################################################################
         # f1
         ################################################################
-        def f1(f1_name: str):
+        def f1(f1_name: str, f1_config_ver: ConfigVerifier):
             log_msg_f1 = f'f1 entered for {f1_name}'
             log_ver.add_msg(log_level=logging.DEBUG,
                             log_msg=log_msg_f1)
@@ -1567,6 +1654,7 @@ class TestSmartThreadConfigs:
             ############################################################
             # send msg to alpha
             ############################################################
+            f1_config_ver.inc_ops_count(['alpha'])
             f1_threads[f1_name].send_msg(targets='alpha', msg='go now')
 
             log_msg_f1 = f'{f1_name} sending message to alpha'
@@ -1576,12 +1664,19 @@ class TestSmartThreadConfigs:
                 log_msg=log_msg_f1)
 
             ############################################################
+            # wait for alpha to tell us to exit
+            ############################################################
+            msgs.get_msg(f1_name)
+
+            ############################################################
             # exit
             ############################################################
             log_msg_f1 = f'f1 exiting for {f1_name}'
             log_ver.add_msg(log_level=logging.DEBUG,
                             log_msg=log_msg_f1)
             logger.debug(log_msg_f1)
+
+            f1_config_ver.set_is_alive(target=f1_name, value=False)
 
         ################################################################
         # Set up log verification and start tests
@@ -1598,19 +1693,19 @@ class TestSmartThreadConfigs:
         log_ver.add_msg(log_msg=log_msg)
         logger.debug(log_msg)
 
-        log_msg = f'random_seed_arg: {random_seed_arg}'
-        log_ver.add_msg(log_msg=log_msg)
-        logger.debug(log_msg)
+        # log_msg = f'random_seed_arg: {random_seed_arg}'
+        # log_ver.add_msg(log_msg=log_msg)
+        # logger.debug(log_msg)
 
         config_ver = ConfigVerifier(log_ver=log_ver)
 
         msgs = Msgs()
 
-        random.seed(random_seed_arg)
+        # random.seed(random_seed_arg)
 
-        num_threads = 1  # random.randint(2, 3)
+        # num_threads_arg = 1  # random.randint(2, 3)
 
-        log_msg = f'num_threads: {num_threads}'
+        log_msg = f'num_threads: {num_threads_arg}'
         log_ver.add_msg(log_msg=log_msg)
         logger.debug(log_msg)
 
@@ -1619,11 +1714,18 @@ class TestSmartThreadConfigs:
         ################################################################
         # Create f1 threads
         ################################################################
-        for thread_num in range(num_threads):
+        for thread_num in range(1, num_threads_arg):
             f1_thread, name = config_ver.create_f1_thread(target=f1)
             f1_threads[name] = f1_thread
 
+        ################################################################
+        # All creates completed, validate config
+        ################################################################
         config_ver.validate_config()
+
+        ################################################################
+        # Tell f1 threads to proceed to send us a msg
+        ################################################################
         for thread_name in f1_threads.keys():
             msgs.queue_msg(thread_name)  # tell thread to proceed
 
@@ -1659,13 +1761,37 @@ class TestSmartThreadConfigs:
         ################################################################
         # Recv msgs from remotes
         ################################################################
+        if recv_msg_after_join_arg == 1:
+            num_early_joins_to_do = 0
+        elif recv_msg_after_join_arg == 2:
+            num_early_joins_to_do = (num_threads_arg-1)/2
+        else:
+            num_early_joins_to_do = num_threads_arg-1
+        print(f'num_early_joins_to_do: {num_early_joins_to_do}')
+        num_joins = 0
+        joined_names = []
         for thread_name in f1_threads.keys():
+            if num_joins < num_early_joins_to_do:
+                msgs.queue_msg(thread_name)  # tell thread to proceed
+                config_ver.alpha_thread.join(targets=thread_name)
+                copy_reg_deque = (
+                    config_ver.alpha_thread.time_last_registry_update.copy())
+                copy_pair_deque = (
+                    config_ver.alpha_thread.time_last_pair_array_update.copy())
+                config_ver.del_thread(
+                    name='alpha',
+                    remotes=[thread_name],
+                    reg_update_times=copy_reg_deque,
+                    pair_array_update_times=copy_pair_deque)
+                joined_names.append(thread_name)
+                num_joins += 1
             log_msg = f'mainline alpha receiving msg from {thread_name}'
             log_ver.add_msg(log_level=logging.DEBUG,
                             log_msg=log_msg)
             logger.debug(log_msg)
 
             config_ver.alpha_thread.recv_msg(remote=thread_name, timeout=3)
+            config_ver.dec_ops_count('alpha')
 
             log_msg = f'alpha receiving msg from {thread_name}'
             log_ver.add_msg(
@@ -1674,9 +1800,25 @@ class TestSmartThreadConfigs:
                 log_msg=log_msg)
 
         ################################################################
+        # All msgs received, validate config
+        ################################################################
+        config_ver.validate_config()
+
+        ################################################################
+        # Tell f1 threads to exit
+        ################################################################
+        if recv_msg_after_join_arg == 1:
+            for thread_name in f1_threads.keys():
+                if thread_name in joined_names:
+                    continue
+                msgs.queue_msg(thread_name)  # tell thread to proceed
+
+        ################################################################
         # Join remotes
         ################################################################
         for thread_name in f1_threads.keys():
+            if thread_name in joined_names:
+                continue
             config_ver.alpha_thread.join(targets=thread_name)
             copy_reg_deque = (
                 config_ver.alpha_thread.time_last_registry_update.copy())
@@ -1687,10 +1829,16 @@ class TestSmartThreadConfigs:
                 remotes=[thread_name],
                 reg_update_times=copy_reg_deque,
                 pair_array_update_times=copy_pair_deque)
+
+        ################################################################
+        # All joins complete, validate config
+        ################################################################
+        config_ver.validate_config()
+
         ################################################################
         # verify logger messages
         ################################################################
-        time.sleep(1)
+        config_ver.validate_config()
         match_results = log_ver.get_match_results(caplog=caplog)
         log_ver.print_match_results(match_results)
         log_ver.verify_log_results(match_results)
