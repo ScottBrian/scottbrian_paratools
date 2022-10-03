@@ -302,6 +302,7 @@ class SmartThread:
         sync_event: threading.Event
         msg_q: queue.Queue[Any]
         code: Any = None
+        del_deferred: bool = False
         wait_wait: bool = False
         sync_wait: bool = False
         wait_timeout_specified: bool = False
@@ -894,6 +895,10 @@ class SmartThread:
                             f'{thread_name}')
                         changed = True
                         break
+                    else:
+                        SmartThread._pair_array[
+                            pair_key].status_blocks[
+                            thread_name].del_deferred = True
             # remove _connection_pair if both names are gone
             if not SmartThread._pair_array[
                     pair_key].status_blocks:
@@ -1075,6 +1080,7 @@ class SmartThread:
                 f'{caller_info} {log_msg}')
         log_msg_added = False
         pair_key = self._get_pair_key(self.name, remote)
+        do_refresh = False
         while True:
             with sel.SELockShare(SmartThread._registry_lock):
                 # We don't check to ensure remote is alive since it may
@@ -1097,6 +1103,13 @@ class SmartThread:
                         ret_msg = SmartThread._pair_array[
                             pair_key].status_blocks[
                             self.name].msg_q.get(timeout=0.2)
+                        if (SmartThread._pair_array[
+                                pair_key].status_blocks[
+                                self.name].del_deferred
+                                and SmartThread._pair_array[
+                                pair_key].status_blocks[
+                                self.name].msg_q.empty()):
+                            do_refresh = True
                         break
                     except queue.Empty:
                         # The msg queue was just now empty. The fact
@@ -1127,6 +1140,9 @@ class SmartThread:
                     f'{remote}.')
 
             time.sleep(0.2)
+        if do_refresh:
+            with sel.SELockExcl(SmartThread._registry_lock):
+                self._refresh_pair_array()
 
         # if caller specified a log message to issue
         if log_msg and self.debug_logging_enabled:

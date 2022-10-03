@@ -1190,21 +1190,19 @@ class TestSmartThreadErrors:
         logger.debug('mainline exiting')
 
 
-
-
 ########################################################################
 # TestSmartThreadLogMsgs class
 ########################################################################
-
-
-
-
 @dataclass
 class ThreadTracker:
     is_alive: bool
     is_auto_started: bool
     status: st.ThreadStatus
     thread_repr: str
+    # expected_last_reg_updates: deque
+
+@dataclass
+class ThreadPairStatus:
     pending_ops_count: int
     # expected_last_reg_updates: deque
 
@@ -1213,7 +1211,8 @@ class ConfigVerifier:
     def __init__(self, log_ver: LogVer):
         self.specified_args = locals()  # used for __repr__, see below
         self.expected_registered: dict[str, ThreadTracker] = {}
-        self.expected_pairs: dict[tuple[str, str], list[str]] = {}
+        self.expected_pairs: dict[tuple[str, str],
+                                  dict[str, ThreadPairStatus]] = {}
         self.log_ver = log_ver
         self.ops_lock = threading.Lock()
         self.alpha_thread: st.SmartThread = self.create_alpha_thread()
@@ -1310,17 +1309,19 @@ class ConfigVerifier:
             is_alive=thread_alive,
             is_auto_started=auto_start,
             status=expected_status,
-            thread_repr=thread_repr,
-            pending_ops_count=0
+            thread_repr=thread_repr
         )
-
+        print(f'\nadd_thread entry for {name}, expected_pairs:\n',
+              self.expected_pairs)
         if len(self.expected_registered) > 1:
             pair_keys = combinations(self.expected_registered.keys(), 2)
             for pair_key in pair_keys:
                 if name not in pair_key:
                     continue
                 if pair_key not in self.expected_pairs:
-                    self.expected_pairs[pair_key] = [pair_key[0], pair_key[1]]
+                    self.expected_pairs[pair_key] = {
+                        pair_key[0]: ThreadPairStatus(pending_ops_count=0),
+                        pair_key[1]: ThreadPairStatus(pending_ops_count=0)}
                     self.add_log_msg(re.escape(
                         f"{name} created "
                         "_refresh_pair_array with "
@@ -1338,8 +1339,8 @@ class ConfigVerifier:
                     if not self.expected_pairs[pair_key]:
                         raise InvalidConfigurationDetected(
                             'Attempt to add thread to existing pair array '
-                            'that has an empty list')
-                    if name in self.expected_pairs[pair_key]:
+                            'that has an empty ThreadPairStatus dict')
+                    if name in self.expected_pairs[pair_key].keys():
                         raise InvalidConfigurationDetected(
                             'Attempt to add thread to pair array that already '
                             'has the thread in the pair array')
@@ -1347,12 +1348,13 @@ class ConfigVerifier:
                         other_name = pair_key[1]
                     else:
                         other_name = pair_key[0]
-                    if other_name not in self.expected_pairs[pair_key]:
+                    if other_name not in self.expected_pairs[pair_key].keys():
                         raise InvalidConfigurationDetected(
                             'Attempt to add thread to pair array that did '
                             'not have the other name in the pair array')
-                    # looks OK, just replace the list with a new list
-                    self.expected_pairs[pair_key] = [pair_key[0], pair_key[1]]
+                    # looks OK, just add in the new name
+                    self.expected_pairs[pair_key][
+                        name] = ThreadPairStatus(pending_ops_count=0)
                     self.add_log_msg(re.escape(
                         f"{name} added status_blocks entry "
                         f"for pair_key = {pair_key}, "
@@ -1412,6 +1414,9 @@ class ConfigVerifier:
                     f'{name} set status for thread {name} '
                     f'from ThreadStatus.Registered to ThreadStatus.Alive')
 
+        print(f'\nadd_thread exit for {name}, expected_pairs:\n',
+              self.expected_pairs)
+
     def del_thread(self,
                    name: str,
                    remotes: list[str],
@@ -1419,6 +1424,10 @@ class ConfigVerifier:
                    pair_array_update_times: deque
                    ) -> None:
 
+        print(f'\ndel_thread entry for {name}, expected_pairs:\n',
+              self.expected_pairs)
+        print(f'\ndel_thread entry for {name}, remotes:\n',
+              remotes)
         for remote in remotes:
             self.expected_registered[remote].is_alive = False
             self.expected_registered[remote].status = st.ThreadStatus.Stopped
@@ -1451,26 +1460,26 @@ class ConfigVerifier:
                 #     raise InvalidConfigurationDetected(
                 #         f'Expected pair_key entry for pair_key {pair_key} '
                 #         f'was not found  while deleting remote {remote}')
-                if remote not in self.expected_pairs[pair_key]:
+                if remote not in self.expected_pairs[pair_key].keys():
                     raise InvalidConfigurationDetected(
                         f'The expected_pairs for pair_key {pair_key} '
                         'contains an entry of '
                         f'{self.expected_pairs[pair_key]}  which does not '
                         f'include the remote {remote} being deleted')
-                if other_name not in self.expected_pairs[pair_key]:
-                    if (other_name in self.expected_registered
-                            and self.expected_registered[
-                                other_name].pending_ops_count > 0):
-                        raise InvalidConfigurationDetected(
-                            f'The expected_pairs for pair_key {pair_key} '
-                            'contains an entry of '
-                            f'{self.expected_pairs[pair_key]}  which does not '
-                            f'include the other_name {other_name} but '
-                            f'should  because it has a non-zero '
-                            f'pending_ops_count')
+                if other_name not in self.expected_pairs[pair_key].keys():
+                    # if (other_name in self.expected_registered
+                    #         and self.expected_registered[
+                    #             other_name].pending_ops_count > 0):
+                    #     raise InvalidConfigurationDetected(
+                    #         f'The expected_pairs for pair_key {pair_key} '
+                    #         'contains an entry of '
+                    #         f'{self.expected_pairs[pair_key]}  which does not '
+                    #         f'include the other_name {other_name} but '
+                    #         f'should  because it has a non-zero '
+                    #         f'pending_ops_count')
                     # ok to delete pair_key entry
                     pair_keys_to_delete.append(pair_key)
-                elif self.expected_registered[
+                elif self.expected_pairs[pair_key][
                         other_name].pending_ops_count == 0:
                     pair_keys_to_delete.append(pair_key)
                     self.add_log_msg(re.escape(
@@ -1478,7 +1487,7 @@ class ConfigVerifier:
                         f"for pair_key = {pair_key}, "
                         f"name = {other_name}"))
                 else:
-                    self.expected_pairs[pair_key] = [other_name]
+                    del self.expected_pairs[pair_key][remote]
                 self.add_log_msg(re.escape(
                     f"{name} removed status_blocks entry "
                     f"for pair_key = {pair_key}, "
@@ -1501,26 +1510,57 @@ class ConfigVerifier:
 
             self.add_log_msg(f'{name} did successful join of {remote}.')
 
-    def inc_ops_count(self, targets: list[str]):
+        print(f'\ndel_thread exit for {name}, expected_pairs:\n',
+              self.expected_pairs)
+
+    def inc_ops_count(self, targets: list[str], pair_with: str):
         with self.ops_lock:
             for target in targets:
-                self.expected_registered[target].pending_ops_count += 1
+                pair_key = st.SmartThread._get_pair_key(target, pair_with)
+                self.expected_pairs[pair_key][target].pending_ops_count += 1
 
-    def dec_ops_count(self, target: str):
+    def dec_ops_count(self,
+                      target: str,
+                      remote: str,
+                      pair_array_update_times: deque):
         with self.ops_lock:
-            self.expected_registered[target].pending_ops_count -= 1
-            if self.expected_registered[target].pending_ops_count < 0:
+            pair_key = st.SmartThread._get_pair_key(target, remote)
+            print('\nexpected pairs:\n', self.expected_pairs)
+            self.expected_pairs[pair_key][target].pending_ops_count -= 1
+            if self.expected_pairs[pair_key][target].pending_ops_count < 0:
                 raise InvalidConfigurationDetected(
-                    f'SmartThread dec_ops_count for for name'
-                    f' {target} was decremented below zero')
+                    f'dec_ops_count for for pair_key {pair_key}, '
+                    f'name {target} was decremented below zero')
+            if (self.expected_pairs[pair_key][target].pending_ops_count == 0
+                    and remote not in self.expected_pairs[pair_key].keys()):
+                # for pair_key in self.expected_pairs:
+                #     if (target in pair_key
+                #             and len(self.expected_pairs[pair_key]) == 1):
+                #         if target not in self.expected_pairs[pair_key]:
+                #             raise InvalidConfigurationDetected(
+                #                 f'SmartThread dec_ops_count for for name'
+                #                 f' {target} was decremented to zero,'
+                #                 f'but target is missing from expected_pairs')
+                #         del_list.append(pair_key)
+
+                del self.expected_pairs[pair_key]
+                self.add_log_msg(f'{target} entered _refresh_pair_array')
+                self.add_log_msg(re.escape(
+                    f"{target} removed status_blocks entry "
+                    f"for pair_key = {pair_key}, "
+                    f"name = {target}"))
+                self.add_log_msg(re.escape(
+                    f'{target} removed _pair_array entry'
+                    f' for pair_key = {pair_key}'))
+                print(f'\npair_key 1: {pair_key}, times:\n',
+                      pair_array_update_times)
+                self.add_log_msg(re.escape(
+                    f'{target} updated _pair_array at UTC '
+                    f'{pair_array_update_times.pop().strftime("%H:%M:%S.%f")}'))
 
     def set_is_alive(self, target: str, value: bool):
         with self.ops_lock:
             self.expected_registered[target].is_alive = value
-            if self.expected_registered[target].pending_ops_count < 0:
-                raise InvalidConfigurationDetected(
-                    f'SmartThread dec_ops_count for for name'
-                    f' {target} was decremented below zero')
 
     def validate_config(self):
         # verify real registry matches expected_registered
@@ -1561,7 +1601,7 @@ class ConfigVerifier:
                     f'not found in expected_pairs: ')
             for name in st.SmartThread._pair_array[
                     pair_key].status_blocks.keys():
-                if name not in self.expected_pairs[pair_key]:
+                if name not in self.expected_pairs[pair_key].keys():
                     raise InvalidConfigurationDetected(
                         f'ConfigVerifier found name {name} in '
                         f'SmartThread._pair_array status_blocks for pair_key'
@@ -1573,45 +1613,48 @@ class ConfigVerifier:
                         f' {pair_key}, but is missing in '
                         f'expected_registered: ')
                 if len(self.expected_pairs[pair_key]) == 1:
-                    if self.expected_registered[name].pending_ops_count == 0:
+                    if self.expected_pairs[pair_key][
+                            name].pending_ops_count == 0:
                         raise InvalidConfigurationDetected(
                             f'ConfigVerifier found name {name} in '
                             f'SmartThread._pair_array status_blocks for '
-                            f'pair_key  {pair_key}, but it is a single name '
-                            f'that has  a pending_ops_count of zero')
+                            f'pair_key {pair_key}, but it is a single name '
+                            f'that has a pending_ops_count of zero')
 
-                if (self.expected_registered[name].pending_ops_count == 0
+                if (self.expected_pairs[pair_key][
+                            name].pending_ops_count == 0
                         and not st.SmartThread._pair_array[
                         pair_key].status_blocks[name].msg_q.empty()):
                     raise InvalidConfigurationDetected(
                         f'ConfigVerifier found name {name} in '
-                        'SmartThread._pair_array status_blocks for '
+                        'expected_pairs for '
                         f'pair_key  {pair_key}, and it has a '
                         'pending_ops_count of zero, but the '
                         'SmartThread._pair_array entry show the msg_q '
                         'is not empty')
-                if (self.expected_registered[name].pending_ops_count != 0
+                if (self.expected_pairs[pair_key][
+                        name].pending_ops_count != 0
                         and st.SmartThread._pair_array[
                         pair_key].status_blocks[name].msg_q.empty()):
                     raise InvalidConfigurationDetected(
                         f'ConfigVerifier found name {name} in '
-                        'SmartThread._pair_array status_blocks for '
+                        'expected_pairs for '
                         f'pair_key  {pair_key}, and it has a '
                         'pending_ops_count of non-zero, but the '
                         'SmartThread._pair_array entry show the msg_q '
                         'is empty')
         # verify expected_pairs matches pair_array
-        for pair_key in self.expected_pairs.keys():
+        for pair_key in self.expected_pairs:
             if pair_key not in st.SmartThread._pair_array:
                 raise InvalidConfigurationDetected(
                     f'ConfigVerifier found pair_key {pair_key} in '
                     'expected_pairs but not in SmartThread._pair_array')
-            for name in self.expected_pairs[pair_key]:
+            for name in self.expected_pairs[pair_key].keys():
                 if name not in st.SmartThread._pair_array[
                         pair_key].status_blocks:
                     raise InvalidConfigurationDetected(
                         f'ConfigVerifier found name {name} in '
-                        f'expected_apirs for pair_key {pair_key}, but not in '
+                        f'expected_pairs for pair_key {pair_key}, but not in '
                         'SmartThread._pair_array status_blocks')
 
     def add_log_msg(self,
@@ -1654,7 +1697,7 @@ class TestSmartThreadConfigs:
             ############################################################
             # send msg to alpha
             ############################################################
-            f1_config_ver.inc_ops_count(['alpha'])
+            f1_config_ver.inc_ops_count(['alpha'], f1_name)
             f1_threads[f1_name].send_msg(targets='alpha', msg='go now')
 
             log_msg_f1 = f'{f1_name} sending message to alpha'
@@ -1791,7 +1834,11 @@ class TestSmartThreadConfigs:
             logger.debug(log_msg)
 
             config_ver.alpha_thread.recv_msg(remote=thread_name, timeout=3)
-            config_ver.dec_ops_count('alpha')
+            copy_pair_deque = (
+                config_ver.alpha_thread.time_last_pair_array_update.copy())
+            print(f'\nthread_name 1: {thread_name}, copy_pair_deque 1:\n',
+                  copy_pair_deque)
+            config_ver.dec_ops_count('alpha', thread_name, copy_pair_deque)
 
             log_msg = f'alpha receiving msg from {thread_name}'
             log_ver.add_msg(
@@ -1807,11 +1854,10 @@ class TestSmartThreadConfigs:
         ################################################################
         # Tell f1 threads to exit
         ################################################################
-        if recv_msg_after_join_arg == 1:
-            for thread_name in f1_threads.keys():
-                if thread_name in joined_names:
-                    continue
-                msgs.queue_msg(thread_name)  # tell thread to proceed
+        for thread_name in f1_threads.keys():
+            if thread_name in joined_names:
+                continue
+            msgs.queue_msg(thread_name)  # tell thread to proceed
 
         ################################################################
         # Join remotes
