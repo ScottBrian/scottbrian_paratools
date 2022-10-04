@@ -708,12 +708,13 @@ class SmartThread:
                         # react. We can only hope that a failed join
                         # here will help give us a clue that something
                         # went wrong.
-                        if sb.timer.remaining_time():
-                            SmartThread._registry[remote].thread.join(
-                                timeout=(sb.timer.remaining_time()
-                                         / len(work_targets)))
-                        else:
-                            SmartThread._registry[remote].thread.join()
+                        # Note also that we timeout each join after a
+                        # short 0.2 seconds so that we release and
+                        # re-obtain the registry lock in between
+                        # attempts. This is done to ensure we  don't
+                        # deadlock with any of the other services
+                        # (e.g., recv_msg)
+                        SmartThread._registry[remote].thread.join(timeout=0.2)
 
                         # we need to check to make sure the thread is
                         # not alive in case we timed out
@@ -883,22 +884,21 @@ class SmartThread:
             # longer registered. If only one thread remains, it should
             # also be removed unless it has a message pending.
             if len(SmartThread._pair_array[pair_key].status_blocks) == 1:
-                for thread_name in SmartThread._pair_array[
-                        pair_key].status_blocks:
-                    if SmartThread._pair_array[
-                            pair_key].status_blocks[thread_name].msg_q.empty():
-                        _ = SmartThread._pair_array[
-                            pair_key].status_blocks.pop(thread_name, None)
-                        self.logger.debug(
-                            f'{self.name} removed status_blocks entry'
-                            f' for pair_key = {pair_key}, name = '
-                            f'{thread_name}')
-                        changed = True
-                        break
-                    else:
-                        SmartThread._pair_array[
-                            pair_key].status_blocks[
-                            thread_name].del_deferred = True
+                thread_name = list(SmartThread._pair_array[
+                        pair_key].status_blocks.keys())[0]
+                if SmartThread._pair_array[
+                        pair_key].status_blocks[thread_name].msg_q.empty():
+                    _ = SmartThread._pair_array[
+                        pair_key].status_blocks.pop(thread_name, None)
+                    self.logger.debug(
+                        f'{self.name} removed status_blocks entry'
+                        f' for pair_key = {pair_key}, name = '
+                        f'{thread_name}')
+                    changed = True
+                else:
+                    SmartThread._pair_array[
+                        pair_key].status_blocks[
+                        thread_name].del_deferred = True
             # remove _connection_pair if both names are gone
             if not SmartThread._pair_array[
                     pair_key].status_blocks:

@@ -1195,7 +1195,9 @@ class TestSmartThreadErrors:
 ########################################################################
 @dataclass
 class ThreadTracker:
+    thread: st.SmartThread
     is_alive: bool
+    exiting: bool
     is_auto_started: bool
     status: st.ThreadStatus
     thread_repr: str
@@ -1250,11 +1252,19 @@ class ConfigVerifier:
 
         return f'{classname}({parms})'
 
+    def get_is_alive(self, name: str) -> bool:
+        if self.expected_registered[name].exiting:
+            return self.expected_registered[name].thread.thread.is_alive()
+        else:
+            return self.expected_registered[name].is_alive
+
+
     def create_alpha_thread(self) -> st.SmartThread:
 
         alpha_thread = st.SmartThread(name='alpha')
         self.add_thread(
             name='alpha',
+            thread=alpha_thread,
             thread_alive=True,
             auto_start=False,
             expected_status=st.ThreadStatus.Alive,
@@ -1263,8 +1273,6 @@ class ConfigVerifier:
             pair_array_update_time=alpha_thread.time_last_pair_array_update[-1]
         )
         return alpha_thread
-
-
 
     def create_f1_thread(self,
                          target: Callable,
@@ -1285,6 +1293,7 @@ class ConfigVerifier:
             exp_status = st.ThreadStatus.Registered
         self.add_thread(
             name=name,
+            thread=f1_thread,
             thread_alive=auto_start,
             auto_start=auto_start,
             expected_status=exp_status,
@@ -1297,6 +1306,7 @@ class ConfigVerifier:
 
     def add_thread(self,
                    name: str,
+                   thread: st.SmartThread,
                    thread_alive: bool,
                    auto_start: bool,
                    expected_status: st.ThreadStatus,
@@ -1306,13 +1316,13 @@ class ConfigVerifier:
                    ) -> None:
 
         self.expected_registered[name] = ThreadTracker(
+            thread=thread,
             is_alive=thread_alive,
+            exiting=False,
             is_auto_started=auto_start,
             status=expected_status,
             thread_repr=thread_repr
         )
-        print(f'\nadd_thread entry for {name}, expected_pairs:\n',
-              self.expected_pairs)
         if len(self.expected_registered) > 1:
             pair_keys = combinations(self.expected_registered.keys(), 2)
             for pair_key in pair_keys:
@@ -1378,7 +1388,7 @@ class ConfigVerifier:
                 continue
             self.add_log_msg(re.escape(
                 f"key = {a_name}, item = {tracker.thread_repr}, "
-                f"item.thread.is_alive() = {tracker.is_alive}, "
+                f"item.thread.is_alive() = {self.get_is_alive(a_name)}, "
                 f"status: {tracker.status}"))
 
         self.add_log_msg(
@@ -1414,9 +1424,6 @@ class ConfigVerifier:
                     f'{name} set status for thread {name} '
                     f'from ThreadStatus.Registered to ThreadStatus.Alive')
 
-        print(f'\nadd_thread exit for {name}, expected_pairs:\n',
-              self.expected_pairs)
-
     def del_thread(self,
                    name: str,
                    remotes: list[str],
@@ -1424,10 +1431,6 @@ class ConfigVerifier:
                    pair_array_update_times: deque
                    ) -> None:
 
-        print(f'\ndel_thread entry for {name}, expected_pairs:\n',
-              self.expected_pairs)
-        print(f'\ndel_thread entry for {name}, remotes:\n',
-              remotes)
         for remote in remotes:
             self.expected_registered[remote].is_alive = False
             self.expected_registered[remote].status = st.ThreadStatus.Stopped
@@ -1440,7 +1443,8 @@ class ConfigVerifier:
             for thread_name, tracker in self.expected_registered.items():
                 self.add_log_msg(re.escape(
                     f"key = {thread_name}, item = {tracker.thread_repr}, "
-                    f"item.thread.is_alive() = {tracker.is_alive}, "
+                    "item.thread.is_alive() = "
+                    f"{self.get_is_alive(thread_name)}, "
                     f"status: {tracker.status}"))
 
             del self.expected_registered[remote]
@@ -1510,9 +1514,6 @@ class ConfigVerifier:
 
             self.add_log_msg(f'{name} did successful join of {remote}.')
 
-        print(f'\ndel_thread exit for {name}, expected_pairs:\n',
-              self.expected_pairs)
-
     def inc_ops_count(self, targets: list[str], pair_with: str):
         with self.ops_lock:
             for target in targets:
@@ -1525,7 +1526,6 @@ class ConfigVerifier:
                       pair_array_update_times: deque):
         with self.ops_lock:
             pair_key = st.SmartThread._get_pair_key(target, remote)
-            print('\nexpected pairs:\n', self.expected_pairs)
             self.expected_pairs[pair_key][target].pending_ops_count -= 1
             if self.expected_pairs[pair_key][target].pending_ops_count < 0:
                 raise InvalidConfigurationDetected(
@@ -1552,15 +1552,15 @@ class ConfigVerifier:
                 self.add_log_msg(re.escape(
                     f'{target} removed _pair_array entry'
                     f' for pair_key = {pair_key}'))
-                print(f'\npair_key 1: {pair_key}, times:\n',
-                      pair_array_update_times)
                 self.add_log_msg(re.escape(
                     f'{target} updated _pair_array at UTC '
                     f'{pair_array_update_times.pop().strftime("%H:%M:%S.%f")}'))
 
-    def set_is_alive(self, target: str, value: bool):
+    def set_is_alive(self, target: str, value: bool, exiting: bool):
         with self.ops_lock:
             self.expected_registered[target].is_alive = value
+            self.expected_registered[
+                target].exiting = exiting
 
     def validate_config(self):
         # verify real registry matches expected_registered
@@ -1719,7 +1719,9 @@ class TestSmartThreadConfigs:
                             log_msg=log_msg_f1)
             logger.debug(log_msg_f1)
 
-            f1_config_ver.set_is_alive(target=f1_name, value=False)
+            f1_config_ver.set_is_alive(target=f1_name,
+                                       value=False,
+                                       exiting=True)
 
         ################################################################
         # Set up log verification and start tests
@@ -1810,7 +1812,6 @@ class TestSmartThreadConfigs:
             num_early_joins_to_do = (num_threads_arg-1)/2
         else:
             num_early_joins_to_do = num_threads_arg-1
-        print(f'num_early_joins_to_do: {num_early_joins_to_do}')
         num_joins = 0
         joined_names = []
         for thread_name in f1_threads.keys():
@@ -1828,6 +1829,7 @@ class TestSmartThreadConfigs:
                     pair_array_update_times=copy_pair_deque)
                 joined_names.append(thread_name)
                 num_joins += 1
+
             log_msg = f'mainline alpha receiving msg from {thread_name}'
             log_ver.add_msg(log_level=logging.DEBUG,
                             log_msg=log_msg)
@@ -1836,8 +1838,6 @@ class TestSmartThreadConfigs:
             config_ver.alpha_thread.recv_msg(remote=thread_name, timeout=3)
             copy_pair_deque = (
                 config_ver.alpha_thread.time_last_pair_array_update.copy())
-            print(f'\nthread_name 1: {thread_name}, copy_pair_deque 1:\n',
-                  copy_pair_deque)
             config_ver.dec_ops_count('alpha', thread_name, copy_pair_deque)
 
             log_msg = f'alpha receiving msg from {thread_name}'
