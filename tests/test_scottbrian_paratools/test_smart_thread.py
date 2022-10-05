@@ -6,14 +6,14 @@
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
+from enum import Enum, auto
 from itertools import combinations
 import logging
 import queue
 import random
 import re
 import time
-from typing import Any, Callable, cast, Type, TYPE_CHECKING, Union
+from typing import Any, Callable, cast, Type, TYPE_CHECKING, Optional
 import threading
 
 ###############################################################################
@@ -26,11 +26,7 @@ from scottbrian_utils.log_verifier import LogVer
 ###############################################################################
 # Local
 ###############################################################################
-from .conftest import Cmds, ThreadPairDesc, ThreadPairDescs, ExpLogMsgs
-
 import scottbrian_paratools.smart_thread as st
-
-import logging
 
 logger = logging.getLogger(__name__)
 logger.debug('about to start the tests')
@@ -53,9 +49,55 @@ class UnrecognizedCmd(ErrorTstSmartThread):
     """UnrecognizedCmd exception class."""
     pass
 
+
 class InvalidConfigurationDetected(ErrorTstSmartThread):
     """UnrecognizedCmd exception class."""
     pass
+
+
+###############################################################################
+# Config Scenarios
+###############################################################################
+class ConfigCmds(Enum):
+    Create = auto()
+    CreateManualStart = auto()
+    SendMsg = auto()
+    Exit = auto()
+
+
+@dataclass
+class ConfigCmd:
+    cmd: ConfigCmds
+    names: Optional[list[str]] = None
+    auto_start: bool = True
+    from_name: Optional[str] = None
+    to_names: Optional[list[str]] = None
+
+
+# config_scenario_1 = ((ConfigCmds.CreateAutoStart, ('beta',)),
+#                      (ConfigCmds.SendMsg, ('beta', 'alpha')),
+#                      (ConfigCmds.Exit, ('beta', )))
+
+config_scenario_1 = (
+    ConfigCmd(cmd=ConfigCmds.Create, names=['beta']),
+    ConfigCmd(cmd=ConfigCmds.SendMsg, from_name='beta', to_names=['alpha']),
+    ConfigCmd(cmd=ConfigCmds.Exit, names=['beta'])
+)
+
+config_scenario_arg_list = [config_scenario_1]
+
+
+@pytest.fixture(params=config_scenario_arg_list)  # type: ignore
+def config_scenario_arg(request: Any) -> tuple[ConfigCmd]:
+    """Using different scenarios.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return request.param
 
 
 ###############################################################################
@@ -1276,14 +1318,15 @@ class ConfigVerifier:
 
     def create_f1_thread(self,
                          target: Callable,
+                         name: Optional[str] = None,
                          auto_start: bool = True
                          ) -> st.SmartThread:
-        name = ''
-        for thread_name, available in self.f1_thread_names.items():
-            if available:
-                name = thread_name
-                self.f1_thread_names[name] = False
-                break
+        if name is None:
+            for thread_name, available in self.f1_thread_names.items():
+                if available:
+                    name = thread_name
+                    self.f1_thread_names[name] = False
+                    break
         f1_thread = st.SmartThread(name=name,
                                    target=target,
                                    args=(name, self))
@@ -1557,12 +1600,21 @@ class ConfigVerifier:
                     f'{pair_array_update_times.pop().strftime("%H:%M:%S.%f")}'))
 
     def set_is_alive(self, target: str, value: bool, exiting: bool):
+        """Set the is_alive flag and exiting flag.
+
+        Args:
+            target: the thread to set the flags for
+            value: the True or False value for is_alive flag
+            exiting: the Tru or False value for the exiting flag
+
+        """
         with self.ops_lock:
             self.expected_registered[target].is_alive = value
             self.expected_registered[
                 target].exiting = exiting
 
     def validate_config(self):
+        """Validate that the SmartThread config is correct."""
         # verify real registry matches expected_registered
         for name, thread in st.SmartThread._registry.items():
             if name not in self.expected_registered:
@@ -1659,6 +1711,11 @@ class ConfigVerifier:
 
     def add_log_msg(self,
                     new_log_msg: str) -> None:
+        """Add log message to log_ver for SmartThread logger.
+
+        Args:
+            new_log_msg: msg to add to log_ver
+        """
         self.log_ver.add_msg(
             log_name='scottbrian_paratools.smart_thread',
             log_level=logging.DEBUG,
@@ -1692,24 +1749,23 @@ class TestSmartThreadConfigs:
                             log_msg=log_msg_f1)
             logger.debug(log_msg_f1)
 
-            msgs.get_msg(f1_name)
+            cmd_msg = ''
+            while cmd_msg != 'exit':
 
-            ############################################################
-            # send msg to alpha
-            ############################################################
-            f1_config_ver.inc_ops_count(['alpha'], f1_name)
-            f1_threads[f1_name].send_msg(targets='alpha', msg='go now')
+                cmd_msg = msgs.get_msg(f1_name)
 
-            log_msg_f1 = f'{f1_name} sending message to alpha'
-            log_ver.add_msg(
-                log_name='scottbrian_paratools.smart_thread',
-                log_level=logging.INFO,
-                log_msg=log_msg_f1)
+                if cmd_msg == 'send_to_alpha':
+                    ####################################################
+                    # send msg to alpha
+                    ####################################################
+                    f1_config_ver.inc_ops_count(['alpha'], f1_name)
+                    f1_threads[f1_name].send_msg(targets='alpha', msg=cmd_msg)
 
-            ############################################################
-            # wait for alpha to tell us to exit
-            ############################################################
-            msgs.get_msg(f1_name)
+                    log_msg_f1 = f'{f1_name} sending message to alpha'
+                    log_ver.add_msg(
+                        log_name='scottbrian_paratools.smart_thread',
+                        log_level=logging.INFO,
+                        log_msg=log_msg_f1)
 
             ############################################################
             # exit
@@ -1772,7 +1828,8 @@ class TestSmartThreadConfigs:
         # Tell f1 threads to proceed to send us a msg
         ################################################################
         for thread_name in f1_threads.keys():
-            msgs.queue_msg(thread_name)  # tell thread to proceed
+            # tell thread to proceed
+            msgs.queue_msg(target=thread_name, msg='send_to_alpha')
 
         ################################################################
         # Start beta thread
@@ -1816,7 +1873,8 @@ class TestSmartThreadConfigs:
         joined_names = []
         for thread_name in f1_threads.keys():
             if num_joins < num_early_joins_to_do:
-                msgs.queue_msg(thread_name)  # tell thread to proceed
+                # tell thread to exit
+                msgs.queue_msg(target=thread_name, msg='exit')
                 config_ver.alpha_thread.join(targets=thread_name)
                 copy_reg_deque = (
                     config_ver.alpha_thread.time_last_registry_update.copy())
@@ -1857,7 +1915,7 @@ class TestSmartThreadConfigs:
         for thread_name in f1_threads.keys():
             if thread_name in joined_names:
                 continue
-            msgs.queue_msg(thread_name)  # tell thread to proceed
+            msgs.queue_msg(target=thread_name, msg='exit')
 
         ################################################################
         # Join remotes
@@ -1890,6 +1948,278 @@ class TestSmartThreadConfigs:
         log_ver.verify_log_results(match_results)
 
         logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_thread_config1
+    ####################################################################
+    def test_smart_thread_config1(
+            self,
+            config_scenario_arg: list[ConfigCmd],
+            caplog: pytest.CaptureFixture[str]
+            ) -> None:
+        """Test simple configuration scenarios.
+
+        Args:
+            config_scenario_arg: fixture for scenario to perform
+            caplog: pytest fixture to capture log output
+
+        """
+        ################################################################
+        # f1
+        ################################################################
+        def f1(f1_name: str, f1_config_ver: ConfigVerifier):
+            log_msg_f1 = f'f1 entered for {f1_name}'
+            log_ver.add_msg(log_level=logging.DEBUG,
+                            log_msg=log_msg_f1)
+            logger.debug(log_msg_f1)
+
+            while True:
+
+                cmd_msg = msgs.get_msg(f1_name)
+
+                if cmd_msg.cmd == ConfigCmds.Exit:
+                    break
+
+                if cmd_msg.cmd == ConfigCmds.SendMsg:
+                    ####################################################
+                    # send msg to alpha
+                    ####################################################
+                    f1_config_ver.inc_ops_count(cmd_msg.to_names,
+                                                f1_name)
+                    f1_threads[f1_name].send_msg(targets=cmd_msg.to_names,
+                                                 msg=cmd_msg)
+
+                    for to_name in cmd_msg.to_names:
+                        log_msg_f1 = f'{f1_name} sending message to {to_name}'
+                        log_ver.add_msg(
+                            log_name='scottbrian_paratools.smart_thread',
+                            log_level=logging.INFO,
+                            log_msg=log_msg_f1)
+
+            ############################################################
+            # exit
+            ############################################################
+            log_msg_f1 = f'f1 exiting for {f1_name}'
+            log_ver.add_msg(log_level=logging.DEBUG,
+                            log_msg=log_msg_f1)
+            logger.debug(log_msg_f1)
+
+            f1_config_ver.set_is_alive(target=f1_name,
+                                       value=False,
+                                       exiting=True)
+
+        ################################################################
+        # Set up log verification and start tests
+        ################################################################
+        log_ver = LogVer(
+            log_name='test_scottbrian_paratools.test_smart_thread')
+        alpha_call_seq = (
+            'test_smart_thread.py::TestSmartThreadLogMsgs'
+            '.test_refresh_pair_array_log_msgs')
+        log_ver.add_call_seq(name='alpha',
+                             seq=alpha_call_seq)
+
+        log_msg = 'mainline entered'
+        log_ver.add_msg(log_msg=log_msg)
+        logger.debug(log_msg)
+
+        # log_msg = f'random_seed_arg: {random_seed_arg}'
+        # log_ver.add_msg(log_msg=log_msg)
+        # logger.debug(log_msg)
+
+        config_ver = ConfigVerifier(log_ver=log_ver)
+
+        msgs = Msgs()
+
+        # random.seed(random_seed_arg)
+
+        # num_threads_arg = 1  # random.randint(2, 3)
+
+        # log_msg = f'num_threads: {num_threads_arg}'
+        # log_ver.add_msg(log_msg=log_msg)
+        # logger.debug(log_msg)
+
+        f1_threads = {}
+
+        for config_cmd in config_scenario_arg:
+            log_msg = f'config_cmd: {config_cmd}'
+            log_ver.add_msg(log_msg=re.escape(log_msg))
+            logger.debug(log_msg)
+
+            if config_cmd.cmd == ConfigCmds.Create:
+                for new_name in config_cmd.names:
+                    f1_thread, name = config_ver.create_f1_thread(
+                        target=f1,
+                        name=new_name,
+                        auto_start=config_cmd.auto_start
+                    )
+                    f1_threads[name] = f1_thread
+            elif config_cmd.cmd == ConfigCmds.SendMsg:
+                from_thread_name = config_cmd.from_name
+                for to_thread_name in config_cmd.to_names:
+                    if to_thread_name == 'alpha':
+                        msgs.queue_msg(target=from_thread_name,
+                                       msg=config_cmd)
+                        config_ver.alpha_thread.recv_msg(
+                            remote=from_thread_name,
+                            timeout=3)
+                        copy_pair_deque = (
+                            config_ver.alpha_thread.time_last_pair_array_update.copy())
+                        config_ver.dec_ops_count(to_thread_name,
+                                                 from_thread_name,
+                                                 copy_pair_deque)
+
+                        log_msg = (f"{to_thread_name} receiving msg from "
+                                   f"{from_thread_name}")
+                        log_ver.add_msg(
+                            log_name='scottbrian_paratools.smart_thread',
+                            log_level=logging.INFO,
+                            log_msg=log_msg)
+            elif config_cmd.cmd == ConfigCmds.Exit:
+                for exit_thread_name in config_cmd.names:
+                    msgs.queue_msg(target=exit_thread_name, msg=config_cmd)
+                    config_ver.alpha_thread.join(targets=exit_thread_name)
+                    copy_reg_deque = (
+                        config_ver.alpha_thread.time_last_registry_update.copy())
+                    copy_pair_deque = (
+                        config_ver.alpha_thread.time_last_pair_array_update.copy())
+                    config_ver.del_thread(
+                        name='alpha',
+                        remotes=[exit_thread_name],
+                        reg_update_times=copy_reg_deque,
+                        pair_array_update_times=copy_pair_deque)
+            config_ver.validate_config()
+
+        ################################################################
+        # All creates completed, validate config
+        ################################################################
+        # config_ver.validate_config()
+
+        # ################################################################
+        # # Tell f1 threads to proceed to send us a msg
+        # ################################################################
+        # for thread_name in f1_threads.keys():
+        #     # tell thread to proceed
+        #     msgs.queue_msg(target=thread_name, msg='send_to_alpha')
+
+        ################################################################
+        # Start beta thread
+        ################################################################
+        # beta_thread.start()
+        #
+        # log_msg = (
+        #     'beta set status for thread beta '
+        #     'from ThreadStatus.Registered to ThreadStatus.Starting')
+        # log_ver.add_msg(
+        #     log_name='scottbrian_paratools.smart_thread',
+        #     log_level=logging.DEBUG,
+        #     log_msg=log_msg)
+        #
+        # log_msg = (
+        #     f'beta set status for thread beta '
+        #     f'from ThreadStatus.Starting to ThreadStatus.Alive')
+        # log_ver.add_msg(
+        #     log_name='scottbrian_paratools.smart_thread',
+        #     log_level=logging.DEBUG,
+        #     log_msg=log_msg)
+        #
+        # log_msg = re.escape(
+        #     'beta thread started, thread.is_alive() = True, '
+        #     'status: ThreadStatus.Alive')
+        # log_ver.add_msg(
+        #     log_name='scottbrian_paratools.smart_thread',
+        #     log_level=logging.DEBUG,
+        #     log_msg=log_msg)
+
+        ################################################################
+        # Recv msgs from remotes
+        ################################################################
+        # if recv_msg_after_join_arg == 1:
+        #     num_early_joins_to_do = 0
+        # elif recv_msg_after_join_arg == 2:
+        #     num_early_joins_to_do = (num_threads_arg-1)/2
+        # else:
+        #     num_early_joins_to_do = num_threads_arg-1
+        # num_joins = 0
+        # joined_names = []
+        # for thread_name in f1_threads.keys():
+        #     if num_joins < num_early_joins_to_do:
+        #         # tell thread to exit
+        #         msgs.queue_msg(target=thread_name, msg='exit')
+        #         config_ver.alpha_thread.join(targets=thread_name)
+        #         copy_reg_deque = (
+        #             config_ver.alpha_thread.time_last_registry_update.copy())
+        #         copy_pair_deque = (
+        #             config_ver.alpha_thread.time_last_pair_array_update.copy())
+        #         config_ver.del_thread(
+        #             name='alpha',
+        #             remotes=[thread_name],
+        #             reg_update_times=copy_reg_deque,
+        #             pair_array_update_times=copy_pair_deque)
+        #         joined_names.append(thread_name)
+        #         num_joins += 1
+        #
+        #     log_msg = f'mainline alpha receiving msg from {thread_name}'
+        #     log_ver.add_msg(log_level=logging.DEBUG,
+        #                     log_msg=log_msg)
+        #     logger.debug(log_msg)
+        #
+        #     config_ver.alpha_thread.recv_msg(remote=thread_name, timeout=3)
+        #     copy_pair_deque = (
+        #         config_ver.alpha_thread.time_last_pair_array_update.copy())
+        #     config_ver.dec_ops_count('alpha', thread_name, copy_pair_deque)
+        #
+        #     log_msg = f'alpha receiving msg from {thread_name}'
+        #     log_ver.add_msg(
+        #         log_name='scottbrian_paratools.smart_thread',
+        #         log_level=logging.INFO,
+        #         log_msg=log_msg)
+
+        ################################################################
+        # All msgs received, validate config
+        ################################################################
+        # config_ver.validate_config()
+
+        ################################################################
+        # Tell f1 threads to exit
+        ################################################################
+        # for thread_name in f1_threads.keys():
+        #     if thread_name in joined_names:
+        #         continue
+        #     msgs.queue_msg(target=thread_name, msg='exit')
+
+        ################################################################
+        # Join remotes
+        ################################################################
+        # for thread_name in f1_threads.keys():
+        #     if thread_name in joined_names:
+        #         continue
+        #     config_ver.alpha_thread.join(targets=thread_name)
+        #     copy_reg_deque = (
+        #         config_ver.alpha_thread.time_last_registry_update.copy())
+        #     copy_pair_deque = (
+        #         config_ver.alpha_thread.time_last_pair_array_update.copy())
+        #     config_ver.del_thread(
+        #         name='alpha',
+        #         remotes=[thread_name],
+        #         reg_update_times=copy_reg_deque,
+        #         pair_array_update_times=copy_pair_deque)
+
+        ################################################################
+        # All joins complete, validate config
+        ################################################################
+        # config_ver.validate_config()
+
+        ################################################################
+        # verify logger messages
+        ################################################################
+        # config_ver.validate_config()
+        match_results = log_ver.get_match_results(caplog=caplog)
+        log_ver.print_match_results(match_results)
+        log_ver.verify_log_results(match_results)
+
+        logger.debug('mainline exiting')
+
 
 class TestSmartThreadCombos:
     """Test class for SmartThread combos."""
