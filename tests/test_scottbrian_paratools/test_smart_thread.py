@@ -63,6 +63,11 @@ class ConfigCmds(Enum):
     SendMsg = auto()
     RecvMsg = auto()
     Join = auto()
+    VerifyRegistered = auto()
+    VerifyNotRegistered = auto()
+    VerifyPaired = auto()
+    VerifyHalfPaired = auto()
+    VerifyNotPaired = auto()
     VerifyAlive = auto()
     VerifyNotAlive = auto()
     VerifyStatus = auto()
@@ -77,6 +82,7 @@ class ConfigCmd:
     from_names: Optional[list[str]] = None
     to_names: Optional[list[str]] = None
     exp_status: Optional[st.ThreadStatus] = None
+    half_paired_names: Optional[list[str]] = None
 
 
 # config_scenario_1 = ((ConfigCmds.CreateAutoStart, ('beta',)),
@@ -85,6 +91,8 @@ class ConfigCmd:
 
 config_scenario_1 = (
     ConfigCmd(cmd=ConfigCmds.Create, names=['beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyRegistered, names=['alpha', 'beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyPaired, names=['alpha', 'beta']),
     ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha', 'beta']),
     ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha', 'beta'],
               exp_status=st.ThreadStatus.Alive),
@@ -99,7 +107,10 @@ config_scenario_1 = (
     ConfigCmd(cmd=ConfigCmds.VerifyNotAlive, names=['beta']),
     ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['beta'],
               exp_status=st.ThreadStatus.Alive),
-    ConfigCmd(cmd=ConfigCmds.Join, names=['beta'])
+    ConfigCmd(cmd=ConfigCmds.Join, names=['beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyRegistered, names=['alpha']),
+    ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered, names=['beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyNotPaired, names=['alpha', 'beta']),
 )
 
 config_scenario_2 = (
@@ -118,6 +129,7 @@ config_scenario_2 = (
               exp_status=st.ThreadStatus.Alive),
     ConfigCmd(cmd=ConfigCmds.Join, names=['beta', 'charlie'])
 )
+
 
 config_scenario_arg_list = [config_scenario_1,
                             config_scenario_2]
@@ -492,6 +504,78 @@ class ConfigVerifier:
                 return False
         return True
 
+    def verify_registered(self, names: list[str]) -> bool:
+        for name in names:
+            if name not in st.SmartThread._registry:
+                return False
+            if name not in self.expected_registered:
+                return False
+        return True
+
+    def verify_not_registered(self, names: list[str]) -> bool:
+        for name in names:
+            if name in st.SmartThread._registry:
+                return False
+            if name in self.expected_registered:
+                return False
+        return True
+
+    def verify_paired(self, names: list[str]) -> bool:
+        pair_keys = combinations(sorted(names), 2)
+        for pair_key in pair_keys:
+            if pair_key not in st.SmartThread._pair_array:
+                return False
+            if pair_key[0] not in st.SmartThread._pair_array[
+                pair_key].status_blocks:
+                return False
+            if pair_key[1] not in st.SmartThread._pair_array[
+                pair_key].status_blocks:
+                return False
+
+            if pair_key not in self.expected_pairs:
+                return False
+            if pair_key[0] not in self.expected_pairs[pair_key]:
+                return False
+            if pair_key[1] not in self.expected_pairs[pair_key]:
+                return False
+        return True
+
+    def verify_half_paired(self, names: list[str],
+                           half_paired_names: list[str]) -> bool:
+        pair_keys = combinations(sorted(names), 2)
+        for pair_key in pair_keys:
+            if pair_key not in st.SmartThread._pair_array:
+                return False
+            if len(st.SmartThread._pair_array[
+                    pair_key].status_blocks) != 1:
+                return False
+            for name in half_paired_names:
+                if (name in pair_key
+                        and name not in st.SmartThread._pair_array[
+                            pair_key].status_blocks):
+                    return False
+
+            if pair_key not in self.expected_pairs:
+                return False
+            if len(self.expected_pairs[pair_key]) != 1:
+                return False
+            for name in half_paired_names:
+                if (name in pair_key
+                        and name not in self.expected_pairs[pair_key]):
+                    return False
+        return True
+
+    def verify_not_paired(self, names: list[str]) -> bool:
+        pair_keys = combinations(sorted(names), 2)
+        for pair_key in pair_keys:
+            if pair_key in st.SmartThread._pair_array:
+                return False
+
+            if pair_key in self.expected_pairs:
+                return False
+
+        return True
+
     def get_is_alive(self, name: str) -> bool:
         if self.expected_registered[name].exiting:
             return self.expected_registered[name].thread.thread.is_alive()
@@ -564,7 +648,8 @@ class ConfigVerifier:
             thread_repr=thread_repr
         )
         if len(self.expected_registered) > 1:
-            pair_keys = combinations(self.expected_registered.keys(), 2)
+            pair_keys = combinations(
+                sorted(self.expected_registered.keys()), 2)
             for pair_key in pair_keys:
                 if name not in pair_key:
                     continue
@@ -670,7 +755,8 @@ class ConfigVerifier:
                    reg_update_times: deque,
                    pair_array_update_times: deque
                    ) -> None:
-
+        reg_update_times.rotate(len(remotes))
+        pair_array_update_times.rotate(len(remotes))
         for remote in remotes:
             self.expected_registered[remote].is_alive = False
             self.expected_registered[remote].status = st.ThreadStatus.Stopped
@@ -700,10 +786,7 @@ class ConfigVerifier:
                     other_name = pair_key[1]
                 else:
                     other_name = pair_key[0]
-                # if pair_key not in self.expected_pairs:
-                #     raise InvalidConfigurationDetected(
-                #         f'Expected pair_key entry for pair_key {pair_key} '
-                #         f'was not found  while deleting remote {remote}')
+
                 if remote not in self.expected_pairs[pair_key].keys():
                     raise InvalidConfigurationDetected(
                         f'The expected_pairs for pair_key {pair_key} '
@@ -725,7 +808,7 @@ class ConfigVerifier:
                     # ok to delete pair_key entry
                     pair_keys_to_delete.append(pair_key)
                 elif self.expected_pairs[pair_key][
-                    other_name].pending_ops_count == 0:
+                        other_name].pending_ops_count == 0:
                     pair_keys_to_delete.append(pair_key)
                     self.add_log_msg(re.escape(
                         f"{name} removed status_blocks entry "
@@ -746,11 +829,12 @@ class ConfigVerifier:
 
             self.add_log_msg(re.escape(
                 f'{name} updated _pair_array at UTC '
-                f'{pair_array_update_times.pop().strftime("%H:%M:%S.%f")}'))
+                f'{pair_array_update_times.popleft().strftime("%H:%M:%S.%f")}')
+            )
 
             self.add_log_msg(re.escape(
                 f"{name} did cleanup of registry at UTC "
-                f'{reg_update_times.pop().strftime("%H:%M:%S.%f")}, '
+                f'{reg_update_times.popleft().strftime("%H:%M:%S.%f")}, '
                 f"deleted ['{remote}']"))
 
             self.add_log_msg(f'{name} did successful join of {remote}.')
@@ -997,6 +1081,8 @@ class TestSmartThreadScenarios:
                             log_level=logging.INFO,
                             log_msg=log_msg_f1)
 
+
+
                 else:
                     raise UnrecognizedCmd(
                         f'The cmd_msg.cmd {cmd_msg.cmd} '
@@ -1151,6 +1237,18 @@ class TestSmartThreadScenarios:
                     remotes=config_cmd.names,
                     reg_update_times=copy_reg_deque,
                     pair_array_update_times=copy_pair_deque)
+
+            elif config_cmd.cmd == ConfigCmds.VerifyRegistered:
+                assert config_ver.verify_registered(config_cmd.names)
+            elif config_cmd.cmd == ConfigCmds.VerifyNotRegistered:
+                assert config_ver.verify_not_registered(config_cmd.names)
+            elif config_cmd.cmd == ConfigCmds.VerifyPaired:
+                assert config_ver.verify_paired(config_cmd.names)
+            elif config_cmd.cmd == ConfigCmds.VerifyHalfPaired:
+                assert config_ver.verify_half_paired(
+                    config_cmd.names, config_cmd.half_paired_names)
+            elif config_cmd.cmd == ConfigCmds.VerifyNotPaired:
+                assert config_ver.verify_not_paired(config_cmd.names)
 
             else:
                 raise UnrecognizedCmd(f'The config_cmd.cmd {config_cmd.cmd} '
