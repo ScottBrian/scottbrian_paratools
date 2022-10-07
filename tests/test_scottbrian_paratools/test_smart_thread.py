@@ -77,6 +77,7 @@ class ConfigCmds(Enum):
 @dataclass
 class ConfigCmd:
     cmd: ConfigCmds
+    executor: Optional[str] = 'alpha'
     names: Optional[list[str]] = None
     auto_start: bool = True
     from_names: Optional[list[str]] = None
@@ -89,17 +90,293 @@ class ConfigCmd:
 #                      (ConfigCmds.SendMsg, ('beta', 'alpha')),
 #                      (ConfigCmds.Exit, ('beta', )))
 
-config_scenario_1 = (
+########################################################################
+# 0) start alpha and beta threads
+# 1) send msg from f1 to alpha
+# 2) alpha recv msg
+########################################################################
+config_scenario_0 = (
+    # 0) start alpha and beta threads
     ConfigCmd(cmd=ConfigCmds.Create, names=['beta']),
+
     ConfigCmd(cmd=ConfigCmds.VerifyRegistered, names=['alpha', 'beta']),
     ConfigCmd(cmd=ConfigCmds.VerifyPaired, names=['alpha', 'beta']),
     ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha', 'beta']),
     ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha', 'beta'],
               exp_status=st.ThreadStatus.Alive),
+
+    # 1) send msg from f1 to alpha
     ConfigCmd(cmd=ConfigCmds.SendMsg, from_names=['beta'],
               to_names=['alpha']),
+
+    # 2) alpha recv msg
     ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['beta'],
               to_names=['alpha']),
+
+    ConfigCmd(cmd=ConfigCmds.Exit, names=['beta']),
+
+    ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha']),
+    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha'],
+              exp_status=st.ThreadStatus.Alive),
+    ConfigCmd(cmd=ConfigCmds.VerifyNotAlive, names=['beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['beta'],
+              exp_status=st.ThreadStatus.Alive),
+
+    ConfigCmd(cmd=ConfigCmds.Join, names=['beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyRegistered, names=['alpha']),
+    ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered, names=['beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyNotPaired, names=['alpha', 'beta']),
+)
+
+########################################################################
+# 0) start alpha, beta, and charlie threads
+# 1) beta and charlie send msg to alpha
+# 2) beta and charlie exit
+# 3) verify alpha half paired with beta
+# 4) alpha recv msg from beta
+# 5) verify no pair with beta
+########################################################################
+config_scenario_1 = (
+    # 0) start alpha, beta, and charlie threads
+    ConfigCmd(cmd=ConfigCmds.Create, names=['beta', 'charlie']),
+
+    ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+              names=['alpha', 'beta', 'charlie']),
+    ConfigCmd(cmd=ConfigCmds.VerifyPaired, names=['alpha', 'beta', 'charlie']),
+    ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha', 'beta', 'charlie']),
+    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha', 'beta', 'charlie'],
+              exp_status=st.ThreadStatus.Alive),
+
+    # 1) beta and charlie send msg to alpha
+    ConfigCmd(cmd=ConfigCmds.SendMsg, from_names=['beta', 'charlie'],
+              to_names=['alpha']),
+
+    # 2) beta and charlie exit
+    ConfigCmd(cmd=ConfigCmds.Exit, names=['beta', 'charlie']),
+
+    ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha']),
+    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha'],
+              exp_status=st.ThreadStatus.Alive),
+    ConfigCmd(cmd=ConfigCmds.VerifyNotAlive, names=['beta', 'charlie']),
+    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['beta', 'charlie'],
+              exp_status=st.ThreadStatus.Alive),
+
+    # 3) join and verify alpha half paired with beta
+    ConfigCmd(cmd=ConfigCmds.Join, names=['beta']),
+
+    ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered, names=['beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+              names=['alpha', 'charlie']),
+    ConfigCmd(cmd=ConfigCmds.VerifyPaired, names=['alpha', 'charlie']),
+    ConfigCmd(cmd=ConfigCmds.VerifyHalfPaired,
+              names=['alpha', 'beta'], half_paired_names=['alpha']),
+    ConfigCmd(cmd=ConfigCmds.VerifyNotPaired, names=['beta', 'charlie']),
+
+    # 4) alpha recv msg from beta
+    ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['beta', 'charlie'],
+              to_names=['alpha']),
+
+    # 5) verify not paired with beta
+    ConfigCmd(cmd=ConfigCmds.VerifyPaired, names=['alpha', 'charlie']),
+    ConfigCmd(cmd=ConfigCmds.VerifyNotPaired, names=['alpha', 'beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyNotPaired, names=['beta', 'charlie']),
+
+
+    ConfigCmd(cmd=ConfigCmds.Join, names=['charlie']),
+
+    ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered, names=['beta', 'charlie']),
+    ConfigCmd(cmd=ConfigCmds.VerifyNotPaired,
+              names=['alpha', 'beta', 'charlie']),
+    ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha']),
+    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha'],
+              exp_status=st.ThreadStatus.Alive),
+)
+
+########################################################################
+# 0) start alpha and beta threads
+# 1) beta exits
+# 2) verify alpha and beta not paired
+# 3) start beta thread again
+# 4) verify alpha and beta are paired
+# 5) beta send msg to alpha
+# 6) beta exits
+# 7) verify alpha half paired with beta
+# 8) start beta again
+# 9) verify alpha and beta are paired
+# 10) beta exits
+# 11) verify alpha half paired with beta
+# 12) alpha recv msg from beta
+# 13) verify alpha not paired with beta
+
+########################################################################
+config_scenario_2 = (
+    # 0) start alpha and beta threads
+    ConfigCmd(cmd=ConfigCmds.Create, names=['beta']),
+
+    ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+              names=['alpha', 'beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyPaired, names=['alpha', 'beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha', 'beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha', 'beta'],
+              exp_status=st.ThreadStatus.Alive),
+
+    # 1) beta exits
+    ConfigCmd(cmd=ConfigCmds.Exit, names=['beta']),
+
+    ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha']),
+    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha'],
+              exp_status=st.ThreadStatus.Alive),
+    ConfigCmd(cmd=ConfigCmds.VerifyNotAlive, names=['beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['beta'],
+              exp_status=st.ThreadStatus.Alive),
+
+    ConfigCmd(cmd=ConfigCmds.Join, names=['beta']),
+
+    # 2) verify alpha and beta not paired
+    ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered, names=['beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyNotPaired,
+              names=['alpha', 'beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha']),
+    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha'],
+              exp_status=st.ThreadStatus.Alive),
+
+    # 3) start beta thread again
+    ConfigCmd(cmd=ConfigCmds.Create, names=['beta']),
+
+    # 4) verify alpha and beta are paired
+    ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+              names=['alpha', 'beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyPaired, names=['alpha', 'beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha', 'beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha', 'beta'],
+              exp_status=st.ThreadStatus.Alive),
+
+
+    # 5) beta send msg to alpha
+    ConfigCmd(cmd=ConfigCmds.SendMsg, from_names=['beta'],
+              to_names=['alpha']),
+
+    # 6) beta exits
+    ConfigCmd(cmd=ConfigCmds.Exit, names=['beta']),
+
+    ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha']),
+    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha'],
+              exp_status=st.ThreadStatus.Alive),
+    ConfigCmd(cmd=ConfigCmds.VerifyNotAlive, names=['beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['beta'],
+              exp_status=st.ThreadStatus.Alive),
+
+    # 7) join and verify alpha half paired with beta
+    ConfigCmd(cmd=ConfigCmds.Join, names=['beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered, names=['beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+              names=['alpha']),
+    ConfigCmd(cmd=ConfigCmds.VerifyHalfPaired,
+              names=['alpha', 'beta'], half_paired_names=['alpha']),
+
+    # 8) start beta again
+    ConfigCmd(cmd=ConfigCmds.Create, names=['beta']),
+
+    # 9) verify alpha and beta are paired
+    ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+              names=['alpha', 'beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyPaired, names=['alpha', 'beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha', 'beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha', 'beta'],
+              exp_status=st.ThreadStatus.Alive),
+
+    # 10) beta exits
+    ConfigCmd(cmd=ConfigCmds.Exit, names=['beta']),
+
+    ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha']),
+    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha'],
+              exp_status=st.ThreadStatus.Alive),
+    ConfigCmd(cmd=ConfigCmds.VerifyNotAlive, names=['beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['beta'],
+              exp_status=st.ThreadStatus.Alive),
+
+    # 11) join and verify alpha half paired with beta
+    ConfigCmd(cmd=ConfigCmds.Join, names=['beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered, names=['beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+              names=['alpha']),
+    ConfigCmd(cmd=ConfigCmds.VerifyHalfPaired,
+              names=['alpha', 'beta'], half_paired_names=['alpha']),
+
+    # 12) alpha recv msg from beta
+    ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['beta'],
+              to_names=['alpha']),
+
+    # 13) verify alpha not paired with beta
+    ConfigCmd(cmd=ConfigCmds.VerifyNotPaired, names=['alpha', 'beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha']),
+    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha'],
+              exp_status=st.ThreadStatus.Alive),
+)
+
+########################################################################
+# 0) start alpha, beta, and charlie threads
+# 1) charlie send msg to beta
+# 2) beta recv msg from charlie
+# 3) charlie send msg to beta
+# 4) charlie exits
+# 5) verify beta half paired with charlie
+# 6) beta recv msg from charlie
+# 7) verify beta and charlie not paired
+# 8) exit beta
+# 9) join beta and verify alpha not paired with beta
+########################################################################
+config_scenario_3 = (
+    # 0) start alpha, beta, and charlie threads
+    ConfigCmd(cmd=ConfigCmds.Create, names=['beta', 'charlie']),
+    ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+              names=['alpha', 'beta', 'charlie']),
+    ConfigCmd(cmd=ConfigCmds.VerifyPaired, names=['alpha', 'beta', 'charlie']),
+    ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha', 'beta', 'charlie']),
+    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha', 'beta', 'charlie'],
+              exp_status=st.ThreadStatus.Alive),
+
+    # 1) charlie send msg to beta
+    ConfigCmd(cmd=ConfigCmds.SendMsg, from_names=['charlie'],
+              to_names=['beta']),
+
+    # 2) beta recv msg from charlie
+    ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['charlie'],
+              to_names=['beta']),
+
+    # 3) charlie send msg to beta
+    ConfigCmd(cmd=ConfigCmds.SendMsg, from_names=['charlie'],
+              to_names=['beta']),
+
+    # 4) charlie exits
+    ConfigCmd(cmd=ConfigCmds.Exit, names=['charlie']),
+    ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha', 'beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha', 'beta'],
+              exp_status=st.ThreadStatus.Alive),
+    ConfigCmd(cmd=ConfigCmds.VerifyNotAlive, names=['charlie']),
+    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['charlie'],
+              exp_status=st.ThreadStatus.Alive),
+
+    # 5) join charlie and verify beta half paired with charlie
+    ConfigCmd(cmd=ConfigCmds.Join, names=['charlie']),
+    ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered, names=['charlie']),
+    ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+              names=['alpha', 'beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyPaired, names=['alpha', 'beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyHalfPaired,
+              names=['beta', 'charlie'], half_paired_names=['beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyNotPaired, names=['alpha', 'charlie']),
+
+    # 6) beta recv msg from charlie
+    ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['charlie'],
+              to_names=['beta']),
+
+    # 7) verify beta and charlie not paired
+    ConfigCmd(cmd=ConfigCmds.VerifyPaired, names=['alpha', 'beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyNotPaired, names=['alpha', 'charlie']),
+    ConfigCmd(cmd=ConfigCmds.VerifyNotPaired, names=['beta', 'charlie']),
+
+    # 8) exit beta
     ConfigCmd(cmd=ConfigCmds.Exit, names=['beta']),
     ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha']),
     ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha'],
@@ -107,32 +384,104 @@ config_scenario_1 = (
     ConfigCmd(cmd=ConfigCmds.VerifyNotAlive, names=['beta']),
     ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['beta'],
               exp_status=st.ThreadStatus.Alive),
-    ConfigCmd(cmd=ConfigCmds.Join, names=['beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyRegistered, names=['alpha']),
-    ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered, names=['beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyNotPaired, names=['alpha', 'beta']),
-)
 
-config_scenario_2 = (
-    ConfigCmd(cmd=ConfigCmds.Create, names=['beta', 'charlie']),
-    ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha', 'beta', 'charlie']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha', 'beta', 'charlie'],
-              exp_status=st.ThreadStatus.Alive),
-    ConfigCmd(cmd=ConfigCmds.SendMsg, from_names=['beta', 'charlie'],
-              to_names=['alpha']),
-    ConfigCmd(cmd=ConfigCmds.Exit, names=['beta', 'charlie']),
+    # 9) join beta and verify alpha not paired with beta
+    ConfigCmd(cmd=ConfigCmds.Join, names=['beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered, names=['beta', 'charlie']),
+    ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+              names=['alpha']),
+    ConfigCmd(cmd=ConfigCmds.VerifyNotPaired,
+              names=['alpha', 'beta', 'charlie']),
     ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha']),
     ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha'],
               exp_status=st.ThreadStatus.Alive),
-    ConfigCmd(cmd=ConfigCmds.VerifyNotAlive, names=['beta', 'charlie']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['beta', 'charlie'],
-              exp_status=st.ThreadStatus.Alive),
-    ConfigCmd(cmd=ConfigCmds.Join, names=['beta', 'charlie'])
 )
 
+########################################################################
+# 0) start alpha and beta threads
+# 1) verify alpha and beta are paired
+# 2) beta send first msg to alpha
+# 3) beta send second msg to alpha
+# 4) beta exits
+# 5) join beta
+# 6) verify alpha half paired with beta
+# 7) alpha recv first msg from beta
+# 8) verify alpha still half paired with beta
+# 9) alpha recv second msg from beta
+# 10) verify alpha not paired with beta
 
-config_scenario_arg_list = [config_scenario_1,
-                            config_scenario_2]
+########################################################################
+config_scenario_4 = (
+    # 0) start alpha and beta threads
+    ConfigCmd(cmd=ConfigCmds.Create, names=['beta']),
+
+    # 1) verify alpha and beta are paired
+    ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+              names=['alpha', 'beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyPaired, names=['alpha', 'beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha', 'beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha', 'beta'],
+              exp_status=st.ThreadStatus.Alive),
+
+    # 2) beta send first msg to alpha
+    ConfigCmd(cmd=ConfigCmds.SendMsg, from_names=['beta'],
+              to_names=['alpha']),
+
+    # 3) beta send second msg to alpha
+    ConfigCmd(cmd=ConfigCmds.SendMsg, from_names=['beta'],
+              to_names=['alpha']),
+
+    # 4) beta exits
+    ConfigCmd(cmd=ConfigCmds.Exit, names=['beta']),
+
+    ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha']),
+    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha'],
+              exp_status=st.ThreadStatus.Alive),
+    ConfigCmd(cmd=ConfigCmds.VerifyNotAlive, names=['beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['beta'],
+              exp_status=st.ThreadStatus.Alive),
+
+    # 5) join beta
+    ConfigCmd(cmd=ConfigCmds.Join, names=['beta']),
+
+    ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered, names=['beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+              names=['alpha']),
+    ConfigCmd(cmd=ConfigCmds.VerifyHalfPaired,
+              names=['alpha', 'beta'], half_paired_names=['alpha']),
+
+    # 6) verify alpha half paired with beta
+    ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered, names=['beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyRegistered, names=['alpha']),
+    ConfigCmd(cmd=ConfigCmds.VerifyHalfPaired,
+              names=['alpha', 'beta'], half_paired_names=['alpha']),
+
+    # 7) alpha recv first msg from beta
+    ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['beta'],
+              to_names=['alpha']),
+
+    # 8) verify alpha still half paired with beta
+    ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered, names=['beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyRegistered, names=['alpha']),
+    ConfigCmd(cmd=ConfigCmds.VerifyHalfPaired,
+              names=['alpha', 'beta'], half_paired_names=['alpha']),
+
+    # 9) alpha recv second msg from beta
+    ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['beta'],
+              to_names=['alpha']),
+
+    # 10) verify alpha not paired with beta
+    ConfigCmd(cmd=ConfigCmds.VerifyNotPaired, names=['alpha', 'beta']),
+    ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha']),
+    ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha'],
+              exp_status=st.ThreadStatus.Alive),
+)
+
+config_scenario_arg_list = [config_scenario_0,
+                            config_scenario_1,
+                            config_scenario_2,
+                            config_scenario_3,
+                            config_scenario_4]
 
 
 @pytest.fixture(params=config_scenario_arg_list)  # type: ignore
@@ -401,6 +750,7 @@ def log_enabled_arg(request: Any) -> bool:
 ########################################################################
 @dataclass
 class ThreadTracker:
+    """Class that tracks each thread."""
     thread: st.SmartThread
     is_alive: bool
     exiting: bool
@@ -412,12 +762,20 @@ class ThreadTracker:
 
 @dataclass
 class ThreadPairStatus:
+    """Class that keeps pair status."""
     pending_ops_count: int
     # expected_last_reg_updates: deque
 
 
 class ConfigVerifier:
-    def __init__(self, log_ver: LogVer):
+    """Class that tracks and verifies the SmartThread configuration."""
+
+    def __init__(self, log_ver: LogVer) -> None:
+        """Initialize the ConfigVerifier.
+
+        Args:
+            log_ver: the log verifier to track and verify log msgs
+        """
         self.specified_args = locals()  # used for __repr__, see below
         self.expected_registered: dict[str, ThreadTracker] = {}
         self.expected_pairs: dict[tuple[str, str],
@@ -505,6 +863,12 @@ class ConfigVerifier:
         return True
 
     def verify_registered(self, names: list[str]) -> bool:
+        """Verify that the given names are registered.
+
+        Args:
+            names: names of the threads to check for being registered
+
+        """
         for name in names:
             if name not in st.SmartThread._registry:
                 return False
@@ -513,6 +877,12 @@ class ConfigVerifier:
         return True
 
     def verify_not_registered(self, names: list[str]) -> bool:
+        """Verify that the given names are not registered.
+
+        Args:
+            names: names of the threads to check for being unregistered
+
+        """
         for name in names:
             if name in st.SmartThread._registry:
                 return False
@@ -521,6 +891,12 @@ class ConfigVerifier:
         return True
 
     def verify_paired(self, names: list[str]) -> bool:
+        """Verify that the given names are paired.
+
+        Args:
+            names: names of the threads to check for being paired
+
+        """
         pair_keys = combinations(sorted(names), 2)
         for pair_key in pair_keys:
             if pair_key not in st.SmartThread._pair_array:
@@ -542,6 +918,12 @@ class ConfigVerifier:
 
     def verify_half_paired(self, names: list[str],
                            half_paired_names: list[str]) -> bool:
+        """Verify that the given names are half paired.
+
+        Args:
+            names: names of the threads to check for being half paired
+            half_paired_names: the names that should be in pair array
+        """
         pair_keys = combinations(sorted(names), 2)
         for pair_key in pair_keys:
             if pair_key not in st.SmartThread._pair_array:
@@ -566,6 +948,12 @@ class ConfigVerifier:
         return True
 
     def verify_not_paired(self, names: list[str]) -> bool:
+        """Verify that the given names are not paired.
+
+        Args:
+            names: names of the threads to check for being not paired
+
+        """
         pair_keys = combinations(sorted(names), 2)
         for pair_key in pair_keys:
             if pair_key in st.SmartThread._pair_array:
@@ -577,12 +965,19 @@ class ConfigVerifier:
         return True
 
     def get_is_alive(self, name: str) -> bool:
+        """Get the is_alive flag for the named thread.
+
+        Args:
+            name: names of thread to get the is_alive flag
+
+        """
         if self.expected_registered[name].exiting:
             return self.expected_registered[name].thread.thread.is_alive()
         else:
             return self.expected_registered[name].is_alive
 
     def create_alpha_thread(self) -> st.SmartThread:
+        """Create the alpha thread."""
 
         alpha_thread = st.SmartThread(name='alpha')
         self.add_thread(
@@ -602,6 +997,14 @@ class ConfigVerifier:
                          name: Optional[str] = None,
                          auto_start: bool = True
                          ) -> st.SmartThread:
+        """Create the f1_thread.
+
+        Args:
+            target: the f1 routine that the thread will run
+            name: name of the thread
+            auto_start: indicates whether the create should start the
+                          thread
+        """
         if name is None:
             for thread_name, available in self.f1_thread_names.items():
                 if available:
@@ -638,6 +1041,20 @@ class ConfigVerifier:
                    reg_update_time: datetime,
                    pair_array_update_time: datetime
                    ) -> None:
+        """Add a thread to the ConfigVerifier.
+
+        Args:
+            name: name to add
+            thread: the SmartThread to add
+            thread_alive: the expeccted is_alive flag
+            auto_start: indicates whther to start the thread
+            expected_status: the expected ThreadStatus
+            thread_repr: the string to be used in any log msgs
+            reg_update_time: the register update time to use for the log
+                               msg
+            pair_array_update_time: the pair array update time to use
+                                      for the log msg
+        """
 
         self.expected_registered[name] = ThreadTracker(
             thread=thread,
@@ -755,6 +1172,16 @@ class ConfigVerifier:
                    reg_update_times: deque,
                    pair_array_update_times: deque
                    ) -> None:
+        """Delete the thread from the ConfigVerifier.
+
+        Args:
+            name: name of thread doing the delete (for log msg)
+            remotes: names of threads to be deleted
+            reg_update_times: register updte times to use for the log
+                                msgs
+            pair_array_update_times: pair array update times to use for
+                                       the log msgs
+        """
         reg_update_times.rotate(len(remotes))
         pair_array_update_times.rotate(len(remotes))
         for remote in remotes:
@@ -840,6 +1267,14 @@ class ConfigVerifier:
             self.add_log_msg(f'{name} did successful join of {remote}.')
 
     def inc_ops_count(self, targets: list[str], pair_with: str):
+        """Increment the pending operations count.
+
+        Args:
+            targets: the names of the threads whose count is to be
+                       incremented
+            pair_with: the names of the threads that are paired with
+                         the targets
+        """
         with self.ops_lock:
             for target in targets:
                 pair_key = st.SmartThread._get_pair_key(target, pair_with)
@@ -849,6 +1284,16 @@ class ConfigVerifier:
                       target: str,
                       remote: str,
                       pair_array_update_times: deque):
+        """Decrement the pending operations count.
+
+        Args:
+            target: the names of the thread whose count is to be
+                      decremented
+            remote: the name of the threads that is paired with
+                         the target
+            pair_array_update_times: pair array update times to be used
+                                       for the log msgs
+        """
         with self.ops_lock:
             pair_key = st.SmartThread._get_pair_key(target, remote)
             self.expected_pairs[pair_key][target].pending_ops_count -= 1
@@ -1015,7 +1460,7 @@ class TestSmartThreadScenarios:
             config_scenario_arg: list[ConfigCmd],
             caplog: pytest.CaptureFixture[str]
     ) -> None:
-        """Test simple configuration scenarios.
+        """Test configuration scenarios.
 
         Args:
             config_scenario_arg: fixture for scenario to perform
@@ -1080,9 +1525,7 @@ class TestSmartThreadScenarios:
                             log_name='scottbrian_paratools.smart_thread',
                             log_level=logging.INFO,
                             log_msg=log_msg_f1)
-
-
-
+                    msgs.queue_msg('alpha', f'recv done for {f1_name}')
                 else:
                     raise UnrecognizedCmd(
                         f'The cmd_msg.cmd {cmd_msg.cmd} '
@@ -1132,7 +1575,17 @@ class TestSmartThreadScenarios:
             logger.debug(log_msg)
 
             ############################################################
-            # Create
+            # CreateMainThread
+            ############################################################
+            # if config_cmd.cmd == ConfigCmds.CreateMainThread:
+            #     for new_name in config_cmd.names:
+            #         config_ver.create_f1_thread(
+            #             target=f1,
+            #             name=new_name,
+            #             auto_start=config_cmd.auto_start
+            #         )
+            ############################################################
+            # CreateF1Thread
             ############################################################
             if config_cmd.cmd == ConfigCmds.Create:
                 for new_name in config_cmd.names:
@@ -1256,18 +1709,6 @@ class TestSmartThreadScenarios:
             config_ver.validate_config()
 
         ################################################################
-        # All creates completed, validate config
-        ################################################################
-        # config_ver.validate_config()
-
-        # ################################################################
-        # # Tell f1 threads to proceed to send us a msg
-        # ################################################################
-        # for thread_name in f1_threads.keys():
-        #     # tell thread to proceed
-        #     msgs.queue_msg(target=thread_name, msg='send_to_alpha')
-
-        ################################################################
         # Start beta thread
         ################################################################
         # beta_thread.start()
@@ -1296,90 +1737,6 @@ class TestSmartThreadScenarios:
         #     log_level=logging.DEBUG,
         #     log_msg=log_msg)
 
-        ################################################################
-        # Recv msgs from remotes
-        ################################################################
-        # if recv_msg_after_join_arg == 1:
-        #     num_early_joins_to_do = 0
-        # elif recv_msg_after_join_arg == 2:
-        #     num_early_joins_to_do = (num_threads_arg-1)/2
-        # else:
-        #     num_early_joins_to_do = num_threads_arg-1
-        # num_joins = 0
-        # joined_names = []
-        # for thread_name in f1_threads.keys():
-        #     if num_joins < num_early_joins_to_do:
-        #         # tell thread to exit
-        #         msgs.queue_msg(target=thread_name, msg='exit')
-        #         config_ver.alpha_thread.join(targets=thread_name)
-        #         copy_reg_deque = (
-        #             config_ver.alpha_thread.time_last_registry_update.copy())
-        #         copy_pair_deque = (
-        #             config_ver.alpha_thread.time_last_pair_array_update
-        #             .copy())
-        #         config_ver.del_thread(
-        #             name='alpha',
-        #             remotes=[thread_name],
-        #             reg_update_times=copy_reg_deque,
-        #             pair_array_update_times=copy_pair_deque)
-        #         joined_names.append(thread_name)
-        #         num_joins += 1
-        #
-        #     log_msg = f'mainline alpha receiving msg from {thread_name}'
-        #     log_ver.add_msg(log_level=logging.DEBUG,
-        #                     log_msg=log_msg)
-        #     logger.debug(log_msg)
-        #
-        #     config_ver.alpha_thread.recv_msg(remote=thread_name, timeout=3)
-        #     copy_pair_deque = (
-        #         config_ver.alpha_thread.time_last_pair_array_update.copy())
-        #     config_ver.dec_ops_count('alpha', thread_name, copy_pair_deque)
-        #
-        #     log_msg = f'alpha receiving msg from {thread_name}'
-        #     log_ver.add_msg(
-        #         log_name='scottbrian_paratools.smart_thread',
-        #         log_level=logging.INFO,
-        #         log_msg=log_msg)
-
-        ################################################################
-        # All msgs received, validate config
-        ################################################################
-        # config_ver.validate_config()
-
-        ################################################################
-        # Tell f1 threads to exit
-        ################################################################
-        # for thread_name in f1_threads.keys():
-        #     if thread_name in joined_names:
-        #         continue
-        #     msgs.queue_msg(target=thread_name, msg='exit')
-
-        ################################################################
-        # Join remotes
-        ################################################################
-        # for thread_name in f1_threads.keys():
-        #     if thread_name in joined_names:
-        #         continue
-        #     config_ver.alpha_thread.join(targets=thread_name)
-        #     copy_reg_deque = (
-        #         config_ver.alpha_thread.time_last_registry_update.copy())
-        #     copy_pair_deque = (
-        #         config_ver.alpha_thread.time_last_pair_array_update.copy())
-        #     config_ver.del_thread(
-        #         name='alpha',
-        #         remotes=[thread_name],
-        #         reg_update_times=copy_reg_deque,
-        #         pair_array_update_times=copy_pair_deque)
-
-        ################################################################
-        # All joins complete, validate config
-        ################################################################
-        # config_ver.validate_config()
-
-        ################################################################
-        # verify logger messages
-        ################################################################
-        # config_ver.validate_config()
         match_results = log_ver.get_match_results(caplog=caplog)
         log_ver.print_match_results(match_results)
         log_ver.verify_log_results(match_results)
@@ -1399,6 +1756,9 @@ class TestSmartThreadScenarios:
 
         Args:
             num_threads_arg: fixture for number of threads to create
+            recv_msg_after_join_arg: value used to determine how many
+                                       threads are to receive the msg
+                                       after the sending thread is gone
             caplog: pytest fixture to capture log output
 
         """
@@ -1927,6 +2287,7 @@ class TestSmartThreadErrors:
     # Basic Scenario1
     ####################################################################
     def test_smart_thread_instantiation_errors(self):
+        """Test error cases for SmartThread."""
         ################################################################
         # f1
         ################################################################
@@ -2494,937 +2855,935 @@ class TestSmartThreadErrors:
 
         logger.debug('mainline exiting')
 
-
-
-class TestSmartThreadCombos:
-    """Test class for SmartThread combos."""
-    ####################################################################
-    # test_refresh_pair_array_log_msgs
-    ####################################################################
-    def test_smart_thread_combos(
-            self,
-            random_seed_arg: int,
-            caplog: pytest.CaptureFixture[str]
-            ) -> None:
-        """Test log msgs for _refresh_pair_array.
-
-        Args:
-            caplog: pytest fixture to capture log output
-
-        """
-        ################################################################
-        # f1
-        ################################################################
-        def f1(name: str):
-            log_msg_f1 = f'f1 entered for {name}'
-            log_ver.add_msg(log_level=logging.DEBUG,
-                            log_msg=log_msg_f1)
-            logger.debug(log_msg_f1)
-
-            msgs.get_msg(name)
-
-            ############################################################
-            # send msg to alpha
-            ############################################################
-            alive_threads[name].send_msg(targets='alpha', msg='go now')
-
-            log_msg_f1 = f'{name} sending message to alpha'
-            log_ver.add_msg(
-                log_name='scottbrian_paratools.smart_thread',
-                log_level=logging.INFO,
-                log_msg=log_msg_f1)
-
-            # ############################################################
-            # # recv msg from alpha
-            # ############################################################
-            # msg1 = beta_thread.recv_msg(remote='alpha', timeout=3)
-            #
-            # log_msg_f1 = 'beta receiving msg from alpha'
-            # log_ver.add_msg(
-            #     log_name='scottbrian_paratools.smart_thread',
-            #     log_level=logging.INFO,
-            #     log_msg=log_msg_f1)
-            #
-            # log_msg_f1 = f'beta received msg: {msg1}'
-            # log_ver.add_msg(log_level=logging.DEBUG,
-            #                 log_msg=log_msg_f1)
-            # logger.debug(log_msg_f1)
-            #
-            # ############################################################
-            # # recv second msg from alpha
-            # ############################################################
-            # msg2 = beta_thread.recv_msg(remote='alpha', timeout=3)
-            #
-            # log_msg_f1 = 'beta receiving msg from alpha'
-            # log_ver.add_msg(
-            #     log_name='scottbrian_paratools.smart_thread',
-            #     log_level=logging.INFO,
-            #     log_msg=log_msg_f1)
-            #
-            # log_msg_f1 = f'beta received msg: {msg2}'
-            # log_ver.add_msg(log_level=logging.DEBUG,
-            #                 log_msg=log_msg_f1)
-            # logger.debug(log_msg_f1)
-            #
-            # ############################################################
-            # # recv third msg from alpha
-            # ############################################################
-            # msg3 = beta_thread.recv_msg(remote='alpha', timeout=3)
-            #
-            # log_msg_f1 = 'beta receiving msg from alpha'
-            # log_ver.add_msg(
-            #     log_name='scottbrian_paratools.smart_thread',
-            #     log_level=logging.INFO,
-            #     log_msg=log_msg_f1)
-            #
-            # log_msg_f1 = f'beta received msg: {msg3}'
-            # log_ver.add_msg(log_level=logging.DEBUG,
-            #                 log_msg=log_msg_f1)
-            # logger.debug(log_msg_f1)
-
-            ############################################################
-            # exit
-            ############################################################
-            log_msg_f1 = f'f1 exiting for {name}'
-            log_ver.add_msg(log_level=logging.DEBUG,
-                            log_msg=log_msg_f1)
-            logger.debug(log_msg_f1)
-
-        ################################################################
-        # Set up log verification and start tests
-        ################################################################
-        log_ver = LogVer(
-            log_name='test_scottbrian_paratools.test_smart_thread')
-        alpha_call_seq = (
-            'test_smart_thread.py::TestSmartThreadLogMsgs'
-            '.test_refresh_pair_array_log_msgs')
-        log_ver.add_call_seq(name='alpha',
-                             seq=alpha_call_seq)
-
-        log_msg = 'mainline entered'
-        log_ver.add_msg(log_msg=log_msg)
-        logger.debug(log_msg)
-
-        log_msg = f'random_seed_arg: {random_seed_arg}'
-        log_ver.add_msg(log_msg=log_msg)
-        logger.debug(log_msg)
-
-        msgs = Msgs()
-
-        random.seed(random_seed_arg)
-
-        num_threads = 3  # random.randint(2, 3)
-
-        log_msg = f'num_threads: {num_threads}'
-        log_ver.add_msg(log_msg=log_msg)
-        logger.debug(log_msg)
-
-        thread_names = ['alpha', 'beta', 'charlie', 'delta', 'echo']
-        alive_threads = {}
-        alive_names = []
-        exp_pairs = {}
-
-        ################################################################
-        # Create smart threads
-        ################################################################
-        for thread_num in range(num_threads):
-            name = thread_names[thread_num]
-            log_msg = f'mainline creating {name} smart thread'
-            log_ver.add_msg(log_level=logging.DEBUG,
-                            log_msg=log_msg)
-            logger.debug(log_msg)
-
-            # alpha_thread = st.SmartThread(name='alpha')
-            if thread_num == 0:
-                alive_threads[name] = st.SmartThread(name=name)
-            else:
-                alive_threads[name] = st.SmartThread(name=name,
-                                                    target=f1,
-                                                    args=(name,))
-            alive_names.append(name)
-            alive_names.sort()
-            if len(alive_names) > 1:
-                pair_keys = list(itertools.combinations(alive_names, 2))
-                for pair_key in pair_keys:
-                    exp_pairs[pair_key] = [pair_key[0], pair_key[1]]
-
-            set_create_expected_log_msgs(name,
-                                         log_ver,
-                                         alive_threads)
-
-        ################################################################
-        # Create beta smart thread
-        ################################################################
-        # log_msg = 'mainline creating beta smart thread'
-        # log_ver.add_msg(log_level=logging.DEBUG,
-        #                 log_msg=log_msg)
-        # logger.debug(log_msg)
-        #
-        # beta_thread = st.SmartThread(name='beta', target=f1, args=('beta',))
-        #
-        # set_create_expected_log_msgs(beta_thread, log_ver, [alpha_thread])
-
-        for thread_name in alive_threads.keys():
-            if thread_name == 'alpha':
-                continue
-            msgs.queue_msg(thread_name)  # tell thread to proceed
-
-        ################################################################
-        # Start beta thread
-        ################################################################
-        # beta_thread.start()
-        #
-        # log_msg = (
-        #     'beta set status for thread beta '
-        #     'from ThreadStatus.Registered to ThreadStatus.Starting')
-        # log_ver.add_msg(
-        #     log_name='scottbrian_paratools.smart_thread',
-        #     log_level=logging.DEBUG,
-        #     log_msg=log_msg)
-        #
-        # log_msg = (
-        #     f'beta set status for thread beta '
-        #     f'from ThreadStatus.Starting to ThreadStatus.Alive')
-        # log_ver.add_msg(
-        #     log_name='scottbrian_paratools.smart_thread',
-        #     log_level=logging.DEBUG,
-        #     log_msg=log_msg)
-        #
-        # log_msg = re.escape(
-        #     'beta thread started, thread.is_alive() = True, '
-        #     'status: ThreadStatus.Alive')
-        # log_ver.add_msg(
-        #     log_name='scottbrian_paratools.smart_thread',
-        #     log_level=logging.DEBUG,
-        #     log_msg=log_msg)
-
-        ################################################################
-        # Recv msgs from remotes
-        ################################################################
-        # time.sleep(.5)
-        for thread_name in alive_threads.keys():
-            if thread_name == 'alpha':
-                continue
-            log_msg = f'mainline alpha receiving msg from {thread_name}'
-            log_ver.add_msg(log_level=logging.DEBUG,
-                            log_msg=log_msg)
-            logger.debug(log_msg)
-
-            alive_threads["alpha"].recv_msg(remote=thread_name, timeout=3)
-
-            log_msg = f'alpha receiving msg from {thread_name}'
-            log_ver.add_msg(
-                log_name='scottbrian_paratools.smart_thread',
-                log_level=logging.INFO,
-                log_msg=log_msg)
-
-        ################################################################
-        # Join remotes
-        ################################################################
-        for thread_name in alive_threads.keys():
-            if thread_name == 'alpha':
-                continue
-            alive_threads["alpha"].join(targets=thread_name)
-            targets = {thread_name: alive_threads[thread_name]}
-            set_join_expected_log_msgs("alpha",
-                                       log_ver,
-                                       targets,
-                                       alive_threads)
-
-        # log_msg = re.escape(
-        #     "key = alpha, item = SmartThread(name='alpha'), "
-        #     "item.thread.is_alive() = True, status: ThreadStatus.Alive")
-        # log_ver.add_msg(
-        #     log_name='scottbrian_paratools.smart_thread',
-        #     log_level=logging.DEBUG,
-        #     log_msg=log_msg)
-        #
-        # log_msg = re.escape(
-        #     "key = beta, item = SmartThread(name='beta', target=f1, "
-        #     "args=('beta',)), item.thread.is_alive() = False, "
-        #     "status: ThreadStatus.Stopped")
-        # log_ver.add_msg(
-        #     log_name='scottbrian_paratools.smart_thread',
-        #     log_level=logging.DEBUG,
-        #     log_msg=log_msg)
-        #
-        # log_msg = 'beta removed from registry'
-        # log_ver.add_msg(
-        #     log_name='scottbrian_paratools.smart_thread',
-        #     log_level=logging.DEBUG,
-        #     log_msg=log_msg)
-        #
-        # log_msg = 'alpha entered _refresh_pair_array'
-        # log_ver.add_msg(
-        #     log_name='scottbrian_paratools.smart_thread',
-        #     log_level=logging.DEBUG,
-        #     log_msg=log_msg)
-        #
-        # log_msg = re.escape(
-        #     "alpha removed status_blocks entry "
-        #     "for pair_key = ('alpha', 'beta'), name = beta")
-        # log_ver.add_msg(
-        #     log_name='scottbrian_paratools.smart_thread',
-        #     log_level=logging.DEBUG,
-        #     log_msg=log_msg)
-        #
-        # update_time_f1 = (alpha_thread.time_last_pair_array_update
-        #                   .strftime("%H:%M:%S.%f"))
-        # log_msg = re.escape(
-        #     'alpha updated _pair_array at UTC '
-        #     f'{update_time_f1}')
-        # log_ver.add_msg(
-        #     log_name='scottbrian_paratools.smart_thread',
-        #     log_level=logging.DEBUG,
-        #     log_msg=log_msg)
-        #
-        # log_msg = re.escape(
-        #     "alpha did cleanup of registry at UTC "
-        #     f'{st.SmartThread._registry_last_update.strftime("%H:%M:%S.%f")}, '
-        #     "deleted ['beta']")
-        # log_ver.add_msg(
-        #     log_name='scottbrian_paratools.smart_thread',
-        #     log_level=logging.DEBUG,
-        #     log_msg=log_msg)
-        #
-        # log_msg = 'alpha did successful join of beta.'
-        # log_ver.add_msg(
-        #     log_name='scottbrian_paratools.smart_thread',
-        #     log_level=logging.DEBUG,
-        #     log_msg=log_msg)
-
-        ################################################################
-        # verify logger messages
-        ################################################################
-        time.sleep(1)
-        match_results = log_ver.get_match_results(caplog=caplog)
-        log_ver.print_match_results(match_results)
-        log_ver.verify_log_results(match_results)
-
-        logger.debug('mainline exiting')
-
-
-class TestSmartThreadLogMsgs:
-    """Test class for SmartThread log msgs."""
-    ####################################################################
-    # test_refresh_pair_array_log_msgs
-    ####################################################################
-    def test_refresh_pair_array_log_msgs(
-            self,
-            caplog: pytest.CaptureFixture[str]
-            ) -> None:
-        """Test log msgs for _refresh_pair_array.
-
-        Args:
-            caplog: pytest fixture to capture log output
-
-        """
-        ################################################################
-        # f1
-        ################################################################
-        def f1(name: str):
-            log_msg_f1 = 'f1 entered'
-            log_ver.add_msg(log_level=logging.DEBUG,
-                            log_msg=log_msg_f1)
-            logger.debug(log_msg_f1)
-
-            msgs.get_msg('beta')
-
-            ############################################################
-            # send msg to alpha
-            ############################################################
-            beta_thread.send_msg(targets='alpha', msg='go now')
-
-            log_msg_f1 = f'beta sending message to alpha'
-            log_ver.add_msg(
-                log_name='scottbrian_paratools.smart_thread',
-                log_level=logging.INFO,
-                log_msg=log_msg_f1)
-
-            # ############################################################
-            # # recv msg from alpha
-            # ############################################################
-            # msg1 = beta_thread.recv_msg(remote='alpha', timeout=3)
-            #
-            # log_msg_f1 = 'beta receiving msg from alpha'
-            # log_ver.add_msg(
-            #     log_name='scottbrian_paratools.smart_thread',
-            #     log_level=logging.INFO,
-            #     log_msg=log_msg_f1)
-            #
-            # log_msg_f1 = f'beta received msg: {msg1}'
-            # log_ver.add_msg(log_level=logging.DEBUG,
-            #                 log_msg=log_msg_f1)
-            # logger.debug(log_msg_f1)
-            #
-            # ############################################################
-            # # recv second msg from alpha
-            # ############################################################
-            # msg2 = beta_thread.recv_msg(remote='alpha', timeout=3)
-            #
-            # log_msg_f1 = 'beta receiving msg from alpha'
-            # log_ver.add_msg(
-            #     log_name='scottbrian_paratools.smart_thread',
-            #     log_level=logging.INFO,
-            #     log_msg=log_msg_f1)
-            #
-            # log_msg_f1 = f'beta received msg: {msg2}'
-            # log_ver.add_msg(log_level=logging.DEBUG,
-            #                 log_msg=log_msg_f1)
-            # logger.debug(log_msg_f1)
-            #
-            # ############################################################
-            # # recv third msg from alpha
-            # ############################################################
-            # msg3 = beta_thread.recv_msg(remote='alpha', timeout=3)
-            #
-            # log_msg_f1 = 'beta receiving msg from alpha'
-            # log_ver.add_msg(
-            #     log_name='scottbrian_paratools.smart_thread',
-            #     log_level=logging.INFO,
-            #     log_msg=log_msg_f1)
-            #
-            # log_msg_f1 = f'beta received msg: {msg3}'
-            # log_ver.add_msg(log_level=logging.DEBUG,
-            #                 log_msg=log_msg_f1)
-            # logger.debug(log_msg_f1)
-
-            ############################################################
-            # exit
-            ############################################################
-            log_msg_f1 = 'f1 exiting'
-            log_ver.add_msg(log_level=logging.DEBUG,
-                            log_msg=log_msg_f1)
-            logger.debug(log_msg_f1)
-
-        ################################################################
-        # Set up log verification and start tests
-        ################################################################
-        log_ver = LogVer(
-            log_name='test_scottbrian_paratools.test_smart_thread')
-        alpha_call_seq = (
-            'test_smart_thread.py::TestSmartThreadLogMsgs'
-            '.test_refresh_pair_array_log_msgs')
-        log_ver.add_call_seq(name='alpha',
-                             seq=alpha_call_seq)
-
-        log_msg = 'mainline entered'
-        log_ver.add_msg(log_msg=log_msg)
-        logger.debug(log_msg)
-
-        msgs = Msgs()
-
-        ################################################################
-        # Create alpha smart thread
-        ################################################################
-        log_msg = 'mainline creating alpha smart thread'
-        log_ver.add_msg(log_level=logging.DEBUG,
-                        log_msg=log_msg)
-        logger.debug(log_msg)
-
-        alpha_thread = st.SmartThread(name='alpha')
-
-        set_create_expected_log_msgs(alpha_thread, log_ver)
-
-        ################################################################
-        # Create beta smart thread
-        ################################################################
-        log_msg = 'mainline creating beta smart thread'
-        log_ver.add_msg(log_level=logging.DEBUG,
-                        log_msg=log_msg)
-        logger.debug(log_msg)
-
-        beta_thread = st.SmartThread(name='beta', target=f1, args=('beta',))
-
-        set_create_expected_log_msgs(beta_thread, log_ver, [alpha_thread])
-
-        msgs.queue_msg('beta')  # tell beta to proceed
-
-        ################################################################
-        # Start beta thread
-        ################################################################
-        # beta_thread.start()
-        #
-        # log_msg = (
-        #     'beta set status for thread beta '
-        #     'from ThreadStatus.Registered to ThreadStatus.Starting')
-        # log_ver.add_msg(
-        #     log_name='scottbrian_paratools.smart_thread',
-        #     log_level=logging.DEBUG,
-        #     log_msg=log_msg)
-        #
-        # log_msg = (
-        #     f'beta set status for thread beta '
-        #     f'from ThreadStatus.Starting to ThreadStatus.Alive')
-        # log_ver.add_msg(
-        #     log_name='scottbrian_paratools.smart_thread',
-        #     log_level=logging.DEBUG,
-        #     log_msg=log_msg)
-        #
-        # log_msg = re.escape(
-        #     'beta thread started, thread.is_alive() = True, '
-        #     'status: ThreadStatus.Alive')
-        # log_ver.add_msg(
-        #     log_name='scottbrian_paratools.smart_thread',
-        #     log_level=logging.DEBUG,
-        #     log_msg=log_msg)
-
-        ################################################################
-        # Recv msg from beta
-        ################################################################
-        time.sleep(.5)
-        log_msg = 'mainline alpha receiving msg from beta'
-        log_ver.add_msg(log_level=logging.DEBUG,
-                        log_msg=log_msg)
-        logger.debug(log_msg)
-
-        alpha_thread.recv_msg(remote='beta', timeout=3)
-
-        log_msg = f'alpha receiving msg from beta'
-        log_ver.add_msg(
-            log_name='scottbrian_paratools.smart_thread',
-            log_level=logging.INFO,
-            log_msg=log_msg)
-
-        ################################################################
-        # Join beta
-        ################################################################
-        alpha_thread.join(targets='beta')
-
-        set_join_expected_log_msgs(alpha_thread, log_ver, [beta_thread],
-                                   [alpha_thread])
-
-        # log_msg = re.escape(
-        #     "key = alpha, item = SmartThread(name='alpha'), "
-        #     "item.thread.is_alive() = True, status: ThreadStatus.Alive")
-        # log_ver.add_msg(
-        #     log_name='scottbrian_paratools.smart_thread',
-        #     log_level=logging.DEBUG,
-        #     log_msg=log_msg)
-        #
-        # log_msg = re.escape(
-        #     "key = beta, item = SmartThread(name='beta', target=f1, "
-        #     "args=('beta',)), item.thread.is_alive() = False, "
-        #     "status: ThreadStatus.Stopped")
-        # log_ver.add_msg(
-        #     log_name='scottbrian_paratools.smart_thread',
-        #     log_level=logging.DEBUG,
-        #     log_msg=log_msg)
-        #
-        # log_msg = 'beta removed from registry'
-        # log_ver.add_msg(
-        #     log_name='scottbrian_paratools.smart_thread',
-        #     log_level=logging.DEBUG,
-        #     log_msg=log_msg)
-        #
-        # log_msg = 'alpha entered _refresh_pair_array'
-        # log_ver.add_msg(
-        #     log_name='scottbrian_paratools.smart_thread',
-        #     log_level=logging.DEBUG,
-        #     log_msg=log_msg)
-        #
-        # log_msg = re.escape(
-        #     "alpha removed status_blocks entry "
-        #     "for pair_key = ('alpha', 'beta'), name = beta")
-        # log_ver.add_msg(
-        #     log_name='scottbrian_paratools.smart_thread',
-        #     log_level=logging.DEBUG,
-        #     log_msg=log_msg)
-        #
-        # update_time_f1 = (alpha_thread.time_last_pair_array_update
-        #                   .strftime("%H:%M:%S.%f"))
-        # log_msg = re.escape(
-        #     'alpha updated _pair_array at UTC '
-        #     f'{update_time_f1}')
-        # log_ver.add_msg(
-        #     log_name='scottbrian_paratools.smart_thread',
-        #     log_level=logging.DEBUG,
-        #     log_msg=log_msg)
-        #
-        # log_msg = re.escape(
-        #     "alpha did cleanup of registry at UTC "
-        #     f'{st.SmartThread._registry_last_update.strftime("%H:%M:%S.%f")}, '
-        #     "deleted ['beta']")
-        # log_ver.add_msg(
-        #     log_name='scottbrian_paratools.smart_thread',
-        #     log_level=logging.DEBUG,
-        #     log_msg=log_msg)
-        #
-        # log_msg = 'alpha did successful join of beta.'
-        # log_ver.add_msg(
-        #     log_name='scottbrian_paratools.smart_thread',
-        #     log_level=logging.DEBUG,
-        #     log_msg=log_msg)
-
-        ################################################################
-        # verify logger messages
-        ################################################################
-        time.sleep(1)
-        match_results = log_ver.get_match_results(caplog=caplog)
-        log_ver.print_match_results(match_results)
-        log_ver.verify_log_results(match_results)
-
-        logger.debug('mainline exiting')
-
-########################################################################
-# TestSmartThreadBasic class
-########################################################################
-class TestSmartThreadBasic:
-    """Test class for SmartThread basic tests."""
-    ####################################################################
-    # Basic Scenario1
-    ####################################################################
-    def test_smart_thread_with_msg_mixin1(self):
-
-        ################################################################
-        # f1
-        ################################################################
-        def f1():
-            logger.debug('f1 entered')
-
-            msgs.get_msg('beta')
-
-
-            # beta_smart_thread.wait(remote='alpha', log_msg='f1 wait 1')
-            # beta_smart_thread.sync(targets='alpha', log_msg='f1 sync 2')
-            beta_smart_thread.send_msg(msg='hi alpha, this is beta',
-                                       targets='alpha',
-                                       log_msg='f1 send_msg 3')
-            assert beta_smart_thread.recv_msg(remote='alpha',
-                                              log_msg='f1 recv_msg 4',
-                                              timeout=3) == (
-                                                  'hi beta, this is alpha')
-            # beta_smart_thread.resume(targets='alpha', log_msg='f1 resume 5')
-            msgs.queue_msg('alpha')
-            logger.debug('f1 exiting')
-
-        ####################################################################
-        # Create smart threads for the main thread (this thread) and f1
-        ####################################################################
-        logger.debug('mainline entered')
-        logger.debug('mainline creating alpha thread')
-
-        alpha_smart_thread = st.SmartThread(name='alpha')
-
-        logger.debug('mainline creating beta thread')
-
-        msgs = Msgs()
-
-        beta_smart_thread = st.SmartThread(name='beta', target=f1)
-        beta_smart_thread.start()
-
-        ####################################################################
-        # Interact with beta
-        ####################################################################
-        logger.debug('mainline interacting with beta')
-
-        msgs.queue_msg('beta')  # tell beta to proceed
-
-        # alpha_smart_thread.resume(targets='beta', log_msg='ml resume 1')
-        # alpha_smart_thread.sync(targets='beta', log_msg='ml sync 2')
-        assert alpha_smart_thread.recv_msg(remote='beta',
-                                           log_msg='ml recv_msg 3',
-                                           timeout=3) == (
-                                               'hi alpha, this is beta')
-        alpha_smart_thread.send_msg(msg='hi beta, this is alpha', targets='beta', log_msg='ml send_msg 4')
-        # alpha_smart_thread.wait(remote='beta', log_msg='f1 resume 5')
-        # # alpha_smart_thread.join(targets='beta', log_msg='ml join 6')
-        msgs.get_msg('alpha')  # wait for beta to tell us to proceed
-        beta_smart_thread.thread.join()
-
-        assert not beta_smart_thread.thread.is_alive()
-
-        logger.debug('mainline exiting')
-    ####################################################################
-    # Basic Scenario1
-    ####################################################################
-    def test_smart_thread_basic_scenario1(self):
-
-        ################################################################
-        # f1
-        ################################################################
-        def f1():
-            logger.debug('f1 entered')
-
-            msgs.get_msg('beta')
-            msgs.queue_msg('alpha')
-
-            # beta_smart_thread.wait(remote='alpha', log_msg='f1 wait 1')
-            # beta_smart_thread.sync(targets='alpha', log_msg='f1 sync 2')
-            # beta_smart_thread.send_msg(msg='hi alpha, this is beta', targets='alpha', log_msg='f1 send_msg 3')
-            # assert beta_smart_thread.recv_msg(remote='alpha', log_msg='f1 recv_msg 4') == 'hi beta, this is alpha'
-            # beta_smart_thread.resume(targets='alpha', log_msg='f1 resume 5')
-
-            logger.debug('f1 exiting')
-
-        ####################################################################
-        # Create smart threads for the main thread (this thread) and f1
-        ####################################################################
-        logger.debug('mainline entered')
-        logger.debug('mainline creating alpha thread')
-        alpha_smart_thread = st.SmartThread(name='alpha')
-
-        logger.debug('mainline creating beta thread')
-
-        msgs = Msgs()
-
-        beta_smart_thread = st.SmartThread(name='beta', target=f1)
-        beta_smart_thread.start()
-
-        ####################################################################
-        # Interact with beta
-        ####################################################################
-        logger.debug('mainline interacting with beta')
-
-        msgs.queue_msg('beta')
-        msgs.get_msg('alpha')
-        # alpha_smart_thread.resume(targets='beta', log_msg='ml resume 1')
-        # alpha_smart_thread.sync(targets='beta', log_msg='ml sync 2')
-        # assert alpha_smart_thread.recv_msg(remote='beta', log_msg='ml recv_msg 3') == 'hi alpha, this is beta'
-        # alpha_smart_thread.send_msg(msg='hi beta, this is alpha', targets='beta', log_msg='ml send_msg 4')
-        # alpha_smart_thread.wait(remote='beta', log_msg='f1 resume 5')
-        # # alpha_smart_thread.join(targets='beta', log_msg='ml join 6')
-
-        beta_smart_thread.thread.join()
-
-        assert not beta_smart_thread.thread.is_alive()
-
-        logger.debug('mainline exiting')
-
-    ####################################################################################################################
-    # Basic Scenario2
-    ####################################################################################################################
-    def test_smart_thread_basic_scenario2(self):
-        ####################################################################
-        # f1
-        ####################################################################
-        def f1():
-            logger.debug('f1 entered')
-            logger.debug(f'SmartThread._registry = {st.SmartThread._registry}')
-            beta_smart_thread.wait(remote='alpha', log_msg='f1 wait 1')
-            beta_smart_thread.sync(targets='alpha', log_msg='f1 sync 2')
-            beta_smart_thread.send_msg(msg='hi alpha, this is beta', targets='alpha', log_msg='f1 send_msg 3')
-            assert beta_smart_thread.recv_msg(remote='alpha', log_msg='f1 recv_msg 4') == 'hi beta, this is alpha'
-            beta_smart_thread.resume(targets='alpha', log_msg='f1 resume 5')
-
-            beta_smart_thread.wait(remote='charlie', log_msg='f1 wait 6')
-            beta_smart_thread.sync(targets='charlie', log_msg='f1 sync 7')
-            beta_smart_thread.send_msg(msg='hi charlie, this is beta', targets='charlie', log_msg='f1 send_msg 8')
-            assert beta_smart_thread.recv_msg(remote='charlie', log_msg='f1 recv_msg 9') == 'hi beta, this is charlie'
-            beta_smart_thread.resume(targets='charlie', log_msg='f1 resume 10')
-
-            logger.debug('f1 exiting')
-
-        ####################################################################
-        # f2
-        ####################################################################
-        def f2():
-            logger.debug('f2 entered')
-
-            charlie_smart_thread.wait(remote='alpha', log_msg='f2 wait 1')
-            charlie_smart_thread.sync(targets='alpha', log_msg='f2 sync 2')
-            charlie_smart_thread.send_msg(msg='hi alpha, this is charlie', targets='alpha', log_msg='f2 send_msg 3')
-            assert charlie_smart_thread.recv_msg(remote='alpha', log_msg='f2 recv_msg 4') == 'hi charlie, this is alpha'
-            charlie_smart_thread.resume(targets='alpha', log_msg='f2 resume 5')
-
-            charlie_smart_thread.resume(targets='beta', log_msg='f2 resume 6')
-            charlie_smart_thread.sync(targets='beta', log_msg='f2 sync 7')
-            assert charlie_smart_thread.recv_msg(remote='beta', log_msg='f2 recv_msg 9') == 'hi charlie, this is beta'
-            charlie_smart_thread.send_msg(msg='hi beta, this is charlie', targets='beta', log_msg='f2 send_msg 8')
-            charlie_smart_thread.wait(remote='beta', log_msg='f2 wait 10')
-
-            logger.debug('f2 exiting')
-
-        ####################################################################
-        # Create smart threads for the main thread (this thread), f1, and f2
-        ####################################################################
-        logger.debug('mainline entered')
-        logger.debug('mainline creating alpha thread')
-        alpha_smart_thread = st.SmartThread(name='alpha')
-
-        logger.debug('mainline creating beta thread')
-        # beta_thread = threading.Thread(name='beta', target=f1)
-        beta_smart_thread = st.SmartThread(name='beta', target=f1)
-        beta_smart_thread.thread.start()
-        logger.debug('mainline creating charlie thread')
-        # charlie_thread = threading.Thread(name='charlie', target=f2)
-        charlie_smart_thread = st.SmartThread(name='charlie', target=f2)
-        charlie_smart_thread.thread.start()
-
-        ####################################################################
-        # Interact with beta and charlie
-        ####################################################################
-        logger.debug('mainline interacting with beta')
-        alpha_smart_thread.resume(targets='beta', log_msg='ml resume 1')
-        alpha_smart_thread.sync(targets='beta', log_msg='ml sync 2')
-        assert alpha_smart_thread.recv_msg(remote='beta', log_msg='ml recv_msg 3') == 'hi alpha, this is beta'
-        alpha_smart_thread.send_msg(msg='hi beta, this is alpha', targets='beta', log_msg='ml send_msg 4')
-        alpha_smart_thread.wait(remote='beta', log_msg='f1 resume 5')
-
-        logger.debug('mainline interacting with charlie')
-        alpha_smart_thread.resume(targets='charlie', log_msg='ml resume 6')
-        alpha_smart_thread.sync(targets='charlie', log_msg='ml sync 7')
-        assert alpha_smart_thread.recv_msg(remote='charlie', log_msg='ml recv_msg 8') == 'hi alpha, this is charlie'
-        alpha_smart_thread.send_msg(msg='hi charlie, this is alpha', targets='charlie', log_msg='ml send_msg 9')
-        alpha_smart_thread.wait(remote='charlie', log_msg='f1 resume 10')
-
-        alpha_smart_thread.join(targets='beta', log_msg='ml join 11')
-        alpha_smart_thread.join(targets='charlie', log_msg='ml join 12')
-
-        logger.debug('mainline exiting')
-
-    ####################################################################################################################
-    # Basic Scenario3
-    ####################################################################################################################
-    def test_smart_thread_basic_scenario3(self):
-        ####################################################################
-        # f1
-        ####################################################################
-        def f1():
-            logger.debug('f1 entered')
-
-            beta_smart_thread.wait(remote='alpha', log_msg='f1 wait 1')
-            beta_smart_thread.sync(targets='alpha', log_msg='f1 sync 2')
-            beta_smart_thread.send_msg(msg='hi alpha, this is beta', targets='alpha', log_msg='f1 send_msg 3')
-            assert beta_smart_thread.recv_msg(remote='alpha', log_msg='f1 recv_msg 4') == 'hi beta, this is alpha'
-            beta_smart_thread.resume(targets='alpha', log_msg='f1 resume 5')
-
-            beta_smart_thread.wait(remote='charlie', log_msg='f1 wait 6')
-            beta_smart_thread.sync(targets='charlie', log_msg='f1 sync 7')
-            beta_smart_thread.send_msg(msg='hi charlie, this is beta', targets='charlie', log_msg='f1 send_msg 8')
-            assert beta_smart_thread.recv_msg(remote='charlie', log_msg='f1 recv_msg 9') == 'hi beta, this is charlie'
-            beta_smart_thread.resume(targets='charlie', log_msg='f1 resume 10')
-
-            logger.debug('f1 exiting')
-
-        ####################################################################
-        # f2
-        ####################################################################
-        def f2():
-            logger.debug('f2 entered')
-
-            charlie_smart_thread.wait(remote='alpha', log_msg='f2 wait 1')
-            charlie_smart_thread.sync(targets='alpha', log_msg='f2 sync 2')
-            charlie_smart_thread.send_msg(msg='hi alpha, this is charlie', targets='alpha', log_msg='f2 send_msg 3')
-            assert charlie_smart_thread.recv_msg(remote='alpha', log_msg='f2 recv_msg 4') == 'hi charlie, this is alpha'
-            charlie_smart_thread.resume(targets='alpha', log_msg='f2 resume 5')
-
-            charlie_smart_thread.resume(targets='beta', log_msg='f2 resume 6')
-            charlie_smart_thread.sync(targets='beta', log_msg='f2 sync 7')
-            assert charlie_smart_thread.recv_msg(remote='beta', log_msg='f2 recv_msg 9') == 'hi charlie, this is beta'
-            charlie_smart_thread.send_msg(msg='hi beta, this is charlie', targets='beta', log_msg='f2 send_msg 8')
-            charlie_smart_thread.wait(remote='beta', log_msg='f2 wait 10')
-
-            logger.debug('f2 exiting')
-
-        ####################################################################
-        # Create smart threads for the main thread (this thread), f1, and f2
-        ####################################################################
-        logger.debug('mainline entered')
-        logger.debug('mainline creating alpha thread')
-        alpha_smart_thread = st.SmartThread(name='alpha', default_timeout=10)
-
-        logger.debug('mainline creating beta thread')
-        beta_smart_thread = st.SmartThread(name='beta', target=f1)
-        beta_smart_thread.thread.start()
-        logger.debug('mainline creating charlie thread')
-        charlie_smart_thread = st.SmartThread(name='charlie', target=f2)
-        charlie_smart_thread.thread.start()
-
-        ####################################################################
-        # Interact with beta and charlie
-        ####################################################################
-        logger.debug('mainline interacting with beta and charlie')
-        alpha_smart_thread.resume(targets='beta', log_msg='ml resume 1')
-        alpha_smart_thread.resume(targets='charlie', log_msg='ml resume 2')
-        alpha_smart_thread.sync(targets='beta', log_msg='ml sync 3')
-        alpha_smart_thread.sync(targets='charlie', log_msg='ml sync 4')
-        assert alpha_smart_thread.recv_msg(remote='beta', log_msg='ml recv_msg 5') == 'hi alpha, this is beta'
-        assert alpha_smart_thread.recv_msg(remote='charlie', log_msg='ml recv_msg 6') == 'hi alpha, this is charlie'
-        alpha_smart_thread.send_msg(msg='hi beta, this is alpha', targets='beta', log_msg='ml send_msg 7')
-        alpha_smart_thread.send_msg(msg='hi charlie, this is alpha', targets='charlie', log_msg='ml send_msg 8')
-        alpha_smart_thread.wait(remote='beta', log_msg='f1 resume 9')
-        alpha_smart_thread.wait(remote='charlie', log_msg='f1 resume 10')
-
-        alpha_smart_thread.join(targets='beta', log_msg='ml join 11')
-        alpha_smart_thread.join(targets='charlie', log_msg='ml join 12')
-
-        logger.debug('mainline exiting')
-
-    ####################################################################################################################
-    # Basic Scenario4
-    ####################################################################################################################
-    def test_smart_thread_basic_scenario4(self):
-        ####################################################################
-        # f1
-        ####################################################################
-        def f1():
-            logger.debug('f1 entered')
-
-            beta_smart_thread.wait(remote='alpha', log_msg='f1 wait 1')
-            beta_smart_thread.sync(targets={'alpha', 'charlie'}, log_msg='f1 sync 2')
-            beta_smart_thread.send_msg(msg='hi alpha and charlie, this is beta', targets={'alpha', 'charlie'},
-                                       log_msg='f1 send_msg 3')
-            assert beta_smart_thread.recv_msg(remote='alpha', log_msg='f1 recv_msg 4') == 'hi beta and charlie, this is alpha'
-            assert beta_smart_thread.recv_msg(remote='charlie',
-                                        log_msg='f1 recv_msg 5') == 'hi alpha and beta, this is charlie'
-            beta_smart_thread.resume(targets={'alpha', 'charlie'}, log_msg='f1 resume 6')
-            beta_smart_thread.wait(remote='charlie', log_msg='f1 wait 7')
-
-            logger.debug('f1 exiting')
-
-        ####################################################################
-        # f2
-        ####################################################################
-        def f2():
-            logger.debug('f2 entered')
-
-            charlie_smart_thread.wait(remote='alpha', log_msg='f2 wait 1')
-            charlie_smart_thread.sync(targets={'alpha', 'beta'}, log_msg='f2 sync 2')
-            charlie_smart_thread.send_msg(msg='hi alpha and beta, this is charlie', targets={'alpha', 'beta'},
-                                          log_msg='f2 send_msg 3')
-            assert charlie_smart_thread.recv_msg(remote='alpha',
-                                           log_msg='f2 recv_msg 4') == 'hi beta and charlie, this is alpha'
-            assert charlie_smart_thread.recv_msg(remote='beta',
-                                           log_msg='f2 recv_msg 5') == 'hi alpha and charlie, this is beta'
-            charlie_smart_thread.wait(remote='beta', log_msg='f2 wait 6')
-            charlie_smart_thread.resume(targets={'alpha', 'beta'}, log_msg='f2 resume 7')
-
-            logger.debug('f2 exiting')
-
-        ####################################################################
-        # Create smart threads for the main thread (this thread), f1, and f2
-        ####################################################################
-        logger.debug('mainline entered')
-        logger.debug('mainline creating alpha thread')
-        alpha_smart_thread = st.SmartThread(name='alpha', default_timeout=10)
-
-        logger.debug('mainline creating beta thread')
-        beta_thread = threading.Thread(name='beta', target=f1)
-        beta_smart_thread = st.SmartThread(name='beta', thread=beta_thread, default_timeout=10)
-        beta_thread.start()
-        logger.debug('mainline creating charlie thread')
-        charlie_thread = threading.Thread(name='charlie', target=f2)
-        charlie_smart_thread = st.SmartThread(name='charlie', thread=charlie_thread, default_timeout=10)
-        charlie_thread.start()
-
-        ####################################################################
-        # Interact with beta and charlie
-        ####################################################################
-        logger.debug('mainline interacting with beta and charlie')
-
-        alpha_smart_thread.resume(targets={'beta', 'charlie'}, log_msg='ml resume 1')
-        alpha_smart_thread.sync(targets={'beta', 'charlie'}, log_msg='ml sync 2')
-        assert alpha_smart_thread.recv_msg(remote='beta', log_msg='ml recv_msg 3') == 'hi alpha and charlie, this is beta'
-        assert alpha_smart_thread.recv_msg(remote='charlie', log_msg='ml recv_msg 4') == 'hi alpha and beta, this is charlie'
-        alpha_smart_thread.send_msg(msg='hi beta and charlie, this is alpha', targets={'beta', 'charlie'},
-                                    log_msg='ml send_msg 5')
-        alpha_smart_thread.wait(remote='beta', log_msg='ml resume 6')
-        alpha_smart_thread.wait(remote='charlie', log_msg='ml resume 7')
-
-        alpha_smart_thread.join(targets={'beta', 'charlie'}, log_msg='ml join 8')
-
-        logger.debug('mainline exiting')
+# class TestSmartThreadCombos:
+#     """Test class for SmartThread combos."""
+#     ####################################################################
+#     # test_refresh_pair_array_log_msgs
+#     ####################################################################
+#     def test_smart_thread_combos(
+#             self,
+#             random_seed_arg: int,
+#             caplog: pytest.CaptureFixture[str]
+#             ) -> None:
+#         """Test log msgs for _refresh_pair_array.
+#
+#         Args:
+#             caplog: pytest fixture to capture log output
+#
+#         """
+#         ################################################################
+#         # f1
+#         ################################################################
+#         def f1(name: str):
+#             log_msg_f1 = f'f1 entered for {name}'
+#             log_ver.add_msg(log_level=logging.DEBUG,
+#                             log_msg=log_msg_f1)
+#             logger.debug(log_msg_f1)
+#
+#             msgs.get_msg(name)
+#
+#             ############################################################
+#             # send msg to alpha
+#             ############################################################
+#             alive_threads[name].send_msg(targets='alpha', msg='go now')
+#
+#             log_msg_f1 = f'{name} sending message to alpha'
+#             log_ver.add_msg(
+#                 log_name='scottbrian_paratools.smart_thread',
+#                 log_level=logging.INFO,
+#                 log_msg=log_msg_f1)
+#
+#             # ############################################################
+#             # # recv msg from alpha
+#             # ############################################################
+#             # msg1 = beta_thread.recv_msg(remote='alpha', timeout=3)
+#             #
+#             # log_msg_f1 = 'beta receiving msg from alpha'
+#             # log_ver.add_msg(
+#             #     log_name='scottbrian_paratools.smart_thread',
+#             #     log_level=logging.INFO,
+#             #     log_msg=log_msg_f1)
+#             #
+#             # log_msg_f1 = f'beta received msg: {msg1}'
+#             # log_ver.add_msg(log_level=logging.DEBUG,
+#             #                 log_msg=log_msg_f1)
+#             # logger.debug(log_msg_f1)
+#             #
+#             # ############################################################
+#             # # recv second msg from alpha
+#             # ############################################################
+#             # msg2 = beta_thread.recv_msg(remote='alpha', timeout=3)
+#             #
+#             # log_msg_f1 = 'beta receiving msg from alpha'
+#             # log_ver.add_msg(
+#             #     log_name='scottbrian_paratools.smart_thread',
+#             #     log_level=logging.INFO,
+#             #     log_msg=log_msg_f1)
+#             #
+#             # log_msg_f1 = f'beta received msg: {msg2}'
+#             # log_ver.add_msg(log_level=logging.DEBUG,
+#             #                 log_msg=log_msg_f1)
+#             # logger.debug(log_msg_f1)
+#             #
+#             # ############################################################
+#             # # recv third msg from alpha
+#             # ############################################################
+#             # msg3 = beta_thread.recv_msg(remote='alpha', timeout=3)
+#             #
+#             # log_msg_f1 = 'beta receiving msg from alpha'
+#             # log_ver.add_msg(
+#             #     log_name='scottbrian_paratools.smart_thread',
+#             #     log_level=logging.INFO,
+#             #     log_msg=log_msg_f1)
+#             #
+#             # log_msg_f1 = f'beta received msg: {msg3}'
+#             # log_ver.add_msg(log_level=logging.DEBUG,
+#             #                 log_msg=log_msg_f1)
+#             # logger.debug(log_msg_f1)
+#
+#             ############################################################
+#             # exit
+#             ############################################################
+#             log_msg_f1 = f'f1 exiting for {name}'
+#             log_ver.add_msg(log_level=logging.DEBUG,
+#                             log_msg=log_msg_f1)
+#             logger.debug(log_msg_f1)
+#
+#         ################################################################
+#         # Set up log verification and start tests
+#         ################################################################
+#         log_ver = LogVer(
+#             log_name='test_scottbrian_paratools.test_smart_thread')
+#         alpha_call_seq = (
+#             'test_smart_thread.py::TestSmartThreadLogMsgs'
+#             '.test_refresh_pair_array_log_msgs')
+#         log_ver.add_call_seq(name='alpha',
+#                              seq=alpha_call_seq)
+#
+#         log_msg = 'mainline entered'
+#         log_ver.add_msg(log_msg=log_msg)
+#         logger.debug(log_msg)
+#
+#         log_msg = f'random_seed_arg: {random_seed_arg}'
+#         log_ver.add_msg(log_msg=log_msg)
+#         logger.debug(log_msg)
+#
+#         msgs = Msgs()
+#
+#         random.seed(random_seed_arg)
+#
+#         num_threads = 3  # random.randint(2, 3)
+#
+#         log_msg = f'num_threads: {num_threads}'
+#         log_ver.add_msg(log_msg=log_msg)
+#         logger.debug(log_msg)
+#
+#         thread_names = ['alpha', 'beta', 'charlie', 'delta', 'echo']
+#         alive_threads = {}
+#         alive_names = []
+#         exp_pairs = {}
+#
+#         ################################################################
+#         # Create smart threads
+#         ################################################################
+#         for thread_num in range(num_threads):
+#             name = thread_names[thread_num]
+#             log_msg = f'mainline creating {name} smart thread'
+#             log_ver.add_msg(log_level=logging.DEBUG,
+#                             log_msg=log_msg)
+#             logger.debug(log_msg)
+#
+#             # alpha_thread = st.SmartThread(name='alpha')
+#             if thread_num == 0:
+#                 alive_threads[name] = st.SmartThread(name=name)
+#             else:
+#                 alive_threads[name] = st.SmartThread(name=name,
+#                                                     target=f1,
+#                                                     args=(name,))
+#             alive_names.append(name)
+#             alive_names.sort()
+#             if len(alive_names) > 1:
+#                 pair_keys = list(itertools.combinations(alive_names, 2))
+#                 for pair_key in pair_keys:
+#                     exp_pairs[pair_key] = [pair_key[0], pair_key[1]]
+#
+#             set_create_expected_log_msgs(name,
+#                                          log_ver,
+#                                          alive_threads)
+#
+#         ################################################################
+#         # Create beta smart thread
+#         ################################################################
+#         # log_msg = 'mainline creating beta smart thread'
+#         # log_ver.add_msg(log_level=logging.DEBUG,
+#         #                 log_msg=log_msg)
+#         # logger.debug(log_msg)
+#         #
+#         # beta_thread = st.SmartThread(name='beta', target=f1, args=('beta',))
+#         #
+#         # set_create_expected_log_msgs(beta_thread, log_ver, [alpha_thread])
+#
+#         for thread_name in alive_threads.keys():
+#             if thread_name == 'alpha':
+#                 continue
+#             msgs.queue_msg(thread_name)  # tell thread to proceed
+#
+#         ################################################################
+#         # Start beta thread
+#         ################################################################
+#         # beta_thread.start()
+#         #
+#         # log_msg = (
+#         #     'beta set status for thread beta '
+#         #     'from ThreadStatus.Registered to ThreadStatus.Starting')
+#         # log_ver.add_msg(
+#         #     log_name='scottbrian_paratools.smart_thread',
+#         #     log_level=logging.DEBUG,
+#         #     log_msg=log_msg)
+#         #
+#         # log_msg = (
+#         #     f'beta set status for thread beta '
+#         #     f'from ThreadStatus.Starting to ThreadStatus.Alive')
+#         # log_ver.add_msg(
+#         #     log_name='scottbrian_paratools.smart_thread',
+#         #     log_level=logging.DEBUG,
+#         #     log_msg=log_msg)
+#         #
+#         # log_msg = re.escape(
+#         #     'beta thread started, thread.is_alive() = True, '
+#         #     'status: ThreadStatus.Alive')
+#         # log_ver.add_msg(
+#         #     log_name='scottbrian_paratools.smart_thread',
+#         #     log_level=logging.DEBUG,
+#         #     log_msg=log_msg)
+#
+#         ################################################################
+#         # Recv msgs from remotes
+#         ################################################################
+#         # time.sleep(.5)
+#         for thread_name in alive_threads.keys():
+#             if thread_name == 'alpha':
+#                 continue
+#             log_msg = f'mainline alpha receiving msg from {thread_name}'
+#             log_ver.add_msg(log_level=logging.DEBUG,
+#                             log_msg=log_msg)
+#             logger.debug(log_msg)
+#
+#             alive_threads["alpha"].recv_msg(remote=thread_name, timeout=3)
+#
+#             log_msg = f'alpha receiving msg from {thread_name}'
+#             log_ver.add_msg(
+#                 log_name='scottbrian_paratools.smart_thread',
+#                 log_level=logging.INFO,
+#                 log_msg=log_msg)
+#
+#         ################################################################
+#         # Join remotes
+#         ################################################################
+#         for thread_name in alive_threads.keys():
+#             if thread_name == 'alpha':
+#                 continue
+#             alive_threads["alpha"].join(targets=thread_name)
+#             targets = {thread_name: alive_threads[thread_name]}
+#             set_join_expected_log_msgs("alpha",
+#                                        log_ver,
+#                                        targets,
+#                                        alive_threads)
+#
+#         # log_msg = re.escape(
+#         #     "key = alpha, item = SmartThread(name='alpha'), "
+#         #     "item.thread.is_alive() = True, status: ThreadStatus.Alive")
+#         # log_ver.add_msg(
+#         #     log_name='scottbrian_paratools.smart_thread',
+#         #     log_level=logging.DEBUG,
+#         #     log_msg=log_msg)
+#         #
+#         # log_msg = re.escape(
+#         #     "key = beta, item = SmartThread(name='beta', target=f1, "
+#         #     "args=('beta',)), item.thread.is_alive() = False, "
+#         #     "status: ThreadStatus.Stopped")
+#         # log_ver.add_msg(
+#         #     log_name='scottbrian_paratools.smart_thread',
+#         #     log_level=logging.DEBUG,
+#         #     log_msg=log_msg)
+#         #
+#         # log_msg = 'beta removed from registry'
+#         # log_ver.add_msg(
+#         #     log_name='scottbrian_paratools.smart_thread',
+#         #     log_level=logging.DEBUG,
+#         #     log_msg=log_msg)
+#         #
+#         # log_msg = 'alpha entered _refresh_pair_array'
+#         # log_ver.add_msg(
+#         #     log_name='scottbrian_paratools.smart_thread',
+#         #     log_level=logging.DEBUG,
+#         #     log_msg=log_msg)
+#         #
+#         # log_msg = re.escape(
+#         #     "alpha removed status_blocks entry "
+#         #     "for pair_key = ('alpha', 'beta'), name = beta")
+#         # log_ver.add_msg(
+#         #     log_name='scottbrian_paratools.smart_thread',
+#         #     log_level=logging.DEBUG,
+#         #     log_msg=log_msg)
+#         #
+#         # update_time_f1 = (alpha_thread.time_last_pair_array_update
+#         #                   .strftime("%H:%M:%S.%f"))
+#         # log_msg = re.escape(
+#         #     'alpha updated _pair_array at UTC '
+#         #     f'{update_time_f1}')
+#         # log_ver.add_msg(
+#         #     log_name='scottbrian_paratools.smart_thread',
+#         #     log_level=logging.DEBUG,
+#         #     log_msg=log_msg)
+#         #
+#         # log_msg = re.escape(
+#         #     "alpha did cleanup of registry at UTC "
+#         #     f'{st.SmartThread._registry_last_update.strftime("%H:%M:%S.%f")}, '
+#         #     "deleted ['beta']")
+#         # log_ver.add_msg(
+#         #     log_name='scottbrian_paratools.smart_thread',
+#         #     log_level=logging.DEBUG,
+#         #     log_msg=log_msg)
+#         #
+#         # log_msg = 'alpha did successful join of beta.'
+#         # log_ver.add_msg(
+#         #     log_name='scottbrian_paratools.smart_thread',
+#         #     log_level=logging.DEBUG,
+#         #     log_msg=log_msg)
+#
+#         ################################################################
+#         # verify logger messages
+#         ################################################################
+#         time.sleep(1)
+#         match_results = log_ver.get_match_results(caplog=caplog)
+#         log_ver.print_match_results(match_results)
+#         log_ver.verify_log_results(match_results)
+#
+#         logger.debug('mainline exiting')
+#
+#
+# class TestSmartThreadLogMsgs:
+#     """Test class for SmartThread log msgs."""
+#     ####################################################################
+#     # test_refresh_pair_array_log_msgs
+#     ####################################################################
+#     def test_refresh_pair_array_log_msgs(
+#             self,
+#             caplog: pytest.CaptureFixture[str]
+#             ) -> None:
+#         """Test log msgs for _refresh_pair_array.
+#
+#         Args:
+#             caplog: pytest fixture to capture log output
+#
+#         """
+#         ################################################################
+#         # f1
+#         ################################################################
+#         def f1(name: str):
+#             log_msg_f1 = 'f1 entered'
+#             log_ver.add_msg(log_level=logging.DEBUG,
+#                             log_msg=log_msg_f1)
+#             logger.debug(log_msg_f1)
+#
+#             msgs.get_msg('beta')
+#
+#             ############################################################
+#             # send msg to alpha
+#             ############################################################
+#             beta_thread.send_msg(targets='alpha', msg='go now')
+#
+#             log_msg_f1 = f'beta sending message to alpha'
+#             log_ver.add_msg(
+#                 log_name='scottbrian_paratools.smart_thread',
+#                 log_level=logging.INFO,
+#                 log_msg=log_msg_f1)
+#
+#             # ############################################################
+#             # # recv msg from alpha
+#             # ############################################################
+#             # msg1 = beta_thread.recv_msg(remote='alpha', timeout=3)
+#             #
+#             # log_msg_f1 = 'beta receiving msg from alpha'
+#             # log_ver.add_msg(
+#             #     log_name='scottbrian_paratools.smart_thread',
+#             #     log_level=logging.INFO,
+#             #     log_msg=log_msg_f1)
+#             #
+#             # log_msg_f1 = f'beta received msg: {msg1}'
+#             # log_ver.add_msg(log_level=logging.DEBUG,
+#             #                 log_msg=log_msg_f1)
+#             # logger.debug(log_msg_f1)
+#             #
+#             # ############################################################
+#             # # recv second msg from alpha
+#             # ############################################################
+#             # msg2 = beta_thread.recv_msg(remote='alpha', timeout=3)
+#             #
+#             # log_msg_f1 = 'beta receiving msg from alpha'
+#             # log_ver.add_msg(
+#             #     log_name='scottbrian_paratools.smart_thread',
+#             #     log_level=logging.INFO,
+#             #     log_msg=log_msg_f1)
+#             #
+#             # log_msg_f1 = f'beta received msg: {msg2}'
+#             # log_ver.add_msg(log_level=logging.DEBUG,
+#             #                 log_msg=log_msg_f1)
+#             # logger.debug(log_msg_f1)
+#             #
+#             # ############################################################
+#             # # recv third msg from alpha
+#             # ############################################################
+#             # msg3 = beta_thread.recv_msg(remote='alpha', timeout=3)
+#             #
+#             # log_msg_f1 = 'beta receiving msg from alpha'
+#             # log_ver.add_msg(
+#             #     log_name='scottbrian_paratools.smart_thread',
+#             #     log_level=logging.INFO,
+#             #     log_msg=log_msg_f1)
+#             #
+#             # log_msg_f1 = f'beta received msg: {msg3}'
+#             # log_ver.add_msg(log_level=logging.DEBUG,
+#             #                 log_msg=log_msg_f1)
+#             # logger.debug(log_msg_f1)
+#
+#             ############################################################
+#             # exit
+#             ############################################################
+#             log_msg_f1 = 'f1 exiting'
+#             log_ver.add_msg(log_level=logging.DEBUG,
+#                             log_msg=log_msg_f1)
+#             logger.debug(log_msg_f1)
+#
+#         ################################################################
+#         # Set up log verification and start tests
+#         ################################################################
+#         log_ver = LogVer(
+#             log_name='test_scottbrian_paratools.test_smart_thread')
+#         alpha_call_seq = (
+#             'test_smart_thread.py::TestSmartThreadLogMsgs'
+#             '.test_refresh_pair_array_log_msgs')
+#         log_ver.add_call_seq(name='alpha',
+#                              seq=alpha_call_seq)
+#
+#         log_msg = 'mainline entered'
+#         log_ver.add_msg(log_msg=log_msg)
+#         logger.debug(log_msg)
+#
+#         msgs = Msgs()
+#
+#         ################################################################
+#         # Create alpha smart thread
+#         ################################################################
+#         log_msg = 'mainline creating alpha smart thread'
+#         log_ver.add_msg(log_level=logging.DEBUG,
+#                         log_msg=log_msg)
+#         logger.debug(log_msg)
+#
+#         alpha_thread = st.SmartThread(name='alpha')
+#
+#         set_create_expected_log_msgs(alpha_thread, log_ver)
+#
+#         ################################################################
+#         # Create beta smart thread
+#         ################################################################
+#         log_msg = 'mainline creating beta smart thread'
+#         log_ver.add_msg(log_level=logging.DEBUG,
+#                         log_msg=log_msg)
+#         logger.debug(log_msg)
+#
+#         beta_thread = st.SmartThread(name='beta', target=f1, args=('beta',))
+#
+#         set_create_expected_log_msgs(beta_thread, log_ver, [alpha_thread])
+#
+#         msgs.queue_msg('beta')  # tell beta to proceed
+#
+#         ################################################################
+#         # Start beta thread
+#         ################################################################
+#         # beta_thread.start()
+#         #
+#         # log_msg = (
+#         #     'beta set status for thread beta '
+#         #     'from ThreadStatus.Registered to ThreadStatus.Starting')
+#         # log_ver.add_msg(
+#         #     log_name='scottbrian_paratools.smart_thread',
+#         #     log_level=logging.DEBUG,
+#         #     log_msg=log_msg)
+#         #
+#         # log_msg = (
+#         #     f'beta set status for thread beta '
+#         #     f'from ThreadStatus.Starting to ThreadStatus.Alive')
+#         # log_ver.add_msg(
+#         #     log_name='scottbrian_paratools.smart_thread',
+#         #     log_level=logging.DEBUG,
+#         #     log_msg=log_msg)
+#         #
+#         # log_msg = re.escape(
+#         #     'beta thread started, thread.is_alive() = True, '
+#         #     'status: ThreadStatus.Alive')
+#         # log_ver.add_msg(
+#         #     log_name='scottbrian_paratools.smart_thread',
+#         #     log_level=logging.DEBUG,
+#         #     log_msg=log_msg)
+#
+#         ################################################################
+#         # Recv msg from beta
+#         ################################################################
+#         time.sleep(.5)
+#         log_msg = 'mainline alpha receiving msg from beta'
+#         log_ver.add_msg(log_level=logging.DEBUG,
+#                         log_msg=log_msg)
+#         logger.debug(log_msg)
+#
+#         alpha_thread.recv_msg(remote='beta', timeout=3)
+#
+#         log_msg = f'alpha receiving msg from beta'
+#         log_ver.add_msg(
+#             log_name='scottbrian_paratools.smart_thread',
+#             log_level=logging.INFO,
+#             log_msg=log_msg)
+#
+#         ################################################################
+#         # Join beta
+#         ################################################################
+#         alpha_thread.join(targets='beta')
+#
+#         set_join_expected_log_msgs(alpha_thread, log_ver, [beta_thread],
+#                                    [alpha_thread])
+#
+#         # log_msg = re.escape(
+#         #     "key = alpha, item = SmartThread(name='alpha'), "
+#         #     "item.thread.is_alive() = True, status: ThreadStatus.Alive")
+#         # log_ver.add_msg(
+#         #     log_name='scottbrian_paratools.smart_thread',
+#         #     log_level=logging.DEBUG,
+#         #     log_msg=log_msg)
+#         #
+#         # log_msg = re.escape(
+#         #     "key = beta, item = SmartThread(name='beta', target=f1, "
+#         #     "args=('beta',)), item.thread.is_alive() = False, "
+#         #     "status: ThreadStatus.Stopped")
+#         # log_ver.add_msg(
+#         #     log_name='scottbrian_paratools.smart_thread',
+#         #     log_level=logging.DEBUG,
+#         #     log_msg=log_msg)
+#         #
+#         # log_msg = 'beta removed from registry'
+#         # log_ver.add_msg(
+#         #     log_name='scottbrian_paratools.smart_thread',
+#         #     log_level=logging.DEBUG,
+#         #     log_msg=log_msg)
+#         #
+#         # log_msg = 'alpha entered _refresh_pair_array'
+#         # log_ver.add_msg(
+#         #     log_name='scottbrian_paratools.smart_thread',
+#         #     log_level=logging.DEBUG,
+#         #     log_msg=log_msg)
+#         #
+#         # log_msg = re.escape(
+#         #     "alpha removed status_blocks entry "
+#         #     "for pair_key = ('alpha', 'beta'), name = beta")
+#         # log_ver.add_msg(
+#         #     log_name='scottbrian_paratools.smart_thread',
+#         #     log_level=logging.DEBUG,
+#         #     log_msg=log_msg)
+#         #
+#         # update_time_f1 = (alpha_thread.time_last_pair_array_update
+#         #                   .strftime("%H:%M:%S.%f"))
+#         # log_msg = re.escape(
+#         #     'alpha updated _pair_array at UTC '
+#         #     f'{update_time_f1}')
+#         # log_ver.add_msg(
+#         #     log_name='scottbrian_paratools.smart_thread',
+#         #     log_level=logging.DEBUG,
+#         #     log_msg=log_msg)
+#         #
+#         # log_msg = re.escape(
+#         #     "alpha did cleanup of registry at UTC "
+#         #     f'{st.SmartThread._registry_last_update.strftime("%H:%M:%S.%f")}, '
+#         #     "deleted ['beta']")
+#         # log_ver.add_msg(
+#         #     log_name='scottbrian_paratools.smart_thread',
+#         #     log_level=logging.DEBUG,
+#         #     log_msg=log_msg)
+#         #
+#         # log_msg = 'alpha did successful join of beta.'
+#         # log_ver.add_msg(
+#         #     log_name='scottbrian_paratools.smart_thread',
+#         #     log_level=logging.DEBUG,
+#         #     log_msg=log_msg)
+#
+#         ################################################################
+#         # verify logger messages
+#         ################################################################
+#         time.sleep(1)
+#         match_results = log_ver.get_match_results(caplog=caplog)
+#         log_ver.print_match_results(match_results)
+#         log_ver.verify_log_results(match_results)
+#
+#         logger.debug('mainline exiting')
+#
+# ########################################################################
+# # TestSmartThreadBasic class
+# ########################################################################
+# class TestSmartThreadBasic:
+#     """Test class for SmartThread basic tests."""
+#     ####################################################################
+#     # Basic Scenario1
+#     ####################################################################
+#     def test_smart_thread_with_msg_mixin1(self):
+#
+#         ################################################################
+#         # f1
+#         ################################################################
+#         def f1():
+#             logger.debug('f1 entered')
+#
+#             msgs.get_msg('beta')
+#
+#
+#             # beta_smart_thread.wait(remote='alpha', log_msg='f1 wait 1')
+#             # beta_smart_thread.sync(targets='alpha', log_msg='f1 sync 2')
+#             beta_smart_thread.send_msg(msg='hi alpha, this is beta',
+#                                        targets='alpha',
+#                                        log_msg='f1 send_msg 3')
+#             assert beta_smart_thread.recv_msg(remote='alpha',
+#                                               log_msg='f1 recv_msg 4',
+#                                               timeout=3) == (
+#                                                   'hi beta, this is alpha')
+#             # beta_smart_thread.resume(targets='alpha', log_msg='f1 resume 5')
+#             msgs.queue_msg('alpha')
+#             logger.debug('f1 exiting')
+#
+#         ####################################################################
+#         # Create smart threads for the main thread (this thread) and f1
+#         ####################################################################
+#         logger.debug('mainline entered')
+#         logger.debug('mainline creating alpha thread')
+#
+#         alpha_smart_thread = st.SmartThread(name='alpha')
+#
+#         logger.debug('mainline creating beta thread')
+#
+#         msgs = Msgs()
+#
+#         beta_smart_thread = st.SmartThread(name='beta', target=f1)
+#         beta_smart_thread.start()
+#
+#         ####################################################################
+#         # Interact with beta
+#         ####################################################################
+#         logger.debug('mainline interacting with beta')
+#
+#         msgs.queue_msg('beta')  # tell beta to proceed
+#
+#         # alpha_smart_thread.resume(targets='beta', log_msg='ml resume 1')
+#         # alpha_smart_thread.sync(targets='beta', log_msg='ml sync 2')
+#         assert alpha_smart_thread.recv_msg(remote='beta',
+#                                            log_msg='ml recv_msg 3',
+#                                            timeout=3) == (
+#                                                'hi alpha, this is beta')
+#         alpha_smart_thread.send_msg(msg='hi beta, this is alpha', targets='beta', log_msg='ml send_msg 4')
+#         # alpha_smart_thread.wait(remote='beta', log_msg='f1 resume 5')
+#         # # alpha_smart_thread.join(targets='beta', log_msg='ml join 6')
+#         msgs.get_msg('alpha')  # wait for beta to tell us to proceed
+#         beta_smart_thread.thread.join()
+#
+#         assert not beta_smart_thread.thread.is_alive()
+#
+#         logger.debug('mainline exiting')
+#     ####################################################################
+#     # Basic Scenario1
+#     ####################################################################
+#     def test_smart_thread_basic_scenario1(self):
+#
+#         ################################################################
+#         # f1
+#         ################################################################
+#         def f1():
+#             logger.debug('f1 entered')
+#
+#             msgs.get_msg('beta')
+#             msgs.queue_msg('alpha')
+#
+#             # beta_smart_thread.wait(remote='alpha', log_msg='f1 wait 1')
+#             # beta_smart_thread.sync(targets='alpha', log_msg='f1 sync 2')
+#             # beta_smart_thread.send_msg(msg='hi alpha, this is beta', targets='alpha', log_msg='f1 send_msg 3')
+#             # assert beta_smart_thread.recv_msg(remote='alpha', log_msg='f1 recv_msg 4') == 'hi beta, this is alpha'
+#             # beta_smart_thread.resume(targets='alpha', log_msg='f1 resume 5')
+#
+#             logger.debug('f1 exiting')
+#
+#         ####################################################################
+#         # Create smart threads for the main thread (this thread) and f1
+#         ####################################################################
+#         logger.debug('mainline entered')
+#         logger.debug('mainline creating alpha thread')
+#         alpha_smart_thread = st.SmartThread(name='alpha')
+#
+#         logger.debug('mainline creating beta thread')
+#
+#         msgs = Msgs()
+#
+#         beta_smart_thread = st.SmartThread(name='beta', target=f1)
+#         beta_smart_thread.start()
+#
+#         ####################################################################
+#         # Interact with beta
+#         ####################################################################
+#         logger.debug('mainline interacting with beta')
+#
+#         msgs.queue_msg('beta')
+#         msgs.get_msg('alpha')
+#         # alpha_smart_thread.resume(targets='beta', log_msg='ml resume 1')
+#         # alpha_smart_thread.sync(targets='beta', log_msg='ml sync 2')
+#         # assert alpha_smart_thread.recv_msg(remote='beta', log_msg='ml recv_msg 3') == 'hi alpha, this is beta'
+#         # alpha_smart_thread.send_msg(msg='hi beta, this is alpha', targets='beta', log_msg='ml send_msg 4')
+#         # alpha_smart_thread.wait(remote='beta', log_msg='f1 resume 5')
+#         # # alpha_smart_thread.join(targets='beta', log_msg='ml join 6')
+#
+#         beta_smart_thread.thread.join()
+#
+#         assert not beta_smart_thread.thread.is_alive()
+#
+#         logger.debug('mainline exiting')
+#
+#     ####################################################################################################################
+#     # Basic Scenario2
+#     ####################################################################################################################
+#     def test_smart_thread_basic_scenario2(self):
+#         ####################################################################
+#         # f1
+#         ####################################################################
+#         def f1():
+#             logger.debug('f1 entered')
+#             logger.debug(f'SmartThread._registry = {st.SmartThread._registry}')
+#             beta_smart_thread.wait(remote='alpha', log_msg='f1 wait 1')
+#             beta_smart_thread.sync(targets='alpha', log_msg='f1 sync 2')
+#             beta_smart_thread.send_msg(msg='hi alpha, this is beta', targets='alpha', log_msg='f1 send_msg 3')
+#             assert beta_smart_thread.recv_msg(remote='alpha', log_msg='f1 recv_msg 4') == 'hi beta, this is alpha'
+#             beta_smart_thread.resume(targets='alpha', log_msg='f1 resume 5')
+#
+#             beta_smart_thread.wait(remote='charlie', log_msg='f1 wait 6')
+#             beta_smart_thread.sync(targets='charlie', log_msg='f1 sync 7')
+#             beta_smart_thread.send_msg(msg='hi charlie, this is beta', targets='charlie', log_msg='f1 send_msg 8')
+#             assert beta_smart_thread.recv_msg(remote='charlie', log_msg='f1 recv_msg 9') == 'hi beta, this is charlie'
+#             beta_smart_thread.resume(targets='charlie', log_msg='f1 resume 10')
+#
+#             logger.debug('f1 exiting')
+#
+#         ####################################################################
+#         # f2
+#         ####################################################################
+#         def f2():
+#             logger.debug('f2 entered')
+#
+#             charlie_smart_thread.wait(remote='alpha', log_msg='f2 wait 1')
+#             charlie_smart_thread.sync(targets='alpha', log_msg='f2 sync 2')
+#             charlie_smart_thread.send_msg(msg='hi alpha, this is charlie', targets='alpha', log_msg='f2 send_msg 3')
+#             assert charlie_smart_thread.recv_msg(remote='alpha', log_msg='f2 recv_msg 4') == 'hi charlie, this is alpha'
+#             charlie_smart_thread.resume(targets='alpha', log_msg='f2 resume 5')
+#
+#             charlie_smart_thread.resume(targets='beta', log_msg='f2 resume 6')
+#             charlie_smart_thread.sync(targets='beta', log_msg='f2 sync 7')
+#             assert charlie_smart_thread.recv_msg(remote='beta', log_msg='f2 recv_msg 9') == 'hi charlie, this is beta'
+#             charlie_smart_thread.send_msg(msg='hi beta, this is charlie', targets='beta', log_msg='f2 send_msg 8')
+#             charlie_smart_thread.wait(remote='beta', log_msg='f2 wait 10')
+#
+#             logger.debug('f2 exiting')
+#
+#         ####################################################################
+#         # Create smart threads for the main thread (this thread), f1, and f2
+#         ####################################################################
+#         logger.debug('mainline entered')
+#         logger.debug('mainline creating alpha thread')
+#         alpha_smart_thread = st.SmartThread(name='alpha')
+#
+#         logger.debug('mainline creating beta thread')
+#         # beta_thread = threading.Thread(name='beta', target=f1)
+#         beta_smart_thread = st.SmartThread(name='beta', target=f1)
+#         beta_smart_thread.thread.start()
+#         logger.debug('mainline creating charlie thread')
+#         # charlie_thread = threading.Thread(name='charlie', target=f2)
+#         charlie_smart_thread = st.SmartThread(name='charlie', target=f2)
+#         charlie_smart_thread.thread.start()
+#
+#         ####################################################################
+#         # Interact with beta and charlie
+#         ####################################################################
+#         logger.debug('mainline interacting with beta')
+#         alpha_smart_thread.resume(targets='beta', log_msg='ml resume 1')
+#         alpha_smart_thread.sync(targets='beta', log_msg='ml sync 2')
+#         assert alpha_smart_thread.recv_msg(remote='beta', log_msg='ml recv_msg 3') == 'hi alpha, this is beta'
+#         alpha_smart_thread.send_msg(msg='hi beta, this is alpha', targets='beta', log_msg='ml send_msg 4')
+#         alpha_smart_thread.wait(remote='beta', log_msg='f1 resume 5')
+#
+#         logger.debug('mainline interacting with charlie')
+#         alpha_smart_thread.resume(targets='charlie', log_msg='ml resume 6')
+#         alpha_smart_thread.sync(targets='charlie', log_msg='ml sync 7')
+#         assert alpha_smart_thread.recv_msg(remote='charlie', log_msg='ml recv_msg 8') == 'hi alpha, this is charlie'
+#         alpha_smart_thread.send_msg(msg='hi charlie, this is alpha', targets='charlie', log_msg='ml send_msg 9')
+#         alpha_smart_thread.wait(remote='charlie', log_msg='f1 resume 10')
+#
+#         alpha_smart_thread.join(targets='beta', log_msg='ml join 11')
+#         alpha_smart_thread.join(targets='charlie', log_msg='ml join 12')
+#
+#         logger.debug('mainline exiting')
+#
+#     ####################################################################################################################
+#     # Basic Scenario3
+#     ####################################################################################################################
+#     def test_smart_thread_basic_scenario3(self):
+#         ####################################################################
+#         # f1
+#         ####################################################################
+#         def f1():
+#             logger.debug('f1 entered')
+#
+#             beta_smart_thread.wait(remote='alpha', log_msg='f1 wait 1')
+#             beta_smart_thread.sync(targets='alpha', log_msg='f1 sync 2')
+#             beta_smart_thread.send_msg(msg='hi alpha, this is beta', targets='alpha', log_msg='f1 send_msg 3')
+#             assert beta_smart_thread.recv_msg(remote='alpha', log_msg='f1 recv_msg 4') == 'hi beta, this is alpha'
+#             beta_smart_thread.resume(targets='alpha', log_msg='f1 resume 5')
+#
+#             beta_smart_thread.wait(remote='charlie', log_msg='f1 wait 6')
+#             beta_smart_thread.sync(targets='charlie', log_msg='f1 sync 7')
+#             beta_smart_thread.send_msg(msg='hi charlie, this is beta', targets='charlie', log_msg='f1 send_msg 8')
+#             assert beta_smart_thread.recv_msg(remote='charlie', log_msg='f1 recv_msg 9') == 'hi beta, this is charlie'
+#             beta_smart_thread.resume(targets='charlie', log_msg='f1 resume 10')
+#
+#             logger.debug('f1 exiting')
+#
+#         ####################################################################
+#         # f2
+#         ####################################################################
+#         def f2():
+#             logger.debug('f2 entered')
+#
+#             charlie_smart_thread.wait(remote='alpha', log_msg='f2 wait 1')
+#             charlie_smart_thread.sync(targets='alpha', log_msg='f2 sync 2')
+#             charlie_smart_thread.send_msg(msg='hi alpha, this is charlie', targets='alpha', log_msg='f2 send_msg 3')
+#             assert charlie_smart_thread.recv_msg(remote='alpha', log_msg='f2 recv_msg 4') == 'hi charlie, this is alpha'
+#             charlie_smart_thread.resume(targets='alpha', log_msg='f2 resume 5')
+#
+#             charlie_smart_thread.resume(targets='beta', log_msg='f2 resume 6')
+#             charlie_smart_thread.sync(targets='beta', log_msg='f2 sync 7')
+#             assert charlie_smart_thread.recv_msg(remote='beta', log_msg='f2 recv_msg 9') == 'hi charlie, this is beta'
+#             charlie_smart_thread.send_msg(msg='hi beta, this is charlie', targets='beta', log_msg='f2 send_msg 8')
+#             charlie_smart_thread.wait(remote='beta', log_msg='f2 wait 10')
+#
+#             logger.debug('f2 exiting')
+#
+#         ####################################################################
+#         # Create smart threads for the main thread (this thread), f1, and f2
+#         ####################################################################
+#         logger.debug('mainline entered')
+#         logger.debug('mainline creating alpha thread')
+#         alpha_smart_thread = st.SmartThread(name='alpha', default_timeout=10)
+#
+#         logger.debug('mainline creating beta thread')
+#         beta_smart_thread = st.SmartThread(name='beta', target=f1)
+#         beta_smart_thread.thread.start()
+#         logger.debug('mainline creating charlie thread')
+#         charlie_smart_thread = st.SmartThread(name='charlie', target=f2)
+#         charlie_smart_thread.thread.start()
+#
+#         ####################################################################
+#         # Interact with beta and charlie
+#         ####################################################################
+#         logger.debug('mainline interacting with beta and charlie')
+#         alpha_smart_thread.resume(targets='beta', log_msg='ml resume 1')
+#         alpha_smart_thread.resume(targets='charlie', log_msg='ml resume 2')
+#         alpha_smart_thread.sync(targets='beta', log_msg='ml sync 3')
+#         alpha_smart_thread.sync(targets='charlie', log_msg='ml sync 4')
+#         assert alpha_smart_thread.recv_msg(remote='beta', log_msg='ml recv_msg 5') == 'hi alpha, this is beta'
+#         assert alpha_smart_thread.recv_msg(remote='charlie', log_msg='ml recv_msg 6') == 'hi alpha, this is charlie'
+#         alpha_smart_thread.send_msg(msg='hi beta, this is alpha', targets='beta', log_msg='ml send_msg 7')
+#         alpha_smart_thread.send_msg(msg='hi charlie, this is alpha', targets='charlie', log_msg='ml send_msg 8')
+#         alpha_smart_thread.wait(remote='beta', log_msg='f1 resume 9')
+#         alpha_smart_thread.wait(remote='charlie', log_msg='f1 resume 10')
+#
+#         alpha_smart_thread.join(targets='beta', log_msg='ml join 11')
+#         alpha_smart_thread.join(targets='charlie', log_msg='ml join 12')
+#
+#         logger.debug('mainline exiting')
+#
+#     ####################################################################################################################
+#     # Basic Scenario4
+#     ####################################################################################################################
+#     def test_smart_thread_basic_scenario4(self):
+#         ####################################################################
+#         # f1
+#         ####################################################################
+#         def f1():
+#             logger.debug('f1 entered')
+#
+#             beta_smart_thread.wait(remote='alpha', log_msg='f1 wait 1')
+#             beta_smart_thread.sync(targets={'alpha', 'charlie'}, log_msg='f1 sync 2')
+#             beta_smart_thread.send_msg(msg='hi alpha and charlie, this is beta', targets={'alpha', 'charlie'},
+#                                        log_msg='f1 send_msg 3')
+#             assert beta_smart_thread.recv_msg(remote='alpha', log_msg='f1 recv_msg 4') == 'hi beta and charlie, this is alpha'
+#             assert beta_smart_thread.recv_msg(remote='charlie',
+#                                         log_msg='f1 recv_msg 5') == 'hi alpha and beta, this is charlie'
+#             beta_smart_thread.resume(targets={'alpha', 'charlie'}, log_msg='f1 resume 6')
+#             beta_smart_thread.wait(remote='charlie', log_msg='f1 wait 7')
+#
+#             logger.debug('f1 exiting')
+#
+#         ####################################################################
+#         # f2
+#         ####################################################################
+#         def f2():
+#             logger.debug('f2 entered')
+#
+#             charlie_smart_thread.wait(remote='alpha', log_msg='f2 wait 1')
+#             charlie_smart_thread.sync(targets={'alpha', 'beta'}, log_msg='f2 sync 2')
+#             charlie_smart_thread.send_msg(msg='hi alpha and beta, this is charlie', targets={'alpha', 'beta'},
+#                                           log_msg='f2 send_msg 3')
+#             assert charlie_smart_thread.recv_msg(remote='alpha',
+#                                            log_msg='f2 recv_msg 4') == 'hi beta and charlie, this is alpha'
+#             assert charlie_smart_thread.recv_msg(remote='beta',
+#                                            log_msg='f2 recv_msg 5') == 'hi alpha and charlie, this is beta'
+#             charlie_smart_thread.wait(remote='beta', log_msg='f2 wait 6')
+#             charlie_smart_thread.resume(targets={'alpha', 'beta'}, log_msg='f2 resume 7')
+#
+#             logger.debug('f2 exiting')
+#
+#         ####################################################################
+#         # Create smart threads for the main thread (this thread), f1, and f2
+#         ####################################################################
+#         logger.debug('mainline entered')
+#         logger.debug('mainline creating alpha thread')
+#         alpha_smart_thread = st.SmartThread(name='alpha', default_timeout=10)
+#
+#         logger.debug('mainline creating beta thread')
+#         beta_thread = threading.Thread(name='beta', target=f1)
+#         beta_smart_thread = st.SmartThread(name='beta', thread=beta_thread, default_timeout=10)
+#         beta_thread.start()
+#         logger.debug('mainline creating charlie thread')
+#         charlie_thread = threading.Thread(name='charlie', target=f2)
+#         charlie_smart_thread = st.SmartThread(name='charlie', thread=charlie_thread, default_timeout=10)
+#         charlie_thread.start()
+#
+#         ####################################################################
+#         # Interact with beta and charlie
+#         ####################################################################
+#         logger.debug('mainline interacting with beta and charlie')
+#
+#         alpha_smart_thread.resume(targets={'beta', 'charlie'}, log_msg='ml resume 1')
+#         alpha_smart_thread.sync(targets={'beta', 'charlie'}, log_msg='ml sync 2')
+#         assert alpha_smart_thread.recv_msg(remote='beta', log_msg='ml recv_msg 3') == 'hi alpha and charlie, this is beta'
+#         assert alpha_smart_thread.recv_msg(remote='charlie', log_msg='ml recv_msg 4') == 'hi alpha and beta, this is charlie'
+#         alpha_smart_thread.send_msg(msg='hi beta and charlie, this is alpha', targets={'beta', 'charlie'},
+#                                     log_msg='ml send_msg 5')
+#         alpha_smart_thread.wait(remote='beta', log_msg='ml resume 6')
+#         alpha_smart_thread.wait(remote='charlie', log_msg='ml resume 7')
+#
+#         alpha_smart_thread.join(targets={'beta', 'charlie'}, log_msg='ml join 8')
+#
+#         logger.debug('mainline exiting')
 #     ###########################################################################
 #     # repr for SmartThread
 #     ###########################################################################
