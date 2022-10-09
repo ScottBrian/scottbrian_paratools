@@ -57,7 +57,7 @@ import logging
 import queue
 import threading
 import time
-from typing import (Any, Callable, ClassVar, Final, Optional, Type,
+from typing import (Any, Callable, ClassVar, Optional, Type,
                     TYPE_CHECKING, Union)
 
 ########################################################################
@@ -81,9 +81,7 @@ class SmartThreadError(Exception):
 
 
 class SmartThreadDetectedOpFromForeignThread(SmartThreadError):
-    """SmartThread exception for attempted op from unregistered
-    thread.
-    """
+    """SmartThread exception attempted op from unregistered thread."""
     pass
 
 
@@ -109,9 +107,9 @@ class SmartThreadConflictDeadlockDetected(SmartThreadError):
     pass
 
 
-class SmartThreadInconsistentFlagSettings(SmartThreadError):
-    """SmartThread exception for flag setting that are not valid."""
-    pass
+# class SmartThreadInconsistentFlagSettings(SmartThreadError):
+#     """SmartThread exception for flag setting that are not valid."""
+#     pass
 
 
 class SmartThreadWaitDeadlockDetected(SmartThreadError):
@@ -119,9 +117,9 @@ class SmartThreadWaitDeadlockDetected(SmartThreadError):
     pass
 
 
-class SmartThreadWaitUntilTimeout(SmartThreadError):
-    """SmartThread exception for pause_until timeout."""
-    pass
+# class SmartThreadWaitUntilTimeout(SmartThreadError):
+#     """SmartThread exception for pause_until timeout."""
+#     pass
 
 
 class SmartThreadRecvMsgTimedOut(SmartThreadError):
@@ -134,44 +132,42 @@ class SmartThreadSendMsgTimedOut(SmartThreadError):
     pass
 
 
-class SmartThreadSendMsgFailed(SmartThreadError):
-    """SmartThread exception failure to send message."""
-    pass
+# class SmartThreadSendMsgFailed(SmartThreadError):
+#     """SmartThread exception failure to send message."""
+#     pass
 
 
 class SmartThreadMutuallyExclusiveTargetThreadSpecified(SmartThreadError):
-    """SmartThread exception mutually exclusive target and thread
-    specified.
-    """
+    """SmartThread exception mutually exclusive target and thread."""
     pass
 
 
-class SmartThreadRemoteSmartThreadMismatch(SmartThreadError):
-    """SmartThread exception remote_array SmartThread does not match
-    registry SmartThread.
-    """
-    pass
+# class SmartThreadRemoteSmartThreadMismatch(SmartThreadError):
+#     """SmartThread exception remote_array SmartThread does not match
+#     registry SmartThread.
+#     """
+#     pass
 
 
-class SmartThreadRemoteThreadMismatch(SmartThreadError):
-    """SmartThread exception remote_array SmartThread.thread does not
-    match registry SmartThread.thread.
-    """
-    pass
+# class SmartThreadRemoteThreadMismatch(SmartThreadError):
+#     """SmartThread exception remote_array SmartThread.thread does not
+#     match registry SmartThread.thread.
+#     """
+#     pass
 
 
-class SmartThreadStatusLockMismatch(SmartThreadError):
-    """SmartThread exception remote_array status_lock does not match
-    remote.remote_array status_lock.
-    """
-    pass
+# class SmartThreadStatusLockMismatch(SmartThreadError):
+#     """SmartThread exception remote_array status_lock does not match
+#     remote.remote_array status_lock.
+#     """
+#     pass
 
 
-class SmartThreadRemoteMsgQMismatch(SmartThreadError):
-    """SmartThread exception remote_array remote msg_q does not match
-    remote.remote_array msg_q.
-    """
-    pass
+# class SmartThreadRemoteMsgQMismatch(SmartThreadError):
+#     """SmartThread exception remote_array remote msg_q does not match
+#     remote.remote_array msg_q.
+#     """
+#     pass
 
 
 class SmartThreadJoinTimedOut(SmartThreadError):
@@ -189,9 +185,9 @@ class SmartThreadWaitTimedOut(SmartThreadError):
     pass
 
 
-class SmartThreadSyncTimedOut(SmartThreadError):
-    """SmartThread exception sync timed out."""
-    pass
+# class SmartThreadSyncTimedOut(SmartThreadError):
+#     """SmartThread exception sync timed out."""
+#     pass
 
 
 class SmartThreadArgsSpecificationWithoutTarget(SmartThreadError):
@@ -205,6 +201,7 @@ class SmartThreadArgsSpecificationWithoutTarget(SmartThreadError):
 ########################################################################
 @dataclass
 class SetupBlock:
+    """Setup block."""
     targets: set[str]
     timer: Timer
 
@@ -215,6 +212,7 @@ class SetupBlock:
 # during initialization based on the arguments.
 ########################################################################
 class ThreadCreate(Flag):
+    """Thread create flags."""
     Current = auto()
     Target = auto()
     Thread = auto()
@@ -232,6 +230,7 @@ class ThreadCreate(Flag):
 # method to remove the SmartThread.
 ########################################################################
 class ThreadStatus(Flag):
+    """Thread status flags."""
     Initializing = auto()
     Registered = auto()
     Starting = auto()
@@ -282,6 +281,7 @@ class SmartThread:
     ####################################################################
     @dataclass
     class ConnectionStatusBlock:
+        """Connection status block."""
         remote_smart_thread: "SmartThread"
         status_lock: threading.Lock
         event: threading.Event
@@ -298,6 +298,7 @@ class SmartThread:
 
     @dataclass
     class ConnectionStatusBlock2:
+        """Connection status block."""
         event: threading.Event
         sync_event: threading.Event
         msg_q: queue.Queue[Any]
@@ -311,6 +312,7 @@ class SmartThread:
 
     @dataclass
     class ConnectionPair:
+        """ConnectionPair class."""
         status_lock: threading.Lock
         pair_status: PairStatus
         status_blocks: dict[str, "SmartThread.ConnectionStatusBlock2"]
@@ -335,29 +337,40 @@ class SmartThread:
 
         Args:
             name: name to be used to refer to this SmartThread. The name
-                    may be the same as the threading.Thread name, but it
-                    is not required that they be the same.
+                      may be the same as the threading.Thread name, but
+                      it is not required that they be the same.
             target: specifies that a thread is to be created and started
-                      with the given target. Mutually exclusive with the
-                      *thread* specification. Note that the
-                      threading.Thread will be created with *target*,
-                      *args* if specified, and the *name*.
+                        with the given target. Mutually exclusive with
+                        the *thread* specification. Note that the
+                        threading.Thread will be created with *target*,
+                        *args* if specified, and the *name*.
             args: args for the thread creation when *target* is
-                    specified.
+                      specified.
             thread: specifies the thread to use instead of the current
-                      thread - needed when SmartThread is instantiated
-                      in a class that inherits threading.Thread in which
-                      case thread=self is required. Mutually exclusive
-                      with *target*.
+                        thread - needed when SmartThread is instantiated
+                        in a class that inherits threading.Thread in
+                        which case thread=self is required. Mutually
+                        exclusive with *target*.
             auto_start: specifies whether to start the thread. Valid for
-                          target or thread only. Ignored when neither
-                          target nor thread specified.
+                            target or thread only. Ignored when neither
+                            target nor thread specified.
             default_timeout: the timeout value to use when a request is
-                               made and a timeout for the request is not
-                               specified. If default_timeout is
-                               specified, a value of zero or less will
-                               be equivalent to None, meaning that a
-                               default timeout will not be used.
+                made and a timeout for the request is
+                not specified. If default_timeout is
+                specified, a value of zero or less will
+                be equivalent to None, meaning that a
+                default timeout will not be used.
+
+        Raises:
+            SmartThreadIncorrectNameSpecified: Attempted SmartThread
+                  instantiation with incorrect name of {name}.
+            SmartThreadMutuallyExclusiveTargetThreadSpecified: Attempted
+                  SmartThread instantiation with both target and thread
+                  specified.
+            SmartThreadArgsSpecificationWithoutTarget: Attempted
+                  SmartThread instantiation with args specified and without
+                  target specified.
+
         Notes:
               There are five possible timeout cases at the time a
               request is made:
@@ -372,23 +385,10 @@ class SmartThread:
                  result: default_timeout value will be used
               d. default_timeout = above zero
                  request_timeout = zero or less
-                 result: the request will not timeout
+                 result: the request will not time out
               e. default_timeout = value above zero
                  request_timeout = value above zero
                  result: request timeout value will be used
-
-
-        Raises:
-            SmartThreadIncorrectNameSpecified: Attempted SmartThread
-              instantiation with incorrect name of {name}.
-
-            SmartThreadMutuallyExclusiveTargetThreadSpecified: Attempted
-              SmartThread instantiation with both target and thread
-              specified.
-
-            SmartThreadArgsSpecificationWithoutTarget: Attempted
-              SmartThread instantiation with args specified and without
-              target specified.
 
         """
         self.specified_args = locals()  # used for __repr__, see below
@@ -503,10 +503,10 @@ class SmartThread:
 
         Raises:
             SmartThreadIncorrectNameSpecified: The name for SmartThread
-              must be of type str.
+                must be of type str.
             SmartThreadNameAlreadyInUse: An entry for a SmartThread with
-              name = *name* is already registered for a different
-              thread.
+                name = *name* is already registered for a different
+                thread.
 
         Notes:
             1) Any old entries for SmartThreads whose threads are not
@@ -558,7 +558,7 @@ class SmartThread:
 
         Raises:
             SmartThreadErrorInRegistry: Registry item with key {key} has
-              non-matching item.name of {item.name}.
+                non-matching item.name of {item.name}.
 
         Notes:
             1) Must be called holding _registry_lock
@@ -654,6 +654,9 @@ class SmartThread:
             log_msg: log message to issue
             timeout: timeout to use instead of default timeout
 
+        Raises:
+            SmartThreadJoinTimedOut: join timed out waiting for targets.
+
         Notes:
             1) A ``resume()`` request can be done on an event that is not yet
                being waited upon. This is referred as a **pre-resume**. The
@@ -741,10 +744,9 @@ class SmartThread:
                             break
 
             if sb.timer.is_expired():
-                self.logger.debug(f'{self.name} timeout of a join() ')
                 self.logger.error(
                     f'{self.name} raising SmartThreadJoinTimedOut waiting '
-                    f'for {work_targets} ')
+                    f'for {work_targets}')
                 raise SmartThreadJoinTimedOut(
                     f'{self.name} timed out waiting for {work_targets}.')
 
@@ -945,10 +947,12 @@ class SmartThread:
                        free slot
 
         Raises:
-            SmartThreadSendMsgFailed: send_msg method unable to send the
-                                    message because the send queue
-                                    is full with the maximum
-                                    number of messages.
+            SmartThreadRemoteThreadNotAlive: send_msg detected remote
+                thread is not alive.
+            SmartThreadSendMsgTimedOut: send_msg method unable to send
+                the message within the allotted time, most likely
+                because the remote receive queue is full of the
+                maximum number of messages.
 
         :Example: instantiate a SmartThread and send a message
 
@@ -990,8 +994,7 @@ class SmartThread:
 
         while work_targets:
             for remote in work_targets:
-                pair_key = self._get_pair_key(self.name,
-                                                         remote)
+                pair_key = self._get_pair_key(self.name, remote)
                 with sel.SELockShare(SmartThread._registry_lock):
                     # If the remote is not yet ready, continue with
                     # the next remote in the list
@@ -1037,7 +1040,7 @@ class SmartThread:
                 raise SmartThreadSendMsgTimedOut(
                     f'{self.name} send_msg method unable to send '
                     f'the message within the allotted time, most likely '
-                    f'because the remote receive queue is full with the '
+                    f'because the remote receive queue is full of the '
                     f'maximum number of messages.')
 
             time.sleep(0.2)
@@ -1066,7 +1069,9 @@ class SmartThread:
 
         Raises:
             SmartThreadRecvMsgTimedOut: recv_msg processing timed out
-              waiting for a message to arrive.
+                waiting for a message to arrive.
+            SmartThreadRemoteThreadNotAlive: send_msg detected remote
+                thread is not alive.
 
         """
         timer = Timer(timeout=timeout,
@@ -1269,13 +1274,10 @@ class SmartThread:
             timeout: number of seconds to allow for ``resume()`` to complete
             code: code that waiter can retrieve with ``get_code()``
 
-        Returns:
-            * ``True`` if *timeout* was not specified, or if it was specified
-              and the ``resume()`` request completed within the specified
-              number of seconds.
-            * ``False`` if *timeout* was specified and the ``resume()``
-              request did not complete within the specified number of
-              seconds.
+        Raises:
+            SmartThreadRemoteThreadNotAlive: resume() detected remote
+                thread is not alive.
+            SmartThreadResumeTimedOut: timed out waiting for targets.
 
         Notes:
             1) A ``resume()`` request can be done on an event that is not yet
@@ -1480,11 +1482,6 @@ class SmartThread:
             log_msg: log msg for the log
             timeout: number of seconds to allow for sync to happen
 
-        Raises:
-            SmartThreadConflictDeadlockDetected: A ``sync()`` request
-              was unable to complete because another thread was
-              attempting a ``wait()`` request.
-
         Notes:
             1) If one thread makes a ``sync()`` request without
                **timeout** specified, and the other thread makes a
@@ -1558,12 +1555,16 @@ class SmartThread:
 
         Raises:
             SmartThreadWaitDeadlockDetected: Two threads are
-              deadlocked in a ''wait()'', each waiting on the other to
-              ``resume()`` their event.
+                deadlocked in a ''wait()'', each waiting on the other to
+                ``resume()`` their event.
             SmartThreadConflictDeadlockDetected: A sync request was made
-              by thread {self.name} but remote thread {remote} detected
-              deadlock instead which indicates that the remote thread
-              did not make a matching sync request.
+                by thread {self.name} but remote thread {remote}
+                detected deadlock instead which indicates that the
+                remote thread did not make a matching sync request.
+            SmartThreadWaitTimedOut: this thread timed out on a wait
+                request waiting for a resume from the remote thread.
+            SmartThreadRemoteThreadNotAlive: this thread wait detected
+                the remote thread is not alive.
 
         Notes:
             1) If one thread makes a ``sync()`` request without
@@ -1685,8 +1686,8 @@ class SmartThread:
                     if (local_cb.remote_smart_thread.status
                             & (ThreadStatus.Alive | ThreadStatus.Stopped)):
                         raise SmartThreadRemoteThreadNotAlive(
-                            f'{self.name} wait detected {remote} thread is not '
-                            'alive.')
+                            f'{self.name} wait detected {remote} '
+                            f'thread is not alive.')
                 else:
                     if local_cb.pair_status == PairStatus.Ready:
                         with local_cb.status_lock:
@@ -1779,8 +1780,8 @@ class SmartThread:
                         'remote_array.')
 
                 raise SmartThreadWaitTimedOut(
-                    f'recv_msg {self.name} timed out waiting for resume from '
-                    f'{remote}.')
+                    f'{self.name} timed out on a wait request for a resume '
+                    f'from {remote}.')
 
             time.sleep(0.2)
 
@@ -1802,6 +1803,10 @@ class SmartThread:
             targets: remote threads for the request
             timeout: number of seconds to allow for request completion
 
+        Returns:
+            A SetupBlock is returned that contains the timer and the set
+            of threads to be processed
+
         """
         timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
         self.verify_thread_is_current()
@@ -1818,8 +1823,8 @@ class SmartThread:
 
         Raises:
             SmartThreadDetectedOpFromForeignThread: SmartThread services
-              must be called from the thread that was originally
-              assigned during instantiation of SmartThread.
+                must be called from the thread that was originally
+                assigned during instantiation of SmartThread.
 
         """
         if self.thread is not threading.current_thread():
