@@ -626,7 +626,7 @@ def action_arg2(request: Any) -> Any:
 ###############################################################################
 # random_seed_arg
 ###############################################################################
-random_seed_arg_list = [1]
+random_seed_arg_list = [1, 2, 3]
 
 
 @pytest.fixture(params=random_seed_arg_list)  # type: ignore
@@ -1521,62 +1521,78 @@ class ConfigVerifier:
     ################################################################
     # build_create_suite
     ################################################################
-    def build_create_suite(self, num_threads: int) -> list[ConfigCmd]:
+    @staticmethod
+    def build_create_suite(names: list[str]) -> list[ConfigCmd]:
         """Return a list of ConfigCmd items for a create.
 
         Args:
-            num_threads: number of threads to create
+            names: names to use on the create
 
         Returns:
             a list of ConfigCmd items
         """
-        self.created_names = self.get_thread_names(num_names=num_threads)
-        names_to_create = self.created_names[1:]
         return [
-            ConfigCmd(cmd=ConfigCmds.Create, names=names_to_create),
+            ConfigCmd(cmd=ConfigCmds.Create, names=names),
             ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
-                      names=self.created_names),
-            ConfigCmd(cmd=ConfigCmds.VerifyPaired, names=self.created_names),
-            ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=self.created_names),
+                      names=names),
+            ConfigCmd(cmd=ConfigCmds.VerifyPaired, names=names),
+            ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=names),
             ConfigCmd(cmd=ConfigCmds.VerifyStatus,
-                      names=self.created_names,
+                      names=names,
                       exp_status=st.ThreadStatus.Alive)]
 
     ################################################################
     # build_exit_suite
     ################################################################
-    def build_exit_suite(self) -> list[ConfigCmd]:
+    @staticmethod
+    def build_msg_suite(from_names: list[str],
+                        to_names: list[str]) -> list[ConfigCmd]:
+        """Return a list of ConfigCmd items for msgs.
+
+        Returns:
+            a list of ConfigCmd items
+        """
+        return [
+            ConfigCmd(cmd=ConfigCmds.SendMsg, from_names=from_names,
+                      to_names=to_names),
+            ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=from_names,
+                      to_names=to_names)]
+
+    ################################################################
+    # build_exit_suite
+    ################################################################
+    @staticmethod
+    def build_exit_suite(names: list[str]) -> list[ConfigCmd]:
         """Return a list of ConfigCmd items for a exit.
 
         Returns:
             a list of ConfigCmd items
         """
-        names_to_exit = self.created_names[1:]
         return [
-            ConfigCmd(cmd=ConfigCmds.Exit, names=names_to_exit),
+            ConfigCmd(cmd=ConfigCmds.Exit, names=names),
 
             ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha']),
             ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha'],
                       exp_status=st.ThreadStatus.Alive),
             ConfigCmd(cmd=ConfigCmds.VerifyNotAlive,
-                      names=names_to_exit),
-            ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=names_to_exit,
+                      names=names),
+            ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=names,
                       exp_status=st.ThreadStatus.Alive)]
 
     ################################################################
     # build_join_suite
     ################################################################
-    def build_join_suite(self) -> list[ConfigCmd]:
+    @staticmethod
+    def build_join_suite(names: list[str]) -> list[ConfigCmd]:
         """Return a list of ConfigCmd items for join.
 
         Returns:
             a list of ConfigCmd items
         """
-        names_to_join = self.created_names[1:]
         return [
-            ConfigCmd(cmd=ConfigCmds.Join, names=names_to_join),
+            ConfigCmd(cmd=ConfigCmds.Join, names=names),
 
-            ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered, names=names_to_join),
+            ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered, names=names),
             ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
                       names=['alpha']),
             ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha']),
@@ -1586,8 +1602,9 @@ class ConfigVerifier:
             #         names=['alpha', 'charlie']),
             # ConfigCmd(cmd=ConfigCmds.VerifyHalfPaired,
             #           names=['alpha', 'beta'], half_paired_names=['alpha']),
+            ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered, names=names),
             ConfigCmd(cmd=ConfigCmds.VerifyNotPaired,
-                      names=self.created_names)]
+                      names=names)]
 
 
 ################################################################
@@ -1752,7 +1769,7 @@ def main_driver(main_name: str,
                 else:
                     raise UnrecognizedCmd(
                         f'A response of {a_msg} for the SendMsg is '
-                        f'is not recognized')
+                        'not recognized')
                 time.sleep(0.1)
 
         elif config_cmd.cmd == ConfigCmds.RecvMsg:
@@ -1971,9 +1988,107 @@ class TestSmartThreadScenarios:
         config_ver = ConfigVerifier(log_ver=log_ver,
                                     msgs=msgs)
 
-        scenario: list[Any] = config_ver.build_create_suite(num_threads=9)
-        scenario.extend(config_ver.build_exit_suite())
-        scenario.extend(config_ver.build_join_suite())
+        names = ['alpha', 'beta', 'charlie']
+        scenario: list[Any] = config_ver.build_create_suite(names=names)
+        scenario.extend(config_ver.build_exit_suite(names[1:]))
+        scenario.extend(config_ver.build_join_suite(names[1:]))
+
+        main_driver(main_name='alpha',
+                    config_ver=config_ver,
+                    scenario=scenario)
+        # random.seed(random_seed_arg)
+
+        ################################################################
+        # check log results
+        ################################################################
+        match_results = log_ver.get_match_results(caplog=caplog)
+        log_ver.print_match_results(match_results)
+        log_ver.verify_log_results(match_results)
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_thread_scenarios
+    ####################################################################
+    def test_smart_thread_random_scenarios(
+            self,
+            random_seed_arg: int,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            caplog: pytest fixture to capture log output
+
+        """
+
+        ################################################################
+        # f1
+        ################################################################
+        def f1(f1_name: str, f1_config_ver: ConfigVerifier):
+            log_msg_f1 = f'f1 entered for {f1_name}'
+            log_ver.add_msg(log_level=logging.DEBUG,
+                            log_msg=log_msg_f1)
+            logger.debug(log_msg_f1)
+
+            f1_driver(f1_name=f1_name, f1_config_ver=f1_config_ver)
+
+            ############################################################
+            # exit
+            ############################################################
+            log_msg_f1 = f'f1 exiting for {f1_name}'
+            log_ver.add_msg(log_level=logging.DEBUG,
+                            log_msg=log_msg_f1)
+            logger.debug(log_msg_f1)
+
+        ################################################################
+        # Set up log verification and start tests
+        ################################################################
+        log_ver = LogVer(log_name=__name__)
+        log_ver.add_call_seq(name='alpha',
+                             seq=get_formatted_call_sequence())
+
+        log_msg = 'mainline entered'
+        log_ver.add_msg(log_msg=log_msg)
+        logger.debug(log_msg)
+
+        random.seed(random_seed_arg)
+        num_threads = random.randint(2, 8)
+
+        log_msg = (f'random_seed_arg: {random_seed_arg}, '
+                   f'num_threads: {num_threads}')
+        log_ver.add_msg(log_msg=log_msg)
+        logger.debug(log_msg)
+
+        msgs = Msgs()
+
+        config_ver = ConfigVerifier(log_ver=log_ver,
+                                    msgs=msgs)
+
+        f1_names = list(config_ver.f1_thread_names.keys())
+
+        f1_names_to_use = random.sample(f1_names, num_threads)
+
+        names = ['alpha'] + f1_names_to_use
+
+        scenario: list[Any] = config_ver.build_create_suite(names=names)
+
+        num_msg_names = random.randint(2, num_threads)
+        num_to_names = random.randint(1, num_msg_names-1)
+        from_msg_names = random.sample(f1_names_to_use, num_msg_names)
+        to_names_selection = ['alpha'] + from_msg_names
+        to_names = random.sample(to_names_selection, num_to_names)
+        for to_name in to_names:
+            if to_name == 'alpha':
+                continue
+            from_msg_names.remove(to_name)
+
+        scenario.extend(config_ver.build_msg_suite(
+            from_names=from_msg_names,
+            to_names=to_names))
+
+        scenario.extend(config_ver.build_exit_suite(names=names[1:]))
+        scenario.extend(config_ver.build_join_suite(names=names[1:]))
 
         main_driver(main_name='alpha',
                     config_ver=config_ver,
@@ -2073,7 +2188,7 @@ class TestSmartThreadScenarios:
 
         # random.seed(random_seed_arg)
 
-        # num_threads_arg = 1  # random.randint(2, 3)
+        # num_threads = 1  random.randint(1, 3)
 
         log_msg = f'num_threads: {num_threads_arg}'
         log_ver.add_msg(log_msg=log_msg)
