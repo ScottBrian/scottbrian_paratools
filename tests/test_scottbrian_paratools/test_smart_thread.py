@@ -835,6 +835,7 @@ class ConfigVerifier:
         self.ops_lock = threading.Lock()
         self.alpha_thread: st.SmartThread = self.create_alpha_thread()
         self.f1_threads: dict[str, st.SmartThread] = {}
+        self.created_names: list[str] = []
         self.f1_thread_names: dict[str, bool] = {
             'beta': True,
             'charlie': True,
@@ -1042,6 +1043,23 @@ class ConfigVerifier:
             pair_array_update_time=alpha_thread.time_last_pair_array_update[-1]
         )
         return alpha_thread
+
+    def get_thread_names(self, num_names: int) -> list[str]:
+        """Return a list of thread names.
+
+        Args:
+            num_names: number of names requested
+        """
+        ret_list: list[str] = ['alpha']  # first name is always alpha
+        num_added = 1
+        for thread_name, available in self.f1_thread_names.items():
+            if num_added == num_names:
+                break
+            if available:
+                ret_list.append(thread_name)
+                self.f1_thread_names[thread_name] = False
+                num_added += 1
+        return ret_list
 
     def create_f1_thread(self,
                          target: Callable,
@@ -1500,6 +1518,98 @@ class ConfigVerifier:
             log_level=log_level,
             log_msg=new_log_msg)
 
+    ################################################################
+    # build_create_suite
+    ################################################################
+    def build_create_suite(self, num_threads: int) -> list[ConfigCmd]:
+        """Return a list of ConfigCmd items for a create.
+
+        Args:
+            num_threads: number of threads to create
+
+        Returns:
+            a list of ConfigCmd items
+        """
+        self.created_names = self.get_thread_names(num_names=num_threads)
+        names_to_create = self.created_names[1:]
+        return [
+            ConfigCmd(cmd=ConfigCmds.Create, names=names_to_create),
+            ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+                      names=self.created_names),
+            ConfigCmd(cmd=ConfigCmds.VerifyPaired, names=self.created_names),
+            ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=self.created_names),
+            ConfigCmd(cmd=ConfigCmds.VerifyStatus,
+                      names=self.created_names,
+                      exp_status=st.ThreadStatus.Alive)]
+
+    ################################################################
+    # build_exit_suite
+    ################################################################
+    def build_exit_suite(self) -> list[ConfigCmd]:
+        """Return a list of ConfigCmd items for a exit.
+
+        Returns:
+            a list of ConfigCmd items
+        """
+        names_to_exit = self.created_names[1:]
+        return [
+            ConfigCmd(cmd=ConfigCmds.Exit, names=names_to_exit),
+
+            ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha']),
+            ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha'],
+                      exp_status=st.ThreadStatus.Alive),
+            ConfigCmd(cmd=ConfigCmds.VerifyNotAlive,
+                      names=names_to_exit),
+            ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=names_to_exit,
+                      exp_status=st.ThreadStatus.Alive)]
+
+    ################################################################
+    # build_join_suite
+    ################################################################
+    def build_join_suite(self) -> list[ConfigCmd]:
+        """Return a list of ConfigCmd items for join.
+
+        Returns:
+            a list of ConfigCmd items
+        """
+        names_to_join = self.created_names[1:]
+        return [
+            ConfigCmd(cmd=ConfigCmds.Join, names=names_to_join),
+
+            ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered, names=names_to_join),
+            ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+                      names=['alpha']),
+            ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha']),
+            ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha'],
+                      exp_status=st.ThreadStatus.Alive),
+            # ConfigCmd(cmd=ConfigCmds.VerifyPaired,
+            #         names=['alpha', 'charlie']),
+            # ConfigCmd(cmd=ConfigCmds.VerifyHalfPaired,
+            #           names=['alpha', 'beta'], half_paired_names=['alpha']),
+            ConfigCmd(cmd=ConfigCmds.VerifyNotPaired,
+                      names=self.created_names)]
+
+
+################################################################
+# expand_cmds
+################################################################
+def expand_list(nested_list: list[Any]) -> list[Any]:
+    """Return a list of items from a nested list of lists.
+
+    Args:
+        nested_list: a list containing nested lists of items
+
+    Returns:
+        a single list of items
+    """
+    ret_list: list[Any] = []
+    for item in nested_list:
+        if isinstance(item, list):
+            ret_list.extend(expand_list(item))
+        else:
+            ret_list.append(item)
+    return ret_list
+
 
 ################################################################
 # outer_f1
@@ -1581,6 +1691,157 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
                 'is not recognized')
 
 
+################################################################
+# main_driver
+################################################################
+def main_driver(main_name: str,
+                config_ver: ConfigVerifier,
+                scenario: list[ConfigCmd]) -> None:
+    for config_cmd in scenario:
+        log_msg = f'config_cmd: {config_cmd}'
+        config_ver.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(log_msg)
+
+        ############################################################
+        # CreateMainThread
+        ############################################################
+        # if config_cmd.cmd == ConfigCmds.CreateMainThread:
+        #     for new_name in config_cmd.names:
+        #         config_ver.create_f1_thread(
+        #             target=f1,
+        #             name=new_name,
+        #             auto_start=config_cmd.auto_start
+        #         )
+        ############################################################
+        # CreateF1Thread
+        ############################################################
+        if config_cmd.cmd == ConfigCmds.Create:
+            for new_name in config_cmd.names:
+                if new_name == 'alpha':
+                    continue
+                config_ver.create_f1_thread(
+                    target=outer_f1,
+                    name=new_name,
+                    auto_start=config_cmd.auto_start
+                )
+        elif config_cmd.cmd == ConfigCmds.Start:
+            for name in config_cmd.names:
+                config_ver.start_thread(name=name)
+        elif config_cmd.cmd == ConfigCmds.VerifyAlive:
+            assert config_ver.verify_is_alive(config_cmd.names)
+
+        elif config_cmd.cmd == ConfigCmds.VerifyNotAlive:
+            assert config_ver.verify_is_not_alive(config_cmd.names)
+
+        elif config_cmd.cmd == ConfigCmds.VerifyStatus:
+            assert config_ver.verify_status(
+                names=config_cmd.names,
+                expected_status=config_cmd.exp_status)
+
+        elif config_cmd.cmd == ConfigCmds.SendMsg:
+            pending_responses = []
+            for from_name in config_cmd.from_names:
+                pending_responses.append(
+                    f'send done from {from_name}')
+                config_ver.msgs.queue_msg(target=from_name,
+                                          msg=config_cmd)
+            while pending_responses:
+                a_msg = config_ver.msgs.get_msg('alpha')
+                if a_msg in pending_responses:
+                    pending_responses.remove(a_msg)
+                else:
+                    raise UnrecognizedCmd(
+                        f'A response of {a_msg} for the SendMsg is '
+                        f'is not recognized')
+                time.sleep(0.1)
+
+        elif config_cmd.cmd == ConfigCmds.RecvMsg:
+            pending_responses = []
+            for to_name in config_cmd.to_names:
+                if to_name == 'alpha':
+                    continue
+                pending_responses.append(
+                    f'recv done for {to_name}')
+                config_ver.msgs.queue_msg(target=to_name,
+                                          msg=config_cmd)
+            while pending_responses:
+                a_msg = config_ver.msgs.get_msg('alpha')
+                if a_msg in pending_responses:
+                    pending_responses.remove(a_msg)
+                else:
+                    raise UnrecognizedCmd(
+                        f'A response of {a_msg} for the SendMsg is '
+                        f'is not recognized')
+                time.sleep(0.1)
+
+            if 'alpha' in config_cmd.to_names:
+                for from_name in config_cmd.from_names:
+                    config_ver.alpha_thread.recv_msg(
+                        remote=from_name,
+                        timeout=3)
+                    copy_pair_deque = (
+                        config_ver.alpha_thread
+                        .time_last_pair_array_update.copy())
+                    config_ver.dec_ops_count('alpha',
+                                             from_name,
+                                             copy_pair_deque)
+
+                    log_msg = (f"{'alpha'} receiving msg from "
+                               f"{from_name}")
+                    config_ver.log_ver.add_msg(
+                        log_name='scottbrian_paratools.smart_thread',
+                        log_level=logging.INFO,
+                        log_msg=log_msg)
+
+        elif config_cmd.cmd == ConfigCmds.Exit:
+            for exit_thread_name in config_cmd.names:
+                config_ver.msgs.queue_msg(
+                    target=exit_thread_name, msg=config_cmd)
+            num_alive = 1
+            while num_alive > 0:
+                num_alive = 0
+                for exit_thread_name in config_cmd.names:
+                    if config_ver.f1_threads[
+                        exit_thread_name].thread.is_alive():
+                        num_alive += 1
+                        time.sleep(.01)
+                    else:
+                        config_ver.set_is_alive(target=exit_thread_name,
+                                                value=False,
+                                                exiting=False)
+
+        elif config_cmd.cmd == ConfigCmds.Join:
+            config_ver.alpha_thread.join(targets=config_cmd.names)
+            copy_reg_deque = (
+                config_ver.alpha_thread.time_last_registry_update
+                .copy())
+            copy_pair_deque = (
+                config_ver.alpha_thread.time_last_pair_array_update
+                .copy())
+            config_ver.del_thread(
+                name='alpha',
+                remotes=config_cmd.names,
+                reg_update_times=copy_reg_deque,
+                pair_array_update_times=copy_pair_deque)
+
+        elif config_cmd.cmd == ConfigCmds.VerifyRegistered:
+            assert config_ver.verify_registered(config_cmd.names)
+        elif config_cmd.cmd == ConfigCmds.VerifyNotRegistered:
+            assert config_ver.verify_not_registered(config_cmd.names)
+        elif config_cmd.cmd == ConfigCmds.VerifyPaired:
+            assert config_ver.verify_paired(config_cmd.names)
+        elif config_cmd.cmd == ConfigCmds.VerifyHalfPaired:
+            assert config_ver.verify_half_paired(
+                config_cmd.names, config_cmd.half_paired_names)
+        elif config_cmd.cmd == ConfigCmds.VerifyNotPaired:
+            assert config_ver.verify_not_paired(config_cmd.names)
+
+        else:
+            raise UnrecognizedCmd(f'The config_cmd.cmd {config_cmd.cmd} '
+                                  'is not recognized')
+        config_ver.validate_config()
+
+
 ########################################################################
 # TestSmartThreadScenarios class
 ########################################################################
@@ -1643,156 +1904,81 @@ class TestSmartThreadScenarios:
         config_ver = ConfigVerifier(log_ver=log_ver,
                                     msgs=msgs)
 
+        main_driver(main_name='alpha',
+                    config_ver=config_ver,
+                    scenario=config_scenario_arg)
         # random.seed(random_seed_arg)
 
-        # num_threads_arg = 1  # random.randint(2, 3)
+        ################################################################
+        # check log results
+        ################################################################
+        match_results = log_ver.get_match_results(caplog=caplog)
+        log_ver.print_match_results(match_results)
+        log_ver.verify_log_results(match_results)
 
-        # log_msg = f'num_threads: {num_threads_arg}'
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_thread_scenarios
+    ####################################################################
+    def test_smart_thread_meta_scenarios(
+            self,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            caplog: pytest fixture to capture log output
+
+        """
+
+        ################################################################
+        # f1
+        ################################################################
+        def f1(f1_name: str, f1_config_ver: ConfigVerifier):
+            log_msg_f1 = f'f1 entered for {f1_name}'
+            log_ver.add_msg(log_level=logging.DEBUG,
+                            log_msg=log_msg_f1)
+            logger.debug(log_msg_f1)
+
+            f1_driver(f1_name=f1_name, f1_config_ver=f1_config_ver)
+
+            ############################################################
+            # exit
+            ############################################################
+            log_msg_f1 = f'f1 exiting for {f1_name}'
+            log_ver.add_msg(log_level=logging.DEBUG,
+                            log_msg=log_msg_f1)
+            logger.debug(log_msg_f1)
+
+        ################################################################
+        # Set up log verification and start tests
+        ################################################################
+        log_ver = LogVer(log_name=__name__)
+        log_ver.add_call_seq(name='alpha',
+                             seq=get_formatted_call_sequence())
+
+        log_msg = 'mainline entered'
+        log_ver.add_msg(log_msg=log_msg)
+        logger.debug(log_msg)
+
+        # log_msg = f'random_seed_arg: {random_seed_arg}'
         # log_ver.add_msg(log_msg=log_msg)
         # logger.debug(log_msg)
-        num_f1_threads = 0
-        for config_cmd in config_scenario_arg:
-            log_msg = f'config_cmd: {config_cmd}'
-            log_ver.add_msg(log_msg=re.escape(log_msg))
-            logger.debug(log_msg)
 
-            ############################################################
-            # CreateMainThread
-            ############################################################
-            # if config_cmd.cmd == ConfigCmds.CreateMainThread:
-            #     for new_name in config_cmd.names:
-            #         config_ver.create_f1_thread(
-            #             target=f1,
-            #             name=new_name,
-            #             auto_start=config_cmd.auto_start
-            #         )
-            ############################################################
-            # CreateF1Thread
-            ############################################################
-            if config_cmd.cmd == ConfigCmds.Create:
-                num_f1_threads += 1
-                for new_name in config_cmd.names:
-                    config_ver.create_f1_thread(
-                        target=outer_f1,
-                        name=new_name,
-                        auto_start=config_cmd.auto_start
-                    )
-            elif config_cmd.cmd == ConfigCmds.Start:
-                for name in config_cmd.names:
-                    config_ver.start_thread(name=name)
-            elif config_cmd.cmd == ConfigCmds.VerifyAlive:
-                assert config_ver.verify_is_alive(config_cmd.names)
+        msgs = Msgs()
 
-            elif config_cmd.cmd == ConfigCmds.VerifyNotAlive:
-                assert config_ver.verify_is_not_alive(config_cmd.names)
+        config_ver = ConfigVerifier(log_ver=log_ver,
+                                    msgs=msgs)
 
-            elif config_cmd.cmd == ConfigCmds.VerifyStatus:
-                assert config_ver.verify_status(
-                    names=config_cmd.names,
-                    expected_status=config_cmd.exp_status)
+        scenario: list[Any] = config_ver.build_create_suite(num_threads=9)
+        scenario.extend(config_ver.build_exit_suite())
+        scenario.extend(config_ver.build_join_suite())
 
-            elif config_cmd.cmd == ConfigCmds.SendMsg:
-                pending_responses = []
-                for from_name in config_cmd.from_names:
-                    pending_responses.append(
-                        f'send done from {from_name}')
-                    config_ver.msgs.queue_msg(target=from_name,
-                                              msg=config_cmd)
-                while pending_responses:
-                    a_msg = config_ver.msgs.get_msg('alpha')
-                    if a_msg in pending_responses:
-                        pending_responses.remove(a_msg)
-                    else:
-                        raise UnrecognizedCmd(
-                            f'A response of {a_msg} for the SendMsg is '
-                            f'is not recognized')
-                    time.sleep(0.1)
-
-            elif config_cmd.cmd == ConfigCmds.RecvMsg:
-                pending_responses = []
-                for to_name in config_cmd.to_names:
-                    if to_name == 'alpha':
-                        continue
-                    pending_responses.append(
-                        f'recv done for {to_name}')
-                    config_ver.msgs.queue_msg(target=to_name,
-                                              msg=config_cmd)
-                while pending_responses:
-                    a_msg = config_ver.msgs.get_msg('alpha')
-                    if a_msg in pending_responses:
-                        pending_responses.remove(a_msg)
-                    else:
-                        raise UnrecognizedCmd(
-                            f'A response of {a_msg} for the SendMsg is '
-                            f'is not recognized')
-                    time.sleep(0.1)
-
-                if 'alpha' in config_cmd.to_names:
-                    for from_name in config_cmd.from_names:
-                        config_ver.alpha_thread.recv_msg(
-                            remote=from_name,
-                            timeout=3)
-                        copy_pair_deque = (
-                            config_ver.alpha_thread
-                            .time_last_pair_array_update.copy())
-                        config_ver.dec_ops_count('alpha',
-                                                 from_name,
-                                                 copy_pair_deque)
-
-                        log_msg = (f"{'alpha'} receiving msg from "
-                                   f"{from_name}")
-                        log_ver.add_msg(
-                            log_name='scottbrian_paratools.smart_thread',
-                            log_level=logging.INFO,
-                            log_msg=log_msg)
-
-            elif config_cmd.cmd == ConfigCmds.Exit:
-                for exit_thread_name in config_cmd.names:
-                    config_ver.msgs.queue_msg(
-                        target=exit_thread_name, msg=config_cmd)
-                num_alive = 1
-                while num_alive > 0:
-                    num_alive = 0
-                    for exit_thread_name in config_cmd.names:
-                        if config_ver.f1_threads[
-                                exit_thread_name].thread.is_alive():
-                            num_alive += 1
-                            time.sleep(.01)
-                        else:
-                            config_ver.set_is_alive(target=exit_thread_name,
-                                                    value=False,
-                                                    exiting=False)
-
-            elif config_cmd.cmd == ConfigCmds.Join:
-                config_ver.alpha_thread.join(targets=config_cmd.names)
-                copy_reg_deque = (
-                    config_ver.alpha_thread.time_last_registry_update
-                    .copy())
-                copy_pair_deque = (
-                    config_ver.alpha_thread.time_last_pair_array_update
-                    .copy())
-                config_ver.del_thread(
-                    name='alpha',
-                    remotes=config_cmd.names,
-                    reg_update_times=copy_reg_deque,
-                    pair_array_update_times=copy_pair_deque)
-
-            elif config_cmd.cmd == ConfigCmds.VerifyRegistered:
-                assert config_ver.verify_registered(config_cmd.names)
-            elif config_cmd.cmd == ConfigCmds.VerifyNotRegistered:
-                assert config_ver.verify_not_registered(config_cmd.names)
-            elif config_cmd.cmd == ConfigCmds.VerifyPaired:
-                assert config_ver.verify_paired(config_cmd.names)
-            elif config_cmd.cmd == ConfigCmds.VerifyHalfPaired:
-                assert config_ver.verify_half_paired(
-                    config_cmd.names, config_cmd.half_paired_names)
-            elif config_cmd.cmd == ConfigCmds.VerifyNotPaired:
-                assert config_ver.verify_not_paired(config_cmd.names)
-
-            else:
-                raise UnrecognizedCmd(f'The config_cmd.cmd {config_cmd.cmd} '
-                                      'is not recognized')
-            config_ver.validate_config()
+        main_driver(main_name='alpha',
+                    config_ver=config_ver,
+                    scenario=scenario)
+        # random.seed(random_seed_arg)
 
         ################################################################
         # check log results
