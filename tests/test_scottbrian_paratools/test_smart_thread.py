@@ -63,8 +63,13 @@ class ConfigCmds(Enum):
     Create = auto()
     Start = auto()
     SendMsg = auto()
+    SendMsgTimeoutTrue = auto()
+    SendMsgTimeoutFalse = auto()
     RecvMsg = auto()
+    RecvMsgTimeoutTrue = auto()
+    RecvMsgTimeoutFalse = auto()
     Join = auto()
+    Pause = auto()
     VerifyRegistered = auto()
     VerifyNotRegistered = auto()
     VerifyPaired = auto()
@@ -86,6 +91,8 @@ class ConfigCmd:
     to_names: Optional[list[str]] = None
     exp_status: Optional[st.ThreadStatus] = None
     half_paired_names: Optional[list[str]] = None
+    pause_seconds: Optional[float] = None
+    timeout: Optional[float] = None
 
 
 ########################################################################
@@ -836,6 +843,7 @@ class ConfigVerifier:
         self.alpha_thread: st.SmartThread = self.create_alpha_thread()
         self.f1_threads: dict[str, st.SmartThread] = {}
         self.created_names: list[str] = []
+        self.pending_ops_count: dict[str, int] = {}
         self.f1_thread_names: dict[str, bool] = {
             'beta': True,
             'charlie': True,
@@ -1170,6 +1178,12 @@ class ConfigVerifier:
                         f"pair_key = {pair_key}"))
 
                     for pair_name in pair_key:
+                        if pair_name in self.pending_ops_count:
+                            self.expected_pairs[pair_key][
+                                pair_name].pending_ops_count = (
+                                self.pending_ops_count[pair_name])
+                            self.pending_ops_count[pair_name] = 0
+
                         self.add_log_msg(re.escape(
                             f"{name} added status_blocks entry "
                             f"for pair_key = {pair_key}, "
@@ -1344,19 +1358,28 @@ class ConfigVerifier:
 
             self.add_log_msg(f'{name} did successful join of {remote}.')
 
-    def inc_ops_count(self, targets: list[str], pair_with: str):
+    def inc_ops_count(self, targets: list[str], remote: str):
         """Increment the pending operations count.
 
         Args:
             targets: the names of the threads whose count is to be
                        incremented
-            pair_with: the names of the threads that are paired with
+            remote: the names of the threads that are paired with
                          the targets
         """
         with self.ops_lock:
             for target in targets:
-                pair_key = st.SmartThread._get_pair_key(target, pair_with)
-                self.expected_pairs[pair_key][target].pending_ops_count += 1
+                pair_key = st.SmartThread._get_pair_key(target, remote)
+                # check to make sure remote is paired - might not have
+                # started yet
+                if pair_key in self.expected_pairs:
+                    self.expected_pairs[pair_key][
+                        target].pending_ops_count += 1
+                else:
+                    if target in self.pending_ops_count:
+                        self.pending_ops_count[target] += 1
+                    else:
+                        self.pending_ops_count[target] = 1
 
     def dec_ops_count(self,
                       target: str,
@@ -1522,23 +1545,31 @@ class ConfigVerifier:
     # build_create_suite
     ################################################################
     @staticmethod
-    def build_create_suite(names: list[str]) -> list[ConfigCmd]:
+    def build_create_suite(names: list[str],
+                           active_names: Optional[list[str]] = None
+                           ) -> list[ConfigCmd]:
         """Return a list of ConfigCmd items for a create.
 
         Args:
             names: names to use on the create
+            active_names: names of threads already active
 
         Returns:
             a list of ConfigCmd items
         """
+        if active_names:
+            check_names = names + active_names
+        else:
+            check_names = names
         return [
             ConfigCmd(cmd=ConfigCmds.Create, names=names),
             ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
-                      names=names),
-            ConfigCmd(cmd=ConfigCmds.VerifyPaired, names=names),
-            ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=names),
+                      names=check_names),
+            ConfigCmd(cmd=ConfigCmds.VerifyPaired,
+                      names=check_names),
+            ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=check_names),
             ConfigCmd(cmd=ConfigCmds.VerifyStatus,
-                      names=names,
+                      names=check_names,
                       exp_status=st.ThreadStatus.Alive)]
 
     ################################################################
@@ -1562,49 +1593,55 @@ class ConfigVerifier:
     # build_exit_suite
     ################################################################
     @staticmethod
-    def build_exit_suite(names: list[str]) -> list[ConfigCmd]:
+    def build_exit_suite(names: list[str],
+                         active_names: Optional[list[str]] = None
+                         ) -> list[ConfigCmd]:
         """Return a list of ConfigCmd items for a exit.
 
         Returns:
             a list of ConfigCmd items
         """
-        return [
+        ret_suite = [
             ConfigCmd(cmd=ConfigCmds.Exit, names=names),
-
-            ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha']),
-            ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha'],
-                      exp_status=st.ThreadStatus.Alive),
-            ConfigCmd(cmd=ConfigCmds.VerifyNotAlive,
-                      names=names),
+            ConfigCmd(cmd=ConfigCmds.VerifyNotAlive, names=names),
             ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=names,
                       exp_status=st.ThreadStatus.Alive)]
+        if active_names:
+            ret_suite.extend([
+                ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=active_names),
+                ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=active_names,
+                          exp_status=st.ThreadStatus.Alive)])
+        return ret_suite
 
     ################################################################
     # build_join_suite
     ################################################################
     @staticmethod
-    def build_join_suite(names: list[str]) -> list[ConfigCmd]:
+    def build_join_suite(names: list[str],
+                         active_names: list[str]) -> list[ConfigCmd]:
         """Return a list of ConfigCmd items for join.
 
         Returns:
             a list of ConfigCmd items
         """
-        return [
+        ret_suite = [
             ConfigCmd(cmd=ConfigCmds.Join, names=names),
-
             ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered, names=names),
-            ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
-                      names=['alpha']),
-            ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=['alpha']),
-            ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=['alpha'],
-                      exp_status=st.ThreadStatus.Alive),
+            ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered, names=names),
+            ConfigCmd(cmd=ConfigCmds.VerifyNotPaired, names=names)]
+
+        if active_names:
+            ret_suite.extend([
+                ConfigCmd(cmd=ConfigCmds.VerifyRegistered, names=active_names),
+                ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=active_names),
+                ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=active_names,
+                          exp_status=st.ThreadStatus.Alive)])
             # ConfigCmd(cmd=ConfigCmds.VerifyPaired,
             #         names=['alpha', 'charlie']),
             # ConfigCmd(cmd=ConfigCmds.VerifyHalfPaired,
             #           names=['alpha', 'beta'], half_paired_names=['alpha']),
-            ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered, names=names),
-            ConfigCmd(cmd=ConfigCmds.VerifyNotPaired,
-                      names=names)]
+
+        return ret_suite
 
 
 ################################################################
@@ -1658,16 +1695,22 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
         if cmd_msg.cmd == ConfigCmds.Exit:
             break
 
-        if cmd_msg.cmd == ConfigCmds.SendMsg:
+        if (cmd_msg.cmd == ConfigCmds.SendMsg
+                or cmd_msg.cmd == ConfigCmds.SendMsgTimeoutFalse):
             ####################################################
             # send one or more msgs
             ####################################################
             f1_config_ver.inc_ops_count(cmd_msg.to_names,
                                         f1_name)
-            f1_config_ver.f1_threads[f1_name].send_msg(
-                targets=cmd_msg.to_names,
-                msg=cmd_msg)
-
+            if cmd_msg.cmd == ConfigCmds.SendMsg:
+                f1_config_ver.f1_threads[f1_name].send_msg(
+                    targets=cmd_msg.to_names,
+                    msg=cmd_msg)
+            else:
+                f1_config_ver.f1_threads[f1_name].send_msg(
+                    targets=cmd_msg.to_names,
+                    msg=cmd_msg,
+                    timeout=cmd_msg.timout)
             for f1_to_name in cmd_msg.to_names:
                 log_msg_f1 = (f'{f1_name} sending message to '
                               f'{f1_to_name}')
@@ -1675,6 +1718,17 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
                     log_name='scottbrian_paratools.smart_thread',
                     log_level=logging.INFO,
                     log_msg=log_msg_f1)
+
+            f1_config_ver.msgs.queue_msg(
+                'alpha', f'send done from {f1_name}')
+        elif cmd_msg.cmd == ConfigCmds.SendMsgTimeoutTrue:
+            ####################################################
+            # send one or more msgs
+            ####################################################
+            with pytest.raises(st.SmartThreadSendMsgTimedOut):
+                f1_config_ver.f1_threads[f1_name].send_msg(
+                    targets=cmd_msg.to_names,
+                    msg=cmd_msg)
 
             f1_config_ver.msgs.queue_msg(
                 'alpha', f'send done from {f1_name}')
@@ -1691,8 +1745,8 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
                     f1_config_ver.f1_threads[f1_name]
                     .time_last_pair_array_update.copy())
                 f1_config_ver.dec_ops_count(f1_name,
-                                         f1_from_name,
-                                         f1_copy_pair_deque)
+                                            f1_from_name,
+                                            f1_copy_pair_deque)
 
                 log_msg_f1 = (f"{f1_name} receiving msg from "
                               f"{f1_from_name}")
@@ -1702,6 +1756,8 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
                     log_msg=log_msg_f1)
             f1_config_ver.msgs.queue_msg(
                 'alpha', f'recv done for {f1_name}')
+        elif cmd_msg.cmd == ConfigCmds.Pause:
+            time.sleep(cmd_msg.pause_seconds)
         else:
             raise UnrecognizedCmd(
                 f'The cmd_msg.cmd {cmd_msg.cmd} '
@@ -1755,7 +1811,9 @@ def main_driver(main_name: str,
                 names=config_cmd.names,
                 expected_status=config_cmd.exp_status)
 
-        elif config_cmd.cmd == ConfigCmds.SendMsg:
+        elif (config_cmd.cmd == ConfigCmds.SendMsg
+              or config_cmd.cmd == ConfigCmds.SendMsgTimeoutTrue
+              or config_cmd.cmd == ConfigCmds.SendMsgTimeoutFalse):
             pending_responses = []
             for from_name in config_cmd.from_names:
                 pending_responses.append(
@@ -1810,6 +1868,14 @@ def main_driver(main_name: str,
                         log_level=logging.INFO,
                         log_msg=log_msg)
 
+        elif config_cmd.cmd == ConfigCmds.Pause:
+            for pause_name in config_cmd.names:
+                if pause_name == 'alpha':
+                    continue
+                config_ver.msgs.queue_msg(
+                    target=pause_name, msg=config_cmd)
+            if 'alpha' in config_cmd.names:
+                time.sleep(config_cmd.pause_seconds)
         elif config_cmd.cmd == ConfigCmds.Exit:
             for exit_thread_name in config_cmd.names:
                 config_ver.msgs.queue_msg(
@@ -1819,7 +1885,7 @@ def main_driver(main_name: str,
                 num_alive = 0
                 for exit_thread_name in config_cmd.names:
                     if config_ver.f1_threads[
-                        exit_thread_name].thread.is_alive():
+                            exit_thread_name].thread.is_alive():
                         num_alive += 1
                         time.sleep(.01)
                     else:
@@ -1828,7 +1894,7 @@ def main_driver(main_name: str,
                                                 exiting=False)
 
         elif config_cmd.cmd == ConfigCmds.Join:
-            config_ver.alpha_thread.join(targets=config_cmd.names)
+            config_ver.alpha_thread.join(targets=set(config_cmd.names))
             copy_reg_deque = (
                 config_ver.alpha_thread.time_last_registry_update
                 .copy())
@@ -1990,6 +2056,34 @@ class TestSmartThreadScenarios:
 
         names = ['alpha', 'beta', 'charlie']
         scenario: list[Any] = config_ver.build_create_suite(names=names)
+
+        scenario.extend([ConfigCmd(cmd=ConfigCmd.Pause,
+                                   names=['alpha'],
+                                   pause_seconds=1.5)])
+
+        scenario.extend(config_ver.build_exit_suite(
+            names=['charlie'], active_names=['alpha', 'beta']))
+        scenario.extend(config_ver.build_join_suite(
+            names=['charlie'], active_names=['alpha', 'beta']))
+        scenario.extend([ConfigCmd(cmd=ConfigCmd.SendMsgTimeoutTrue,
+                                   from_names=['beta'],
+                                   to_names=['charlie'],
+                                   timeout=1.5)])
+        scenario.extend([ConfigCmd(cmd=ConfigCmd.Pause,
+                                   names=['alpha'],
+                                   pause_seconds=2.0)])
+
+        scenario.extend([ConfigCmd(cmd=ConfigCmd.SendMsgTimeoutFalse,
+                                   from_names=['beta'],
+                                   to_names=['charlie'],
+                                   timeout=2.0)])
+        scenario.extend([ConfigCmd(cmd=ConfigCmd.Pause,
+                                   names=['alpha'],
+                                   pause_seconds=1.0)])
+
+        scenario: list[Any] = config_ver.build_create_suite(
+            names=['charlie'],
+            active_names=['alpha', 'beta'])
         scenario.extend(config_ver.build_exit_suite(names[1:]))
         scenario.extend(config_ver.build_join_suite(names[1:]))
 
