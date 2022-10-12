@@ -843,7 +843,7 @@ class ConfigVerifier:
         self.alpha_thread: st.SmartThread = self.create_alpha_thread()
         self.f1_threads: dict[str, st.SmartThread] = {}
         self.created_names: list[str] = []
-        self.pending_ops_count: dict[str, int] = {}
+        self.pending_ops_counts: dict[tuple[str, str], dict[str, int]] = {}
         self.f1_thread_names: dict[str, bool] = {
             'beta': True,
             'charlie': True,
@@ -1168,22 +1168,32 @@ class ConfigVerifier:
             for pair_key in pair_keys:
                 if name not in pair_key:
                     continue
+                if name == pair_key[0]:
+                    other_name = pair_key[1]
+                else:
+                    other_name = pair_key[0]
+                name_poc = 0
+                other_poc = 0
+                if pair_key in self.pending_ops_counts:
+                    if name in self.pending_ops_counts[pair_key]:
+                        name_poc = self.pending_ops_counts[pair_key][name]
+                        self.pending_ops_counts[pair_key][name] = 0
+                    if other_name in self.pending_ops_counts[pair_key]:
+                        other_poc = self.pending_ops_counts[pair_key][
+                            other_name]
+                        self.pending_ops_counts[pair_key][other_name] = 0
+
                 if pair_key not in self.expected_pairs:
                     self.expected_pairs[pair_key] = {
-                        pair_key[0]: ThreadPairStatus(pending_ops_count=0),
-                        pair_key[1]: ThreadPairStatus(pending_ops_count=0)}
+                        name: ThreadPairStatus(pending_ops_count=name_poc),
+                        other_name: ThreadPairStatus(
+                            pending_ops_count=other_poc)}
                     self.add_log_msg(re.escape(
                         f"{name} created "
                         "_refresh_pair_array with "
                         f"pair_key = {pair_key}"))
 
                     for pair_name in pair_key:
-                        if pair_name in self.pending_ops_count:
-                            self.expected_pairs[pair_key][
-                                pair_name].pending_ops_count = (
-                                self.pending_ops_count[pair_name])
-                            self.pending_ops_count[pair_name] = 0
-
                         self.add_log_msg(re.escape(
                             f"{name} added status_blocks entry "
                             f"for pair_key = {pair_key}, "
@@ -1210,7 +1220,7 @@ class ConfigVerifier:
                             'not have the other name in the pair array')
                     # looks OK, just add in the new name
                     self.expected_pairs[pair_key][
-                        name] = ThreadPairStatus(pending_ops_count=0)
+                        name] = ThreadPairStatus(pending_ops_count=name_poc)
                     self.add_log_msg(re.escape(
                         f"{name} added status_blocks entry "
                         f"for pair_key = {pair_key}, "
@@ -1376,10 +1386,12 @@ class ConfigVerifier:
                     self.expected_pairs[pair_key][
                         target].pending_ops_count += 1
                 else:
-                    if target in self.pending_ops_count:
-                        self.pending_ops_count[target] += 1
+                    if pair_key not in self.pending_ops_counts:
+                        self.pending_ops_counts[pair_key] = {}
+                    if target in self.pending_ops_counts[pair_key]:
+                        self.pending_ops_counts[pair_key][target] += 1
                     else:
-                        self.pending_ops_count[target] = 1
+                        self.pending_ops_counts[pair_key][target] = 1
 
     def dec_ops_count(self,
                       target: str,
@@ -1690,7 +1702,7 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
 
     while True:
 
-        cmd_msg = f1_config_ver.msgs.get_msg(f1_name)
+        cmd_msg = f1_config_ver.msgs.get_msg(f1_name, timeout=None)
 
         if cmd_msg.cmd == ConfigCmds.Exit:
             break
@@ -1710,7 +1722,7 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
                 f1_config_ver.f1_threads[f1_name].send_msg(
                     targets=cmd_msg.to_names,
                     msg=cmd_msg,
-                    timeout=cmd_msg.timout)
+                    timeout=cmd_msg.timeout)
             for f1_to_name in cmd_msg.to_names:
                 log_msg_f1 = (f'{f1_name} sending message to '
                               f'{f1_to_name}')
@@ -1728,7 +1740,8 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
             with pytest.raises(st.SmartThreadSendMsgTimedOut):
                 f1_config_ver.f1_threads[f1_name].send_msg(
                     targets=cmd_msg.to_names,
-                    msg=cmd_msg)
+                    msg=cmd_msg,
+                    timeout=cmd_msg.timeout)
 
             f1_config_ver.msgs.queue_msg(
                 'alpha', f'send done from {f1_name}')
@@ -1821,7 +1834,7 @@ def main_driver(main_name: str,
                 config_ver.msgs.queue_msg(target=from_name,
                                           msg=config_cmd)
             while pending_responses:
-                a_msg = config_ver.msgs.get_msg('alpha')
+                a_msg = config_ver.msgs.get_msg('alpha', timeout=None)
                 if a_msg in pending_responses:
                     pending_responses.remove(a_msg)
                 else:
@@ -1840,7 +1853,7 @@ def main_driver(main_name: str,
                 config_ver.msgs.queue_msg(target=to_name,
                                           msg=config_cmd)
             while pending_responses:
-                a_msg = config_ver.msgs.get_msg('alpha')
+                a_msg = config_ver.msgs.get_msg('alpha', timeout=None)
                 if a_msg in pending_responses:
                     pending_responses.remove(a_msg)
                 else:
@@ -2057,7 +2070,7 @@ class TestSmartThreadScenarios:
         names = ['alpha', 'beta', 'charlie']
         scenario: list[Any] = config_ver.build_create_suite(names=names)
 
-        scenario.extend([ConfigCmd(cmd=ConfigCmd.Pause,
+        scenario.extend([ConfigCmd(cmd=ConfigCmds.Pause,
                                    names=['alpha'],
                                    pause_seconds=1.5)])
 
@@ -2065,27 +2078,35 @@ class TestSmartThreadScenarios:
             names=['charlie'], active_names=['alpha', 'beta']))
         scenario.extend(config_ver.build_join_suite(
             names=['charlie'], active_names=['alpha', 'beta']))
-        scenario.extend([ConfigCmd(cmd=ConfigCmd.SendMsgTimeoutTrue,
+        scenario.extend([ConfigCmd(cmd=ConfigCmds.SendMsgTimeoutTrue,
                                    from_names=['beta'],
                                    to_names=['charlie'],
                                    timeout=1.5)])
-        scenario.extend([ConfigCmd(cmd=ConfigCmd.Pause,
+        scenario.extend([ConfigCmd(cmd=ConfigCmds.Pause,
                                    names=['alpha'],
                                    pause_seconds=2.0)])
 
-        scenario.extend([ConfigCmd(cmd=ConfigCmd.SendMsgTimeoutFalse,
+        scenario.extend([ConfigCmd(cmd=ConfigCmds.SendMsgTimeoutFalse,
                                    from_names=['beta'],
                                    to_names=['charlie'],
                                    timeout=2.0)])
-        scenario.extend([ConfigCmd(cmd=ConfigCmd.Pause,
+        scenario.extend([ConfigCmd(cmd=ConfigCmds.Pause,
                                    names=['alpha'],
                                    pause_seconds=1.0)])
 
-        scenario: list[Any] = config_ver.build_create_suite(
+        scenario.extend([config_ver.build_create_suite(
             names=['charlie'],
-            active_names=['alpha', 'beta'])
-        scenario.extend(config_ver.build_exit_suite(names[1:]))
-        scenario.extend(config_ver.build_join_suite(names[1:]))
+            active_names=['alpha', 'beta'])])
+
+        scenario.extend([ConfigCmd(cmd=ConfigCmds.SendMsg,
+                                   from_names=['beta'],
+                                   to_names=['charlie'])])
+
+        scenario.extend(config_ver.build_exit_suite(
+            names[1:],
+            active_names=['alpha']))
+        scenario.extend(config_ver.build_join_suite(
+            names[1:], active_names=['alpha']))
 
         main_driver(main_name='alpha',
                     config_ver=config_ver,
@@ -2230,7 +2251,7 @@ class TestSmartThreadScenarios:
             cmd_msg = ''
             while cmd_msg != 'exit':
 
-                cmd_msg = f1_config_ver.msgs.get_msg(f1_name)
+                cmd_msg = f1_config_ver.msgs.get_msg(f1_name, timeout=None)
 
                 if cmd_msg == 'send_to_alpha':
                     ####################################################
