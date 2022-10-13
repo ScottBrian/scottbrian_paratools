@@ -1035,7 +1035,7 @@ class SmartThread:
                         pass
 
             if sb.timer.is_expired():
-                self.logger.debug(f'{self.name} timeout of a send_msg() ')
+                self.logger.debug(f'{self.name} timeout of a send_msg()')
                 self.logger.error('Raise SmartThreadSendMsgTimedOut')
                 raise SmartThreadSendMsgTimedOut(
                     f'{self.name} send_msg method unable to send '

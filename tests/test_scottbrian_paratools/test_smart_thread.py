@@ -70,6 +70,8 @@ class ConfigCmds(Enum):
     RecvMsgTimeoutFalse = auto()
     Join = auto()
     Pause = auto()
+    ConfirmResponse = auto()
+    ValidateConfig = auto()
     VerifyRegistered = auto()
     VerifyNotRegistered = auto()
     VerifyPaired = auto()
@@ -93,6 +95,8 @@ class ConfigCmd:
     half_paired_names: Optional[list[str]] = None
     pause_seconds: Optional[float] = None
     timeout: Optional[float] = None
+    confirm_response: Optional[bool] = False
+    confirm_response_cmd: Optional[ConfigCmds] = None
 
 
 ########################################################################
@@ -111,12 +115,12 @@ config_scenario_0 = (
               exp_status=st.ThreadStatus.Alive),
 
     # 1) send msg from f1 to alpha
-    ConfigCmd(cmd=ConfigCmds.SendMsg, from_names=['beta'],
+    ConfigCmd(cmd=ConfigCmds.SendMsg, names=['beta'],
               to_names=['alpha']),
 
     # 2) alpha recv msg
     ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['beta'],
-              to_names=['alpha']),
+              names=['alpha']),
 
     ConfigCmd(cmd=ConfigCmds.Exit, names=['beta']),
 
@@ -153,7 +157,7 @@ config_scenario_1 = (
               exp_status=st.ThreadStatus.Alive),
 
     # 1) beta and charlie send msg to alpha
-    ConfigCmd(cmd=ConfigCmds.SendMsg, from_names=['beta', 'charlie'],
+    ConfigCmd(cmd=ConfigCmds.SendMsg, names=['beta', 'charlie'],
               to_names=['alpha']),
 
     # 2) beta and charlie exit
@@ -179,7 +183,7 @@ config_scenario_1 = (
 
     # 4) alpha recv msg from beta
     ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['beta', 'charlie'],
-              to_names=['alpha']),
+              names=['alpha']),
 
     # 5) verify not paired with beta
     ConfigCmd(cmd=ConfigCmds.VerifyPaired, names=['alpha', 'charlie']),
@@ -258,7 +262,7 @@ config_scenario_2 = (
 
 
     # 5) beta send msg to alpha
-    ConfigCmd(cmd=ConfigCmds.SendMsg, from_names=['beta'],
+    ConfigCmd(cmd=ConfigCmds.SendMsg, names=['beta'],
               to_names=['alpha']),
 
     # 6) beta exits
@@ -310,7 +314,7 @@ config_scenario_2 = (
 
     # 12) alpha recv msg from beta
     ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['beta'],
-              to_names=['alpha']),
+              names=['alpha']),
 
     # 13) verify alpha not paired with beta
     ConfigCmd(cmd=ConfigCmds.VerifyNotPaired, names=['alpha', 'beta']),
@@ -342,15 +346,15 @@ config_scenario_3 = (
               exp_status=st.ThreadStatus.Alive),
 
     # 1) charlie send msg to beta
-    ConfigCmd(cmd=ConfigCmds.SendMsg, from_names=['charlie'],
+    ConfigCmd(cmd=ConfigCmds.SendMsg, names=['charlie'],
               to_names=['beta']),
 
     # 2) beta recv msg from charlie
     ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['charlie'],
-              to_names=['beta']),
+              names=['beta']),
 
     # 3) charlie send msg to beta
-    ConfigCmd(cmd=ConfigCmds.SendMsg, from_names=['charlie'],
+    ConfigCmd(cmd=ConfigCmds.SendMsg, names=['charlie'],
               to_names=['beta']),
 
     # 4) charlie exits
@@ -374,7 +378,7 @@ config_scenario_3 = (
 
     # 6) beta recv msg from charlie
     ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['charlie'],
-              to_names=['beta']),
+              names=['beta']),
 
     # 7) verify beta and charlie not paired
     ConfigCmd(cmd=ConfigCmds.VerifyPaired, names=['alpha', 'beta']),
@@ -429,11 +433,11 @@ config_scenario_4 = (
               exp_status=st.ThreadStatus.Alive),
 
     # 2) beta send first msg to alpha
-    ConfigCmd(cmd=ConfigCmds.SendMsg, from_names=['beta'],
+    ConfigCmd(cmd=ConfigCmds.SendMsg, names=['beta'],
               to_names=['alpha']),
 
     # 3) beta send second msg to alpha
-    ConfigCmd(cmd=ConfigCmds.SendMsg, from_names=['beta'],
+    ConfigCmd(cmd=ConfigCmds.SendMsg, names=['beta'],
               to_names=['alpha']),
 
     # 4) beta exits
@@ -463,7 +467,7 @@ config_scenario_4 = (
 
     # 7) alpha recv first msg from beta
     ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['beta'],
-              to_names=['alpha']),
+              names=['alpha']),
 
     # 8) verify alpha still half paired with beta
     ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered, names=['beta']),
@@ -473,7 +477,7 @@ config_scenario_4 = (
 
     # 9) alpha recv second msg from beta
     ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['beta'],
-              to_names=['alpha']),
+              names=['alpha']),
 
     # 10) verify alpha not paired with beta
     ConfigCmd(cmd=ConfigCmds.VerifyNotPaired, names=['alpha', 'beta']),
@@ -509,12 +513,12 @@ config_scenario_5 = (
 
 
     # 2) send msg from f1 to alpha
-    ConfigCmd(cmd=ConfigCmds.SendMsg, from_names=['beta'],
+    ConfigCmd(cmd=ConfigCmds.SendMsg, names=['beta'],
               to_names=['alpha']),
 
     # 3) alpha recv msg
     ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['beta'],
-              to_names=['alpha']),
+              names=['alpha']),
 
     ConfigCmd(cmd=ConfigCmds.Exit, names=['beta']),
 
@@ -1596,10 +1600,10 @@ class ConfigVerifier:
             a list of ConfigCmd items
         """
         return [
-            ConfigCmd(cmd=ConfigCmds.SendMsg, from_names=from_names,
+            ConfigCmd(cmd=ConfigCmds.SendMsg, names=from_names,
                       to_names=to_names),
             ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=from_names,
-                      to_names=to_names)]
+                      names=to_names)]
 
     ################################################################
     # build_exit_suite
@@ -1702,9 +1706,13 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
 
     while True:
 
-        cmd_msg = f1_config_ver.msgs.get_msg(f1_name, timeout=None)
+        cmd_msg: ConfigCmd = f1_config_ver.msgs.get_msg(
+            f1_name, timeout=None)
 
         if cmd_msg.cmd == ConfigCmds.Exit:
+            if cmd_msg.confirm_response:
+                f1_config_ver.msgs.queue_msg(
+                    'alpha', f'{cmd_msg.cmd} completed by {f1_name}')
             break
 
         if (cmd_msg.cmd == ConfigCmds.SendMsg
@@ -1731,8 +1739,6 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
                     log_level=logging.INFO,
                     log_msg=log_msg_f1)
 
-            f1_config_ver.msgs.queue_msg(
-                'alpha', f'send done from {f1_name}')
         elif cmd_msg.cmd == ConfigCmds.SendMsgTimeoutTrue:
             ####################################################
             # send one or more msgs
@@ -1743,8 +1749,12 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
                     msg=cmd_msg,
                     timeout=cmd_msg.timeout)
 
-            f1_config_ver.msgs.queue_msg(
-                'alpha', f'send done from {f1_name}')
+            f1_config_ver.add_log_msg(re.escape(
+                f'{f1_name} timeout of a send_msg()'))
+            f1_config_ver.add_log_msg(
+                'Raise SmartThreadSendMsgTimedOut',
+                log_level=logging.ERROR)
+
         elif cmd_msg.cmd == ConfigCmds.RecvMsg:
             ####################################################
             # recv one or more msgs
@@ -1767,14 +1777,17 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
                     log_name='scottbrian_paratools.smart_thread',
                     log_level=logging.INFO,
                     log_msg=log_msg_f1)
-            f1_config_ver.msgs.queue_msg(
-                'alpha', f'recv done for {f1_name}')
+
         elif cmd_msg.cmd == ConfigCmds.Pause:
             time.sleep(cmd_msg.pause_seconds)
         else:
             raise UnrecognizedCmd(
                 f'The cmd_msg.cmd {cmd_msg.cmd} '
                 'is not recognized')
+
+        if cmd_msg.confirm_response:
+            f1_config_ver.msgs.queue_msg(
+                    'alpha', f'{cmd_msg.cmd} completed by {f1_name}')
 
 
 ################################################################
@@ -1827,42 +1840,18 @@ def main_driver(main_name: str,
         elif (config_cmd.cmd == ConfigCmds.SendMsg
               or config_cmd.cmd == ConfigCmds.SendMsgTimeoutTrue
               or config_cmd.cmd == ConfigCmds.SendMsgTimeoutFalse):
-            pending_responses = []
-            for from_name in config_cmd.from_names:
-                pending_responses.append(
-                    f'send done from {from_name}')
-                config_ver.msgs.queue_msg(target=from_name,
+
+            for name in config_cmd.names:
+                config_ver.msgs.queue_msg(target=name,
                                           msg=config_cmd)
-            while pending_responses:
-                a_msg = config_ver.msgs.get_msg('alpha', timeout=None)
-                if a_msg in pending_responses:
-                    pending_responses.remove(a_msg)
-                else:
-                    raise UnrecognizedCmd(
-                        f'A response of {a_msg} for the SendMsg is '
-                        'not recognized')
-                time.sleep(0.1)
 
         elif config_cmd.cmd == ConfigCmds.RecvMsg:
-            pending_responses = []
-            for to_name in config_cmd.to_names:
-                if to_name == 'alpha':
+            for name in config_cmd.names:
+                if name == 'alpha':
                     continue
-                pending_responses.append(
-                    f'recv done for {to_name}')
-                config_ver.msgs.queue_msg(target=to_name,
+                config_ver.msgs.queue_msg(target=name,
                                           msg=config_cmd)
-            while pending_responses:
-                a_msg = config_ver.msgs.get_msg('alpha', timeout=None)
-                if a_msg in pending_responses:
-                    pending_responses.remove(a_msg)
-                else:
-                    raise UnrecognizedCmd(
-                        f'A response of {a_msg} for the SendMsg is '
-                        f'is not recognized')
-                time.sleep(0.1)
-
-            if 'alpha' in config_cmd.to_names:
+            if 'alpha' in config_cmd.names:
                 for from_name in config_cmd.from_names:
                     config_ver.alpha_thread.recv_msg(
                         remote=from_name,
@@ -1931,12 +1920,25 @@ def main_driver(main_name: str,
                 config_cmd.names, config_cmd.half_paired_names)
         elif config_cmd.cmd == ConfigCmds.VerifyNotPaired:
             assert config_ver.verify_not_paired(config_cmd.names)
-
+        elif config_cmd.cmd == ConfigCmds.ValidateConfig:
+            config_ver.validate_config()
+        elif config_cmd.cmd == ConfigCmds.ConfirmResponse:
+            pending_responses = []
+            for name in config_cmd.names:
+                pending_responses.append(
+                    f'{config_cmd.confirm_response_cmd} completed by {name}')
+            while pending_responses:
+                a_msg = config_ver.msgs.get_msg('alpha', timeout=None)
+                if a_msg in pending_responses:
+                    pending_responses.remove(a_msg)
+                else:
+                    raise UnrecognizedCmd(
+                        f'A response of {a_msg} for the SendMsg is '
+                        'not recognized')
+                time.sleep(0.1)
         else:
             raise UnrecognizedCmd(f'The config_cmd.cmd {config_cmd.cmd} '
                                   'is not recognized')
-        config_ver.validate_config()
-
 
 ########################################################################
 # TestSmartThreadScenarios class
@@ -2079,28 +2081,39 @@ class TestSmartThreadScenarios:
         scenario.extend(config_ver.build_join_suite(
             names=['charlie'], active_names=['alpha', 'beta']))
         scenario.extend([ConfigCmd(cmd=ConfigCmds.SendMsgTimeoutTrue,
-                                   from_names=['beta'],
+                                   names=['beta'],
                                    to_names=['charlie'],
-                                   timeout=1.5)])
+                                   timeout=1.5,
+                                   confirm_response=True)])
+        scenario.extend([ConfigCmd(
+            cmd=ConfigCmds.ConfirmResponse,
+            names=['beta'],
+            confirm_response_cmd=ConfigCmds.SendMsgTimeoutTrue)])
+
         scenario.extend([ConfigCmd(cmd=ConfigCmds.Pause,
                                    names=['alpha'],
                                    pause_seconds=2.0)])
 
         scenario.extend([ConfigCmd(cmd=ConfigCmds.SendMsgTimeoutFalse,
-                                   from_names=['beta'],
+                                   names=['beta'],
                                    to_names=['charlie'],
                                    timeout=2.0)])
         scenario.extend([ConfigCmd(cmd=ConfigCmds.Pause,
                                    names=['alpha'],
                                    pause_seconds=1.0)])
 
-        scenario.extend([config_ver.build_create_suite(
+        scenario.extend(config_ver.build_create_suite(
             names=['charlie'],
-            active_names=['alpha', 'beta'])])
+            active_names=['alpha', 'beta']))
 
         scenario.extend([ConfigCmd(cmd=ConfigCmds.SendMsg,
-                                   from_names=['beta'],
-                                   to_names=['charlie'])])
+                                   names=['beta'],
+                                   to_names=['charlie'],
+                                   confirm_response=True)])
+        scenario.extend([ConfigCmd(
+            cmd=ConfigCmds.ConfirmResponse,
+            names=['beta'],
+            confirm_response_cmd=ConfigCmds.SendMsg)])
 
         scenario.extend(config_ver.build_exit_suite(
             names[1:],
