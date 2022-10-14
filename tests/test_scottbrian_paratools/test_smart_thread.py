@@ -1288,7 +1288,8 @@ class ConfigVerifier:
                    name: str,
                    remotes: list[str],
                    reg_update_times: deque,
-                   pair_array_update_times: deque
+                   pair_array_update_times: deque,
+                   join_names: deque
                    ) -> None:
         """Delete the thread from the ConfigVerifier.
 
@@ -1299,10 +1300,13 @@ class ConfigVerifier:
                                 msgs
             pair_array_update_times: pair array update times to use for
                                        the log msgs
+            join_names: deque of names that were joined, in order
         """
         reg_update_times.rotate(len(remotes))
         pair_array_update_times.rotate(len(remotes))
-        for remote in remotes:
+        join_names.rotate(len(remotes))
+        for idx in range(len(remotes)):
+            remote = join_names.popleft()
             self.expected_registered[remote].is_alive = False
             self.expected_registered[remote].status = st.ThreadStatus.Stopped
             self.add_log_msg(
@@ -1903,11 +1907,14 @@ def main_driver(main_name: str,
             copy_pair_deque = (
                 config_ver.alpha_thread.time_last_pair_array_update
                 .copy())
+            copy_join_names = config_ver.alpha_thread.join_names.copy()
             config_ver.del_thread(
                 name='alpha',
                 remotes=config_cmd.names,
                 reg_update_times=copy_reg_deque,
-                pair_array_update_times=copy_pair_deque)
+                pair_array_update_times=copy_pair_deque,
+                join_names=copy_join_names
+                )
 
         elif config_cmd.cmd == ConfigCmds.VerifyRegistered:
             assert config_ver.verify_registered(config_cmd.names)

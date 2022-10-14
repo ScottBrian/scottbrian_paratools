@@ -452,8 +452,9 @@ class SmartThread:
 
         # The following deques are used for testing and diagnostic
         # purposes only.
-        self.time_last_pair_array_update: deque[datetime] = deque([], 8)
-        self.time_last_registry_update: deque[datetime] = deque([], 8)
+        self.time_last_pair_array_update: deque[datetime] = deque([], 32)
+        self.time_last_registry_update: deque[datetime] = deque([], 32)
+        self.join_names: deque[str] = deque([], 32)
 
         # register this new SmartThread so others can find us
         self._register()
@@ -735,6 +736,7 @@ class SmartThread:
                                     f'{SmartThread._registry[remote].status}')
                             # remove this thread from the registry
                             self._clean_up_registry()
+                            self.join_names.append(remote)
                             self.logger.debug(
                                 f'{self.name} did successful join of '
                                 f'{remote}.')
