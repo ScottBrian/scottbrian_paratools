@@ -65,6 +65,8 @@ class InvalidInputDetected(ErrorTstSmartThread):
 # Config Scenarios
 ###############################################################################
 class ConfigCmds(Enum):
+    CreateCommanderNoStart = auto()
+    CreateCommanderAutoStart = auto()
     CreateNoStart = auto()
     CreateAutoStart = auto()
     Start = auto()
@@ -92,8 +94,8 @@ class ConfigCmds(Enum):
 @dataclass
 class ConfigCmd:
     cmd: ConfigCmds
-    executor: Optional[str] = 'alpha'
     names: Optional[list[str]] = None
+    commander_name: Optional[str] = None
     auto_start: bool = True
     from_names: Optional[list[str]] = None
     to_names: Optional[list[str]] = None
@@ -837,6 +839,7 @@ class ConfigVerifier:
     """Class that tracks and verifies the SmartThread configuration."""
 
     def __init__(self,
+                 commander_name: str,
                  log_ver: LogVer,
                  msgs: Msgs) -> None:
         """Initialize the ConfigVerifier.
@@ -845,20 +848,24 @@ class ConfigVerifier:
             log_ver: the log verifier to track and verify log msgs
         """
         self.specified_args = locals()  # used for __repr__, see below
+        self.commander_name = commander_name
+        self.unregistered_names: set[str] = {
+            'alpha', 'beta', 'charlie', 'delta',
+            'echo', 'fox', 'george', 'henry',
+            'ida', 'jack', 'king', 'love',
+            'mary', 'nancy', 'oscar', 'peter'}
+        self.inactive_names: set[str] = set()
+        self.active_names: set[str] = set()
         self.expected_registered: dict[str, ThreadTracker] = {}
         self.expected_pairs: dict[tuple[str, str],
                                   dict[str, ThreadPairStatus]] = {}
         self.log_ver = log_ver
         self.msgs = msgs
         self.ops_lock = threading.Lock()
-        self.alpha_thread: st.SmartThread = self.create_alpha_thread()
+        self.commander_thread: st.SmartThread = None
         self.f1_threads: dict[str, st.SmartThread] = {}
         self.created_names: list[str] = []
-        self.unregistered_names: set[str] = {
-            'alpha', 'beta', 'charlie', 'delta', 'echo',
-            'fox', 'george', 'henry', 'ida'}
-        self.inactive_names: set[str] = set()
-        self.active_names: set[str] = set()
+
         self.pending_ops_counts: dict[tuple[str, str], dict[str, int]] = {}
         self.f1_thread_names: dict[str, bool] = {
             'beta': True,
@@ -894,196 +901,25 @@ class ConfigVerifier:
 
         return f'{classname}({parms})'
 
-    def verify_is_alive(self, names: list[str]) -> bool:
-        """Verify that the given names are alive.
+    def create_commander_thread(self,
+                                name: str,
+                                auto_start: bool) -> None:
+        """Create the commander thread."""
 
-        Args:
-            names: names of the threads to check for being alive
-
-        """
-        for name in names:
-            if not st.SmartThread._registry[name].thread.is_alive():
-                return False
-            if not self.expected_registered[name].is_alive:
-                return False
-        return True
-
-    def verify_is_not_alive(self, names: list[str]) -> bool:
-        """Verify that the given names are not alive.
-
-        Args:
-            names: names of the threads to check for being not alive
-
-        """
-        for name in names:
-            if st.SmartThread._registry[name].thread.is_alive():
-                return False
-            if self.expected_registered[name].is_alive:
-                return False
-        return True
-
-    def verify_status(self, names: list[str],
-                      expected_status: st.ThreadStatus) -> bool:
-        """Verify that the given names have the given status.
-
-        Args:
-            names: names of the threads to check for the given status
-            expected_status: the status each thread is expected to have
-
-        """
-        for name in names:
-            if not st.SmartThread._registry[name].status == expected_status:
-                return False
-            if not self.expected_registered[name].status == expected_status:
-                return False
-        return True
-
-    def verify_registered(self, names: list[str]) -> bool:
-        """Verify that the given names are registered.
-
-        Args:
-            names: names of the threads to check for being registered
-
-        """
-        for name in names:
-            if name not in st.SmartThread._registry:
-                return False
-            if name not in self.expected_registered:
-                return False
-        return True
-
-    def verify_not_registered(self, names: list[str]) -> bool:
-        """Verify that the given names are not registered.
-
-        Args:
-            names: names of the threads to check for being unregistered
-
-        """
-        for name in names:
-            if name in st.SmartThread._registry:
-                return False
-            if name in self.expected_registered:
-                return False
-        return True
-
-    def verify_paired(self, names: list[str]) -> bool:
-        """Verify that the given names are paired.
-
-        Args:
-            names: names of the threads to check for being paired
-
-        """
-        pair_keys = combinations(sorted(names), 2)
-        for pair_key in pair_keys:
-            if pair_key not in st.SmartThread._pair_array:
-                return False
-            if pair_key[0] not in st.SmartThread._pair_array[
-                pair_key].status_blocks:
-                return False
-            if pair_key[1] not in st.SmartThread._pair_array[
-                pair_key].status_blocks:
-                return False
-
-            if pair_key not in self.expected_pairs:
-                return False
-            if pair_key[0] not in self.expected_pairs[pair_key]:
-                return False
-            if pair_key[1] not in self.expected_pairs[pair_key]:
-                return False
-        return True
-
-    def verify_half_paired(self, names: list[str],
-                           half_paired_names: list[str]) -> bool:
-        """Verify that the given names are half paired.
-
-        Args:
-            names: names of the threads to check for being half paired
-            half_paired_names: the names that should be in pair array
-        """
-        pair_keys = combinations(sorted(names), 2)
-        for pair_key in pair_keys:
-            if pair_key not in st.SmartThread._pair_array:
-                return False
-            if len(st.SmartThread._pair_array[
-                    pair_key].status_blocks) != 1:
-                return False
-            for name in half_paired_names:
-                if (name in pair_key
-                        and name not in st.SmartThread._pair_array[
-                            pair_key].status_blocks):
-                    return False
-
-            if pair_key not in self.expected_pairs:
-                return False
-            if len(self.expected_pairs[pair_key]) != 1:
-                return False
-            for name in half_paired_names:
-                if (name in pair_key
-                        and name not in self.expected_pairs[pair_key]):
-                    return False
-        return True
-
-    def verify_not_paired(self, names: list[str]) -> bool:
-        """Verify that the given names are not paired.
-
-        Args:
-            names: names of the threads to check for being not paired
-
-        """
-        pair_keys = combinations(sorted(names), 2)
-        for pair_key in pair_keys:
-            if pair_key in st.SmartThread._pair_array:
-                return False
-
-            if pair_key in self.expected_pairs:
-                return False
-
-        return True
-
-    def get_is_alive(self, name: str) -> bool:
-        """Get the is_alive flag for the named thread.
-
-        Args:
-            name: names of thread to get the is_alive flag
-
-        """
-        if self.expected_registered[name].exiting:
-            return self.expected_registered[name].thread.thread.is_alive()
-        else:
-            return self.expected_registered[name].is_alive
-
-    def create_alpha_thread(self) -> st.SmartThread:
-        """Create the alpha thread."""
-
-        alpha_thread = st.SmartThread(name='alpha')
+        self.commander_thread = st.SmartThread(
+            name=name, auto_start=auto_start)
         self.add_thread(
-            name='alpha',
-            thread=alpha_thread,
+            name=name,
+            thread=self.commander_thread,
             thread_alive=True,
             auto_start=False,
             expected_status=st.ThreadStatus.Alive,
-            thread_repr=repr(alpha_thread),
-            reg_update_time=alpha_thread.time_last_registry_update[-1],
-            pair_array_update_time=alpha_thread.time_last_pair_array_update[-1]
+            thread_repr=repr(self.commander_thread),
+            reg_update_time=self.commander_thread
+            .time_last_registry_update[-1],
+            pair_array_update_time=self.commander_thread
+            .time_last_pair_array_update[-1]
         )
-        return alpha_thread
-
-    def get_thread_names(self, num_names: int) -> list[str]:
-        """Return a list of thread names.
-
-        Args:
-            num_names: number of names requested
-        """
-        ret_list: list[str] = ['alpha']  # first name is always alpha
-        num_added = 1
-        for thread_name, available in self.f1_thread_names.items():
-            if num_added == num_names:
-                break
-            if available:
-                ret_list.append(thread_name)
-                self.f1_thread_names[thread_name] = False
-                num_added += 1
-        return ret_list
 
     def create_f1_thread(self,
                          target: Callable,
@@ -1132,9 +968,9 @@ class ConfigVerifier:
         Args:
             name: name of the thread to start
         """
-        assert {name}.issubset(self.inactive_names)
-        self.inactive_names -= {name}
-        self.active_names |= {name}
+        # assert {name}.issubset(self.inactive_names)
+        # self.inactive_names -= {name}
+        # self.active_names |= {name}
         self.f1_threads[name].start()
         self.expected_registered[name].is_alive = True
         self.expected_registered[name].status = st.ThreadStatus.Alive
@@ -1172,11 +1008,11 @@ class ConfigVerifier:
             pair_array_update_time: the pair array update time to use
                                       for the log msg
         """
-        self.unregistered_names -= {name}
-        if auto_start:
-            self.active_names |= {name}
-        else:
-            self.inactive_names |= {name}
+        # self.unregistered_names -= {name}
+        # if auto_start:
+        #     self.active_names |= {name}
+        # else:
+        #     self.inactive_names |= {name}
 
         self.expected_registered[name] = ThreadTracker(
             thread=thread,
@@ -1327,16 +1163,16 @@ class ConfigVerifier:
         join_names.rotate(len(remotes))
         for idx in range(len(remotes)):
             remote = join_names.popleft()
-            if {remote}.issubset(self.inactive_names)
-                self.inactive_names -= {remote}
-            elif {remote}.issubset(self.active_names)
-                self.active_names -= {remote}
-            else:
-                raise InvalidConfigurationDetected(f'remote {remote} is'
-                                                   'was joined but is'
-                                                   'not in either active'
-                                                   'nor inactive names')
-            self.unregistered_names |= {name}
+            # if {remote}.issubset(self.inactive_names):
+            #     self.inactive_names -= {remote}
+            # elif {remote}.issubset(self.active_names):
+            #     self.active_names -= {remote}
+            # else:
+            #     raise InvalidConfigurationDetected(f'remote {remote} is'
+            #                                        'was joined but is'
+            #                                        'not in either active'
+            #                                        'nor inactive names')
+            # self.unregistered_names |= {name}
             self.expected_registered[remote].is_alive = False
             self.expected_registered[remote].status = st.ThreadStatus.Stopped
             self.add_log_msg(
@@ -1405,6 +1241,18 @@ class ConfigVerifier:
                 f"deleted ['{remote}']"))
 
             self.add_log_msg(f'{name} did successful join of {remote}.')
+
+    def get_is_alive(self, name: str) -> bool:
+        """Get the is_alive flag for the named thread.
+
+        Args:
+            name: names of thread to get the is_alive flag
+
+        """
+        if self.expected_registered[name].exiting:
+            return self.expected_registered[name].thread.thread.is_alive()
+        else:
+            return self.expected_registered[name].is_alive
 
     def inc_ops_count(self, targets: list[str], remote: str):
         """Increment the pending operations count.
@@ -1595,37 +1443,80 @@ class ConfigVerifier:
     # build_create_suite
     ################################################################
     def build_create_suite(self,
-                           names: set[str],
+                           commander_name: Optional[str] = None,
+                           commander_auto_start: Optional[bool] = True,
+                           names: Optional[list[str]] = None,
+                           auto_start: Optional[bool] = True,
+                           validate_config: Optional[bool] = True
                            ) -> list[ConfigCmd]:
         """Return a list of ConfigCmd items for a create.
 
         Args:
+            commander_name: specifies that a commander thread is to be
+                created with this name
+            commander_auto_start: specifies whether to start the
+                commander thread during create
             names: names to use on the create
+            auto_start: specifies whether to start threads during create
 
         Returns:
             a list of ConfigCmd items
         """
-        if not names.issubset(self.unregistered_names):
-            raise InvalidInputDetected(f'Input {names} is not a subset '
-                                       f'of {self.unregistered_names}')
 
-        check_name_set = self.active_names | names
-        check_names = list(check_name_set)
+        active_names = list(self.active_names)
+        ret_suite = []
+        if commander_name:
+            active_names += [commander_name]
+            if not set([commander_name]).issubset(self.unregistered_names):
+                raise InvalidInputDetected(f'Input commander name '
+                                           f'{commander_name} not a '
+                                           f'subset of unregistered names '
+                                           f'{self.unregistered_names}')
+            if commander_auto_start:
+                ret_suite.extend([
+                    ConfigCmd(cmd=ConfigCmds.CreateCommanderAutoStart,
+                              commander_name=commander_name)])
+            else:
+                ret_suite.extend([
+                    ConfigCmd(cmd=ConfigCmds.CreateCommanderNoStart,
+                              commander_name=commander_name)])
 
-        return [
-            ConfigCmd(cmd=ConfigCmds.CreateAutoStart, names=names),
-            ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
-                      names=check_names),
-            ConfigCmd(cmd=ConfigCmds.VerifyPaired,
-                      names=check_names),
-            ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=check_names),
+            self.unregistered_names -= {commander_name}
+            self.active_names |= {commander_name}
+
+        if names:
+            active_names += names
+            if not set(names).issubset(self.unregistered_names):
+                raise InvalidInputDetected(f'Input names {names} not a '
+                                           f'subset '
+                                           'of unregistered names '
+                                           f'{self.unregistered_names}')
+            if auto_start:
+                ret_suite.extend([
+                    ConfigCmd(cmd=ConfigCmds.CreateAutoStart,
+                              names=names)])
+            else:
+                ret_suite.extend([
+                    ConfigCmd(cmd=ConfigCmds.CreateNoStart,
+                              names=names)])
+            self.unregistered_names -= set(names)
+            self.active_names |= set(names)
+
+        ret_suite.extend([
+            ConfigCmd(cmd=ConfigCmds.VerifyRegistered, names=active_names),
+            ConfigCmd(cmd=ConfigCmds.VerifyPaired, names=active_names),
+            ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=active_names),
             ConfigCmd(cmd=ConfigCmds.VerifyStatus,
-                      names=check_names,
-                      exp_status=st.ThreadStatus.Alive),
-            ConfigCmd(cmd=ConfigCmds.ValidateConfig)]
+                      names=active_names,
+                      exp_status=st.ThreadStatus.Alive)])
+        if validate_config:
+            ret_suite.extend([
+                ConfigCmd(cmd=ConfigCmds.ValidateConfig)])
+
+        return ret_suite
 
     ################################################################
-    # build_exit_suite
+    # build_msg_suite
     ################################################################
     @staticmethod
     def build_msg_suite(from_names: list[str],
@@ -1644,15 +1535,18 @@ class ConfigVerifier:
     ################################################################
     # build_exit_suite
     ################################################################
-    @staticmethod
-    def build_exit_suite(names: list[str],
-                         active_names: Optional[list[str]] = None
+    def build_exit_suite(self,
+                         names: list[str],
                          ) -> list[ConfigCmd]:
         """Return a list of ConfigCmd items for a exit.
 
         Returns:
             a list of ConfigCmd items
         """
+        if not set(names).issubset(self.active_names):
+            raise InvalidInputDetected(f'Input names {names} not a subset '
+                                       f'of active names {self.active_names}')
+        active_names = list(self.active_names - set(names))
         ret_suite = [
             ConfigCmd(cmd=ConfigCmds.Exit, names=names),
             ConfigCmd(cmd=ConfigCmds.VerifyNotAlive, names=names),
@@ -1663,19 +1557,31 @@ class ConfigVerifier:
                 ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=active_names),
                 ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=active_names,
                           exp_status=st.ThreadStatus.Alive)])
+        ret_suite.extend([ConfigCmd(cmd=ConfigCmds.ValidateConfig)])
+
+        self.active_names -= set(names)
+        self.inactive_names |= set(names)
+
         return ret_suite
 
     ################################################################
     # build_join_suite
     ################################################################
-    @staticmethod
-    def build_join_suite(names: list[str],
-                         active_names: list[str]) -> list[ConfigCmd]:
+    def build_join_suite(self,
+                         names: list[str]) -> list[ConfigCmd]:
         """Return a list of ConfigCmd items for join.
+
+        Args:
+            names: list of names to join
 
         Returns:
             a list of ConfigCmd items
         """
+        if not set(names).issubset(self.inactive_names):
+            raise InvalidInputDetected(f'Input {names} is not a subset '
+                                       'of inactive names '
+                                       f'{self.inactive_names}')
+        active_names = list(self.active_names)
         ret_suite = [
             ConfigCmd(cmd=ConfigCmds.Join, names=names),
             ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered, names=names),
@@ -1688,12 +1594,159 @@ class ConfigVerifier:
                 ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=active_names),
                 ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=active_names,
                           exp_status=st.ThreadStatus.Alive)])
-            # ConfigCmd(cmd=ConfigCmds.VerifyPaired,
-            #         names=['alpha', 'charlie']),
-            # ConfigCmd(cmd=ConfigCmds.VerifyHalfPaired,
-            #           names=['alpha', 'beta'], half_paired_names=['alpha']),
+
+        ret_suite.extend([ConfigCmd(cmd=ConfigCmds.ValidateConfig)])
+
+        self.unregistered_names |= set(names)
+        self.inactive_names -= set(names)
 
         return ret_suite
+
+    def verify_is_alive(self, names: list[str]) -> bool:
+        """Verify that the given names are alive.
+
+        Args:
+            names: names of the threads to check for being alive
+
+        """
+        for name in names:
+            if not st.SmartThread._registry[name].thread.is_alive():
+                return False
+            if not self.expected_registered[name].is_alive:
+                return False
+        return True
+
+    def verify_is_not_alive(self, names: list[str]) -> bool:
+        """Verify that the given names are not alive.
+
+        Args:
+            names: names of the threads to check for being not alive
+
+        """
+        for name in names:
+            if st.SmartThread._registry[name].thread.is_alive():
+                return False
+            if self.expected_registered[name].is_alive:
+                return False
+        return True
+
+    def verify_status(self, names: list[str],
+                      expected_status: st.ThreadStatus) -> bool:
+        """Verify that the given names have the given status.
+
+        Args:
+            names: names of the threads to check for the given status
+            expected_status: the status each thread is expected to have
+
+        """
+        for name in names:
+            if not st.SmartThread._registry[name].status == expected_status:
+                return False
+            if not self.expected_registered[name].status == expected_status:
+                return False
+        return True
+
+    def verify_registered(self, names: list[str]) -> bool:
+        """Verify that the given names are registered.
+
+        Args:
+            names: names of the threads to check for being registered
+
+        """
+        for name in names:
+            if name not in st.SmartThread._registry:
+                return False
+            if name not in self.expected_registered:
+                return False
+        return True
+
+    def verify_not_registered(self, names: list[str]) -> bool:
+        """Verify that the given names are not registered.
+
+        Args:
+            names: names of the threads to check for being unregistered
+
+        """
+        for name in names:
+            if name in st.SmartThread._registry:
+                return False
+            if name in self.expected_registered:
+                return False
+        return True
+
+    def verify_paired(self, names: list[str]) -> bool:
+        """Verify that the given names are paired.
+
+        Args:
+            names: names of the threads to check for being paired
+
+        """
+        pair_keys = combinations(sorted(names), 2)
+        for pair_key in pair_keys:
+            if pair_key not in st.SmartThread._pair_array:
+                return False
+            if pair_key[0] not in st.SmartThread._pair_array[
+                pair_key].status_blocks:
+                return False
+            if pair_key[1] not in st.SmartThread._pair_array[
+                pair_key].status_blocks:
+                return False
+
+            if pair_key not in self.expected_pairs:
+                return False
+            if pair_key[0] not in self.expected_pairs[pair_key]:
+                return False
+            if pair_key[1] not in self.expected_pairs[pair_key]:
+                return False
+        return True
+
+    def verify_half_paired(self, names: list[str],
+                           half_paired_names: list[str]) -> bool:
+        """Verify that the given names are half paired.
+
+        Args:
+            names: names of the threads to check for being half paired
+            half_paired_names: the names that should be in pair array
+        """
+        pair_keys = combinations(sorted(names), 2)
+        for pair_key in pair_keys:
+            if pair_key not in st.SmartThread._pair_array:
+                return False
+            if len(st.SmartThread._pair_array[
+                    pair_key].status_blocks) != 1:
+                return False
+            for name in half_paired_names:
+                if (name in pair_key
+                        and name not in st.SmartThread._pair_array[
+                            pair_key].status_blocks):
+                    return False
+
+            if pair_key not in self.expected_pairs:
+                return False
+            if len(self.expected_pairs[pair_key]) != 1:
+                return False
+            for name in half_paired_names:
+                if (name in pair_key
+                        and name not in self.expected_pairs[pair_key]):
+                    return False
+        return True
+
+    def verify_not_paired(self, names: list[str]) -> bool:
+        """Verify that the given names are not paired.
+
+        Args:
+            names: names of the threads to check for being not paired
+
+        """
+        pair_keys = combinations(sorted(names), 2)
+        for pair_key in pair_keys:
+            if pair_key in st.SmartThread._pair_array:
+                return False
+
+            if pair_key in self.expected_pairs:
+                return False
+
+        return True
 
 
 ################################################################
@@ -1740,6 +1793,8 @@ def outer_f1(f1_name: str, f1_config_ver: ConfigVerifier):
 ################################################################
 def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
 
+    commander_name = f1_config_ver.commander_thread.name
+
     while True:
 
         cmd_msg: ConfigCmd = f1_config_ver.msgs.get_msg(
@@ -1748,7 +1803,8 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
         if cmd_msg.cmd == ConfigCmds.Exit:
             if cmd_msg.confirm_response:
                 f1_config_ver.msgs.queue_msg(
-                    'alpha', f'{cmd_msg.cmd} completed by {f1_name}')
+                    commander_name,
+                    f'{cmd_msg.cmd} completed by {f1_name}')
             break
 
         if (cmd_msg.cmd == ConfigCmds.SendMsg
@@ -1823,15 +1879,15 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
 
         if cmd_msg.confirm_response:
             f1_config_ver.msgs.queue_msg(
-                    'alpha', f'{cmd_msg.cmd} completed by {f1_name}')
+                    commander_name, f'{cmd_msg.cmd} completed by {f1_name}')
 
 
 ################################################################
 # main_driver
 ################################################################
-def main_driver(main_name: str,
-                config_ver: ConfigVerifier,
+def main_driver(config_ver: ConfigVerifier,
                 scenario: list[ConfigCmd]) -> None:
+    commander_name = config_ver.commander_name
     for config_cmd in scenario:
         log_msg = f'config_cmd: {config_cmd}'
         config_ver.log_ver.add_msg(log_msg=re.escape(log_msg))
@@ -1850,10 +1906,16 @@ def main_driver(main_name: str,
         ############################################################
         # CreateF1Thread
         ############################################################
-        if config_cmd.cmd == ConfigCmds.CreateAutoStart:
+        if config_cmd.cmd == ConfigCmds.CreateCommanderAutoStart:
+            config_ver.create_commander_thread(
+                name=config_cmd.commander_name,
+                auto_start=True)
+        elif config_cmd.cmd == ConfigCmds.CreateCommanderNoStart:
+            config_ver.create_commander_thread(
+                name=config_cmd.commander_name,
+                auto_start=False)
+        elif config_cmd.cmd == ConfigCmds.CreateAutoStart:
             for new_name in config_cmd.names:
-                if new_name == 'alpha':
-                    continue
                 config_ver.create_f1_thread(
                     target=outer_f1,
                     name=new_name,
@@ -1861,8 +1923,6 @@ def main_driver(main_name: str,
                 )
         elif config_cmd.cmd == ConfigCmds.CreateNoStart:
             for new_name in config_cmd.names:
-                if new_name == 'alpha':
-                    continue
                 config_ver.create_f1_thread(
                     target=outer_f1,
                     name=new_name,
@@ -1892,23 +1952,23 @@ def main_driver(main_name: str,
 
         elif config_cmd.cmd == ConfigCmds.RecvMsg:
             for name in config_cmd.names:
-                if name == 'alpha':
+                if name == commander_name:
                     continue
                 config_ver.msgs.queue_msg(target=name,
                                           msg=config_cmd)
-            if 'alpha' in config_cmd.names:
+            if commander_name in config_cmd.names:
                 for from_name in config_cmd.from_names:
-                    config_ver.alpha_thread.recv_msg(
+                    config_ver.commander_thread.recv_msg(
                         remote=from_name,
                         timeout=3)
                     copy_pair_deque = (
-                        config_ver.alpha_thread
+                        config_ver.commander_thread
                         .time_last_pair_array_update.copy())
-                    config_ver.dec_ops_count('alpha',
+                    config_ver.dec_ops_count(commander_name,
                                              from_name,
                                              copy_pair_deque)
 
-                    log_msg = (f"{'alpha'} receiving msg from "
+                    log_msg = (f"{commander_name} receiving msg from "
                                f"{from_name}")
                     config_ver.log_ver.add_msg(
                         log_name='scottbrian_paratools.smart_thread',
@@ -1917,11 +1977,11 @@ def main_driver(main_name: str,
 
         elif config_cmd.cmd == ConfigCmds.Pause:
             for pause_name in config_cmd.names:
-                if pause_name == 'alpha':
+                if pause_name == commander_name:
                     continue
                 config_ver.msgs.queue_msg(
                     target=pause_name, msg=config_cmd)
-            if 'alpha' in config_cmd.names:
+            if commander_name in config_cmd.names:
                 time.sleep(config_cmd.pause_seconds)
         elif config_cmd.cmd == ConfigCmds.Exit:
             for exit_thread_name in config_cmd.names:
@@ -1936,26 +1996,21 @@ def main_driver(main_name: str,
                         num_alive += 1
                         time.sleep(.01)
                     else:
-                        assert {exit_thread_name}.issubset(
-                            config_ver.active_names)
-                        config_ver.active_names -= {exit_thread_name}
-                        config_ver.inactive_names |= {exit_thread_name}
-
                         config_ver.set_is_alive(target=exit_thread_name,
                                                 value=False,
                                                 exiting=False)
 
         elif config_cmd.cmd == ConfigCmds.Join:
-            config_ver.alpha_thread.join(targets=set(config_cmd.names))
+            config_ver.commander_thread.join(targets=set(config_cmd.names))
             copy_reg_deque = (
-                config_ver.alpha_thread.time_last_registry_update
+                config_ver.commander_thread.time_last_registry_update
                 .copy())
             copy_pair_deque = (
-                config_ver.alpha_thread.time_last_pair_array_update
+                config_ver.commander_thread.time_last_pair_array_update
                 .copy())
-            copy_join_names = config_ver.alpha_thread.join_names.copy()
+            copy_join_names = config_ver.commander_thread.join_names.copy()
             config_ver.del_thread(
-                name='alpha',
+                name=commander_name,
                 remotes=config_cmd.names,
                 reg_update_times=copy_reg_deque,
                 pair_array_update_times=copy_pair_deque,
@@ -1981,7 +2036,7 @@ def main_driver(main_name: str,
                 pending_responses.append(
                     f'{config_cmd.confirm_response_cmd} completed by {name}')
             while pending_responses:
-                a_msg = config_ver.msgs.get_msg('alpha', timeout=None)
+                a_msg = config_ver.msgs.get_msg(commander_name, timeout=None)
                 if a_msg in pending_responses:
                     pending_responses.remove(a_msg)
                 else:
@@ -1992,6 +2047,7 @@ def main_driver(main_name: str,
         else:
             raise UnrecognizedCmd(f'The config_cmd.cmd {config_cmd.cmd} '
                                   'is not recognized')
+
 
 ########################################################################
 # TestSmartThreadScenarios class
@@ -2105,8 +2161,9 @@ class TestSmartThreadScenarios:
         ################################################################
         # Set up log verification and start tests
         ################################################################
+        commander_name = 'alpha'
         log_ver = LogVer(log_name=__name__)
-        log_ver.add_call_seq(name='alpha',
+        log_ver.add_call_seq(name=commander_name,
                              seq=get_formatted_call_sequence())
 
         log_msg = 'mainline entered'
@@ -2119,23 +2176,23 @@ class TestSmartThreadScenarios:
 
         msgs = Msgs()
 
-        config_ver = ConfigVerifier(log_ver=log_ver,
+        config_ver = ConfigVerifier(commander_name=commander_name,
+                                    log_ver=log_ver,
                                     msgs=msgs)
 
-        names = {'alpha', 'beta', 'charlie'}
-        scenario: list[Any] = config_ver.build_create_suite(names=names)
+        names = ['beta', 'charlie']
+        scenario: list[Any] = config_ver.build_create_suite(
+            names=names, commander_name=commander_name, auto_start=True)
 
         scenario.extend([ConfigCmd(
             cmd=ConfigCmds.ValidateConfig)])
 
         scenario.extend([ConfigCmd(cmd=ConfigCmds.Pause,
-                                   names=['alpha'],
+                                   names=[commander_name],
                                    pause_seconds=1.5)])
 
-        scenario.extend(config_ver.build_exit_suite(
-            names=['charlie'], active_names=['alpha', 'beta']))
-        scenario.extend(config_ver.build_join_suite(
-            names=['charlie'], active_names=['alpha', 'beta']))
+        scenario.extend(config_ver.build_exit_suite(names=['charlie']))
+        scenario.extend(config_ver.build_join_suite(names=['charlie']))
         scenario.extend([ConfigCmd(cmd=ConfigCmds.SendMsgTimeoutTrue,
                                    names=['beta'],
                                    to_names=['charlie'],
@@ -2147,7 +2204,7 @@ class TestSmartThreadScenarios:
             confirm_response_cmd=ConfigCmds.SendMsgTimeoutTrue)])
 
         scenario.extend([ConfigCmd(cmd=ConfigCmds.Pause,
-                                   names=['alpha'],
+                                   names=[commander_name],
                                    pause_seconds=2.0)])
 
         scenario.extend([ConfigCmd(cmd=ConfigCmds.SendMsgTimeoutFalse,
@@ -2155,10 +2212,12 @@ class TestSmartThreadScenarios:
                                    to_names=['charlie'],
                                    timeout=2.0)])
         scenario.extend([ConfigCmd(cmd=ConfigCmds.Pause,
-                                   names=['alpha'],
+                                   names=[commander_name],
                                    pause_seconds=1.0)])
 
-        scenario.extend(config_ver.build_create_suite(names={'charlie'}))
+        scenario.extend(config_ver.build_create_suite(
+            names=['charlie'],
+            validate_config=False))
 
         scenario.extend([ConfigCmd(cmd=ConfigCmds.SendMsg,
                                    names=['beta'],
@@ -2173,14 +2232,12 @@ class TestSmartThreadScenarios:
         scenario.extend([ConfigCmd(
             cmd=ConfigCmds.ValidateConfig)])
 
-        scenario.extend(config_ver.build_exit_suite(
-            names - {'alpha'},
-            active_names=['alpha']))
-        scenario.extend(config_ver.build_join_suite(
-            names - {'alpha'}, active_names=['alpha']))
+        names = list(config_ver.active_names - {commander_name})
+        scenario.extend(config_ver.build_exit_suite(names=names))
 
-        main_driver(main_name='alpha',
-                    config_ver=config_ver,
+        scenario.extend(config_ver.build_join_suite(names=names))
+
+        main_driver(config_ver=config_ver,
                     scenario=scenario)
         # random.seed(random_seed_arg)
 
@@ -2255,7 +2312,7 @@ class TestSmartThreadScenarios:
 
         f1_names_to_use = random.sample(f1_names, num_threads)
 
-        names = {'alpha'} | set(f1_names_to_use)
+        names = ['alpha'] + f1_names_to_use
 
         scenario: list[Any] = config_ver.build_create_suite(names=names)
 
@@ -2274,9 +2331,9 @@ class TestSmartThreadScenarios:
             to_names=to_names))
 
         scenario.extend(config_ver.build_exit_suite(
-            names=names - {'alpha'}))
+            names=f1_names_to_use))
         scenario.extend(config_ver.build_join_suite(
-            names=names - {'alpha'}))
+            names=f1_names_to_use))
 
         main_driver(main_name='alpha',
                     config_ver=config_ver,
@@ -2415,11 +2472,11 @@ class TestSmartThreadScenarios:
             if num_joins < num_early_joins_to_do:
                 # tell thread to exit
                 msgs.queue_msg(target=thread_name, msg='exit')
-                config_ver.alpha_thread.join(targets=thread_name)
+                config_ver.commander_thread.join(targets=thread_name)
                 copy_reg_deque = (
-                    config_ver.alpha_thread.time_last_registry_update.copy())
+                    config_ver.commander_thread.time_last_registry_update.copy())
                 copy_pair_deque = (
-                    config_ver.alpha_thread.time_last_pair_array_update.copy())
+                    config_ver.commander_thread.time_last_pair_array_update.copy())
                 config_ver.del_thread(
                     name='alpha',
                     remotes=[thread_name],
@@ -2433,9 +2490,9 @@ class TestSmartThreadScenarios:
                             log_msg=log_msg)
             logger.debug(log_msg)
 
-            config_ver.alpha_thread.recv_msg(remote=thread_name, timeout=3)
+            config_ver.commander_thread.recv_msg(remote=thread_name, timeout=3)
             copy_pair_deque = (
-                config_ver.alpha_thread.time_last_pair_array_update.copy())
+                config_ver.commander_thread.time_last_pair_array_update.copy())
             config_ver.dec_ops_count('alpha', thread_name, copy_pair_deque)
 
             log_msg = f'alpha receiving msg from {thread_name}'
@@ -2463,11 +2520,11 @@ class TestSmartThreadScenarios:
         for thread_name in config_ver.f1_threads.keys():
             if thread_name in joined_names:
                 continue
-            config_ver.alpha_thread.join(targets=thread_name)
+            config_ver.commander_thread.join(targets=thread_name)
             copy_reg_deque = (
-                config_ver.alpha_thread.time_last_registry_update.copy())
+                config_ver.commander_thread.time_last_registry_update.copy())
             copy_pair_deque = (
-                config_ver.alpha_thread.time_last_pair_array_update.copy())
+                config_ver.commander_thread.time_last_pair_array_update.copy())
             config_ver.del_thread(
                 name='alpha',
                 remotes=[thread_name],
@@ -2871,7 +2928,7 @@ class TestSmartThreadErrors:
         ################################################################
         exp_error = st.SmartThreadJoinTimedOut
         with pytest.raises(exp_error):
-            config_ver.alpha_thread.join(targets='beta',
+            config_ver.commander_thread.join(targets='beta',
                                          timeout=2)
 
         config_ver.add_log_msg(re.escape(
@@ -2900,13 +2957,13 @@ class TestSmartThreadErrors:
         ################################################################
         # join beta - should be ok since after exit
         ################################################################
-        config_ver.alpha_thread.join(targets='beta',
+        config_ver.commander_thread.join(targets='beta',
                                      timeout=2)
         copy_reg_deque = (
-            config_ver.alpha_thread.time_last_registry_update
+            config_ver.commander_thread.time_last_registry_update
             .copy())
         copy_pair_deque = (
-            config_ver.alpha_thread.time_last_pair_array_update
+            config_ver.commander_thread.time_last_pair_array_update
             .copy())
         config_ver.del_thread(
             name='alpha',
