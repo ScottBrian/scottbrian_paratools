@@ -9,6 +9,7 @@ from datetime import datetime
 from enum import Enum, auto
 from itertools import combinations
 import logging
+import math
 import queue
 import random
 import re
@@ -99,6 +100,7 @@ class ConfigCmd:
     auto_start: bool = True
     from_names: Optional[list[str]] = None
     to_names: Optional[list[str]] = None
+    timeout_names: Optional[list[str]] = None
     exp_status: Optional[st.ThreadStatus] = None
     half_paired_names: Optional[list[str]] = None
     pause_seconds: Optional[float] = None
@@ -665,7 +667,7 @@ def random_seed_arg(request: Any) -> int:
 ###############################################################################
 # num_threads_arg
 ###############################################################################
-num_threads_arg_list = [1, 2, 3, 4, 5, 6, 7, 8]
+num_threads_arg_list = [3, 8, 16]
 
 
 @pytest.fixture(params=num_threads_arg_list)  # type: ignore
@@ -854,8 +856,10 @@ class ConfigVerifier:
             'echo', 'fox', 'george', 'henry',
             'ida', 'jack', 'king', 'love',
             'mary', 'nancy', 'oscar', 'peter'}
-        self.inactive_names: set[str] = set()
+        self.unregistered_names.remove(commander_name)
+        self.registered_only_names: set[str] = set()
         self.active_names: set[str] = set()
+        self.inactive_names: set[str] = set()
         self.expected_registered: dict[str, ThreadTracker] = {}
         self.expected_pairs: dict[tuple[str, str],
                                   dict[str, ThreadPairStatus]] = {}
@@ -1458,6 +1462,7 @@ class ConfigVerifier:
                 commander thread during create
             names: names to use on the create
             auto_start: specifies whether to start threads during create
+            validate_config: indicates whether to do config validation
 
         Returns:
             a list of ConfigCmd items
@@ -1467,11 +1472,7 @@ class ConfigVerifier:
         ret_suite = []
         if commander_name:
             active_names += [commander_name]
-            if not set([commander_name]).issubset(self.unregistered_names):
-                raise InvalidInputDetected(f'Input commander name '
-                                           f'{commander_name} not a '
-                                           f'subset of unregistered names '
-                                           f'{self.unregistered_names}')
+
             if commander_auto_start:
                 ret_suite.extend([
                     ConfigCmd(cmd=ConfigCmds.CreateCommanderAutoStart,
@@ -1481,7 +1482,6 @@ class ConfigVerifier:
                     ConfigCmd(cmd=ConfigCmds.CreateCommanderNoStart,
                               commander_name=commander_name)])
 
-            self.unregistered_names -= {commander_name}
             self.active_names |= {commander_name}
 
         if names:
@@ -1512,6 +1512,263 @@ class ConfigVerifier:
         if validate_config:
             ret_suite.extend([
                 ConfigCmd(cmd=ConfigCmds.ValidateConfig)])
+
+        return ret_suite
+
+    ################################################################
+    # build_create_suite
+    ################################################################
+    def build_create_suite_num(self,
+                               commander_name: Optional[str] = None,
+                               commander_auto_start: Optional[bool] = True,
+                               num_f1_auto_start: Optional[float] = None,
+                               num_f1_no_start: Optional[float] = None,
+                               validate_config: Optional[bool] = True
+                               ) -> list[ConfigCmd]:
+        """Return a list of ConfigCmd items for a create.
+
+        Args:
+            commander_name: specifies that a commander thread is to be
+                created with this name
+            commander_auto_start: indicates whether to create
+                commander with auto_start if commander is True
+            num_f1_auto_start: ratio of unregistered f1_threads to
+                create with auto_start
+            num_f1_no_start: ratio of unregistered f1_threads to
+                create with no_start
+            validate_config: indicates whether to do config validation
+
+        Returns:
+            a list of ConfigCmd items
+        """
+
+        active_names = list(self.active_names)
+        registered_only_names = []
+        ret_suite = []
+
+        if commander_name:
+            active_names += [commander_name]
+            if commander_auto_start:
+                ret_suite.extend([
+                    ConfigCmd(cmd=ConfigCmds.CreateCommanderAutoStart,
+                              commander_name=commander_name)])
+            else:
+                ret_suite.extend([
+                    ConfigCmd(cmd=ConfigCmds.CreateCommanderNoStart,
+                              commander_name=commander_name)])
+
+            self.active_names |= {commander_name}
+
+        f1_auto_start_names = []
+        f1_no_start_names = []
+
+        num_auto_start = 0
+        num_no_start = 0
+        if num_f1_auto_start:
+            num_auto_start = math.ceil(
+                num_f1_auto_start * len(self.unregistered_names))
+        if num_f1_no_start:
+            num_no_start = math.floor(
+                num_f1_no_start * len(self.unregistered_names))
+
+        if num_auto_start > 0:
+            for idx in range(num_auto_start):
+                f1_auto_start_names.append(self.unregistered_names.pop())
+
+            active_names += f1_auto_start_names
+
+            ret_suite.extend([
+                ConfigCmd(cmd=ConfigCmds.CreateAutoStart,
+                          names=f1_auto_start_names)])
+
+            self.active_names |= set(f1_auto_start_names)
+
+        if num_no_start > 0:
+            for idx in range(num_no_start):
+                f1_no_start_names.append(self.unregistered_names.pop())
+
+            ret_suite.extend([
+                ConfigCmd(cmd=ConfigCmds.CreateNoStart,
+                          names=f1_no_start_names)])
+
+            registered_only_names += f1_no_start_names
+            self.registered_only_names |= set(f1_no_start_names)
+
+        check_registered = []
+        check_registered += (active_names + registered_only_names)
+
+        if check_registered:
+            ret_suite.extend([
+                ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+                          names=check_registered),
+                ConfigCmd(cmd=ConfigCmds.VerifyPaired, names=check_registered)
+                ])
+        if active_names:
+            ret_suite.extend([
+                ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=active_names),
+                ConfigCmd(cmd=ConfigCmds.VerifyStatus,
+                          names=active_names,
+                          exp_status=st.ThreadStatus.Alive)])
+
+        if registered_only_names:
+            ret_suite.extend([
+                ConfigCmd(cmd=ConfigCmds.VerifyNotAlive,
+                          names=registered_only_names),
+                ConfigCmd(cmd=ConfigCmds.VerifyStatus,
+                          names=registered_only_names,
+                          exp_status=st.ThreadStatus.Registered)])
+
+        if validate_config:
+            ret_suite.extend([
+                ConfigCmd(cmd=ConfigCmds.ValidateConfig)])
+
+        return ret_suite
+
+    ################################################################
+    # build_create_suite2
+    ################################################################
+    def build_create_suite2(self,
+                            commander_name: Optional[str] = None,
+                            commander_auto_start: Optional[bool] = True,
+                            num_f1_auto_start: Optional[int] = 0,
+                            num_f1_no_start: Optional[int] = 0,
+                            validate_config: Optional[bool] = True
+                            ) -> list[ConfigCmd]:
+        """Return a list of ConfigCmd items for a create.
+
+        Args:
+            commander_name: specifies that a commander thread is to be
+                created with this name
+            commander_auto_start: indicates whether to create
+                commander with auto_start if commander is True
+            num_f1_auto_start: ratio of unregistered f1_threads to
+                create with auto_start
+            num_f1_no_start: ratio of unregistered f1_threads to
+                create with no_start
+            validate_config: indicates whether to do config validation
+
+        Returns:
+            a list of ConfigCmd items
+        """
+
+        active_names = list(self.active_names)
+        registered_only_names = []
+        ret_suite = []
+
+        if commander_name:
+            active_names += [commander_name]
+            if commander_auto_start:
+                ret_suite.extend([
+                    ConfigCmd(cmd=ConfigCmds.CreateCommanderAutoStart,
+                              commander_name=commander_name)])
+            else:
+                ret_suite.extend([
+                    ConfigCmd(cmd=ConfigCmds.CreateCommanderNoStart,
+                              commander_name=commander_name)])
+
+            self.active_names |= {commander_name}
+
+        f1_auto_start_names = []
+        f1_no_start_names = []
+
+        if num_f1_auto_start > 0:
+            for idx in range(num_f1_auto_start):
+                f1_auto_start_names.append(self.unregistered_names.pop())
+
+            active_names += f1_auto_start_names
+
+            ret_suite.extend([
+                ConfigCmd(cmd=ConfigCmds.CreateAutoStart,
+                          names=f1_auto_start_names)])
+
+            self.active_names |= set(f1_auto_start_names)
+
+        if num_f1_no_start > 0:
+            for idx in range(num_f1_no_start):
+                f1_no_start_names.append(self.unregistered_names.pop())
+
+            ret_suite.extend([
+                ConfigCmd(cmd=ConfigCmds.CreateNoStart,
+                          names=f1_no_start_names)])
+
+            registered_only_names += f1_no_start_names
+            self.registered_only_names |= set(f1_no_start_names)
+
+        check_registered = []
+        check_registered += (active_names + registered_only_names)
+
+        if check_registered:
+            ret_suite.extend([
+                ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+                          names=check_registered),
+                ConfigCmd(cmd=ConfigCmds.VerifyPaired, names=check_registered)
+            ])
+        if active_names:
+            ret_suite.extend([
+                ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=active_names),
+                ConfigCmd(cmd=ConfigCmds.VerifyStatus,
+                          names=active_names,
+                          exp_status=st.ThreadStatus.Alive)])
+
+        if registered_only_names:
+            ret_suite.extend([
+                ConfigCmd(cmd=ConfigCmds.VerifyNotAlive,
+                          names=registered_only_names),
+                ConfigCmd(cmd=ConfigCmds.VerifyStatus,
+                          names=registered_only_names,
+                          exp_status=st.ThreadStatus.Registered)])
+
+        if validate_config:
+            ret_suite.extend([
+                ConfigCmd(cmd=ConfigCmds.ValidateConfig)])
+
+        return ret_suite
+
+    ################################################################
+    # build_msg_timeout_suite
+    ################################################################
+    def build_msg_timeout_true_suite(self,
+                                     num_senders: Optional[int] = 1,
+                                     num_targets: Optional[int] = 1,
+                                     num_timeouts: Optional[int] = 1
+                                     ) -> list[ConfigCmd]:
+        """Return a list of ConfigCmd items for a msg timeout.
+
+        Args:
+            num_timeouts: specifies the number of threads that should
+                be exited to cause timeout
+            num_sends: specifies number of sends to do
+
+        Returns:
+            a list of ConfigCmd items
+        """
+        ret_suite = []
+
+        f1_active_names = self.active_names - {self.commander_name}
+        msg_names: list[str] = random.sample(
+            f1_active_names, num_senders+num_targets)
+        sender_names: list[str] = random.sample(msg_names, num_senders)
+        target_names: list[str] = list(set(msg_names) - set(sender_names))
+        exit_names: list[str] = random.sample(target_names, num_timeouts)
+
+        ret_suite.extend(self.build_exit_suite(names=exit_names))
+        ret_suite.extend(self.build_join_suite(names=exit_names))
+        ret_suite.extend([
+            ConfigCmd(cmd=ConfigCmds.SendMsgTimeoutTrue,
+                      names=sender_names,
+                      to_names=target_names,
+                      timeout_names=exit_names,
+                      timeout=1.5,
+                      confirm_response=True),
+            ConfigCmd(cmd=ConfigCmds.ConfirmResponse,
+                      names=sender_names,
+                      confirm_response_cmd=ConfigCmds.SendMsgTimeoutTrue)
+        ])
+
+        # restore config by adding back the exited threads
+        ret_suite.extend(self.build_create_suite(
+            names=exit_names,
+            validate_config=True))
 
         return ret_suite
 
@@ -1808,22 +2065,41 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
             break
 
         if (cmd_msg.cmd == ConfigCmds.SendMsg
-                or cmd_msg.cmd == ConfigCmds.SendMsgTimeoutFalse):
+                or cmd_msg.cmd == ConfigCmds.SendMsgTimeoutFalse
+                or cmd_msg.cmd == ConfigCmds.SendMsgTimeoutTrue):
             ####################################################
             # send one or more msgs
             ####################################################
-            f1_config_ver.inc_ops_count(cmd_msg.to_names,
+            if cmd_msg.timeout_names:
+                ops_count_names = list(
+                    set(cmd_msg.to_names) - set(cmd_msg.timeout_names))
+            else:
+                ops_count_names = cmd_msg.to_names
+            f1_config_ver.inc_ops_count(ops_count_names,
                                         f1_name)
             if cmd_msg.cmd == ConfigCmds.SendMsg:
                 f1_config_ver.f1_threads[f1_name].send_msg(
-                    targets=cmd_msg.to_names,
+                    targets=set(cmd_msg.to_names),
                     msg=cmd_msg)
-            else:
+            elif cmd_msg.cmd == ConfigCmds.SendMsgTimeoutFalse:
                 f1_config_ver.f1_threads[f1_name].send_msg(
-                    targets=cmd_msg.to_names,
+                    targets=set(cmd_msg.to_names),
                     msg=cmd_msg,
                     timeout=cmd_msg.timeout)
-            for f1_to_name in cmd_msg.to_names:
+            else:
+                with pytest.raises(st.SmartThreadSendMsgTimedOut):
+                    f1_config_ver.f1_threads[f1_name].send_msg(
+                        targets=set(cmd_msg.to_names),
+                        msg=cmd_msg,
+                        timeout=cmd_msg.timeout)
+
+                f1_config_ver.add_log_msg(re.escape(
+                    f'{f1_name} timeout of a send_msg()'))
+                f1_config_ver.add_log_msg(
+                    'Raise SmartThreadSendMsgTimedOut',
+                    log_level=logging.ERROR)
+
+            for f1_to_name in ops_count_names:
                 log_msg_f1 = (f'{f1_name} sending message to '
                               f'{f1_to_name}')
                 f1_config_ver.log_ver.add_msg(
@@ -1831,21 +2107,21 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
                     log_level=logging.INFO,
                     log_msg=log_msg_f1)
 
-        elif cmd_msg.cmd == ConfigCmds.SendMsgTimeoutTrue:
-            ####################################################
-            # send one or more msgs
-            ####################################################
-            with pytest.raises(st.SmartThreadSendMsgTimedOut):
-                f1_config_ver.f1_threads[f1_name].send_msg(
-                    targets=cmd_msg.to_names,
-                    msg=cmd_msg,
-                    timeout=cmd_msg.timeout)
-
-            f1_config_ver.add_log_msg(re.escape(
-                f'{f1_name} timeout of a send_msg()'))
-            f1_config_ver.add_log_msg(
-                'Raise SmartThreadSendMsgTimedOut',
-                log_level=logging.ERROR)
+        # elif cmd_msg.cmd == ConfigCmds.SendMsgTimeoutTrue:
+        #     ####################################################
+        #     # send one or more msgs
+        #     ####################################################
+        #     with pytest.raises(st.SmartThreadSendMsgTimedOut):
+        #         f1_config_ver.f1_threads[f1_name].send_msg(
+        #             targets=cmd_msg.to_names,
+        #             msg=cmd_msg,
+        #             timeout=cmd_msg.timeout)
+        #
+        #     f1_config_ver.add_log_msg(re.escape(
+        #         f'{f1_name} timeout of a send_msg()'))
+        #     f1_config_ver.add_log_msg(
+        #         'Raise SmartThreadSendMsgTimedOut',
+        #         log_level=logging.ERROR)
 
         elif cmd_msg.cmd == ConfigCmds.RecvMsg:
             ####################################################
@@ -2126,7 +2402,7 @@ class TestSmartThreadScenarios:
         logger.debug('mainline exiting')
 
     ####################################################################
-    # test_smart_thread_scenarios
+    # test_smart_thread_meta_scenarios
     ####################################################################
     def test_smart_thread_meta_scenarios(
             self,
@@ -2240,6 +2516,140 @@ class TestSmartThreadScenarios:
         main_driver(config_ver=config_ver,
                     scenario=scenario)
         # random.seed(random_seed_arg)
+
+        ################################################################
+        # check log results
+        ################################################################
+        match_results = log_ver.get_match_results(caplog=caplog)
+        log_ver.print_match_results(match_results)
+        log_ver.verify_log_results(match_results)
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_thread_meta_scenarios2
+    ####################################################################
+    def test_smart_thread_meta_scenarios2(
+            self,
+            # num_threads_arg: int,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            num_threads_arg: number of threads to start, including
+                the commander thread
+            caplog: pytest fixture to capture log output
+
+        """
+
+        ################################################################
+        # f1
+        ################################################################
+        def f1(f1_name: str, f1_config_ver: ConfigVerifier):
+            log_msg_f1 = f'f1 entered for {f1_name}'
+            log_ver.add_msg(log_level=logging.DEBUG,
+                            log_msg=log_msg_f1)
+            logger.debug(log_msg_f1)
+
+            f1_driver(f1_name=f1_name, f1_config_ver=f1_config_ver)
+
+            ############################################################
+            # exit
+            ############################################################
+            log_msg_f1 = f'f1 exiting for {f1_name}'
+            log_ver.add_msg(log_level=logging.DEBUG,
+                            log_msg=log_msg_f1)
+            logger.debug(log_msg_f1)
+
+        ################################################################
+        # Set up log verification and start tests
+        ################################################################
+        commander_name = 'alpha'
+        log_ver = LogVer(log_name=__name__)
+        log_ver.add_call_seq(name=commander_name,
+                             seq=get_formatted_call_sequence())
+
+        log_msg = 'mainline entered'
+        log_ver.add_msg(log_msg=log_msg)
+        logger.debug(log_msg)
+
+        # log_msg = f'random_seed_arg: {random_seed_arg}'
+        # log_ver.add_msg(log_msg=log_msg)
+        # logger.debug(log_msg)
+        random.seed(42)
+        msgs = Msgs()
+
+        config_ver = ConfigVerifier(commander_name=commander_name,
+                                    log_ver=log_ver,
+                                    msgs=msgs)
+
+        scenario: list[Any] = config_ver.build_create_suite2(
+            commander_name=commander_name,
+            commander_auto_start=True,
+            num_f1_auto_start=8)
+
+        scenario.extend([ConfigCmd(cmd=ConfigCmds.Pause,
+                                   names=[commander_name],
+                                   pause_seconds=1.5)])
+
+        # f1_active_names = config_ver.active_names - {commander_name}
+        # msg_names: list[str] = random.sample(f1_active_names, 2)
+        # exit_name = msg_names[0]
+        # sender_name = msg_names[1]
+        # scenario.extend(config_ver.build_exit_suite(names=[exit_name]))
+        # scenario.extend(config_ver.build_join_suite(names=[exit_name]))
+        # scenario.extend([ConfigCmd(cmd=ConfigCmds.SendMsgTimeoutTrue,
+        #                            names=[sender_name],
+        #                            to_names=[exit_name],
+        #                            timeout=1.5,
+        #                            confirm_response=True)])
+        # scenario.extend([ConfigCmd(
+        #     cmd=ConfigCmds.ConfirmResponse,
+        #     names=[sender_name],
+        #     confirm_response_cmd=ConfigCmds.SendMsgTimeoutTrue)])
+
+        scenario.extend(
+            config_ver.build_msg_timeout_true_suite(num_senders=2,
+                                                    num_targets=3,
+                                                    num_timeouts=2))
+
+        scenario.extend([ConfigCmd(cmd=ConfigCmds.Pause,
+                                   names=[commander_name],
+                                   pause_seconds=2.0)])
+
+        # scenario.extend([ConfigCmd(cmd=ConfigCmds.SendMsgTimeoutFalse,
+        #                            names=[sender_name],
+        #                            to_names=[exit_name],
+        #                            timeout=2.0)])
+        # scenario.extend([ConfigCmd(cmd=ConfigCmds.Pause,
+        #                            names=[commander_name],
+        #                            pause_seconds=1.0)])
+        #
+        # scenario.extend(config_ver.build_create_suite(
+        #     names=[exit_name],
+        #     validate_config=False))
+        #
+        # scenario.extend([ConfigCmd(cmd=ConfigCmds.SendMsg,
+        #                            names=[sender_name],
+        #                            to_names=[exit_name],
+        #                            confirm_response=True)])
+        #
+        # scenario.extend([ConfigCmd(
+        #     cmd=ConfigCmds.ConfirmResponse,
+        #     names=[sender_name],
+        #     confirm_response_cmd=ConfigCmds.SendMsg)])
+
+        scenario.extend([ConfigCmd(
+            cmd=ConfigCmds.ValidateConfig)])
+
+        names = list(config_ver.active_names - {commander_name})
+        scenario.extend(config_ver.build_exit_suite(names=names))
+
+        scenario.extend(config_ver.build_join_suite(names=names))
+
+        main_driver(config_ver=config_ver,
+                    scenario=scenario)
 
         ################################################################
         # check log results

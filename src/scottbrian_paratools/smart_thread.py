@@ -1015,7 +1015,8 @@ class SmartThread:
                             raise SmartThreadRemoteThreadNotAlive(
                                 f'{self.name} send_msg detected {remote} '
                                 'thread is not alive.')
-                    # If here, remote is in registry and is alive.
+                    # If here, remote is in registry and is alive or
+                    # hopefully soon to be alive.
                     # This also means we have an entry for the remote in
                     # the status_blocks in the connection array
                     try:
