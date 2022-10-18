@@ -455,6 +455,7 @@ class SmartThread:
         self.time_last_pair_array_update: deque[datetime] = deque([], 32)
         self.time_last_registry_update: deque[datetime] = deque([], 32)
         self.join_names: deque[str] = deque([], 32)
+        self.unregister_names: deque[str] = deque([], 32)
 
         # register this new SmartThread so others can find us
         self._register()
@@ -499,6 +500,30 @@ class SmartThread:
     ####################################################################
     # register
     ####################################################################
+    def _set_status(self,
+                    target_thread: "SmartThread",
+                    new_status: ThreadStatus) -> bool:
+        """Set the status for a thread.
+
+        Args:
+            target_thread: thread to set status for
+            new_status: the new status to be set
+
+        Returns:
+            True if status was changed, False otherwise
+        """
+        saved_status = target_thread.status
+        if saved_status == new_status:
+            return False
+        target_thread.status = new_status
+        self.logger.debug(
+            f'{self.name} set status for thread {target_thread.name} '
+            f'from {saved_status} to {new_status}')
+        return True
+
+    ####################################################################
+    # register
+    ####################################################################
     def _register(self) -> None:
         """Register SmartThread in the class registry.
 
@@ -533,11 +558,14 @@ class SmartThread:
             # Add entry if not already present
             if self.name not in SmartThread._registry:
                 SmartThread._registry[self.name] = self
-                saved_status = self.status
-                self.status = ThreadStatus.Registered
-                self.logger.debug(
-                    f'{self.name} set status for thread {self.name} '
-                    f'from {saved_status} to {self.status}')
+                # saved_status = self.status
+                # self.status = ThreadStatus.Registered
+                # self.logger.debug(
+                #     f'{self.name} set status for thread {self.name} '
+                #     f'from {saved_status} to {self.status}')
+                self._set_status(
+                    target_thread=self,
+                    new_status=ThreadStatus.Registered)
                 SmartThread._registry_last_update = datetime.utcnow()
                 self.time_last_registry_update.append(
                     SmartThread._registry_last_update)
@@ -620,26 +648,135 @@ class SmartThread:
 
         """
         if not self.thread.is_alive():
-            saved_status = self.status
-            self.status = ThreadStatus.Starting
-            if saved_status != self.status:
-                self.logger.debug(
-                    f'{self.name} set status for thread {self.name} '
-                    f'from {saved_status} to {self.status}')
+            # saved_status = self.status
+            # self.status = ThreadStatus.Starting
+            # if saved_status != self.status:
+            #     self.logger.debug(
+            #         f'{self.name} set status for thread {self.name} '
+            #         f'from {saved_status} to {self.status}')
+            self._set_status(
+                target_thread=self,
+                new_status=ThreadStatus.Starting)
             self.thread.start()
 
         if self.thread.is_alive():
-            saved_status = self.status
-            self.status = ThreadStatus.Alive
-            if saved_status != self.status:
-                self.logger.debug(
-                    f'{self.name} set status for thread {self.name} '
-                    f'from {saved_status} to {self.status}')
+            # saved_status = self.status
+            # self.status = ThreadStatus.Alive
+            # if saved_status != self.status:
+            #     self.logger.debug(
+            #         f'{self.name} set status for thread {self.name} '
+            #         f'from {saved_status} to {self.status}')
+            self._set_status(
+                target_thread=self,
+                new_status=ThreadStatus.Alive)
 
         self.logger.debug(
             f'{self.name} thread started, thread.is_alive() = '
             f'{self.thread.is_alive()}, '
             f'status: {self.status}')
+
+    ####################################################################
+    # unregister
+    ####################################################################
+    def unregister(self, *,
+                   targets: Union[str, set[str]],
+                   log_msg: Optional[str] = None) -> None:
+        """Unregister threads that were never started.
+
+        Args:
+            targets: thread names that are to be unregistered
+            log_msg: log message to issue
+
+
+        Notes:
+            1) A thread that is created but not started remains in the
+               registered state until it is started at which time it
+               enters the active state
+
+        :Example: instantiate SmartThread without auto_start and then
+                      unregister the thread
+
+        >>> import scottbrian_paratools.smart_event as st
+        >>> def f1() -> None:
+        ...     print('f1 beta entered')
+        ...     beta_smart_thread.wait()
+        ...     print('f1 beta exiting')
+
+        >>> alpha_smart_thread = SmartThread(name='alpha')
+        >>> beta_smart_thread = SmartThread(name='beta',
+        ...                                 target=f1,
+        ...                                 auto_start=False)
+        >>> beta_smart_thread.unregister()
+
+        """
+        # get SetupBlock with targets in a set and a timer object
+        sb = self._common_setup(targets=targets, timeout=None)
+
+        # if caller specified a log message to issue
+        caller_info = ''
+        if log_msg and self.debug_logging_enabled:
+            caller_info = get_formatted_call_sequence(latest=1, depth=1)
+            self.logger.debug(
+                f'unregister() entered by {self.name} to unregister '
+                f' {sb.targets} '
+                f'{caller_info} {log_msg}')
+
+        work_targets = sb.targets.copy()
+
+        while work_targets:
+            for remote in work_targets:
+                with sel.SELockExcl(SmartThread._registry_lock):
+                    if remote not in SmartThread._registry:
+                        raise SmartThreadInvalidUnregister(
+                            f'{self.name} attempted to unregister '
+                            f'remote thread {remote} which was not '
+                            f'found in the registry.')
+                    if SmartThread._registry[
+                            remote].status != ThreadStatus.Registered:
+                        raise SmartThreadInvalidUnregister(
+                            f'{self.name} attempted to unregister '
+                            f'remote thread {remote} which had the '
+                            'incorrect status of '
+                            f'{SmartThread._registry[remote].status}.')
+
+                    # indicate remove from registry
+                    # saved_status = SmartThread._registry[remote].status
+                    # SmartThread._registry[
+                    #     remote].status = ThreadStatus.Stopped
+                    # if saved_status != SmartThread._registry[
+                    #         remote].status:
+                    #     self.logger.debug(
+                    #         f'{self.name} set status for thread '
+                    #         f'{remote} '
+                    #         f'from {saved_status} to '
+                    #         f'{SmartThread._registry[remote].status}')
+                    self._set_status(
+                        target_thread=SmartThread._registry[remote],
+                        new_status=ThreadStatus.Stopped)
+                    # remove this thread from the registry
+                    self._clean_up_registry()
+                    self.unregister_names.append(remote)
+                    self.logger.debug(
+                        f'{self.name} did successful unregister of '
+                        f'{remote}.')
+
+                    # restart while loop with one less remote
+                    work_targets.remove(remote)
+                    break
+
+            if sb.timer.is_expired():
+                self.logger.error(
+                    f'{self.name} raising SmartThreadJoinTimedOut waiting '
+                    f'for {work_targets}')
+                raise SmartThreadJoinTimedOut(
+                    f'{self.name} timed out waiting for {work_targets}.')
+
+            time.sleep(0.2)
+
+        if log_msg and self.debug_logging_enabled:
+            self.logger.debug(
+                f'join() by {self.name} to join {sb.targets} exiting. '
+                f'{caller_info} {log_msg}')
 
     ####################################################################
     # join
@@ -715,7 +852,7 @@ class SmartThread:
                         # Note also that we timeout each join after a
                         # short 0.2 seconds so that we release and
                         # re-obtain the registry lock in between
-                        # attempts. This is done to ensure we  don't
+                        # attempts. This is done to ensure we don't
                         # deadlock with any of the other services
                         # (e.g., recv_msg)
                         SmartThread._registry[remote].thread.join(timeout=0.2)
@@ -724,16 +861,19 @@ class SmartThread:
                         # not alive in case we timed out
                         if not SmartThread._registry[remote].thread.is_alive():
                             # indicate remove from registry
-                            saved_status = SmartThread._registry[remote].status
-                            SmartThread._registry[
-                                remote].status = ThreadStatus.Stopped
-                            if saved_status != SmartThread._registry[
-                                    remote].status:
-                                self.logger.debug(
-                                    f'{self.name} set status for thread '
-                                    f'{remote} '
-                                    f'from {saved_status} to '
-                                    f'{SmartThread._registry[remote].status}')
+                            # saved_status = SmartThread._registry[remote].status
+                            # SmartThread._registry[
+                            #     remote].status = ThreadStatus.Stopped
+                            # if saved_status != SmartThread._registry[
+                            #         remote].status:
+                            #     self.logger.debug(
+                            #         f'{self.name} set status for thread '
+                            #         f'{remote} '
+                            #         f'from {saved_status} to '
+                            #         f'{SmartThread._registry[remote].status}')
+                            self._set_status(
+                                target_thread=SmartThread._registry[remote],
+                                new_status=ThreadStatus.Stopped)
                             # remove this thread from the registry
                             self._clean_up_registry()
                             self.join_names.append(remote)
@@ -823,16 +963,19 @@ class SmartThread:
         changed = False
         # scan registry and adjust status
         for name0, s_thread1 in (SmartThread._registry.items()):
-            saved_status = s_thread1.status
+            # saved_status = s_thread1.status
+            # if s_thread1.thread.is_alive():
+            #     s_thread1.status = ThreadStatus.Alive
+            #
+            # if saved_status != s_thread1.status:
+            #     self.logger.debug(
+            #         f'{self.name} set status for thread {name0} '
+            #         f'from {saved_status} to {s_thread1.status}')
+            #     changed = True
             if s_thread1.thread.is_alive():
-                s_thread1.status = ThreadStatus.Alive
-
-            if saved_status != s_thread1.status:
-                self.logger.debug(
-                    f'{self.name} set status for thread {name0} '
-                    f'from {saved_status} to {s_thread1.status}')
-                changed = True
-
+                if self._set_status(target_thread=s_thread1,
+                                    new_status=ThreadStatus.Alive):
+                    changed = True
             for name1, s_thread2 in (SmartThread._registry.items()):
                 if name0 == name1:
                     continue
