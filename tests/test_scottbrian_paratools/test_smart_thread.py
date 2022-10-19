@@ -71,6 +71,7 @@ class ConfigCmds(Enum):
     CreateNoStart = auto()
     CreateAutoStart = auto()
     Start = auto()
+    Unregister = auto()
     SendMsg = auto()
     SendMsgTimeoutTrue = auto()
     SendMsgTimeoutFalse = auto()
@@ -1727,7 +1728,79 @@ class ConfigVerifier:
         return ret_suite
 
     ################################################################
-    # build_msg_timeout_suite
+    # build_unreg_suite
+    ################################################################
+    def build_unreg_suite(self,
+                          names: list[str]) -> list[ConfigCmd]:
+        """Return a list of ConfigCmd items for unregister.
+
+        Args:
+            names: thread name to be unregistered
+
+        Returns:
+            a list of ConfigCmd items
+        """
+        if not set(names).issubset(self.registered_names):
+            raise InvalidInputDetected(f'Input {names} is not a subset '
+                                       'of registered names '
+                                       f'{self.registered_names}')
+
+        active_names = list(self.active_names)
+
+        ret_suite = [
+            ConfigCmd(cmd=ConfigCmds.Unregister, names=names),
+            ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered, names=names),
+            ConfigCmd(cmd=ConfigCmds.VerifyNotPaired, names=names)]
+
+        if active_names:
+            ret_suite.extend([
+                ConfigCmd(cmd=ConfigCmds.VerifyRegistered, names=active_names),
+                ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=active_names),
+                ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=active_names,
+                          exp_status=st.ThreadStatus.Alive)])
+
+        ret_suite.extend([ConfigCmd(cmd=ConfigCmds.ValidateConfig)])
+
+        self.registered_names -= set(names)
+        self.unregistered_names |= set(names)
+
+        return ret_suite
+
+    ################################################################
+    # build_start_suite
+    ################################################################
+    def build_start_suite(self,
+                          names: list[str]) -> list[ConfigCmd]:
+        """Return a list of ConfigCmd items for unregister.
+
+        Args:
+            names: thread name to be started
+
+        Returns:
+            a list of ConfigCmd items
+        """
+        if not set(names).issubset(self.registered_names):
+            raise InvalidInputDetected(f'Input {names} is not a subset '
+                                       'of registered names '
+                                       f'{self.registered_names}')
+
+        active_names = list(self.active_names) + names
+
+        ret_suite = [
+            ConfigCmd(cmd=ConfigCmds.Start, names=names),
+            ConfigCmd(cmd=ConfigCmds.VerifyRegistered, names=active_names),
+            ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=active_names),
+            ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=active_names,
+                      exp_status=st.ThreadStatus.Alive),
+            ConfigCmd(cmd=ConfigCmds.ValidateConfig)]
+
+        self.registered_names -= set(names)
+        self.active_names |= set(names)
+
+        return ret_suite
+
+    ################################################################
+    # build_config
     ################################################################
     def build_config(self,
                      num_registered: int,
@@ -1754,53 +1827,108 @@ class ConfigVerifier:
         assert (num_registered
                 + num_active
                 + num_stopped) <= len(self.thread_names)
+        assert num_active >= 1  # always need at least 1 for commander
 
         ret_suite = []
         num_adjust_registered = len(self.registered_names) - num_registered
         num_adjust_active = len(self.active_names) - num_active
         num_adjust_stopped = len(self.stopped_names) - num_stopped
 
-        # if num_active < len(self.active_names):
-        #     num_suplus_active = len(self.active_names) - num_active_needed
-        # else:
-        #
-        #
-        # num_active_needed = (num_senders
-        #                      + num_targets - (num_reg_only_targets
-        #                                       + num_unreg_timeouts))
-        f1_active_names = self.active_names - {self.commander_name}
+        num_to_create_auto_start = 0
+        num_to_create_no_start = 0
+        num_reg_to_unreg = 0
+        num_reg_to_start = 0
+        num_active_to_exit = 0
+        num_stopped_to_join = 0
 
-        # if not enough active threads then we need to create more
-        if len(f1_active_names) < num_active_needed:
-            num_new = num_active_needed - len(f1_active_names)
-            new_names = random.sample(self.unregistered_names, num_new)
+        # determine how many to start for active and stopped
+        if num_adjust_registered > 0:  # if surplus of registered
+            num_adjust_act_stop = num_adjust_active + num_adjust_stopped
+            if num_adjust_act_stop < 0:  # if shortage
+                num_reg_to_start = min(num_adjust_registered,
+                                       -num_adjust_act_stop)
+                num_adjust_registered -= num_reg_to_start
+                num_adjust_active += num_reg_to_start
+
+            if num_adjust_registered > 0:  # if still surplus
+                num_reg_to_unreg = num_adjust_registered
+                num_adjust_registered = 0
+        elif num_adjust_registered < 0:
+            num_to_create_no_start = -num_adjust_registered
+            num_adjust_registered = 0
+
+        if num_adjust_active > 0:  # if surplus
+            if num_adjust_stopped < 0:  # need more
+                num_active_to_exit = min(num_adjust_active,
+                                         -num_adjust_stopped)
+                num_adjust_active -= num_active_to_exit
+                num_adjust_stopped += num_active_to_exit
+
+            if num_adjust_active > 0:  # if still surplus
+                num_active_to_exit += num_adjust_active
+                num_stopped_to_join = num_adjust_active
+                num_adjust_active = 0
+        elif num_adjust_active < 0:  # if need more
+            num_to_create_auto_start += -num_adjust_active
+            num_adjust_active = 0
+
+        if num_adjust_stopped > 0:  # if surplus
+            num_stopped_to_join += num_adjust_stopped
+            num_adjust_stopped = 0
+        elif num_adjust_stopped < 0:  # if need more
+            num_create_auto_start += -num_adjust_stopped
+            num_active_to_exit += -num_adjust_stopped
+            num_adjust_stopped = 0
+
+        # start by reducing surpluses
+        if num_reg_to_unreg > 0:
+            unreg_names: list[str] = list(
+                random.sample(self.registered_names, num_reg_to_unreg))
+            ret_suite.extend(self.build_unreg_suite(names=unreg_names))
+
+        if num_stopped_to_join > 0:
+            join_names: list[str] = list(
+                random.sample(self.stopped_names, num_stopped_to_join))
+            ret_suite.extend(self.build_join_suite(names=join_names))
+
+        # create threads with no_start
+        if num_to_create_no_start > 0:
+            create_names_no_start: list[str] = list(
+                random.sample(self.unregistered_names, num_to_create_no_start))
             ret_suite.extend(self.build_create_suite(
-                names=new_names,
-                validate_config=True))
-        msg_names: list[str] = random.sample(
-            f1_active_names, num_senders+num_targets)
-        sender_names: list[str] = random.sample(msg_names, num_senders)
-        target_names: list[str] = list(set(msg_names) - set(sender_names))
-        exit_names: list[str] = random.sample(target_names, num_exit_timeouts)
+                names=create_names_no_start,
+                auto_start=False))
 
-        ret_suite.extend(self.build_exit_suite(names=exit_names))
-        ret_suite.extend(self.build_join_suite(names=exit_names))
-        ret_suite.extend([
-            ConfigCmd(cmd=ConfigCmds.SendMsgTimeoutTrue,
-                      names=sender_names,
-                      to_names=target_names,
-                      timeout_names=exit_names,
-                      timeout=1.5,
-                      confirm_response=True),
-            ConfigCmd(cmd=ConfigCmds.ConfirmResponse,
-                      names=sender_names,
-                      confirm_response_cmd=ConfigCmds.SendMsgTimeoutTrue)
-        ])
+        # start registered so we have actives to exit if need be
+        if num_reg_to_start > 0:
+            start_names: list[str] = list(
+                random.sample(self.registered_names, num_reg_to_start))
+            ret_suite.extend(self.build_start_suite(names=start_names))
 
-        # restore config by adding back the exited threads
-        ret_suite.extend(self.build_create_suite(
-            names=exit_names,
-            validate_config=True))
+        # create threads with auto_start
+        if num_to_create_auto_start > 0:
+            create_names_auto_start: list[str] = list(
+                random.sample(self.unregistered_names,
+                              num_to_create_auto_start))
+            ret_suite.extend(self.build_create_suite(
+                names=create_names_auto_start,
+                auto_start=True))
+
+        # Now that we have actives, do any needed exits
+        if num_active_to_exit > 0:
+            exit_names: list[str] = list(
+                random.sample(self.active_names,
+                              num_active_to_exit))
+            ret_suite.extend(self.build_exit_suite(
+                names=exit_names))
+
+        # Finally, join the stopped threads as needed
+        if num_stopped_to_join > 0:
+            join_names: list[str] = list(
+                random.sample(self.stopped_names,
+                              num_stopped_to_join))
+            ret_suite.extend(self.build_join_suite(
+                names=join_names))
 
         return ret_suite
 
@@ -2204,6 +2332,8 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
                     log_level=logging.ERROR)
 
             for f1_to_name in ops_count_names:
+                print(f'cmd_msg.cmd: {cmd_msg.cmd} '
+                      f'ops_count_names: {ops_count_names}')
                 log_msg_f1 = (f'{f1_name} sending message to '
                               f'{f1_to_name}')
                 f1_config_ver.log_ver.add_msg(
@@ -2797,6 +2927,131 @@ class TestSmartThreadScenarios:
 
         main_driver(config_ver=config_ver,
                     scenario=scenario)
+
+        ################################################################
+        # check log results
+        ################################################################
+        match_results = log_ver.get_match_results(caplog=caplog)
+        log_ver.print_match_results(match_results)
+        log_ver.verify_log_results(match_results)
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_thread_meta_scenarios
+    ####################################################################
+    def test_smart_thread_meta_scenarios3(
+            self,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            caplog: pytest fixture to capture log output
+
+        """
+
+        ################################################################
+        # f1
+        ################################################################
+        def f1(f1_name: str, f1_config_ver: ConfigVerifier):
+            log_msg_f1 = f'f1 entered for {f1_name}'
+            log_ver.add_msg(log_level=logging.DEBUG,
+                            log_msg=log_msg_f1)
+            logger.debug(log_msg_f1)
+
+            f1_driver(f1_name=f1_name, f1_config_ver=f1_config_ver)
+
+            ############################################################
+            # exit
+            ############################################################
+            log_msg_f1 = f'f1 exiting for {f1_name}'
+            log_ver.add_msg(log_level=logging.DEBUG,
+                            log_msg=log_msg_f1)
+            logger.debug(log_msg_f1)
+
+        ################################################################
+        # Set up log verification and start tests
+        ################################################################
+        commander_name = 'alpha'
+        log_ver = LogVer(log_name=__name__)
+        log_ver.add_call_seq(name=commander_name,
+                             seq=get_formatted_call_sequence())
+
+        log_msg = 'mainline entered'
+        log_ver.add_msg(log_msg=log_msg)
+        logger.debug(log_msg)
+
+        # log_msg = f'random_seed_arg: {random_seed_arg}'
+        # log_ver.add_msg(log_msg=log_msg)
+        # logger.debug(log_msg)
+
+        msgs = Msgs()
+
+        config_ver = ConfigVerifier(commander_name=commander_name,
+                                    log_ver=log_ver,
+                                    msgs=msgs)
+
+        names = ['beta', 'charlie']
+        scenario: list[Any] = config_ver.build_create_suite(
+            names=names, commander_name=commander_name, auto_start=True)
+
+        scenario.extend([ConfigCmd(
+            cmd=ConfigCmds.ValidateConfig)])
+
+        scenario.extend([ConfigCmd(cmd=ConfigCmds.Pause,
+                                   names=[commander_name],
+                                   pause_seconds=1.5)])
+
+        scenario.extend(config_ver.build_exit_suite(names=['charlie']))
+        scenario.extend(config_ver.build_join_suite(names=['charlie']))
+        scenario.extend([ConfigCmd(cmd=ConfigCmds.SendMsgTimeoutTrue,
+                                   names=['beta'],
+                                   to_names=['charlie'],
+                                   timeout=1.5,
+                                   confirm_response=True)])
+        scenario.extend([ConfigCmd(
+            cmd=ConfigCmds.ConfirmResponse,
+            names=['beta'],
+            confirm_response_cmd=ConfigCmds.SendMsgTimeoutTrue)])
+
+        scenario.extend([ConfigCmd(cmd=ConfigCmds.Pause,
+                                   names=[commander_name],
+                                   pause_seconds=2.0)])
+
+        scenario.extend([ConfigCmd(cmd=ConfigCmds.SendMsgTimeoutFalse,
+                                   names=['beta'],
+                                   to_names=['charlie'],
+                                   timeout=2.0)])
+        scenario.extend([ConfigCmd(cmd=ConfigCmds.Pause,
+                                   names=[commander_name],
+                                   pause_seconds=1.0)])
+
+        scenario.extend(config_ver.build_create_suite(
+            names=['charlie'],
+            validate_config=False))
+
+        scenario.extend([ConfigCmd(cmd=ConfigCmds.SendMsg,
+                                   names=['beta'],
+                                   to_names=['charlie'],
+                                   confirm_response=True)])
+
+        scenario.extend([ConfigCmd(
+            cmd=ConfigCmds.ConfirmResponse,
+            names=['beta'],
+            confirm_response_cmd=ConfigCmds.SendMsg)])
+
+        scenario.extend([ConfigCmd(
+            cmd=ConfigCmds.ValidateConfig)])
+
+        names = list(config_ver.active_names - {commander_name})
+        scenario.extend(config_ver.build_exit_suite(names=names))
+
+        scenario.extend(config_ver.build_join_suite(names=names))
+
+        main_driver(config_ver=config_ver,
+                    scenario=scenario)
+        # random.seed(random_seed_arg)
 
         ################################################################
         # check log results
