@@ -195,6 +195,11 @@ class SmartThreadArgsSpecificationWithoutTarget(SmartThreadError):
     pass
 
 
+class SmartThreadInvalidUnregister(SmartThreadError):
+    """SmartThread exception for invalid unregister request."""
+    pass
+
+
 ########################################################################
 # SetupBlock
 # contains the targets and timer returned from _common_setup
