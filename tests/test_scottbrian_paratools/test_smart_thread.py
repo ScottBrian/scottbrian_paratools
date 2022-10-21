@@ -731,6 +731,24 @@ def build_config_arg(request: Any) -> tuple[int, int, int]:
 
 
 ###############################################################################
+# build_config2_arg
+###############################################################################
+
+
+@pytest.fixture(params=build_config_arg_list)  # type: ignore
+def build_config2_arg(request: Any) -> tuple[int, int, int]:
+    """Number of registered, active, and stopped threads to create.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(tuple[int, int, int], request.param)
+
+
+###############################################################################
 # recv_msg_after_join_arg
 ###############################################################################
 recv_msg_after_join_arg_list = [1, 2, 3]
@@ -898,6 +916,7 @@ class ConfigVerifier:
         """
         self.specified_args = locals()  # used for __repr__, see below
         self.commander_name = commander_name
+        self.commander_thread_config_built = False
         self.thread_names: list[str] = [
             'alpha', 'beta', 'charlie', 'delta',
             'echo', 'fox', 'george', 'henry',
@@ -905,7 +924,7 @@ class ConfigVerifier:
             'mary', 'nancy', 'oscar', 'peter'
         ]
         self.unregistered_names: set[str] = set(self.thread_names)
-        self.unregistered_names.remove(commander_name)
+        # self.unregistered_names.remove(commander_name)
         self.registered_names: set[str] = set()
         self.active_names: set[str] = set()
         self.stopped_names: set[str] = set()
@@ -1036,6 +1055,28 @@ class ConfigVerifier:
         self.add_log_msg(re.escape(
             f'{name} thread started, thread.is_alive() = True, '
             'status: ThreadStatus.Alive'))
+
+    def unregister_thread(self, names: list[str]) -> None:
+        """Unregister the named thread.
+
+        Args:
+            names: names of threads to be unregistered
+        """
+        self.commander_thread.unregister(targets=set(names))
+        self.expected_registered[name]
+        config_ver.commander_thread.join(targets=set(config_cmd.names))
+        copy_reg_deque = (
+            self.commander_thread.time_last_registry_update.copy())
+        copy_pair_deque = (
+            self.commander_thread.time_last_pair_array_update.copy())
+        copy_unreg_names = self.commander_thread.unregister_names.copy()
+        self.del_thread(
+            name=self.commander_name,
+            remotes=names,
+            reg_update_times=copy_reg_deque,
+            pair_array_update_times=copy_pair_deque,
+            join_names=copy_unreg_names
+        )
 
     def add_thread(self,
                    name: str,
@@ -1205,7 +1246,7 @@ class ConfigVerifier:
         Args:
             name: name of thread doing the delete (for log msg)
             remotes: names of threads to be deleted
-            reg_update_times: register updte times to use for the log
+            reg_update_times: register update times to use for the log
                                 msgs
             pair_array_update_times: pair array update times to use for
                                        the log msgs
@@ -1569,213 +1610,37 @@ class ConfigVerifier:
         return ret_suite
 
     ################################################################
-    # build_create_suite
+    # build_f1_create_suite_num
     ################################################################
-    def build_create_suite_num(self,
-                               commander_name: Optional[str] = None,
-                               commander_auto_start: Optional[bool] = True,
-                               num_f1_auto_start: Optional[float] = None,
-                               num_f1_no_start: Optional[float] = None,
-                               validate_config: Optional[bool] = True
-                               ) -> list[ConfigCmd]:
+    def build_f1_create_suite_num(self,
+                                  num_to_create: int,
+                                  auto_start: Optional[bool] = True,
+                                  validate_config: Optional[bool] = True
+                                  ) -> list[ConfigCmd]:
         """Return a list of ConfigCmd items for a create.
 
         Args:
-            commander_name: specifies that a commander thread is to be
-                created with this name
-            commander_auto_start: indicates whether to create
-                commander with auto_start if commander is True
-            num_f1_auto_start: ratio of unregistered f1_threads to
-                create with auto_start
-            num_f1_no_start: ratio of unregistered f1_threads to
-                create with no_start
+            num_to_create: number of f1 threads to create
+            auto_start: indicates whether to use auto_start
             validate_config: indicates whether to do config validation
 
         Returns:
             a list of ConfigCmd items
         """
+        assert num_to_create > 0
+        if len(self.unregistered_names) < num_to_create:
+            raise InvalidInputDetected(
+                f'Input num_to_create {num_to_create} '
+                f'is greater than the number of '
+                f'unregistered threads '
+                f'{len(self.unregistered_names)}')
 
-        active_names = list(self.active_names)
-        registered_only_names = []
-        ret_suite = []
+        names: list[str] = list(
+            random.sample(self.unregistered_names, num_to_create))
 
-        if commander_name:
-            active_names += [commander_name]
-            if commander_auto_start:
-                ret_suite.extend([
-                    ConfigCmd(cmd=ConfigCmds.CreateCommanderAutoStart,
-                              commander_name=commander_name)])
-            else:
-                ret_suite.extend([
-                    ConfigCmd(cmd=ConfigCmds.CreateCommanderNoStart,
-                              commander_name=commander_name)])
-
-            self.active_names |= {commander_name}
-
-        f1_auto_start_names = []
-        f1_no_start_names = []
-
-        num_auto_start = 0
-        num_no_start = 0
-        if num_f1_auto_start:
-            num_auto_start = math.ceil(
-                num_f1_auto_start * len(self.unregistered_names))
-        if num_f1_no_start:
-            num_no_start = math.floor(
-                num_f1_no_start * len(self.unregistered_names))
-
-        if num_auto_start > 0:
-            for idx in range(num_auto_start):
-                f1_auto_start_names.append(self.unregistered_names.pop())
-
-            active_names += f1_auto_start_names
-
-            ret_suite.extend([
-                ConfigCmd(cmd=ConfigCmds.CreateAutoStart,
-                          names=f1_auto_start_names)])
-
-            self.active_names |= set(f1_auto_start_names)
-
-        if num_no_start > 0:
-            for idx in range(num_no_start):
-                f1_no_start_names.append(self.unregistered_names.pop())
-
-            ret_suite.extend([
-                ConfigCmd(cmd=ConfigCmds.CreateNoStart,
-                          names=f1_no_start_names)])
-
-            registered_only_names += f1_no_start_names
-            self.registered_names |= set(f1_no_start_names)
-
-        check_registered = []
-        check_registered += (active_names + registered_only_names)
-
-        if check_registered:
-            ret_suite.extend([
-                ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
-                          names=check_registered),
-                ConfigCmd(cmd=ConfigCmds.VerifyPaired, names=check_registered)
-                ])
-        if active_names:
-            ret_suite.extend([
-                ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=active_names),
-                ConfigCmd(cmd=ConfigCmds.VerifyStatus,
-                          names=active_names,
-                          exp_status=st.ThreadStatus.Alive)])
-
-        if registered_only_names:
-            ret_suite.extend([
-                ConfigCmd(cmd=ConfigCmds.VerifyNotAlive,
-                          names=registered_only_names),
-                ConfigCmd(cmd=ConfigCmds.VerifyStatus,
-                          names=registered_only_names,
-                          exp_status=st.ThreadStatus.Registered)])
-
-        if validate_config:
-            ret_suite.extend([
-                ConfigCmd(cmd=ConfigCmds.ValidateConfig)])
-
-        return ret_suite
-
-    ################################################################
-    # build_create_suite2
-    ################################################################
-    def build_create_suite2(self,
-                            commander_name: Optional[str] = None,
-                            commander_auto_start: Optional[bool] = True,
-                            num_f1_auto_start: Optional[int] = 0,
-                            num_f1_no_start: Optional[int] = 0,
-                            validate_config: Optional[bool] = True
-                            ) -> list[ConfigCmd]:
-        """Return a list of ConfigCmd items for a create.
-
-        Args:
-            commander_name: specifies that a commander thread is to be
-                created with this name
-            commander_auto_start: indicates whether to create
-                commander with auto_start if commander is True
-            num_f1_auto_start: ratio of unregistered f1_threads to
-                create with auto_start
-            num_f1_no_start: ratio of unregistered f1_threads to
-                create with no_start
-            validate_config: indicates whether to do config validation
-
-        Returns:
-            a list of ConfigCmd items
-        """
-
-        active_names = list(self.active_names)
-        registered_only_names = []
-        ret_suite = []
-
-        if commander_name:
-            active_names += [commander_name]
-            if commander_auto_start:
-                ret_suite.extend([
-                    ConfigCmd(cmd=ConfigCmds.CreateCommanderAutoStart,
-                              commander_name=commander_name)])
-            else:
-                ret_suite.extend([
-                    ConfigCmd(cmd=ConfigCmds.CreateCommanderNoStart,
-                              commander_name=commander_name)])
-
-            self.active_names |= {commander_name}
-
-        f1_auto_start_names = []
-        f1_no_start_names = []
-
-        if num_f1_auto_start > 0:
-            for idx in range(num_f1_auto_start):
-                f1_auto_start_names.append(self.unregistered_names.pop())
-
-            active_names += f1_auto_start_names
-
-            ret_suite.extend([
-                ConfigCmd(cmd=ConfigCmds.CreateAutoStart,
-                          names=f1_auto_start_names)])
-
-            self.active_names |= set(f1_auto_start_names)
-
-        if num_f1_no_start > 0:
-            for idx in range(num_f1_no_start):
-                f1_no_start_names.append(self.unregistered_names.pop())
-
-            ret_suite.extend([
-                ConfigCmd(cmd=ConfigCmds.CreateNoStart,
-                          names=f1_no_start_names)])
-
-            registered_only_names += f1_no_start_names
-            self.registered_names |= set(f1_no_start_names)
-
-        check_registered = []
-        check_registered += (active_names + registered_only_names)
-
-        if check_registered:
-            ret_suite.extend([
-                ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
-                          names=check_registered),
-                ConfigCmd(cmd=ConfigCmds.VerifyPaired, names=check_registered)
-            ])
-        if active_names:
-            ret_suite.extend([
-                ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=active_names),
-                ConfigCmd(cmd=ConfigCmds.VerifyStatus,
-                          names=active_names,
-                          exp_status=st.ThreadStatus.Alive)])
-
-        if registered_only_names:
-            ret_suite.extend([
-                ConfigCmd(cmd=ConfigCmds.VerifyNotAlive,
-                          names=registered_only_names),
-                ConfigCmd(cmd=ConfigCmds.VerifyStatus,
-                          names=registered_only_names,
-                          exp_status=st.ThreadStatus.Registered)])
-
-        if validate_config:
-            ret_suite.extend([
-                ConfigCmd(cmd=ConfigCmds.ValidateConfig)])
-
-        return ret_suite
+        return self.build_create_suite(names=names,
+                                       auto_start=auto_start,
+                                       validate_config=validate_config)
 
     ################################################################
     # build_unreg_suite
@@ -1808,6 +1673,31 @@ class ConfigVerifier:
         return ret_suite
 
     ################################################################
+    # build_unreg_suite_num
+    ################################################################
+    def build_unreg_suite_num(self,
+                              num_to_unreg: int) -> list[ConfigCmd]:
+        """Return a list of ConfigCmd items for unregister.
+
+        Args:
+            num_to_unreg: number of threads to be unregistered
+
+        Returns:
+            a list of ConfigCmd items
+        """
+        assert num_to_unreg > 0
+        if len(self.registered_names) < num_to_unreg:
+            raise InvalidInputDetected(f'Input num_to_unreg {num_to_unreg} '
+                                       f'is greater than the number of '
+                                       f'registered threads '
+                                       f'{len(self.registered_names)}')
+
+        names: list[str] = list(
+            random.sample(self.registered_names, num_to_unreg))
+
+        return self.build_unreg_suite(names=names)
+
+    ################################################################
     # build_start_suite
     ################################################################
     def build_start_suite(self,
@@ -1835,6 +1725,31 @@ class ConfigVerifier:
         self.active_names |= set(names)
 
         return ret_suite
+
+    ################################################################
+    # build_start_suite_num
+    ################################################################
+    def build_start_suite_num(self,
+                              num_to_start: int) -> list[ConfigCmd]:
+        """Return a list of ConfigCmd items for unregister.
+
+        Args:
+            num_to_start: number of threads to be started
+
+        Returns:
+            a list of ConfigCmd items
+        """
+        assert num_to_start > 0
+        if len(self.registered_names) < num_to_start:
+            raise InvalidInputDetected(f'Input num_to_start {num_to_start} '
+                                       f'is greater than the number of '
+                                       f'registered threads '
+                                       f'{len(self.registered_names)}')
+
+        names: list[str] = list(
+            random.sample(self.registered_names, num_to_start))
+
+        return self.build_start_suite(names=names)
 
     ################################################################
     # build_config
@@ -1869,11 +1784,11 @@ class ConfigVerifier:
 
         ret_suite = []
 
-        if self.commander_thread is None:
-            self.create_commander_thread(name=self.commander_name,
-                                         auto_start=True)
-            self.unregistered_names -= {self.commander_name}
-            self.active_names = {self.commander_name}
+        if not self.commander_thread_config_built:
+            ret_suite.extend(self.build_create_suite(
+                commander_name=self.commander_name))
+            self.commander_thread_config_built = True
+            # num_active -= 1  # one less active thread to create
 
         num_adjust_registered = len(self.registered_names) - num_registered
         num_adjust_active = len(self.active_names) - num_active
@@ -1885,6 +1800,7 @@ class ConfigVerifier:
         num_reg_to_start = 0
         num_active_to_exit = 0
         num_stopped_to_join = 0
+        num_active_to_join = 0
 
         # determine how many to start for active and stopped
         if num_adjust_registered > 0:  # if surplus of registered
@@ -1911,7 +1827,7 @@ class ConfigVerifier:
 
             if num_adjust_active > 0:  # if still surplus
                 num_active_to_exit += num_adjust_active
-                num_stopped_to_join = num_adjust_active
+                num_active_to_join = num_adjust_active
                 num_adjust_active = 0
         elif num_adjust_active < 0:  # if need more
             num_create_auto_start += -num_adjust_active
@@ -1920,60 +1836,47 @@ class ConfigVerifier:
         if num_adjust_stopped > 0:  # if surplus
             num_stopped_to_join += num_adjust_stopped
             num_adjust_stopped = 0
-        elif num_adjust_stopped < 0:  # if need more
+        elif num_adjust_stopped < 0:  # if we need more
             num_create_auto_start += -num_adjust_stopped
             num_active_to_exit += -num_adjust_stopped
             num_adjust_stopped = 0
 
         # start by reducing surpluses
         if num_reg_to_unreg > 0:
-            unreg_names: list[str] = list(
-                random.sample(self.registered_names, num_reg_to_unreg))
-            ret_suite.extend(self.build_unreg_suite(names=unreg_names))
+            ret_suite.extend(
+                self.build_unreg_suite_num(num_to_unreg=num_reg_to_unreg))
 
         if num_stopped_to_join > 0:
-            join_names: list[str] = list(
-                random.sample(self.stopped_names, num_stopped_to_join))
-            ret_suite.extend(self.build_join_suite(names=join_names))
+            ret_suite.extend(
+                self.build_join_suite_num(num_to_join=num_stopped_to_join))
 
         # create threads with no_start
         if num_create_no_start > 0:
-            create_names_no_start: list[str] = list(
-                random.sample(self.unregistered_names, num_create_no_start))
-            ret_suite.extend(self.build_create_suite(
-                names=create_names_no_start,
-                auto_start=False))
+            ret_suite.extend(
+                self.build_f1_create_suite_num(
+                    num_to_create=num_create_no_start,
+                    auto_start=False))
 
         # start registered so we have actives to exit if need be
         if num_reg_to_start > 0:
-            start_names: list[str] = list(
-                random.sample(self.registered_names, num_reg_to_start))
-            ret_suite.extend(self.build_start_suite(names=start_names))
+            ret_suite.extend(self.build_start_suite_num(
+                num_to_start=num_reg_to_start))
 
         # create threads with auto_start
         if num_create_auto_start > 0:
-            create_names_auto_start: list[str] = list(
-                random.sample(self.unregistered_names,
-                              num_create_auto_start))
-            ret_suite.extend(self.build_create_suite(
-                names=create_names_auto_start,
+            ret_suite.extend(self.build_f1_create_suite_num(
+                num_to_create=num_create_auto_start,
                 auto_start=True))
 
         # Now that we have actives, do any needed exits
         if num_active_to_exit > 0:
-            exit_names: list[str] = list(
-                random.sample(self.active_names - {self.commander_name},
-                              num_active_to_exit))
-            ret_suite.extend(self.build_exit_suite(
-                names=exit_names))
+            ret_suite.extend(self.build_exit_suite_num(
+                num_to_exit=num_active_to_exit))
 
         # Finally, join the stopped threads as needed
-        if num_stopped_to_join > 0:
-            join_names: list[str] = list(
-                random.sample(self.stopped_names,
-                              num_stopped_to_join))
-            ret_suite.extend(self.build_join_suite(
-                names=join_names))
+        if num_active_to_join > 0:
+            ret_suite.extend(self.build_join_suite_num(
+                num_to_join=num_active_to_join))
 
         # verify the counts
         ret_suite.extend([
@@ -2108,6 +2011,32 @@ class ConfigVerifier:
         return ret_suite
 
     ################################################################
+    # build_exit_suite_num
+    ################################################################
+    def build_exit_suite_num(self,
+                             num_to_exit: int) -> list[ConfigCmd]:
+        """Return a list of ConfigCmd items for unregister.
+
+        Args:
+            num_to_exit: number of threads to exit
+
+        Returns:
+            a list of ConfigCmd items
+        """
+        assert num_to_exit > 0
+        if (len(self.active_names) - 1) < num_to_exit:
+            raise InvalidInputDetected(f'Input num_to_exit {num_to_exit} '
+                                       f'is greater than the number of '
+                                       f'registered threads '
+                                       f'{len(self.active_names)}')
+
+        names: list[str] = list(
+            random.sample(self.active_names - {self.commander_name},
+                          num_to_exit))
+
+        return self.build_exit_suite(names=names)
+
+    ################################################################
     # build_join_suite
     ################################################################
     def build_join_suite(self,
@@ -2139,6 +2068,34 @@ class ConfigVerifier:
 
         return ret_suite
 
+    ################################################################
+    # build_join_suite
+    ################################################################
+    def build_join_suite_num(self,
+                             num_to_join: int) -> list[ConfigCmd]:
+        """Return a list of ConfigCmd items for join.
+
+        Args:
+            num_to_join: number of threads to join
+
+        Returns:
+            a list of ConfigCmd items
+        """
+        assert num_to_join > 0
+        if len(self.stopped_names) < num_to_join:
+            raise InvalidInputDetected(f'Input num_to_join {num_to_join} '
+                                       f'is greater than the number of '
+                                       f'stopped threads '
+                                       f'{len(self.stopped_names)}')
+
+        names: list[str] = list(
+            random.sample(self.stopped_names, num_to_join))
+
+        return self.build_join_suite(names=names)
+
+    ################################################################
+    # verify_is_registered
+    ################################################################
     def verify_is_registered(self, names: list[str]) -> bool:
         """Verify that the given names are registered only.
 
@@ -2345,7 +2302,7 @@ class ConfigVerifier:
             else:
                 if thread.status == st.ThreadStatus.Registered:
                     registered_found_real += 1
-                if (thread.status == st.ThreadStatus.Alive
+                elif (thread.status == st.ThreadStatus.Alive
                         or thread.status == st.ThreadStatus.Stopped):
                     stopped_found_real += 1
 
@@ -2359,7 +2316,7 @@ class ConfigVerifier:
             else:
                 if thread_tracker.status == st.ThreadStatus.Registered:
                     registered_found_mock += 1
-                if (thread_tracker.status == st.ThreadStatus.Alive
+                elif (thread_tracker.status == st.ThreadStatus.Alive
                         or thread_tracker.status == st.ThreadStatus.Stopped):
                     stopped_found_mock += 1
 
@@ -2589,6 +2546,9 @@ def main_driver(config_ver: ConfigVerifier,
                 config_ver.start_thread(name=name)
         elif config_cmd.cmd == ConfigCmds.VerifyAlive:
             assert config_ver.verify_is_alive(config_cmd.names)
+
+        elif config_cmd.cmd == ConfigCmds.Unregister:
+            config_ver.unregister_thread(names=names)
 
         elif config_cmd.cmd == ConfigCmds.VerifyActive:
             assert config_ver.verify_is_active(config_cmd.names)
@@ -3098,6 +3058,7 @@ class TestSmartThreadScenarios:
     def test_smart_thread_meta_scenarios3(
             self,
             build_config_arg: tuple[int, int, int],
+            build_config2_arg: tuple[int, int, int],
             caplog: pytest.CaptureFixture[str]
     ) -> None:
         """Test meta configuration scenarios.
@@ -3149,6 +3110,11 @@ class TestSmartThreadScenarios:
             num_registered=build_config_arg[0],
             num_active=build_config_arg[1],
             num_stopped=build_config_arg[2])
+
+        scenario.extend(config_ver.build_config(
+            num_registered=build_config2_arg[0],
+            num_active=build_config2_arg[1],
+            num_stopped=build_config2_arg[2]))
 
         exit_names = list(config_ver.active_names - {commander_name})
         scenario.extend(config_ver.build_exit_suite(names=exit_names))
