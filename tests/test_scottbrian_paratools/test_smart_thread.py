@@ -716,6 +716,11 @@ build_config_arg_list = [
     (4, 4, 0), (4, 4, 1), (4, 4, 2), (4, 4, 3), (4, 4, 4),
 ]
 
+# build_config_arg_list = [
+#     (0, 1, 0),
+#     (1, 1, 0),
+# ]
+
 
 @pytest.fixture(params=build_config_arg_list)  # type: ignore
 def build_config_arg(request: Any) -> tuple[int, int, int]:
@@ -749,6 +754,101 @@ def build_config2_arg(request: Any) -> tuple[int, int, int]:
 
 
 ###############################################################################
+# num_sender_arg
+###############################################################################
+num_sender_arg_list = [1, 2, 3]
+
+
+@pytest.fixture(params=num_sender_arg_list)  # type: ignore
+def num_sender_arg(request: Any) -> int:
+    """Number of threads to send msg.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
+###############################################################################
+# num_active_targets_arg
+###############################################################################
+num_active_targets_arg_list = [1, 2, 3]
+
+
+@pytest.fixture(params=num_active_targets_arg_list)  # type: ignore
+def num_active_targets_arg(request: Any) -> int:
+    """Number of threads to be active at time of send.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
+###############################################################################
+# num_registered_targets_arg
+###############################################################################
+num_registered_targets_arg_list = [1, 2, 3]
+
+
+@pytest.fixture(params=num_registered_targets_arg_list)  # type: ignore
+def num_registered_targets_arg(request: Any) -> int:
+    """Number of threads to be registered at time of send.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
+########################################################################
+# num_exit_timeouts_arg
+########################################################################
+num_exit_timeouts_arg_list = [1, 2, 3]
+
+
+@pytest.fixture(params=num_exit_timeouts_arg_list)  # type: ignore
+def num_exit_timeouts_arg(request: Any) -> int:
+    """Number of threads to exit before msg is sent.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
+########################################################################
+# num_unreg_timeouts_arg
+########################################################################
+num_unreg_timeouts_arg_list = [1, 2, 3]
+
+
+@pytest.fixture(params=num_unreg_timeouts_arg_list)  # type: ignore
+def num_unreg_timeouts_arg(request: Any) -> int:
+    """Number of threads to be unregistered at time of send.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
+###############################################################################
 # recv_msg_after_join_arg
 ###############################################################################
 recv_msg_after_join_arg_list = [1, 2, 3]
@@ -765,6 +865,8 @@ def recv_msg_after_join_arg(request: Any) -> int:
         The params values are returned one at a time
     """
     return request.param
+
+
 ###############################################################################
 # timeout_arg fixtures
 ###############################################################################
@@ -1063,8 +1165,6 @@ class ConfigVerifier:
             names: names of threads to be unregistered
         """
         self.commander_thread.unregister(targets=set(names))
-        self.expected_registered[name]
-        config_ver.commander_thread.join(targets=set(config_cmd.names))
         copy_reg_deque = (
             self.commander_thread.time_last_registry_update.copy())
         copy_pair_deque = (
@@ -1075,7 +1175,8 @@ class ConfigVerifier:
             remotes=names,
             reg_update_times=copy_reg_deque,
             pair_array_update_times=copy_pair_deque,
-            join_names=copy_unreg_names
+            process_names=copy_unreg_names,
+            process='unregister'
         )
 
     def add_thread(self,
@@ -1239,7 +1340,8 @@ class ConfigVerifier:
                    remotes: list[str],
                    reg_update_times: deque,
                    pair_array_update_times: deque,
-                   join_names: deque
+                   process_names: deque,
+                   process: str  # join or unregister
                    ) -> None:
         """Delete the thread from the ConfigVerifier.
 
@@ -1250,29 +1352,24 @@ class ConfigVerifier:
                                 msgs
             pair_array_update_times: pair array update times to use for
                                        the log msgs
-            join_names: deque of names that were joined, in order
+            process_names: deque of names unreged or joined, in order
+            process: names the process, either join or unregister
         """
         reg_update_times.rotate(len(remotes))
         pair_array_update_times.rotate(len(remotes))
-        join_names.rotate(len(remotes))
+        process_names.rotate(len(remotes))
+        if process == 'join':
+            from_status = st.ThreadStatus.Alive
+        else:
+            from_status = st.ThreadStatus.Registered
         for idx in range(len(remotes)):
-            remote = join_names.popleft()
-            # if {remote}.issubset(self.stopped_names):
-            #     self.stopped_names -= {remote}
-            # elif {remote}.issubset(self.active_names):
-            #     self.active_names -= {remote}
-            # else:
-            #     raise InvalidConfigurationDetected(f'remote {remote} is'
-            #                                        'was joined but is'
-            #                                        'not in either active'
-            #                                        'nor inactive names')
-            # self.unregistered_names |= {name}
+            remote = process_names.popleft()
             self.expected_registered[remote].is_alive = False
             self.expected_registered[remote].status = st.ThreadStatus.Stopped
             self.add_log_msg(
                 f'{name} set status for thread '
                 f'{remote} '
-                f'from {st.ThreadStatus.Alive} to '
+                f'from {from_status} to '
                 f'{st.ThreadStatus.Stopped}')
 
             for thread_name, tracker in self.expected_registered.items():
@@ -1334,7 +1431,7 @@ class ConfigVerifier:
                 f'{reg_update_times.popleft().strftime("%H:%M:%S.%f")}, '
                 f"deleted ['{remote}']"))
 
-            self.add_log_msg(f'{name} did successful join of {remote}.')
+            self.add_log_msg(f'{name} did successful {process} of {remote}.')
 
     def get_is_alive(self, name: str) -> bool:
         """Get the is_alive flag for the named thread.
@@ -1892,19 +1989,20 @@ class ConfigVerifier:
     ################################################################
     def build_msg_timeout_true_suite(self,
                                      num_senders: Optional[int] = 1,
-                                     num_targets: Optional[int] = 1,
-                                     num_reg_only_targets: Optional[int] = 0,
+                                     num_active_targets: Optional[int] = 1,
+                                     num_registered_targets: Optional[int] = 0,
                                      num_exit_timeouts: Optional[int] = 1,
                                      num_unreg_timeouts: Optional[int] = 0
                                      ) -> list[ConfigCmd]:
         """Return a list of ConfigCmd items for a msg timeout.
 
         Args:
-            num_senders: specifies number of threads doing the send
-            num_targets: specifies number of threads to receive the msg,
+            num_senders: specifies number of threads that will send msg
+            num_active_targets: specifies number of threads to receive
+                the msg,
                 including those that are registered only or expected to
                 cause the timeout
-            num_reg_only_targets: specifies the number of targets that
+            num_registered_targets: specifies the number of targets that
                 should be registered only (i.e., not yet started)
             num_exit_timeouts: specifies the number of threads that
                 should be exited and joined to cause timeout
@@ -2541,14 +2639,15 @@ def main_driver(config_ver: ConfigVerifier,
                     name=new_name,
                     auto_start=False
                 )
+        elif config_cmd.cmd == ConfigCmds.Unregister:
+            config_ver.unregister_thread(names=config_cmd.names)
+
         elif config_cmd.cmd == ConfigCmds.Start:
             for name in config_cmd.names:
                 config_ver.start_thread(name=name)
+
         elif config_cmd.cmd == ConfigCmds.VerifyAlive:
             assert config_ver.verify_is_alive(config_cmd.names)
-
-        elif config_cmd.cmd == ConfigCmds.Unregister:
-            config_ver.unregister_thread(names=names)
 
         elif config_cmd.cmd == ConfigCmds.VerifyActive:
             assert config_ver.verify_is_active(config_cmd.names)
@@ -2681,7 +2780,8 @@ def main_driver(config_ver: ConfigVerifier,
                 remotes=config_cmd.names,
                 reg_update_times=copy_reg_deque,
                 pair_array_update_times=copy_pair_deque,
-                join_names=copy_join_names
+                process_names=copy_join_names,
+                process='join'
                 )
 
         elif config_cmd.cmd == ConfigCmds.VerifyRegistered:
@@ -2923,14 +3023,24 @@ class TestSmartThreadScenarios:
     ####################################################################
     def test_smart_thread_meta_scenarios2(
             self,
-            # num_threads_arg: int,
+            num_senders_arg: int,
+            num_active_targets_arg: int,
+            num_registered_targets_arg: int,
+            num_exit_timeouts_arg: int,
+            num_unreg_timeouts_arg: int,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
         """Test meta configuration scenarios.
 
         Args:
-            num_threads_arg: number of threads to start, including
-                the commander thread
+            num_senders_arg: number of threads to send msgs
+            num_active_targets_arg: number of active threads to recv
+            num_registered_targets_arg: number registered thread to
+                recv
+            num_exit_timeouts_arg: number of threads to be targets that
+                exit before msg is sent
+            num_unreg_timeouts_arg: number of threads to be targets
+                that have not yet become active
             caplog: pytest fixture to capture log output
 
         """
@@ -2976,11 +3086,14 @@ class TestSmartThreadScenarios:
                                     log_ver=log_ver,
                                     msgs=msgs)
 
-        scenario: list[Any] = config_ver.build_create_suite2(
-            commander_name=commander_name,
-            commander_auto_start=True,
-            num_f1_auto_start=8)
+        scenario: list[Any] = config_ver.build_config(
+            num_registered=0,
+            num_active=8,
+            num_stopped=0)
 
+        scenario.extend([ConfigCmd(cmd=ConfigCmds.Pause,
+                                   names=[commander_name],
+                                   pause_seconds=1.5)])
         scenario.extend([ConfigCmd(cmd=ConfigCmds.Pause,
                                    names=[commander_name],
                                    pause_seconds=1.5)])
@@ -3000,11 +3113,13 @@ class TestSmartThreadScenarios:
         #     cmd=ConfigCmds.ConfirmResponse,
         #     names=[sender_name],
         #     confirm_response_cmd=ConfigCmds.SendMsgTimeoutTrue)])
-
         scenario.extend(
-            config_ver.build_msg_timeout_true_suite(num_senders=2,
-                                                    num_targets=3,
-                                                    num_exit_timeouts=2))
+            config_ver.build_msg_timeout_true_suite(
+                num_senders=num_senders_arg,
+                num_active_targets=num_active_targets_arg,
+                num_registered_targets=num_registered_targets_arg,
+                num_exit_timeouts=num_exit_timeouts_arg,
+                num_unreg_timeouts=num_unreg_timeouts_arg))
 
         scenario.extend([ConfigCmd(cmd=ConfigCmds.Pause,
                                    names=[commander_name],
@@ -3362,11 +3477,14 @@ class TestSmartThreadScenarios:
                     config_ver.commander_thread.time_last_registry_update.copy())
                 copy_pair_deque = (
                     config_ver.commander_thread.time_last_pair_array_update.copy())
+                copy_join_names = config_ver.commander_thread.join_names.copy()
                 config_ver.del_thread(
                     name='alpha',
                     remotes=[thread_name],
                     reg_update_times=copy_reg_deque,
-                    pair_array_update_times=copy_pair_deque)
+                    pair_array_update_times=copy_pair_deque,
+                    process_names=copy_join_names,
+                    process='join')
                 joined_names.append(thread_name)
                 num_joins += 1
 
@@ -3410,11 +3528,14 @@ class TestSmartThreadScenarios:
                 config_ver.commander_thread.time_last_registry_update.copy())
             copy_pair_deque = (
                 config_ver.commander_thread.time_last_pair_array_update.copy())
+            copy_join_names = config_ver.commander_thread.join_names.copy()
             config_ver.del_thread(
                 name='alpha',
                 remotes=[thread_name],
                 reg_update_times=copy_reg_deque,
-                pair_array_update_times=copy_pair_deque)
+                pair_array_update_times=copy_pair_deque,
+                process_names=copy_join_names,
+                process='join')
 
         ################################################################
         # All joins complete, validate config
@@ -3850,11 +3971,14 @@ class TestSmartThreadErrors:
         copy_pair_deque = (
             config_ver.commander_thread.time_last_pair_array_update
             .copy())
+        copy_join_names = config_ver.commander_thread.join_names.copy()
         config_ver.del_thread(
             name='alpha',
             remotes=config_cmd.names,
             reg_update_times=copy_reg_deque,
-            pair_array_update_times=copy_pair_deque)
+            pair_array_update_times=copy_pair_deque,
+            process_names=copy_join_names,
+            process='join')
 
         ################################################################
         # verify the configuration
