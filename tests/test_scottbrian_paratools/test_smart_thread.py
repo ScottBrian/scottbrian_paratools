@@ -848,6 +848,23 @@ def num_unreg_timeouts_arg(request: Any) -> int:
     return cast(int, request.param)
 
 
+########################################################################
+# num_full_q_timeouts_arg
+########################################################################
+num_full_q_timeouts_arg_list = [1, 2, 3]
+
+
+@pytest.fixture(params=num_full_q_timeouts_arg_list)  # type: ignore
+def num_unreg_timeouts_arg(request: Any) -> int:
+    """Number of threads to have full queue at time of send.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
 ###############################################################################
 # recv_msg_after_join_arg
 ###############################################################################
@@ -1991,8 +2008,9 @@ class ConfigVerifier:
                                      num_senders: Optional[int] = 1,
                                      num_active_targets: Optional[int] = 1,
                                      num_registered_targets: Optional[int] = 0,
+                                     num_unreg_timeouts: Optional[int] = 0,
                                      num_exit_timeouts: Optional[int] = 1,
-                                     num_unreg_timeouts: Optional[int] = 0
+                                     num_full_q_timeouts: Optional[int] = 0
                                      ) -> list[ConfigCmd]:
         """Return a list of ConfigCmd items for a msg timeout.
 
@@ -2004,44 +2022,94 @@ class ConfigVerifier:
                 cause the timeout
             num_registered_targets: specifies the number of targets that
                 should be registered only (i.e., not yet started)
-            num_exit_timeouts: specifies the number of threads that
-                should be exited and joined to cause timeout
             num_unreg_timeouts: specifies the number of threads that
                 should cause timeout by being unregistered
+            num_exit_timeouts: specifies the number of threads that
+                should be exited and joined to cause timeout
+            num_full_q_timeouts: specifies the number of threads that
+                should cause timeout by having a full msg queue
 
         Returns:
             a list of ConfigCmd items
         """
-        assert (num_reg_only_targets
+        assert (num_senders
+                + num_active_targets
+                + num_registered_targets
+                + num_unreg_timeouts
                 + num_exit_timeouts
-                + num_unreg_timeouts) <= num_targets
+                + num_full_q_timeouts) <= len(self.unregistered_names)
+
+        assert num_senders > 0
+        assert (+ num_active_targets
+                + num_registered_targets
+                + num_unreg_timeouts
+                + num_exit_timeouts
+                + num_full_q_timeouts) > 0
 
         ret_suite = []
 
-        num_active_needed = (num_senders
-                             + num_targets - (num_reg_only_targets
-                                              + num_unreg_timeouts))
-        f1_active_names = self.active_names - {self.commander_name}
+        num_active_needed = (
+                num_senders
+                + num_active_targets
+                + num_exit_timeouts
+                + num_full_q_timeouts)
 
-        # if not enough active threads then we need to create more
-        if len(f1_active_names) < num_active_needed:
-            num_new = num_active_needed - len(f1_active_names)
-            new_names = random.sample(self.unregistered_names, num_new)
-            ret_suite.extend(self.build_create_suite(
-                names=new_names,
-                validate_config=True))
-        msg_names: list[str] = random.sample(
-            f1_active_names, num_senders+num_targets)
-        sender_names: list[str] = random.sample(msg_names, num_senders)
-        target_names: list[str] = list(set(msg_names) - set(sender_names))
-        exit_names: list[str] = random.sample(target_names, num_exit_timeouts)
+        ret_suite = (self.build_config(
+            num_registered=num_registered_targets,
+            num_active=num_active_needed))
 
-        ret_suite.extend(self.build_exit_suite(names=exit_names))
-        ret_suite.extend(self.build_join_suite(names=exit_names))
+        exit_names = list(config_ver.active_names - {commander_name})
+        scenario.extend(config_ver.build_exit_suite(names=exit_names))
+        scenario.extend(config_ver.build_join_suite(names=exit_names))
+
+        # active_names = self.active_names.copy()
+        # remove commander for now, but if we add it later we need to
+        # be careful not to exit the commander
+        active_names = self.active_names - {commander_name}
+
+        sender_names: list[str] = list(
+            random.sample(active_names, num_senders))
+        active_names -= set(sender_names)
+
+        if num_active_targets > 0:
+            active_target_names: list[str] = list(
+                random.sample(active_names,
+                              num_active_targets))
+            active_names -= set(active_target_names)
+
+        if num_registered_targets > 0:
+            registered_target_names: list[str] = list(
+                random.sample(self.registered_names,
+                              num_registered_targets))
+
+        if num_unreg_timeouts > 0:
+            unreg_timeout_names: list[str] = list(
+                random.sample(self.unregistered_names,
+                              num_unreg_timeouts))
+
+        if num_exit_timeouts > 0:
+            exit_names: list[str] = list(
+                random.sample(active_names,
+                              num_exit_timeouts))
+            active_names -= set(exit_names)
+
+        if num_full_q_timeouts > 0:
+            full_q_names: list[str] = list(
+                random.sample(active_names,
+                              num_full_q_timeouts))
+            active_names -= set(full_q_names)
+
+        ################################################################
+        # build exit and join suites for the exit names
+        ################################################################
+        if num_exit_timeouts > 0:
+            ret_suite.extend(self.build_exit_suite(names=exit_names))
+            ret_suite.extend(self.build_join_suite(names=exit_names))
+
         ret_suite.extend([
             ConfigCmd(cmd=ConfigCmds.SendMsgTimeoutTrue,
                       names=sender_names,
-                      to_names=target_names,
+                      to_names=active_target_names,
                       timeout_names=exit_names,
                       timeout=1.5,
                       confirm_response=True),
@@ -3028,6 +3096,7 @@ class TestSmartThreadScenarios:
             num_registered_targets_arg: int,
             num_exit_timeouts_arg: int,
             num_unreg_timeouts_arg: int,
+            num_full_q_timeouts_arg: int,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
         """Test meta configuration scenarios.
@@ -3041,6 +3110,8 @@ class TestSmartThreadScenarios:
                 exit before msg is sent
             num_unreg_timeouts_arg: number of threads to be targets
                 that have not yet become active
+            num_full_q_timeouts_arg: number of threads that will cause
+                a timeout for having a full msg queue
             caplog: pytest fixture to capture log output
 
         """
@@ -3118,8 +3189,9 @@ class TestSmartThreadScenarios:
                 num_senders=num_senders_arg,
                 num_active_targets=num_active_targets_arg,
                 num_registered_targets=num_registered_targets_arg,
+                num_unreg_timeouts=num_unreg_timeouts_arg,
                 num_exit_timeouts=num_exit_timeouts_arg,
-                num_unreg_timeouts=num_unreg_timeouts_arg))
+                num_full_q_timeouts=num_full_q_timeouts_arg))
 
         scenario.extend([ConfigCmd(cmd=ConfigCmds.Pause,
                                    names=[commander_name],

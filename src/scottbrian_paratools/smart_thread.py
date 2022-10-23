@@ -449,6 +449,9 @@ class SmartThread:
 
         self.code = None
 
+        self.remotes_unregistered: set[str] = set()
+        self.remotes_full_send_q: set[str] = set()
+
         # The following remote_array is used to keep track of who we
         # know and to process the various requests. The known remotes
         # are obtained from the SmartThread._registry as updated in
@@ -1095,6 +1098,8 @@ class SmartThread:
                               f'{caller_info} {log_msg}')
 
         work_targets = sb.targets.copy()
+        self.remotes_unregistered = set()
+        self.remotes_full_send_q = set()
 
         while work_targets:
             for remote in work_targets:
@@ -1103,6 +1108,7 @@ class SmartThread:
                     # If the remote is not yet ready, continue with
                     # the next remote in the list
                     if remote not in SmartThread._registry:
+                        self.remotes_unregistered |= {remote}
                         continue
 
                     if not SmartThread._registry[remote].thread.is_alive():
@@ -1137,16 +1143,19 @@ class SmartThread:
                         # to the full remote later and hope that it
                         # reads its messages and frees up space on its
                         # queue before we time out.
+                        self.remotes_full_send_q |= {remote}
                         pass
 
             if sb.timer.is_expired():
-                self.logger.debug(f'{self.name} timeout of a send_msg()')
+                self.logger.debug(f'{self.name} timeout of a send_msg(). '
+                                  f'Remotes unregistered: '
+                                  f'{sorted(self.remotes_unregistered)} '
+                                  f'Remotes with full send queue: '
+                                  f'{sorted(self.remotes_full_send_q)}. ')
                 self.logger.error('Raise SmartThreadSendMsgTimedOut')
                 raise SmartThreadSendMsgTimedOut(
                     f'{self.name} send_msg method unable to send '
-                    f'the message within the allotted time, most likely '
-                    f'because the remote receive queue is full of the '
-                    f'maximum number of messages.')
+                    'the message within the allotted time. ')
 
             time.sleep(0.2)
 
