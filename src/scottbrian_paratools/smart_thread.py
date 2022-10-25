@@ -336,7 +336,8 @@ class SmartThread:
                  args: Optional[tuple[...]] = None,
                  thread: Optional[threading.Thread] = None,
                  auto_start: Optional[bool] = True,
-                 default_timeout: Optional[Union[int, float]] = None
+                 default_timeout: Optional[Union[int, float]] = None,
+                 max_msgs: Optional[int] = 0
                  ) -> None:
         """Initialize an instance of the SmartThread class.
 
@@ -365,6 +366,9 @@ class SmartThread:
                 specified, a value of zero or less will
                 be equivalent to None, meaning that a
                 default timeout will not be used.
+            max_msgs: specifies the maximum number of messages that can
+                occupy the message queue. Zero (the default) specifies
+                no limit.
 
         Raises:
             SmartThreadIncorrectNameSpecified: Attempted SmartThread
@@ -448,6 +452,8 @@ class SmartThread:
         self.sync_request = False
 
         self.code = None
+
+        self.max_msgs = max_msgs
 
         self.remotes_unregistered: set[str] = set()
         self.remotes_full_send_q: set[str] = set()
@@ -967,7 +973,7 @@ class SmartThread:
                             name] = SmartThread.ConnectionStatusBlock2(
                                     event=threading.Event(),
                                     sync_event=threading.Event(),
-                                    msg_q=queue.Queue())
+                                    msg_q=queue.Queue(maxsize=self.max_msgs))
                         self.logger.debug(
                             f'{self.name} added status_blocks entry '
                             f'for pair_key = {pair_key}, '
@@ -1128,12 +1134,12 @@ class SmartThread:
                     # This also means we have an entry for the remote in
                     # the status_blocks in the connection array
                     try:
-                        self.logger.info(
-                            f'{self.name} sending message to {remote}')
                         # place message on remote q
                         SmartThread._pair_array[
                             pair_key].status_blocks[
                             remote].msg_q.put(msg, timeout=0.2)
+                        self.logger.info(
+                            f'{self.name} sent message to {remote}')
                         # start while loop again with one less remote
                         work_targets.remove(remote)
                         break
@@ -1147,11 +1153,20 @@ class SmartThread:
                         pass
 
             if sb.timer.is_expired():
+                unreg_timeout_msg = ''
+                if self.remotes_unregistered:
+                    unreg_timeout_msg = (
+                        'Remotes unregistered: '
+                        f'{sorted(self.remotes_unregistered)}. ')
+                fullq_timeout_msg = ''
+                if self.remotes_full_send_q:
+                    fullq_timeout_msg = (
+                        'Remotes with full send queue: '
+                        f'{sorted(self.remotes_full_send_q)}.')
                 self.logger.debug(f'{self.name} timeout of a send_msg(). '
-                                  f'Remotes unregistered: '
-                                  f'{sorted(self.remotes_unregistered)} '
-                                  f'Remotes with full send queue: '
-                                  f'{sorted(self.remotes_full_send_q)}. ')
+                                  f'{unreg_timeout_msg}'
+                                  f'{fullq_timeout_msg}')
+
                 self.logger.error('Raise SmartThreadSendMsgTimedOut')
                 raise SmartThreadSendMsgTimedOut(
                     f'{self.name} send_msg method unable to send '
