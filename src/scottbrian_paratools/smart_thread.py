@@ -1137,11 +1137,17 @@ class SmartThread:
                         # place message on remote q
                         SmartThread._pair_array[
                             pair_key].status_blocks[
-                            remote].msg_q.put(msg, timeout=0.2)
+                            remote].msg_q.put(msg, timeout=0.01)
                         self.logger.info(
                             f'{self.name} sent message to {remote}')
                         # start while loop again with one less remote
                         work_targets.remove(remote)
+                        # we need to remove the remote from the unreg
+                        # or fullq sets since the send now succeeded
+                        if remote in self.remotes_unregistered:
+                            self.remotes_unregistered -= {remote}
+                        if remote in self.remotes_full_send_q:
+                            self.remotes_full_send_q -= {remote}
                         break
                     except queue.Full:
                         # If the remote msg queue is full, move on to
@@ -1164,6 +1170,7 @@ class SmartThread:
                         'Remotes with full send queue: '
                         f'{sorted(self.remotes_full_send_q)}.')
                 self.logger.debug(f'{self.name} timeout of a send_msg(). '
+                                  f'Targets: {sorted(sb.targets)}. '
                                   f'{unreg_timeout_msg}'
                                   f'{fullq_timeout_msg}')
 
@@ -1172,7 +1179,7 @@ class SmartThread:
                     f'{self.name} send_msg method unable to send '
                     'the message within the allotted time. ')
 
-            time.sleep(0.2)
+            time.sleep(0.1)
 
         # if caller specified a log message to issue
         if log_msg and self.debug_logging_enabled:
