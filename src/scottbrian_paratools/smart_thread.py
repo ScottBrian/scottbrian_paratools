@@ -1280,7 +1280,7 @@ class SmartThread:
                     f'from '
                     f'{remote}.')
 
-            time.sleep(0.2)
+            time.sleep(0.1)
         if do_refresh:
             with sel.SELockExcl(SmartThread._registry_lock):
                 self._refresh_pair_array()
