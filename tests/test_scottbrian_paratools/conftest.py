@@ -120,13 +120,15 @@ def thread_exc(monkeypatch: Any) -> "ExcHook":
     SmartThread._registry = {}
     SmartThread._pair_array = {}
 
-    # clean the registry in ThreadPair class
-    # ThreadPair._registry = {}
+    # surface any remote thread uncaught exceptions
+    exc_hook.raise_exc_if_one()
 
     # the following check ensures that the test case waited via join for
     # any started threads to come home
+    if threading.active_count() > 1:
+        for thread in threading.enumerate():
+            print(f'conftest thread: {thread}')
     assert threading.active_count() == 1
-    exc_hook.raise_exc_if_one()
 
     # the following assert ensures -p no:threadexception was specified
     assert threading.excepthook == new_hook
