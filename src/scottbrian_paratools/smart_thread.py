@@ -965,9 +965,15 @@ class SmartThread:
 
                 # add status block for name0 and name1 if needed
                 for name in (name0, name1):
-                    if (name not in
-                            SmartThread._pair_array[pair_key]
-                            .status_blocks):
+                    if (name in SmartThread._pair_array[
+                            pair_key].status_blocks):
+                        # reset del_deferred in case it is ON and the
+                        # other name is a resurrected thread
+                        SmartThread._pair_array[
+                            pair_key].status_blocks[
+                            name].del_deferred = False
+                    else:
+                        # add an entry for this thread
                         SmartThread._pair_array[
                             pair_key].status_blocks[
                             name] = SmartThread.ConnectionStatusBlock2(
@@ -1244,6 +1250,17 @@ class SmartThread:
                         ret_msg = SmartThread._pair_array[
                             pair_key].status_blocks[
                             self.name].msg_q.get(timeout=0.2)
+                        # if we had wanted to delete an entry in the
+                        # pair array for this thread because the other
+                        # thread exited, but we could not because this
+                        # thread had a pending msg to recv, then we
+                        # deferred the delete. If the msg_q for this
+                        # thread is now empty as a result of this recv,
+                        # we can go ahead and delete the pair, so
+                        # set the flag to do a refresh (we can't do the
+                        # refresh here because we need to hold the lock
+                        # exclusive - see code below where we do the
+                        # refresh)
                         if (SmartThread._pair_array[
                                 pair_key].status_blocks[
                                 self.name].del_deferred
