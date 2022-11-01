@@ -334,6 +334,7 @@ class SmartThread:
                  name: str,
                  target: Optional[Callable[..., Any]] = None,
                  args: Optional[tuple[...]] = None,
+                 kwargs: Optional[dict[str, Any]] = None,
                  thread: Optional[threading.Thread] = None,
                  auto_start: Optional[bool] = True,
                  default_timeout: Optional[Union[int, float]] = None,
@@ -352,6 +353,8 @@ class SmartThread:
                         *args* if specified, and the *name*.
             args: args for the thread creation when *target* is
                       specified.
+            kwargs: keyword args for the thread creation when *target*
+                is specified.
             thread: specifies the thread to use instead of the current
                         thread - needed when SmartThread is instantiated
                         in a class that inherits threading.Thread in
@@ -424,20 +427,25 @@ class SmartThread:
                 'Attempted SmartThread instantiation with both target and '
                 'thread specified.')
 
-        if (not target) and args:
+        if (not target) and (args or kwargs):
             raise SmartThreadArgsSpecificationWithoutTarget(
-                'Attempted SmartThread instantiation with args specified and '
-                'without target specified.')
+                'Attempted SmartThread instantiation with args or '
+                'kwargs specified but without target specified.')
 
         if target:  # caller wants a thread created
             self.thread_create = ThreadCreate.Target
-            if args:
-                self.thread = threading.Thread(target=target,
-                                               args=args,
-                                               name=name)
-            else:
-                self.thread = threading.Thread(target=target,
-                                               name=name)
+            self.thread = threading.Thread(target=target,
+                                           args=args,
+                                           kwargs=kwargs,
+                                           name=name)
+            # if args or kwargs:
+            #     self.thread = threading.Thread(target=target,
+            #                                    args=args,
+            #                                    kwargs=kwargs,
+            #                                    name=name)
+            # else:
+            #     self.thread = threading.Thread(target=target,
+            #                                    name=name)
         elif thread:  # caller provided the thread to use
             self.thread_create = ThreadCreate.Thread
             self.thread = thread
@@ -1225,7 +1233,6 @@ class SmartThread:
             self.logger.debug(
                 f'recv_msg() entered: {self.name} <- {remote} '
                 f'{caller_info} {log_msg}')
-        log_msg_added = False
         pair_key = self._get_pair_key(self.name, remote)
         do_refresh = False
         while True:
@@ -1243,13 +1250,11 @@ class SmartThread:
                 if pair_key in SmartThread._pair_array:
                     try:
                         # recv message from remote
-                        if not log_msg_added:  # do only one log message
-                            self.logger.info(
-                                f'{self.name} receiving msg from {remote}')
-                            log_msg_added = True
                         ret_msg = SmartThread._pair_array[
                             pair_key].status_blocks[
-                            self.name].msg_q.get(timeout=0.2)
+                            self.name].msg_q.get(timeout=0.01)
+                        self.logger.info(
+                            f'{self.name} received msg from {remote}')
                         # if we had wanted to delete an entry in the
                         # pair array for this thread because the other
                         # thread exited, but we could not because this
@@ -1290,14 +1295,13 @@ class SmartThread:
             if timer.is_expired():
                 self.logger.error(
                     f'{self.name} raising SmartThreadRecvMsgTimedOut '
-                    f'waiting '
-                    f'for {remote} ')
+                    f'waiting for {remote} ')
                 raise SmartThreadRecvMsgTimedOut(
                     f'recv_msg {self.name} timed out waiting for message '
-                    f'from '
-                    f'{remote}.')
+                    f'from {remote}.')
 
             time.sleep(0.1)
+
         if do_refresh:
             with sel.SELockExcl(SmartThread._registry_lock):
                 self._refresh_pair_array()
