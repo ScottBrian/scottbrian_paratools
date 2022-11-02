@@ -107,6 +107,7 @@ class ConfigCmd:
     to_names: Optional[list[str]] = None
     msg_to_send: Optional[Any] = None
     log_msg: Optional[str] = None
+    recv_msg_timeout_names: Optional[list[str]] = None
     unreg_timeout_names: Optional[list[str]] = None
     fullq_timeout_names: Optional[list[str]] = None
     exp_status: Optional[st.ThreadStatus] = None
@@ -135,7 +136,8 @@ class TimeoutType(Enum):
 @dataclass
 class RecvMsgParms:
     timeout_type: TimeoutType
-    num_active_senders: int
+    num_active_no_delay_senders: int
+    num_active_delay_senders: int
     num_send_exit_senders: int
     num_nosend_exit_senders: int
     num_unreg_senders: int
@@ -783,15 +785,34 @@ def num_senders_arg(request: Any) -> int:
 
 
 ###############################################################################
-# num_active_senders_arg
+# num_active_no_delay_senders_arg
 ###############################################################################
-num_active_senders_arg_list = [0, 1, 2]
-num_active_senders_arg_list = [1]
+num_active_no_delay_senders_arg_list = [0, 1, 2]
+num_active_no_delay_senders_arg_list = [1]
 
 
-@pytest.fixture(params=num_active_senders_arg_list)  # type: ignore
-def num_active_senders_arg(request: Any) -> int:
-    """Number of threads to send msg.
+@pytest.fixture(params=num_active_no_delay_senders_arg_list)  # type: ignore
+def num_active_no_delay_senders_arg(request: Any) -> int:
+    """Number of threads to send msg immediately.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+###############################################################################
+# num_active_delay_senders_arg
+###############################################################################
+num_active_delay_senders_arg_list = [0, 1, 2]
+num_active_delay_senders_arg_list = [1]
+
+
+@pytest.fixture(params=num_active_delay_senders_arg_list)  # type: ignore
+def num_active_delay_senders_arg(request: Any) -> int:
+    """Number of threads to send msg after a delay.
 
     Args:
         request: special fixture that returns the fixture params
@@ -806,6 +827,7 @@ def num_active_senders_arg(request: Any) -> int:
 # num_senders_exit_before_arg
 ###############################################################################
 num_send_exit_senders_arg_list = [0, 1, 2]
+num_send_exit_senders_arg_list = [0]
 
 
 @pytest.fixture(params=num_send_exit_senders_arg_list)  # type: ignore
@@ -825,6 +847,7 @@ def num_send_exit_senders_arg(request: Any) -> int:
 # num_senders_exit_before_arg
 ###############################################################################
 num_nosend_exit_senders_arg_list = [0, 1, 2]
+num_nosend_exit_senders_arg_list = [0]
 
 
 @pytest.fixture(params=num_nosend_exit_senders_arg_list)  # type: ignore
@@ -844,6 +867,7 @@ def num_nosend_exit_senders_arg(request: Any) -> int:
 # num_unreg_senders_arg
 ###############################################################################
 num_unreg_senders_arg_list = [0, 1, 2]
+num_unreg_senders_arg_list = [0]
 
 
 @pytest.fixture(params=num_unreg_senders_arg_list)  # type: ignore
@@ -863,7 +887,7 @@ def num_unreg_senders_arg(request: Any) -> int:
 # num_reg_senders_arg
 ###############################################################################
 num_reg_senders_arg_list = [0, 1, 2]
-
+num_reg_senders_arg_list = [0]
 
 @pytest.fixture(params=num_reg_senders_arg_list)  # type: ignore
 def num_reg_senders_arg(request: Any) -> int:
@@ -882,6 +906,7 @@ def num_reg_senders_arg(request: Any) -> int:
 # num_receivers_arg
 ###############################################################################
 num_receivers_arg_list = [1, 2, 3]
+num_receivers_arg_list = [1]
 
 
 @pytest.fixture(params=num_receivers_arg_list)  # type: ignore
@@ -1818,10 +1843,10 @@ class ConfigVerifier:
                         name].pending_ops_count
                     self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
-                        f'ConfigVerifier found that the expected_pairs '
-                        f'entry for pair_key {pair_key}, the entry for '
-                        f'{name} has has a pending_ops_count of '
-                        f'{ops_count}, but the SmartThread._pair_array'
+                        f'ConfigVerifier found that for the '
+                        f'expected_pairs entry for pair_key {pair_key}, '
+                        f'the entry for {name} has has a pending_ops_count '
+                        f'of {ops_count}, but the SmartThread._pair_array'
                         f' entry for {name} has a an empty msg_q')
         # verify expected_pairs matches pair_array
         for pair_key in self.expected_pairs:
@@ -2215,13 +2240,69 @@ class ConfigVerifier:
         return ret_suite
 
     ################################################################
+    # log_name_groups
+    ################################################################
+    def log_name_groups(self) -> None:
+        """Issue log msgs to show the names in each set."""
+        log_msg = f'unregistered_names: {sorted(self.unregistered_names)}'
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(log_msg)
+
+        log_msg = f'registered_names: {sorted(self.registered_names)}'
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(log_msg)
+
+        log_msg = f'active_names: {sorted(self.active_names)}'
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(log_msg)
+
+        log_msg = f'stopped_names: {sorted(self.stopped_names)}'
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(log_msg)
+
+    ################################################################
+    # choose_names
+    ################################################################
+    def choose_names(
+            self,
+            name_collection: set[str],
+            num_names_needed: int,
+            update_collection: bool,
+            var_name_for_log: str) -> list[str]:
+        """Return a list of names picked from a set and issue log msg.
+
+        Args:
+            name_collection: set of names to choose from
+            num_names_needed: number of names to choose
+            update_collection: indicates whether to remove the chosen names
+                from the set of names
+            var_name_for_log: variable name to use for the log msg
+
+        Returns:
+            a list of names
+        """
+        chosen_names: list[str] = []
+        if num_names_needed > 0:
+            chosen_names = list(
+                random.sample(name_collection, num_names_needed))
+        if update_collection:
+            name_collection -= set(chosen_names)
+
+        log_msg = f'{var_name_for_log}: {chosen_names}'
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(log_msg)
+
+        return chosen_names
+
+    ################################################################
     # build_recv_msg_timeout_suite
     ################################################################
     def build_recv_msg_timeout_suite(
             self,
             timeout_type: TimeoutType,
             num_receivers: int,
-            num_active_senders: int,
+            num_active_no_delay_senders: int,
+            num_active_delay_senders: int,
             num_send_exit_senders: int,
             num_nosend_exit_senders: int,
             num_unreg_senders: int,
@@ -2234,8 +2315,10 @@ class ConfigVerifier:
                 succeed or fail with a timeout
             num_receivers: number of threads that will do the
                 recv_msg
-            num_active_senders: number of threads that are active
-                and will do the send_msg
+            num_active_no_delay_senders: number of threads that are
+                active and will do the send_msg immediately
+            num_active_delay_senders: number of threads that are active
+                and will do the send_msg after a delay
             num_send_exit_senders: number of threads that are active
                 and will do the send_msg and then exit
             num_nosend_exit_senders: number of threads that are
@@ -2253,7 +2336,8 @@ class ConfigVerifier:
         # the count of unregistered names to ensure we have one thread
         # for the commander
         assert (num_receivers
-                + num_active_senders
+                + num_active_no_delay_senders
+                + num_active_delay_senders
                 + num_send_exit_senders
                 + num_nosend_exit_senders
                 + num_unreg_senders
@@ -2261,17 +2345,26 @@ class ConfigVerifier:
 
         assert num_receivers > 0
 
-        assert (num_active_senders
+        assert (num_active_no_delay_senders
+                + num_active_delay_senders
                 + num_send_exit_senders
                 + num_nosend_exit_senders
                 + num_unreg_senders
                 + num_reg_senders) > 0
 
+        if (timeout_type == TimeoutType.TimeoutFalse
+                or timeout_type == TimeoutType.TimeoutTrue):
+            assert (num_active_delay_senders
+                    + num_nosend_exit_senders
+                    + num_unreg_senders
+                    + num_reg_senders) > 0
+
         ret_suite = []
 
         num_active_needed = (
                 num_receivers
-                + num_active_senders
+                + num_active_no_delay_senders
+                + num_active_delay_senders
                 + num_send_exit_senders
                 + num_nosend_exit_senders
                 + 1)
@@ -2279,6 +2372,8 @@ class ConfigVerifier:
         ret_suite = (self.build_config(
             num_registered=num_reg_senders,
             num_active=num_active_needed))
+
+        self.log_name_groups()
 
         # active_names = self.active_names.copy()
         # remove commander for now, but if we add it later we need to
@@ -2288,113 +2383,168 @@ class ConfigVerifier:
         ################################################################
         # choose receiver_names
         ################################################################
-        receiver_names: list[str] = list(
-            random.sample(active_names, num_receivers))
-        active_names -= set(receiver_names)
-
-        log_msg = f'receiver_names: {receiver_names}'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
+        receiver_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_receivers,
+            update_collection=True,
+            var_name_for_log='receiver_names')
 
         ################################################################
-        # choose active_sender_names
+        # choose active_no_delay_sender_names
         ################################################################
-        active_sender_names: list[str] = []
-        if num_active_senders > 0:
-            active_sender_names = list(
-                random.sample(active_names, num_active_senders))
-            active_names -= set(active_sender_names)
+        active_no_delay_sender_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_active_no_delay_senders,
+            update_collection=True,
+            var_name_for_log='active_no_delay_sender_names')
 
-        log_msg = f'active_sender_names: {active_sender_names}'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
+        ################################################################
+        # choose active_delay_sender_names
+        ################################################################
+        active_delay_sender_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_active_delay_senders,
+            update_collection=True,
+            var_name_for_log='active_delay_sender_names')
 
         ################################################################
         # choose send_exit_sender_names
         ################################################################
-        send_exit_sender_names: list[str] = []
-        if num_send_exit_senders > 0:
-            send_exit_sender_names = list(
-                random.sample(active_names, num_send_exit_senders))
-            active_names -= set(send_exit_sender_names)
-
-        log_msg = f'send_exit_sender_names: {send_exit_sender_names}'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
+        send_exit_sender_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_send_exit_senders,
+            update_collection=True,
+            var_name_for_log='send_exit_sender_names')
 
         ################################################################
         # choose nosend_exit_sender_names
         ################################################################
-        nosend_exit_sender_names: list[str] = []
-        if num_nosend_exit_senders > 0:
-            nosend_exit_sender_names: list[str] = list(
-                random.sample(active_names, num_nosend_exit_senders))
-            active_names -= set(nosend_exit_sender_names)
-
-        log_msg = f'nosend_exit_sender_names: {nosend_exit_sender_names}'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
+        nosend_exit_sender_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_nosend_exit_senders,
+            update_collection=True,
+            var_name_for_log='nosend_exit_sender_names')
 
         ################################################################
         # choose unreg_sender_names
         ################################################################
-        unreg_sender_names: list[str] = []
-        if num_unreg_senders > 0:
-            unreg_sender_names = list(
-                random.sample(self.unregistered_names, num_unreg_senders))
-
-        log_msg = f'unreg_sender_names: {unreg_sender_names}'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
+        unreg_sender_names = self.choose_names(
+            name_collection=self.unregistered_names,
+            num_names_needed=num_unreg_senders,
+            update_collection=False,
+            var_name_for_log='unreg_sender_names')
 
         ################################################################
         # choose reg_sender_names
         ################################################################
-        reg_sender_names: list[str] = []
-        if num_reg_senders > 0:
-            reg_sender_names = list(
-                random.sample(self.registered_names, num_reg_senders))
-
-        log_msg = f'reg_sender_names: {reg_sender_names}'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
+        reg_sender_names = self.choose_names(
+            name_collection=self.registered_names,
+            num_names_needed=num_reg_senders,
+            update_collection=False,
+            var_name_for_log='reg_sender_names')
 
         ################################################################
         # start by doing the recv_msgs, one for each sender
         ################################################################
-        all_sender_names: list[str] = (active_sender_names
+        all_sender_names: list[str] = (active_no_delay_sender_names
+                                       + active_delay_sender_names
                                        + send_exit_sender_names
                                        + nosend_exit_sender_names
                                        + unreg_sender_names
                                        + reg_sender_names)
-        sender_1_msg_1 = f'recv test: {self.get_ptime()}'
-        ret_suite.extend([
-            ConfigCmd(cmd=ConfigCmds.RecvMsg,
-                      names=receiver_names,
-                      from_names=all_sender_names,
-                      msg_to_send=sender_1_msg_1,
-                      confirm_response=False)])
-            # ConfigCmd(cmd=ConfigCmds.ConfirmResponse,
-            #           names=receiver_names,
-            #           confirm_response_cmd=ConfigCmds.RecvMsg)])
+
+        all_timeout_names: list[str] = (active_delay_sender_names
+                                       + nosend_exit_sender_names
+                                       + unreg_sender_names
+                                       + reg_sender_names)
 
         ################################################################
-        # do send_msg from active senders
+        # setup the messages to send
         ################################################################
-        if active_sender_names:
+        # sender_msgs: dict[str, str] = {}
+        # for name in all_sender_names:
+        #     sender_msgs[name] = f'recv test: {self.get_ptime()}'
+        sender_msgs = f'recv test: {self.get_ptime()}'
+
+        if timeout_type == TimeoutType.TimeoutNone:
+            confirm_response_to_use = ConfigCmds.RecvMsg
+            ret_suite.extend([
+                ConfigCmd(cmd=ConfigCmds.RecvMsg,
+                          names=receiver_names,
+                          from_names=all_sender_names,
+                          msg_to_send=sender_msgs,
+                          confirm_response=True)])
+
+        elif timeout_type == TimeoutType.TimeoutFalse:
+            confirm_response_to_use = ConfigCmds.RecvMsgTimeoutFalse
+            ret_suite.extend([
+                ConfigCmd(cmd=ConfigCmds.RecvMsgTimeoutFalse,
+                          names=receiver_names,
+                          from_names=all_sender_names,
+                          msg_to_send=sender_msgs,
+                          timeout=2,
+                          confirm_response=True)])
+
+        else:  # TimeoutType.TimeoutTrue
+            confirm_response_to_use = ConfigCmds.RecvMsgTimeoutTrue
+            ret_suite.extend([
+                ConfigCmd(cmd=ConfigCmds.RecvMsgTimeoutTrue,
+                          names=receiver_names,
+                          from_names=all_sender_names,
+                          msg_to_send=sender_msgs,
+                          timeout=2,
+                          recv_msg_timeout_names=all_timeout_names,
+                          confirm_response=True)])
+
+        ################################################################
+        # do send_msg from active_no_delay_senders
+        ################################################################
+        if active_no_delay_sender_names:
             # sender_1_msg_1[exit_name] = f'send test: {self.get_ptime()}'
             # log_msg = f'log test: {self.get_ptime()}'
 
             ret_suite.extend([
                 ConfigCmd(cmd=ConfigCmds.SendMsg,
-                          names=active_sender_names,
+                          names=active_no_delay_sender_names,
                           to_names=receiver_names,
-                          msg_to_send=sender_1_msg_1,
+                          msg_to_send=sender_msgs,
                           # log_msg=log_msg,
-                          confirm_response=True),
-                ConfigCmd(cmd=ConfigCmds.ConfirmResponse,
-                          names=active_sender_names,
-                          confirm_response_cmd=ConfigCmds.SendMsg)])
+                          confirm_response=False)])
+                # ConfigCmd(cmd=ConfigCmds.ConfirmResponse,
+                #           names=active_no_delay_sender_names,
+                #           confirm_response_cmd=ConfigCmds.SendMsg)])
+
+        if (timeout_type == TimeoutType.TimeoutNone
+                or timeout_type == TimeoutType.TimeoutFalse):
+            ret_suite.extend([ConfigCmd(cmd=ConfigCmds.Pause,
+                                        names=[self.commander_name],
+                                        pause_seconds=1)])
+        elif timeout_type == TimeoutType.TimeoutTrue:
+            ret_suite.extend([ConfigCmd(cmd=ConfigCmds.Pause,
+                                        names=[self.commander_name],
+                                        pause_seconds=3)])
+        ################################################################
+        # do send_msg from active_delay_senders
+        ################################################################
+        if active_delay_sender_names:
+            # sender_1_msg_1[exit_name] = f'send test: {self.get_ptime()}'
+            # log_msg = f'log test: {self.get_ptime()}'
+
+            ret_suite.extend([
+                ConfigCmd(cmd=ConfigCmds.SendMsg,
+                          names=active_delay_sender_names,
+                          to_names=receiver_names,
+                          msg_to_send=sender_msgs,
+                          # log_msg=log_msg,
+                          confirm_response=False)])
+            # ConfigCmd(cmd=ConfigCmds.ConfirmResponse,
+            #           names=active_no_delay_sender_names,
+            #           confirm_response_cmd=ConfigCmds.SendMsg)])
+
+        ret_suite.extend([
+            ConfigCmd(cmd=ConfigCmds.ConfirmResponse,
+                      names=receiver_names,
+                      confirm_response_cmd=confirm_response_to_use)])
 
         return ret_suite
 
@@ -2475,88 +2625,71 @@ class ConfigVerifier:
 
         active_names = self.active_names - {self.commander_name}
 
-        print(f'active_names 1: {active_names}')
+        ################################################################
+        # choose sender_names
+        ################################################################
+        sender_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_senders,
+            update_collection=True,
+            var_name_for_log='sender_names')
 
-        sender_names: list[str] = list(
-            random.sample(active_names, num_senders))
-        active_names -= set(sender_names)
+        ################################################################
+        # choose active_target_names
+        ################################################################
+        active_target_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_active_targets,
+            update_collection=True,
+            var_name_for_log='active_target_names')
 
-        print(f'sender_names: {sender_names}')
-        print(f'active_names 2: {active_names}')
+        ################################################################
+        # choose registered_target_names
+        ################################################################
+        registered_target_names = self.choose_names(
+            name_collection=self.registered_names,
+            num_names_needed=num_registered_targets,
+            update_collection=False,
+            var_name_for_log='registered_target_names')
 
-        active_target_names: list[str] = []
-        if num_active_targets > 0:
-            active_target_names = list(
-                random.sample(active_names,
-                              num_active_targets))
-            active_names -= set(active_target_names)
+        ################################################################
+        # choose unreg_timeout_names
+        ################################################################
+        unreg_timeout_names = self.choose_names(
+            name_collection=self.unregistered_names,
+            num_names_needed=num_unreg_timeouts,
+            update_collection=False,
+            var_name_for_log='unreg_timeout_names')
 
-        print(f'active_target_names: {active_target_names}')
-        print(f'active_names 3: {active_names}')
+        ################################################################
+        # choose exit_names
+        ################################################################
+        exit_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_exit_timeouts,
+            update_collection=True,
+            var_name_for_log='exit_names')
 
-        registered_target_names: list[str] = []
-        if num_registered_targets > 0:
-            registered_target_names = list(
-                random.sample(self.registered_names,
-                              num_registered_targets))
-        print(f'registered_target_names: {registered_target_names}')
-
-        unreg_timeout_names: list[str] = []
-        if num_unreg_timeouts > 0:
-            unreg_timeout_names = list(
-                random.sample(self.unregistered_names,
-                              num_unreg_timeouts))
-
-        print(f'unreg_timeout_names: {unreg_timeout_names}')
-
-        exit_names: list[str] = []
-        if num_exit_timeouts > 0:
-            exit_names = list(
-                random.sample(active_names,
-                              num_exit_timeouts))
-            active_names -= set(exit_names)
-
-        print(f'exit_names: {exit_names}')
-        print(f'active_names 4: {active_names}')
-
-        full_q_names: list[str] = []
-        if num_full_q_timeouts > 0:
-            full_q_names = list(
-                random.sample(active_names,
-                              num_full_q_timeouts))
-            active_names -= set(full_q_names)
-
-        print(f'full_q_names: {full_q_names}')
-        print(f'active_names 5: {active_names}')
-
-        log_msg = f'sender_names: {sender_names}'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
-
-        log_msg = f'active_target_names: {active_target_names}'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
-
-        log_msg = f'registered_target_names: {registered_target_names}'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
-
-        log_msg = f'unreg_timeout_names: {unreg_timeout_names}'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
-
-        log_msg = f'exit_names: {exit_names}'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
-
-        log_msg = f'full_q_names: {full_q_names}'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
+        ################################################################
+        # choose full_q_names
+        ################################################################
+        full_q_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_full_q_timeouts,
+            update_collection=True,
+            var_name_for_log='full_q_names')
 
         ################################################################
         # send msgs to senders so we have some on their queues so we
         # can verify partially paired for any threads that are exited
         ################################################################
+        ################################################################
+        # setup the messages to send
+        ################################################################
+        # sender_msgs: dict[str, str] = {}
+        # for name in all_sender_names:
+        #     sender_msgs[name] = f'recv test: {self.get_ptime()}'
+
         sender_1_msg_1: dict[str, str] = {}
         if exit_names and num_senders >= 2:
             for exit_name in exit_names:
@@ -2590,12 +2723,6 @@ class ConfigVerifier:
                               confirm_response_cmd=ConfigCmds.SendMsg)])
                 sender_2_msg_2[exit_name] = f'send test: {self.get_ptime()}'
                 log_msg = f'log test: {self.get_ptime()}'
-                # for enter_exit in ('entered', 'exiting'):
-                #     self.add_log_msg(re.escape(
-                #         f'send_msg() {enter_exit}: {exit_name} -> '
-                #         f'{sender_names[2]} '
-                #         f'{self.log_ver.get_call_seq("main_driver")} '
-                #         f'{log_msg}'))
 
                 ret_suite.extend([
                     ConfigCmd(cmd=ConfigCmds.SendMsg,
@@ -2639,12 +2766,6 @@ class ConfigVerifier:
                     msg_to_send = f'send test: {self.get_ptime()}'
                     for sender_name in sender_names:
                         log_msg = f'log test: {self.get_ptime()}'
-                        # for enter_exit in ('entered', 'exiting'):
-                        #     self.add_log_msg(re.escape(
-                        #         f'send_msg() {enter_exit}: {sender_name} -> '
-                        #         f'{exit_names[idx]} '
-                        #         f'{self.log_ver.get_call_seq("main_driver")} '
-                        #         f'{log_msg}'))
 
                     ret_suite.extend([ConfigCmd(cmd=ConfigCmds.SendMsg,
                                                 names=sender_names,
@@ -2670,14 +2791,14 @@ class ConfigVerifier:
                     ret_suite.extend([ConfigCmd(
                         cmd=ConfigCmds.VerifyHalfPaired,
                         names=[exit_name, sender_names[1]],
-                        half_paired_names=sender_names[1])])
+                        half_paired_names=[sender_names[1]])])
 
             if num_senders == 3:
                 for exit_name in exit_names:
                     ret_suite.extend([ConfigCmd(
                         cmd=ConfigCmds.VerifyHalfPaired,
                         names=[exit_name, sender_names[2]],
-                        half_paired_names=sender_names[2])])
+                        half_paired_names=[sender_names[2]])])
 
         all_targets: list[str] = (active_target_names
                                   + registered_target_names
@@ -2690,11 +2811,6 @@ class ConfigVerifier:
         if timeout_type == TimeoutType.TimeoutTrue:
             for sender_name in sender_names:
                 log_msg = f'log test: {self.get_ptime()}'
-                # self.add_log_msg(re.escape(
-                #     f'send_msg() entered: {sender_name} -> '
-                #     f'{set(all_targets)} '
-                #     f'{self.log_ver.get_call_seq("main_driver")} '
-                #     f'{log_msg}'))
 
             ret_suite.extend([
                 ConfigCmd(cmd=ConfigCmds.SendMsgTimeoutTrue,
@@ -2713,12 +2829,7 @@ class ConfigVerifier:
             if timeout_type == TimeoutType.TimeoutFalse:
                 for sender_name in sender_names:
                     log_msg = f'log test: {self.get_ptime()}'
-                    # for enter_exit in ('entered', 'exiting'):
-                    #     self.add_log_msg(re.escape(
-                    #         f'send_msg() {enter_exit}: {sender_name} -> '
-                    #         f'{set(all_targets)} '
-                    #         f'{self.log_ver.get_call_seq("main_driver")} '
-                    #         f'{log_msg}'))
+
                 ret_suite.extend([
                     ConfigCmd(cmd=ConfigCmds.SendMsgTimeoutFalse,
                               names=sender_names,
@@ -3430,30 +3541,19 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
                     log_level=logging.INFO,
                     log_msg=log_msg_f1)
 
-        # elif cmd_msg.cmd == ConfigCmds.SendMsgTimeoutTrue:
-        #     ####################################################
-        #     # send one or more msgs
-        #     ####################################################
-        #     with pytest.raises(st.SmartThreadSendMsgTimedOut):
-        #         f1_config_ver.f1_threads[f1_name].send_msg(
-        #             targets=cmd_msg.to_names,
-        #             msg=cmd_msg,
-        #             timeout=cmd_msg.timeout)
-        #
-        #     f1_config_ver.add_log_msg(re.escape(
-        #         f'{f1_name} timeout of a send_msg()'))
-        #     f1_config_ver.add_log_msg(
-        #         'Raise SmartThreadSendMsgTimedOut',
-        #         log_level=logging.ERROR)
-
-        elif cmd_msg.cmd == ConfigCmds.RecvMsg:
+        elif (cmd_msg.cmd == ConfigCmds.RecvMsg
+              or cmd_msg.cmd == ConfigCmds.RecvMsgTimeoutFalse):
             ####################################################
             # recv one or more msgs
             ####################################################
             for f1_from_name in cmd_msg.from_names:
-                recvd_msg = f1_config_ver.f1_threads[f1_name].recv_msg(
-                    remote=f1_from_name,
-                    timeout=3)
+                if cmd_msg.cmd == ConfigCmds.RecvMsg:
+                    recvd_msg = f1_config_ver.f1_threads[f1_name].recv_msg(
+                        remote=f1_from_name)
+                elif cmd_msg.cmd == ConfigCmds.RecvMsgTimeoutFalse:
+                    recvd_msg = f1_config_ver.f1_threads[f1_name].recv_msg(
+                        remote=f1_from_name,
+                        timeout=cmd_msg.timeout)
 
                 assert recvd_msg == cmd_msg.msg_to_send
 
@@ -3470,6 +3570,42 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
                     log_name='scottbrian_paratools.smart_thread',
                     log_level=logging.INFO,
                     log_msg=log_msg_f1)
+        elif cmd_msg.cmd == ConfigCmds.RecvMsgTimeoutTrue:
+            ####################################################
+            # recv one or more msgs
+            ####################################################
+            for f1_from_name in cmd_msg.from_names:
+                if f1_from_name in cmd_msg.recv_msg_timeout_names:
+                    with pytest.raises(st.SmartThreadRecvMsgTimedOut):
+                        recvd_msg = f1_config_ver.f1_threads[f1_name].recv_msg(
+                            remote=f1_from_name,
+                            timeout=cmd_msg.timeout)
+                    log_msg_f1 = (
+                        f'{f1_name} raising SmartThreadRecvMsgTimedOut '
+                        f'waiting for {f1_from_name} ')
+                    f1_config_ver.log_ver.add_msg(
+                        log_name='scottbrian_paratools.smart_thread',
+                        log_level=logging.ERROR,
+                        log_msg=log_msg_f1)
+                else:
+                    recvd_msg = f1_config_ver.f1_threads[f1_name].recv_msg(
+                        remote=f1_from_name,
+                        timeout=cmd_msg.timeout)
+                    assert recvd_msg == cmd_msg.msg_to_send
+
+                    f1_copy_pair_deque = (
+                        f1_config_ver.f1_threads[f1_name]
+                        .time_last_pair_array_update.copy())
+                    f1_config_ver.dec_ops_count(f1_name,
+                                                f1_from_name,
+                                                f1_copy_pair_deque)
+
+                    log_msg_f1 = (f"{f1_name} received msg from "
+                                  f"{f1_from_name}")
+                    f1_config_ver.log_ver.add_msg(
+                        log_name='scottbrian_paratools.smart_thread',
+                        log_level=logging.INFO,
+                        log_msg=log_msg_f1)
 
         elif cmd_msg.cmd == ConfigCmds.Pause:
             time.sleep(cmd_msg.pause_seconds)
@@ -3641,7 +3777,8 @@ def main_driver(config_ver: ConfigVerifier,
                         log_level=logging.INFO,
                         log_msg=log_msg)
 
-        elif config_cmd.cmd == ConfigCmds.RecvMsg:
+        elif (config_cmd.cmd == ConfigCmds.RecvMsg
+              or config_cmd.cmd == ConfigCmds.RecvMsgTimeoutFalse):
             for name in config_cmd.names:
                 if name == commander_name:
                     continue
@@ -3649,10 +3786,13 @@ def main_driver(config_ver: ConfigVerifier,
                                           msg=config_cmd)
             if commander_name in config_cmd.names:
                 for from_name in config_cmd.from_names:
-                    recvd_msg = config_ver.commander_thread.recv_msg(
-                        remote=from_name,
-                        timeout=3)
-
+                    if config_cmd.cmd == ConfigCmds.RecvMsg:
+                        recvd_msg = config_ver.commander_thread.recv_msg(
+                            remote=from_name)
+                    else:
+                        recvd_msg = config_ver.commander_thread.recv_msg(
+                            remote=from_name,
+                            timeout=config_cmd.timeout)
                     assert recvd_msg == config_cmd.msg_to_send
 
                     copy_pair_deque = (
@@ -3668,6 +3808,46 @@ def main_driver(config_ver: ConfigVerifier,
                         log_name='scottbrian_paratools.smart_thread',
                         log_level=logging.INFO,
                         log_msg=log_msg)
+
+        elif config_cmd.cmd == ConfigCmds.RecvMsgTimeoutTrue:
+            for name in config_cmd.names:
+                if name == commander_name:
+                    continue
+                config_ver.msgs.queue_msg(target=name,
+                                          msg=config_cmd)
+            if commander_name in config_cmd.names:
+                for from_name in config_cmd.from_names:
+                    with pytest.raises(st.SmartThreadRecvMsgTimedOut):
+                        recvd_msg = config_ver.commander_thread.recv_msg(
+                            remote=from_name,
+                            timeout=config_cmd.timeout)
+
+                    if from_name in config_cmd.recv_msg_timeout_names:
+                        log_msg = (
+                            f'{commander_name} raising '
+                            'SmartThreadRecvMsgTimedOut '
+                            f'waiting for {from_name} ')
+                        config_ver.log_ver.add_msg(
+                            log_name='scottbrian_paratools.smart_thread',
+                            log_level=logging.ERROR,
+                            log_msg=log_msg)
+
+                    else:
+                        assert recvd_msg == config_cmd.msg_to_send
+
+                        copy_pair_deque = (
+                            config_ver.commander_thread
+                            .time_last_pair_array_update.copy())
+                        config_ver.dec_ops_count(commander_name,
+                                                 from_name,
+                                                 copy_pair_deque)
+
+                        log_msg = (f"{commander_name} received msg from "
+                                   f"{from_name}")
+                        config_ver.log_ver.add_msg(
+                            log_name='scottbrian_paratools.smart_thread',
+                            log_level=logging.INFO,
+                            log_msg=log_msg)
 
         elif config_cmd.cmd == ConfigCmds.Pause:
             for pause_name in config_cmd.names:
@@ -3968,7 +4148,8 @@ class TestSmartThreadScenarios:
             self,
             timeout_type_arg: TimeoutType,
             num_receivers_arg: int,
-            num_active_senders_arg: int,
+            num_active_no_delay_senders_arg: int,
+            num_active_delay_senders_arg: int,
             num_send_exit_senders_arg: int,
             num_nosend_exit_senders_arg: int,
             num_unreg_senders_arg: int,
@@ -3983,8 +4164,10 @@ class TestSmartThreadScenarios:
                 succeed or fail with a timeout
             num_receivers_arg: number of threads that will do the
                 recv_msg
-            num_active_senders_arg: number of threads that are active
-                and will do the send_msg
+            num_active_no_delay_senders_arg: number of threads that are
+                active and will do the send_msg immediately
+            num_active_delay_senders_arg: number of threads that are
+                active and will do the send_msg after a delay
             num_send_exit_senders_arg: number of threads that are active
                 and will do the send_msg and then exit
             num_nosend_exit_senders_arg: number of threads that are
@@ -3997,13 +4180,40 @@ class TestSmartThreadScenarios:
             caplog: pytest fixture to capture log output
 
         """
+        if timeout_type_arg == TimeoutType.TimeoutNone:
+            if (num_active_no_delay_senders_arg
+                    + num_active_delay_senders_arg
+                    + num_send_exit_senders_arg
+                    + num_nosend_exit_senders_arg
+                    + num_unreg_senders_arg
+                    + num_reg_senders_arg) == 0:
+                return
+        else:
+            if (num_active_delay_senders_arg
+                    + num_nosend_exit_senders_arg
+                    + num_unreg_senders_arg
+                    + num_reg_senders_arg) == 0:
+                return
+
+        self.msg_timeout_driver(
+            send_or_recv=ConfigCmds.RecvMsg,
+            recv_args=RecvMsgParms(
+                timeout_type=timeout_type_arg,
+                num_receivers=num_receivers_arg,
+                num_active_no_delay_senders=num_active_no_delay_senders_arg,
+                num_active_delay_senders=num_active_delay_senders_arg,
+                num_send_exit_senders=num_send_exit_senders_arg,
+                num_nosend_exit_senders=num_nosend_exit_senders_arg,
+                num_unreg_senders=num_unreg_senders_arg,
+                num_reg_senders=num_reg_senders_arg,
+                caplog_to_use=caplog))
 
     ####################################################################
     # test_smart_thread_msg_timeout_scenarios
     ####################################################################
     def msg_timeout_driver(
             self,
-            send_or_recv: str,
+            send_or_recv: ConfigCmds,
             recv_args: Optional[RecvMsgParms] = None
     ) -> None:
         """Test meta configuration scenarios.
@@ -4059,12 +4269,15 @@ class TestSmartThreadScenarios:
 
         scenario: list[Any] = []
 
-        if send_or_recv == 'recv':
+        if send_or_recv == ConfigCmds.RecvMsg:
             scenario.extend(
                 config_ver.build_recv_msg_timeout_suite(
                     timeout_type=recv_args.timeout_type,
                     num_receivers=recv_args.num_receivers,
-                    num_active_senders=recv_args.num_active_senders,
+                    num_active_no_delay_senders=
+                    recv_args.num_active_no_delay_senders,
+                    num_active_delay_senders=
+                    recv_args.num_active_delay_senders,
                     num_send_exit_senders=recv_args.num_send_exit_senders,
                     num_nosend_exit_senders=recv_args.num_nosend_exit_senders,
                     num_unreg_senders=recv_args.num_unreg_senders,
@@ -4084,7 +4297,8 @@ class TestSmartThreadScenarios:
         ################################################################
         # check log results
         ################################################################
-        match_results = log_ver.get_match_results(caplog=caplog)
+        match_results = log_ver.get_match_results(
+            caplog=recv_args.caplog_to_use)
         log_ver.print_match_results(match_results)
         log_ver.verify_log_results(match_results)
 

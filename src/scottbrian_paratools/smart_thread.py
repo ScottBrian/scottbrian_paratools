@@ -1286,6 +1286,15 @@ class SmartThread:
                         # send us the msg and then get removed from the
                         # status_blocks without having obtained the lock
                         # exclusive.
+                        # @sbt WAIT - this can't really happen. If the
+                        # pair_key is valid, then the remote must be
+                        # there unless it left us a msg and exiting,
+                        # in which case we should have just read that
+                        # msg. If the remote left without leaving us a
+                        # msg, then the pair_key would not be valid.
+                        # so, I don't think we can ever see this case
+                        # where the remote is gone on a queue.empty
+                        # condition.
                         if remote not in SmartThread._pair_array[
                                 pair_key].status_blocks:
                             raise SmartThreadRemoteThreadNotAlive(
