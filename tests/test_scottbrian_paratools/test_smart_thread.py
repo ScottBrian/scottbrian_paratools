@@ -14,7 +14,7 @@ import queue
 import random
 import re
 import time
-from typing import Any, Callable, cast, Type, TYPE_CHECKING, Optional
+from typing import Any, Callable, cast, Type, TYPE_CHECKING, Optional, Union
 import threading
 
 ###############################################################################
@@ -145,6 +145,22 @@ class RecvMsgParms:
     num_reg_senders: int
     num_receivers: int
     caplog_to_use: pytest.CaptureFixture[str]
+
+
+########################################################################
+# SendMsgParms used to specify the args for testing send_msg
+########################################################################
+@dataclass
+class SendMsgParms:
+    timeout_type: TimeoutType
+    num_senders: int
+    num_active_targets: int
+    num_registered_targets: int
+    num_unreg_timeouts: int
+    num_exit_timeouts: int
+    num_full_q_timeouts: int
+    caplog_to_use: pytest.CaptureFixture[str]
+
 
 ########################################################################
 # 0) start alpha, beta, and charlie threads
@@ -750,7 +766,7 @@ def build_config2_arg(request: Any) -> tuple[int, int, int]:
 timeout_type_arg_list = [TimeoutType.TimeoutNone,
                          TimeoutType.TimeoutFalse,
                          TimeoutType.TimeoutTrue]
-timeout_type_arg_list = [TimeoutType.TimeoutTrue]
+# timeout_type_arg_list = [TimeoutType.TimeoutTrue]
 
 @pytest.fixture(params=timeout_type_arg_list)  # type: ignore
 def timeout_type_arg(request: Any) -> TimeoutType:
@@ -784,6 +800,24 @@ def num_senders_arg(request: Any) -> int:
     return cast(int, request.param)
 
 
+###############################################################################
+# num_receivers_arg
+###############################################################################
+num_receivers_arg_list = [1, 2, 3]
+# num_receivers_arg_list = [2, 3]
+
+
+@pytest.fixture(params=num_receivers_arg_list)  # type: ignore
+def num_receivers_arg(request: Any) -> int:
+    """Number of threads to receive msgs.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
 ###############################################################################
 # num_active_no_delay_senders_arg
 ###############################################################################
@@ -903,26 +937,6 @@ def num_reg_senders_arg(request: Any) -> int:
 
 
 ###############################################################################
-# num_receivers_arg
-###############################################################################
-num_receivers_arg_list = [1, 2, 3]
-# num_receivers_arg_list = [1]
-
-
-@pytest.fixture(params=num_receivers_arg_list)  # type: ignore
-def num_receivers_arg(request: Any) -> int:
-    """Number of threads to receive msgs.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
 # num_active_targets_arg
 ###############################################################################
 num_active_targets_arg_list = [0, 1, 2]
@@ -985,7 +999,7 @@ num_timeouts_arg_list = [(0, 0, 1), (0, 0, 2), (0, 0, 3),
                          (3, 2, 0), (3, 2, 1), (3, 2, 2), (3, 2, 3),
                          (3, 3, 0), (3, 3, 1), (3, 3, 2), (3, 3, 3)]
 
-# num_timeouts_arg_list = [(0, 2, 0)]
+
 @pytest.fixture(params=num_timeouts_arg_list)  # type: ignore
 def num_timeouts_arg(request: Any) -> tuple[int, int, int]:
     """Number of threads to timeout by unreg, exit, or fullq.
@@ -1002,7 +1016,7 @@ def num_timeouts_arg(request: Any) -> tuple[int, int, int]:
 ########################################################################
 # num_exit_timeouts_arg
 ########################################################################
-num_exit_timeouts_arg_list = [0, 1, 2, 3]
+num_exit_timeouts_arg_list = [0, 1, 2]
 
 
 @pytest.fixture(params=num_exit_timeouts_arg_list)  # type: ignore
@@ -1021,7 +1035,7 @@ def num_exit_timeouts_arg(request: Any) -> int:
 ########################################################################
 # num_unreg_timeouts_arg
 ########################################################################
-num_unreg_timeouts_arg_list = [1, 2, 3]
+num_unreg_timeouts_arg_list = [0, 1, 2]
 
 
 @pytest.fixture(params=num_unreg_timeouts_arg_list)  # type: ignore
@@ -1040,7 +1054,7 @@ def num_unreg_timeouts_arg(request: Any) -> int:
 ########################################################################
 # num_full_q_timeouts_arg
 ########################################################################
-num_full_q_timeouts_arg_list = [0, 1, 2, 3]
+num_full_q_timeouts_arg_list = [0, 1, 2]
 
 
 @pytest.fixture(params=num_full_q_timeouts_arg_list)  # type: ignore
@@ -2478,7 +2492,14 @@ class ConfigVerifier:
                                         + unreg_sender_names
                                         + reg_sender_names)
 
-        self.set_recv_timeout(num_timeouts=len(all_timeout_names))
+        self.set_recv_timeout(
+            num_timeouts=len(all_timeout_names) * num_receivers)
+
+        if len(all_sender_names) % 2 == 0:
+            log_msg = f'recv_msg log test: {self.get_ptime()}'
+        else:
+            log_msg=None
+
         ################################################################
         # setup the messages to send
         ################################################################
@@ -2494,6 +2515,7 @@ class ConfigVerifier:
                           names=receiver_names,
                           from_names=all_sender_names,
                           msg_to_send=sender_msgs,
+                          log_msg=log_msg,
                           confirm_response=True)])
 
         elif timeout_type == TimeoutType.TimeoutFalse:
@@ -2504,6 +2526,7 @@ class ConfigVerifier:
                           from_names=all_sender_names,
                           msg_to_send=sender_msgs,
                           timeout=2,
+                          log_msg=log_msg,
                           confirm_response=True)])
 
         else:  # TimeoutType.TimeoutTrue
@@ -2515,6 +2538,7 @@ class ConfigVerifier:
                           msg_to_send=sender_msgs,
                           timeout=2,
                           recv_msg_timeout_names=all_timeout_names,
+                          log_msg=log_msg,
                           confirm_response=True)])
 
         ################################################################
@@ -2644,15 +2668,15 @@ class ConfigVerifier:
     ################################################################
     # build_msg_timeout_suite
     ################################################################
-    def build_msg_timeout_suite(self,
-                                timeout_type: TimeoutType,
-                                num_senders: Optional[int] = 1,
-                                num_active_targets: Optional[int] = 1,
-                                num_registered_targets: Optional[int] = 0,
-                                num_unreg_timeouts: Optional[int] = 0,
-                                num_exit_timeouts: Optional[int] = 1,
-                                num_full_q_timeouts: Optional[int] = 0
-                                ) -> list[ConfigCmd]:
+    def build_send_msg_timeout_suite(self,
+                                     timeout_type: TimeoutType,
+                                     num_senders: Optional[int] = 1,
+                                     num_active_targets: Optional[int] = 1,
+                                     num_registered_targets: Optional[int] = 0,
+                                     num_unreg_timeouts: Optional[int] = 0,
+                                     num_exit_timeouts: Optional[int] = 1,
+                                     num_full_q_timeouts: Optional[int] = 0
+                                     ) -> list[ConfigCmd]:
         """Return a list of ConfigCmd items for a msg timeout.
 
         Args:
@@ -2688,9 +2712,9 @@ class ConfigVerifier:
 
         assert num_senders > 0
 
-        assert (num_unreg_timeouts
-                + num_exit_timeouts
-                + num_full_q_timeouts) > 0
+        # assert (num_unreg_timeouts
+        #         + num_exit_timeouts
+        #         + num_full_q_timeouts) > 0
 
         # for the exit timeout case, we send zero msgs for the first
         # thread, then 1 for the second thread, 2 for the third, etc.,
@@ -3654,47 +3678,128 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
                     log_level=logging.INFO,
                     log_msg=log_msg_f1)
 
+        # elif (cmd_msg.cmd == ConfigCmds.RecvMsg
+        #       or cmd_msg.cmd == ConfigCmds.RecvMsgTimeoutFalse):
+        #     ####################################################
+        #     # recv one or more msgs
+        #     ####################################################
+        #     for f1_from_name in cmd_msg.from_names:
+        #         if cmd_msg.cmd == ConfigCmds.RecvMsg:
+        #             enter_exit_list = ('entered', 'exiting')
+        #             recvd_msg = f1_config_ver.f1_threads[f1_name].recv_msg(
+        #                 remote=f1_from_name)
+        #         else:
+        #             enter_exit_list = ('entered', 'exiting')
+        #             recvd_msg = f1_config_ver.f1_threads[f1_name].recv_msg(
+        #                 remote=f1_from_name,
+        #                 timeout=cmd_msg.timeout)
+        #
+        #         assert recvd_msg == cmd_msg.msg_to_send[f1_from_name]
+        #
+        #         f1_copy_pair_deque = (
+        #             f1_config_ver.f1_threads[f1_name]
+        #             .time_last_pair_array_update.copy())
+        #         f1_config_ver.dec_ops_count(f1_name,
+        #                                     f1_from_name,
+        #                                     f1_copy_pair_deque)
+        #
+        #         log_msg_f1 = (f"{f1_name} received msg from "
+        #                       f"{f1_from_name}")
+        #         f1_config_ver.log_ver.add_msg(
+        #             log_name='scottbrian_paratools.smart_thread',
+        #             log_level=logging.INFO,
+        #             log_msg=log_msg_f1)
+        #
+        #         if cmd_msg.log_msg:
+        #             log_msg_2 = (
+        #                 f'{f1_config_ver.log_ver.get_call_seq("f1_driver")} ')
+        #             log_msg_3 = re.escape(f'{cmd_msg.log_msg}')
+        #             for enter_exit in enter_exit_list:
+        #                 log_msg_1 = re.escape(
+        #                     f'send_msg() {enter_exit}: {f1_name} -> '
+        #                     f'{set(cmd_msg.to_names)} ')
+        #
+        #                 f1_config_ver.add_log_msg(log_msg_1
+        #                                           + log_msg_2
+        #                                           + log_msg_3)
+        # elif cmd_msg.cmd == ConfigCmds.RecvMsgTimeoutTrue:
+        #     ####################################################
+        #     # recv one or more msgs
+        #     ####################################################
+        #     # set first timeout for full time
+        #     timeout_value = cmd_msg.timeout
+        #     for f1_from_name in cmd_msg.from_names:
+        #         if f1_from_name in cmd_msg.recv_msg_timeout_names:
+        #             with pytest.raises(st.SmartThreadRecvMsgTimedOut):
+        #                 _ = f1_config_ver.f1_threads[f1_name].recv_msg(
+        #                     remote=f1_from_name,
+        #                     timeout=timeout_value)
+        #             log_msg_f1 = (
+        #                 f'{f1_name} raising SmartThreadRecvMsgTimedOut '
+        #                 f'waiting for {f1_from_name} ')
+        #             f1_config_ver.log_ver.add_msg(
+        #                 log_name='scottbrian_paratools.smart_thread',
+        #                 log_level=logging.ERROR,
+        #                 log_msg=log_msg_f1)
+        #             f1_config_ver.dec_recv_timeout()
+        #         else:
+        #             recvd_msg = f1_config_ver.f1_threads[f1_name].recv_msg(
+        #                 remote=f1_from_name,
+        #                 timeout=timeout_value)
+        #             assert recvd_msg == cmd_msg.msg_to_send[f1_from_name]
+        #
+        #             f1_copy_pair_deque = (
+        #                 f1_config_ver.f1_threads[f1_name]
+        #                 .time_last_pair_array_update.copy())
+        #             f1_config_ver.dec_ops_count(f1_name,
+        #                                         f1_from_name,
+        #                                         f1_copy_pair_deque)
+        #
+        #             log_msg_f1 = (f"{f1_name} received msg from "
+        #                           f"{f1_from_name}")
+        #             f1_config_ver.log_ver.add_msg(
+        #                 log_name='scottbrian_paratools.smart_thread',
+        #                 log_level=logging.INFO,
+        #                 log_msg=log_msg_f1)
+        #
+        #         # remaining timeouts are shorter so we don't have
+        #         # to pause for the cumulative timeouts before
+        #         # sending messages
+        #         timeout_value = 0.2
+
         elif (cmd_msg.cmd == ConfigCmds.RecvMsg
-              or cmd_msg.cmd == ConfigCmds.RecvMsgTimeoutFalse):
+              or cmd_msg.cmd == ConfigCmds.RecvMsgTimeoutFalse
+              or cmd_msg.cmd == ConfigCmds.RecvMsgTimeoutTrue):
             ####################################################
             # recv one or more msgs
             ####################################################
+            timeout_true_value = cmd_msg.timeout
             for f1_from_name in cmd_msg.from_names:
+                enter_exit_list = ('entered', 'exiting')
                 if cmd_msg.cmd == ConfigCmds.RecvMsg:
                     recvd_msg = f1_config_ver.f1_threads[f1_name].recv_msg(
-                        remote=f1_from_name)
-                else:
+                        remote=f1_from_name,
+                        log_msg=cmd_msg.log_msg)
+                elif (cmd_msg.cmd == ConfigCmds.RecvMsgTimeoutFalse
+                        or (cmd_msg.cmd == ConfigCmds.RecvMsgTimeoutTrue
+                            and f1_from_name
+                            not in cmd_msg.recv_msg_timeout_names)):
                     recvd_msg = f1_config_ver.f1_threads[f1_name].recv_msg(
                         remote=f1_from_name,
-                        timeout=cmd_msg.timeout)
-
-                assert recvd_msg == cmd_msg.msg_to_send[f1_from_name]
-
-                f1_copy_pair_deque = (
-                    f1_config_ver.f1_threads[f1_name]
-                    .time_last_pair_array_update.copy())
-                f1_config_ver.dec_ops_count(f1_name,
-                                            f1_from_name,
-                                            f1_copy_pair_deque)
-
-                log_msg_f1 = (f"{f1_name} received msg from "
-                              f"{f1_from_name}")
-                f1_config_ver.log_ver.add_msg(
-                    log_name='scottbrian_paratools.smart_thread',
-                    log_level=logging.INFO,
-                    log_msg=log_msg_f1)
-        elif cmd_msg.cmd == ConfigCmds.RecvMsgTimeoutTrue:
-            ####################################################
-            # recv one or more msgs
-            ####################################################
-            # set first timeout for full time
-            timeout_value = cmd_msg.timeout
-            for f1_from_name in cmd_msg.from_names:
-                if f1_from_name in cmd_msg.recv_msg_timeout_names:
+                        timeout=cmd_msg.timeout,
+                        log_msg=cmd_msg.log_msg)
+                else:  # ConfigCmds.RecvMsgTimeoutTrue
+                    enter_exit_list = ('entered', )
                     with pytest.raises(st.SmartThreadRecvMsgTimedOut):
-                        _ = f1_config_ver.f1_threads[f1_name].recv_msg(
+                        recvd_msg = f1_config_ver.f1_threads[f1_name].recv_msg(
                             remote=f1_from_name,
-                            timeout=timeout_value)
+                            timeout=timeout_true_value,
+                            log_msg=cmd_msg.log_msg)
+
+                    # remaining timeouts are shorter so we don't have
+                    # to pause for the cumulative timeouts before
+                    # sending messages
+                    timeout_true_value = 0.2
                     log_msg_f1 = (
                         f'{f1_name} raising SmartThreadRecvMsgTimedOut '
                         f'waiting for {f1_from_name} ')
@@ -3703,10 +3808,21 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
                         log_level=logging.ERROR,
                         log_msg=log_msg_f1)
                     f1_config_ver.dec_recv_timeout()
-                else:
-                    recvd_msg = f1_config_ver.f1_threads[f1_name].recv_msg(
-                        remote=f1_from_name,
-                        timeout=timeout_value)
+
+                if cmd_msg.log_msg:
+                    log_msg_2 = (
+                        f'{f1_config_ver.log_ver.get_call_seq("f1_driver")} ')
+                    log_msg_3 = re.escape(f'{cmd_msg.log_msg}')
+                    for enter_exit in enter_exit_list:
+                        log_msg_1 = re.escape(
+                            f'recv_msg() {enter_exit}: '
+                            f'{f1_name} <- {f1_from_name} ')
+
+                        f1_config_ver.add_log_msg(log_msg_1
+                                                  + log_msg_2
+                                                  + log_msg_3)
+
+                if 'exiting' in enter_exit_list:
                     assert recvd_msg == cmd_msg.msg_to_send[f1_from_name]
 
                     f1_copy_pair_deque = (
@@ -3722,11 +3838,6 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
                         log_name='scottbrian_paratools.smart_thread',
                         log_level=logging.INFO,
                         log_msg=log_msg_f1)
-
-                # remaining timeouts are shorter so we don't have
-                # to pause for the cumulative timeouts before
-                # sending messages
-                timeout_value = 0.2
 
         elif cmd_msg.cmd == ConfigCmds.Pause:
             time.sleep(cmd_msg.pause_seconds)
@@ -3749,6 +3860,7 @@ def main_driver(config_ver: ConfigVerifier,
     config_ver.log_ver.add_call_seq(
         name='main_driver',
         seq='test_smart_thread.py::main_driver')
+    main_driver_call_seq = config_ver.log_ver.get_call_seq("main_driver")
     for config_cmd in scenario:
         log_msg = f'config_cmd: {config_cmd}'
         config_ver.log_ver.add_msg(log_msg=re.escape(log_msg))
@@ -3897,65 +4009,144 @@ def main_driver(config_ver: ConfigVerifier,
                         log_level=logging.INFO,
                         log_msg=log_msg)
 
+        # elif (config_cmd.cmd == ConfigCmds.RecvMsg
+        #       or config_cmd.cmd == ConfigCmds.RecvMsgTimeoutFalse):
+        #     for name in config_cmd.names:
+        #         if name == commander_name:
+        #             continue
+        #         config_ver.msgs.queue_msg(target=name,
+        #                                   msg=config_cmd)
+        #     if commander_name in config_cmd.names:
+        #         for from_name in config_cmd.from_names:
+        #             if config_cmd.cmd == ConfigCmds.RecvMsg:
+        #                 recvd_msg = config_ver.commander_thread.recv_msg(
+        #                     remote=from_name)
+        #             else:
+        #                 recvd_msg = config_ver.commander_thread.recv_msg(
+        #                     remote=from_name,
+        #                     timeout=config_cmd.timeout)
+        #             assert recvd_msg == config_cmd.msg_to_send[from_name]
+        #
+        #             copy_pair_deque = (
+        #                 config_ver.commander_thread
+        #                 .time_last_pair_array_update.copy())
+        #             config_ver.dec_ops_count(commander_name,
+        #                                      from_name,
+        #                                      copy_pair_deque)
+        #
+        #             log_msg = (f"{commander_name} received msg from "
+        #                        f"{from_name}")
+        #             config_ver.log_ver.add_msg(
+        #                 log_name='scottbrian_paratools.smart_thread',
+        #                 log_level=logging.INFO,
+        #                 log_msg=log_msg)
+        #
+        # elif config_cmd.cmd == ConfigCmds.RecvMsgTimeoutTrue:
+        #     for name in config_cmd.names:
+        #         if name == commander_name:
+        #             continue
+        #         config_ver.msgs.queue_msg(target=name,
+        #                                   msg=config_cmd)
+        #     if commander_name in config_cmd.names:
+        #         for from_name in config_cmd.from_names:
+        #             if from_name in config_cmd.recv_msg_timeout_names:
+        #                 with pytest.raises(st.SmartThreadRecvMsgTimedOut):
+        #                     _ = config_ver.commander_thread.recv_msg(
+        #                         remote=from_name,
+        #                         timeout=config_cmd.timeout)
+        #
+        #                 log_msg = (
+        #                     f'{commander_name} raising '
+        #                     'SmartThreadRecvMsgTimedOut '
+        #                     f'waiting for {from_name} ')
+        #                 config_ver.log_ver.add_msg(
+        #                     log_name='scottbrian_paratools.smart_thread',
+        #                     log_level=logging.ERROR,
+        #                     log_msg=log_msg)
+        #
+        #             else:
+        #                 recvd_msg = config_ver.commander_thread.recv_msg(
+        #                     remote=from_name,
+        #                     timeout=config_cmd.timeout)
+        #                 assert recvd_msg == config_cmd.msg_to_send[from_name]
+        #
+        #                 copy_pair_deque = (
+        #                     config_ver.commander_thread
+        #                     .time_last_pair_array_update.copy())
+        #                 config_ver.dec_ops_count(commander_name,
+        #                                          from_name,
+        #                                          copy_pair_deque)
+        #
+        #                 log_msg = (f"{commander_name} received msg from "
+        #                            f"{from_name}")
+        #                 config_ver.log_ver.add_msg(
+        #                     log_name='scottbrian_paratools.smart_thread',
+        #                     log_level=logging.INFO,
+        #                     log_msg=log_msg)
+
         elif (config_cmd.cmd == ConfigCmds.RecvMsg
-              or config_cmd.cmd == ConfigCmds.RecvMsgTimeoutFalse):
+              or config_cmd.cmd == ConfigCmds.RecvMsgTimeoutFalse
+              or config_cmd.cmd == ConfigCmds.RecvMsgTimeoutTrue):
+            ####################################################
+            # recv one or more msgs
+            ####################################################
             for name in config_cmd.names:
                 if name == commander_name:
                     continue
                 config_ver.msgs.queue_msg(target=name,
                                           msg=config_cmd)
+
             if commander_name in config_cmd.names:
+                timeout_true_value = config_cmd.timeout
                 for from_name in config_cmd.from_names:
+                    enter_exit_list = ('entered', 'exiting')
                     if config_cmd.cmd == ConfigCmds.RecvMsg:
                         recvd_msg = config_ver.commander_thread.recv_msg(
-                            remote=from_name)
-                    else:
+                            remote=from_name,
+                            log_msg=config_cmd.log_msg)
+                    elif (config_cmd.cmd == ConfigCmds.RecvMsgTimeoutFalse
+                          or (config_cmd.cmd == ConfigCmds.RecvMsgTimeoutTrue
+                              and from_name
+                              not in config_cmd.recv_msg_timeout_names)):
                         recvd_msg = config_ver.commander_thread.recv_msg(
                             remote=from_name,
-                            timeout=config_cmd.timeout)
-                    assert recvd_msg == config_cmd.msg_to_send[from_name]
-
-                    copy_pair_deque = (
-                        config_ver.commander_thread
-                        .time_last_pair_array_update.copy())
-                    config_ver.dec_ops_count(commander_name,
-                                             from_name,
-                                             copy_pair_deque)
-
-                    log_msg = (f"{commander_name} received msg from "
-                               f"{from_name}")
-                    config_ver.log_ver.add_msg(
-                        log_name='scottbrian_paratools.smart_thread',
-                        log_level=logging.INFO,
-                        log_msg=log_msg)
-
-        elif config_cmd.cmd == ConfigCmds.RecvMsgTimeoutTrue:
-            for name in config_cmd.names:
-                if name == commander_name:
-                    continue
-                config_ver.msgs.queue_msg(target=name,
-                                          msg=config_cmd)
-            if commander_name in config_cmd.names:
-                for from_name in config_cmd.from_names:
-                    if from_name in config_cmd.recv_msg_timeout_names:
+                            timeout=config_cmd.timeout,
+                            log_msg=config_cmd.log_msg)
+                    else:  # ConfigCmds.RecvMsgTimeoutTrue
+                        enter_exit_list = ('entered',)
                         with pytest.raises(st.SmartThreadRecvMsgTimedOut):
-                            _ = config_ver.commander_thread.recv_msg(
+                            recvd_msg = config_ver.commander_thread.recv_msg(
                                 remote=from_name,
-                                timeout=config_cmd.timeout)
+                                timeout=timeout_true_value,
+                                log_msg=config_cmd.log_msg)
 
+                        # remaining timeouts are shorter so we don't have
+                        # to pause for the cumulative timeouts before
+                        # sending messages
+                        timeout_true_value = 0.2
                         log_msg = (
                             f'{commander_name} raising '
-                            'SmartThreadRecvMsgTimedOut '
-                            f'waiting for {from_name} ')
+                            'SmartThreadRecvMsgTimedOut waiting for '
+                            f'{from_name} ')
                         config_ver.log_ver.add_msg(
                             log_name='scottbrian_paratools.smart_thread',
                             log_level=logging.ERROR,
                             log_msg=log_msg)
+                        config_ver.dec_recv_timeout()
 
-                    else:
-                        recvd_msg = config_ver.commander_thread.recv_msg(
-                            remote=from_name,
-                            timeout=config_cmd.timeout)
+                    if config_cmd.log_msg:
+                        log_msg_2 = f'{main_driver_call_seq} '
+                        log_msg_3 = re.escape(f'{config_cmd.log_msg}')
+                        for enter_exit in enter_exit_list:
+                            log_msg_1 = re.escape(
+                                f'recv_msg() {enter_exit}: '
+                                f'{commander_name} <- {from_name} ')
+
+                            config_ver.add_log_msg(log_msg_1
+                                                   + log_msg_2
+                                                   + log_msg_3)
+
+                    if 'exiting' in enter_exit_list:
                         assert recvd_msg == config_cmd.msg_to_send[from_name]
 
                         copy_pair_deque = (
@@ -4047,7 +4238,7 @@ def main_driver(config_ver: ConfigVerifier,
             while pending_responses:
                 try:
                     a_msg = config_ver.msgs.get_msg(commander_name,
-                                                    timeout=0.2)
+                                                    timeout=10)
                     split_msg = a_msg.rsplit(maxsplit=1)
                     if a_msg in pending_responses:
                         pending_responses.remove(a_msg)
@@ -4336,9 +4527,9 @@ class TestSmartThreadScenarios:
                     + num_reg_senders_arg) == 0:
                 return
 
-        self.msg_timeout_driver(
-            send_or_recv=ConfigCmds.RecvMsg,
-            recv_args=RecvMsgParms(
+        self.scenario_driver(
+            cmd_to_do=ConfigCmds.RecvMsg,
+            cmd_args=RecvMsgParms(
                 timeout_type=timeout_type_arg,
                 num_receivers=num_receivers_arg,
                 num_active_no_delay_senders=num_active_no_delay_senders_arg,
@@ -4352,17 +4543,17 @@ class TestSmartThreadScenarios:
     ####################################################################
     # test_smart_thread_msg_timeout_scenarios
     ####################################################################
-    def msg_timeout_driver(
+    def scenario_driver(
             self,
-            send_or_recv: ConfigCmds,
-            recv_args: Optional[RecvMsgParms] = None
+            cmd_to_do: ConfigCmds,
+            cmd_args: Union[RecvMsgParms, SendMsgParms]
     ) -> None:
         """Test meta configuration scenarios.
 
         Args:
-            send_or_recv: specifies whether we are doing a send_msg
+            cmd_to_do: specifies whether we are doing a send_msg
                 timeout scenario or a recv_msg timeout scenario
-            recv_args: provides the args to use for recv_msg timeout
+            cmd_args: provides the args to use for recv_msg timeout
 
         """
 
@@ -4410,19 +4601,29 @@ class TestSmartThreadScenarios:
 
         scenario: list[Any] = []
 
-        if send_or_recv == ConfigCmds.RecvMsg:
+        if cmd_to_do == ConfigCmds.RecvMsg:
             scenario.extend(
                 config_ver.build_recv_msg_timeout_suite(
-                    timeout_type=recv_args.timeout_type,
-                    num_receivers=recv_args.num_receivers,
+                    timeout_type=cmd_args.timeout_type,
+                    num_receivers=cmd_args.num_receivers,
                     num_active_no_delay_senders=
-                    recv_args.num_active_no_delay_senders,
+                    cmd_args.num_active_no_delay_senders,
                     num_active_delay_senders=
-                    recv_args.num_active_delay_senders,
-                    num_send_exit_senders=recv_args.num_send_exit_senders,
-                    num_nosend_exit_senders=recv_args.num_nosend_exit_senders,
-                    num_unreg_senders=recv_args.num_unreg_senders,
-                    num_reg_senders=recv_args.num_reg_senders))
+                    cmd_args.num_active_delay_senders,
+                    num_send_exit_senders=cmd_args.num_send_exit_senders,
+                    num_nosend_exit_senders=cmd_args.num_nosend_exit_senders,
+                    num_unreg_senders=cmd_args.num_unreg_senders,
+                    num_reg_senders=cmd_args.num_reg_senders))
+        elif cmd_to_do == ConfigCmds.SendMsg:
+            scenario.extend(
+                config_ver.build_send_msg_timeout_suite(
+                    timeout_type=cmd_args.timeout_type,
+                    num_senders=cmd_args.num_senders,
+                    num_active_targets=cmd_args.num_active_targets,
+                    num_registered_targets=cmd_args.num_registered_targets,
+                    num_unreg_timeouts=cmd_args.num_unreg_timeouts,
+                    num_exit_timeouts=cmd_args.num_exit_timeouts,
+                    num_full_q_timeouts=cmd_args.num_full_q_timeouts))
 
         scenario.extend([ConfigCmd(
             cmd=ConfigCmds.ValidateConfig)])
@@ -4439,7 +4640,7 @@ class TestSmartThreadScenarios:
         # check log results
         ################################################################
         match_results = log_ver.get_match_results(
-            caplog=recv_args.caplog_to_use)
+            caplog=cmd_args.caplog_to_use)
         log_ver.print_match_results(match_results)
         log_ver.verify_log_results(match_results)
 
@@ -4448,13 +4649,15 @@ class TestSmartThreadScenarios:
     ####################################################################
     # test_smart_thread_msg_timeout_scenarios
     ####################################################################
-    def test_smart_thread_msg_timeout_scenarios(
+    def test_send_msg_timeout_scenarios(
             self,
             timeout_type_arg: TimeoutType,
             num_senders_arg: int,
             num_active_targets_arg: int,
             num_registered_targets_arg: int,
-            num_timeouts_arg: tuple[int, int, int],
+            num_unreg_timeouts_arg: int,
+            num_exit_timeouts_arg: int,
+            num_full_q_timeouts_arg: int,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
         """Test meta configuration scenarios.
@@ -4464,85 +4667,40 @@ class TestSmartThreadScenarios:
             num_active_targets_arg: number of active threads to recv
             num_registered_targets_arg: number registered thread to
                 recv
-            num_timeouts_arg: number of threads to be targets that
-                cause a timeout by exit, unreg, or fullq
+            num_unreg_timeouts_arg: number of threads to be targets that
+                cause a timeout by being unregistering
+            num_exit_timeouts_arg: number of threads to be targets that
+                cause a timeout by exiting
+            num_full_q_timeouts_arg: number of threads to be targets
+                that cause a timeout by having a full msgq
             caplog: pytest fixture to capture log output
 
         """
+        if timeout_type_arg == TimeoutType.TimeoutNone:
+            if (num_active_targets_arg
+                    + num_registered_targets_arg
+                    + num_unreg_timeouts_arg
+                    + num_exit_timeouts_arg
+                    + num_full_q_timeouts_arg) == 0:
+                return
+        else:
+            if (num_registered_targets_arg
+                    + num_unreg_timeouts_arg
+                    + num_exit_timeouts_arg
+                    + num_full_q_timeouts_arg) == 0:
+                return
 
-        ################################################################
-        # f1
-        ################################################################
-        def f1(f1_name: str, f1_config_ver: ConfigVerifier):
-            log_msg_f1 = f'f1 entered for {f1_name}'
-            log_ver.add_msg(log_level=logging.DEBUG,
-                            log_msg=log_msg_f1)
-            logger.debug(log_msg_f1)
-
-            f1_driver(f1_name=f1_name, f1_config_ver=f1_config_ver)
-
-            ############################################################
-            # exit
-            ############################################################
-            log_msg_f1 = f'f1 exiting for {f1_name}'
-            log_ver.add_msg(log_level=logging.DEBUG,
-                            log_msg=log_msg_f1)
-            logger.debug(log_msg_f1)
-
-        ################################################################
-        # Set up log verification and start tests
-        ################################################################
-        commander_name = 'alpha'
-        log_ver = LogVer(log_name=__name__)
-        log_ver.add_call_seq(name=commander_name,
-                             seq=get_formatted_call_sequence())
-
-        log_msg = 'mainline entered'
-        log_ver.add_msg(log_msg=log_msg)
-        logger.debug(log_msg)
-
-        # log_msg = f'random_seed_arg: {random_seed_arg}'
-        # log_ver.add_msg(log_msg=log_msg)
-        # logger.debug(log_msg)
-        random.seed(42)
-        msgs = Msgs()
-
-        config_ver = ConfigVerifier(commander_name=commander_name,
-                                    log_ver=log_ver,
-                                    msgs=msgs,
-                                    max_msgs=10)
-
-        scenario: list[Any] = []
-
-        scenario.extend(
-            config_ver.build_msg_timeout_suite(
+        self.scenario_driver(
+            cmd_to_do=ConfigCmds.SendMsg,
+            cmd_args=SendMsgParms(
                 timeout_type=timeout_type_arg,
                 num_senders=num_senders_arg,
                 num_active_targets=num_active_targets_arg,
                 num_registered_targets=num_registered_targets_arg,
-                num_unreg_timeouts=num_timeouts_arg[0],
-                num_exit_timeouts=num_timeouts_arg[1],
-                num_full_q_timeouts=num_timeouts_arg[2]))
-
-        scenario.extend([ConfigCmd(
-            cmd=ConfigCmds.ValidateConfig)])
-
-        names = list(config_ver.active_names - {commander_name})
-        scenario.extend(config_ver.build_exit_suite(names=names))
-
-        scenario.extend(config_ver.build_join_suite(names=names))
-
-        main_driver(config_ver=config_ver,
-                    scenario=scenario)
-
-        ################################################################
-        # check log results
-        ################################################################
-        match_results = log_ver.get_match_results(caplog=caplog)
-        log_ver.print_match_results(match_results)
-        log_ver.verify_log_results(match_results)
-
-        logger.debug('mainline exiting')
+                num_unreg_timeouts=num_unreg_timeouts_arg,
+                num_exit_timeouts=num_exit_timeouts_arg,
+                num_full_q_timeouts=num_full_q_timeouts_arg,
+                caplog_to_use=caplog))
 
     ####################################################################
     # test_smart_thread_msg_timeout_scenarios
