@@ -108,6 +108,7 @@ class ConfigCmd:
     msg_to_send: Optional[Any] = None
     log_msg: Optional[str] = None
     recv_msg_timeout_names: Optional[list[str]] = None
+    wait_for_recv_timeouts: Optional[bool] = False
     unreg_timeout_names: Optional[list[str]] = None
     fullq_timeout_names: Optional[list[str]] = None
     exp_status: Optional[st.ThreadStatus] = None
@@ -749,7 +750,7 @@ def build_config2_arg(request: Any) -> tuple[int, int, int]:
 timeout_type_arg_list = [TimeoutType.TimeoutNone,
                          TimeoutType.TimeoutFalse,
                          TimeoutType.TimeoutTrue]
-
+timeout_type_arg_list = [TimeoutType.TimeoutTrue]
 
 @pytest.fixture(params=timeout_type_arg_list)  # type: ignore
 def timeout_type_arg(request: Any) -> TimeoutType:
@@ -768,7 +769,6 @@ def timeout_type_arg(request: Any) -> TimeoutType:
 # num_senders_arg
 ###############################################################################
 num_senders_arg_list = [1, 2, 3]
-# num_senders_arg_list = [2]
 
 
 @pytest.fixture(params=num_senders_arg_list)  # type: ignore
@@ -788,7 +788,7 @@ def num_senders_arg(request: Any) -> int:
 # num_active_no_delay_senders_arg
 ###############################################################################
 num_active_no_delay_senders_arg_list = [0, 1, 2]
-# num_active_no_delay_senders_arg_list = [1]
+# num_active_no_delay_senders_arg_list = [0]
 
 
 @pytest.fixture(params=num_active_no_delay_senders_arg_list)  # type: ignore
@@ -827,7 +827,7 @@ def num_active_delay_senders_arg(request: Any) -> int:
 # num_senders_exit_before_arg
 ###############################################################################
 num_send_exit_senders_arg_list = [0, 1, 2]
-# num_send_exit_senders_arg_list = [1]
+# num_send_exit_senders_arg_list = [0]
 
 
 @pytest.fixture(params=num_send_exit_senders_arg_list)  # type: ignore
@@ -867,7 +867,7 @@ def num_nosend_exit_senders_arg(request: Any) -> int:
 # num_unreg_senders_arg
 ###############################################################################
 num_unreg_senders_arg_list = [0, 1, 2]
-# num_unreg_senders_arg_list = [1]
+# num_unreg_senders_arg_list = [2]
 
 
 @pytest.fixture(params=num_unreg_senders_arg_list)  # type: ignore
@@ -887,7 +887,7 @@ def num_unreg_senders_arg(request: Any) -> int:
 # num_reg_senders_arg
 ###############################################################################
 num_reg_senders_arg_list = [0, 1, 2]
-# num_reg_senders_arg_list = [1]
+# num_reg_senders_arg_list = [2]
 
 @pytest.fixture(params=num_reg_senders_arg_list)  # type: ignore
 def num_reg_senders_arg(request: Any) -> int:
@@ -1253,6 +1253,7 @@ class ConfigVerifier:
         self.max_msgs = max_msgs
 
         self.pending_ops_counts: dict[tuple[str, str], dict[str, int]] = {}
+        self.expected_num_recv_timouts: int = 0
         self.f1_thread_names: dict[str, bool] = {
             'beta': True,
             'charlie': True,
@@ -1741,6 +1742,21 @@ class ConfigVerifier:
                     f'{target} updated _pair_array at UTC '
                     f'{pair_array_update_times.pop().strftime("%H:%M:%S.%f")}'))
 
+    def set_recv_timeout(self, num_timeouts: int):
+        with self.ops_lock:
+            self.expected_num_recv_timouts = num_timeouts
+
+    def dec_recv_timeout(self):
+        with self.ops_lock:
+            self.expected_num_recv_timouts -= 1
+
+    def wait_for_recv_msg_timeouts(self):
+        while True:
+            with self.ops_lock:
+                if self.expected_num_recv_timouts == 0:
+                    return
+            time.sleep(0.1)
+
     def set_is_alive(self, target: str, value: bool, exiting: bool):
         """Set the is_alive flag and exiting flag.
 
@@ -2051,7 +2067,9 @@ class ConfigVerifier:
     # build_start_suite
     ################################################################
     def build_start_suite(self,
-                          names: list[str]) -> list[ConfigCmd]:
+                          names: list[str],
+                          validate_config: Optional[bool] = True
+                          ) -> list[ConfigCmd]:
         """Return a list of ConfigCmd items for unregister.
 
         Args:
@@ -2069,8 +2087,9 @@ class ConfigVerifier:
         ret_suite = [
             ConfigCmd(cmd=ConfigCmds.Start, names=names),
             ConfigCmd(cmd=ConfigCmds.VerifyActive,
-                      names=names),
-            ConfigCmd(cmd=ConfigCmds.ValidateConfig)]
+                      names=names)]
+        if validate_config:
+            ret_suite.extend([ConfigCmd(cmd=ConfigCmds.ValidateConfig)])
 
         self.registered_names -= set(names)
         self.active_names |= set(names)
@@ -2459,6 +2478,7 @@ class ConfigVerifier:
                                         + unreg_sender_names
                                         + reg_sender_names)
 
+        self.set_recv_timeout(num_timeouts=len(all_timeout_names))
         ################################################################
         # setup the messages to send
         ################################################################
@@ -2523,7 +2543,11 @@ class ConfigVerifier:
         elif timeout_type == TimeoutType.TimeoutTrue:
             ret_suite.extend([ConfigCmd(cmd=ConfigCmds.Pause,
                                         names=[self.commander_name],
-                                        pause_seconds=3)])
+                                        pause_seconds=3),
+                              ConfigCmd(cmd=ConfigCmds.WaitForMsgTimeouts,
+                                        names=[self.commander_name],
+                                        wait_for_recv_timeouts=True)
+                              ])
         ################################################################
         # do send_msg from active_delay_senders
         ################################################################
@@ -2554,18 +2578,18 @@ class ConfigVerifier:
                           # log_msg=log_msg,
                           confirm_response=False)])
             ret_suite.extend(self.build_exit_suite(
-                names=send_exit_sender_names))
+                names=send_exit_sender_names, validate_config=False))
             ret_suite.extend(self.build_join_suite(
-                names=send_exit_sender_names))
+                names=send_exit_sender_names, validate_config=False))
 
         ################################################################
         # exit the nosend_exit_senders, then resurrect and do send_msg
         ################################################################
         if nosend_exit_sender_names:
             ret_suite.extend(self.build_exit_suite(
-                names=nosend_exit_sender_names))
+                names=nosend_exit_sender_names, validate_config=False))
             ret_suite.extend(self.build_join_suite(
-                names=nosend_exit_sender_names))
+                names=nosend_exit_sender_names, validate_config=False))
             ret_suite.extend(self.build_create_suite(
                 names=nosend_exit_sender_names,
                 validate_config=False))
@@ -2597,7 +2621,8 @@ class ConfigVerifier:
         ################################################################
         if reg_sender_names:
             ret_suite.extend(self.build_start_suite(
-                names=reg_sender_names))
+                names=reg_sender_names,
+                validate_config=False))
             ret_suite.extend([
                 ConfigCmd(cmd=ConfigCmds.SendMsg,
                           names=reg_sender_names,
@@ -3062,6 +3087,7 @@ class ConfigVerifier:
     ################################################################
     def build_exit_suite(self,
                          names: list[str],
+                         validate_config: Optional[bool] = True
                          ) -> list[ConfigCmd]:
         """Return a list of ConfigCmd items for a exit.
 
@@ -3085,7 +3111,9 @@ class ConfigVerifier:
                 ConfigCmd(cmd=ConfigCmds.VerifyAlive, names=active_names),
                 ConfigCmd(cmd=ConfigCmds.VerifyStatus, names=active_names,
                           exp_status=st.ThreadStatus.Alive)])
-        ret_suite.extend([ConfigCmd(cmd=ConfigCmds.ValidateConfig)])
+
+        if validate_config:
+            ret_suite.extend([ConfigCmd(cmd=ConfigCmds.ValidateConfig)])
 
         self.active_names -= set(names)
         self.stopped_names |= set(names)
@@ -3123,7 +3151,9 @@ class ConfigVerifier:
     # build_join_suite
     ################################################################
     def build_join_suite(self,
-                         names: list[str]) -> list[ConfigCmd]:
+                         names: list[str],
+                         validate_config: Optional[bool] = True
+                         ) -> list[ConfigCmd]:
         """Return a list of ConfigCmd items for join.
 
         Args:
@@ -3145,7 +3175,8 @@ class ConfigVerifier:
                 ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered, names=names),
                 ConfigCmd(cmd=ConfigCmds.VerifyNotPaired, names=names)])
 
-        ret_suite.extend([ConfigCmd(cmd=ConfigCmds.ValidateConfig)])
+        if validate_config:
+            ret_suite.extend([ConfigCmd(cmd=ConfigCmds.ValidateConfig)])
 
         self.unregistered_names |= set(names)
         self.stopped_names -= set(names)
@@ -3671,6 +3702,7 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
                         log_name='scottbrian_paratools.smart_thread',
                         log_level=logging.ERROR,
                         log_msg=log_msg_f1)
+                    f1_config_ver.dec_recv_timeout()
                 else:
                     recvd_msg = f1_config_ver.f1_threads[f1_name].recv_msg(
                         remote=f1_from_name,
@@ -3997,27 +4029,45 @@ def main_driver(config_ver: ConfigVerifier,
         elif config_cmd.cmd == ConfigCmds.ValidateConfig:
             config_ver.validate_config()
         elif config_cmd.cmd == ConfigCmds.WaitForMsgTimeouts:
-            config_ver.wait_for_msg_timeouts(
-                sender_names=config_cmd.names,
-                unreg_names=config_cmd.unreg_timeout_names,
-                fullq_names=config_cmd.fullq_timeout_names)
+            if config_cmd.wait_for_recv_timeouts:
+                config_ver.wait_for_recv_msg_timeouts()
+            else:
+                config_ver.wait_for_msg_timeouts(
+                    sender_names=config_cmd.names,
+                    unreg_names=config_cmd.unreg_timeout_names,
+                    fullq_names=config_cmd.fullq_timeout_names)
         elif config_cmd.cmd == ConfigCmds.ConfirmResponse:
-            pending_responses = []
+            pending_responses: list[str] = []
+            pending_response_names: list[str] = []
+
             for name in config_cmd.names:
+                pending_response_names.append(name)
                 pending_responses.append(
                     f'{config_cmd.confirm_response_cmd} completed by {name}')
             while pending_responses:
-                a_msg = config_ver.msgs.get_msg(commander_name, timeout=None)
-                if a_msg in pending_responses:
-                    pending_responses.remove(a_msg)
-                else:
-                    logger.debug(f'main raising UnrecognizedCmd for a_msg '
-                                 f'{a_msg}')
-                    config_ver.abort_all_f1_threads()
-                    raise UnrecognizedCmd(
-                        f'A response of {a_msg} for the SendMsg is '
-                        'not recognized')
-                time.sleep(0.1)
+                try:
+                    a_msg = config_ver.msgs.get_msg(commander_name,
+                                                    timeout=0.2)
+                    split_msg = a_msg.rsplit(maxsplit=1)
+                    if a_msg in pending_responses:
+                        pending_responses.remove(a_msg)
+                        pending_response_names.remove(split_msg[-1])
+                    else:
+                        logger.debug(f'main raising UnrecognizedCmd for a_msg '
+                                     f'{a_msg}')
+                        config_ver.abort_all_f1_threads()
+                        raise UnrecognizedCmd(
+                            f'A response of {a_msg} for the SendMsg is '
+                            'not recognized')
+                    time.sleep(0.1)
+                except GetMsgTimedOut:
+                    for name in pending_response_names:
+                        if not config_ver.f1_threads[name].thread.is_alive():
+                            config_ver.abort_all_f1_threads()
+                            raise InvalidConfigurationDetected(
+                                f'{commander_name} detected f1_thread '
+                                f'{name} is no longer active and will thus '
+                                f'not be providing a response')
         else:
             config_ver.abort_all_f1_threads()
             raise UnrecognizedCmd(f'The config_cmd.cmd {config_cmd.cmd} '
