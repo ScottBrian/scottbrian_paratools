@@ -132,37 +132,6 @@ class TimeoutType(Enum):
 
 
 ########################################################################
-# RecvMsgParms used to specify the args for testing recv_msg
-########################################################################
-@dataclass
-class RecvMsgParms:
-    timeout_type: TimeoutType
-    num_active_no_delay_senders: int
-    num_active_delay_senders: int
-    num_send_exit_senders: int
-    num_nosend_exit_senders: int
-    num_unreg_senders: int
-    num_reg_senders: int
-    num_receivers: int
-    caplog_to_use: pytest.CaptureFixture[str]
-
-
-########################################################################
-# SendMsgParms used to specify the args for testing send_msg
-########################################################################
-@dataclass
-class SendMsgParms:
-    timeout_type: TimeoutType
-    num_senders: int
-    num_active_targets: int
-    num_registered_targets: int
-    num_unreg_timeouts: int
-    num_exit_timeouts: int
-    num_full_q_timeouts: int
-    caplog_to_use: pytest.CaptureFixture[str]
-
-
-########################################################################
 # 0) start alpha, beta, and charlie threads
 # 1) beta and charlie send msg to alpha
 # 2) beta and charlie exit
@@ -759,6 +728,119 @@ def build_config2_arg(request: Any) -> tuple[int, int, int]:
     """
     return cast(tuple[int, int, int], request.param)
 
+
+###############################################################################
+# num_registered_1_arg
+###############################################################################
+num_registered_1_arg_list = [0, 1, 2]
+
+
+@pytest.fixture(params=num_registered_1_arg_list)  # type: ignore
+def num_registered_1_arg(request: Any) -> int:
+    """Number of threads to configur as registered.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
+###############################################################################
+# num_active_1_arg
+###############################################################################
+num_active_1_arg_list = [1, 2, 3]
+
+
+@pytest.fixture(params=num_active_1_arg_list)  # type: ignore
+def num_active_1_arg(request: Any) -> int:
+    """Number of threads to configur as registered.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
+###############################################################################
+# num_stopped_1_arg
+###############################################################################
+num_stopped_1_arg_list = [0, 1, 2]
+
+
+@pytest.fixture(params=num_stopped_1_arg_list)  # type: ignore
+def num_stopped_1_arg(request: Any) -> int:
+    """Number of threads to configur as registered.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
+###############################################################################
+# num_registered_2_arg
+###############################################################################
+num_registered_2_arg_list = [0, 1, 2]
+
+
+@pytest.fixture(params=num_registered_2_arg_list)  # type: ignore
+def num_registered_2_arg(request: Any) -> int:
+    """Number of threads to configur as registered.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
+###############################################################################
+# num_active_2_arg
+###############################################################################
+num_active_2_arg_list = [1, 2, 3]
+
+
+@pytest.fixture(params=num_active_2_arg_list)  # type: ignore
+def num_active_2_arg(request: Any) -> int:
+    """Number of threads to configur as registered.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
+###############################################################################
+# num_stopped_2_arg
+###############################################################################
+num_stopped_2_arg_list = [0, 1, 2]
+
+
+@pytest.fixture(params=num_stopped_2_arg_list)  # type: ignore
+def num_stopped_2_arg(request: Any) -> int:
+    """Number of threads to configur as registered.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
 
 ###############################################################################
 # timeout_type_arg
@@ -3234,6 +3316,45 @@ class ConfigVerifier:
         return self.build_join_suite(names=names)
 
     ################################################################
+    # build_config_build_suite
+    ################################################################
+    def build_config_build_suite(self,
+                                 num_registered_1: int,
+                                 num_active_1: int,
+                                 num_stopped_1: int,
+                                 num_registered_2: int,
+                                 num_active_2: int,
+                                 num_stopped_2: int
+                         ) -> list[ConfigCmd]:
+        """Return a list of ConfigCmd items for config build.
+
+        Args:
+            num_registered_1: number of threads to initially build as
+                registered
+            num_active_1: number of threads to initially build as
+                active
+            num_stopped_1: number of threads to initially build as
+                stopped
+            num_registered_2: number of threads to reconfigured as
+                registered
+            num_active_2: number of threads to reconfigured as active
+            num_stopped_2: number of threads to reconfigured as stopped
+
+        Returns:
+            a list of ConfigCmd items
+        """
+        ret_suite: list[Any] = self.build_config(
+            num_registered=num_registered_1,
+            num_active=num_active_1,
+            num_stopped=num_stopped_1)
+        ret_suite.extend(self.build_config(
+            num_registered=num_registered_2,
+            num_active=num_active_2,
+            num_stopped=num_stopped_2))
+
+        return ret_suite
+
+    ################################################################
     # verify_is_registered
     ################################################################
     def verify_is_registered(self, names: list[str]) -> bool:
@@ -4527,124 +4648,21 @@ class TestSmartThreadScenarios:
                     + num_reg_senders_arg) == 0:
                 return
 
+        args_for_scenario_builder: dict[str, Any] = {
+            'timeout_type': timeout_type_arg,
+            'num_receivers': num_receivers_arg,
+            'num_active_no_delay_senders': num_active_no_delay_senders_arg,
+            'num_active_delay_senders': num_active_delay_senders_arg,
+            'num_send_exit_senders': num_send_exit_senders_arg,
+            'num_nosend_exit_senders': num_nosend_exit_senders_arg,
+            'num_unreg_senders': num_unreg_senders_arg,
+            'num_reg_senders': num_reg_senders_arg
+        }
+
         self.scenario_driver(
-            cmd_to_do=ConfigCmds.RecvMsg,
-            cmd_args=RecvMsgParms(
-                timeout_type=timeout_type_arg,
-                num_receivers=num_receivers_arg,
-                num_active_no_delay_senders=num_active_no_delay_senders_arg,
-                num_active_delay_senders=num_active_delay_senders_arg,
-                num_send_exit_senders=num_send_exit_senders_arg,
-                num_nosend_exit_senders=num_nosend_exit_senders_arg,
-                num_unreg_senders=num_unreg_senders_arg,
-                num_reg_senders=num_reg_senders_arg,
-                caplog_to_use=caplog))
-
-    ####################################################################
-    # test_smart_thread_msg_timeout_scenarios
-    ####################################################################
-    def scenario_driver(
-            self,
-            cmd_to_do: ConfigCmds,
-            cmd_args: Union[RecvMsgParms, SendMsgParms]
-    ) -> None:
-        """Test meta configuration scenarios.
-
-        Args:
-            cmd_to_do: specifies whether we are doing a send_msg
-                timeout scenario or a recv_msg timeout scenario
-            cmd_args: provides the args to use for recv_msg timeout
-
-        """
-
-        ################################################################
-        # f1
-        ################################################################
-        def f1(f1_name: str, f1_config_ver: ConfigVerifier):
-            log_msg_f1 = f'f1 entered for {f1_name}'
-            log_ver.add_msg(log_level=logging.DEBUG,
-                            log_msg=log_msg_f1)
-            logger.debug(log_msg_f1)
-
-            f1_driver(f1_name=f1_name, f1_config_ver=f1_config_ver)
-
-            ############################################################
-            # exit
-            ############################################################
-            log_msg_f1 = f'f1 exiting for {f1_name}'
-            log_ver.add_msg(log_level=logging.DEBUG,
-                            log_msg=log_msg_f1)
-            logger.debug(log_msg_f1)
-
-        ################################################################
-        # Set up log verification and start tests
-        ################################################################
-        commander_name = 'alpha'
-        log_ver = LogVer(log_name=__name__)
-        log_ver.add_call_seq(name=commander_name,
-                             seq=get_formatted_call_sequence())
-
-        log_msg = 'mainline entered'
-        log_ver.add_msg(log_msg=log_msg)
-        logger.debug(log_msg)
-
-        # log_msg = f'random_seed_arg: {random_seed_arg}'
-        # log_ver.add_msg(log_msg=log_msg)
-        # logger.debug(log_msg)
-        random.seed(42)
-        msgs = Msgs()
-
-        config_ver = ConfigVerifier(commander_name=commander_name,
-                                    log_ver=log_ver,
-                                    msgs=msgs,
-                                    max_msgs=10)
-
-        scenario: list[Any] = []
-
-        if cmd_to_do == ConfigCmds.RecvMsg:
-            scenario.extend(
-                config_ver.build_recv_msg_timeout_suite(
-                    timeout_type=cmd_args.timeout_type,
-                    num_receivers=cmd_args.num_receivers,
-                    num_active_no_delay_senders=
-                    cmd_args.num_active_no_delay_senders,
-                    num_active_delay_senders=
-                    cmd_args.num_active_delay_senders,
-                    num_send_exit_senders=cmd_args.num_send_exit_senders,
-                    num_nosend_exit_senders=cmd_args.num_nosend_exit_senders,
-                    num_unreg_senders=cmd_args.num_unreg_senders,
-                    num_reg_senders=cmd_args.num_reg_senders))
-        elif cmd_to_do == ConfigCmds.SendMsg:
-            scenario.extend(
-                config_ver.build_send_msg_timeout_suite(
-                    timeout_type=cmd_args.timeout_type,
-                    num_senders=cmd_args.num_senders,
-                    num_active_targets=cmd_args.num_active_targets,
-                    num_registered_targets=cmd_args.num_registered_targets,
-                    num_unreg_timeouts=cmd_args.num_unreg_timeouts,
-                    num_exit_timeouts=cmd_args.num_exit_timeouts,
-                    num_full_q_timeouts=cmd_args.num_full_q_timeouts))
-
-        scenario.extend([ConfigCmd(
-            cmd=ConfigCmds.ValidateConfig)])
-
-        names = list(config_ver.active_names - {commander_name})
-        scenario.extend(config_ver.build_exit_suite(names=names))
-
-        scenario.extend(config_ver.build_join_suite(names=names))
-
-        main_driver(config_ver=config_ver,
-                    scenario=scenario)
-
-        ################################################################
-        # check log results
-        ################################################################
-        match_results = log_ver.get_match_results(
-            caplog=cmd_args.caplog_to_use)
-        log_ver.print_match_results(match_results)
-        log_ver.verify_log_results(match_results)
-
-        logger.debug('mainline exiting')
+            scenario_builder=ConfigVerifier.build_recv_msg_timeout_suite,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
 
     ####################################################################
     # test_smart_thread_msg_timeout_scenarios
@@ -4684,45 +4702,86 @@ class TestSmartThreadScenarios:
                     + num_full_q_timeouts_arg) == 0:
                 return
         else:
-            if (num_registered_targets_arg
-                    + num_unreg_timeouts_arg
+            if (num_unreg_timeouts_arg
                     + num_exit_timeouts_arg
                     + num_full_q_timeouts_arg) == 0:
                 return
 
+        args_for_scenario_builder: dict[str, Any] = {
+            'timeout_type': timeout_type_arg,
+            'num_senders': num_senders_arg,
+            'num_active_targets': num_active_targets_arg,
+            'num_registered_targets': num_registered_targets_arg,
+            'num_unreg_timeouts': num_unreg_timeouts_arg,
+            'num_exit_timeouts': num_exit_timeouts_arg,
+            'num_full_q_timeouts': num_full_q_timeouts_arg
+        }
+
         self.scenario_driver(
-            cmd_to_do=ConfigCmds.SendMsg,
-            cmd_args=SendMsgParms(
-                timeout_type=timeout_type_arg,
-                num_senders=num_senders_arg,
-                num_active_targets=num_active_targets_arg,
-                num_registered_targets=num_registered_targets_arg,
-                num_unreg_timeouts=num_unreg_timeouts_arg,
-                num_exit_timeouts=num_exit_timeouts_arg,
-                num_full_q_timeouts=num_full_q_timeouts_arg,
-                caplog_to_use=caplog))
+            scenario_builder=ConfigVerifier.build_send_msg_timeout_suite,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
 
     ####################################################################
-    # test_smart_thread_msg_timeout_scenarios
+    # test_smart_thread_meta_scenarios
     ####################################################################
-    def test_smart_thread_msg_timeout_false_scenarios(
+    def test_config_build_scenarios(
             self,
-            num_senders_arg: int,
-            num_active_targets_arg: int,
-            num_registered_targets_arg: int,
-            num_timeouts_arg: tuple[int, int, int],
+            num_registered_1_arg: int,
+            num_active_1_arg: int,
+            num_stopped_1_arg: int,
+            num_registered_2_arg: int,
+            num_active_2_arg: int,
+            num_stopped_2_arg: int,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
         """Test meta configuration scenarios.
 
         Args:
-            num_senders_arg: number of threads to send msgs
-            num_active_targets_arg: number of active threads to recv
-            num_registered_targets_arg: number registered thread to
-                recv
-            num_timeouts_arg: number of threads to be targets that
-                cause a timeout by exit, unreg, or fullq
+            num_registered_1_arg: number of threads to initially build
+                as registered
+            num_active_1_arg: number of threads to initially build as
+                active
+            num_stopped_1_arg: number of threads to initially build as
+                stopped
+            num_registered_2_arg: number of threads to reconfigured as
+                registered
+            num_active_2_arg: number of threads to reconfigured as
+                active
+            num_stopped_2_arg: number of threads to reconfigured as
+                stopped
             caplog: pytest fixture to capture log output
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {
+            'num_registered_1': num_registered_1_arg,
+            'num_active_1': num_active_1_arg,
+            'num_stopped_1': num_stopped_1_arg,
+            'num_registered_2': num_registered_2_arg,
+            'num_active_2': num_active_2_arg,
+            'num_stopped_2': num_stopped_2_arg,
+        }
+
+        self.scenario_driver(
+            scenario_builder=ConfigVerifier.build_config_build_suite,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
+
+    ####################################################################
+    # test_smart_thread_msg_timeout_scenarios
+    ####################################################################
+    def scenario_driver(
+            self,
+            scenario_builder: Callable[..., list[ConfigCmds]],
+            scenario_builder_args: dict[str, Any],
+            caplog_to_use: pytest.CaptureFixture[str]
+    ) -> None:
+        """Build and run a scenario.
+
+        Args:
+            scenario_builder: the ConfigVerifier builder method to call
+            scenario_builder_args: the args to pass to the builder
+            caplog_to_use: the capsys to capture log messages
 
         """
 
@@ -4757,9 +4816,6 @@ class TestSmartThreadScenarios:
         log_ver.add_msg(log_msg=log_msg)
         logger.debug(log_msg)
 
-        # log_msg = f'random_seed_arg: {random_seed_arg}'
-        # log_ver.add_msg(log_msg=log_msg)
-        # logger.debug(log_msg)
         random.seed(42)
         msgs = Msgs()
 
@@ -4768,64 +4824,8 @@ class TestSmartThreadScenarios:
                                     msgs=msgs,
                                     max_msgs=10)
 
-        scenario: list[Any] = []
-
-        # scenario.extend([ConfigCmd(cmd=ConfigCmds.Pause,
-        #                            names=[commander_name],
-        #                            pause_seconds=1.5)])
-        # scenario.extend([ConfigCmd(cmd=ConfigCmds.Pause,
-        #                            names=[commander_name],
-        #                            pause_seconds=1.5)])
-
-        # f1_active_names = config_ver.active_names - {commander_name}
-        # msg_names: list[str] = random.sample(f1_active_names, 2)
-        # exit_name = msg_names[0]
-        # sender_name = msg_names[1]
-        # scenario.extend(config_ver.build_exit_suite(names=[exit_name]))
-        # scenario.extend(config_ver.build_join_suite(names=[exit_name]))
-        # scenario.extend([ConfigCmd(cmd=ConfigCmds.SendMsgTimeoutTrue,
-        #                            names=[sender_name],
-        #                            to_names=[exit_name],
-        #                            timeout=1.5,
-        #                            confirm_response=True)])
-        # scenario.extend([ConfigCmd(
-        #     cmd=ConfigCmds.ConfirmResponse,
-        #     names=[sender_name],
-        #     confirm_response_cmd=ConfigCmds.SendMsgTimeoutTrue)])
-        scenario.extend(
-            config_ver.build_msg_timeout_false_suite(
-                num_senders=num_senders_arg,
-                num_active_targets=num_active_targets_arg,
-                num_registered_targets=num_registered_targets_arg,
-                num_unreg_timeouts=num_timeouts_arg[0],
-                num_exit_timeouts=num_timeouts_arg[1],
-                num_full_q_timeouts=num_timeouts_arg[2]))
-
-        # scenario.extend([ConfigCmd(cmd=ConfigCmds.Pause,
-        #                            names=[commander_name],
-        #                            pause_seconds=2.0)])
-
-        # scenario.extend([ConfigCmd(cmd=ConfigCmds.SendMsgTimeoutFalse,
-        #                            names=[sender_name],
-        #                            to_names=[exit_name],
-        #                            timeout=2.0)])
-        # scenario.extend([ConfigCmd(cmd=ConfigCmds.Pause,
-        #                            names=[commander_name],
-        #                            pause_seconds=1.0)])
-        #
-        # scenario.extend(config_ver.build_create_suite(
-        #     names=[exit_name],
-        #     validate_config=False))
-        #
-        # scenario.extend([ConfigCmd(cmd=ConfigCmds.SendMsg,
-        #                            names=[sender_name],
-        #                            to_names=[exit_name],
-        #                            confirm_response=True)])
-        #
-        # scenario.extend([ConfigCmd(
-        #     cmd=ConfigCmds.ConfirmResponse,
-        #     names=[sender_name],
-        #     confirm_response_cmd=ConfigCmds.SendMsg)])
+        scenario: list[Any] = scenario_builder(config_ver,
+                                               **scenario_builder_args)
 
         scenario.extend([ConfigCmd(
             cmd=ConfigCmds.ValidateConfig)])
@@ -4841,90 +4841,8 @@ class TestSmartThreadScenarios:
         ################################################################
         # check log results
         ################################################################
-        match_results = log_ver.get_match_results(caplog=caplog)
-        log_ver.print_match_results(match_results)
-        log_ver.verify_log_results(match_results)
-
-        logger.debug('mainline exiting')
-
-    ####################################################################
-    # test_smart_thread_meta_scenarios
-    ####################################################################
-    def test_smart_thread_meta_scenarios3(
-            self,
-            build_config_arg: tuple[int, int, int],
-            build_config2_arg: tuple[int, int, int],
-            caplog: pytest.CaptureFixture[str]
-    ) -> None:
-        """Test meta configuration scenarios.
-
-        Args:
-            build_config_arg: determines the config to build
-            caplog: pytest fixture to capture log output
-
-        """
-
-        ################################################################
-        # f1
-        ################################################################
-        def f1(f1_name: str, f1_config_ver: ConfigVerifier):
-            log_msg_f1 = f'f1 entered for {f1_name}'
-            log_ver.add_msg(log_level=logging.DEBUG,
-                            log_msg=log_msg_f1)
-            logger.debug(log_msg_f1)
-
-            f1_driver(f1_name=f1_name, f1_config_ver=f1_config_ver)
-
-            ############################################################
-            # exit
-            ############################################################
-            log_msg_f1 = f'f1 exiting for {f1_name}'
-            log_ver.add_msg(log_level=logging.DEBUG,
-                            log_msg=log_msg_f1)
-            logger.debug(log_msg_f1)
-
-        ################################################################
-        # Set up log verification and start tests
-        ################################################################
-        commander_name = 'alpha'
-        log_ver = LogVer(log_name=__name__)
-        log_ver.add_call_seq(name=commander_name,
-                             seq=get_formatted_call_sequence())
-
-        log_msg = 'mainline entered'
-        log_ver.add_msg(log_msg=log_msg)
-        logger.debug(log_msg)
-
-        msgs = Msgs()
-
-        config_ver = ConfigVerifier(commander_name=commander_name,
-                                    log_ver=log_ver,
-                                    msgs=msgs)
-
-        scenario: list[Any] = config_ver.build_config(
-            num_registered=build_config_arg[0],
-            num_active=build_config_arg[1],
-            num_stopped=build_config_arg[2])
-
-        scenario.extend(config_ver.build_config(
-            num_registered=build_config2_arg[0],
-            num_active=build_config2_arg[1],
-            num_stopped=build_config2_arg[2]))
-
-        exit_names = list(config_ver.active_names - {commander_name})
-        scenario.extend(config_ver.build_exit_suite(names=exit_names))
-        scenario.extend(config_ver.build_join_suite(names=exit_names))
-
-        scenario.extend([ConfigCmd(
-            cmd=ConfigCmds.ValidateConfig)])
-
-        main_driver(config_ver=config_ver,
-                    scenario=scenario)
-
-        ################################################################
-        # check log results
-        ################################################################
-        match_results = log_ver.get_match_results(caplog=caplog)
+        match_results = log_ver.get_match_results(
+            caplog=caplog_to_use)
         log_ver.print_match_results(match_results)
         log_ver.verify_log_results(match_results)
 
