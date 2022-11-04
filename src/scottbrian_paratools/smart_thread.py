@@ -873,7 +873,7 @@ class SmartThread:
             if sb.timer.is_expired():
                 self.logger.error(
                     f'{self.name} raising SmartThreadJoinTimedOut waiting '
-                    f'for {work_targets}')
+                    f'for {sorted(work_targets)}')
                 raise SmartThreadJoinTimedOut(
                     f'{self.name} timed out waiting for {work_targets}.')
 
