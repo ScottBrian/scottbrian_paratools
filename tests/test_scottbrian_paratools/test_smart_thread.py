@@ -847,6 +847,7 @@ def num_stopped_2_arg(request: Any) -> int:
     """
     return cast(int, request.param)
 
+
 ###############################################################################
 # timeout_type_arg
 ###############################################################################
@@ -1177,6 +1178,135 @@ def recv_msg_after_join_arg(request: Any) -> int:
 
 
 ###############################################################################
+# num_active_no_target_arg
+###############################################################################
+num_active_no_target_arg_list = [1, 2, 3]
+
+
+@pytest.fixture(params=num_active_no_target_arg_list)  # type: ignore
+def num_active_no_target_arg(request: Any) -> int:
+    """Which threads should exit before alpha recvs msg.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
+###############################################################################
+# num_no_delay_exit_arg
+###############################################################################
+num_no_delay_exit_arg_list = [0, 1, 2]
+
+
+@pytest.fixture(params=num_no_delay_exit_arg_list)  # type: ignore
+def num_no_delay_exit_arg(request: Any) -> int:
+    """Which threads should exit before alpha recvs msg.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+###############################################################################
+# num_delay_exit_arg
+###############################################################################
+num_delay_exit_arg_list = [0, 1, 2]
+
+
+@pytest.fixture(params=num_delay_exit_arg_list)  # type: ignore
+def num_delay_exit_arg(request: Any) -> int:
+    """Which threads should exit before alpha recvs msg.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+###############################################################################
+# num_no_delay_unreg_arg
+###############################################################################
+num_no_delay_unreg_arg_list = [0, 1, 2]
+
+
+@pytest.fixture(params=num_no_delay_unreg_arg_list)  # type: ignore
+def num_no_delay_unreg_arg(request: Any) -> int:
+    """Which threads should exit before alpha recvs msg.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+###############################################################################
+# num_delay_unreg_arg
+###############################################################################
+num_delay_unreg_arg_list = [0, 1, 2]
+
+
+@pytest.fixture(params=num_delay_unreg_arg_list)  # type: ignore
+def num_delay_unreg_arg(request: Any) -> int:
+    """Which threads should exit before alpha recvs msg.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
+###############################################################################
+# num_no_delay_reg_arg
+###############################################################################
+num_no_delay_reg_arg_list = [0, 1, 2]
+
+
+@pytest.fixture(params=num_no_delay_reg_arg_list)  # type: ignore
+def num_no_delay_reg_arg(request: Any) -> int:
+    """Which threads should exit before alpha recvs msg.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+###############################################################################
+# num_delay_reg_arg
+###############################################################################
+num_delay_reg_arg_list = [0, 1, 2]
+
+
+@pytest.fixture(params=num_delay_reg_arg_list)  # type: ignore
+def num_delay_reg_arg(request: Any) -> int:
+    """Which threads should exit before alpha recvs msg.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
+###############################################################################
 # timeout_arg fixtures
 ###############################################################################
 timeout_arg_list = [None, 'TO_False', 'TO_True']
@@ -1483,7 +1613,7 @@ class ConfigVerifier:
 
         self.del_thread(
             name=self.commander_name,
-            remotes=names,
+            num_remotes=len(names),
             process='unregister'
         )
 
@@ -1648,23 +1778,23 @@ class ConfigVerifier:
 
     def del_thread(self,
                    name: str,
-                   remotes: list[str],
+                   num_remotes: int,
                    process: str  # join or unregister
                    ) -> None:
         """Delete the thread from the ConfigVerifier.
 
         Args:
             name: name of thread doing the delete (for log msg)
-            remotes: names of threads to be deleted
+            num_remotes: number of threads to be deleted
             process: names the process, either join or unregister
         """
         copy_reg_deque = (
             self.commander_thread.time_last_registry_update.copy())
-        copy_reg_deque.rotate(len(remotes))
+        copy_reg_deque.rotate(num_remotes)
 
         copy_pair_deque = (
             self.commander_thread.time_last_pair_array_update.copy())
-        copy_pair_deque.rotate(len(remotes))
+        copy_pair_deque.rotate(num_remotes)
 
         if process == 'join':
             process_names = self.commander_thread.join_names.copy()
@@ -1672,9 +1802,9 @@ class ConfigVerifier:
         else:
             process_names = self.commander_thread.unregister_names.copy()
             from_status = st.ThreadStatus.Registered
-        process_names.rotate(len(remotes))
+        process_names.rotate(num_remotes)
 
-        for idx in range(len(remotes)):
+        for idx in range(num_remotes):
             remote = process_names.popleft()
             self.expected_registered[remote].is_alive = False
             self.expected_registered[remote].status = st.ThreadStatus.Stopped
@@ -2192,8 +2322,8 @@ class ConfigVerifier:
         # active_names = self.active_names.copy()
         # remove commander for now, but if we add it later we need to
         # be careful not to exit the commander
-        unregistered_names = self.unregistered_names
-        registered_names = self.registered_names
+        unregistered_names = self.unregistered_names.copy()
+        registered_names = self.registered_names.copy()
         active_names = self.active_names - {self.commander_name}
 
         ################################################################
@@ -2297,6 +2427,7 @@ class ConfigVerifier:
                 ConfigCmd(cmd=ConfigCmds.JoinTimeoutFalse,
                           names=[active_no_target_names[0]],
                           join_target_names=all_target_names,
+                          timeout=3,
                           timeout_names=all_timeout_names,
                           log_msg=log_msg,
                           confirm_response=True)])
@@ -2307,9 +2438,91 @@ class ConfigVerifier:
                 ConfigCmd(cmd=ConfigCmds.JoinTimeoutTrue,
                           names=[active_no_target_names[0]],
                           join_target_names=all_target_names,
+                          timeout=3,
                           timeout_names=all_timeout_names,
                           log_msg=log_msg,
                           confirm_response=True)])
+
+        ################################################################
+        # handle no_delay_exit_names
+        ################################################################
+        if no_delay_exit_names:
+            ret_suite.extend(self.build_exit_suite(names=no_delay_exit_names,
+                                                   validate_config=False))
+
+        ################################################################
+        # handle no_delay_unreg_names
+        ################################################################
+        if no_delay_unreg_names:
+            ret_suite.extend(
+                self.build_create_suite(names=no_delay_unreg_names,
+                                        validate_config=False))
+            ret_suite.extend(
+                self.build_exit_suite(names=no_delay_unreg_names,
+                                      validate_config=False))
+
+        ################################################################
+        # handle no_delay_reg_names
+        ################################################################
+        if no_delay_reg_names:
+            ret_suite.extend(
+                self.build_start_suite(names=no_delay_reg_names,
+                                       validate_config=False))
+            ret_suite.extend(
+                self.build_exit_suite(names=no_delay_reg_names,
+                                      validate_config=False))
+
+        ################################################################
+        # pause for short or long delay
+        ################################################################
+        if (timeout_type == TimeoutType.TimeoutNone
+                or timeout_type == TimeoutType.TimeoutFalse):
+            ret_suite.extend([ConfigCmd(cmd=ConfigCmds.Pause,
+                                        names=[self.commander_name],
+                                        pause_seconds=1)])
+        elif timeout_type == TimeoutType.TimeoutTrue:
+            ret_suite.extend([ConfigCmd(cmd=ConfigCmds.Pause,
+                                        names=[self.commander_name],
+                                        pause_seconds=3)
+                              ])
+
+        ################################################################
+        # handle delay_exit_names
+        ################################################################
+        if delay_exit_names:
+            ret_suite.extend(
+                self.build_exit_suite(names=delay_exit_names,
+                                      validate_config=False))
+
+        ################################################################
+        # handle delay_unreg_names
+        ################################################################
+        if delay_unreg_names:
+            ret_suite.extend(
+                self.build_create_suite(names=delay_unreg_names,
+                                        validate_config=False))
+            ret_suite.extend(
+                self.build_exit_suite(names=delay_unreg_names,
+                                      validate_config=False))
+
+        ################################################################
+        # handle delay_reg_names
+        ################################################################
+        if delay_reg_names:
+            ret_suite.extend(
+                self.build_start_suite(names=delay_reg_names,
+                                       validate_config=False))
+            ret_suite.extend(
+                self.build_exit_suite(names=delay_reg_names,
+                                      validate_config=False))
+
+        ################################################################
+        # finally, confirm the recv_msg is done
+        ################################################################
+        ret_suite.extend([
+            ConfigCmd(cmd=ConfigCmds.ConfirmResponse,
+                      names=[active_no_target_names[0]],
+                      confirm_response_cmd=confirm_response_to_use)])
 
         return ret_suite
 
@@ -4011,95 +4224,6 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
                     log_level=logging.INFO,
                     log_msg=log_msg_f1)
 
-        # elif (cmd_msg.cmd == ConfigCmds.RecvMsg
-        #       or cmd_msg.cmd == ConfigCmds.RecvMsgTimeoutFalse):
-        #     ####################################################
-        #     # recv one or more msgs
-        #     ####################################################
-        #     for f1_from_name in cmd_msg.from_names:
-        #         if cmd_msg.cmd == ConfigCmds.RecvMsg:
-        #             enter_exit_list = ('entered', 'exiting')
-        #             recvd_msg = f1_config_ver.f1_threads[f1_name].recv_msg(
-        #                 remote=f1_from_name)
-        #         else:
-        #             enter_exit_list = ('entered', 'exiting')
-        #             recvd_msg = f1_config_ver.f1_threads[f1_name].recv_msg(
-        #                 remote=f1_from_name,
-        #                 timeout=cmd_msg.timeout)
-        #
-        #         assert recvd_msg == cmd_msg.msg_to_send[f1_from_name]
-        #
-        #         f1_copy_pair_deque = (
-        #             f1_config_ver.f1_threads[f1_name]
-        #             .time_last_pair_array_update.copy())
-        #         f1_config_ver.dec_ops_count(f1_name,
-        #                                     f1_from_name,
-        #                                     f1_copy_pair_deque)
-        #
-        #         log_msg_f1 = (f"{f1_name} received msg from "
-        #                       f"{f1_from_name}")
-        #         f1_config_ver.log_ver.add_msg(
-        #             log_name='scottbrian_paratools.smart_thread',
-        #             log_level=logging.INFO,
-        #             log_msg=log_msg_f1)
-        #
-        #         if cmd_msg.log_msg:
-        #             log_msg_2 = (
-        #                 f'{f1_config_ver.log_ver.get_call_seq("f1_driver")} ')
-        #             log_msg_3 = re.escape(f'{cmd_msg.log_msg}')
-        #             for enter_exit in enter_exit_list:
-        #                 log_msg_1 = re.escape(
-        #                     f'send_msg() {enter_exit}: {f1_name} -> '
-        #                     f'{set(cmd_msg.to_names)} ')
-        #
-        #                 f1_config_ver.add_log_msg(log_msg_1
-        #                                           + log_msg_2
-        #                                           + log_msg_3)
-        # elif cmd_msg.cmd == ConfigCmds.RecvMsgTimeoutTrue:
-        #     ####################################################
-        #     # recv one or more msgs
-        #     ####################################################
-        #     # set first timeout for full time
-        #     timeout_value = cmd_msg.timeout
-        #     for f1_from_name in cmd_msg.from_names:
-        #         if f1_from_name in cmd_msg.recv_msg_timeout_names:
-        #             with pytest.raises(st.SmartThreadRecvMsgTimedOut):
-        #                 _ = f1_config_ver.f1_threads[f1_name].recv_msg(
-        #                     remote=f1_from_name,
-        #                     timeout=timeout_value)
-        #             log_msg_f1 = (
-        #                 f'{f1_name} raising SmartThreadRecvMsgTimedOut '
-        #                 f'waiting for {f1_from_name} ')
-        #             f1_config_ver.log_ver.add_msg(
-        #                 log_name='scottbrian_paratools.smart_thread',
-        #                 log_level=logging.ERROR,
-        #                 log_msg=log_msg_f1)
-        #             f1_config_ver.dec_recv_timeout()
-        #         else:
-        #             recvd_msg = f1_config_ver.f1_threads[f1_name].recv_msg(
-        #                 remote=f1_from_name,
-        #                 timeout=timeout_value)
-        #             assert recvd_msg == cmd_msg.msg_to_send[f1_from_name]
-        #
-        #             f1_copy_pair_deque = (
-        #                 f1_config_ver.f1_threads[f1_name]
-        #                 .time_last_pair_array_update.copy())
-        #             f1_config_ver.dec_ops_count(f1_name,
-        #                                         f1_from_name,
-        #                                         f1_copy_pair_deque)
-        #
-        #             log_msg_f1 = (f"{f1_name} received msg from "
-        #                           f"{f1_from_name}")
-        #             f1_config_ver.log_ver.add_msg(
-        #                 log_name='scottbrian_paratools.smart_thread',
-        #                 log_level=logging.INFO,
-        #                 log_msg=log_msg_f1)
-        #
-        #         # remaining timeouts are shorter so we don't have
-        #         # to pause for the cumulative timeouts before
-        #         # sending messages
-        #         timeout_value = 0.2
-
         elif (cmd_msg.cmd == ConfigCmds.RecvMsg
               or cmd_msg.cmd == ConfigCmds.RecvMsgTimeoutFalse
               or cmd_msg.cmd == ConfigCmds.RecvMsgTimeoutTrue):
@@ -4135,7 +4259,7 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
                     timeout_true_value = 0.2
                     log_msg_f1 = (
                         f'{f1_name} raising SmartThreadRecvMsgTimedOut '
-                        f'waiting for {f1_from_name} ')
+                        f'waiting for {f1_from_name}')
                     f1_config_ver.log_ver.add_msg(
                         log_name='scottbrian_paratools.smart_thread',
                         log_level=logging.ERROR,
@@ -4171,6 +4295,68 @@ def f1_driver(f1_name: str, f1_config_ver: ConfigVerifier):
                         log_name='scottbrian_paratools.smart_thread',
                         log_level=logging.INFO,
                         log_msg=log_msg_f1)
+
+        elif (cmd_msg.cmd == ConfigCmds.Join
+              or cmd_msg.cmd == ConfigCmds.JoinTimeoutFalse
+              or cmd_msg.cmd == ConfigCmds.JoinTimeoutTrue):
+            ####################################################
+            # join one or more threads
+            ####################################################
+            for join_name in cmd_msg.join_target_names:
+                enter_exit_list = ('entered', 'exiting')
+                if cmd_msg.cmd == ConfigCmds.Join:
+                    f1_config_ver.f1_threads[f1_name].join(
+                        targets=set(cmd_msg.join_target_names),
+                        log_msg=cmd_msg.log_msg)
+                elif (cmd_msg.cmd == ConfigCmds.JoinTimeoutFalse
+                        or (cmd_msg.cmd == ConfigCmds.RecvMsgTimeoutTrue
+                            and not cmd_msg.timeout_names)):
+                    f1_config_ver.f1_threads[f1_name].join(
+                        targets=set(cmd_msg.join_target_names),
+                        timeout=cmd_msg.timeout,
+                        log_msg=cmd_msg.log_msg)
+                else:  # ConfigCmds.RecvMsgTimeoutTrue
+                    enter_exit_list = ('entered', )
+                    with pytest.raises(st.SmartThreadJoinTimedOut):
+                        f1_config_ver.f1_threads[f1_name].join(
+                            targets=set(cmd_msg.join_target_names),
+                            timeout=cmd_msg.timeout,
+                            log_msg=cmd_msg.log_msg)
+
+                    log_msg_f1 = (
+                        f'{f1_name} raising SmartThreadJoinTimedOut '
+                        f'waiting for {sorted(set(cmd_msg.timeout_names))}')
+                    f1_config_ver.log_ver.add_msg(
+                        log_name='scottbrian_paratools.smart_thread',
+                        log_level=logging.ERROR,
+                        log_msg=log_msg_f1)
+                    f1_config_ver.dec_recv_timeout()
+
+                if cmd_msg.log_msg:
+                    log_msg_2 = (
+                        f'{f1_config_ver.log_ver.get_call_seq("f1_driver")} ')
+                    log_msg_3 = re.escape(f'{cmd_msg.log_msg}')
+                    for enter_exit in enter_exit_list:
+                        log_msg_1 = re.escape(
+                            f'join() entered by {f1_name} to join '
+                            f'{sorted(set(cmd_msg.join_target_names))} ')
+
+                        f1_config_ver.add_log_msg(log_msg_1
+                                                  + log_msg_2
+                                                  + log_msg_3)
+
+                if cmd_msg.timeout_names:
+                    num_joins = (len(cmd_msg.join_target_names)
+                                 - len(cmd_msg.timeout_names))
+                else:
+                    num_joins = len(cmd_msg.join_target_names)
+
+                if num_joins > 0:
+                    f1_config_ver.del_thread(
+                        name=f1_name,
+                        num_remotes=num_joins,
+                        process='join'
+                    )
 
         elif cmd_msg.cmd == ConfigCmds.Pause:
             time.sleep(cmd_msg.pause_seconds)
@@ -4380,7 +4566,7 @@ def main_driver(config_ver: ConfigVerifier,
                         log_msg = (
                             f'{commander_name} raising '
                             'SmartThreadRecvMsgTimedOut waiting for '
-                            f'{from_name} ')
+                            f'{from_name}')
                         config_ver.log_ver.add_msg(
                             log_name='scottbrian_paratools.smart_thread',
                             log_level=logging.ERROR,
@@ -4441,36 +4627,17 @@ def main_driver(config_ver: ConfigVerifier,
                                                 value=False,
                                                 exiting=False)
 
-        elif config_cmd.cmd == ConfigCmds.Join:
-            if config_cmd.exp_error:
-                with pytest.raises(config_cmd.exp_error):
-                    config_ver.commander_thread.join(
-                        targets=set(config_cmd.names),
-                        timeout=config_cmd.timeout)
-                log_msg = re.escape(
-                    f'{commander_name} raising SmartThreadJoinTimedOut '
-                    f'waiting for {sorted(set(config_cmd.timeout_names))}')
-                config_ver.log_ver.add_msg(
-                    log_name='scottbrian_paratools.smart_thread',
-                    log_level=logging.ERROR,
-                    log_msg=log_msg)
-            else:
-                config_ver.commander_thread.join(
-                    targets=set(config_cmd.names),
-                    timeout=config_cmd.timeout)
-
-            if config_cmd.timeout_names:
-                num_joins = (len(config_cmd.names)
-                             - len(config_cmd.timeout_names))
-            else:
-                num_joins = len(config_cmd.names)
-
-            if num_joins > 0:
-                config_ver.del_thread(
-                    name=commander_name,
-                    remotes=config_cmd.names,
-                    process='join'
-                    )
+        elif (config_cmd.cmd == ConfigCmds.Join
+              or config_cmd.cmd == ConfigCmds.JoinTimeoutFalse
+              or config_cmd.cmd == ConfigCmds.JoinTimeoutTrue):
+            ####################################################
+            # join one or more threads
+            ####################################################
+            for name in config_cmd.names:
+                if name == commander_name:
+                    continue
+                config_ver.msgs.queue_msg(target=name,
+                                          msg=config_cmd)
 
         elif config_cmd.cmd == ConfigCmds.VerifyRegistered:
             assert config_ver.verify_is_registered(config_cmd.names)
@@ -4915,8 +5082,16 @@ class TestSmartThreadScenarios:
     ####################################################################
     # test_smart_thread_join_errors
     ####################################################################
-    def test_smart_thread_join_errors(
+    def test_join_timeout_scenarios(
             self,
+            timeout_type_arg: TimeoutType,
+            num_active_no_target_arg: int,
+            num_no_delay_exit_arg: int,
+            num_delay_exit_arg: int,
+            num_no_delay_unreg_arg: int,
+            num_delay_unreg_arg: int,
+            num_no_delay_reg_arg: int,
+            num_delay_reg_arg: int,
             caplog: pytest.CaptureFixture[str]
             ) -> None:
         """Test error cases in the _regref remote array method.
@@ -4925,18 +5100,35 @@ class TestSmartThreadScenarios:
             caplog: pytest fixture to capture log output
 
         """
+        assert num_active_no_target_arg > 0
+        if timeout_type_arg == TimeoutType.TimeoutNone:
+            if (num_no_delay_exit_arg
+                    + num_delay_exit_arg
+                    + num_no_delay_unreg_arg
+                    + num_delay_unreg_arg
+                    + num_no_delay_reg_arg
+                    + num_delay_reg_arg) == 0:
+                return
+        else:
+            if (num_delay_exit_arg
+                    + num_delay_unreg_arg
+                    + num_delay_reg_arg) == 0:
+                return
+
         args_for_scenario_builder: dict[str, Any] = {
-            'num_registered_1': num_registered_1_arg,
-            'num_active_1': num_active_1_arg,
-            'num_stopped_1': num_stopped_1_arg,
-            'num_registered_2': num_registered_2_arg,
-            'num_active_2': num_active_2_arg,
-            'num_stopped_2': num_stopped_2_arg,
+            'timeout_type': timeout_type_arg,
+            'num_active_no_target': num_active_no_target_arg,
+            'num_no_delay_exit': num_no_delay_exit_arg,
+            'num_delay_exit': num_delay_exit_arg,
+            'num_no_delay_unreg': num_no_delay_unreg_arg,
+            'num_delay_unreg': num_delay_unreg_arg,
+            'num_no_delay_reg': num_no_delay_reg_arg,
+            'num_delay_reg': num_delay_reg_arg
         }
 
         self.scenario_driver(
-            scenario_builder=ConfigVerifier.build_join_error_suite,
-            scenario_builder_args={},  # args_for_scenario_builder,
+            scenario_builder=ConfigVerifier.build_join_timeout_suite,
+            scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 
     ####################################################################
@@ -5246,7 +5438,7 @@ class TestSmartThreadScenarios:
 
                 config_ver.del_thread(
                     name='alpha',
-                    remotes=[thread_name],
+                    num_remotes=1,
                     process='join')
                 joined_names.append(thread_name)
                 num_joins += 1
@@ -5290,7 +5482,7 @@ class TestSmartThreadScenarios:
 
             config_ver.del_thread(
                 name='alpha',
-                remotes=[thread_name],
+                num_remotes=1,
                 process='join')
 
         ################################################################
@@ -5452,7 +5644,7 @@ class TestSmartThreadErrors:
 
         config_ver.del_thread(
             name='alpha',
-            remotes=config_cmd.names,
+            num_remotes=len(config_cmd.names),
             process='join')
 
         ################################################################

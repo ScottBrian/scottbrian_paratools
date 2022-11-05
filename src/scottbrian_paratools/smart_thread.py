@@ -828,7 +828,7 @@ class SmartThread:
         if log_msg and self.debug_logging_enabled:
             caller_info = get_formatted_call_sequence(latest=1, depth=1)
             self.logger.debug(
-                f'join() entered by {self.name} to join {sb.targets} '
+                f'join() entered by {self.name} to join {sorted(sb.targets)} '
                 f'{caller_info} {log_msg}')
 
         work_targets = sb.targets.copy()
@@ -850,8 +850,15 @@ class SmartThread:
                         # attempts. This is done to ensure we don't
                         # deadlock with any of the other services
                         # (e.g., recv_msg)
-                        SmartThread._registry[remote].thread.join(timeout=0.2)
-
+                        try:
+                            SmartThread._registry[remote].thread.join(
+                              timeout=0.2)
+                        except RuntimeError:
+                            # We know the thread is registered, so
+                            # we will skip it for now and come back to it
+                            # later. If it never starts and exits then
+                            # we will timeout (if timeout was specified)
+                            continue
                         # we need to check to make sure the thread is
                         # not alive in case we timed out
                         if not SmartThread._registry[remote].thread.is_alive():
@@ -881,7 +888,7 @@ class SmartThread:
 
         if log_msg and self.debug_logging_enabled:
             self.logger.debug(
-                f'join() by {self.name} to join {sb.targets} exiting. '
+                f'join() by {self.name} to join {sorted(sb.targets)} exiting. '
                 f'{caller_info} {log_msg}')
 
     ####################################################################
@@ -1304,7 +1311,7 @@ class SmartThread:
             if timer.is_expired():
                 self.logger.error(
                     f'{self.name} raising SmartThreadRecvMsgTimedOut '
-                    f'waiting for {remote} ')
+                    f'waiting for {remote}')
                 raise SmartThreadRecvMsgTimedOut(
                     f'recv_msg {self.name} timed out waiting for message '
                     f'from {remote}.')
