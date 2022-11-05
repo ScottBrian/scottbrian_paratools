@@ -79,6 +79,8 @@ class ConfigCmds(Enum):
     RecvMsgTimeoutTrue = auto()
     RecvMsgTimeoutFalse = auto()
     Join = auto()
+    JoinTimeoutTrue = auto()
+    JoinTimeoutFalse = auto()
     Pause = auto()
     ConfirmResponse = auto()
     ValidateConfig = auto()
@@ -105,6 +107,7 @@ class ConfigCmd:
     auto_start: bool = True
     from_names: Optional[list[str]] = None
     to_names: Optional[list[str]] = None
+    join_target_names: Optional[list[str]] = None
     msg_to_send: Optional[Any] = None
     log_msg: Optional[str] = None
     recv_msg_timeout_names: Optional[list[str]] = None
@@ -2099,38 +2102,214 @@ class ConfigVerifier:
                                        validate_config=validate_config)
 
     ################################################################
-    # build_join_error_suite
+    # build_join_timeout_suite
     ################################################################
-    def build_join_error_suite(self) -> list[ConfigCmd]:
+    def build_join_timeout_suite(
+            self,
+            timeout_type: TimeoutType,
+            num_active_no_target: int,
+            num_no_delay_exit: int,
+            num_delay_exit: int,
+            num_no_delay_unreg: int,
+            num_delay_unreg: int,
+            num_no_delay_reg: int,
+            num_delay_reg: int) -> list[ConfigCmd]:
         """Return a list of ConfigCmd items for a create.
 
         Args:
-            commander_name: specifies that a commander thread is to be
-                created with this name
-            commander_auto_start: specifies whether to start the
-                commander thread during create
-            names: names to use on the create
-            auto_start: specifies whether to start threads during create
-            validate_config: indicates whether to do config validation
+            timeout_type: specifies TimeoutNone, TimeoutFalse,
+                or TimeoutTrue
+            num_active_no_target: number of threads that should be
+                active and stay active during the join as non-targets
+            num_no_delay_exit: number of threads that should be active
+                and targeted for join, and then exited immediately to
+                allow the join to succeed
+            num_delay_exit: number of threads that should be active and
+                targeted for join, and then be exited after a short
+                delay to allow a TimeoutFalse join to succeed, and a
+                long delay to cause a TimeoutTrue join to
+                timeout and a TimeoutNone to eventually succeed
+            num_no_delay_unreg: number of threads that should be
+                unregistered and targeted for join, and then be
+                be immediately created, started, exited to allow the
+                join to succeed
+            num_delay_unreg: number of threads that should be
+                unregistered and targeted for join, and then be
+                be created, started, exited after a short delay to allow
+                a TimeoutFalse join to succeed, and a long delay to
+                cause a TimeoutTrue join to timeout and a TimeoutNone to
+                eventually succeed
+            num_no_delay_reg: number of threads that should be
+                registered and targeted for join, and then be
+                be immediately started and exited to allow the
+                join to succeed
+            num_delay_reg: number of threads that should be registered
+                and targeted for join, and then be started and exited
+                after a short delay to allow a TimeoutFalse join to
+                succeed, and a long delay to cause a TimeoutTrue join to
+                timeout and a TimeoutNone to eventually succeed
 
         Returns:
             a list of ConfigCmd items
         """
-        ################################################################
-        # Create config with commander and one f1 thread
-        ###############################################################
-        ret_suite: list[ConfigCmd] = self.build_config(num_active=2)
-        f1_names = list(self.active_names - {self.commander_name})
+        # Make sure we have enough threads. Note that we subtract 1 from
+        # the count of unregistered names to ensure we have one thread
+        # for the commander
+        assert 1 < (num_active_no_target
+                    + num_no_delay_exit
+                    + num_delay_exit
+                    + num_no_delay_unreg
+                    + num_delay_unreg
+                    + num_no_delay_reg
+                    + num_delay_reg) <= len(self.unregistered_names) - 1
+
+        if (timeout_type == TimeoutType.TimeoutFalse
+                or timeout_type == TimeoutType.TimeoutTrue):
+            assert (num_delay_exit
+                    + num_delay_unreg
+                    + num_delay_reg) > 0
+
+        assert num_active_no_target > 0
+
+        ret_suite = []
+
+        num_registered_needed = (
+                num_no_delay_reg
+                + num_delay_reg)
+
+        num_active_needed = (
+                num_active_no_target
+                + num_no_delay_exit
+                + num_delay_exit
+                + 1)
+
+        ret_suite: list[ConfigCmd] = (self.build_config(
+            num_registered=num_registered_needed,
+            num_active=num_active_needed))
+
+        self.log_name_groups()
+
+        # active_names = self.active_names.copy()
+        # remove commander for now, but if we add it later we need to
+        # be careful not to exit the commander
+        unregistered_names = self.unregistered_names
+        registered_names = self.registered_names
+        active_names = self.active_names - {self.commander_name}
 
         ################################################################
-        # join before telling f1 to exit
+        # choose receiver_names
         ################################################################
-        ret_suite.extend([
-            ConfigCmd(cmd=ConfigCmds.Join,
-                      names=f1_names,
-                      timeout=2,
-                      timeout_names=f1_names,
-                      exp_error=st.SmartThreadJoinTimedOut)])
+        active_no_target_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_active_no_target,
+            update_collection=True,
+            var_name_for_log='active_no_target_names')
+
+        ################################################################
+        # choose active_no_delay_sender_names
+        ################################################################
+        no_delay_exit_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_no_delay_exit,
+            update_collection=True,
+            var_name_for_log='no_delay_exit_names')
+
+        ################################################################
+        # choose active_delay_sender_names
+        ################################################################
+        delay_exit_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_delay_exit,
+            update_collection=True,
+            var_name_for_log='delay_exit_names')
+
+        ################################################################
+        # choose send_exit_sender_names
+        ################################################################
+        no_delay_unreg_names = self.choose_names(
+            name_collection=unregistered_names,
+            num_names_needed=num_no_delay_unreg,
+            update_collection=True,
+            var_name_for_log='no_delay_unreg_names')
+
+        ################################################################
+        # choose nosend_exit_sender_names
+        ################################################################
+        delay_unreg_names = self.choose_names(
+            name_collection=unregistered_names,
+            num_names_needed=num_delay_unreg,
+            update_collection=True,
+            var_name_for_log='delay_unreg_names')
+
+        ################################################################
+        # choose unreg_sender_names
+        ################################################################
+        no_delay_reg_names = self.choose_names(
+            name_collection=registered_names,
+            num_names_needed=num_no_delay_reg,
+            update_collection=True,
+            var_name_for_log='no_delay_reg_names')
+
+        ################################################################
+        # choose reg_sender_names
+        ################################################################
+        delay_reg_names = self.choose_names(
+            name_collection=registered_names,
+            num_names_needed=num_delay_reg,
+            update_collection=True,
+            var_name_for_log='delay_reg_names')
+
+        ################################################################
+        # start by doing the recv_msgs, one for each sender
+        ################################################################
+        all_target_names: list[str] = (no_delay_exit_names
+                                       + delay_exit_names
+                                       + no_delay_unreg_names
+                                       + delay_unreg_names
+                                       + no_delay_reg_names
+                                       + delay_reg_names)
+
+        all_timeout_names: list[str] = (delay_exit_names
+                                        + delay_unreg_names
+                                        + delay_reg_names)
+
+        if len(all_target_names) % 2 == 0:
+            log_msg = f'join log test: {self.get_ptime()}'
+        else:
+            log_msg = None
+
+        ################################################################
+        # start the join
+        ################################################################
+        if timeout_type == TimeoutType.TimeoutNone:
+            confirm_response_to_use = ConfigCmds.Join
+            ret_suite.extend([
+                ConfigCmd(cmd=ConfigCmds.Join,
+                          names=[active_no_target_names[0]],
+                          join_target_names=all_target_names,
+                          timeout_names=all_timeout_names,
+                          log_msg=log_msg,
+                          confirm_response=True)])
+
+        elif timeout_type == TimeoutType.TimeoutFalse:
+            confirm_response_to_use = ConfigCmds.JoinTimeoutFalse
+            ret_suite.extend([
+                ConfigCmd(cmd=ConfigCmds.JoinTimeoutFalse,
+                          names=[active_no_target_names[0]],
+                          join_target_names=all_target_names,
+                          timeout_names=all_timeout_names,
+                          log_msg=log_msg,
+                          confirm_response=True)])
+
+        else:  # TimeoutType.TimeoutTrue
+            confirm_response_to_use = ConfigCmds.JoinTimeoutTrue
+            ret_suite.extend([
+                ConfigCmd(cmd=ConfigCmds.JoinTimeoutTrue,
+                          names=[active_no_target_names[0]],
+                          join_target_names=all_target_names,
+                          timeout_names=all_timeout_names,
+                          log_msg=log_msg,
+                          confirm_response=True)])
 
         return ret_suite
 
@@ -2849,11 +3028,10 @@ class ConfigVerifier:
             num_registered=num_registered_targets,
             num_active=num_active_needed))
 
+        self.log_name_groups()
         # active_names = self.active_names.copy()
         # remove commander for now, but if we add it later we need to
         # be careful not to exit the commander
-        print(f'\nself.active_names: {self.active_names}')
-
         active_names = self.active_names - {self.commander_name}
 
         ################################################################
