@@ -664,16 +664,17 @@ class SmartThread:
         f1 beta entered
 
         """
-        if not self.thread.is_alive():
-            self._set_status(
-                target_thread=self,
-                new_status=ThreadStatus.Starting)
-            self.thread.start()
+        with sel.SELockExcl(SmartThread._registry_lock):
+            if not self.thread.is_alive():
+                self._set_status(
+                    target_thread=self,
+                    new_status=ThreadStatus.Starting)
+                self.thread.start()
 
-        if self.thread.is_alive():
-            self._set_status(
-                target_thread=self,
-                new_status=ThreadStatus.Alive)
+            if self.thread.is_alive():
+                self._set_status(
+                    target_thread=self,
+                    new_status=ThreadStatus.Alive)
 
         self.logger.debug(
             f'{self.name} thread started, thread.is_alive() = '
@@ -828,7 +829,7 @@ class SmartThread:
         if log_msg and self.debug_logging_enabled:
             caller_info = get_formatted_call_sequence(latest=1, depth=1)
             self.logger.debug(
-                f'join() entered by {self.name} to join {sorted(sb.targets)} '
+                f'join() entered: {self.name} to join {sorted(sb.targets)}. '
                 f'{caller_info} {log_msg}')
 
         work_targets = sb.targets.copy()
@@ -888,7 +889,7 @@ class SmartThread:
 
         if log_msg and self.debug_logging_enabled:
             self.logger.debug(
-                f'join() by {self.name} to join {sorted(sb.targets)} exiting. '
+                f'join() exiting: {self.name} to join {sorted(sb.targets)}. '
                 f'{caller_info} {log_msg}')
 
     ####################################################################
