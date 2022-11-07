@@ -327,6 +327,16 @@ class SmartThread:
     _pair_array_last_update: datetime = datetime(
         2000, 1, 1, 12, 0, 1)
 
+    @dataclass
+    class LogStatusBlock:
+        is_alive: bool
+        status: ThreadStatus
+
+    @dataclass
+    class LogStatusBlocks:
+        process_name: str
+        status_array: dict[str, "SmartThread.LogStatusBlock"]
+
     ####################################################################
     # __init__
     ####################################################################
@@ -477,7 +487,11 @@ class SmartThread:
         self.time_last_pair_array_update: deque[datetime] = deque([], 32)
         self.time_last_registry_update: deque[datetime] = deque([], 32)
         self.join_names: deque[str] = deque([], 32)
+        self.join_log_array: deque[SmartThread.LogStatusBlocks] = deque([], 32)
         self.unregister_names: deque[str] = deque([], 32)
+        self.unreg_log_array: deque[SmartThread.LogStatusBlocks] = deque([],
+                                                                         32)
+        self.reg_log_array: deque[SmartThread.LogStatusBlocks] = deque([], 32)
 
         # register this new SmartThread so others can find us
         self._register()
@@ -575,7 +589,11 @@ class SmartThread:
                               f'class name = {self.__class__.__name__}')
 
             # Remove any old entries
-            self._clean_up_registry()
+            status_array = self._clean_up_registry()
+            self.reg_log_array.append(
+                SmartThread.LogStatusBlocks(
+                    process_name=self.name,
+                    status_array=status_array))
 
             # Add entry if not already present
             if self.name not in SmartThread._registry:
@@ -599,8 +617,11 @@ class SmartThread:
     ####################################################################
     # _clean_up_registry
     ####################################################################
-    def _clean_up_registry(self) -> None:
+    def _clean_up_registry(self) -> dict[str, "SmartThread.LogStatusBlock"]:
         """Clean up any old not alive items in the registry.
+
+        Returns:
+            dictionary of log status items
 
         Raises:
             SmartThreadErrorInRegistry: Registry item with key {key} has
@@ -611,12 +632,18 @@ class SmartThread:
 
         """
         # Remove any old entries
+        ret_log_status_array: dict[str, "SmartThread.LogStatusBlock"] = {}
         keys_to_del = []
         for key, item in SmartThread._registry.items():
+            is_alive: bool = item.thread.is_alive()
+            status: ThreadStatus = item.status
+            ret_log_status_array[key] = SmartThread.LogStatusBlock(
+                is_alive=is_alive,
+                status=status)
             self.logger.debug(
                 f'key = {key}, item = {item}, '
-                f'item.thread.is_alive() = {item.thread.is_alive()}, '
-                f'status: {item.status}')
+                f'item.thread.is_alive() = {is_alive}, '
+                f'status: {status}')
             if ((not item.thread.is_alive())
                     and (item.status & ThreadStatus.Stopped)):
                 keys_to_del.append(key)
@@ -647,6 +674,7 @@ class SmartThread:
                           .strftime("%H:%M:%S.%f"))
             self.logger.debug(f'{self.name} did cleanup of registry at UTC '
                               f'{print_time}, deleted {keys_to_del}')
+        return ret_log_status_array
 
     ####################################################################
     # start
@@ -750,8 +778,12 @@ class SmartThread:
                         target_thread=SmartThread._registry[remote],
                         new_status=ThreadStatus.Stopped)
                     # remove this thread from the registry
-                    self._clean_up_registry()
+                    status_array = self._clean_up_registry()
                     self.unregister_names.append(remote)
+                    self.unreg_log_array.append(
+                        SmartThread.LogStatusBlocks(
+                            process_name=remote,
+                            status_array=status_array))
                     self.logger.debug(
                         f'{self.name} did successful unregister of '
                         f'{remote}.')
@@ -868,8 +900,12 @@ class SmartThread:
                                 target_thread=SmartThread._registry[remote],
                                 new_status=ThreadStatus.Stopped)
                             # remove this thread from the registry
-                            self._clean_up_registry()
+                            status_array = self._clean_up_registry()
                             self.join_names.append(remote)
+                            self.join_log_array.append(
+                                SmartThread.LogStatusBlocks(
+                                    process_name=remote,
+                                    status_array=status_array))
                             self.logger.debug(
                                 f'{self.name} did successful join of '
                                 f'{remote}.')
