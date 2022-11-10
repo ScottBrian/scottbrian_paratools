@@ -1053,9 +1053,16 @@ class SmartThread:
                         f' for pair_key = {pair_key}, name = {thread_name}')
                     changed = True
 
-            # At this point, we may have removed a thread that was no
-            # longer registered. If only one thread remains, it should
-            # also be removed unless it has a message pending.
+            # At this point, either or both threads of the pair will
+            # have been removed if no longer registered. If only one
+            # thread was removed, then the remaining thread is still
+            # registered but should also be removed unless it has one or
+            # more messages pending, in which case we need to leave the
+            # entry in place to allow the thread to eventually read its
+            # messages. For this case, we will set the del_pending flag
+            # to indicate in the recv_msg method that once the msg_q is
+            # empty, _refresh_pair_array should be called to clean up
+            # this entry.
             if len(SmartThread._pair_array[pair_key].status_blocks) == 1:
                 thread_name = list(SmartThread._pair_array[
                         pair_key].status_blocks.keys())[0]
@@ -1214,7 +1221,6 @@ class SmartThread:
                         # reads its messages and frees up space on its
                         # queue before we time out.
                         self.remotes_full_send_q |= {remote}
-                        pass
 
             if sb.timer.is_expired():
                 unreg_timeout_msg = ''
