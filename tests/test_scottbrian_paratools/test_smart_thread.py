@@ -158,11 +158,12 @@ class ConfigCmd2:
 ########################################################################
 class ConfigCmd(ABC):
     def __init__(self,
-                 cmd_runners: list[str],
-                 config_ver: "ConfigVerifier"):
+                 cmd_runners: list[str]):
+        self.serial_num: int = 0
+        self.line_num: int = 0
         self.cmd_runners = cmd_runners
         self.specified_args = locals()  # used for __repr__, see below
-        self.config_ver = config_ver
+        self.config_ver: "ConfigVerifier" = None
         self.arg_list: list[str] = []
 
     def __repr__(self):
@@ -199,17 +200,16 @@ class ConfigCmd(ABC):
 class ConfirmResponse(ConfigCmd):
     def __init__(self,
                  cmd_runners: list[str],
-                 config_ver: "ConfigVerifier",
                  confirm_cmd: str,
-                 serial_num: int,
-                 targets: list[str]
+                 confirm_serial_num: int,
+                 confirmers: list[str]
                  ) -> None:
         super().__init__(cmd_runners=cmd_runners,
                          config_ver=config_ver)
 
         self.confirm_cmd = confirm_cmd
-        self.serial_num = serial_num
-        self.targets = targets
+        self.confirm_serial_num = confirm_serial_num
+        self.confirmers = confirmers
         self.arg_list = ['confirm_cmd', 'serial_num', 'targets']
 
     def run_process(self, name: str) -> None:
@@ -219,20 +219,20 @@ class ConfirmResponse(ConfigCmd):
             name: name of thread running the command
         """
         start_time = time.time()
-        work_targets = self.targets.copy()
-        while work_targets:
-            for name in work_targets:
+        work_confirmers = self.confirmers.copy()
+        while work_confirmers:
+            for name in work_confirmers:
                 # If the serial number is in the completed_cmds for
                 # this name then the command was completed. Remove the
                 # target name and break to start looking again with one
                 # less target until no targets remain.
                 if self.serial_num in self.config_ver.completed_cmds[name]:
-                    work_targets.remove(name)
+                    work_confirmers.remove(name)
                     break
             time.sleep(0.1)
             if time.time() - start_time > 600:
                 raise CmdTimedOut('ConfirmResponse took too long waiting '
-                                  f'for {work_targets} to complete '
+                                  f'for {work_confirmers} to complete '
                                   f'cmd {self.confirm_cmd} with '
                                   f'serial_num {self.serial_num}.')
 
@@ -243,11 +243,9 @@ class ConfirmResponse(ConfigCmd):
 class CreateCommanderAutoStart(ConfigCmd):
     def __init__(self,
                  cmd_runners: list[str],
-                 config_ver: "ConfigVerifier",
                  commander_name: str
                  ) -> None:
-        super().__init__(cmd_runners=cmd_runners,
-                         config_ver=config_ver)
+        super().__init__(cmd_runners=cmd_runners)
         self.commander_name = commander_name
         self.args_list = ['commander_name']
 
@@ -268,11 +266,9 @@ class CreateCommanderAutoStart(ConfigCmd):
 class CreateCommanderNoStart(CreateCommanderAutoStart):
     def __init__(self,
                  cmd_runners: list[str],
-                 config_ver: "ConfigVerifier",
                  commander_name: str
                  ) -> None:
         super().__init__(cmd_runners=cmd_runners,
-                         config_ver=config_ver,
                          commander_name=commander_name)
 
     def run_process(self, name: str) -> None:
@@ -292,12 +288,10 @@ class CreateCommanderNoStart(CreateCommanderAutoStart):
 class CreateF1AutoStart(ConfigCmd):
     def __init__(self,
                  cmd_runners: list[str],
-                 config_ver: "ConfigVerifier",
                  f1_names: list[str],
                  target: Callable[..., Any]
                  ) -> None:
-        super().__init__(cmd_runners=cmd_runners,
-                         config_ver=config_ver)
+        super().__init__(cmd_runners=cmd_runners)
 
         self.f1_names = f1_names
         self.target = target
@@ -321,12 +315,10 @@ class CreateF1AutoStart(ConfigCmd):
 class CreateF1NoStart(CreateF1AutoStart):
     def __init__(self,
                  cmd_runners: list[str],
-                 config_ver: "ConfigVerifier",
                  f1_names: list[str],
                  target: Callable[..., Any]
                  ) -> None:
         super().__init__(cmd_runners=cmd_runners,
-                         config_ver=config_ver,
                          f1_names=f1_names,
                          target=target)
 
@@ -349,10 +341,8 @@ class CreateF1NoStart(CreateF1AutoStart):
 class Exit(ConfigCmd):
     def __init__(self,
                  cmd_runners: list[str],
-                 config_ver: "ConfigVerifier",
                  target_names: list[str]) -> None:
-        super().__init__(cmd_runners=cmd_runners,
-                         config_ver=config_ver)
+        super().__init__(cmd_runners=cmd_runners)
 
         self.target_names = target_names
         self.args_list = ['cmd_runners',
@@ -374,10 +364,8 @@ class Exit(ConfigCmd):
 class Join(ConfigCmd):
     def __init__(self,
                  cmd_runners: list[str],
-                 config_ver: "ConfigVerifier",
                  target_names: list[str]) -> None:
-        super().__init__(cmd_runners=cmd_runners,
-                         config_ver=config_ver)
+        super().__init__(cmd_runners=cmd_runners)
 
         self.target_names = target_names
         self.args_list = ['cmd_runners',
@@ -389,8 +377,8 @@ class Join(ConfigCmd):
         Args:
             name: name of thread running the command
         """
-        self.handle_join(cmd_runner_name=name,
-                         target_names=self.target_names)
+        self.config_ver.handle_join(cmd_runner_name=name,
+                                    target_names=self.target_names)
 
 
 ########################################################################
@@ -399,11 +387,9 @@ class Join(ConfigCmd):
 class JoinTimeoutFalse(Join):
     def __init__(self,
                  cmd_runners: list[str],
-                 config_ver: "ConfigVerifier",
                  target_names: list[str],
                  timeout: IntFloat) -> None:
         super().__init__(cmd_runners=cmd_runners,
-                         config_ver=config_ver,
                          target_names=target_names)
 
         self.timeout = timeout
@@ -417,9 +403,9 @@ class JoinTimeoutFalse(Join):
         Args:
             name: name of thread running the command
         """
-        self.handle_join_tof(cmd_runner_name=name,
-                             target_names=self.target_names,
-                             timeout=self.timeout)
+        self.config_ver.handle_join_tof(cmd_runner_name=name,
+                                        target_names=self.target_names,
+                                        timeout=self.timeout)
 
 
 ########################################################################
@@ -428,13 +414,11 @@ class JoinTimeoutFalse(Join):
 class JoinTimeoutTrue(JoinTimeoutFalse):
     def __init__(self,
                  cmd_runners: list[str],
-                 config_ver: "ConfigVerifier",
                  target_names: list[str],
                  timeout: IntFloat,
                  timeout_names: list[str],
                  log_msg) -> None:
         super().__init__(cmd_runners=cmd_runners,
-                         config_ver=config_ver,
                          target_names=target_names,
                          timeout=timeout)
 
@@ -450,10 +434,15 @@ class JoinTimeoutTrue(JoinTimeoutFalse):
         Args:
             name: name of thread running the command
         """
-        self.handle_join_tot(cmd_runner_name=name,
-                             target_names=self.target_names,
-                             timeout=self.timeout,
-                             timeout_names=self.timeout_names)
+        if self.timeout_names:
+            self.config_ver.handle_join_tot(cmd_runner_name=name,
+                                            target_names=self.target_names,
+                                            timeout=self.timeout,
+                                            timeout_names=self.timeout_names)
+        else:
+            self.config_ver.handle_join_tof(cmd_runner_name=name,
+                                            target_names=self.target_names,
+                                            timeout=self.timeout)
 
 
 ########################################################################
@@ -462,12 +451,10 @@ class JoinTimeoutTrue(JoinTimeoutFalse):
 class SendMsg(ConfigCmd):
     def __init__(self,
                  cmd_runners: list[str],
-                 config_ver: "ConfigVerifier",
                  to_names: list[str],
                  msg_to_send: dict[str, Any],
                  log_msg: Optional[str] = None) -> None:
-        super().__init__(cmd_runners=cmd_runners,
-                         config_ver=config_ver)
+        super().__init__(cmd_runners=cmd_runners)
 
         self.to_names = to_names
         self.msg_to_send = msg_to_send
@@ -493,7 +480,6 @@ class SendMsg(ConfigCmd):
 class SendMsgTimeoutFalse(SendMsg):
     def __init__(self,
                  cmd_runners: list[str],
-                 config_ver: "ConfigVerifier",
                  to_names: list[str],
                  msg_to_send: dict[str, Any],
                  timeout: IntFloat,
@@ -502,7 +488,6 @@ class SendMsgTimeoutFalse(SendMsg):
                  log_msg: Optional[str] = None) -> None:
         super().__init__(
             cmd_runners=cmd_runners,
-            config_ver=config_ver,
             to_names=to_names,
             msg_to_send=msg_to_send,
             log_msg=log_msg)
@@ -522,7 +507,7 @@ class SendMsgTimeoutFalse(SendMsg):
             name: name of thread running the command
         """
         self.config_ver.handle_send_msg_tof(
-            cmd_runner_name==name,
+            cmd_runner_name=name,
             config_cmd=self)
 
 
@@ -532,7 +517,6 @@ class SendMsgTimeoutFalse(SendMsg):
 class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
     def __init__(self,
                  cmd_runners: list[str],
-                 config_ver: "ConfigVerifier",
                  to_names: list[str],
                  msg_to_send: dict[str, Any],
                  timeout: IntFloat,
@@ -541,7 +525,6 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
                  log_msg: Optional[str] = None) -> None:
         super().__init__(
             cmd_runners=cmd_runners,
-            config_ver=config_ver,
             to_names=to_names,
             msg_to_send=msg_to_send,
             timeout=timeout,
@@ -1795,17 +1778,6 @@ def log_enabled_arg(request: Any) -> bool:
 
 
 ########################################################################
-# CmdQItem class
-########################################################################
-@dataclass
-class CmdQItem:
-    """Class that represents a queued ConfigCmd."""
-    serial_num: int
-    location: int
-    cmd: ConfigCmd
-
-
-########################################################################
 # TestSmartThreadLogMsgs class
 ########################################################################
 @dataclass
@@ -1930,7 +1902,7 @@ class ConfigVerifier:
     # add_thread
     ####################################################################
     def add_cmd(self,
-                cmd: ConfigCmd) -> None:
+                cmd: ConfigCmd) -> int:
         """Add a command to the deque.
 
         Args:
@@ -1938,11 +1910,12 @@ class ConfigVerifier:
 
         """
         self.cmd_serial_num += 1
+        cmd.serial_num = self.cmd_serial_num
+
         frame = _getframe(1)
         caller_info = get_caller_info(frame)
-        line_num = caller_info.line_num
-        cmd_q_item = CmdQItem(self.cmd_serial_num, line_num, cmd)
-        self.cmd_suite.append(cmd_q_item)
+        cmd.line_num = caller_info.line_num
+        self.cmd_suite.append(cmd)
 
         return self.cmd_serial_num
 
@@ -2428,8 +2401,6 @@ class ConfigVerifier:
             f1_name: name of thread doing the command
 
         """
-
-        self.commander_name = self.commander_thread.name
         self.log_ver.add_call_seq(
             name='f1_driver',
             seq='test_smart_thread.py::ConfigVerifier.f1_driver')
@@ -2441,11 +2412,11 @@ class ConfigVerifier:
         # exit after we indicate that the cmd is complete
         while self.f1_process_cmds[f1_name]:
 
-            cmd_q_item: CmdQItem = self.msgs.get_msg(f1_name, timeout=None)
+            cmd: ConfigCmd = self.msgs.get_msg(f1_name, timeout=None)
 
-            cmd_q_item.cmd.run_process(name=f1_name)
+            cmd.run_process(name=f1_name)
 
-            self.completed_cmds[f1_name].append(cmd_q_item.serial_num)
+            self.completed_cmds[f1_name].append(cmd.serial_num)
 
     ################################################################
     # main_driver
@@ -2458,19 +2429,19 @@ class ConfigVerifier:
         main_driver_call_seq = self.log_ver.get_call_seq("main_driver")
 
         while self.cmd_suite:
-            cmd_q_item: CmdQItem = self.cmd_suite.popleft()
-            log_msg = f'config_cmd: {cmd_q_item}'
+            cmd: ConfigCmd = self.cmd_suite.popleft()
+            log_msg = f'config_cmd: {cmd}'
             self.log_ver.add_msg(log_msg=re.escape(log_msg))
             logger.debug(log_msg)
 
-            for name in cmd_q_item.cmd.cmd_runners:
+            for name in cmd.cmd_runners:
                 if name == self.commander_name:
                     continue
                 self.msgs.queue_msg(target=name,
-                                    msg=cmd_q_item)
+                                    msg=cmd)
 
-            if self.commander_name in cmd_q_item.cmd.cmd_runners:
-                cmd_q_item.cmd.run_process(name=self.commander_name)
+            if self.commander_name in cmd.cmd_runners:
+                cmd.run_process(name=self.commander_name)
 
         for config_cmd in scenario:
             # log_msg = f'config_cmd: {config_cmd}'
@@ -3233,17 +3204,17 @@ class ConfigVerifier:
         # start the join
         ################################################################
         if timeout_type == TimeoutType.TimeoutNone:
-            confirm_response_to_use = ConfigCmds.Join
-            ret_suite.extend([
-                ConfigCmd(cmd=ConfigCmds.Join,
+            confirm_cmd_to_use = 'Join'
+            join_serial_num = self.add_cmd(
+                Join(
                           cmd_runner=[active_no_target_names[0]],
                           join_target_names=all_target_names,
                           # timeout_names=all_timeout_names,
                           log_msg=log_msg,
-                          confirm_response=True)])
+                          confirm_response=True))
 
         elif timeout_type == TimeoutType.TimeoutFalse:
-            confirm_response_to_use = ConfigCmds.JoinTimeoutFalse
+            confirm_cmd_to_use = 'JoinTimeoutFalse'
             ret_suite.extend([
                 ConfigCmd(cmd=ConfigCmds.JoinTimeoutFalse,
                           cmd_runner=[active_no_target_names[0]],
@@ -3254,7 +3225,7 @@ class ConfigVerifier:
                           confirm_response=True)])
 
         else:  # TimeoutType.TimeoutTrue
-            confirm_response_to_use = ConfigCmds.JoinTimeoutTrue
+            confirm_cmd_to_use = 'JoinTimeoutTrue'
             ret_suite.extend([
                 ConfigCmd(cmd=ConfigCmds.JoinTimeoutTrue,
                           cmd_runner=[active_no_target_names[0]],
@@ -3340,10 +3311,11 @@ class ConfigVerifier:
         ################################################################
         # finally, confirm the recv_msg is done
         ################################################################
-        ret_suite.extend([
-            ConfigCmd(cmd=ConfigCmds.ConfirmResponse,
-                      cmd_runner=[active_no_target_names[0]],
-                      confirm_response_cmd=confirm_response_to_use)])
+        self.add_cmd(
+            ConfirmResponse(cmd_runners=[self.commander_name],
+                 confirm_cmd=confirm_cmd_to_use,
+                 confirm_serial_num=join_serial_num,
+                 confirmers=[active_no_target_names[0]))
 
         return ret_suite
 
@@ -5358,44 +5330,32 @@ class ConfigVerifier:
             name='handle_join_tot',
             seq='test_smart_thread.py::ConfigVerifier.handle_join_tot')
 
-        enter_exit_list = ('entered', 'exiting')
-        if not timeout_names:
+        with pytest.raises(st.SmartThreadJoinTimedOut):
             self.all_threads[cmd_runner_name].join(
                 targets=set(target_names),
                 timeout=timeout,
                 log_msg=log_msg)
-        else:  # JoinTimeoutTrue
-            enter_exit_list = ('entered', )
-            with pytest.raises(st.SmartThreadJoinTimedOut):
-                self.all_threads[cmd_runner_name].join(
-                    targets=set(target_names),
-                    timeout=timeout,
-                    log_msg=log_msg)
 
-            log_msg = (
-                f'{cmd_runner_name} raising SmartThreadJoinTimedOut '
-                f'waiting for {sorted(set(timeout_names))}')
-            self.log_ver.add_msg(
-                log_name='scottbrian_paratools.smart_thread',
-                log_level=logging.ERROR,
-                log_msg=re.escape(log_msg))
+        log_msg = (
+            f'{cmd_runner_name} raising SmartThreadJoinTimedOut '
+            f'waiting for {sorted(set(timeout_names))}')
+        self.log_ver.add_msg(
+            log_name='scottbrian_paratools.smart_thread',
+            log_level=logging.ERROR,
+            log_msg=re.escape(log_msg))
 
         if log_msg:
             log_msg_2 = (
                 f'{self.log_ver.get_call_seq("handle_join_tot")} ')
             log_msg_3 = re.escape(f'{log_msg}')
-            for enter_exit in enter_exit_list:
-                log_msg_1 = re.escape(
-                    f'join() {enter_exit}: {cmd_runner_name} to join '
-                    f'{sorted(set(target_names))}. ')
+            log_msg_1 = re.escape(
+                f'join() entered: {cmd_runner_name} to join '
+                f'{sorted(set(target_names))}. ')
 
-                self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
+            self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
-        if timeout_names:
-            num_joins = (len(target_names)
-                         - len(timeout_names))
-        else:
-            num_joins = len(target_names)
+        num_joins = (len(target_names)
+                     - len(timeout_names))
 
         if num_joins > 0:
             self.del_thread(
