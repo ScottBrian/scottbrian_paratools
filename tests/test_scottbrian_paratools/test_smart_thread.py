@@ -755,6 +755,97 @@ class Unregister(ConfigCmd):
 
 
 ########################################################################
+# ValidateConfig
+########################################################################
+class ValidateConfig(ConfigCmd):
+    def __init__(self,
+                 cmd_runners: StrOrList) -> None:
+        super().__init__(cmd_runners=cmd_runners)
+
+    def run_process(self, name: str) -> None:
+        """Run the command.
+
+        Args:
+            name: name of thread running the command
+        """
+        self.config_ver.validate_config()
+
+
+########################################################################
+# VerifyAlive
+########################################################################
+class VerifyAlive(ConfigCmd):
+    def __init__(self,
+                 cmd_runners: StrOrList,
+                 exp_alive_names: StrOrList) -> None:
+        super().__init__(cmd_runners=cmd_runners)
+
+
+        if isinstance(exp_alive_names, str):
+            exp_alive_names = [exp_alive_names]
+        self.exp_alive_names = exp_alive_names
+
+        self.arg_list += ['exp_alive_names']
+
+    def run_process(self, name: str) -> None:
+        """Run the command.
+
+        Args:
+            name: name of thread running the command
+        """
+        self.config_ver.verify_is_alive(names=self.exp_alive_names)
+
+
+########################################################################
+# VerifyAliveNot
+########################################################################
+class VerifyAliveNot(ConfigCmd):
+    def __init__(self,
+                 cmd_runners: StrOrList,
+                 exp_not_alive_names: StrOrList) -> None:
+        super().__init__(cmd_runners=cmd_runners)
+
+        if isinstance(exp_not_alive_names, str):
+            exp_not_alive_names = [exp_not_alive_names]
+        self.exp_not_alive_names = exp_not_alive_names
+
+        self.arg_list += ['exp_not_alive_names']
+
+    def run_process(self, name: str) -> None:
+        """Run the command.
+
+        Args:
+            name: name of thread running the command
+        """
+        self.config_ver.verify_is_alive_not(names=self.exp_not_alive_names)
+
+
+########################################################################
+# VerifyActive
+########################################################################
+class VerifyActive(ConfigCmd):
+    def __init__(self,
+                 cmd_runners: StrOrList,
+                 exp_active_names: StrOrList) -> None:
+        super().__init__(cmd_runners=cmd_runners)
+
+        if isinstance(exp_active_names, str):
+            exp_active_names = [exp_active_names]
+        self.exp_active_names = exp_active_names
+
+        self.arg_list += ['exp_active_names']
+
+    def run_process(self, name: str) -> None:
+        """Run the command.
+
+        Args:
+            name: name of thread running the command
+        """
+        self.config_ver.verify_is_active(names=self.exp_active_names)
+
+
+
+########################################################################
 # timeout_type used to specify whether to use timeout on various cmds
 ########################################################################
 class TimeoutType(Enum):
@@ -2138,18 +2229,21 @@ class ConfigVerifier:
         return self.cmd_serial_num
 
     ####################################################################
-    # add_thread
+    # add_log_msg
     ####################################################################
-    def add_cmd_suite(self,
-                      suite: list[ConfigCmd]) -> None:
-        """Add a command suite to the deque.
+    def add_log_msg(self,
+                    new_log_msg: str,
+                    log_level: Optional[int] = logging.DEBUG) -> None:
+        """Add log message to log_ver for SmartThread logger.
 
         Args:
-            suite: list of ConfigCmds to add
-
+            new_log_msg: msg to add to log_ver
+            log_level: the logging severity level to use
         """
-        for cmd_item in suite:
-            self.cmd_suite.append(cmd_item)
+        self.log_ver.add_msg(
+            log_name='scottbrian_paratools.smart_thread',
+            log_level=log_level,
+            log_msg=new_log_msg)
 
     ####################################################################
     # add_thread
@@ -2347,8 +2441,143 @@ class ConfigVerifier:
                     f'from ThreadStatus.Registered to ThreadStatus.Alive')
 
     ################################################################
-    # build_config_build_suite
+    # build_config
     ################################################################
+    def build_config(self,
+                     num_registered: Optional[int] = 0,
+                     num_active: Optional[int] = 1,
+                     num_stopped: Optional[int] = 0
+                     ) -> list[ConfigCmd]:
+        """Return a list of ConfigCmd items for config.
+
+        Args:
+            num_registered: number of threads that need to be
+                registered but not yet started (meaning state is
+                Registered)
+            num_active: number of threads that need to be active
+                (meaning state is Active)
+            num_stopped: number of threads that need to have exited but
+                not yet joined (meaning state is Stopped)
+
+        Returns:
+            a list of ConfigCmd items
+
+        Note: the number of registered, active, and stopped must not
+            exceed the number of thread_names
+
+        """
+        assert (num_registered
+                + num_active
+                + num_stopped) <= len(self.thread_names)
+        assert num_active >= 1  # always need at least 1 for commander
+
+        ret_suite = []
+
+        if not self.commander_thread_config_built:
+            self.build_create_suite(commander_name=self.commander_name)
+            self.commander_thread_config_built = True
+            # num_active -= 1  # one less active thread to create
+
+        num_adjust_registered = len(self.registered_names) - num_registered
+        num_adjust_active = len(self.active_names) - num_active
+        num_adjust_stopped = len(self.stopped_names) - num_stopped
+
+        num_create_auto_start = 0
+        num_create_no_start = 0
+        num_reg_to_unreg = 0
+        num_reg_to_start = 0
+        num_active_to_exit = 0
+        num_stopped_to_join = 0
+        num_active_to_join = 0
+
+        # determine how many to start for active and stopped
+        if num_adjust_registered > 0:  # if surplus of registered
+            num_adjust_act_stop = num_adjust_active + num_adjust_stopped
+            if num_adjust_act_stop < 0:  # if shortage
+                num_reg_to_start = min(num_adjust_registered,
+                                       -num_adjust_act_stop)
+                num_adjust_registered -= num_reg_to_start
+                num_adjust_active += num_reg_to_start
+
+            if num_adjust_registered > 0:  # if still surplus
+                num_reg_to_unreg = num_adjust_registered
+                num_adjust_registered = 0
+        elif num_adjust_registered < 0:
+            num_create_no_start = -num_adjust_registered
+            num_adjust_registered = 0
+
+        if num_adjust_active > 0:  # if surplus
+            if num_adjust_stopped < 0:  # need more
+                num_active_to_exit = min(num_adjust_active,
+                                         -num_adjust_stopped)
+                num_adjust_active -= num_active_to_exit
+                num_adjust_stopped += num_active_to_exit
+
+            if num_adjust_active > 0:  # if still surplus
+                num_active_to_exit += num_adjust_active
+                num_active_to_join = num_adjust_active
+                num_adjust_active = 0
+        elif num_adjust_active < 0:  # if need more
+            num_create_auto_start += -num_adjust_active
+            num_adjust_active = 0
+
+        if num_adjust_stopped > 0:  # if surplus
+            num_stopped_to_join += num_adjust_stopped
+            num_adjust_stopped = 0
+        elif num_adjust_stopped < 0:  # if we need more
+            num_create_auto_start += -num_adjust_stopped
+            num_active_to_exit += -num_adjust_stopped
+            num_adjust_stopped = 0
+
+        # start by reducing surpluses
+        if num_reg_to_unreg > 0:
+            ret_suite.extend(
+                self.build_unreg_suite_num(num_to_unreg=num_reg_to_unreg))
+
+        if num_stopped_to_join > 0:
+            ret_suite.extend(
+                self.build_join_suite_num(num_to_join=num_stopped_to_join))
+
+        # create threads with no_start
+        if num_create_no_start > 0:
+            ret_suite.extend(
+                self.build_f1_create_suite_num(
+                    num_to_create=num_create_no_start,
+                    auto_start=False))
+
+        # start registered so we have actives to exit if need be
+        if num_reg_to_start > 0:
+            ret_suite.extend(self.build_start_suite_num(
+                num_to_start=num_reg_to_start))
+
+        # create threads with auto_start
+        if num_create_auto_start > 0:
+            ret_suite.extend(self.build_f1_create_suite_num(
+                num_to_create=num_create_auto_start,
+                auto_start=True))
+
+        # Now that we have actives, do any needed exits
+        if num_active_to_exit > 0:
+            ret_suite.extend(self.build_exit_suite_num(
+                num_to_exit=num_active_to_exit))
+
+        # Finally, join the stopped threads as needed
+        if num_active_to_join > 0:
+            ret_suite.extend(self.build_join_suite_num(
+                num_to_join=num_active_to_join))
+
+        # verify the counts
+        ret_suite.extend([
+            ConfigCmd(cmd=ConfigCmds.VerifyCounts,
+                      num_registered=num_registered,
+                      num_active=num_active,
+                      num_stopped=num_stopped)])
+
+        return ret_suite
+
+    ####################################################################
+    # build_config_build_suite
+    ####################################################################
     def build_config_build_suite(self,
                                  num_registered_1: int,
                                  num_active_1: int,
@@ -2386,754 +2615,8 @@ class ConfigVerifier:
         return ret_suite
 
     ####################################################################
-    # create_commander_thread
-    ####################################################################
-    def create_commander_thread(self,
-                                name: str,
-                                auto_start: bool) -> None:
-        """Create the commander thread."""
-
-        self.commander_thread = st.SmartThread(
-            name=name, auto_start=auto_start, max_msgs=self.max_msgs)
-        self.all_threads[name] = self.commander_thread
-        self.add_thread(
-            name=name,
-            thread=self.commander_thread,
-            thread_alive=True,
-            auto_start=False,
-            expected_status=st.ThreadStatus.Alive,
-            thread_repr=repr(self.commander_thread),
-            reg_update_time=self.commander_thread
-            .time_last_registry_update[-1],
-            pair_array_update_time=self.commander_thread
-            .time_last_pair_array_update[-1]
-        )
-
-    ####################################################################
-    # create_f1_thread
-    ####################################################################
-    def create_f1_thread(self,
-                         target: Callable,
-                         name: Optional[str] = None,
-                         auto_start: bool = True
-                         ) -> st.SmartThread:
-        """Create the f1_thread.
-
-        Args:
-            target: the f1 routine that the thread will run
-            name: name of the thread
-            auto_start: indicates whether the create should start the
-                          thread
-        """
-        if name is None:
-            for thread_name, available in self.f1_thread_names.items():
-                if available:
-                    name = thread_name
-                    self.f1_thread_names[name] = False
-                    break
-        # Create a new entry for this thread in the completed cmds
-        # dictionary, but only if there is nothing there yet. We need
-        # to preserve what is already there on thread resurrection.
-        # Note also that we need to do this before we actually start the
-        # thread so that it will be in place as soon as the thread
-        # begins to run.
-        if name not in self.completed_cmds:
-            self.completed_cmds[name] = []
-        self.f1_process_cmds[name] = True
-
-        f1_thread = st.SmartThread(name=name,
-                                   target=target,
-                                   args=(name, self),
-                                   auto_start=auto_start,
-                                   max_msgs=self.max_msgs)
-        self.f1_threads[name] = f1_thread
-        self.all_threads[name] = f1_thread
-        if auto_start:
-            exp_status = st.ThreadStatus.Alive
-        else:
-            exp_status = st.ThreadStatus.Registered
-        self.add_thread(
-            name=name,
-            thread=f1_thread,
-            thread_alive=auto_start,
-            auto_start=auto_start,
-            expected_status=exp_status,
-            thread_repr=repr(f1_thread),
-            reg_update_time=f1_thread.time_last_registry_update[-1],
-            pair_array_update_time=f1_thread.time_last_pair_array_update[-1]
-        )
-
-    ####################################################################
-    # del_thread
-    ####################################################################
-    def del_thread(self,
-                   name: str,
-                   num_remotes: int,
-                   process: str  # join or unregister
-                   ) -> None:
-        """Delete the thread from the ConfigVerifier.
-
-        Args:
-            name: name of thread doing the delete (for log msg)
-            num_remotes: number of threads to be deleted
-            process: names the process, either join or unregister
-        """
-        log_msg = (f'del_thread entered for {name}, '
-                   f'num_remotes: {num_remotes}, process: {process}')
-        self.log_ver.add_msg(log_msg=log_msg)
-        logger.debug(log_msg)
-
-        if name == self.commander_name:
-            copy_reg_deque = (
-                self.commander_thread.time_last_registry_update.copy())
-            copy_pair_deque = (
-                self.commander_thread.time_last_pair_array_update.copy())
-        else:
-            copy_reg_deque = (
-                self.f1_threads[name].time_last_registry_update.copy())
-            copy_pair_deque = (
-                self.f1_threads[name].time_last_pair_array_update.copy())
-
-        copy_reg_deque.rotate(num_remotes)
-        copy_pair_deque.rotate(num_remotes)
-
-        if process == 'join':
-            if name == self.commander_name:
-                process_names = self.commander_thread.join_names.copy()
-                log_arrays = self.commander_thread.join_log_array.copy()
-            else:
-                process_names = self.f1_threads[name].join_names.copy()
-                log_arrays = self.f1_threads[name].join_log_array.copy()
-            from_status = st.ThreadStatus.Alive
-        else:
-            if name == self.commander_name:
-                process_names = self.commander_thread.unregister_names.copy()
-                log_arrays = self.commander_thread.unreg_log_array.copy()
-            else:
-                process_names = self.f1_threads[name].unregister_names.copy()
-                log_arrays = self.f1_threads[name].unreg_log_array.copy()
-            from_status = st.ThreadStatus.Registered
-
-        process_names.rotate(num_remotes)
-        log_arrays.rotate(num_remotes)
-
-        for idx in range(num_remotes):
-            remote = process_names.popleft()
-            log_array = log_arrays.popleft()
-            self.expected_registered[remote].is_alive = False
-            self.expected_registered[remote].status = st.ThreadStatus.Stopped
-            self.add_log_msg(
-                f'{name} set status for thread '
-                f'{remote} '
-                f'from {from_status} to '
-                f'{st.ThreadStatus.Stopped}')
-
-            for thread_name, tracker in self.expected_registered.items():
-                if thread_name in log_array.status_array:
-                    is_alive = log_array.status_array[thread_name].is_alive
-                    status = log_array.status_array[thread_name].status
-                    log_msg = (
-                        f"key = {thread_name}, item = {tracker.thread_repr}, "
-                        "item.thread.is_alive() = "
-                        f"{is_alive}, "
-                        f"status: {status}")
-                    self.add_log_msg(re.escape(log_msg))
-                # log_msg = (
-                #     f"key = {thread_name}, item = {tracker.thread_repr}, "
-                #     "item.thread.is_alive() = "
-                #     f"{self.get_is_alive(thread_name)}, "
-                #     f"status: {tracker.status}")
-                # if thread_name in self.delay_reg_names:
-                #     # logger.debug('del_thread: ', log_msg)
-                #     print(f'del_thread for {remote}: ', log_msg)
-                # self.add_log_msg(re.escape(log_msg))
-                # self.add_log_msg(re.escape(
-                #     f"key = {thread_name}, item = {tracker.thread_repr}, "
-                #     "item.thread.is_alive() = "
-                #     f"{self.get_is_alive(thread_name)}, "
-                #     f"status: {tracker.status}"))
-
-            del self.expected_registered[remote]
-            self.add_log_msg(f'{remote} removed from registry')
-
-            self.add_log_msg(f'{name} entered _refresh_pair_array')
-
-            pair_keys_to_delete = []
-            for pair_key in self.expected_pairs:
-                if remote not in pair_key:
-                    continue
-                if remote == pair_key[0]:
-                    other_name = pair_key[1]
-                else:
-                    other_name = pair_key[0]
-
-                if remote not in self.expected_pairs[pair_key].keys():
-                    self.abort_all_f1_threads()
-                    raise InvalidConfigurationDetected(
-                        f'The expected_pairs for pair_key {pair_key} '
-                        'contains an entry of '
-                        f'{self.expected_pairs[pair_key]}  which does not '
-                        f'include the remote {remote} being deleted')
-                if other_name not in self.expected_pairs[pair_key].keys():
-                    pair_keys_to_delete.append(pair_key)
-                elif self.expected_pairs[pair_key][
-                        other_name].pending_ops_count == 0:
-                    pair_keys_to_delete.append(pair_key)
-                    self.add_log_msg(re.escape(
-                        f"{name} removed status_blocks entry "
-                        f"for pair_key = {pair_key}, "
-                        f"name = {other_name}"))
-                else:
-                    del self.expected_pairs[pair_key][remote]
-                self.add_log_msg(re.escape(
-                    f"{name} removed status_blocks entry "
-                    f"for pair_key = {pair_key}, "
-                    f"name = {remote}"))
-
-            for pair_key in pair_keys_to_delete:
-                del self.expected_pairs[pair_key]
-                self.add_log_msg(re.escape(
-                    f'{name} removed _pair_array entry'
-                    f' for pair_key = {pair_key}'))
-
-            self.add_log_msg(re.escape(
-                f'{name} updated _pair_array at UTC '
-                f'{copy_pair_deque.popleft().strftime("%H:%M:%S.%f")}')
-            )
-
-            self.add_log_msg(re.escape(
-                f"{name} did cleanup of registry at UTC "
-                f'{copy_reg_deque.popleft().strftime("%H:%M:%S.%f")}, '
-                f"deleted ['{remote}']"))
-
-            self.add_log_msg(f'{name} did successful {process} of {remote}.')
-
-    ################################################################
-    # f1_driver
-    ################################################################
-    def f1_driver(self,
-                  f1_name: str):
-        """Drive the commands received on the command queue.
-
-        Args:
-            f1_name: name of thread doing the command
-
-        """
-        self.log_ver.add_call_seq(
-            name='f1_driver',
-            seq='test_smart_thread.py::ConfigVerifier.f1_driver')
-
-        # We will stay in this loop to process command while the
-        # f1_process_cmds dictionary entry for f1_name is True. The
-        # ConfigCmdExit cmd runProcess method will simply set the
-        # dictionary entry for f1_name to False so that we will then
-        # exit after we indicate that the cmd is complete
-        while self.f1_process_cmds[f1_name]:
-
-            cmd: ConfigCmd = self.msgs.get_msg(f1_name, timeout=None)
-
-            cmd.run_process(name=f1_name)
-
-            self.completed_cmds[f1_name].append(cmd.serial_num)
-
-    ################################################################
-    # main_driver
-    ################################################################
-    def main_driver(self) -> None:
-        """Delete the thread from the ConfigVerifier."""
-        self.log_ver.add_call_seq(
-            name='main_driver',
-            seq='test_smart_thread.py::ConfigVerifier.main_driver')
-        main_driver_call_seq = self.log_ver.get_call_seq("main_driver")
-
-        while self.cmd_suite:
-            cmd: ConfigCmd = self.cmd_suite.popleft()
-            log_msg = f'config_cmd: {cmd}'
-            self.log_ver.add_msg(log_msg=re.escape(log_msg))
-            logger.debug(log_msg)
-
-            for name in cmd.cmd_runners:
-                if name == self.commander_name:
-                    continue
-                self.msgs.queue_msg(target=name,
-                                    msg=cmd)
-
-            if self.commander_name in cmd.cmd_runners:
-                cmd.run_process(name=self.commander_name)
-
-        # for config_cmd in scenario:
-        #     # log_msg = f'config_cmd: {config_cmd}'
-        #     # self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        #     # logger.debug(log_msg)
-        #
-        #     ############################################################
-        #     # CreateF1Thread
-        #     ############################################################
-        #     if config_cmd.cmd == ConfigCmds.CreateCommanderAutoStart:
-        #         self.create_commander_thread(
-        #             name=config_cmd.commander_name,
-        #             auto_start=True)
-        #     elif config_cmd.cmd == ConfigCmds.CreateCommanderNoStart:
-        #         self.create_commander_thread(
-        #             name=config_cmd.commander_name,
-        #             auto_start=False)
-        #     elif config_cmd.cmd == ConfigCmds.CreateAutoStart:
-        #         for new_name in config_cmd.cmd_runner:
-        #             self.create_f1_thread(
-        #                 target=outer_f1,
-        #                 name=new_name,
-        #                 auto_start=True
-        #             )
-        #     elif config_cmd.cmd == ConfigCmds.CreateNoStart:
-        #         for new_name in config_cmd.cmd_runner:
-        #             self.create_f1_thread(
-        #                 target=outer_f1,
-        #                 name=new_name,
-        #                 auto_start=False
-        #             )
-        #     elif config_cmd.cmd == ConfigCmds.Unregister:
-        #         self.unregister_threads(names=config_cmd.cmd_runner)
-        #
-        #     elif config_cmd.cmd == ConfigCmds.Start:
-        #         for name in config_cmd.cmd_runner:
-        #             self.start_thread(name=name)
-        #
-        #     elif config_cmd.cmd == ConfigCmds.VerifyAlive:
-        #         self.verify_is_alive(config_cmd.cmd_runner)
-        #
-        #     elif config_cmd.cmd == ConfigCmds.VerifyActive:
-        #         assert self.verify_is_active(config_cmd.cmd_runner)
-        #
-        #     elif config_cmd.cmd == ConfigCmds.VerifyCounts:
-        #         assert self.verify_counts(config_cmd.num_registered,
-        #                                         config_cmd.num_active,
-        #                                         config_cmd.num_stopped)
-        #
-        #     elif config_cmd.cmd == ConfigCmds.VerifyAliveNot:
-        #         assert self.verify_is_not_alive(config_cmd.cmd_runner)
-        #
-        #     elif config_cmd.cmd == ConfigCmds.VerifyStatus:
-        #         self.verify_status(
-        #             names=config_cmd.cmd_runner,
-        #             expected_status=config_cmd.exp_status)
-        #
-        #     elif (config_cmd.cmd == ConfigCmds.SendMsg
-        #           or config_cmd.cmd == ConfigCmds.SendMsgTimeoutTrue
-        #           or config_cmd.cmd == ConfigCmds.SendMsgTimeoutFalse):
-        #
-        #         for name in config_cmd.cmd_runner:
-        #             if name == commander_name:
-        #                 continue
-        #             self.msgs.queue_msg(target=name,
-        #                                       msg=config_cmd)
-        #
-        #         if commander_name in config_cmd.cmd_runner:
-        #             self.handle_send_cmd(cmd_runner_name=commander_name,
-        #                                        config_cmd=config_cmd)
-        #
-        #     elif (config_cmd.cmd == ConfigCmds.RecvMsg
-        #           or config_cmd.cmd == ConfigCmds.RecvMsgTimeoutFalse
-        #           or config_cmd.cmd == ConfigCmds.RecvMsgTimeoutTrue):
-        #         ####################################################
-        #         # recv one or more msgs
-        #         ####################################################
-        #         for name in config_cmd.cmd_runner:
-        #             if name == commander_name:
-        #                 continue
-        #             self.msgs.queue_msg(target=name,
-        #                                       msg=config_cmd)
-        #
-        #         if commander_name in config_cmd.cmd_runner:
-        #             self.handle_recv_cmd(cmd_runner_name=commander_name,
-        #                                        config_cmd=config_cmd)
-        #
-        #     elif config_cmd.cmd == ConfigCmds.Pause:
-        #         for pause_name in config_cmd.cmd_runner:
-        #             if pause_name == commander_name:
-        #                 continue
-        #             self.msgs.queue_msg(
-        #                 target=pause_name, msg=config_cmd)
-        #         if commander_name in config_cmd.cmd_runner:
-        #             time.sleep(config_cmd.pause_seconds)
-        #     elif config_cmd.cmd == ConfigCmds.Exit:
-        #         for exit_thread_name in config_cmd.cmd_runner:
-        #             self.msgs.queue_msg(
-        #                 target=exit_thread_name, msg=config_cmd)
-        #         num_alive = 1
-        #         while num_alive > 0:
-        #             num_alive = 0
-        #             for exit_thread_name in config_cmd.cmd_runner:
-        #                 if self.f1_threads[
-        #                     exit_thread_name].thread.is_alive():
-        #                     num_alive += 1
-        #                     time.sleep(.01)
-        #                 else:
-        #                     self.set_is_alive(target=exit_thread_name,
-        #                                             value=False,
-        #                                             exiting=False)
-        #
-        #     elif (config_cmd.cmd == ConfigCmds.Join
-        #           or config_cmd.cmd == ConfigCmds.JoinTimeoutFalse
-        #           or config_cmd.cmd == ConfigCmds.JoinTimeoutTrue):
-        #         ####################################################
-        #         # join one or more threads
-        #         ####################################################
-        #         for name in config_cmd.cmd_runner:
-        #             if name == commander_name:
-        #                 continue
-        #             self.msgs.queue_msg(target=name,
-        #                                       msg=config_cmd)
-        #         if commander_name in config_cmd.cmd_runner:
-        #             self.handle_join_cmd(cmd_runner_name=commander_name,
-        #                                        config_cmd=config_cmd)
-        #
-        #
-        #     elif config_cmd.cmd == ConfigCmds.VerifyRegistered:
-        #         assert self.verify_is_registered(config_cmd.cmd_runner)
-        #     elif config_cmd.cmd == ConfigCmds.VerifyRegisteredNot:
-        #         self.verify_not_registered(config_cmd.cmd_runner)
-        #     elif config_cmd.cmd == ConfigCmds.VerifyPaired:
-        #         assert self.verify_paired(config_cmd.cmd_runner)
-        #     elif config_cmd.cmd == ConfigCmds.VerifyPairedHalf:
-        #         assert self.verify_half_paired(
-        #             config_cmd.cmd_runner, config_cmd.half_paired_names)
-        #     elif config_cmd.cmd == ConfigCmds.VerifyPairedNot:
-        #         assert self.verify_not_paired(config_cmd.cmd_runner)
-        #     elif config_cmd.cmd == ConfigCmds.ValidateConfig:
-        #         self.validate_config()
-        #     elif config_cmd.cmd == ConfigCmds.WaitForMsgTimeouts:
-        #         if config_cmd.wait_for_recv_timeouts:
-        #             self.wait_for_recv_msg_timeouts()
-        #         else:
-        #             self.wait_for_msg_timeouts(
-        #                 sender_names=config_cmd.cmd_runner,
-        #                 unreg_names=config_cmd.unreg_timeout_names,
-        #                 fullq_names=config_cmd.fullq_timeout_names)
-        #     elif config_cmd.cmd == ConfigCmds.ConfirmResponse:
-        #         pending_responses: list[str] = []
-        #         pending_response_names: list[str] = []
-        #
-        #         for name in config_cmd.cmd_runner:
-        #             pending_response_names.append(name)
-        #             pending_responses.append(
-        #                 f'{config_cmd.confirm_response_cmd} completed by '
-        #                 f'{name}')
-        #         while pending_responses:
-        #             try:
-        #                 a_msg = self.msgs.get_msg(commander_name,
-        #                                                 timeout=10)
-        #                 split_msg = a_msg.rsplit(maxsplit=1)
-        #                 if a_msg in pending_responses:
-        #                     pending_responses.remove(a_msg)
-        #                     pending_response_names.remove(split_msg[-1])
-        #                 else:
-        #                     logger.debug(
-        #                         f'main raising UnrecognizedCmd for a_msg '
-        #                         f'{a_msg}')
-        #                     self.abort_all_f1_threads()
-        #                     raise UnrecognizedCmd(
-        #                         f'A response of {a_msg} for the SendMsg is '
-        #                         'not recognized')
-        #                 time.sleep(0.1)
-        #             except GetMsgTimedOut:
-        #                 for name in pending_response_names:
-        #                     if not self.f1_threads[
-        #                         name].thread.is_alive():
-        #                         self.abort_all_f1_threads()
-        #                         raise InvalidConfigurationDetected(
-        #                             f'{commander_name} detected f1_thread '
-        #                             f'{name} is no longer active and will '
-        #                             f'thus '
-        #                             f'not be providing a response')
-        #     else:
-        #         self.abort_all_f1_threads()
-        #         raise UnrecognizedCmd(f'The config_cmd.cmd {config_cmd.cmd} '
-        #                               'is not recognized')
-
-    ####################################################################
-    # start_thread
-    ####################################################################
-    def start_thread(self,
-                     start_names: list[str]) -> None:
-        """Start the named thread.
-
-        Args:
-            start_names: names of the threads to start
-        """
-        for start_name in start_names:
-            self.f1_threads[start_name].start()
-            self.expected_registered[start_name].is_alive = True
-            self.expected_registered[start_name].status = st.ThreadStatus.Alive
-
-            self.add_log_msg(
-                f'{start_name} set status for thread {start_name} '
-                'from ThreadStatus.Registered to ThreadStatus.Starting')
-            self.add_log_msg(
-                f'{start_name} set status for thread {start_name} '
-                f'from ThreadStatus.Starting to ThreadStatus.Alive')
-            self.add_log_msg(re.escape(
-                f'{start_name} thread started, thread.is_alive() = True, '
-                'status: ThreadStatus.Alive'))
-
-    ####################################################################
-    # unregister_threads
-    ####################################################################
-    def unregister_threads(self,
-                           cmd_runner: str,
-                           unregister_targets: list[str]) -> None:
-        """Unregister the named threads.
-
-        Args:
-            cmd_runner: name of thread doing the unregister
-            unregister_targets: names of threads to be unregistered
-        """
-        self.commander_thread.unregister(targets=set(names))
-        self.all_threads[cmd_runner].unregister(
-            targets=set(unregister_targets))
-
-        self.del_thread(
-            name=cmd_runner,
-            num_remotes=len(unregister_targets),
-            process='unregister'
-        )
-
-    def get_is_alive(self, name: str) -> bool:
-        """Get the is_alive flag for the named thread.
-
-        Args:
-            name: thread to get the is_alive flag
-
-        """
-        if self.expected_registered[name].exiting:
-            return self.expected_registered[name].thread.thread.is_alive()
-        else:
-            return self.expected_registered[name].is_alive
-
-    def inc_ops_count(self, targets: list[str], remote: str):
-        """Increment the pending operations count.
-
-        Args:
-            targets: the names of the threads whose count is to be
-                       incremented
-            remote: the names of the threads that are paired with
-                         the targets
-        """
-        with self.ops_lock:
-            for target in targets:
-                pair_key = st.SmartThread._get_pair_key(target, remote)
-                # check to make sure remote is paired - might not have
-                # started yet. Note that we also need to check to make
-                # sure the target is in the expected pairs in case it
-                # was removed but the other thread remained because it
-                # has a pending ops count (and non-empty msg_q)
-                if (pair_key in self.expected_pairs and
-                        target in self.expected_pairs[pair_key]):
-                    self.expected_pairs[pair_key][
-                        target].pending_ops_count += 1
-                else:
-                    # we are assuming that the remote will be started
-                    # while send_msg is running and that the msg
-                    # will be delivered (otherwise we should not have
-                    # called inc_ops_count)
-                    if pair_key not in self.pending_ops_counts:
-                        self.pending_ops_counts[pair_key] = {}
-                    if target in self.pending_ops_counts[pair_key]:
-                        self.pending_ops_counts[pair_key][target] += 1
-                    else:
-                        self.pending_ops_counts[pair_key][target] = 1
-
-    def dec_ops_count(self,
-                      target: str,
-                      remote: str,
-                      pair_array_update_times: deque):
-        """Decrement the pending operations count.
-
-        Args:
-            target: the names of the thread whose count is to be
-                      decremented
-            remote: the name of the threads that is paired with
-                         the target
-            pair_array_update_times: pair array update times to be used
-                                       for the log msgs
-        """
-        with self.ops_lock:
-            pair_key = st.SmartThread._get_pair_key(target, remote)
-            self.expected_pairs[pair_key][target].pending_ops_count -= 1
-            if self.expected_pairs[pair_key][target].pending_ops_count < 0:
-                self.abort_all_f1_threads()
-                raise InvalidConfigurationDetected(
-                    f'dec_ops_count for for pair_key {pair_key}, '
-                    f'name {target} was decremented below zero')
-            if (self.expected_pairs[pair_key][target].pending_ops_count == 0
-                    and remote not in self.expected_pairs[pair_key].keys()):
-                del self.expected_pairs[pair_key]
-                self.add_log_msg(f'{target} entered _refresh_pair_array')
-                self.add_log_msg(re.escape(
-                    f"{target} removed status_blocks entry "
-                    f"for pair_key = {pair_key}, "
-                    f"name = {target}"))
-                self.add_log_msg(re.escape(
-                    f'{target} removed _pair_array entry'
-                    f' for pair_key = {pair_key}'))
-                self.add_log_msg(re.escape(
-                    f'{target} updated _pair_array at UTC '
-                    f'{pair_array_update_times.pop().strftime("%H:%M:%S.%f")}'))
-
-    def set_recv_timeout(self, num_timeouts: int):
-        with self.ops_lock:
-            self.expected_num_recv_timouts = num_timeouts
-
-    def dec_recv_timeout(self):
-        with self.ops_lock:
-            self.expected_num_recv_timouts -= 1
-
-    def wait_for_recv_msg_timeouts(self):
-        while True:
-            with self.ops_lock:
-                if self.expected_num_recv_timouts == 0:
-                    return
-            time.sleep(0.1)
-
-    def set_is_alive(self, target: str, value: bool, exiting: bool):
-        """Set the is_alive flag and exiting flag.
-
-        Args:
-            target: the thread to set the flags for
-            value: the True or False value for is_alive flag
-            exiting: the Tru or False value for the exiting flag
-
-        """
-        with self.ops_lock:
-            self.expected_registered[target].is_alive = value
-            self.expected_registered[
-                target].exiting = exiting
-
-    def validate_config(self):
-        """Validate that the SmartThread config is correct."""
-        # verify real registry matches expected_registered
-        for name, thread in st.SmartThread._registry.items():
-            if name not in self.expected_registered:
-                self.abort_all_f1_threads()
-                raise InvalidConfigurationDetected(
-                    f'SmartThread registry has entry for name {name} '
-                    f'that is missing from the expected_registry ')
-            if (self.expected_registered[name].is_alive
-                    != thread.thread.is_alive()):
-                self.abort_all_f1_threads()
-                raise InvalidConfigurationDetected(
-                    f'SmartThread registry has entry for name {name} '
-                    f'that has is_alive of {thread.thread.is_alive()} '
-                    f'which does not match the expected_registered '
-                    f'is_alive of {self.expected_registered[name].is_alive}')
-            if (self.expected_registered[name].status
-                    != thread.status):
-                self.abort_all_f1_threads()
-                raise InvalidConfigurationDetected(
-                    f'SmartThread registry has entry for name {name} '
-                    f'that has satus of {thread.status} '
-                    f'which does not match the expected_registered '
-                    f'status of {self.expected_registered[name].status}')
-
-        # verify expected_registered matches real registry
-        for name, tracker in self.expected_registered.items():
-            if name not in st.SmartThread._registry:
-                self.abort_all_f1_threads()
-                raise InvalidConfigurationDetected(
-                    f'ConfigVerifier expected_registered has '
-                    f'entry for name {name} '
-                    f'that is missing from SmartThread._registry')
-
-        # verify pair_array matches expected_pairs
-        for pair_key in st.SmartThread._pair_array.keys():
-            if pair_key not in self.expected_pairs:
-                self.abort_all_f1_threads()
-                raise InvalidConfigurationDetected(
-                    f'ConfigVerifier found pair_key {pair_key}'
-                    f'in SmartThread._pair_array that is '
-                    f'not found in expected_pairs: ')
-            for name in st.SmartThread._pair_array[
-                pair_key].status_blocks.keys():
-                if name not in self.expected_pairs[pair_key].keys():
-                    self.abort_all_f1_threads()
-                    raise InvalidConfigurationDetected(
-                        f'ConfigVerifier found name {name} in '
-                        f'SmartThread._pair_array status_blocks for pair_key'
-                        f' {pair_key}, but is missing in expected_pairs: ')
-                if name not in self.expected_registered:
-                    self.abort_all_f1_threads()
-                    raise InvalidConfigurationDetected(
-                        f'ConfigVerifier found name {name} in '
-                        f'SmartThread._pair_array status_blocks for pair_key'
-                        f' {pair_key}, but is missing in '
-                        f'expected_registered: ')
-                if len(self.expected_pairs[pair_key]) == 1:
-                    if self.expected_pairs[pair_key][
-                            name].pending_ops_count == 0:
-                        self.abort_all_f1_threads()
-                        raise InvalidConfigurationDetected(
-                            f'ConfigVerifier found name {name} in '
-                            f'SmartThread._pair_array status_blocks for '
-                            f'pair_key {pair_key}, but it is a single name '
-                            f'that has a pending_ops_count of zero')
-
-                if (self.expected_pairs[pair_key][
-                    name].pending_ops_count == 0
-                        and not st.SmartThread._pair_array[
-                            pair_key].status_blocks[name].msg_q.empty()):
-                    self.abort_all_f1_threads()
-                    raise InvalidConfigurationDetected(
-                        f'ConfigVerifier found name {name} in '
-                        'expected_pairs for '
-                        f'pair_key  {pair_key}, and it has a '
-                        'pending_ops_count of zero, but the '
-                        'SmartThread._pair_array entry show the msg_q '
-                        'is not empty')
-                if (self.expected_pairs[pair_key][
-                    name].pending_ops_count != 0
-                        and st.SmartThread._pair_array[
-                            pair_key].status_blocks[name].msg_q.empty()):
-                    ops_count = self.expected_pairs[pair_key][
-                        name].pending_ops_count
-                    self.abort_all_f1_threads()
-                    raise InvalidConfigurationDetected(
-                        f'ConfigVerifier found that for the '
-                        f'expected_pairs entry for pair_key {pair_key}, '
-                        f'the entry for {name} has has a pending_ops_count '
-                        f'of {ops_count}, but the SmartThread._pair_array'
-                        f' entry for {name} has a an empty msg_q')
-        # verify expected_pairs matches pair_array
-        for pair_key in self.expected_pairs:
-            if pair_key not in st.SmartThread._pair_array:
-                self.abort_all_f1_threads()
-                raise InvalidConfigurationDetected(
-                    f'ConfigVerifier found pair_key {pair_key} in '
-                    'expected_pairs but not in SmartThread._pair_array')
-            for name in self.expected_pairs[pair_key].keys():
-                if name not in st.SmartThread._pair_array[
-                        pair_key].status_blocks:
-                    self.abort_all_f1_threads()
-                    raise InvalidConfigurationDetected(
-                        f'ConfigVerifier found name {name} in '
-                        f'expected_pairs for pair_key {pair_key}, but not in '
-                        'SmartThread._pair_array status_blocks')
-
-    def add_log_msg(self,
-                    new_log_msg: str,
-                    log_level: Optional[int] = logging.DEBUG) -> None:
-        """Add log message to log_ver for SmartThread logger.
-
-        Args:
-            new_log_msg: msg to add to log_ver
-            log_level: the logging severity level to use
-        """
-        self.log_ver.add_msg(
-            log_name='scottbrian_paratools.smart_thread',
-            log_level=log_level,
-            log_msg=new_log_msg)
-
-    ################################################################
     # build_create_suite
-    ################################################################
+    ####################################################################
     def build_create_suite(
             self,
             commander_name: Optional[str] = None,
@@ -3217,8 +2700,74 @@ class ConfigVerifier:
                 ConfigCmd(cmd=ConfigCmds.VerifyActive,
                           cmd_runner=list(self.active_names))])
         if validate_config:
-            ret_suite.extend([
-                ConfigCmd(cmd=ConfigCmds.ValidateConfig)])
+            self.add_cmd(ValidateConfig(cmd_runners=self.commander_name))
+
+    ################################################################
+    # build_exit_suite
+    ################################################################
+    def build_exit_suite(self,
+                         names: list[str],
+                         validate_config: Optional[bool] = True
+                         ) -> None:
+        """Return a list of ConfigCmd items for a exit.
+
+        Returns:
+            a list of ConfigCmd items
+        """
+        if not set(names).issubset(self.active_names):
+            self.abort_all_f1_threads()
+            raise InvalidInputDetected(f'Input names {names} not a subset '
+                                       f'of active names {self.active_names}')
+        active_names = list(self.active_names - set(names))
+        ret_suite = []
+        if names:
+            self.add_cmd(Exit(cmd_runners=self.commander_name,
+                              exit_names=names))
+            if validate_config:
+                self.add_cmd(VerifyAliveNot(cmd_runners=self.command_name,
+                                            exp_not_alive_names=names))
+                    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=names,
+                              exp_status=st.ThreadStatus.Alive)])
+        if active_names and validate_config:
+            self.add_cmd(VerifyAlive(cmd_runners=self.command_name,
+                                     exp_alive_names=active_names))
+                ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=active_names,
+                          exp_status=st.ThreadStatus.Alive)])
+
+        if validate_config:
+            self.add_cmd(ValidateConfig(cmd_runners=self.commander_name))
+
+        self.active_names -= set(names)
+        self.stopped_names |= set(names)
+
+        return ret_suite
+
+    ################################################################
+    # build_exit_suite_num
+    ################################################################
+    def build_exit_suite_num(self,
+                             num_to_exit: int) -> list[ConfigCmd]:
+        """Return a list of ConfigCmd items for unregister.
+
+        Args:
+            num_to_exit: number of threads to exit
+
+        Returns:
+            a list of ConfigCmd items
+        """
+        assert num_to_exit > 0
+        if (len(self.active_names) - 1) < num_to_exit:
+            self.abort_all_f1_threads()
+            raise InvalidInputDetected(f'Input num_to_exit {num_to_exit} '
+                                       f'is greater than the number of '
+                                       f'registered threads '
+                                       f'{len(self.active_names)}')
+
+        names: list[str] = list(
+            random.sample(self.active_names - {self.commander_name},
+                          num_to_exit))
+
+        return self.build_exit_suite(names=names)
 
     ################################################################
     # build_f1_create_suite_num
@@ -3257,6 +2806,78 @@ class ConfigVerifier:
 
         self.build_create_suite(f1_create_items=f1_create_items,
                                 validate_config=validate_config)
+
+    ################################################################
+    # build_join_suite
+    ################################################################
+    def build_join_suite(self,
+                         cmd_runners: StrOrList,
+                         join_target_names: list[str],
+                         validate_config: Optional[bool] = True
+                         ) -> None:
+        """Return a list of ConfigCmd items for join.
+
+        Args:
+            cmd_runners: list of names to do the join
+            join_target_names: the threads that are to be joined
+            validate_config: specifies whether to validate the config
+                after the join is done
+
+        Returns:
+            a list of ConfigCmd items
+        """
+        if isinstance(cmd_runners, str):
+            cmd_runners = [cmd_runners]
+
+        if not set(join_target_names).issubset(self.stopped_names):
+            self.abort_all_f1_threads()
+            raise InvalidInputDetected(f'Input {join_target_names} is not a '
+                                       'subset of inactive names '
+                                       f'{self.stopped_names}')
+
+        if join_target_names:
+            self.add_cmd(
+                Join(cmd_runners=cmd_runners,
+                     join_names=join_target_names,
+                     log_msg=log_msg))
+
+                ConfigCmd(cmd=ConfigCmds.VerifyRegisteredNot,
+                          cmd_runner=join_target_names),
+                ConfigCmd(cmd=ConfigCmds.VerifyPairedNot,
+                          cmd_runner=join_target_names)])
+
+        if validate_config:
+            self.add_cmd(ValidateConfig(cmd_runners=self.commander_name))
+
+        self.unregistered_names |= set(join_target_names)
+        self.stopped_names -= set(join_target_names)
+
+    ################################################################
+    # build_join_suite
+    ################################################################
+    def build_join_suite_num(self,
+                             num_to_join: int) -> list[ConfigCmd]:
+        """Return a list of ConfigCmd items for join.
+
+        Args:
+            num_to_join: number of threads to join
+
+        Returns:
+            a list of ConfigCmd items
+        """
+        assert num_to_join > 0
+        if len(self.stopped_names) < num_to_join:
+            self.abort_all_f1_threads()
+            raise InvalidInputDetected(f'Input num_to_join {num_to_join} '
+                                       f'is greater than the number of '
+                                       f'stopped threads '
+                                       f'{len(self.stopped_names)}')
+
+        names: list[str] = list(
+            random.sample(self.stopped_names, num_to_join))
+
+        return self.build_join_suite(names=[self.commander_name],
+                                     join_target_names=names)
 
     ################################################################
     # build_join_timeout_suite
@@ -3548,310 +3169,28 @@ class ConfigVerifier:
                  confirmers=active_no_target_names[0]))
 
     ################################################################
-    # build_unreg_suite
+    # build_msg_suite
     ################################################################
-    def build_unreg_suite(self,
-                          names: list[str]) -> list[ConfigCmd]:
-        """Return a list of ConfigCmd items for unregister.
-
-        Args:
-            names: thread name to be unregistered
+    def build_msg_suite(self,
+                        from_names: list[str],
+                        to_names: list[str]) -> None:
+        """Return a list of ConfigCmd items for msgs.
 
         Returns:
             a list of ConfigCmd items
         """
-        if not set(names).issubset(self.registered_names):
-            self.abort_all_f1_threads()
-            raise InvalidInputDetected(f'Input {names} is not a subset '
-                                       'of registered names '
-                                       f'{self.registered_names}')
-
-        self.add_cmd(Unregister(cmd_runners=self.commander_name,
-                                unregister_targets=names))
-
-            ConfigCmd(cmd=ConfigCmds.VerifyRegisteredNot, cmd_runner=names),
-            ConfigCmd(cmd=ConfigCmds.VerifyPairedNot, cmd_runner=names)]
-
-        ret_suite.extend([ConfigCmd(cmd=ConfigCmds.ValidateConfig)])
-
-        self.registered_names -= set(names)
-        self.unregistered_names |= set(names)
-
-        return ret_suite
-
-    ################################################################
-    # build_unreg_suite_num
-    ################################################################
-    def build_unreg_suite_num(self,
-                              num_to_unreg: int) -> list[ConfigCmd]:
-        """Return a list of ConfigCmd items for unregister.
-
-        Args:
-            num_to_unreg: number of threads to be unregistered
-
-        Returns:
-            a list of ConfigCmd items
-        """
-        assert num_to_unreg > 0
-        if len(self.registered_names) < num_to_unreg:
-            self.abort_all_f1_threads()
-            raise InvalidInputDetected(f'Input num_to_unreg {num_to_unreg} '
-                                       f'is greater than the number of '
-                                       f'registered threads '
-                                       f'{len(self.registered_names)}')
-
-        names: list[str] = list(
-            random.sample(self.registered_names, num_to_unreg))
-
-        return self.build_unreg_suite(names=names)
-
-    ################################################################
-    # build_start_suite
-    ################################################################
-    def build_start_suite(self,
-                          start_names: list[str],
-                          validate_config: Optional[bool] = True
-                          ) -> None:
-        """Return a list of ConfigCmd items for unregister.
-
-        Args:
-            start_names: thread names to be started
-            validate_config: indicates whether to validate the config
-
-        """
-        if not set(start_names).issubset(self.registered_names):
-            self.abort_all_f1_threads()
-            raise InvalidInputDetected(f'Input {start_names} is not a subset '
-                                       'of registered names '
-                                       f'{self.registered_names}')
+        msgs_to_send: dict[str, str] = {}
+        for from_name in from_names:
+            msgs_to_send[from_name] = f'send test: {self.get_ptime()}'
+        self.add_cmd(
+            SendMsg(cmd_runners=from_names,
+                    receivers=to_names,
+                    msgs_to_send=msgs_to_send))
 
         self.add_cmd(
-            StartThread(cmd_runners=self.commander_name,
-                        start_names=start_names))
-
-            ConfigCmd(cmd=ConfigCmds.VerifyActive,
-                      cmd_runner=start_names)]
-        if validate_config:
-            ret_suite.extend([ConfigCmd(cmd=ConfigCmds.ValidateConfig)])
-
-        self.registered_names -= set(start_names)
-        self.active_names |= set(start_names)
-
-    ################################################################
-    # build_start_suite_num
-    ################################################################
-    def build_start_suite_num(self,
-                              num_to_start: int) -> list[ConfigCmd]:
-        """Return a list of ConfigCmd items for unregister.
-
-        Args:
-            num_to_start: number of threads to be started
-
-        Returns:
-            a list of ConfigCmd items
-        """
-        assert num_to_start > 0
-        if len(self.registered_names) < num_to_start:
-            self.abort_all_f1_threads()
-            raise InvalidInputDetected(f'Input num_to_start {num_to_start} '
-                                       f'is greater than the number of '
-                                       f'registered threads '
-                                       f'{len(self.registered_names)}')
-
-        names: list[str] = list(
-            random.sample(self.registered_names, num_to_start))
-
-        return self.build_start_suite(names=names)
-
-    ################################################################
-    # build_config
-    ################################################################
-    def build_config(self,
-                     num_registered: Optional[int] = 0,
-                     num_active: Optional[int] = 1,
-                     num_stopped: Optional[int] = 0
-                     ) -> list[ConfigCmd]:
-        """Return a list of ConfigCmd items for config.
-
-        Args:
-            num_registered: number of threads that need to be
-                registered but not yet started (meaning state is
-                Registered)
-            num_active: number of threads that need to be active
-                (meaning state is Active)
-            num_stopped: number of threads that need to have exited but
-                not yet joined (meaning state is Stopped)
-
-        Returns:
-            a list of ConfigCmd items
-
-        Note: the number of registered, active, and stopped must not
-            exceed the number of thread_names
-
-        """
-        assert (num_registered
-                + num_active
-                + num_stopped) <= len(self.thread_names)
-        assert num_active >= 1  # always need at least 1 for commander
-
-        ret_suite = []
-
-        if not self.commander_thread_config_built:
-            self.build_create_suite(commander_name=self.commander_name)
-            self.commander_thread_config_built = True
-            # num_active -= 1  # one less active thread to create
-
-        num_adjust_registered = len(self.registered_names) - num_registered
-        num_adjust_active = len(self.active_names) - num_active
-        num_adjust_stopped = len(self.stopped_names) - num_stopped
-
-        num_create_auto_start = 0
-        num_create_no_start = 0
-        num_reg_to_unreg = 0
-        num_reg_to_start = 0
-        num_active_to_exit = 0
-        num_stopped_to_join = 0
-        num_active_to_join = 0
-
-        # determine how many to start for active and stopped
-        if num_adjust_registered > 0:  # if surplus of registered
-            num_adjust_act_stop = num_adjust_active + num_adjust_stopped
-            if num_adjust_act_stop < 0:  # if shortage
-                num_reg_to_start = min(num_adjust_registered,
-                                       -num_adjust_act_stop)
-                num_adjust_registered -= num_reg_to_start
-                num_adjust_active += num_reg_to_start
-
-            if num_adjust_registered > 0:  # if still surplus
-                num_reg_to_unreg = num_adjust_registered
-                num_adjust_registered = 0
-        elif num_adjust_registered < 0:
-            num_create_no_start = -num_adjust_registered
-            num_adjust_registered = 0
-
-        if num_adjust_active > 0:  # if surplus
-            if num_adjust_stopped < 0:  # need more
-                num_active_to_exit = min(num_adjust_active,
-                                         -num_adjust_stopped)
-                num_adjust_active -= num_active_to_exit
-                num_adjust_stopped += num_active_to_exit
-
-            if num_adjust_active > 0:  # if still surplus
-                num_active_to_exit += num_adjust_active
-                num_active_to_join = num_adjust_active
-                num_adjust_active = 0
-        elif num_adjust_active < 0:  # if need more
-            num_create_auto_start += -num_adjust_active
-            num_adjust_active = 0
-
-        if num_adjust_stopped > 0:  # if surplus
-            num_stopped_to_join += num_adjust_stopped
-            num_adjust_stopped = 0
-        elif num_adjust_stopped < 0:  # if we need more
-            num_create_auto_start += -num_adjust_stopped
-            num_active_to_exit += -num_adjust_stopped
-            num_adjust_stopped = 0
-
-        # start by reducing surpluses
-        if num_reg_to_unreg > 0:
-            ret_suite.extend(
-                self.build_unreg_suite_num(num_to_unreg=num_reg_to_unreg))
-
-        if num_stopped_to_join > 0:
-            ret_suite.extend(
-                self.build_join_suite_num(num_to_join=num_stopped_to_join))
-
-        # create threads with no_start
-        if num_create_no_start > 0:
-            ret_suite.extend(
-                self.build_f1_create_suite_num(
-                    num_to_create=num_create_no_start,
-                    auto_start=False))
-
-        # start registered so we have actives to exit if need be
-        if num_reg_to_start > 0:
-            ret_suite.extend(self.build_start_suite_num(
-                num_to_start=num_reg_to_start))
-
-        # create threads with auto_start
-        if num_create_auto_start > 0:
-            ret_suite.extend(self.build_f1_create_suite_num(
-                num_to_create=num_create_auto_start,
-                auto_start=True))
-
-        # Now that we have actives, do any needed exits
-        if num_active_to_exit > 0:
-            ret_suite.extend(self.build_exit_suite_num(
-                num_to_exit=num_active_to_exit))
-
-        # Finally, join the stopped threads as needed
-        if num_active_to_join > 0:
-            ret_suite.extend(self.build_join_suite_num(
-                num_to_join=num_active_to_join))
-
-        # verify the counts
-        ret_suite.extend([
-            ConfigCmd(cmd=ConfigCmds.VerifyCounts,
-                      num_registered=num_registered,
-                      num_active=num_active,
-                      num_stopped=num_stopped)])
-
-        return ret_suite
-
-    ################################################################
-    # log_name_groups
-    ################################################################
-    def log_name_groups(self) -> None:
-        """Issue log msgs to show the names in each set."""
-        log_msg = f'unregistered_names: {sorted(self.unregistered_names)}'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
-
-        log_msg = f'registered_names: {sorted(self.registered_names)}'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
-
-        log_msg = f'active_names: {sorted(self.active_names)}'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
-
-        log_msg = f'stopped_names: {sorted(self.stopped_names)}'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
-
-    ################################################################
-    # choose_names
-    ################################################################
-    def choose_names(
-            self,
-            name_collection: set[str],
-            num_names_needed: int,
-            update_collection: bool,
-            var_name_for_log: str) -> list[str]:
-        """Return a list of names picked from a set and issue log msg.
-
-        Args:
-            name_collection: set of names to choose from
-            num_names_needed: number of names to choose
-            update_collection: indicates whether to remove the chosen names
-                from the set of names
-            var_name_for_log: variable name to use for the log msg
-
-        Returns:
-            a list of names
-        """
-        chosen_names: list[str] = []
-        if num_names_needed > 0:
-            chosen_names = list(
-                random.sample(name_collection, num_names_needed))
-        if update_collection:
-            name_collection -= set(chosen_names)
-
-        log_msg = f'{var_name_for_log}: {chosen_names}'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
-
-        return chosen_names
+            RecvMsg(cmd_runners=to_names,
+                    senders=from_names,
+                    exp_msgs=msgs_to_send))
 
     ################################################################
     # build_recv_msg_timeout_suite
@@ -4649,6 +3988,475 @@ class ConfigVerifier:
 
         return ret_suite
 
+
+    ################################################################
+    # build_start_suite
+    ################################################################
+    def build_start_suite(self,
+                          start_names: list[str],
+                          validate_config: Optional[bool] = True
+                          ) -> None:
+        """Return a list of ConfigCmd items for unregister.
+
+        Args:
+            start_names: thread names to be started
+            validate_config: indicates whether to validate the config
+
+        """
+        if not set(start_names).issubset(self.registered_names):
+            self.abort_all_f1_threads()
+            raise InvalidInputDetected(f'Input {start_names} is not a subset '
+                                       'of registered names '
+                                       f'{self.registered_names}')
+
+        self.add_cmd(
+            StartThread(cmd_runners=self.commander_name,
+                        start_names=start_names))
+
+            ConfigCmd(cmd=ConfigCmds.VerifyActive,
+                      cmd_runner=start_names)]
+        if validate_config:
+            self.add_cmd(ValidateConfig(cmd_runners=self.commander_name))
+
+        self.registered_names -= set(start_names)
+        self.active_names |= set(start_names)
+
+    ################################################################
+    # build_start_suite_num
+    ################################################################
+    def build_start_suite_num(self,
+                              num_to_start: int) -> list[ConfigCmd]:
+        """Return a list of ConfigCmd items for unregister.
+
+        Args:
+            num_to_start: number of threads to be started
+
+        Returns:
+            a list of ConfigCmd items
+        """
+        assert num_to_start > 0
+        if len(self.registered_names) < num_to_start:
+            self.abort_all_f1_threads()
+            raise InvalidInputDetected(f'Input num_to_start {num_to_start} '
+                                       f'is greater than the number of '
+                                       f'registered threads '
+                                       f'{len(self.registered_names)}')
+
+        names: list[str] = list(
+            random.sample(self.registered_names, num_to_start))
+
+        return self.build_start_suite(names=names)
+
+
+    ################################################################
+    # build_unreg_suite
+    ################################################################
+    def build_unreg_suite(self,
+                          names: list[str]) -> list[ConfigCmd]:
+        """Return a list of ConfigCmd items for unregister.
+
+        Args:
+            names: thread name to be unregistered
+
+        Returns:
+            a list of ConfigCmd items
+        """
+        if not set(names).issubset(self.registered_names):
+            self.abort_all_f1_threads()
+            raise InvalidInputDetected(f'Input {names} is not a subset '
+                                       'of registered names '
+                                       f'{self.registered_names}')
+
+        self.add_cmd(Unregister(cmd_runners=self.commander_name,
+                                unregister_targets=names))
+
+            ConfigCmd(cmd=ConfigCmds.VerifyRegisteredNot, cmd_runner=names),
+            ConfigCmd(cmd=ConfigCmds.VerifyPairedNot, cmd_runner=names)]
+
+        self.add_cmd(ValidateConfig(cmd_runners=self.commander_name))
+
+        self.registered_names -= set(names)
+        self.unregistered_names |= set(names)
+
+        return ret_suite
+
+    ################################################################
+    # build_unreg_suite_num
+    ################################################################
+    def build_unreg_suite_num(self,
+                              num_to_unreg: int) -> list[ConfigCmd]:
+        """Return a list of ConfigCmd items for unregister.
+
+        Args:
+            num_to_unreg: number of threads to be unregistered
+
+        Returns:
+            a list of ConfigCmd items
+        """
+        assert num_to_unreg > 0
+        if len(self.registered_names) < num_to_unreg:
+            self.abort_all_f1_threads()
+            raise InvalidInputDetected(f'Input num_to_unreg {num_to_unreg} '
+                                       f'is greater than the number of '
+                                       f'registered threads '
+                                       f'{len(self.registered_names)}')
+
+        names: list[str] = list(
+            random.sample(self.registered_names, num_to_unreg))
+
+        return self.build_unreg_suite(names=names)
+
+    ################################################################
+    # choose_names
+    ################################################################
+    def choose_names(
+            self,
+            name_collection: set[str],
+            num_names_needed: int,
+            update_collection: bool,
+            var_name_for_log: str) -> list[str]:
+        """Return a list of names picked from a set and issue log msg.
+
+        Args:
+            name_collection: set of names to choose from
+            num_names_needed: number of names to choose
+            update_collection: indicates whether to remove the chosen names
+                from the set of names
+            var_name_for_log: variable name to use for the log msg
+
+        Returns:
+            a list of names
+        """
+        chosen_names: list[str] = []
+        if num_names_needed > 0:
+            chosen_names = list(
+                random.sample(name_collection, num_names_needed))
+        if update_collection:
+            name_collection -= set(chosen_names)
+
+        log_msg = f'{var_name_for_log}: {chosen_names}'
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(log_msg)
+
+        return chosen_names
+
+    ####################################################################
+    # create_commander_thread
+    ####################################################################
+    def create_commander_thread(self,
+                                name: str,
+                                auto_start: bool) -> None:
+        """Create the commander thread."""
+
+        self.commander_thread = st.SmartThread(
+            name=name, auto_start=auto_start, max_msgs=self.max_msgs)
+        self.all_threads[name] = self.commander_thread
+        self.add_thread(
+            name=name,
+            thread=self.commander_thread,
+            thread_alive=True,
+            auto_start=False,
+            expected_status=st.ThreadStatus.Alive,
+            thread_repr=repr(self.commander_thread),
+            reg_update_time=self.commander_thread
+            .time_last_registry_update[-1],
+            pair_array_update_time=self.commander_thread
+            .time_last_pair_array_update[-1]
+        )
+
+    ####################################################################
+    # create_f1_thread
+    ####################################################################
+    def create_f1_thread(self,
+                         target: Callable,
+                         name: Optional[str] = None,
+                         auto_start: bool = True
+                         ) -> st.SmartThread:
+        """Create the f1_thread.
+
+        Args:
+            target: the f1 routine that the thread will run
+            name: name of the thread
+            auto_start: indicates whether the create should start the
+                          thread
+        """
+        if name is None:
+            for thread_name, available in self.f1_thread_names.items():
+                if available:
+                    name = thread_name
+                    self.f1_thread_names[name] = False
+                    break
+        # Create a new entry for this thread in the completed cmds
+        # dictionary, but only if there is nothing there yet. We need
+        # to preserve what is already there on thread resurrection.
+        # Note also that we need to do this before we actually start the
+        # thread so that it will be in place as soon as the thread
+        # begins to run.
+        if name not in self.completed_cmds:
+            self.completed_cmds[name] = []
+        self.f1_process_cmds[name] = True
+
+        f1_thread = st.SmartThread(name=name,
+                                   target=target,
+                                   args=(name, self),
+                                   auto_start=auto_start,
+                                   max_msgs=self.max_msgs)
+        self.f1_threads[name] = f1_thread
+        self.all_threads[name] = f1_thread
+        if auto_start:
+            exp_status = st.ThreadStatus.Alive
+        else:
+            exp_status = st.ThreadStatus.Registered
+        self.add_thread(
+            name=name,
+            thread=f1_thread,
+            thread_alive=auto_start,
+            auto_start=auto_start,
+            expected_status=exp_status,
+            thread_repr=repr(f1_thread),
+            reg_update_time=f1_thread.time_last_registry_update[-1],
+            pair_array_update_time=f1_thread.time_last_pair_array_update[-1]
+        )
+
+    ####################################################################
+    # dec_ops_count
+    ####################################################################
+    def dec_ops_count(self,
+                      target: str,
+                      remote: str,
+                      pair_array_update_times: deque):
+        """Decrement the pending operations count.
+
+        Args:
+            target: the names of the thread whose count is to be
+                      decremented
+            remote: the name of the threads that is paired with
+                         the target
+            pair_array_update_times: pair array update times to be used
+                                       for the log msgs
+        """
+        with self.ops_lock:
+            pair_key = st.SmartThread._get_pair_key(target, remote)
+            self.expected_pairs[pair_key][target].pending_ops_count -= 1
+            if self.expected_pairs[pair_key][target].pending_ops_count < 0:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'dec_ops_count for for pair_key {pair_key}, '
+                    f'name {target} was decremented below zero')
+            if (self.expected_pairs[pair_key][
+                target].pending_ops_count == 0
+                    and remote not in self.expected_pairs[
+                        pair_key].keys()):
+                del self.expected_pairs[pair_key]
+                self.add_log_msg(f'{target} entered _refresh_pair_array')
+                self.add_log_msg(re.escape(
+                    f"{target} removed status_blocks entry "
+                    f"for pair_key = {pair_key}, "
+                    f"name = {target}"))
+                self.add_log_msg(re.escape(
+                    f'{target} removed _pair_array entry'
+                    f' for pair_key = {pair_key}'))
+                self.add_log_msg(re.escape(
+                    f'{target} updated _pair_array at UTC '
+                    f'{pair_array_update_times.pop().strftime("%H:%M:%S.%f")}'
+                ))
+
+    ####################################################################
+    # dec_recv_timeout
+    ###################################################################
+    def dec_recv_timeout(self):
+        with self.ops_lock:
+            self.expected_num_recv_timouts -= 1
+
+
+    ####################################################################
+    # del_thread
+    ####################################################################
+    def del_thread(self,
+                   name: str,
+                   num_remotes: int,
+                   process: str  # join or unregister
+                   ) -> None:
+        """Delete the thread from the ConfigVerifier.
+
+        Args:
+            name: name of thread doing the delete (for log msg)
+            num_remotes: number of threads to be deleted
+            process: names the process, either join or unregister
+        """
+        log_msg = (f'del_thread entered for {name}, '
+                   f'num_remotes: {num_remotes}, process: {process}')
+        self.log_ver.add_msg(log_msg=log_msg)
+        logger.debug(log_msg)
+
+        if name == self.commander_name:
+            copy_reg_deque = (
+                self.commander_thread.time_last_registry_update.copy())
+            copy_pair_deque = (
+                self.commander_thread.time_last_pair_array_update.copy())
+        else:
+            copy_reg_deque = (
+                self.f1_threads[name].time_last_registry_update.copy())
+            copy_pair_deque = (
+                self.f1_threads[name].time_last_pair_array_update.copy())
+
+        copy_reg_deque.rotate(num_remotes)
+        copy_pair_deque.rotate(num_remotes)
+
+        if process == 'join':
+            if name == self.commander_name:
+                process_names = self.commander_thread.join_names.copy()
+                log_arrays = self.commander_thread.join_log_array.copy()
+            else:
+                process_names = self.f1_threads[name].join_names.copy()
+                log_arrays = self.f1_threads[name].join_log_array.copy()
+            from_status = st.ThreadStatus.Alive
+        else:
+            if name == self.commander_name:
+                process_names = self.commander_thread.unregister_names.copy()
+                log_arrays = self.commander_thread.unreg_log_array.copy()
+            else:
+                process_names = self.f1_threads[name].unregister_names.copy()
+                log_arrays = self.f1_threads[name].unreg_log_array.copy()
+            from_status = st.ThreadStatus.Registered
+
+        process_names.rotate(num_remotes)
+        log_arrays.rotate(num_remotes)
+
+        for idx in range(num_remotes):
+            remote = process_names.popleft()
+            log_array = log_arrays.popleft()
+            self.expected_registered[remote].is_alive = False
+            self.expected_registered[remote].status = st.ThreadStatus.Stopped
+            self.add_log_msg(
+                f'{name} set status for thread '
+                f'{remote} '
+                f'from {from_status} to '
+                f'{st.ThreadStatus.Stopped}')
+
+            for thread_name, tracker in self.expected_registered.items():
+                if thread_name in log_array.status_array:
+                    is_alive = log_array.status_array[thread_name].is_alive
+                    status = log_array.status_array[thread_name].status
+                    log_msg = (
+                        f"key = {thread_name}, item = {tracker.thread_repr}, "
+                        "item.thread.is_alive() = "
+                        f"{is_alive}, "
+                        f"status: {status}")
+                    self.add_log_msg(re.escape(log_msg))
+                # log_msg = (
+                #     f"key = {thread_name}, item = {tracker.thread_repr}, "
+                #     "item.thread.is_alive() = "
+                #     f"{self.get_is_alive(thread_name)}, "
+                #     f"status: {tracker.status}")
+                # if thread_name in self.delay_reg_names:
+                #     # logger.debug('del_thread: ', log_msg)
+                #     print(f'del_thread for {remote}: ', log_msg)
+                # self.add_log_msg(re.escape(log_msg))
+                # self.add_log_msg(re.escape(
+                #     f"key = {thread_name}, item = {tracker.thread_repr}, "
+                #     "item.thread.is_alive() = "
+                #     f"{self.get_is_alive(thread_name)}, "
+                #     f"status: {tracker.status}"))
+
+            del self.expected_registered[remote]
+            self.add_log_msg(f'{remote} removed from registry')
+
+            self.add_log_msg(f'{name} entered _refresh_pair_array')
+
+            pair_keys_to_delete = []
+            for pair_key in self.expected_pairs:
+                if remote not in pair_key:
+                    continue
+                if remote == pair_key[0]:
+                    other_name = pair_key[1]
+                else:
+                    other_name = pair_key[0]
+
+                if remote not in self.expected_pairs[pair_key].keys():
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'The expected_pairs for pair_key {pair_key} '
+                        'contains an entry of '
+                        f'{self.expected_pairs[pair_key]}  which does not '
+                        f'include the remote {remote} being deleted')
+                if other_name not in self.expected_pairs[pair_key].keys():
+                    pair_keys_to_delete.append(pair_key)
+                elif self.expected_pairs[pair_key][
+                        other_name].pending_ops_count == 0:
+                    pair_keys_to_delete.append(pair_key)
+                    self.add_log_msg(re.escape(
+                        f"{name} removed status_blocks entry "
+                        f"for pair_key = {pair_key}, "
+                        f"name = {other_name}"))
+                else:
+                    del self.expected_pairs[pair_key][remote]
+                self.add_log_msg(re.escape(
+                    f"{name} removed status_blocks entry "
+                    f"for pair_key = {pair_key}, "
+                    f"name = {remote}"))
+
+            for pair_key in pair_keys_to_delete:
+                del self.expected_pairs[pair_key]
+                self.add_log_msg(re.escape(
+                    f'{name} removed _pair_array entry'
+                    f' for pair_key = {pair_key}'))
+
+            self.add_log_msg(re.escape(
+                f'{name} updated _pair_array at UTC '
+                f'{copy_pair_deque.popleft().strftime("%H:%M:%S.%f")}')
+            )
+
+            self.add_log_msg(re.escape(
+                f"{name} did cleanup of registry at UTC "
+                f'{copy_reg_deque.popleft().strftime("%H:%M:%S.%f")}, '
+                f"deleted ['{remote}']"))
+
+            self.add_log_msg(f'{name} did successful {process} of {remote}.')
+
+    ####################################################################
+    # f1_driver
+    ####################################################################
+    def f1_driver(self,
+                  f1_name: str):
+        """Drive the commands received on the command queue.
+
+        Args:
+            f1_name: name of thread doing the command
+
+        """
+        self.log_ver.add_call_seq(
+            name='f1_driver',
+            seq='test_smart_thread.py::ConfigVerifier.f1_driver')
+
+        # We will stay in this loop to process command while the
+        # f1_process_cmds dictionary entry for f1_name is True. The
+        # ConfigCmdExit cmd runProcess method will simply set the
+        # dictionary entry for f1_name to False so that we will then
+        # exit after we indicate that the cmd is complete
+        while self.f1_process_cmds[f1_name]:
+
+            cmd: ConfigCmd = self.msgs.get_msg(f1_name, timeout=None)
+
+            cmd.run_process(name=f1_name)
+
+            self.completed_cmds[f1_name].append(cmd.serial_num)
+
+    ####################################################################
+    # get_is_alive
+    ####################################################################
+    def get_is_alive(self, name: str) -> bool:
+        """Get the is_alive flag for the named thread.
+
+        Args:
+            name: thread to get the is_alive flag
+
+        """
+        if self.expected_registered[name].exiting:
+            return self.expected_registered[name].thread.thread.is_alive()
+        else:
+            return self.expected_registered[name].is_alive
+
     ################################################################
     # get_ptime
     ################################################################
@@ -4665,743 +4473,232 @@ class ConfigVerifier:
         return print_time
 
     ################################################################
-    # build_msg_suite
+    # handle_join
     ################################################################
-    def build_msg_suite(self,
-                        from_names: list[str],
-                        to_names: list[str]) -> None:
-        """Return a list of ConfigCmd items for msgs.
+    def handle_join(self,
+                    cmd_runner: str,
+                    join_names: list[str],
+                    log_msg: str) -> None:
 
-        Returns:
-            a list of ConfigCmd items
-        """
-        msgs_to_send: dict[str, str] = {}
-        for from_name in from_names:
-            msgs_to_send[from_name] = f'send test: {self.get_ptime()}'
-        self.add_cmd(
-            SendMsg(cmd_runners=from_names,
-                    receivers=to_names,
-                    msgs_to_send=msgs_to_send))
-
-        self.add_cmd(
-            RecvMsg(cmd_runners=to_names,
-                    senders=from_names,
-                    exp_msgs=msgs_to_send))
-
-    ################################################################
-    # build_exit_suite
-    ################################################################
-    def build_exit_suite(self,
-                         names: list[str],
-                         validate_config: Optional[bool] = True
-                         ) -> None:
-        """Return a list of ConfigCmd items for a exit.
-
-        Returns:
-            a list of ConfigCmd items
-        """
-        if not set(names).issubset(self.active_names):
-            self.abort_all_f1_threads()
-            raise InvalidInputDetected(f'Input names {names} not a subset '
-                                       f'of active names {self.active_names}')
-        active_names = list(self.active_names - set(names))
-        ret_suite = []
-        if names:
-            self.add_cmd(Exit(cmd_runners=self.commander_name,
-                              exit_names=names))
-            if validate_config:
-                ret_suite.extend([
-                    ConfigCmd(cmd=ConfigCmds.VerifyAliveNot, cmd_runner=names),
-                    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=names,
-                              exp_status=st.ThreadStatus.Alive)])
-        if active_names and validate_config:
-            ret_suite.extend([
-                ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=active_names),
-                ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=active_names,
-                          exp_status=st.ThreadStatus.Alive)])
-
-        if validate_config:
-            ret_suite.extend([ConfigCmd(cmd=ConfigCmds.ValidateConfig)])
-
-        self.active_names -= set(names)
-        self.stopped_names |= set(names)
-
-        return ret_suite
-
-    ################################################################
-    # build_exit_suite_num
-    ################################################################
-    def build_exit_suite_num(self,
-                             num_to_exit: int) -> list[ConfigCmd]:
-        """Return a list of ConfigCmd items for unregister.
-
-        Args:
-            num_to_exit: number of threads to exit
-
-        Returns:
-            a list of ConfigCmd items
-        """
-        assert num_to_exit > 0
-        if (len(self.active_names) - 1) < num_to_exit:
-            self.abort_all_f1_threads()
-            raise InvalidInputDetected(f'Input num_to_exit {num_to_exit} '
-                                       f'is greater than the number of '
-                                       f'registered threads '
-                                       f'{len(self.active_names)}')
-
-        names: list[str] = list(
-            random.sample(self.active_names - {self.commander_name},
-                          num_to_exit))
-
-        return self.build_exit_suite(names=names)
-
-    ################################################################
-    # build_join_suite
-    ################################################################
-    def build_join_suite(self,
-                         cmd_runners: StrOrList,
-                         join_target_names: list[str],
-                         validate_config: Optional[bool] = True
-                         ) -> None:
-        """Return a list of ConfigCmd items for join.
-
-        Args:
-            cmd_runners: list of names to do the join
-            join_target_names: the threads that are to be joined
-            validate_config: specifies whether to validate the config
-                after the join is done
-
-        Returns:
-            a list of ConfigCmd items
-        """
-        if isinstance(cmd_runners, str):
-            cmd_runners = [cmd_runners]
-
-        if not set(join_target_names).issubset(self.stopped_names):
-            self.abort_all_f1_threads()
-            raise InvalidInputDetected(f'Input {join_target_names} is not a '
-                                       'subset of inactive names '
-                                       f'{self.stopped_names}')
-
-        if join_target_names:
-            self.add_cmd(
-                Join(cmd_runners=cmd_runners,
-                     join_names=join_target_names,
-                     log_msg=log_msg))
-
-                ConfigCmd(cmd=ConfigCmds.VerifyRegisteredNot,
-                          cmd_runner=join_target_names),
-                ConfigCmd(cmd=ConfigCmds.VerifyPairedNot,
-                          cmd_runner=join_target_names)])
-
-        if validate_config:
-            ret_suite.extend([ConfigCmd(cmd=ConfigCmds.ValidateConfig)])
-
-        self.unregistered_names |= set(join_target_names)
-        self.stopped_names -= set(join_target_names)
-
-    ################################################################
-    # build_join_suite
-    ################################################################
-    def build_join_suite_num(self,
-                             num_to_join: int) -> list[ConfigCmd]:
-        """Return a list of ConfigCmd items for join.
-
-        Args:
-            num_to_join: number of threads to join
-
-        Returns:
-            a list of ConfigCmd items
-        """
-        assert num_to_join > 0
-        if len(self.stopped_names) < num_to_join:
-            self.abort_all_f1_threads()
-            raise InvalidInputDetected(f'Input num_to_join {num_to_join} '
-                                       f'is greater than the number of '
-                                       f'stopped threads '
-                                       f'{len(self.stopped_names)}')
-
-        names: list[str] = list(
-            random.sample(self.stopped_names, num_to_join))
-
-        return self.build_join_suite(names=[self.commander_name],
-                                     join_target_names=names)
-
-    ################################################################
-    # handle_send_msg
-    ################################################################
-    def handle_send_msg(self,
-                        cmd_runner: str,
-                        receivers: list[str],
-                        msg_to_send: Any,
-                        log_msg: str) -> None:
-
-        """Handle the send_cmd execution and log msgs.
+        """Handle the join execution and log msgs.
 
         Args:
             cmd_runner: name of thread doing the cmd
-            receivers: names of threads to receive the message
-            msg_to_send: message to send to the receivers
-            log_msg: log message for send_msg to issue
+            join_names: target threads that we will join
+            log_msg: log message to issue on the join (name be None)
 
         """
         self.log_ver.add_call_seq(
-            name='handle_send_msg',
-            seq='test_smart_thread.py::ConfigVerifier.handle_send_msg')
-        ops_count_names = receivers.copy()
-        self.inc_ops_count(ops_count_names, cmd_runner)
+            name='handle_join',
+            seq='test_smart_thread.py::ConfigVerifier.handle_join')
 
-        self.all_threads[cmd_runner].send_msg(
-            targets=set(receivers),
-            msg=msg_to_send,
+        self.all_threads[cmd_runner].join(
+            targets=set(join_names),
             log_msg=log_msg)
 
         if log_msg:
-            log_msg_2 = f'{self.log_ver.get_call_seq("handle_send_msg")} '
+            log_msg_2 = (
+                f'{self.log_ver.get_call_seq("handle_join")} ')
             log_msg_3 = re.escape(f'{log_msg}')
             for enter_exit in ('entered', 'exiting'):
                 log_msg_1 = re.escape(
-                    f'send_msg() {enter_exit}: {cmd_runner} -> '
-                    f'{set(receivers)} ')
+                    f'join() {enter_exit}: {cmd_runner} to join '
+                    f'{sorted(set(join_names))}. ')
+
                 self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
-        for name in ops_count_names:
-            log_msg = f'{cmd_runner} sent message to {name}'
-            self.log_ver.add_msg(
-                log_name='scottbrian_paratools.smart_thread',
-                log_level=logging.INFO,
-                log_msg=log_msg)
+        num_joins = len(join_names)
+
+        if num_joins > 0:
+            self.del_thread(
+                name=cmd_runner,
+                num_remotes=num_joins,
+                process='join'
+            )
 
     ################################################################
-    # handle_send_msg_tof
+    # handle_join_tof
     ################################################################
-    def handle_send_msg_tof(
-            self,
-            cmd_runner: str,
-            receivers: list[str],
-            msg_to_send: Any,
-            timeout: IntOrFloat,
-            log_msg: str) -> None:
+    def handle_join_tof(self,
+                        cmd_runner: str,
+                        join_names: list[str],
+                        timeout: IntOrFloat,
+                        log_msg: str) -> None:
 
-        """Handle the send_cmd execution and log msgs.
+        """Handle the join execution and log msgs.
 
         Args:
             cmd_runner: name of thread doing the cmd
-            receivers: names of threads to receive the message
-            msg_to_send: message to send to the receivers
-            timeout: number of seconds to specify on send_msg timeout
-            log_msg: log message for send_msg to issue
+            join_names: target threads that we will join
+            timeout: timeout value to specify on join
+            log_msg: log message to issue on the join (name be None)
 
         """
         self.log_ver.add_call_seq(
-            name='handle_send_msg_tof',
-            seq='test_smart_thread.py::ConfigVerifier.handle_send_msg_tof')
-        ops_count_names = receivers.copy()
-        self.inc_ops_count(ops_count_names, cmd_runner)
+            name='handle_join_tof',
+            seq='test_smart_thread.py::ConfigVerifier.handle_join_tof')
 
-        enter_exit_list = ('entered', 'exiting')
-        self.all_threads[cmd_runner].send_msg(
-            targets=set(receivers),
-            msg=msg_to_send,
-            log_msg=log_msg,
-            timeout=timeout)
+        self.all_threads[cmd_runner].join(
+            targets=set(join_names),
+            timeout=timeout,
+            log_msg=log_msg)
 
         if log_msg:
-            log_msg_2 = f'{self.log_ver.get_call_seq("handle_send_msg_tof")} '
+            log_msg_2 = (
+                f'{self.log_ver.get_call_seq("handle_join_tof")} ')
             log_msg_3 = re.escape(f'{log_msg}')
             for enter_exit in ('entered', 'exiting'):
                 log_msg_1 = re.escape(
-                    f'send_msg() {enter_exit}: {cmd_runner} -> '
-                    f'{set(receivers)} ')
+                    f'join() {enter_exit}: {cmd_runner} to join '
+                    f'{sorted(set(join_names))}. ')
+
                 self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
-        for name in ops_count_names:
-            log_msg = f'{cmd_runner} sent message to {name}'
-            self.log_ver.add_msg(
-                log_name='scottbrian_paratools.smart_thread',
-                log_level=logging.INFO,
-                log_msg=log_msg)
+        num_joins = len(join_names)
+
+        if num_joins > 0:
+            self.del_thread(
+                name=cmd_runner,
+                num_remotes=num_joins,
+                process='join'
+            )
 
     ################################################################
-    # handle_send_msg_tot
+    # handle_join_tot
     ################################################################
-    def handle_send_msg_tot(
-            self,
-            cmd_runner: str,
-            receivers: list[str],
-            msg_to_send: Any,
-            timeout: IntOrFloat,
-            unreg_timeout_names: list[str],
-            fullq_timeout_names: list[str],
-            log_msg: str) -> None:
+    def handle_join_tot(self,
+                        cmd_runner: str,
+                        join_names: list[str],
+                        timeout: IntOrFloat,
+                        timeout_names: list[str],
+                        log_msg: str) -> None:
 
-        """Handle the send_cmd execution and log msgs.
+        """Handle the join execution and log msgs.
 
         Args:
             cmd_runner: name of thread doing the cmd
-            receivers: names of threads to receive the message
-            msg_to_send: message to send to the receivers
-            timeout: number of seconds to specify on send_msg timeout
-            unreg_timeout_names: names that are unregistered
-            fullq_timeout_names: names with a full msgq
-            log_msg: log message for send_msg to issue
-            config_cmd: contains the targets and other specifications
+            join_names: target threads that we will join
+            timeout: timeout value to specify on join
+            timeout_names: targets that are expected to timeout
+            log_msg: log message to issue on the join (name be None)
 
         """
         self.log_ver.add_call_seq(
-            name='handle_send_msg_tot',
-            seq='test_smart_thread.py::ConfigVerifier.handle_send_msg_tot')
-        ops_count_names = receivers.copy()
-        if unreg_timeout_names:
-            ops_count_names = list(
-                set(ops_count_names)
-                - set(unreg_timeout_names))
-        if fullq_timeout_names:
-            ops_count_names = list(
-                set(ops_count_names)
-                - set(fullq_timeout_names))
+            name='handle_join_tot',
+            seq='test_smart_thread.py::ConfigVerifier.handle_join_tot')
 
-        self.inc_ops_count(ops_count_names, cmd_runner)
+        with pytest.raises(st.SmartThreadJoinTimedOut):
+            self.all_threads[cmd_runner].join(
+                targets=set(join_names),
+                timeout=timeout,
+                log_msg=log_msg)
 
-        enter_exit_list = ('entered',)
-        with pytest.raises(st.SmartThreadSendMsgTimedOut):
-            self.all_threads[cmd_runner].send_msg(
-                targets=set(receivers),
-                msg=msg_to_send,
-                log_msg=log_msg,
-                timeout=timeout)
-
-        unreg_timeout_msg = ''
-        if unreg_timeout_names:
-            unreg_timeout_msg = (
-                'Remotes unregistered: '
-                f'{sorted(set(unreg_timeout_names))}. ')
-
-        fullq_timeout_msg = ''
-        if fullq_timeout_names:
-            fullq_timeout_msg = (
-                'Remotes with full send queue: '
-                f'{sorted(set(fullq_timeout_names))}.')
-
-        self.add_log_msg(re.escape(
-            f'{cmd_runner} timeout of a send_msg(). '
-            f'Targets: {sorted(set(receivers))}. '
-            f'{unreg_timeout_msg}'
-            f'{fullq_timeout_msg}'))
-
-        self.add_log_msg(
-            'Raise SmartThreadSendMsgTimedOut',
-            log_level=logging.ERROR)
+        log_msg = (
+            f'{cmd_runner} raising SmartThreadJoinTimedOut '
+            f'waiting for {sorted(set(timeout_names))}')
+        self.log_ver.add_msg(
+            log_name='scottbrian_paratools.smart_thread',
+            log_level=logging.ERROR,
+            log_msg=re.escape(log_msg))
 
         if log_msg:
-            log_msg_2 = f'{self.log_ver.get_call_seq("handle_send_msg_tot")} '
+            log_msg_2 = (
+                f'{self.log_ver.get_call_seq("handle_join_tot")} ')
             log_msg_3 = re.escape(f'{log_msg}')
             log_msg_1 = re.escape(
-                f'send_msg() entered: {cmd_runner} -> '
-                f'{set(receivers)} ')
+                f'join() entered: {cmd_runner} to join '
+                f'{sorted(set(join_names))}. ')
+
             self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
-        for name in ops_count_names:
-            log_msg = f'{cmd_runner} sent message to {name}'
-            self.log_ver.add_msg(
-                log_name='scottbrian_paratools.smart_thread',
-                log_level=logging.INFO,
-                log_msg=log_msg)
+        num_joins = (len(join_names)
+                     - len(timeout_names))
 
-    ################################################################
-    # verify_is_registered
-    ################################################################
-    def verify_is_registered(self, names: list[str]) -> bool:
-        """Verify that the given names are registered only.
-
-        Args:
-            names: names of the threads to check for being registered
-
-        """
-        if not self.verify_registered(names=names):
-            return False
-        if not self.verify_is_not_alive(names=names):
-            return False
-        self.verify_status(names=names,
-                           expected_status=st.ThreadStatus.Registered)
-        if len(names) > 1 and not self.verify_paired(names=names):
-            return False
-
-        return True
-
-    def verify_is_active(self, names: list[str]) -> bool:
-        """Verify that the given names are active.
-
-        Args:
-            names: names of the threads to check for being active
-
-        """
-        if not self.verify_registered(names=names):
-            return False
-        self.verify_is_alive(names=names)
-
-        self.verify_status(names=names,
-                           expected_status=st.ThreadStatus.Alive)
-        if len(names) > 1 and not self.verify_paired(names=names):
-            return False
-
-        return True
-
-    def verify_is_alive(self, names: list[str]) -> None:
-        """Verify that the given names are alive.
-
-        Args:
-            names: names of the threads to check for being alive
-
-        """
-        for name in names:
-            if not st.SmartThread._registry[name].thread.is_alive():
-                self.abort_all_f1_threads()
-                raise InvalidConfigurationDetected(
-                    f'verify_is_alive found {name} has real is_alive = '
-                    f'{st.SmartThread._registry[name].thread.is_alive()} '
-                    'which is not equal to the expected is_alive of True ')
-            if not self.expected_registered[name].is_alive:
-                self.abort_all_f1_threads()
-                raise InvalidConfigurationDetected(
-                    f'verify_is_alive found {name} has mock is_alive = '
-                    f'{self.expected_registered[name].is_alive} which is '
-                    'not equal to the expected is_alive of True ')
-    def verify_is_not_alive(self, names: list[str]) -> bool:
-        """Verify that the given names are not alive.
-
-        Args:
-            names: names of the threads to check for being not alive
-
-        """
-        for name in names:
-            if st.SmartThread._registry[name].thread.is_alive():
-                return False
-            if self.expected_registered[name].is_alive:
-                return False
-        return True
-
-    def verify_status(self, names: list[str],
-                      expected_status: st.ThreadStatus) -> None:
-        """Verify that the given names have the given status.
-
-        Args:
-            names: names of the threads to check for the given status
-            expected_status: the status each thread is expected to have
-
-        """
-        for name in names:
-            if not st.SmartThread._registry[name].status == expected_status:
-                self.abort_all_f1_threads()
-                raise InvalidConfigurationDetected(
-                    f'verify_status found {name} has real status '
-                    f'{st.SmartThread._registry[name].status} '
-                    'not equal to the expected status of '
-                    f'{expected_status}')
-            if not self.expected_registered[name].status == expected_status:
-                self.abort_all_f1_threads()
-                raise InvalidConfigurationDetected(
-                    f'verify_status found {name} has mock status '
-                    f'{self.expected_registered[name].status} '
-                    'not equal to the expected status of '
-                    f'{expected_status}')
-
-    def verify_registered(self, names: list[str]) -> bool:
-        """Verify that the given names are registered.
-
-        Args:
-            names: names of the threads to check for being registered
-
-        """
-        for name in names:
-            if name not in st.SmartThread._registry:
-                return False
-            if name not in self.expected_registered:
-                return False
-        return True
-
-    def verify_not_registered(self, names: list[str]) -> None:
-        """Verify that the given names are not registered.
-
-        Args:
-            names: names of the threads to check for being unregistered
-
-        """
-        for name in names:
-            if name in st.SmartThread._registry:
-                self.abort_all_f1_threads()
-                raise InvalidConfigurationDetected(
-                    f'verify_not_registered found {name} is registered '
-                    f'in the real SmartThread._registry')
-            if name in self.expected_registered:
-                self.abort_all_f1_threads()
-                raise InvalidConfigurationDetected(
-                    f'verify_not_registered found {name} is registered '
-                    f'in the mock expected_registered')
-
-    def verify_paired(self, names: list[str]) -> bool:
-        """Verify that the given names are paired.
-
-        Args:
-            names: names of the threads to check for being paired
-
-        """
-        pair_keys = combinations(sorted(names), 2)
-        for pair_key in pair_keys:
-            if pair_key not in st.SmartThread._pair_array:
-                return False
-            if pair_key[0] not in st.SmartThread._pair_array[
-                pair_key].status_blocks:
-                return False
-            if pair_key[1] not in st.SmartThread._pair_array[
-                pair_key].status_blocks:
-                return False
-
-            if pair_key not in self.expected_pairs:
-                return False
-            if pair_key[0] not in self.expected_pairs[pair_key]:
-                return False
-            if pair_key[1] not in self.expected_pairs[pair_key]:
-                return False
-        return True
-
-    def verify_half_paired(self, names: list[str],
-                           half_paired_names: list[str]) -> bool:
-        """Verify that the given names are half paired.
-
-        Args:
-            names: names of the threads to check for being half paired
-            half_paired_names: the names that should be in pair array
-        """
-        pair_keys = combinations(sorted(names), 2)
-        for pair_key in pair_keys:
-            if pair_key not in st.SmartThread._pair_array:
-                return False
-            if len(st.SmartThread._pair_array[
-                    pair_key].status_blocks) != 1:
-                return False
-            for name in half_paired_names:
-                if (name in pair_key
-                        and name not in st.SmartThread._pair_array[
-                            pair_key].status_blocks):
-                    return False
-
-            if pair_key not in self.expected_pairs:
-                return False
-            if len(self.expected_pairs[pair_key]) != 1:
-                return False
-            for name in half_paired_names:
-                if (name in pair_key
-                        and name not in self.expected_pairs[pair_key]):
-                    return False
-        return True
-
-    def verify_not_paired(self, names: list[str]) -> bool:
-        """Verify that the given names are not paired.
-
-        Args:
-            names: names of the threads to check for being not paired
-
-        """
-        pair_keys = combinations(sorted(names), 2)
-        for pair_key in pair_keys:
-            if pair_key in st.SmartThread._pair_array:
-                return False
-
-            if pair_key in self.expected_pairs:
-                return False
-
-        return True
-
-    def verify_counts(self,
-                      num_registered: Optional[int] = None,
-                      num_active: Optional[int] = None,
-                      num_stopped: Optional[int] = None) -> bool:
-        """Verify that the given counts are correct.
-
-        Args:
-            num_registered: number of expected registered only threads
-            num_active: number of expected active threads
-            num_stopped: number of expected stopped threads
-
-        """
-        registered_found_real = 0
-        active_found_real = 0
-        stopped_found_real = 0
-        for name, thread in st.SmartThread._registry.items():
-            if thread.thread.is_alive():
-                if thread.status == st.ThreadStatus.Alive:
-                    active_found_real += 1
-            else:
-                if thread.status == st.ThreadStatus.Registered:
-                    registered_found_real += 1
-                elif (thread.status == st.ThreadStatus.Alive
-                        or thread.status == st.ThreadStatus.Stopped):
-                    stopped_found_real += 1
-
-        registered_found_mock = 0
-        active_found_mock = 0
-        stopped_found_mock = 0
-        for name, thread_tracker in self.expected_registered.items():
-            if thread_tracker.is_alive:
-                if thread_tracker.status == st.ThreadStatus.Alive:
-                    active_found_mock += 1
-            else:
-                if thread_tracker.status == st.ThreadStatus.Registered:
-                    registered_found_mock += 1
-                elif (thread_tracker.status == st.ThreadStatus.Alive
-                        or thread_tracker.status == st.ThreadStatus.Stopped):
-                    stopped_found_mock += 1
-
-        if num_registered is not None:
-            if not (num_registered
-                    == registered_found_real
-                    == registered_found_mock):
-                return False
-
-        if num_active is not None:
-            if not (num_active
-                    == active_found_real
-                    == active_found_mock):
-                return False
-
-        if num_stopped is not None:
-            if not (num_stopped
-                    == stopped_found_real
-                    == stopped_found_mock):
-                return False
-
-        return True
-
-    def wait_for_msg_timeouts(self,
-                              sender_names: list[str],
-                              unreg_names: list[str],
-                              fullq_names: list[str]) -> None:
-        """Verify that the senders have detected the timeout threads.
-
-        Args:
-            sender_names: names of the threads to check for timeout
-                threads
-            unreg_names: threads that cause timeout by being
-                unregistered
-            fullq_names: threads that cause timeout because their msg_q
-                is full
-
-        """
-        unregs = []
-        if unreg_names:
-            unregs = sorted(unreg_names)
-        fullqs = []
-        if fullq_names:
-            fullqs = sorted(fullq_names)
-
-        work_senders = sender_names.copy()
-        start_time = time.time()
-        while work_senders:
-            for sender in work_senders:
-                test_unregs = []
-                test_fullqs = []
-                if sender == self.commander_name:
-                    if self.commander_thread.remotes_unregistered:
-                        test_unregs = sorted(
-                            self.commander_thread.remotes_unregistered)
-                    if self.commander_thread.remotes_full_send_q:
-                        test_fullqs = sorted(
-                            self.commander_thread.remotes_full_send_q)
-                else:
-                    if self.f1_threads[sender].remotes_unregistered:
-                        test_unregs = sorted(
-                            self.f1_threads[sender].remotes_unregistered)
-                    if self.f1_threads[sender].remotes_full_send_q:
-                        test_fullqs = sorted(
-                            self.f1_threads[sender].remotes_full_send_q)
-
-                if unregs == test_unregs and fullqs == test_fullqs:
-                    work_senders.remove(sender)
-
-            time.sleep(0.1)
-            assert time.time() < start_time + 30  # allow 30 seconds
-
-        return
+        if num_joins > 0:
+            self.del_thread(
+                name=cmd_runner,
+                num_remotes=num_joins,
+                process='join'
+            )
 
     ################################################################
     # handle_recv_cmd
     ################################################################
-    def handle_recv_cmd(self,
-                        cmd_runner: str,
-                        config_cmd: ConfigCmd) -> None:
-
-        """Handle the send_recv_cmd execution and log msgs.
-
-        Args:
-            cmd_runner: name of thread doing the cmd
-            config_cmd: contains the targets and other specifications
-
-        """
-        self.log_ver.add_call_seq(
-            name='handle_recv_cmd',
-            seq='test_smart_thread.py::ConfigVerifier.handle_recv_cmd')
-        timeout_true_value = config_cmd.timeout
-        for from_name in config_cmd.from_names:
-            enter_exit_list = ('entered', 'exiting')
-            if config_cmd.cmd == ConfigCmds.RecvMsg:
-                recvd_msg = self.all_threads[cmd_runner].recv_msg(
-                    remote=from_name,
-                    log_msg=config_cmd.log_msg)
-            elif (config_cmd.cmd == ConfigCmds.RecvMsgTimeoutFalse
-                  or (config_cmd.cmd == ConfigCmds.RecvMsgTimeoutTrue
-                      and from_name not in config_cmd.recv_msg_timeout_names)):
-                recvd_msg = self.all_threads[cmd_runner].recv_msg(
-                    remote=from_name,
-                    timeout=config_cmd.timeout,
-                    log_msg=config_cmd.log_msg)
-            else:  # ConfigCmds.RecvMsgTimeoutTrue
-                enter_exit_list = ('entered',)
-                with pytest.raises(st.SmartThreadRecvMsgTimedOut):
-                    recvd_msg = self.all_threads[cmd_runner].recv_msg(
-                        remote=from_name,
-                        timeout=timeout_true_value,
-                        log_msg=config_cmd.log_msg)
-
-                # remaining timeouts are shorter so we don't have
-                # to pause for the cumulative timeouts before
-                # sending messages
-                timeout_true_value = 0.2
-                log_msg = (
-                    f'{cmd_runner} raising SmartThreadRecvMsgTimedOut '
-                    f'waiting for {from_name}')
-                self.log_ver.add_msg(
-                    log_name='scottbrian_paratools.smart_thread',
-                    log_level=logging.ERROR,
-                    log_msg=log_msg)
-                self.dec_recv_timeout()
-
-            if config_cmd.log_msg:
-                log_msg_2 = (
-                    f'{self.log_ver.get_call_seq("handle_recv_cmd")} ')
-                log_msg_3 = re.escape(f'{config_cmd.log_msg}')
-                for enter_exit in enter_exit_list:
-                    log_msg_1 = re.escape(
-                        f'recv_msg() {enter_exit}: '
-                        f'{cmd_runner} <- {from_name} ')
-
-                    self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
-
-            if 'exiting' in enter_exit_list:
-                assert recvd_msg == msg_to_send[from_name]
-
-                copy_pair_deque = (
-                    self.all_threads[cmd_runner]
-                    .time_last_pair_array_update.copy())
-                self.dec_ops_count(cmd_runner,
-                                   from_name,
-                                   copy_pair_deque)
-
-                log_msg = f"{cmd_runner} received msg from {from_name}"
-                self.log_ver.add_msg(
-                    log_name='scottbrian_paratools.smart_thread',
-                    log_level=logging.INFO,
-                    log_msg=log_msg)
+    # def handle_recv_cmd(self,
+    #                     cmd_runner: str,
+    #                     config_cmd: ConfigCmd) -> None:
+    #
+    #     """Handle the send_recv_cmd execution and log msgs.
+    #
+    #     Args:
+    #         cmd_runner: name of thread doing the cmd
+    #         config_cmd: contains the targets and other specifications
+    #
+    #     """
+    #     self.log_ver.add_call_seq(
+    #         name='handle_recv_cmd',
+    #         seq='test_smart_thread.py::ConfigVerifier.handle_recv_cmd')
+    #     timeout_true_value = config_cmd.timeout
+    #     for from_name in config_cmd.from_names:
+    #         enter_exit_list = ('entered', 'exiting')
+    #         if config_cmd.cmd == ConfigCmds.RecvMsg:
+    #             recvd_msg = self.all_threads[cmd_runner].recv_msg(
+    #                 remote=from_name,
+    #                 log_msg=config_cmd.log_msg)
+    #         elif (config_cmd.cmd == ConfigCmds.RecvMsgTimeoutFalse
+    #               or (config_cmd.cmd == ConfigCmds.RecvMsgTimeoutTrue
+    #                   and from_name not in config_cmd.recv_msg_timeout_names)):
+    #             recvd_msg = self.all_threads[cmd_runner].recv_msg(
+    #                 remote=from_name,
+    #                 timeout=config_cmd.timeout,
+    #                 log_msg=config_cmd.log_msg)
+    #         else:  # ConfigCmds.RecvMsgTimeoutTrue
+    #             enter_exit_list = ('entered',)
+    #             with pytest.raises(st.SmartThreadRecvMsgTimedOut):
+    #                 recvd_msg = self.all_threads[cmd_runner].recv_msg(
+    #                     remote=from_name,
+    #                     timeout=timeout_true_value,
+    #                     log_msg=config_cmd.log_msg)
+    #
+    #             # remaining timeouts are shorter so we don't have
+    #             # to pause for the cumulative timeouts before
+    #             # sending messages
+    #             timeout_true_value = 0.2
+    #             log_msg = (
+    #                 f'{cmd_runner} raising SmartThreadRecvMsgTimedOut '
+    #                 f'waiting for {from_name}')
+    #             self.log_ver.add_msg(
+    #                 log_name='scottbrian_paratools.smart_thread',
+    #                 log_level=logging.ERROR,
+    #                 log_msg=log_msg)
+    #             self.dec_recv_timeout()
+    #
+    #         if config_cmd.log_msg:
+    #             log_msg_2 = (
+    #                 f'{self.log_ver.get_call_seq("handle_recv_cmd")} ')
+    #             log_msg_3 = re.escape(f'{config_cmd.log_msg}')
+    #             for enter_exit in enter_exit_list:
+    #                 log_msg_1 = re.escape(
+    #                     f'recv_msg() {enter_exit}: '
+    #                     f'{cmd_runner} <- {from_name} ')
+    #
+    #                 self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
+    #
+    #         if 'exiting' in enter_exit_list:
+    #             assert recvd_msg == msg_to_send[from_name]
+    #
+    #             copy_pair_deque = (
+    #                 self.all_threads[cmd_runner]
+    #                 .time_last_pair_array_update.copy())
+    #             self.dec_ops_count(cmd_runner,
+    #                                from_name,
+    #                                copy_pair_deque)
+    #
+    #             log_msg = f"{cmd_runner} received msg from {from_name}"
+    #             self.log_ver.add_msg(
+    #                 log_name='scottbrian_paratools.smart_thread',
+    #                 log_level=logging.INFO,
+    #                 log_msg=log_msg)
 
     ################################################################
     # handle_recv_cmd
@@ -5596,153 +4893,1025 @@ class ConfigVerifier:
                     log_msg=recv_log_msg)
 
     ################################################################
-    # handle_join
+    # handle_send_msg
     ################################################################
-    def handle_join(self,
-                    cmd_runner: str,
-                    join_names: list[str],
-                    log_msg: str) -> None:
+    def handle_send_msg(self,
+                        cmd_runner: str,
+                        receivers: list[str],
+                        msg_to_send: Any,
+                        log_msg: str) -> None:
 
-        """Handle the join execution and log msgs.
+        """Handle the send_cmd execution and log msgs.
 
         Args:
             cmd_runner: name of thread doing the cmd
-            join_names: target threads that we will join
-            log_msg: log message to issue on the join (name be None)
+            receivers: names of threads to receive the message
+            msg_to_send: message to send to the receivers
+            log_msg: log message for send_msg to issue
 
         """
         self.log_ver.add_call_seq(
-            name='handle_join',
-            seq='test_smart_thread.py::ConfigVerifier.handle_join')
+            name='handle_send_msg',
+            seq='test_smart_thread.py::ConfigVerifier.handle_send_msg')
+        ops_count_names = receivers.copy()
+        self.inc_ops_count(ops_count_names, cmd_runner)
 
-        self.all_threads[cmd_runner].join(
-            targets=set(join_names),
+        self.all_threads[cmd_runner].send_msg(
+            targets=set(receivers),
+            msg=msg_to_send,
             log_msg=log_msg)
 
         if log_msg:
-            log_msg_2 = (
-                f'{self.log_ver.get_call_seq("handle_join")} ')
+            log_msg_2 = f'{self.log_ver.get_call_seq("handle_send_msg")} '
             log_msg_3 = re.escape(f'{log_msg}')
             for enter_exit in ('entered', 'exiting'):
                 log_msg_1 = re.escape(
-                    f'join() {enter_exit}: {cmd_runner} to join '
-                    f'{sorted(set(join_names))}. ')
-
+                    f'send_msg() {enter_exit}: {cmd_runner} -> '
+                    f'{set(receivers)} ')
                 self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
-        num_joins = len(join_names)
-
-        if num_joins > 0:
-            self.del_thread(
-                name=cmd_runner,
-                num_remotes=num_joins,
-                process='join'
-            )
-
-    ################################################################
-    # handle_join_tof
-    ################################################################
-    def handle_join_tof(self,
-                        cmd_runner: str,
-                        join_names: list[str],
-                        timeout: IntOrFloat,
-                        log_msg: str) -> None:
-
-        """Handle the join execution and log msgs.
-
-        Args:
-            cmd_runner: name of thread doing the cmd
-            join_names: target threads that we will join
-            timeout: timeout value to specify on join
-            log_msg: log message to issue on the join (name be None)
-
-        """
-        self.log_ver.add_call_seq(
-            name='handle_join_tof',
-            seq='test_smart_thread.py::ConfigVerifier.handle_join_tof')
-
-        self.all_threads[cmd_runner].join(
-            targets=set(join_names),
-            timeout=timeout,
-            log_msg=log_msg)
-
-        if log_msg:
-            log_msg_2 = (
-                f'{self.log_ver.get_call_seq("handle_join_tof")} ')
-            log_msg_3 = re.escape(f'{log_msg}')
-            for enter_exit in ('entered', 'exiting'):
-                log_msg_1 = re.escape(
-                    f'join() {enter_exit}: {cmd_runner} to join '
-                    f'{sorted(set(join_names))}. ')
-
-                self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
-
-        num_joins = len(join_names)
-
-        if num_joins > 0:
-            self.del_thread(
-                name=cmd_runner,
-                num_remotes=num_joins,
-                process='join'
-            )
-
-    ################################################################
-    # handle_join_tot
-    ################################################################
-    def handle_join_tot(self,
-                        cmd_runner: str,
-                        join_names: list[str],
-                        timeout: IntOrFloat,
-                        timeout_names: list[str],
-                        log_msg: str) -> None:
-
-        """Handle the join execution and log msgs.
-
-        Args:
-            cmd_runner: name of thread doing the cmd
-            join_names: target threads that we will join
-            timeout: timeout value to specify on join
-            timeout_names: targets that are expected to timeout
-            log_msg: log message to issue on the join (name be None)
-
-        """
-        self.log_ver.add_call_seq(
-            name='handle_join_tot',
-            seq='test_smart_thread.py::ConfigVerifier.handle_join_tot')
-
-        with pytest.raises(st.SmartThreadJoinTimedOut):
-            self.all_threads[cmd_runner].join(
-                targets=set(join_names),
-                timeout=timeout,
+        for name in ops_count_names:
+            log_msg = f'{cmd_runner} sent message to {name}'
+            self.log_ver.add_msg(
+                log_name='scottbrian_paratools.smart_thread',
+                log_level=logging.INFO,
                 log_msg=log_msg)
 
-        log_msg = (
-            f'{cmd_runner} raising SmartThreadJoinTimedOut '
-            f'waiting for {sorted(set(timeout_names))}')
-        self.log_ver.add_msg(
-            log_name='scottbrian_paratools.smart_thread',
-            log_level=logging.ERROR,
-            log_msg=re.escape(log_msg))
+    ################################################################
+    # handle_send_msg_tof
+    ################################################################
+    def handle_send_msg_tof(
+            self,
+            cmd_runner: str,
+            receivers: list[str],
+            msg_to_send: Any,
+            timeout: IntOrFloat,
+            log_msg: str) -> None:
+
+        """Handle the send_cmd execution and log msgs.
+
+        Args:
+            cmd_runner: name of thread doing the cmd
+            receivers: names of threads to receive the message
+            msg_to_send: message to send to the receivers
+            timeout: number of seconds to specify on send_msg timeout
+            log_msg: log message for send_msg to issue
+
+        """
+        self.log_ver.add_call_seq(
+            name='handle_send_msg_tof',
+            seq='test_smart_thread.py::ConfigVerifier.handle_send_msg_tof')
+        ops_count_names = receivers.copy()
+        self.inc_ops_count(ops_count_names, cmd_runner)
+
+        enter_exit_list = ('entered', 'exiting')
+        self.all_threads[cmd_runner].send_msg(
+            targets=set(receivers),
+            msg=msg_to_send,
+            log_msg=log_msg,
+            timeout=timeout)
 
         if log_msg:
-            log_msg_2 = (
-                f'{self.log_ver.get_call_seq("handle_join_tot")} ')
+            log_msg_2 = f'{self.log_ver.get_call_seq("handle_send_msg_tof")} '
+            log_msg_3 = re.escape(f'{log_msg}')
+            for enter_exit in ('entered', 'exiting'):
+                log_msg_1 = re.escape(
+                    f'send_msg() {enter_exit}: {cmd_runner} -> '
+                    f'{set(receivers)} ')
+                self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
+
+        for name in ops_count_names:
+            log_msg = f'{cmd_runner} sent message to {name}'
+            self.log_ver.add_msg(
+                log_name='scottbrian_paratools.smart_thread',
+                log_level=logging.INFO,
+                log_msg=log_msg)
+
+    ################################################################
+    # handle_send_msg_tot
+    ################################################################
+    def handle_send_msg_tot(
+            self,
+            cmd_runner: str,
+            receivers: list[str],
+            msg_to_send: Any,
+            timeout: IntOrFloat,
+            unreg_timeout_names: list[str],
+            fullq_timeout_names: list[str],
+            log_msg: str) -> None:
+
+        """Handle the send_cmd execution and log msgs.
+
+        Args:
+            cmd_runner: name of thread doing the cmd
+            receivers: names of threads to receive the message
+            msg_to_send: message to send to the receivers
+            timeout: number of seconds to specify on send_msg timeout
+            unreg_timeout_names: names that are unregistered
+            fullq_timeout_names: names with a full msgq
+            log_msg: log message for send_msg to issue
+            config_cmd: contains the targets and other specifications
+
+        """
+        self.log_ver.add_call_seq(
+            name='handle_send_msg_tot',
+            seq='test_smart_thread.py::ConfigVerifier.handle_send_msg_tot')
+        ops_count_names = receivers.copy()
+        if unreg_timeout_names:
+            ops_count_names = list(
+                set(ops_count_names)
+                - set(unreg_timeout_names))
+        if fullq_timeout_names:
+            ops_count_names = list(
+                set(ops_count_names)
+                - set(fullq_timeout_names))
+
+        self.inc_ops_count(ops_count_names, cmd_runner)
+
+        enter_exit_list = ('entered',)
+        with pytest.raises(st.SmartThreadSendMsgTimedOut):
+            self.all_threads[cmd_runner].send_msg(
+                targets=set(receivers),
+                msg=msg_to_send,
+                log_msg=log_msg,
+                timeout=timeout)
+
+        unreg_timeout_msg = ''
+        if unreg_timeout_names:
+            unreg_timeout_msg = (
+                'Remotes unregistered: '
+                f'{sorted(set(unreg_timeout_names))}. ')
+
+        fullq_timeout_msg = ''
+        if fullq_timeout_names:
+            fullq_timeout_msg = (
+                'Remotes with full send queue: '
+                f'{sorted(set(fullq_timeout_names))}.')
+
+        self.add_log_msg(re.escape(
+            f'{cmd_runner} timeout of a send_msg(). '
+            f'Targets: {sorted(set(receivers))}. '
+            f'{unreg_timeout_msg}'
+            f'{fullq_timeout_msg}'))
+
+        self.add_log_msg(
+            'Raise SmartThreadSendMsgTimedOut',
+            log_level=logging.ERROR)
+
+        if log_msg:
+            log_msg_2 = f'{self.log_ver.get_call_seq("handle_send_msg_tot")} '
             log_msg_3 = re.escape(f'{log_msg}')
             log_msg_1 = re.escape(
-                f'join() entered: {cmd_runner} to join '
-                f'{sorted(set(join_names))}. ')
-
+                f'send_msg() entered: {cmd_runner} -> '
+                f'{set(receivers)} ')
             self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
-        num_joins = (len(join_names)
-                     - len(timeout_names))
+        for name in ops_count_names:
+            log_msg = f'{cmd_runner} sent message to {name}'
+            self.log_ver.add_msg(
+                log_name='scottbrian_paratools.smart_thread',
+                log_level=logging.INFO,
+                log_msg=log_msg)
 
-        if num_joins > 0:
-            self.del_thread(
-                name=cmd_runner,
-                num_remotes=num_joins,
-                process='join'
-            )
+
+
+    ####################################################################
+    # inc_ops_count
+    ####################################################################
+    def inc_ops_count(self, targets: list[str], remote: str):
+        """Increment the pending operations count.
+
+        Args:
+            targets: the names of the threads whose count is to be
+                       incremented
+            remote: the names of the threads that are paired with
+                         the targets
+        """
+        with self.ops_lock:
+            for target in targets:
+                pair_key = st.SmartThread._get_pair_key(target, remote)
+                # check to make sure remote is paired - might not have
+                # started yet. Note that we also need to check to make
+                # sure the target is in the expected pairs in case it
+                # was removed but the other thread remained because it
+                # has a pending ops count (and non-empty msg_q)
+                if (pair_key in self.expected_pairs and
+                        target in self.expected_pairs[pair_key]):
+                    self.expected_pairs[pair_key][
+                        target].pending_ops_count += 1
+                else:
+                    # we are assuming that the remote will be started
+                    # while send_msg is running and that the msg
+                    # will be delivered (otherwise we should not have
+                    # called inc_ops_count)
+                    if pair_key not in self.pending_ops_counts:
+                        self.pending_ops_counts[pair_key] = {}
+                    if target in self.pending_ops_counts[pair_key]:
+                        self.pending_ops_counts[pair_key][target] += 1
+                    else:
+                        self.pending_ops_counts[pair_key][target] = 1
+
+    ################################################################
+    # log_name_groups
+    ################################################################
+    def log_name_groups(self) -> None:
+        """Issue log msgs to show the names in each set."""
+        log_msg = f'unregistered_names: {sorted(self.unregistered_names)}'
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(log_msg)
+
+        log_msg = f'registered_names: {sorted(self.registered_names)}'
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(log_msg)
+
+        log_msg = f'active_names: {sorted(self.active_names)}'
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(log_msg)
+
+        log_msg = f'stopped_names: {sorted(self.stopped_names)}'
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(log_msg)
+
+    ####################################################################
+    # main_driver
+    ####################################################################
+    def main_driver(self) -> None:
+        """Delete the thread from the ConfigVerifier."""
+        self.log_ver.add_call_seq(
+            name='main_driver',
+            seq='test_smart_thread.py::ConfigVerifier.main_driver')
+        main_driver_call_seq = self.log_ver.get_call_seq("main_driver")
+
+        while self.cmd_suite:
+            cmd: ConfigCmd = self.cmd_suite.popleft()
+            log_msg = f'config_cmd: {cmd}'
+            self.log_ver.add_msg(log_msg=re.escape(log_msg))
+            logger.debug(log_msg)
+
+            for name in cmd.cmd_runners:
+                if name == self.commander_name:
+                    continue
+                self.msgs.queue_msg(target=name,
+                                    msg=cmd)
+
+            if self.commander_name in cmd.cmd_runners:
+                cmd.run_process(name=self.commander_name)
+
+        # for config_cmd in scenario:
+        #     # log_msg = f'config_cmd: {config_cmd}'
+        #     # self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        #     # logger.debug(log_msg)
+        #
+        #     ############################################################
+        #     # CreateF1Thread
+        #     ############################################################
+        #     if config_cmd.cmd == ConfigCmds.CreateCommanderAutoStart:
+        #         self.create_commander_thread(
+        #             name=config_cmd.commander_name,
+        #             auto_start=True)
+        #     elif config_cmd.cmd == ConfigCmds.CreateCommanderNoStart:
+        #         self.create_commander_thread(
+        #             name=config_cmd.commander_name,
+        #             auto_start=False)
+        #     elif config_cmd.cmd == ConfigCmds.CreateAutoStart:
+        #         for new_name in config_cmd.cmd_runner:
+        #             self.create_f1_thread(
+        #                 target=outer_f1,
+        #                 name=new_name,
+        #                 auto_start=True
+        #             )
+        #     elif config_cmd.cmd == ConfigCmds.CreateNoStart:
+        #         for new_name in config_cmd.cmd_runner:
+        #             self.create_f1_thread(
+        #                 target=outer_f1,
+        #                 name=new_name,
+        #                 auto_start=False
+        #             )
+        #     elif config_cmd.cmd == ConfigCmds.Unregister:
+        #         self.unregister_threads(names=config_cmd.cmd_runner)
+        #
+        #     elif config_cmd.cmd == ConfigCmds.Start:
+        #         for name in config_cmd.cmd_runner:
+        #             self.start_thread(name=name)
+        #
+        #     elif config_cmd.cmd == ConfigCmds.VerifyAlive:
+        #         self.verify_is_alive(config_cmd.cmd_runner)
+        #
+        #     elif config_cmd.cmd == ConfigCmds.VerifyActive:
+        #         assert self.verify_is_active(config_cmd.cmd_runner)
+        #
+        #     elif config_cmd.cmd == ConfigCmds.VerifyCounts:
+        #         assert self.verify_counts(config_cmd.num_registered,
+        #                                         config_cmd.num_active,
+        #                                         config_cmd.num_stopped)
+        #
+        #     elif config_cmd.cmd == ConfigCmds.VerifyAliveNot:
+        #         assert self.verify_is_alive_not(config_cmd.cmd_runner)
+        #
+        #     elif config_cmd.cmd == ConfigCmds.VerifyStatus:
+        #         self.verify_status(
+        #             names=config_cmd.cmd_runner,
+        #             expected_status=config_cmd.exp_status)
+        #
+        #     elif (config_cmd.cmd == ConfigCmds.SendMsg
+        #           or config_cmd.cmd == ConfigCmds.SendMsgTimeoutTrue
+        #           or config_cmd.cmd == ConfigCmds.SendMsgTimeoutFalse):
+        #
+        #         for name in config_cmd.cmd_runner:
+        #             if name == commander_name:
+        #                 continue
+        #             self.msgs.queue_msg(target=name,
+        #                                       msg=config_cmd)
+        #
+        #         if commander_name in config_cmd.cmd_runner:
+        #             self.handle_send_cmd(cmd_runner_name=commander_name,
+        #                                        config_cmd=config_cmd)
+        #
+        #     elif (config_cmd.cmd == ConfigCmds.RecvMsg
+        #           or config_cmd.cmd == ConfigCmds.RecvMsgTimeoutFalse
+        #           or config_cmd.cmd == ConfigCmds.RecvMsgTimeoutTrue):
+        #         ####################################################
+        #         # recv one or more msgs
+        #         ####################################################
+        #         for name in config_cmd.cmd_runner:
+        #             if name == commander_name:
+        #                 continue
+        #             self.msgs.queue_msg(target=name,
+        #                                       msg=config_cmd)
+        #
+        #         if commander_name in config_cmd.cmd_runner:
+        #             self.handle_recv_cmd(cmd_runner_name=commander_name,
+        #                                        config_cmd=config_cmd)
+        #
+        #     elif config_cmd.cmd == ConfigCmds.Pause:
+        #         for pause_name in config_cmd.cmd_runner:
+        #             if pause_name == commander_name:
+        #                 continue
+        #             self.msgs.queue_msg(
+        #                 target=pause_name, msg=config_cmd)
+        #         if commander_name in config_cmd.cmd_runner:
+        #             time.sleep(config_cmd.pause_seconds)
+        #     elif config_cmd.cmd == ConfigCmds.Exit:
+        #         for exit_thread_name in config_cmd.cmd_runner:
+        #             self.msgs.queue_msg(
+        #                 target=exit_thread_name, msg=config_cmd)
+        #         num_alive = 1
+        #         while num_alive > 0:
+        #             num_alive = 0
+        #             for exit_thread_name in config_cmd.cmd_runner:
+        #                 if self.f1_threads[
+        #                     exit_thread_name].thread.is_alive():
+        #                     num_alive += 1
+        #                     time.sleep(.01)
+        #                 else:
+        #                     self.set_is_alive(target=exit_thread_name,
+        #                                             value=False,
+        #                                             exiting=False)
+        #
+        #     elif (config_cmd.cmd == ConfigCmds.Join
+        #           or config_cmd.cmd == ConfigCmds.JoinTimeoutFalse
+        #           or config_cmd.cmd == ConfigCmds.JoinTimeoutTrue):
+        #         ####################################################
+        #         # join one or more threads
+        #         ####################################################
+        #         for name in config_cmd.cmd_runner:
+        #             if name == commander_name:
+        #                 continue
+        #             self.msgs.queue_msg(target=name,
+        #                                       msg=config_cmd)
+        #         if commander_name in config_cmd.cmd_runner:
+        #             self.handle_join_cmd(cmd_runner_name=commander_name,
+        #                                        config_cmd=config_cmd)
+        #
+        #
+        #     elif config_cmd.cmd == ConfigCmds.VerifyRegistered:
+        #         assert self.verify_is_registered(config_cmd.cmd_runner)
+        #     elif config_cmd.cmd == ConfigCmds.VerifyRegisteredNot:
+        #         self.verify_in_registry_not(config_cmd.cmd_runner)
+        #     elif config_cmd.cmd == ConfigCmds.VerifyPaired:
+        #         assert self.verify_paired(config_cmd.cmd_runner)
+        #     elif config_cmd.cmd == ConfigCmds.VerifyPairedHalf:
+        #         assert self.verify_paired_half(
+        #             config_cmd.cmd_runner, config_cmd.half_paired_names)
+        #     elif config_cmd.cmd == ConfigCmds.VerifyPairedNot:
+        #         assert self.verify_paired_not(config_cmd.cmd_runner)
+        #     elif config_cmd.cmd == ConfigCmds.ValidateConfig:
+        #         self.validate_config()
+        #     elif config_cmd.cmd == ConfigCmds.WaitForMsgTimeouts:
+        #         if config_cmd.wait_for_recv_timeouts:
+        #             self.wait_for_recv_msg_timeouts()
+        #         else:
+        #             self.wait_for_msg_timeouts(
+        #                 sender_names=config_cmd.cmd_runner,
+        #                 unreg_names=config_cmd.unreg_timeout_names,
+        #                 fullq_names=config_cmd.fullq_timeout_names)
+        #     elif config_cmd.cmd == ConfigCmds.ConfirmResponse:
+        #         pending_responses: list[str] = []
+        #         pending_response_names: list[str] = []
+        #
+        #         for name in config_cmd.cmd_runner:
+        #             pending_response_names.append(name)
+        #             pending_responses.append(
+        #                 f'{config_cmd.confirm_response_cmd} completed by '
+        #                 f'{name}')
+        #         while pending_responses:
+        #             try:
+        #                 a_msg = self.msgs.get_msg(commander_name,
+        #                                                 timeout=10)
+        #                 split_msg = a_msg.rsplit(maxsplit=1)
+        #                 if a_msg in pending_responses:
+        #                     pending_responses.remove(a_msg)
+        #                     pending_response_names.remove(split_msg[-1])
+        #                 else:
+        #                     logger.debug(
+        #                         f'main raising UnrecognizedCmd for a_msg '
+        #                         f'{a_msg}')
+        #                     self.abort_all_f1_threads()
+        #                     raise UnrecognizedCmd(
+        #                         f'A response of {a_msg} for the SendMsg is '
+        #                         'not recognized')
+        #                 time.sleep(0.1)
+        #             except GetMsgTimedOut:
+        #                 for name in pending_response_names:
+        #                     if not self.f1_threads[
+        #                         name].thread.is_alive():
+        #                         self.abort_all_f1_threads()
+        #                         raise InvalidConfigurationDetected(
+        #                             f'{commander_name} detected f1_thread '
+        #                             f'{name} is no longer active and will '
+        #                             f'thus '
+        #                             f'not be providing a response')
+        #     else:
+        #         self.abort_all_f1_threads()
+        #         raise UnrecognizedCmd(f'The config_cmd.cmd {config_cmd.cmd} '
+        #                               'is not recognized')
+
+    ####################################################################
+    # set_is_alive
+    ####################################################################
+    def set_is_alive(self, target: str, value: bool, exiting: bool):
+        """Set the is_alive flag and exiting flag.
+
+        Args:
+            target: the thread to set the flags for
+            value: the True or False value for is_alive flag
+            exiting: the Tru or False value for the exiting flag
+
+        """
+        with self.ops_lock:
+            self.expected_registered[target].is_alive = value
+            self.expected_registered[
+                target].exiting = exiting
+
+    ####################################################################
+    # set_recv_timeout
+    ####################################################################
+    def set_recv_timeout(self, num_timeouts: int):
+        with self.ops_lock:
+            self.expected_num_recv_timouts = num_timeouts
+
+    ####################################################################
+    # start_thread
+    ####################################################################
+    def start_thread(self,
+                     start_names: list[str]) -> None:
+        """Start the named thread.
+
+        Args:
+            start_names: names of the threads to start
+        """
+        for start_name in start_names:
+            self.f1_threads[start_name].start()
+            self.expected_registered[start_name].is_alive = True
+            self.expected_registered[start_name].status = st.ThreadStatus.Alive
+
+            self.add_log_msg(
+                f'{start_name} set status for thread {start_name} '
+                'from ThreadStatus.Registered to ThreadStatus.Starting')
+            self.add_log_msg(
+                f'{start_name} set status for thread {start_name} '
+                f'from ThreadStatus.Starting to ThreadStatus.Alive')
+            self.add_log_msg(re.escape(
+                f'{start_name} thread started, thread.is_alive() = True, '
+                'status: ThreadStatus.Alive'))
+
+
+
+    ####################################################################
+    # unregister_threads
+    ####################################################################
+    def unregister_threads(self,
+                           cmd_runner: str,
+                           unregister_targets: list[str]) -> None:
+        """Unregister the named threads.
+
+        Args:
+            cmd_runner: name of thread doing the unregister
+            unregister_targets: names of threads to be unregistered
+        """
+        self.commander_thread.unregister(targets=set(names))
+        self.all_threads[cmd_runner].unregister(
+            targets=set(unregister_targets))
+
+        self.del_thread(
+            name=cmd_runner,
+            num_remotes=len(unregister_targets),
+            process='unregister'
+        )
+
+    ####################################################################
+    # validate_config
+    ####################################################################
+    def validate_config(self):
+        """Validate that the SmartThread config is correct."""
+        # verify real registry matches expected_registered
+        for name, thread in st.SmartThread._registry.items():
+            if name not in self.expected_registered:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'SmartThread registry has entry for name {name} '
+                    f'that is missing from the expected_registry ')
+            if (self.expected_registered[name].is_alive
+                    != thread.thread.is_alive()):
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'SmartThread registry has entry for name {name} '
+                    f'that has is_alive of {thread.thread.is_alive()} '
+                    f'which does not match the expected_registered '
+                    f'is_alive of {self.expected_registered[name].is_alive}')
+            if (self.expected_registered[name].status
+                    != thread.status):
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'SmartThread registry has entry for name {name} '
+                    f'that has satus of {thread.status} '
+                    f'which does not match the expected_registered '
+                    f'status of {self.expected_registered[name].status}')
+
+        # verify expected_registered matches real registry
+        for name, tracker in self.expected_registered.items():
+            if name not in st.SmartThread._registry:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'ConfigVerifier expected_registered has '
+                    f'entry for name {name} '
+                    f'that is missing from SmartThread._registry')
+
+        # verify pair_array matches expected_pairs
+        for pair_key in st.SmartThread._pair_array.keys():
+            if pair_key not in self.expected_pairs:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'ConfigVerifier found pair_key {pair_key}'
+                    f'in SmartThread._pair_array that is '
+                    f'not found in expected_pairs: ')
+            for name in st.SmartThread._pair_array[
+                pair_key].status_blocks.keys():
+                if name not in self.expected_pairs[pair_key].keys():
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'ConfigVerifier found name {name} in '
+                        f'SmartThread._pair_array status_blocks for pair_key'
+                        f' {pair_key}, but is missing in expected_pairs: ')
+                if name not in self.expected_registered:
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'ConfigVerifier found name {name} in '
+                        f'SmartThread._pair_array status_blocks for pair_key'
+                        f' {pair_key}, but is missing in '
+                        f'expected_registered: ')
+                if len(self.expected_pairs[pair_key]) == 1:
+                    if self.expected_pairs[pair_key][
+                            name].pending_ops_count == 0:
+                        self.abort_all_f1_threads()
+                        raise InvalidConfigurationDetected(
+                            f'ConfigVerifier found name {name} in '
+                            f'SmartThread._pair_array status_blocks for '
+                            f'pair_key {pair_key}, but it is a single name '
+                            f'that has a pending_ops_count of zero')
+
+                if (self.expected_pairs[pair_key][
+                    name].pending_ops_count == 0
+                        and not st.SmartThread._pair_array[
+                            pair_key].status_blocks[name].msg_q.empty()):
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'ConfigVerifier found name {name} in '
+                        'expected_pairs for '
+                        f'pair_key  {pair_key}, and it has a '
+                        'pending_ops_count of zero, but the '
+                        'SmartThread._pair_array entry show the msg_q '
+                        'is not empty')
+                if (self.expected_pairs[pair_key][
+                    name].pending_ops_count != 0
+                        and st.SmartThread._pair_array[
+                            pair_key].status_blocks[name].msg_q.empty()):
+                    ops_count = self.expected_pairs[pair_key][
+                        name].pending_ops_count
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'ConfigVerifier found that for the '
+                        f'expected_pairs entry for pair_key {pair_key}, '
+                        f'the entry for {name} has has a pending_ops_count '
+                        f'of {ops_count}, but the SmartThread._pair_array'
+                        f' entry for {name} has a an empty msg_q')
+        # verify expected_pairs matches pair_array
+        for pair_key in self.expected_pairs:
+            if pair_key not in st.SmartThread._pair_array:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'ConfigVerifier found pair_key {pair_key} in '
+                    'expected_pairs but not in SmartThread._pair_array')
+            for name in self.expected_pairs[pair_key].keys():
+                if name not in st.SmartThread._pair_array[
+                        pair_key].status_blocks:
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'ConfigVerifier found name {name} in '
+                        f'expected_pairs for pair_key {pair_key}, but not in '
+                        'SmartThread._pair_array status_blocks')
+
+    ####################################################################
+    # verify_counts
+    ####################################################################
+    def verify_counts(self,
+                      num_registered: Optional[int] = None,
+                      num_active: Optional[int] = None,
+                      num_stopped: Optional[int] = None) -> bool:
+        """Verify that the given counts are correct.
+
+        Args:
+            num_registered: number of expected registered only threads
+            num_active: number of expected active threads
+            num_stopped: number of expected stopped threads
+
+        """
+        registered_found_real = 0
+        active_found_real = 0
+        stopped_found_real = 0
+        for name, thread in st.SmartThread._registry.items():
+            if thread.thread.is_alive():
+                if thread.status == st.ThreadStatus.Alive:
+                    active_found_real += 1
+            else:
+                if thread.status == st.ThreadStatus.Registered:
+                    registered_found_real += 1
+                elif (thread.status == st.ThreadStatus.Alive
+                        or thread.status == st.ThreadStatus.Stopped):
+                    stopped_found_real += 1
+
+        registered_found_mock = 0
+        active_found_mock = 0
+        stopped_found_mock = 0
+        for name, thread_tracker in self.expected_registered.items():
+            if thread_tracker.is_alive:
+                if thread_tracker.status == st.ThreadStatus.Alive:
+                    active_found_mock += 1
+            else:
+                if thread_tracker.status == st.ThreadStatus.Registered:
+                    registered_found_mock += 1
+                elif (thread_tracker.status == st.ThreadStatus.Alive
+                        or thread_tracker.status == st.ThreadStatus.Stopped):
+                    stopped_found_mock += 1
+
+        if num_registered is not None:
+            if not (num_registered
+                    == registered_found_real
+                    == registered_found_mock):
+                return False
+
+        if num_active is not None:
+            if not (num_active
+                    == active_found_real
+                    == active_found_mock):
+                return False
+
+        if num_stopped is not None:
+            if not (num_stopped
+                    == stopped_found_real
+                    == stopped_found_mock):
+                return False
+
+        return True
+
+    ####################################################################
+    # verify_in_registry
+    ####################################################################
+    def verify_in_registry(self, names: list[str]) -> bool:
+        """Verify that the given names are registered.
+
+        Args:
+            names: names of the threads to check for being registered
+
+        """
+        for name in names:
+            if name not in st.SmartThread._registry:
+                return False
+            if name not in self.expected_registered:
+                return False
+        return True
+
+    ####################################################################
+    # verify_in_registry_not
+    ####################################################################
+    def verify_in_registry_not(self, names: list[str]) -> None:
+        """Verify that the given names are not registered.
+
+        Args:
+            names: names of the threads to check for being unregistered
+
+        """
+        for name in names:
+            if name in st.SmartThread._registry:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_in_registry_not found {name} is registered '
+                    f'in the real SmartThread._registry')
+            if name in self.expected_registered:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_in_registry_not found {name} is registered '
+                    f'in the mock expected_registered')
+
+
+
+    ####################################################################
+    # verify_is_active
+    ####################################################################
+    def verify_is_active(self, names: list[str]) -> None:
+        """Verify that the given names are active.
+
+        Args:
+            names: names of the threads to check for being active
+
+        """
+        self.verify_in_registry(names=names)
+
+        self.verify_is_alive(names=names)
+
+        self.verify_status(names=names,
+                           expected_status=st.ThreadStatus.Alive)
+        if len(names) > 1:
+            self.verify_paired(names=names):
+
+    ####################################################################
+    # verify_is_alive
+    ####################################################################
+    def verify_is_alive(self, names: list[str]) -> None:
+        """Verify that the given names are alive.
+
+        Args:
+            names: names of the threads to check for being alive
+
+        """
+        for name in names:
+            if not st.SmartThread._registry[name].thread.is_alive():
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_is_alive found {name} has real is_alive = '
+                    f'{st.SmartThread._registry[name].thread.is_alive()} '
+                    'which is not equal to the expected is_alive of True ')
+            if not self.expected_registered[name].is_alive:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_is_alive found {name} has mock is_alive = '
+                    f'{self.expected_registered[name].is_alive} which is '
+                    'not equal to the expected is_alive of True ')
+
+    ####################################################################
+    # verify_is_alive_not
+    ####################################################################
+    def verify_is_alive_not(self, names: list[str]) -> None:
+        """Verify that the given names are not alive.
+
+        Args:
+            names: names of the threads to check for being not alive
+
+        """
+        for name in names:
+            if st.SmartThread._registry[name].thread.is_alive():
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_is_alive_not found {name} has real is_alive = '
+                    f'{st.SmartThread._registry[name].thread.is_alive()} '
+                    'which is not equal to the expected is_alive of False ')
+            if self.expected_registered[name].is_alive:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_is_alive_not found {name} has mock is_alive = '
+                    f'{self.expected_registered[name].is_alive} which is '
+                    'not equal to the expected is_alive of False')
+
+
+    ####################################################################
+    # verify_is_registered
+    ####################################################################
+    def verify_is_registered(self, names: list[str]) -> None:
+        """Verify that the given names are registered only.
+
+        Args:
+            names: names of the threads to check for being registered
+
+        """
+        self.verify_in_registry(names=names)
+        self.verify_is_alive_not(names=names)
+        self.verify_status(names=names,
+                           expected_status=st.ThreadStatus.Registered)
+        if len(names) > 1:
+            self.verify_paired(names=names)
+
+    ####################################################################
+    # verify_paired
+    ####################################################################
+    def verify_paired(self, names: list[str]) -> None:
+        """Verify that the given names are paired.
+
+        Args:
+            names: names of the threads to check for being paired
+
+        """
+        pair_keys = combinations(sorted(names), 2)
+        for pair_key in pair_keys:
+            if pair_key not in st.SmartThread._pair_array:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_paired found {pair_key=} is not '
+                    f'in the real pair_array')
+            if pair_key[0] not in st.SmartThread._pair_array[
+                    pair_key].status_blocks:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_paired found {pair_key[0]=} does not '
+                    f'have a status block in the real pair_array')
+            if pair_key[1] not in st.SmartThread._pair_array[
+                    pair_key].status_blocks:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_paired found {pair_key[1]=} does not '
+                    f'have a status block in the real pair_array')
+
+            if pair_key not in self.expected_pairs:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_paired found {pair_key=} is not '
+                    f'in the mock pair_array')
+            if pair_key[0] not in self.expected_pairs[pair_key]:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_paired found {pair_key[0]=} does not '
+                    f'have a status block in the mock pair_array')
+            if pair_key[1] not in self.expected_pairs[pair_key]:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_paired found {pair_key[1]=} does not '
+                    f'have a status block in the mock pair_array')
+
+    ####################################################################
+    # verify_paired_half
+    ####################################################################
+    def verify_paired_half(self, names: list[str],
+                           half_paired_names: list[str]) -> bool:
+        """Verify that the given names are half paired.
+
+        Args:
+            names: names of the threads to check for being half paired
+            half_paired_names: the names that should be in pair array
+        """
+        pair_keys = combinations(sorted(names), 2)
+        for pair_key in pair_keys:
+            if pair_key not in st.SmartThread._pair_array:
+                return False
+            if len(st.SmartThread._pair_array[
+                    pair_key].status_blocks) != 1:
+                return False
+            for name in half_paired_names:
+                if (name in pair_key
+                        and name not in st.SmartThread._pair_array[
+                            pair_key].status_blocks):
+                    return False
+
+            if pair_key not in self.expected_pairs:
+                return False
+            if len(self.expected_pairs[pair_key]) != 1:
+                return False
+            for name in half_paired_names:
+                if (name in pair_key
+                        and name not in self.expected_pairs[pair_key]):
+                    return False
+        return True
+
+    ####################################################################
+    # verify_paired_not
+    ####################################################################
+    def verify_paired_not(self, names: list[str]) -> bool:
+        """Verify that the given names are not paired.
+
+        Args:
+            names: names of the threads to check for being not paired
+
+        """
+        pair_keys = combinations(sorted(names), 2)
+        for pair_key in pair_keys:
+            if pair_key in st.SmartThread._pair_array:
+                return False
+
+            if pair_key in self.expected_pairs:
+                return False
+
+        return True
+
+
+    ####################################################################
+    # verify_status
+    ####################################################################
+    def verify_status(self, names: list[str],
+                      expected_status: st.ThreadStatus) -> None:
+        """Verify that the given names have the given status.
+
+        Args:
+            names: names of the threads to check for the given status
+            expected_status: the status each thread is expected to have
+
+        """
+        for name in names:
+            if not st.SmartThread._registry[name].status == expected_status:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_status found {name} has real status '
+                    f'{st.SmartThread._registry[name].status} '
+                    'not equal to the expected status of '
+                    f'{expected_status}')
+            if not self.expected_registered[name].status == expected_status:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_status found {name} has mock status '
+                    f'{self.expected_registered[name].status} '
+                    'not equal to the expected status of '
+                    f'{expected_status}')
+
+    ####################################################################
+    # wait_for_msg_timeouts
+    ####################################################################
+    def wait_for_msg_timeouts(self,
+                              sender_names: list[str],
+                              unreg_names: list[str],
+                              fullq_names: list[str]) -> None:
+        """Verify that the senders have detected the timeout threads.
+
+        Args:
+            sender_names: names of the threads to check for timeout
+                threads
+            unreg_names: threads that cause timeout by being
+                unregistered
+            fullq_names: threads that cause timeout because their msg_q
+                is full
+
+        """
+        unregs = []
+        if unreg_names:
+            unregs = sorted(unreg_names)
+        fullqs = []
+        if fullq_names:
+            fullqs = sorted(fullq_names)
+
+        work_senders = sender_names.copy()
+        start_time = time.time()
+        while work_senders:
+            for sender in work_senders:
+                test_unregs = []
+                test_fullqs = []
+                if sender == self.commander_name:
+                    if self.commander_thread.remotes_unregistered:
+                        test_unregs = sorted(
+                            self.commander_thread.remotes_unregistered)
+                    if self.commander_thread.remotes_full_send_q:
+                        test_fullqs = sorted(
+                            self.commander_thread.remotes_full_send_q)
+                else:
+                    if self.f1_threads[sender].remotes_unregistered:
+                        test_unregs = sorted(
+                            self.f1_threads[sender].remotes_unregistered)
+                    if self.f1_threads[sender].remotes_full_send_q:
+                        test_fullqs = sorted(
+                            self.f1_threads[sender].remotes_full_send_q)
+
+                if unregs == test_unregs and fullqs == test_fullqs:
+                    work_senders.remove(sender)
+
+            time.sleep(0.1)
+            assert time.time() < start_time + 30  # allow 30 seconds
+
+        return
+
+    ####################################################################
+    # wait_for_recv_msg_timeouts
+    ####################################################################
+    def wait_for_recv_msg_timeouts(self):
+        while True:
+            with self.ops_lock:
+                if self.expected_num_recv_timouts == 0:
+                    return
+            time.sleep(0.1)
 
 
 ################################################################
@@ -5979,7 +6148,7 @@ def main_driver_old(config_ver: ConfigVerifier,
     #                                         config_cmd.num_stopped)
     #
     #     elif config_cmd.cmd == ConfigCmds.VerifyAliveNot:
-    #         assert config_ver.verify_is_not_alive(config_cmd.cmd_runner)
+    #         assert config_ver.verify_is_alive_not(config_cmd.cmd_runner)
     #
     #     elif config_cmd.cmd == ConfigCmds.VerifyStatus:
     #         config_ver.verify_status(
@@ -6060,14 +6229,14 @@ def main_driver_old(config_ver: ConfigVerifier,
     #     elif config_cmd.cmd == ConfigCmds.VerifyRegistered:
     #         assert config_ver.verify_is_registered(config_cmd.cmd_runner)
     #     elif config_cmd.cmd == ConfigCmds.VerifyRegisteredNot:
-    #         config_ver.verify_not_registered(config_cmd.cmd_runner)
+    #         config_ver.verify_in_registry_not(config_cmd.cmd_runner)
     #     elif config_cmd.cmd == ConfigCmds.VerifyPaired:
     #         assert config_ver.verify_paired(config_cmd.cmd_runner)
     #     elif config_cmd.cmd == ConfigCmds.VerifyPairedHalf:
-    #         assert config_ver.verify_half_paired(
+    #         assert config_ver.verify_paired_half(
     #             config_cmd.cmd_runner, config_cmd.half_paired_names)
     #     elif config_cmd.cmd == ConfigCmds.VerifyPairedNot:
-    #         assert config_ver.verify_not_paired(config_cmd.cmd_runner)
+    #         assert config_ver.verify_paired_not(config_cmd.cmd_runner)
     #     elif config_cmd.cmd == ConfigCmds.ValidateConfig:
     #         config_ver.validate_config()
     #     elif config_cmd.cmd == ConfigCmds.WaitForMsgTimeouts:
@@ -6477,8 +6646,7 @@ class TestSmartThreadScenarios:
         scenario: list[Any] = scenario_builder(config_ver,
                                                **scenario_builder_args)
 
-        scenario.extend([ConfigCmd(
-            cmd=ConfigCmds.ValidateConfig)])
+        config_ver.add_cmd(ValidateConfig(cmd_runners=self.commander_name))
 
         names = list(config_ver.active_names - {commander_name})
         scenario.extend(config_ver.build_exit_suite(names=names))
