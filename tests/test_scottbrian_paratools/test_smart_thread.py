@@ -161,14 +161,23 @@ class ConfigCmd2:
 class ConfigCmd(ABC):
     def __init__(self,
                  cmd_runners: StrOrList):
+
+        self.specified_args = locals()  # used for __repr__, see below
+
+        # the serial number, line_num, and config_ver are filled in
+        # by the ConfigVerifier add_cmd method just before queueing
+        # the command
         self.serial_num: int = 0
         self.line_num: int = 0
+        self.config_ver: "ConfigVerifier" = None
+
         if isinstance(cmd_runners, str):
             cmd_runners = [cmd_runners]
         self.cmd_runners = cmd_runners
-        self.specified_args = locals()  # used for __repr__, see below
-        self.config_ver: "ConfigVerifier" = None
-        self.arg_list: list[str] = []
+
+        self.arg_list: list[str] = ['cmd_runners',
+                                     'serial_num',
+                                     'line_num']
 
     def __repr__(self):
         if TYPE_CHECKING:
@@ -215,7 +224,7 @@ class ConfirmResponse(ConfigCmd):
         if isinstance(confirmers, str):
             confirmers = [confirmers]
         self.confirmers = confirmers
-        self.arg_list = ['confirm_cmd', 'serial_num', 'targets']
+        self.arg_list += ['confirm_cmd', 'confirm_serial_num', 'targets']
 
     def run_process(self, name: str) -> None:
         """Run the command.
@@ -252,7 +261,7 @@ class CreateCommanderAutoStart(ConfigCmd):
                  ) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.commander_name = commander_name
-        self.args_list = ['commander_name']
+        self.arg_list += ['commander_name']
 
     def run_process(self, name: str) -> None:
         """Run the command.
@@ -375,7 +384,7 @@ class Join(ConfigCmd):
             join_names = [join_names]
         self.join_names = join_names
         self.log_msg = log_msg
-        self.args_list = ['cmd_runners',
+        self.arg_list += ['cmd_runners',
                           'join_names']
 
     def run_process(self, name: str) -> None:
@@ -403,9 +412,8 @@ class JoinTimeoutFalse(Join):
                          log_msg=log_msg)
 
         self.timeout = timeout
-        self.args_list = ['cmd_runners',
-                          'join_names',
-                          'timeout']
+        self.arg_list = ['join_names',
+                         'timeout']
 
     def run_process(self, name: str) -> None:
         """Run the command.
@@ -437,8 +445,7 @@ class JoinTimeoutTrue(JoinTimeoutFalse):
         if isinstance(timeout_names, str):
             timeout_names = [timeout_names]
         self.timeout_names = timeout_names
-        self.args_list = ['cmd_runners',
-                          'join_names',
+        self.arg_list += ['join_names',
                           'timeout',
                           'timeout_names']
 
@@ -496,8 +503,7 @@ class SendMsg(ConfigCmd):
         self.receivers = receivers
         self.msg_to_send = msg_to_send
         self.log_msg = log_msg
-        self.args_list = ['cmd_runners',
-                          'receivers',
+        self.arg_list += ['receivers',
                           'msg_to_send']
 
     def run_process(self, name: str) -> None:
@@ -533,7 +539,7 @@ class SendMsgTimeoutFalse(SendMsg):
 
         self.timeout = timeout
 
-        self.args_list += ['timeout']
+        self.arg_list += ['timeout']
 
     def run_process(self, name: str) -> None:
         """Run the command.
@@ -570,8 +576,8 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
             # fullq_timeout_names=fullq_timeout_names,
             log_msg=log_msg)
 
-        self.args_list += ['unreg_timeout_names',
-                           'fullq_timeout_names']
+        self.arg_list += ['unreg_timeout_names',
+                          'fullq_timeout_names']
 
         if isinstance(unreg_timeout_names, str):
             unreg_timeout_names = [unreg_timeout_names]
@@ -597,7 +603,28 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
             log_msg=self.log_msg)
 
 
+########################################################################
+# StartThread
+########################################################################
+class StartThread(ConfigCmd):
+    def __init__(self,
+                 cmd_runners: StrOrList,
+                 start_names: StrOrList) -> None:
+        super().__init__(cmd_runners=cmd_runners)
 
+        if isinstance(start_names, str):
+            start_names = [start_names]
+        self.start_names = start_names
+
+        self.arg_list += ['start_names']
+
+    def run_process(self, name: str) -> None:
+        """Run the command.
+
+        Args:
+            name: name of thread running the command
+        """
+        self.config_ver.start_thread(start_names=self.start_names)
 
 ########################################################################
 # timeout_type used to specify whether to use timeout on various cmds
@@ -2699,29 +2726,26 @@ class ConfigVerifier:
     # start_thread
     ####################################################################
     def start_thread(self,
-                     name: str) -> None:
+                     start_names: list[str]) -> None:
         """Start the named thread.
 
         Args:
-            name: name of the thread to start
+            start_names: names of the threads to start
         """
-        # assert {name}.issubset(self.stopped_names)
-        # self.stopped_names -= {name}
-        # self.active_names |= {name}
-        self.f1_threads[name].start()
-        self.expected_registered[name].is_alive = True
-        self.expected_registered[name].status = st.ThreadStatus.Alive
-        # self.expected_registered[
-        #     name].transitioning_from.st.ThreadStatus.Registered
-        self.add_log_msg(
-            f'{name} set status for thread {name} '
-            'from ThreadStatus.Registered to ThreadStatus.Starting')
-        self.add_log_msg(
-            f'{name} set status for thread {name} '
-            f'from ThreadStatus.Starting to ThreadStatus.Alive')
-        self.add_log_msg(re.escape(
-            f'{name} thread started, thread.is_alive() = True, '
-            'status: ThreadStatus.Alive'))
+        for start_name in start_names:
+            self.f1_threads[start_name].start()
+            self.expected_registered[start_name].is_alive = True
+            self.expected_registered[start_name].status = st.ThreadStatus.Alive
+
+            self.add_log_msg(
+                f'{start_name} set status for thread {start_name} '
+                'from ThreadStatus.Registered to ThreadStatus.Starting')
+            self.add_log_msg(
+                f'{start_name} set status for thread {start_name} '
+                f'from ThreadStatus.Starting to ThreadStatus.Alive')
+            self.add_log_msg(re.escape(
+                f'{start_name} thread started, thread.is_alive() = True, '
+                'status: ThreadStatus.Alive'))
 
     ####################################################################
     # unregister_thread
@@ -3451,34 +3475,33 @@ class ConfigVerifier:
     # build_start_suite
     ################################################################
     def build_start_suite(self,
-                          names: list[str],
+                          start_names: list[str],
                           validate_config: Optional[bool] = True
-                          ) -> list[ConfigCmd]:
+                          ) -> None:
         """Return a list of ConfigCmd items for unregister.
 
         Args:
-            names: thread name to be started
+            start_names: thread names to be started
+            validate_config: indicates whether to validate the config
 
-        Returns:
-            a list of ConfigCmd items
         """
-        if not set(names).issubset(self.registered_names):
+        if not set(start_names).issubset(self.registered_names):
             self.abort_all_f1_threads()
-            raise InvalidInputDetected(f'Input {names} is not a subset '
+            raise InvalidInputDetected(f'Input {start_names} is not a subset '
                                        'of registered names '
                                        f'{self.registered_names}')
 
-        ret_suite = [
-            ConfigCmd(cmd=ConfigCmds.Start, cmd_runner=names),
+        self.add_cmd(
+            StartThread(cmd_runners=self.commander_name,
+                        start_names=start_names))
+
             ConfigCmd(cmd=ConfigCmds.VerifyActive,
-                      cmd_runner=names)]
+                      cmd_runner=start_names)]
         if validate_config:
             ret_suite.extend([ConfigCmd(cmd=ConfigCmds.ValidateConfig)])
 
-        self.registered_names -= set(names)
-        self.active_names |= set(names)
-
-        return ret_suite
+        self.registered_names -= set(start_names)
+        self.active_names |= set(start_names)
 
     ################################################################
     # build_start_suite_num
