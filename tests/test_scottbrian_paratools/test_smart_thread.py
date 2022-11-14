@@ -113,6 +113,8 @@ class ConfigCmds(Enum):
 
     VerifyCounts = auto()
 
+    VerifyInRegistry
+    VerifyInRegistryNot
     VerifyRegistered = auto()
     VerifyRegisteredNot = auto()
 
@@ -844,6 +846,109 @@ class VerifyActive(ConfigCmd):
         self.config_ver.verify_is_active(names=self.exp_active_names)
 
 
+########################################################################
+# VerifyCounts
+########################################################################
+class VerifyCounts(ConfigCmd):
+    def __init__(self,
+                 cmd_runners: StrOrList,
+                 exp_num_registered: int,
+                 exp_num_active: int,
+                 exp_num_stopped: int) -> None:
+        super().__init__(cmd_runners=cmd_runners)
+
+        self.exp_num_registered = exp_num_registered
+        self.exp_num_active = exp_num_active
+        self.exp_num_stopped = exp_num_stopped
+
+        self.arg_list += ['exp_num_registered',
+                          'exp_num_active',
+                          'exp_num_stopped']
+
+    def run_process(self, name: str) -> None:
+        """Run the command.
+
+        Args:
+            name: name of thread running the command
+        """
+        self.config_ver.verify_counts(num_registered=self.exp_num_registered,
+                                      num_active=self.exp_num_active,
+                                      num_stopped=self.exp_num_stopped)
+
+########################################################################
+# VerifyInRegistry
+########################################################################
+class VerifyInRegistry(ConfigCmd):
+    def __init__(self,
+                 cmd_runners: StrOrList,
+                 exp_in_registry_names: StrOrList) -> None:
+        super().__init__(cmd_runners=cmd_runners)
+
+        if isinstance(exp_in_registry_names, str):
+            exp_in_registry_names = [exp_in_registry_names]
+        self.exp_in_registry_names = exp_in_registry_names
+
+        self.arg_list += ['exp_in_registry_names']
+
+    def run_process(self, name: str) -> None:
+        """Run the command.
+
+        Args:
+            name: name of thread running the command
+        """
+        self.config_ver.verify_in_registry(
+            cmd_runner=name,
+            exp_in_registry_names=self.exp_in_registry_names)
+
+########################################################################
+# VerifyInRegistryNot
+########################################################################
+class VerifyInRegistryNot(ConfigCmd):
+    def __init__(self,
+                 cmd_runners: StrOrList,
+                 exp_not_in_registry_names: StrOrList) -> None:
+        super().__init__(cmd_runners=cmd_runners)
+
+        if isinstance(exp_not_in_registry_names, str):
+            exp_not_in_registry_names = [exp_not_in_registry_names]
+        self.exp_not_in_registry_names = exp_not_in_registry_names
+
+        self.arg_list += ['exp_not_in_registry_names']
+
+    def run_process(self, name: str) -> None:
+        """Run the command.
+
+        Args:
+            name: name of thread running the command
+        """
+        self.config_ver.verify_in_registry_not(
+            cmd_runner=name,
+            exp_not_in_registry_names=self.exp_not_in_registry_names)
+
+########################################################################
+# VerifyRegistered
+########################################################################
+class VerifyRegistered(ConfigCmd):
+    def __init__(self,
+                 cmd_runners: StrOrList,
+                 exp_registered_names: StrOrList) -> None:
+        super().__init__(cmd_runners=cmd_runners)
+
+        if isinstance(exp_registered_names, str):
+            exp_registered_names = [exp_registered_names]
+        self.exp_registered_names = exp_registered_names
+
+        self.arg_list += ['exp_registered_names']
+
+    def run_process(self, name: str) -> None:
+        """Run the command.
+
+        Args:
+            name: name of thread running the command
+        """
+        self.config_ver.verify_is_registered(
+            cmd_runner=name,
+            exp_registered_names=self.exp_registered_names)
 
 ########################################################################
 # timeout_type used to specify whether to use timeout on various cmds
@@ -2447,7 +2552,7 @@ class ConfigVerifier:
                      num_registered: Optional[int] = 0,
                      num_active: Optional[int] = 1,
                      num_stopped: Optional[int] = 0
-                     ) -> list[ConfigCmd]:
+                     ) -> None:
         """Return a list of ConfigCmd items for config.
 
         Args:
@@ -2567,13 +2672,10 @@ class ConfigVerifier:
                 num_to_join=num_active_to_join))
 
         # verify the counts
-        ret_suite.extend([
-            ConfigCmd(cmd=ConfigCmds.VerifyCounts,
-                      num_registered=num_registered,
-                      num_active=num_active,
-                      num_stopped=num_stopped)])
-
-        return ret_suite
+        self.add_cmd(VerifyCounts(cmd_runners=self.commander_name,
+                                  exp_num_registered=num_registered,
+                                  exp_num_active=num_active,
+                                  exp_num_stopped=num_stopped))
 
     ####################################################################
     # build_config_build_suite
@@ -2691,14 +2793,15 @@ class ConfigVerifier:
                 self.registered_names |= set(f1_no_start_names)
 
         if self.registered_names:
-            ret_suite.extend([
-                ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
-                          cmd_runner=list(self.registered_names))])
+            self.add_cmd(VerifyRegistered(
+                cmd_runners=self.commander_name,
+                exp_registered_names=list(self.registered_names)))
 
         if self.active_names:
-            ret_suite.extend([
-                ConfigCmd(cmd=ConfigCmds.VerifyActive,
-                          cmd_runner=list(self.active_names))])
+            self.add_cmd(VerifyActive(
+                cmd_runners=self.commander_name,
+                exp_active_names=list(self.active_names)))
+
         if validate_config:
             self.add_cmd(ValidateConfig(cmd_runners=self.commander_name))
 
@@ -2840,9 +2943,10 @@ class ConfigVerifier:
                 Join(cmd_runners=cmd_runners,
                      join_names=join_target_names,
                      log_msg=log_msg))
+            self.add_msg(VerifyInRegistryNot(
+                cmd_runners=self.commander_name,
+                exp_notin_registry_names=join_target_names))
 
-                ConfigCmd(cmd=ConfigCmds.VerifyRegisteredNot,
-                          cmd_runner=join_target_names),
                 ConfigCmd(cmd=ConfigCmds.VerifyPairedNot,
                           cmd_runner=join_target_names)])
 
@@ -4012,9 +4116,10 @@ class ConfigVerifier:
         self.add_cmd(
             StartThread(cmd_runners=self.commander_name,
                         start_names=start_names))
+        self.add_cmd(VerifyActive(
+                cmd_runners=self.commander_name,
+                exp_active_names=start_names))
 
-            ConfigCmd(cmd=ConfigCmds.VerifyActive,
-                      cmd_runner=start_names)]
         if validate_config:
             self.add_cmd(ValidateConfig(cmd_runners=self.commander_name))
 
@@ -4069,8 +4174,10 @@ class ConfigVerifier:
 
         self.add_cmd(Unregister(cmd_runners=self.commander_name,
                                 unregister_targets=names))
+        self.add_msg(VerifyInRegistryNot(
+            cmd_runners=self.commander_name,
+            exp_notin_registry_names=names))
 
-            ConfigCmd(cmd=ConfigCmds.VerifyRegisteredNot, cmd_runner=names),
             ConfigCmd(cmd=ConfigCmds.VerifyPairedNot, cmd_runner=names)]
 
         self.add_cmd(ValidateConfig(cmd_runners=self.commander_name))
@@ -5537,7 +5644,7 @@ class ConfigVerifier:
     def verify_counts(self,
                       num_registered: Optional[int] = None,
                       num_active: Optional[int] = None,
-                      num_stopped: Optional[int] = None) -> bool:
+                      num_stopped: Optional[int] = None) -> None:
         """Verify that the given counts are correct.
 
         Args:
@@ -5578,62 +5685,87 @@ class ConfigVerifier:
             if not (num_registered
                     == registered_found_real
                     == registered_found_mock):
-                return False
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_counts found expected {num_registered=} is not '
+                    f'equal to {registered_found_real=} and/or '
+                    f'{registered_found_mock=}')
 
         if num_active is not None:
             if not (num_active
                     == active_found_real
                     == active_found_mock):
-                return False
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_counts found expected {num_active=} is not '
+                    f'equal to {active_found_real=} and/or '
+                    f'{active_found_mock=}')
 
         if num_stopped is not None:
             if not (num_stopped
                     == stopped_found_real
                     == stopped_found_mock):
-                return False
-
-        return True
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_counts found expected {num_stopped=} is not '
+                    f'equal to {stopped_found_real=} and/or '
+                    f'{stopped_found_mock=}')
 
     ####################################################################
     # verify_in_registry
     ####################################################################
-    def verify_in_registry(self, names: list[str]) -> bool:
+    def verify_in_registry(self,
+                           cmd_runner: str,
+                           exp_in_registry_names: list[str]) -> None:
         """Verify that the given names are registered.
 
         Args:
-            names: names of the threads to check for being registered
+            cmd_runner: name of thread doing the verify
+            exp_in_registry_names: names of the threads to check for
+                being in the registry
 
         """
-        for name in names:
-            if name not in st.SmartThread._registry:
-                return False
-            if name not in self.expected_registered:
-                return False
-        return True
+        for exp_in_registry_name in exp_in_registry_names:
+            if exp_in_registry_name not in st.SmartThread._registry:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_in_registry found {exp_in_registry_name} is not '
+                    'registered in the real SmartThread._registry '
+                    f'per {cmd_runner=}')
+            if exp_in_registry_name not in self.expected_registered:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_in_registry found {exp_in_registry_name} is not '
+                    'registered in the mock SmartThread._registry '
+                    f'per {cmd_runner=}')
 
     ####################################################################
     # verify_in_registry_not
     ####################################################################
-    def verify_in_registry_not(self, names: list[str]) -> None:
+    def verify_in_registry_not(self,
+                               cmd_runner: str,
+                               exp_in_registry_names: list[str]) -> None:
         """Verify that the given names are not registered.
 
         Args:
-            names: names of the threads to check for being unregistered
+            cmd_runner: name of thread doing the verify
+            exp_not_in_registry_names: names of the threads to check for
+                not being in the registry
 
         """
-        for name in names:
-            if name in st.SmartThread._registry:
+        for exp_not_in_registry_name in exp_not_in_registry_names:
+            if exp_not_in_registry_name in st.SmartThread._registry:
                 self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
-                    f'verify_in_registry_not found {name} is registered '
-                    f'in the real SmartThread._registry')
-            if name in self.expected_registered:
+                    f'verify_in_registry_not found {exp_not_in_registry_name} '
+                    'is registered in the real SmartThread._registry per '
+                    f'{cmd_runner=}')
+            if exp_not_in_registry_name in self.expected_registered:
                 self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
-                    f'verify_in_registry_not found {name} is registered '
-                    f'in the mock expected_registered')
-
-
+                    f'verify_in_registry_not found {exp_not_in_registry_name} '
+                    'is registered in the mock expected_registered per '
+                    f'{cmd_runner=}')
 
     ####################################################################
     # verify_is_active
@@ -5646,9 +5778,7 @@ class ConfigVerifier:
 
         """
         self.verify_in_registry(names=names)
-
         self.verify_is_alive(names=names)
-
         self.verify_status(names=names,
                            expected_status=st.ThreadStatus.Alive)
         if len(names) > 1:
@@ -5702,23 +5832,26 @@ class ConfigVerifier:
                     f'{self.expected_registered[name].is_alive} which is '
                     'not equal to the expected is_alive of False')
 
-
     ####################################################################
     # verify_is_registered
     ####################################################################
-    def verify_is_registered(self, names: list[str]) -> None:
+    def verify_is_registered(self,
+                             cmd_runner: str,
+                             exp_registered_names: list[str]) -> None:
         """Verify that the given names are registered only.
 
         Args:
-            names: names of the threads to check for being registered
+            cmd_runner: thread doing the verify
+            exp_registered_names: names of the threads to check for
+                being registered
 
         """
-        self.verify_in_registry(names=names)
-        self.verify_is_alive_not(names=names)
-        self.verify_status(names=names,
+        self.verify_in_registry(names=exp_registered_names)
+        self.verify_is_alive_not(names=exp_registered_names)
+        self.verify_status(names=exp_registered_names,
                            expected_status=st.ThreadStatus.Registered)
-        if len(names) > 1:
-            self.verify_paired(names=names)
+        if len(exp_registered_names) > 1:
+            self.verify_paired(names=exp_registered_names)
 
     ####################################################################
     # verify_paired
@@ -5770,7 +5903,7 @@ class ConfigVerifier:
     # verify_paired_half
     ####################################################################
     def verify_paired_half(self, names: list[str],
-                           half_paired_names: list[str]) -> bool:
+                           half_paired_names: list[str]) -> None:
         """Verify that the given names are half paired.
 
         Args:
@@ -5780,30 +5913,53 @@ class ConfigVerifier:
         pair_keys = combinations(sorted(names), 2)
         for pair_key in pair_keys:
             if pair_key not in st.SmartThread._pair_array:
-                return False
-            if len(st.SmartThread._pair_array[
-                    pair_key].status_blocks) != 1:
-                return False
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_paired_half found {pair_key=} is not '
+                    f'in the real pair_array')
+            num_real_status_blocks = len(st.SmartThread._pair_array[
+                    pair_key].status_blocks)
+            if num_real_status_blocks != 1:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_paired_half found '
+                    f'{num_real_status_blocks=} is not equal to 1 '
+                    f'in the real pair_array')
             for name in half_paired_names:
                 if (name in pair_key
                         and name not in st.SmartThread._pair_array[
                             pair_key].status_blocks):
-                    return False
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'verify_paired_half found '
+                        f'{name=} does not have a status block '
+                        f'in the real pair_array for {pair_key=}.')
 
             if pair_key not in self.expected_pairs:
-                return False
-            if len(self.expected_pairs[pair_key]) != 1:
-                return False
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_paired_half found {pair_key=} is not '
+                    f'in the mock pair_array')
+            num_mock_status_blocks = len(self.expected_pairs[pair_key])
+            if num_mock_status_blocks != 1:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_paired_half found '
+                    f'{num_mock_status_blocks=} is not 1 '
+                    f'in the mock pair_array')
             for name in half_paired_names:
                 if (name in pair_key
                         and name not in self.expected_pairs[pair_key]):
-                    return False
-        return True
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'verify_paired_half found '
+                        f'{name=} does not have a status block '
+                        f'in the mock pair_array for {pair_key=}.')
 
     ####################################################################
     # verify_paired_not
     ####################################################################
-    def verify_paired_not(self, names: list[str]) -> bool:
+    def verify_paired_not(self, names: list[str]) -> None:
         """Verify that the given names are not paired.
 
         Args:
@@ -5813,13 +5969,16 @@ class ConfigVerifier:
         pair_keys = combinations(sorted(names), 2)
         for pair_key in pair_keys:
             if pair_key in st.SmartThread._pair_array:
-                return False
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_paired_not found {pair_key=} is in '
+                    f'in the real pair_array')
 
             if pair_key in self.expected_pairs:
-                return False
-
-        return True
-
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_paired_not found {pair_key=} is in '
+                    f'in the mock pair_array')
 
     ####################################################################
     # verify_status
