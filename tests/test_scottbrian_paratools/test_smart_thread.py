@@ -10,8 +10,6 @@ from datetime import datetime
 from enum import Enum, auto
 from itertools import combinations
 import logging
-import math
-import queue
 import random
 import re
 from sys import _getframe
@@ -24,7 +22,7 @@ import threading
 # Third Party
 ###############################################################################
 import pytest
-from scottbrian_utils.msgs import Msgs, GetMsgTimedOut
+from scottbrian_utils.msgs import Msgs
 from scottbrian_utils.log_verifier import LogVer
 from scottbrian_utils.diag_msg import (get_formatted_call_sequence,
                                        get_caller_info)
@@ -79,82 +77,83 @@ class CmdTimedOut(ErrorTstSmartThread):
 ###############################################################################
 # Config Scenarios
 ###############################################################################
-class ConfigCmds(Enum):
-    ConfirmResponse = auto()
-    CreateCommanderAutoStart = auto()
-    CreateCommanderNoStart = auto()
-    CreateF1AutoStart = auto()
-    CreateF1NoStart = auto()
-
-    Exit = auto()
-    
-    Join = auto()
-    JoinTimeoutFalse = auto()
-    JoinTimeoutTrue = auto()
-    
-    Pause = auto()
-
-    SendMsg = auto()
-    SendMsgTimeoutFalse = auto()
-    SendMsgTimeoutTrue = auto()
-    Start = auto()
-
-    RecvMsg = auto()
-    RecvMsgTimeoutFalse = auto()
-    RecvMsgTimeoutTrue = auto()
-    
-    Unregister = auto()
-
-    ValidateConfig = auto()
-
-    VerifyAlive = auto()
-    VerifyAliveNot = auto()
-    VerifyActive = auto()
-
-    VerifyCounts = auto()
-
-    VerifyInRegistry
-    VerifyInRegistryNot
-    VerifyRegistered = auto()
-    VerifyRegisteredNot = auto()
-
-    VerifyPaired = auto()
-    VerifyPairedHalf = auto()
-    VerifyPairedNot = auto()
-
-    VerifyStatus = auto()
-    VerifyStopped = auto()
-
-    WaitForMsgTimeouts = auto()
+# class ConfigCmds(Enum):
+#     ConfirmResponse = auto()
+#     CreateCommanderAutoStart = auto()
+#     CreateCommanderNoStart = auto()
+#     CreateF1AutoStart = auto()
+#     CreateF1NoStart = auto()
+#
+#     Exit = auto()
+#
+#     Join = auto()
+#     JoinTimeoutFalse = auto()
+#     JoinTimeoutTrue = auto()
+#
+#     Pause = auto()
+#
+#     SendMsg = auto()
+#     SendMsgTimeoutFalse = auto()
+#     SendMsgTimeoutTrue = auto()
+#     Start = auto()
+#
+#     RecvMsg = auto()
+#     RecvMsgTimeoutFalse = auto()
+#     RecvMsgTimeoutTrue = auto()
+#
+#     Unregister = auto()
+#
+#     ValidateConfig = auto()
+#
+#     VerifyAlive = auto()
+#     VerifyAliveNot = auto()
+#     VerifyActive = auto()
+#
+#     VerifyCounts = auto()
+#
+#     VerifyInRegistry
+#     VerifyInRegistryNot
+#     VerifyRegistered = auto()
+#     VerifyRegisteredNot = auto()
+#
+#     VerifyPaired = auto()
+#     VerifyPairedHalf = auto()
+#     VerifyPairedNot = auto()
+#
+#     VerifyStatus = auto()
+#     VerifyStopped = auto()
+#
+#     WaitForMsgTimeouts = auto()
+#     WaitForRecv
 
 
 
 @dataclass
-class ConfigCmd2:
-    cmd: ConfigCmds
-    cmd_runner: Optional[list[str]] = None
-    commander_name: Optional[str] = None
-    auto_start: bool = True
-    from_names: Optional[list[str]] = None
-    to_names: Optional[list[str]] = None
-    join_target_names: Optional[list[str]] = None
-    msg_to_send: Optional[Any] = None
-    log_msg: Optional[str] = None
-    recv_msg_timeout_names: Optional[list[str]] = None
-    wait_for_recv_timeouts: Optional[bool] = False
-    unreg_timeout_names: Optional[list[str]] = None
-    fullq_timeout_names: Optional[list[str]] = None
-    exp_status: Optional[st.ThreadStatus] = None
-    exp_error: Optional[Exception] = None
-    half_paired_names: Optional[list[str]] = None
-    pause_seconds: Optional[float] = None
-    timeout: Optional[float] = None
-    timeout_names: Optional[list[str]] = None
-    confirm_response: Optional[bool] = False
-    confirm_response_cmd: Optional[ConfigCmds] = None
-    num_registered: Optional[int] = None
-    num_active: Optional[int] = None
-    num_stopped: Optional[int] = None
+# class ConfigCmd2:
+#     cmd: ConfigCmds
+#     cmd_runner: Optional[list[str]] = None
+#     commander_name: Optional[str] = None
+#     auto_start: bool = True
+#     from_names: Optional[list[str]] = None
+#     to_names: Optional[list[str]] = None
+#     join_target_names: Optional[list[str]] = None
+#     msg_to_send: Optional[Any] = None
+#     log_msg: Optional[str] = None
+#     recv_msg_timeout_names: Optional[list[str]] = None
+#     wait_for_recv_timeouts: Optional[bool] = False
+#     unreg_timeout_names: Optional[list[str]] = None
+#     fullq_timeout_names: Optional[list[str]] = None
+#     exp_status: Optional[st.ThreadStatus] = None
+#     exp_error: Optional[Exception] = None
+#     half_paired_names: Optional[list[str]] = None
+#     pause_seconds: Optional[float] = None
+#     timeout: Optional[float] = None
+#     timeout_names: Optional[list[str]] = None
+#     confirm_response: Optional[bool] = False
+#     confirm_response_cmd: Optional[ConfigCmds] = None
+#     num_registered: Optional[int] = None
+#     num_active: Optional[int] = None
+#     num_stopped: Optional[int] = None
 
 
 ########################################################################
@@ -171,7 +170,7 @@ class ConfigCmd(ABC):
         # the command
         self.serial_num: int = 0
         self.line_num: int = 0
-        self.config_ver: "ConfigVerifier" = None
+        self.config_ver: Optional["ConfigVerifier"] = None
 
         if isinstance(cmd_runners, str):
             cmd_runners = [cmd_runners]
@@ -226,7 +225,9 @@ class ConfirmResponse(ConfigCmd):
         if isinstance(confirmers, str):
             confirmers = [confirmers]
         self.confirmers = confirmers
-        self.arg_list += ['confirm_cmd', 'confirm_serial_num', 'targets']
+        self.arg_list += ['confirm_cmd',
+                          'confirm_serial_num',
+                          'targets']
 
     def run_process(self, name: str) -> None:
         """Run the command.
@@ -978,6 +979,7 @@ class VerifyPaired(ConfigCmd):
             cmd_runner=name,
             exp_paired_names=self.exp_paired_names)
 
+
 ########################################################################
 # VerifyPairedHalf
 ########################################################################
@@ -985,16 +987,16 @@ class VerifyPairedHalf(ConfigCmd):
     def __init__(self,
                  cmd_runners: StrOrList,
                  pair_names: list[str],
-                 exp_paired_names: StrOrList) -> None:
+                 exp_half_paired_names: StrOrList) -> None:
         super().__init__(cmd_runners=cmd_runners)
 
         self.pair_names = pair_names
-        if isinstance(exp_paired_names, str):
-            exp_paired_names = [exp_paired_names]
-        self.exp_paired_names = exp_paired_names
+        if isinstance(exp_half_paired_names, str):
+            exp_half_paired_names = [exp_half_paired_names]
+        self.exp_half_paired_names = exp_half_paired_names
 
         self.arg_list += ['pair_names',
-                          'exp_paired_names']
+                          'exp_half_paired_names']
 
     def run_process(self, name: str) -> None:
         """Run the command.
@@ -1005,7 +1007,7 @@ class VerifyPairedHalf(ConfigCmd):
         self.config_ver.verify_paired_half(
             cmd_runner=name,
             pair_names=self.pair_names,
-            exp_paired_names=self.exp_paired_names)
+            half_paired_names=self.exp_half_paired_names)
 
 ########################################################################
 # VerifyPairedNot
@@ -1063,6 +1065,62 @@ class VerifyStatus(ConfigCmd):
             check_status_names=self.check_status_names,
             expected_status=self.expected_status)
 
+########################################################################
+# WaitForRecvTimeouts
+########################################################################
+class WaitForRecvTimeouts(ConfigCmd):
+    def __init__(self,
+                 cmd_runners: StrOrList) -> None:
+        super().__init__(cmd_runners=cmd_runners)
+
+    def run_process(self, name: str) -> None:
+        """Run the command.
+
+        Args:
+            name: name of thread running the command
+        """
+        self.config_ver.wait_for_recv_msg_timeouts(cmd_runner=name)
+
+########################################################################
+# WaitForSendTimeouts
+########################################################################
+class WaitForSendTimeouts(ConfigCmd):
+    def __init__(self,
+                 cmd_runners: StrOrList,
+                 sender_names: StrOrList,
+                 unreg_names: StrOrList,
+                 fullq_names: StrOrList
+                 ) -> None:
+        super().__init__(cmd_runners=cmd_runners)
+
+        if isinstance(sender_names, str):
+            sender_names = [sender_names]
+        self.sender_names = sender_names
+
+        if isinstance(unreg_names, str):
+            unreg_names = [unreg_names]
+        self.unreg_names = unreg_names
+
+        if isinstance(fullq_names, str):
+            fullq_names = [fullq_names]
+        self.fullq_names = fullq_names
+
+        self.arg_list += ['sender_names',
+                          'unreg_names',
+                          'fullq_names']
+
+    def run_process(self, name: str) -> None:
+        """Run the command.
+
+        Args:
+            name: name of thread running the command
+        """
+        self.config_ver.wait_for_send_msg_timeouts(
+            cmd_runner=name,
+            sender_names=self.sender_names,
+            unreg_names=self.unreg_names,
+            fullq_names=self.fullq_names)
+
 
 ########################################################################
 # timeout_type used to specify whether to use timeout on various cmds
@@ -1073,438 +1131,518 @@ class TimeoutType(Enum):
     TimeoutTrue = auto()
 
 
-
-
-########################################################################
-# 0) start alpha and beta threads
-# 1) beta exits
-# 2) verify alpha and beta not paired
-# 3) start beta thread again
-# 4) verify alpha and beta are paired
-# 5) beta send msg to alpha
-# 6) beta exits
-# 7) verify alpha half paired with beta
-# 8) start beta again
-# 9) verify alpha and beta are paired
-# 10) beta exits
-# 11) verify alpha half paired with beta
-# 12) alpha recv msg from beta
-# 13) verify alpha not paired with beta
-
-########################################################################
-config_scenario_2 = (
-    # 0) start alpha and beta threads
-    ConfigCmd(cmd=ConfigCmds.CreateAutoStart, cmd_runner=['beta']),
-
-    ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
-              cmd_runner=['alpha', 'beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyPaired, cmd_runner=['alpha', 'beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha', 'beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha', 'beta'],
-              exp_status=st.ThreadStatus.Alive),
-
-    # 1) beta exits
-    ConfigCmd(cmd=ConfigCmds.Exit, cmd_runner=['beta']),
-
-    ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha'],
-              exp_status=st.ThreadStatus.Alive),
-    ConfigCmd(cmd=ConfigCmds.VerifyAliveNot, cmd_runner=['beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['beta'],
-              exp_status=st.ThreadStatus.Alive),
-
-    ConfigCmd(cmd=ConfigCmds.Join, cmd_runner=['beta']),
-
-    # 2) verify alpha and beta not paired
-    ConfigCmd(cmd=ConfigCmds.VerifyRegisteredNot, cmd_runner=['beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyPairedNot,
-              cmd_runner=['alpha', 'beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha'],
-              exp_status=st.ThreadStatus.Alive),
-
-    # 3) start beta thread again
-    ConfigCmd(cmd=ConfigCmds.CreateAutoStart, cmd_runner=['beta']),
-
-    # 4) verify alpha and beta are paired
-    ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
-              cmd_runner=['alpha', 'beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyPaired, cmd_runner=['alpha', 'beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha', 'beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha', 'beta'],
-              exp_status=st.ThreadStatus.Alive),
-
-
-    # 5) beta send msg to alpha
-    ConfigCmd(cmd=ConfigCmds.SendMsg, cmd_runner=['beta'],
-              to_names=['alpha']),
-
-    # 6) beta exits
-    ConfigCmd(cmd=ConfigCmds.Exit, cmd_runner=['beta']),
-
-    ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha'],
-              exp_status=st.ThreadStatus.Alive),
-    ConfigCmd(cmd=ConfigCmds.VerifyAliveNot, cmd_runner=['beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['beta'],
-              exp_status=st.ThreadStatus.Alive),
-
-    # 7) join and verify alpha half paired with beta
-    ConfigCmd(cmd=ConfigCmds.Join, cmd_runner=['beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyRegisteredNot, cmd_runner=['beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
-              cmd_runner=['alpha']),
-    ConfigCmd(cmd=ConfigCmds.VerifyPairedHalf,
-              cmd_runner=['alpha', 'beta'], half_paired_names=['alpha']),
-
-    # 8) start beta again
-    ConfigCmd(cmd=ConfigCmds.CreateAutoStart, cmd_runner=['beta']),
-
-    # 9) verify alpha and beta are paired
-    ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
-              cmd_runner=['alpha', 'beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyPaired, cmd_runner=['alpha', 'beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha', 'beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha', 'beta'],
-              exp_status=st.ThreadStatus.Alive),
-
-    # 10) beta exits
-    ConfigCmd(cmd=ConfigCmds.Exit, cmd_runner=['beta']),
-
-    ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha'],
-              exp_status=st.ThreadStatus.Alive),
-    ConfigCmd(cmd=ConfigCmds.VerifyAliveNot, cmd_runner=['beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['beta'],
-              exp_status=st.ThreadStatus.Alive),
-
-    # 11) join and verify alpha half paired with beta
-    ConfigCmd(cmd=ConfigCmds.Join, cmd_runner=['beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyRegisteredNot, cmd_runner=['beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
-              cmd_runner=['alpha']),
-    ConfigCmd(cmd=ConfigCmds.VerifyPairedHalf,
-              cmd_runner=['alpha', 'beta'], half_paired_names=['alpha']),
-
-    # 12) alpha recv msg from beta
-    ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['beta'],
-              cmd_runner=['alpha']),
-
-    # 13) verify alpha not paired with beta
-    ConfigCmd(cmd=ConfigCmds.VerifyPairedNot, cmd_runner=['alpha', 'beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha'],
-              exp_status=st.ThreadStatus.Alive),
-)
-
 ########################################################################
 # 0) start alpha, beta, and charlie threads
-# 1) charlie send msg to beta
-# 2) beta recv msg from charlie
-# 3) charlie send msg to beta
-# 4) charlie exits
-# 5) verify beta half paired with charlie
-# 6) beta recv msg from charlie
-# 7) verify beta and charlie not paired
-# 8) exit beta
-# 9) join beta and verify alpha not paired with beta
+# 1) beta and charlie send msg to alpha
+# 2) beta and charlie exit
+# 3) verify alpha half paired with beta
+# 4) alpha recv msg from beta
+# 5) verify no pair with beta
 ########################################################################
-config_scenario_3 = (
-    # 0) start alpha, beta, and charlie threads
-    ConfigCmd(cmd=ConfigCmds.CreateAutoStart, cmd_runner=['beta', 'charlie']),
-    ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
-              cmd_runner=['alpha', 'beta', 'charlie']),
-    ConfigCmd(cmd=ConfigCmds.VerifyPaired, cmd_runner=['alpha', 'beta', 'charlie']),
-    ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha', 'beta', 'charlie']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha', 'beta', 'charlie'],
-              exp_status=st.ThreadStatus.Alive),
+# config_scenario_1 = (
+#     # 0) start alpha, beta, and charlie threads
+#     CreateCommanderAutoStart(cmd_runners='alpha',
+#                              commander_name='alpha'),
+#     CreateF1AutoStart(cmd_runners='alpha',
+#                       f1_create_items=[F1CreateItem(name='beta',
+#                                                 auto_start=True,
+#                                                 target_rtn=outer_f1),
+#                                        F1CreateItem(name='charlie',
+#                                                 auto_start=True,
+#                                                 target_rtn=outer_f1)]),
+#     Exit(cmd_runners='alpha',
+#          exit_names=['beta', 'charlie']),
+#     Join(cmd_runners='alpha',
+#          join_names=['beta', 'charlie']))
+#     ConfigCmd(cmd=ConfigCmds.VerifyPaired, cmd_runner=['alpha', 'beta', 'charlie']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha', 'beta', 'charlie']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha', 'beta', 'charlie'],
+#               exp_status=st.ThreadStatus.Alive),
+#
+#     # 1) beta and charlie send msg to alpha
+#     ConfigCmd(cmd=ConfigCmds.SendMsg, cmd_runner=['beta', 'charlie'],
+#               to_names=['alpha'],
+#               msg_to_send={'beta': 'scenario 1 send from beta',
+#                            'charlie': 'scenario 1 send from charlie'}),
+#
+#     # 2) beta and charlie exit
+#     ConfigCmd(cmd=ConfigCmds.Exit, cmd_runner=['beta', 'charlie']),
+#
+#     ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha'],
+#               exp_status=st.ThreadStatus.Alive),
+#     ConfigCmd(cmd=ConfigCmds.VerifyNotAlive, cmd_runner=['beta', 'charlie']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['beta', 'charlie'],
+#               exp_status=st.ThreadStatus.Alive),
+#
+#     # 3) join and verify alpha half paired with beta
+#     ConfigCmd(cmd=ConfigCmds.Join, cmd_runner=['alpha'],
+#               join_target_names=['beta']),
+#
+#     ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered, cmd_runner=['beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyAlive,
+#               cmd_runner=['alpha']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyPaired, cmd_runner=['alpha', 'charlie']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyHalfPaired,
+#               cmd_runner=['alpha', 'beta'], half_paired_names=['alpha']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyNotPaired, cmd_runner=['beta', 'charlie']),
+#
+#     # 4) alpha recv msg from beta
+#     ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['beta', 'charlie'],
+#               cmd_runner=['alpha'],
+#               msg_to_send={'beta': 'scenario 1 send from beta',
+#                            'charlie': 'scenario 1 send from charlie'}
+#               ),
+#
+#     # 5) verify not paired with beta
+#     ConfigCmd(cmd=ConfigCmds.VerifyPaired, cmd_runner=['alpha', 'charlie']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyNotPaired, cmd_runner=['alpha', 'beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyNotPaired, cmd_runner=['beta', 'charlie']),
+#
+#
+#     ConfigCmd(cmd=ConfigCmds.Join, cmd_runner=['alpha'],
+#               join_target_names=['charlie']),
+#
+#     ConfigCmd(cmd=ConfigCmds.VerifyNotRegistered,
+#               cmd_runner=['beta', 'charlie']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyNotPaired,
+#               cmd_runner=['alpha', 'beta', 'charlie']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha'],
+#               exp_status=st.ThreadStatus.Alive),
+# )
+#
+# ########################################################################
+# # 0) start alpha and beta threads
+# # 1) beta exits
+# # 2) verify alpha and beta not paired
+# # 3) start beta thread again
+# # 4) verify alpha and beta are paired
+# # 5) beta send msg to alpha
+# # 6) beta exits
+# # 7) verify alpha half paired with beta
+# # 8) start beta again
+# # 9) verify alpha and beta are paired
+# # 10) beta exits
+# # 11) verify alpha half paired with beta
+# # 12) alpha recv msg from beta
+# # 13) verify alpha not paired with beta
+#
+# ########################################################################
+# config_scenario_2 = (
+#     # 0) start alpha and beta threads
+#     ConfigCmd(cmd=ConfigCmds.CreateAutoStart, cmd_runner=['beta']),
+#
+#     ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+#               cmd_runner=['alpha', 'beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyPaired, cmd_runner=['alpha', 'beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha', 'beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha', 'beta'],
+#               exp_status=st.ThreadStatus.Alive),
+#
+#     # 1) beta exits
+#     ConfigCmd(cmd=ConfigCmds.Exit, cmd_runner=['beta']),
+#
+#     ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha'],
+#               exp_status=st.ThreadStatus.Alive),
+#     ConfigCmd(cmd=ConfigCmds.VerifyAliveNot, cmd_runner=['beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['beta'],
+#               exp_status=st.ThreadStatus.Alive),
+#
+#     ConfigCmd(cmd=ConfigCmds.Join, cmd_runner=['beta']),
+#
+#     # 2) verify alpha and beta not paired
+#     ConfigCmd(cmd=ConfigCmds.VerifyRegisteredNot, cmd_runner=['beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyPairedNot,
+#               cmd_runner=['alpha', 'beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha'],
+#               exp_status=st.ThreadStatus.Alive),
+#
+#     # 3) start beta thread again
+#     ConfigCmd(cmd=ConfigCmds.CreateAutoStart, cmd_runner=['beta']),
+#
+#     # 4) verify alpha and beta are paired
+#     ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+#               cmd_runner=['alpha', 'beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyPaired, cmd_runner=['alpha', 'beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha', 'beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha', 'beta'],
+#               exp_status=st.ThreadStatus.Alive),
+#
+#
+#     # 5) beta send msg to alpha
+#     ConfigCmd(cmd=ConfigCmds.SendMsg, cmd_runner=['beta'],
+#               to_names=['alpha']),
+#
+#     # 6) beta exits
+#     ConfigCmd(cmd=ConfigCmds.Exit, cmd_runner=['beta']),
+#
+#     ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha'],
+#               exp_status=st.ThreadStatus.Alive),
+#     ConfigCmd(cmd=ConfigCmds.VerifyAliveNot, cmd_runner=['beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['beta'],
+#               exp_status=st.ThreadStatus.Alive),
+#
+#     # 7) join and verify alpha half paired with beta
+#     ConfigCmd(cmd=ConfigCmds.Join, cmd_runner=['beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyRegisteredNot, cmd_runner=['beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+#               cmd_runner=['alpha']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyPairedHalf,
+#               cmd_runner=['alpha', 'beta'], half_paired_names=['alpha']),
+#
+#     # 8) start beta again
+#     ConfigCmd(cmd=ConfigCmds.CreateAutoStart, cmd_runner=['beta']),
+#
+#     # 9) verify alpha and beta are paired
+#     ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+#               cmd_runner=['alpha', 'beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyPaired, cmd_runner=['alpha', 'beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha', 'beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha', 'beta'],
+#               exp_status=st.ThreadStatus.Alive),
+#
+#     # 10) beta exits
+#     ConfigCmd(cmd=ConfigCmds.Exit, cmd_runner=['beta']),
+#
+#     ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha'],
+#               exp_status=st.ThreadStatus.Alive),
+#     ConfigCmd(cmd=ConfigCmds.VerifyAliveNot, cmd_runner=['beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['beta'],
+#               exp_status=st.ThreadStatus.Alive),
+#
+#     # 11) join and verify alpha half paired with beta
+#     ConfigCmd(cmd=ConfigCmds.Join, cmd_runner=['beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyRegisteredNot, cmd_runner=['beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+#               cmd_runner=['alpha']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyPairedHalf,
+#               cmd_runner=['alpha', 'beta'], half_paired_names=['alpha']),
+#
+#     # 12) alpha recv msg from beta
+#     ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['beta'],
+#               cmd_runner=['alpha']),
+#
+#     # 13) verify alpha not paired with beta
+#     ConfigCmd(cmd=ConfigCmds.VerifyPairedNot, cmd_runner=['alpha', 'beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha'],
+#               exp_status=st.ThreadStatus.Alive),
+# )
+#
+# ########################################################################
+# # 0) start alpha, beta, and charlie threads
+# # 1) charlie send msg to beta
+# # 2) beta recv msg from charlie
+# # 3) charlie send msg to beta
+# # 4) charlie exits
+# # 5) verify beta half paired with charlie
+# # 6) beta recv msg from charlie
+# # 7) verify beta and charlie not paired
+# # 8) exit beta
+# # 9) join beta and verify alpha not paired with beta
+# ########################################################################
+# config_scenario_3 = (
+#     # 0) start alpha, beta, and charlie threads
+#     ConfigCmd(cmd=ConfigCmds.CreateAutoStart, cmd_runner=['beta', 'charlie']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+#               cmd_runner=['alpha', 'beta', 'charlie']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyPaired, cmd_runner=['alpha', 'beta', 'charlie']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha', 'beta', 'charlie']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha', 'beta', 'charlie'],
+#               exp_status=st.ThreadStatus.Alive),
+#
+#     # 1) charlie send msg to beta
+#     ConfigCmd(cmd=ConfigCmds.SendMsg, cmd_runner=['charlie'],
+#               to_names=['beta']),
+#
+#     # 2) beta recv msg from charlie
+#     ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['charlie'],
+#               cmd_runner=['beta']),
+#
+#     # 3) charlie send msg to beta
+#     ConfigCmd(cmd=ConfigCmds.SendMsg, cmd_runner=['charlie'],
+#               to_names=['beta']),
+#
+#     # 4) charlie exits
+#     ConfigCmd(cmd=ConfigCmds.Exit, cmd_runner=['charlie']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha', 'beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha', 'beta'],
+#               exp_status=st.ThreadStatus.Alive),
+#     ConfigCmd(cmd=ConfigCmds.VerifyAliveNot, cmd_runner=['charlie']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['charlie'],
+#               exp_status=st.ThreadStatus.Alive),
+#
+#     # 5) join charlie and verify beta half paired with charlie
+#     ConfigCmd(cmd=ConfigCmds.Join, cmd_runner=['charlie']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyRegisteredNot, cmd_runner=['charlie']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+#               cmd_runner=['alpha', 'beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyPaired, cmd_runner=['alpha', 'beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyPairedHalf,
+#               cmd_runner=['beta', 'charlie'], half_paired_names=['beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyPairedNot, cmd_runner=['alpha', 'charlie']),
+#
+#     # 6) beta recv msg from charlie
+#     ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['charlie'],
+#               cmd_runner=['beta']),
+#
+#     # 7) verify beta and charlie not paired
+#     ConfigCmd(cmd=ConfigCmds.VerifyPaired, cmd_runner=['alpha', 'beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyPairedNot, cmd_runner=['alpha', 'charlie']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyPairedNot, cmd_runner=['beta', 'charlie']),
+#
+#     # 8) exit beta
+#     ConfigCmd(cmd=ConfigCmds.Exit, cmd_runner=['beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha'],
+#               exp_status=st.ThreadStatus.Alive),
+#     ConfigCmd(cmd=ConfigCmds.VerifyAliveNot, cmd_runner=['beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['beta'],
+#               exp_status=st.ThreadStatus.Alive),
+#
+#     # 9) join beta and verify alpha not paired with beta
+#     ConfigCmd(cmd=ConfigCmds.Join, cmd_runner=['beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyRegisteredNot, cmd_runner=['beta', 'charlie']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+#               cmd_runner=['alpha']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyPairedNot,
+#               cmd_runner=['alpha', 'beta', 'charlie']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha'],
+#               exp_status=st.ThreadStatus.Alive),
+# )
+#
+# ########################################################################
+# # 0) start alpha and beta threads
+# # 1) verify alpha and beta are paired
+# # 2) beta send first msg to alpha
+# # 3) beta send second msg to alpha
+# # 4) beta exits
+# # 5) join beta
+# # 6) verify alpha half paired with beta
+# # 7) alpha recv first msg from beta
+# # 8) verify alpha still half paired with beta
+# # 9) alpha recv second msg from beta
+# # 10) verify alpha not paired with beta
+#
+# ########################################################################
+# config_scenario_4 = (
+#     # 0) start alpha and beta threads
+#     ConfigCmd(cmd=ConfigCmds.CreateAutoStart, cmd_runner=['beta']),
+#
+#     # 1) verify alpha and beta are paired
+#     ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+#               cmd_runner=['alpha', 'beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyPaired, cmd_runner=['alpha', 'beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha', 'beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha', 'beta'],
+#               exp_status=st.ThreadStatus.Alive),
+#
+#     # 2) beta send first msg to alpha
+#     ConfigCmd(cmd=ConfigCmds.SendMsg, cmd_runner=['beta'],
+#               to_names=['alpha']),
+#
+#     # 3) beta send second msg to alpha
+#     ConfigCmd(cmd=ConfigCmds.SendMsg, cmd_runner=['beta'],
+#               to_names=['alpha']),
+#
+#     # 4) beta exits
+#     ConfigCmd(cmd=ConfigCmds.Exit, cmd_runner=['beta']),
+#
+#     ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha'],
+#               exp_status=st.ThreadStatus.Alive),
+#     ConfigCmd(cmd=ConfigCmds.VerifyAliveNot, cmd_runner=['beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['beta'],
+#               exp_status=st.ThreadStatus.Alive),
+#
+#     # 5) join beta
+#     ConfigCmd(cmd=ConfigCmds.Join, cmd_runner=['beta']),
+#
+#     ConfigCmd(cmd=ConfigCmds.VerifyRegisteredNot, cmd_runner=['beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
+#               cmd_runner=['alpha']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyPairedHalf,
+#               cmd_runner=['alpha', 'beta'], half_paired_names=['alpha']),
+#
+#     # 6) verify alpha half paired with beta
+#     ConfigCmd(cmd=ConfigCmds.VerifyRegisteredNot, cmd_runner=['beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyRegistered, cmd_runner=['alpha']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyPairedHalf,
+#               cmd_runner=['alpha', 'beta'], half_paired_names=['alpha']),
+#
+#     # 7) alpha recv first msg from beta
+#     ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['beta'],
+#               cmd_runner=['alpha']),
+#
+#     # 8) verify alpha still half paired with beta
+#     ConfigCmd(cmd=ConfigCmds.VerifyRegisteredNot, cmd_runner=['beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyRegistered, cmd_runner=['alpha']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyPairedHalf,
+#               cmd_runner=['alpha', 'beta'], half_paired_names=['alpha']),
+#
+#     # 9) alpha recv second msg from beta
+#     ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['beta'],
+#               cmd_runner=['alpha']),
+#
+#     # 10) verify alpha not paired with beta
+#     ConfigCmd(cmd=ConfigCmds.VerifyPairedNot, cmd_runner=['alpha', 'beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha'],
+#               exp_status=st.ThreadStatus.Alive),
+# )
+#
+# ########################################################################
+# # 0) start alpha and beta threads, auto_start=False
+# # 1) start beta
+# # 2) send msg from f1 to alpha
+# # 3) alpha recv msg
+# ########################################################################
+# config_scenario_5 = (
+#     # 0) start alpha and beta threads, auto_start=False
+#     ConfigCmd(cmd=ConfigCmds.CreateNoStart, cmd_runner=['beta'],
+#               auto_start=False),
+#
+#     ConfigCmd(cmd=ConfigCmds.VerifyRegistered, cmd_runner=['alpha', 'beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyPaired, cmd_runner=['alpha', 'beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha'],
+#               exp_status=st.ThreadStatus.Alive),
+#     ConfigCmd(cmd=ConfigCmds.VerifyAliveNot, cmd_runner=['beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['beta'],
+#               exp_status=st.ThreadStatus.Registered),
+#
+#     # 1) start beta
+#     ConfigCmd(cmd=ConfigCmds.Start, cmd_runner=['beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha', 'beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha', 'beta'],
+#               exp_status=st.ThreadStatus.Alive),
+#
+#
+#     # 2) send msg from f1 to alpha
+#     ConfigCmd(cmd=ConfigCmds.SendMsg, cmd_runner=['beta'],
+#               to_names=['alpha']),
+#
+#     # 3) alpha recv msg
+#     ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['beta'],
+#               cmd_runner=['alpha']),
+#
+#     ConfigCmd(cmd=ConfigCmds.Exit, cmd_runner=['beta']),
+#
+#     ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha'],
+#               exp_status=st.ThreadStatus.Alive),
+#     ConfigCmd(cmd=ConfigCmds.VerifyAliveNot, cmd_runner=['beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['beta'],
+#               exp_status=st.ThreadStatus.Alive),
+#
+#     ConfigCmd(cmd=ConfigCmds.Join, cmd_runner=['beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyRegistered, cmd_runner=['alpha']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyRegisteredNot, cmd_runner=['beta']),
+#     ConfigCmd(cmd=ConfigCmds.VerifyPairedNot, cmd_runner=['alpha', 'beta']),
+# )
 
-    # 1) charlie send msg to beta
-    ConfigCmd(cmd=ConfigCmds.SendMsg, cmd_runner=['charlie'],
-              to_names=['beta']),
-
-    # 2) beta recv msg from charlie
-    ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['charlie'],
-              cmd_runner=['beta']),
-
-    # 3) charlie send msg to beta
-    ConfigCmd(cmd=ConfigCmds.SendMsg, cmd_runner=['charlie'],
-              to_names=['beta']),
-
-    # 4) charlie exits
-    ConfigCmd(cmd=ConfigCmds.Exit, cmd_runner=['charlie']),
-    ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha', 'beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha', 'beta'],
-              exp_status=st.ThreadStatus.Alive),
-    ConfigCmd(cmd=ConfigCmds.VerifyAliveNot, cmd_runner=['charlie']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['charlie'],
-              exp_status=st.ThreadStatus.Alive),
-
-    # 5) join charlie and verify beta half paired with charlie
-    ConfigCmd(cmd=ConfigCmds.Join, cmd_runner=['charlie']),
-    ConfigCmd(cmd=ConfigCmds.VerifyRegisteredNot, cmd_runner=['charlie']),
-    ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
-              cmd_runner=['alpha', 'beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyPaired, cmd_runner=['alpha', 'beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyPairedHalf,
-              cmd_runner=['beta', 'charlie'], half_paired_names=['beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyPairedNot, cmd_runner=['alpha', 'charlie']),
-
-    # 6) beta recv msg from charlie
-    ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['charlie'],
-              cmd_runner=['beta']),
-
-    # 7) verify beta and charlie not paired
-    ConfigCmd(cmd=ConfigCmds.VerifyPaired, cmd_runner=['alpha', 'beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyPairedNot, cmd_runner=['alpha', 'charlie']),
-    ConfigCmd(cmd=ConfigCmds.VerifyPairedNot, cmd_runner=['beta', 'charlie']),
-
-    # 8) exit beta
-    ConfigCmd(cmd=ConfigCmds.Exit, cmd_runner=['beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha'],
-              exp_status=st.ThreadStatus.Alive),
-    ConfigCmd(cmd=ConfigCmds.VerifyAliveNot, cmd_runner=['beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['beta'],
-              exp_status=st.ThreadStatus.Alive),
-
-    # 9) join beta and verify alpha not paired with beta
-    ConfigCmd(cmd=ConfigCmds.Join, cmd_runner=['beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyRegisteredNot, cmd_runner=['beta', 'charlie']),
-    ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
-              cmd_runner=['alpha']),
-    ConfigCmd(cmd=ConfigCmds.VerifyPairedNot,
-              cmd_runner=['alpha', 'beta', 'charlie']),
-    ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha'],
-              exp_status=st.ThreadStatus.Alive),
-)
-
-########################################################################
-# 0) start alpha and beta threads
-# 1) verify alpha and beta are paired
-# 2) beta send first msg to alpha
-# 3) beta send second msg to alpha
-# 4) beta exits
-# 5) join beta
-# 6) verify alpha half paired with beta
-# 7) alpha recv first msg from beta
-# 8) verify alpha still half paired with beta
-# 9) alpha recv second msg from beta
-# 10) verify alpha not paired with beta
-
-########################################################################
-config_scenario_4 = (
-    # 0) start alpha and beta threads
-    ConfigCmd(cmd=ConfigCmds.CreateAutoStart, cmd_runner=['beta']),
-
-    # 1) verify alpha and beta are paired
-    ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
-              cmd_runner=['alpha', 'beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyPaired, cmd_runner=['alpha', 'beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha', 'beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha', 'beta'],
-              exp_status=st.ThreadStatus.Alive),
-
-    # 2) beta send first msg to alpha
-    ConfigCmd(cmd=ConfigCmds.SendMsg, cmd_runner=['beta'],
-              to_names=['alpha']),
-
-    # 3) beta send second msg to alpha
-    ConfigCmd(cmd=ConfigCmds.SendMsg, cmd_runner=['beta'],
-              to_names=['alpha']),
-
-    # 4) beta exits
-    ConfigCmd(cmd=ConfigCmds.Exit, cmd_runner=['beta']),
-
-    ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha'],
-              exp_status=st.ThreadStatus.Alive),
-    ConfigCmd(cmd=ConfigCmds.VerifyAliveNot, cmd_runner=['beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['beta'],
-              exp_status=st.ThreadStatus.Alive),
-
-    # 5) join beta
-    ConfigCmd(cmd=ConfigCmds.Join, cmd_runner=['beta']),
-
-    ConfigCmd(cmd=ConfigCmds.VerifyRegisteredNot, cmd_runner=['beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyRegistered,
-              cmd_runner=['alpha']),
-    ConfigCmd(cmd=ConfigCmds.VerifyPairedHalf,
-              cmd_runner=['alpha', 'beta'], half_paired_names=['alpha']),
-
-    # 6) verify alpha half paired with beta
-    ConfigCmd(cmd=ConfigCmds.VerifyRegisteredNot, cmd_runner=['beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyRegistered, cmd_runner=['alpha']),
-    ConfigCmd(cmd=ConfigCmds.VerifyPairedHalf,
-              cmd_runner=['alpha', 'beta'], half_paired_names=['alpha']),
-
-    # 7) alpha recv first msg from beta
-    ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['beta'],
-              cmd_runner=['alpha']),
-
-    # 8) verify alpha still half paired with beta
-    ConfigCmd(cmd=ConfigCmds.VerifyRegisteredNot, cmd_runner=['beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyRegistered, cmd_runner=['alpha']),
-    ConfigCmd(cmd=ConfigCmds.VerifyPairedHalf,
-              cmd_runner=['alpha', 'beta'], half_paired_names=['alpha']),
-
-    # 9) alpha recv second msg from beta
-    ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['beta'],
-              cmd_runner=['alpha']),
-
-    # 10) verify alpha not paired with beta
-    ConfigCmd(cmd=ConfigCmds.VerifyPairedNot, cmd_runner=['alpha', 'beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha'],
-              exp_status=st.ThreadStatus.Alive),
-)
-
-########################################################################
-# 0) start alpha and beta threads, auto_start=False
-# 1) start beta
-# 2) send msg from f1 to alpha
-# 3) alpha recv msg
-########################################################################
-config_scenario_5 = (
-    # 0) start alpha and beta threads, auto_start=False
-    ConfigCmd(cmd=ConfigCmds.CreateNoStart, cmd_runner=['beta'],
-              auto_start=False),
-
-    ConfigCmd(cmd=ConfigCmds.VerifyRegistered, cmd_runner=['alpha', 'beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyPaired, cmd_runner=['alpha', 'beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha'],
-              exp_status=st.ThreadStatus.Alive),
-    ConfigCmd(cmd=ConfigCmds.VerifyAliveNot, cmd_runner=['beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['beta'],
-              exp_status=st.ThreadStatus.Registered),
-
-    # 1) start beta
-    ConfigCmd(cmd=ConfigCmds.Start, cmd_runner=['beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha', 'beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha', 'beta'],
-              exp_status=st.ThreadStatus.Alive),
+# config_scenario_arg_list = [config_scenario_1,
+#                             config_scenario_2,
+#                             config_scenario_3,
+#                             config_scenario_4,
+#                             config_scenario_5]
+# config_scenario_arg_list = [config_scenario_1]
+#
+# @pytest.fixture(params=config_scenario_arg_list)  # type: ignore
+# def config_scenario_arg(request: Any) -> tuple[ConfigCmd]:
+#     """Using different scenarios.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return request.param
 
 
-    # 2) send msg from f1 to alpha
-    ConfigCmd(cmd=ConfigCmds.SendMsg, cmd_runner=['beta'],
-              to_names=['alpha']),
-
-    # 3) alpha recv msg
-    ConfigCmd(cmd=ConfigCmds.RecvMsg, from_names=['beta'],
-              cmd_runner=['alpha']),
-
-    ConfigCmd(cmd=ConfigCmds.Exit, cmd_runner=['beta']),
-
-    ConfigCmd(cmd=ConfigCmds.VerifyAlive, cmd_runner=['alpha']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['alpha'],
-              exp_status=st.ThreadStatus.Alive),
-    ConfigCmd(cmd=ConfigCmds.VerifyAliveNot, cmd_runner=['beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=['beta'],
-              exp_status=st.ThreadStatus.Alive),
-
-    ConfigCmd(cmd=ConfigCmds.Join, cmd_runner=['beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyRegistered, cmd_runner=['alpha']),
-    ConfigCmd(cmd=ConfigCmds.VerifyRegisteredNot, cmd_runner=['beta']),
-    ConfigCmd(cmd=ConfigCmds.VerifyPairedNot, cmd_runner=['alpha', 'beta']),
-)
-
-config_scenario_arg_list = [config_scenario_2,
-                            config_scenario_3,
-                            config_scenario_4,
-                            config_scenario_5]
-
-
-@pytest.fixture(params=config_scenario_arg_list)  # type: ignore
-def config_scenario_arg(request: Any) -> tuple[ConfigCmd]:
-    """Using different scenarios.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return request.param
-
-
-###############################################################################
-# Cmd Constants
-###############################################################################
-Cmd = Enum('Cmd', 'Wait Wait_TOT Wait_TOF Wait_Clear Resume Sync Exit '
-                  'Next_Action')
-
-###############################################################################
-# Action
-###############################################################################
-Action = Enum('Action',
-              'MainWait '
-              'MainSync MainSync_TOT MainSync_TOF '
-              'MainResume MainResume_TOT MainResume_TOF '
-              'ThreadWait ThreadWait_TOT ThreadWait_TOF '
-              'ThreadResume ')
-
-###############################################################################
-# action_arg fixtures
-###############################################################################
-action_arg_list = [Action.MainWait,
-                   Action.MainSync,
-                   Action.MainSync_TOT,
-                   Action.MainSync_TOF,
-                   Action.MainResume,
-                   Action.MainResume_TOT,
-                   Action.MainResume_TOF,
-                   Action.ThreadWait,
-                   Action.ThreadWait_TOT,
-                   Action.ThreadWait_TOF,
-                   Action.ThreadResume]
-
-action_arg_list1 = [Action.MainWait
-                    # Action.MainResume,
-                    # Action.MainResume_TOT,
-                    # Action.MainResume_TOF,
-                    # Action.ThreadWait,
-                    # Action.ThreadWait_TOT,
-                    # Action.ThreadWait_TOF,
-                    # Action.ThreadResume
-                    ]
-
-action_arg_list2 = [  # Action.MainWait,
-                    # Action.MainResume,
-                    # Action.MainResume_TOT,
-                    Action.MainResume_TOF
-                    # Action.ThreadWait,
-                    # Action.ThreadWait_TOT,
-                    # Action.ThreadWait_TOF,
-                    # Action.ThreadResume
-                    ]
-
-
-@pytest.fixture(params=action_arg_list)  # type: ignore
-def action_arg1(request: Any) -> Any:
-    """Using different reply messages.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return request.param
-
-
-@pytest.fixture(params=action_arg_list)  # type: ignore
-def action_arg2(request: Any) -> Any:
-    """Using different reply messages.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return request.param
+# ###############################################################################
+# # Cmd Constants
+# ###############################################################################
+# Cmd = Enum('Cmd', 'Wait Wait_TOT Wait_TOF Wait_Clear Resume Sync Exit '
+#                   'Next_Action')
+#
+# ###############################################################################
+# # Action
+# ###############################################################################
+# Action = Enum('Action',
+#               'MainWait '
+#               'MainSync MainSync_TOT MainSync_TOF '
+#               'MainResume MainResume_TOT MainResume_TOF '
+#               'ThreadWait ThreadWait_TOT ThreadWait_TOF '
+#               'ThreadResume ')
+#
+# ###############################################################################
+# # action_arg fixtures
+# ###############################################################################
+# action_arg_list = [Action.MainWait,
+#                    Action.MainSync,
+#                    Action.MainSync_TOT,
+#                    Action.MainSync_TOF,
+#                    Action.MainResume,
+#                    Action.MainResume_TOT,
+#                    Action.MainResume_TOF,
+#                    Action.ThreadWait,
+#                    Action.ThreadWait_TOT,
+#                    Action.ThreadWait_TOF,
+#                    Action.ThreadResume]
+#
+# action_arg_list1 = [Action.MainWait
+#                     # Action.MainResume,
+#                     # Action.MainResume_TOT,
+#                     # Action.MainResume_TOF,
+#                     # Action.ThreadWait,
+#                     # Action.ThreadWait_TOT,
+#                     # Action.ThreadWait_TOF,
+#                     # Action.ThreadResume
+#                     ]
+#
+# action_arg_list2 = [  # Action.MainWait,
+#                     # Action.MainResume,
+#                     # Action.MainResume_TOT,
+#                     Action.MainResume_TOF
+#                     # Action.ThreadWait,
+#                     # Action.ThreadWait_TOT,
+#                     # Action.ThreadWait_TOF,
+#                     # Action.ThreadResume
+#                     ]
+#
+#
+# @pytest.fixture(params=action_arg_list)  # type: ignore
+# def action_arg1(request: Any) -> Any:
+#     """Using different reply messages.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return request.param
+#
+#
+# @pytest.fixture(params=action_arg_list)  # type: ignore
+# def action_arg2(request: Any) -> Any:
+#     """Using different reply messages.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return request.param
 
 
 ###############################################################################
@@ -1728,7 +1866,7 @@ def num_stopped_2_arg(request: Any) -> int:
 timeout_type_arg_list = [TimeoutType.TimeoutNone,
                          TimeoutType.TimeoutFalse,
                          TimeoutType.TimeoutTrue]
-timeout_type_arg_list = [TimeoutType.TimeoutTrue]
+# timeout_type_arg_list = [TimeoutType.TimeoutTrue]
 
 @pytest.fixture(params=timeout_type_arg_list)  # type: ignore
 def timeout_type_arg(request: Any) -> TimeoutType:
@@ -2303,7 +2441,7 @@ class F1CreateItem:
     """Class that has infor for f1 create."""
     name: str
     auto_start: bool
-    target_rtn: Calable[..., Any]
+    target_rtn: Callable[..., Any]
 
 
 ########################################################################
@@ -2369,7 +2507,7 @@ class ConfigVerifier:
         self.log_ver = log_ver
         self.msgs = msgs
         self.ops_lock = threading.Lock()
-        self.commander_thread: st.SmartThread = None
+        self.commander_thread: Optional[st.SmartThread] = None
         self.f1_threads: dict[str, st.SmartThread] = {}
         self.all_threads: dict[str, st.SmartThread] = {}
         self.created_names: list[str] = []
@@ -2507,6 +2645,7 @@ class ConfigVerifier:
         log_arrays = list(thread.reg_log_array.copy())
         log_arrays.reverse()
 
+        log_array = None
         for l_item in log_arrays:
             if l_item.process_name == name:
                 log_array = l_item
@@ -2750,40 +2889,39 @@ class ConfigVerifier:
 
         # start by reducing surpluses
         if num_reg_to_unreg > 0:
-            ret_suite.extend(
-                self.build_unreg_suite_num(num_to_unreg=num_reg_to_unreg))
+            self.build_unreg_suite_num(num_to_unreg=num_reg_to_unreg)
 
         if num_stopped_to_join > 0:
-            ret_suite.extend(
-                self.build_join_suite_num(num_to_join=num_stopped_to_join))
+            self.build_join_suite_num(
+                cmd_runners=self.commander_name
+                num_to_join=num_stopped_to_join)
 
         # create threads with no_start
         if num_create_no_start > 0:
-            ret_suite.extend(
-                self.build_f1_create_suite_num(
+            self.build_f1_create_suite_num(
                     num_to_create=num_create_no_start,
-                    auto_start=False))
+                    auto_start=False)
 
         # start registered so we have actives to exit if need be
         if num_reg_to_start > 0:
-            ret_suite.extend(self.build_start_suite_num(
-                num_to_start=num_reg_to_start))
+            self.build_start_suite_num(num_to_start=num_reg_to_start)
 
         # create threads with auto_start
         if num_create_auto_start > 0:
-            ret_suite.extend(self.build_f1_create_suite_num(
+            self.build_f1_create_suite_num(
                 num_to_create=num_create_auto_start,
-                auto_start=True))
+                auto_start=True)
 
         # Now that we have actives, do any needed exits
         if num_active_to_exit > 0:
-            ret_suite.extend(self.build_exit_suite_num(
-                num_to_exit=num_active_to_exit))
+            self.build_exit_suite_num(
+                num_to_exit=num_active_to_exit)
 
         # Finally, join the stopped threads as needed
         if num_active_to_join > 0:
-            ret_suite.extend(self.build_join_suite_num(
-                num_to_join=num_active_to_join))
+            self.build_join_suite_num(
+                cmd_runners=self.commander_name,
+                num_to_join=num_active_to_join)
 
         # verify the counts
         self.add_cmd(VerifyCounts(cmd_runners=self.commander_name,
@@ -2801,7 +2939,7 @@ class ConfigVerifier:
                                  num_registered_2: int,
                                  num_active_2: int,
                                  num_stopped_2: int
-                         ) -> list[ConfigCmd]:
+                         ) -> None:
         """Return a list of ConfigCmd items for config build.
 
         Args:
@@ -2819,16 +2957,14 @@ class ConfigVerifier:
         Returns:
             a list of ConfigCmd items
         """
-        ret_suite: list[Any] = self.build_config(
+        self.build_config(
             num_registered=num_registered_1,
             num_active=num_active_1,
             num_stopped=num_stopped_1)
-        ret_suite.extend(self.build_config(
+        self.build_config(
             num_registered=num_registered_2,
             num_active=num_active_2,
-            num_stopped=num_stopped_2))
-
-        return ret_suite
+            num_stopped=num_stopped_2)
 
     ####################################################################
     # build_create_suite
@@ -2941,15 +3077,20 @@ class ConfigVerifier:
             self.add_cmd(Exit(cmd_runners=self.commander_name,
                               exit_names=names))
             if validate_config:
-                self.add_cmd(VerifyAliveNot(cmd_runners=self.command_name,
+                self.add_cmd(VerifyAliveNot(cmd_runners=self.commander_name,
                                             exp_not_alive_names=names))
-                    ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=names,
-                              exp_status=st.ThreadStatus.Alive)])
+                self.add_cmd(VerifyStatus(
+                    cmd_runners=self.commander_name,
+                    check_status_names=names,
+                    expected_status=st.ThreadStatus.Alive))
+
         if active_names and validate_config:
-            self.add_cmd(VerifyAlive(cmd_runners=self.command_name,
+            self.add_cmd(VerifyAlive(cmd_runners=self.commander_name,
                                      exp_alive_names=active_names))
-                ConfigCmd(cmd=ConfigCmds.VerifyStatus, cmd_runner=active_names,
-                          exp_status=st.ThreadStatus.Alive)])
+            self.add_cmd(VerifyStatus(
+                cmd_runners=self.commander_name,
+                check_status_names=active_names,
+                expected_status=st.ThreadStatus.Alive))
 
         if validate_config:
             self.add_cmd(ValidateConfig(cmd_runners=self.commander_name))
@@ -2957,13 +3098,11 @@ class ConfigVerifier:
         self.active_names -= set(names)
         self.stopped_names |= set(names)
 
-        return ret_suite
-
     ################################################################
     # build_exit_suite_num
     ################################################################
     def build_exit_suite_num(self,
-                             num_to_exit: int) -> list[ConfigCmd]:
+                             num_to_exit: int) -> None:
         """Return a list of ConfigCmd items for unregister.
 
         Args:
@@ -3053,13 +3192,12 @@ class ConfigVerifier:
                                        f'{self.stopped_names}')
 
         if join_target_names:
-            self.add_cmd(
-                Join(cmd_runners=cmd_runners,
-                     join_names=join_target_names,
-                     log_msg=log_msg))
-            self.add_msg(VerifyInRegistryNot(
+            self.add_cmd(Join(
+                cmd_runners=cmd_runners,
+                join_names=join_target_names))
+            self.add_cmd(VerifyInRegistryNot(
                 cmd_runners=self.commander_name,
-                exp_notin_registry_names=join_target_names))
+                exp_not_in_registry_names=join_target_names))
             self.add_cmd(VerifyPairedNot(
                 cmd_runners=self.commander_name,
                 exp_not_paired_names=join_target_names))
@@ -3074,10 +3212,12 @@ class ConfigVerifier:
     # build_join_suite
     ################################################################
     def build_join_suite_num(self,
-                             num_to_join: int) -> list[ConfigCmd]:
+                             cmd_runners: StrOrList,
+                             num_to_join: int) -> None:
         """Return a list of ConfigCmd items for join.
 
         Args:
+            cmd_runners: thread or threads running the command
             num_to_join: number of threads to join
 
         Returns:
@@ -3094,8 +3234,9 @@ class ConfigVerifier:
         names: list[str] = list(
             random.sample(self.stopped_names, num_to_join))
 
-        return self.build_join_suite(names=[self.commander_name],
-                                     join_target_names=names)
+        self.build_join_suite(
+            cmd_runners=cmd_runners,
+            join_target_names=names)
 
     ################################################################
     # build_join_timeout_suite
@@ -3109,7 +3250,7 @@ class ConfigVerifier:
             num_no_delay_unreg: int,
             num_delay_unreg: int,
             num_no_delay_reg: int,
-            num_delay_reg: int) -> list[ConfigCmd]:
+            num_delay_reg: int) -> None:
         """Return a list of ConfigCmd items for a create.
 
         Args:
@@ -3177,9 +3318,9 @@ class ConfigVerifier:
                 + num_delay_exit
                 + 1)
 
-        ret_suite: list[ConfigCmd] = (self.build_config(
+        self.build_config(
             num_registered=num_registered_needed,
-            num_active=num_active_needed))
+            num_active=num_active_needed)
 
         self.log_name_groups()
 
@@ -3303,8 +3444,8 @@ class ConfigVerifier:
         # handle no_delay_exit_names
         ################################################################
         if no_delay_exit_names:
-            ret_suite.extend(self.build_exit_suite(names=no_delay_exit_names,
-                                                   validate_config=False))
+            self.build_exit_suite(names=no_delay_exit_names,
+                                                   validate_config=False)
 
         ################################################################
         # handle no_delay_unreg_names
@@ -3324,12 +3465,10 @@ class ConfigVerifier:
         # handle no_delay_reg_names
         ################################################################
         if no_delay_reg_names:
-            ret_suite.extend(
-                self.build_start_suite(names=no_delay_reg_names,
-                                       validate_config=False))
-            ret_suite.extend(
-                self.build_exit_suite(names=no_delay_reg_names,
-                                      validate_config=False))
+            self.build_start_suite(names=no_delay_reg_names,
+                                   validate_config=False)
+            self.build_exit_suite(names=no_delay_reg_names,
+                                  validate_config=False)
 
         ################################################################
         # pause for short or long delay
@@ -3348,9 +3487,8 @@ class ConfigVerifier:
         # handle delay_exit_names
         ################################################################
         if delay_exit_names:
-            ret_suite.extend(
-                self.build_exit_suite(names=delay_exit_names,
-                                      validate_config=False))
+            self.build_exit_suite(names=delay_exit_names,
+                                  validate_config=False)
 
         ################################################################
         # handle delay_unreg_names
@@ -3370,12 +3508,10 @@ class ConfigVerifier:
         # handle delay_reg_names
         ################################################################
         if delay_reg_names:
-            ret_suite.extend(
-                self.build_start_suite(names=delay_reg_names,
-                                       validate_config=False))
-            ret_suite.extend(
-                self.build_exit_suite(names=delay_reg_names,
-                                      validate_config=False))
+            self.build_start_suite(names=delay_reg_names,
+                                   validate_config=False)
+            self.build_exit_suite(names=delay_reg_names,
+                                  validate_config=False)
 
         ################################################################
         # finally, confirm the recv_msg is done
@@ -3643,10 +3779,8 @@ class ConfigVerifier:
             self.add_cmd(
                 Pause(cmd_runners=self.commander_name,
                       pause_seconds=3))
-                              ConfigCmd(cmd=ConfigCmds.WaitForMsgTimeouts,
-                                        cmd_runner=[self.commander_name],
-                                        wait_for_recv_timeouts=True)
-                              ])
+            self.add_cmd(WaitForRecvTimeouts(cmd_runners=self.commander_name))
+
         ################################################################
         # do send_msg from active_delay_senders
         ################################################################
@@ -3672,23 +3806,23 @@ class ConfigVerifier:
                         receivers=receiver_names,
                         msgs_to_send=sender_msgs))
 
-            ret_suite.extend(self.build_exit_suite(
-                names=send_exit_sender_names, validate_config=False))
-            ret_suite.extend(self.build_join_suite(
+            self.build_exit_suite(
+                names=send_exit_sender_names, validate_config=False)
+            self.build_join_suite(
                 cmd_runners=self.commander_name,
                 join_target_names=send_exit_sender_names,
-                validate_config=False))
+                validate_config=False)
 
         ################################################################
         # exit the nosend_exit_senders, then resurrect and do send_msg
         ################################################################
         if nosend_exit_sender_names:
-            ret_suite.extend(self.build_exit_suite(
-                names=nosend_exit_sender_names, validate_config=False))
-            ret_suite.extend(self.build_join_suite(
+            self.build_exit_suite(
+                names=nosend_exit_sender_names, validate_config=False)
+            self.build_join_suite(
                 cmd_runners=self.commander_name,
                 join_target_names=nosend_exit_sender_names,
-                validate_config=False))
+                validate_config=False)
             f1_create_items: list[F1CreateItem] = []
             for name in nosend_exit_sender_names:
                 f1_create_items.append(F1CreateItem(name=name,
@@ -3723,9 +3857,9 @@ class ConfigVerifier:
         # start the reg_senders, then do send_msg
         ################################################################
         if reg_sender_names:
-            ret_suite.extend(self.build_start_suite(
+            self.build_start_suite(
                 names=reg_sender_names,
-                validate_config=False))
+                validate_config=False)
             self.add_cmd(
                 SendMsg(cmd_runners=reg_sender_names,
                         receivers=receiver_names,
@@ -3994,10 +4128,10 @@ class ConfigVerifier:
                                         confirm_serial_num=send_msg_serial_num,
                                         confirmers=sender_names))
 
-            ret_suite.extend(self.build_exit_suite(names=exit_names))
-            ret_suite.extend(self.build_join_suite(
+            self.build_exit_suite(names=exit_names)
+            self.build_join_suite(
                 cmd_runners=self.commander_name,
-                join_target_names=exit_names))
+                join_target_names=exit_names)
 
             for exit_name in exit_names:
                 self.add_cmd(VerifyPairedNot(
@@ -4009,14 +4143,14 @@ class ConfigVerifier:
                     self.add_cmd(VerifyPairedHalf(
                         cmd_runners=self.commander_name,
                         pair_names=[exit_name, sender_names[1]],
-                        exp_paired_names=sender_names[1]))
+                        exp_half_paired_names=sender_names[1]))
 
             if num_senders == 3:
                 for exit_name in exit_names:
                     self.add_cmd(VerifyPairedHalf(
                         cmd_runners=self.commander_name,
                         pair_names=[exit_name, sender_names[2]],
-                        exp_paired_names=sender_names[2]))
+                        exp_half_paired_names=sender_names[2]))
 
         all_targets: list[str] = (active_target_names
                                   + registered_target_names
@@ -4040,14 +4174,14 @@ class ConfigVerifier:
                     fullq_timeout_names=full_q_names))
 
             confirm_cmd_to_use = 'SendMsgTimeoutTrue'
-            ############################################################
-            # confirm the send_msg
-            ############################################################
-            self.add_cmd(
-                ConfirmResponse(cmd_runners=[self.commander_name],
-                                confirm_cmd=confirm_cmd_to_use,
-                                confirm_serial_num=send_msg_serial_num,
-                                confirmers=sender_names))
+            # ############################################################
+            # # confirm the send_msg
+            # ############################################################
+            # self.add_cmd(
+            #     ConfirmResponse(cmd_runners=[self.commander_name],
+            #                     confirm_cmd=confirm_cmd_to_use,
+            #                     confirm_serial_num=send_msg_serial_num,
+            #                     confirmers=sender_names))
 
             final_recv_names = active_target_names + registered_target_names
         else:
@@ -4060,7 +4194,7 @@ class ConfigVerifier:
                         cmd_runners=sender_names,
                         receivers=all_targets,
                         msgs_to_send=sender_msgs,
-                        timeout=3.0)
+                        timeout=3.0))
                     # ConfigCmd(cmd=ConfigCmds.SendMsgTimeoutFalse,
                     #           cmd_runner=sender_names,
                     #           to_names=all_targets,
@@ -4079,11 +4213,12 @@ class ConfigVerifier:
                             msgs_to_send=sender_msgs))
                 confirm_cmd_to_use = 'SendMsg'
 
-            ret_suite.extend([ConfigCmd(
-                cmd=ConfigCmds.WaitForMsgTimeouts,
-                cmd_runner=sender_names,
-                unreg_timeout_names=unreg_timeout_names + exit_names,
-                fullq_timeout_names=full_q_names)])
+            self.add_cmd(WaitForSendTimeouts(
+                cmd_runners=self.commander_name,
+                sender_names=sender_names,
+                unreg_names=unreg_timeout_names + exit_names,
+                fullq_names=full_q_names))
+
 
             # restore config by adding back the exited threads and
             # creating the un_reg threads so send_msg will complete
@@ -4107,20 +4242,21 @@ class ConfigVerifier:
                                 senders=sender_names,
                                 exp_msgs=sender_msgs))
 
-            ############################################################
-            # confirm the send_msg
-            ############################################################
-            self.add_cmd(
-                ConfirmResponse(cmd_runners=[self.commander_name],
-                                confirm_cmd=confirm_cmd_to_use,
-                                confirm_serial_num=send_msg_serial_num,
-                                confirmers=sender_names))
             final_recv_names = all_targets
+
+        ################################################################
+        # confirm the send_msg
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(cmd_runners=[self.commander_name],
+                            confirm_cmd=confirm_cmd_to_use,
+                            confirm_serial_num=send_msg_serial_num,
+                            confirmers=sender_names))
 
         # start any registered threads
         if registered_target_names:
-            ret_suite.extend(self.build_start_suite(
-                names=registered_target_names))
+            self.build_start_suite(
+                names=registered_target_names)
 
         # do RecvMsg to verify the SendMsg for targets
         if final_recv_names:
@@ -4131,7 +4267,7 @@ class ConfigVerifier:
                         log_msg=log_msg))
 
             ############################################################
-            # confirm the send_msg
+            # confirm the recv_msg
             ############################################################
             self.add_cmd(
                 ConfirmResponse(cmd_runners=[self.commander_name],
@@ -4193,16 +4329,56 @@ class ConfigVerifier:
             # pending messages, and then verify exit names and senders
             # are no longer paired
             if timeout_type != TimeoutType.TimeoutTrue:
-                ret_suite.extend(self.build_exit_suite(names=exit_names))
-                ret_suite.extend(self.build_join_suite(
+                self.build_exit_suite(names=exit_names)
+                self.build_join_suite(
                     cmd_runners=self.commander_name,
-                    join_target_names=exit_names))
+                    join_target_names=exit_names)
 
             for sender_name in sender_names:
                 exp_not_paired = [sender_name] + exit_names
                 self.add_cmd(VerifyPairedNot(
                     cmd_runners=self.commander_name,
                     exp_not_paired_names=exp_not_paired))
+
+    ################################################################
+    # build_join_suite
+    ################################################################
+
+    def build_simple_scenario(self) -> None:
+        """Add config cmds to the scenario queue.
+
+        """
+        self.add_cmd(CreateCommanderAutoStart(
+            cmd_runners='alpha',
+            commander_name='alpha'))
+        self.add_cmd(ValidateConfig(
+            cmd_runners='alpha'))
+        self.add_cmd(CreateF1AutoStart(
+            cmd_runners='alpha',
+            f1_create_items=[F1CreateItem(name='beta',
+                                          auto_start=True,
+                                          target_rtn=outer_f1),
+                             F1CreateItem(name='charlie',
+                                          auto_start=True,
+                                          target_rtn=outer_f1)]))
+        self.add_cmd(Pause(
+            cmd_runners='alpha',
+            pause_seconds=1))
+        self.add_cmd(ValidateConfig(
+            cmd_runners='alpha'))
+        self.add_cmd(Exit(
+            cmd_runners='alpha',
+            exit_names=['beta', 'charlie']))
+        self.add_cmd(Pause(
+            cmd_runners='alpha',
+            pause_seconds=1))
+        self.add_cmd(ValidateConfig(
+            cmd_runners='alpha'))
+        self.add_cmd(Join(
+            cmd_runners='alpha',
+            join_names=['beta', 'charlie']))
+        self.add_cmd(ValidateConfig(
+            cmd_runners='alpha'))
 
     ################################################################
     # build_start_suite
@@ -4241,7 +4417,7 @@ class ConfigVerifier:
     # build_start_suite_num
     ################################################################
     def build_start_suite_num(self,
-                              num_to_start: int) -> list[ConfigCmd]:
+                              num_to_start: int) -> None:
         """Return a list of ConfigCmd items for unregister.
 
         Args:
@@ -4283,7 +4459,7 @@ class ConfigVerifier:
 
         self.add_cmd(Unregister(cmd_runners=self.commander_name,
                                 unregister_targets=names))
-        self.add_msg(VerifyInRegistryNot(
+        self.add_cmd(VerifyInRegistryNot(
             cmd_runners=self.commander_name,
             exp_not_in_registry_names=names))
         self.add_cmd(VerifyPairedNot(
@@ -4299,7 +4475,7 @@ class ConfigVerifier:
     # build_unreg_suite_num
     ################################################################
     def build_unreg_suite_num(self,
-                              num_to_unreg: int) -> list[ConfigCmd]:
+                              num_to_unreg: int) -> None:
         """Return a list of ConfigCmd items for unregister.
 
         Args:
@@ -5624,7 +5800,7 @@ class ConfigVerifier:
             cmd_runner: name of thread doing the unregister
             unregister_targets: names of threads to be unregistered
         """
-        self.commander_thread.unregister(targets=set(names))
+        self.commander_thread.unregister(targets=set(unregister_targets))
         self.all_threads[cmd_runner].unregister(
             targets=set(unregister_targets))
 
@@ -5852,7 +6028,8 @@ class ConfigVerifier:
     ####################################################################
     def verify_in_registry_not(self,
                                cmd_runner: str,
-                               exp_in_registry_names: list[str]) -> None:
+                               exp_not_in_registry_names: list[str]
+                               ) -> None:
         """Verify that the given names are not registered.
 
         Args:
@@ -5895,10 +6072,10 @@ class ConfigVerifier:
             cmd_runner=cmd_runner,
             check_status_names=exp_active_names,
             expected_status=st.ThreadStatus.Alive)
-        if len(names) > 1:
+        if len(exp_active_names) > 1:
             self.verify_paired(
                 cmd_runner=cmd_runner,
-                exp_paired_names=exp_active_names):
+                exp_paired_names=exp_active_names)
 
     ####################################################################
     # verify_is_alive
@@ -6133,25 +6310,43 @@ class ConfigVerifier:
                     f'verify_status found {name} has real status '
                     f'{st.SmartThread._registry[name].status} '
                     'not equal to the expected status of '
-                    f'{expected_status}')
+                    f'{expected_status} per {cmd_runner=}')
             if not self.expected_registered[name].status == expected_status:
                 self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f'verify_status found {name} has mock status '
                     f'{self.expected_registered[name].status} '
                     'not equal to the expected status of '
-                    f'{expected_status}')
+                    f'{expected_status} per {cmd_runner=}')
+
+    ####################################################################
+    # wait_for_recv_msg_timeouts
+    ####################################################################
+    def wait_for_recv_msg_timeouts(self,
+                                   cmd_runner: str):
+        """Verify that the receivers have timed out.
+
+        Args:
+            cmd_runner: thread doing the wait
+        """
+        while True:
+            with self.ops_lock:
+                if self.expected_num_recv_timouts == 0:
+                    return
+            time.sleep(0.1)
 
     ####################################################################
     # wait_for_msg_timeouts
     ####################################################################
-    def wait_for_msg_timeouts(self,
-                              sender_names: list[str],
-                              unreg_names: list[str],
-                              fullq_names: list[str]) -> None:
+    def wait_for_send_msg_timeouts(self,
+                                  cmd_runner: str,
+                                  sender_names: list[str],
+                                  unreg_names: list[str],
+                                  fullq_names: list[str]) -> None:
         """Verify that the senders have detected the timeout threads.
 
         Args:
+            cmd_runner: thread doing the wait
             sender_names: names of the threads to check for timeout
                 threads
             unreg_names: threads that cause timeout by being
@@ -6196,15 +6391,6 @@ class ConfigVerifier:
 
         return
 
-    ####################################################################
-    # wait_for_recv_msg_timeouts
-    ####################################################################
-    def wait_for_recv_msg_timeouts(self):
-        while True:
-            with self.ops_lock:
-                if self.expected_num_recv_timouts == 0:
-                    return
-            time.sleep(0.1)
 
 
 ################################################################
@@ -6231,41 +6417,41 @@ def expand_list(nested_list: list[Any]) -> list[Any]:
 ###############################################################################
 # OuterThreadApp class
 ###############################################################################
-class OuterThreadApp(threading.Thread):
-    """Outer thread app for test."""
-    def __init__(self,
-                 config_ver: ConfigVerifier,
-                 scenario: list[ConfigCmd]
-                 ) -> None:
-        """Initialize the object.
-
-        Args:
-            config_ver: configuration verifier and test support methods
-            scenario: list of commands to run
-
-        """
-        super().__init__()
-        self.config_ver = config_ver
-        self.scenario = scenario
-        self.smart_thread = st.SmartThread()
-
-    def run(self) -> None:
-        """Run the test."""
-        print('beta run started')
-
-        # normally, the add_desc is done just after the instantiation, but
-        # in this case the thread is not made alive until now, and the
-        # add_desc checks that the thread is alive
-        self.descs.add_desc(SmartThreadDesc(smart_thread=self.t_pair))
-
-        self.cmds.queue_cmd('alpha')
-
-        self.t_pair.pair_with(remote_name='alpha')
-        self.descs.paired('alpha', 'beta')
-
-        self.cmds.get_cmd('beta')
-
-        logger.debug('beta run exiting')
+# class OuterThreadApp(threading.Thread):
+#     """Outer thread app for test."""
+#     def __init__(self,
+#                  config_ver: ConfigVerifier,
+#                  scenario: list[ConfigCmd]
+#                  ) -> None:
+#         """Initialize the object.
+#
+#         Args:
+#             config_ver: configuration verifier and test support methods
+#             scenario: list of commands to run
+#
+#         """
+#         super().__init__()
+#         self.config_ver = config_ver
+#         self.scenario = scenario
+#         self.smart_thread = st.SmartThread()
+#
+#     def run(self) -> None:
+#         """Run the test."""
+#         print('beta run started')
+#
+#         # normally, the add_desc is done just after the instantiation, but
+#         # in this case the thread is not made alive until now, and the
+#         # add_desc checks that the thread is alive
+#         self.descs.add_desc(SmartThreadDesc(smart_thread=self.t_pair))
+#
+#         self.cmds.queue_cmd('alpha')
+#
+#         self.t_pair.pair_with(remote_name='alpha')
+#         self.descs.paired('alpha', 'beta')
+#
+#         self.cmds.get_cmd('beta')
+#
+#         logger.debug('beta run exiting')
 
 
 # ###############################################################################
@@ -6313,7 +6499,7 @@ def outer_f1(f1_name: str, f1_config_ver: ConfigVerifier):
     f1_config_ver.log_ver.add_msg(log_msg=log_msg_f1)
     logger.debug(log_msg_f1)
 
-    f1_driver(f1_name=f1_name, f1_config_ver=f1_config_ver)
+    f1_config_ver.f1_driver(f1_name=f1_name)
 
     ############################################################
     # exit
@@ -6326,7 +6512,7 @@ def outer_f1(f1_name: str, f1_config_ver: ConfigVerifier):
 ################################################################
 # f1_driver
 ################################################################
-def f1_driver_old(f1_name: str, f1_config_ver: ConfigVerifier):
+    # def f1_driver_old(f1_name: str, f1_config_ver: ConfigVerifier):
 
     # commander_name = f1_config_ver.commander_thread.name
     # f1_config_ver.log_ver.add_call_seq(
@@ -6385,8 +6571,8 @@ def f1_driver_old(f1_name: str, f1_config_ver: ConfigVerifier):
 ################################################################
 # main_driver
 ################################################################
-def main_driver_old(config_ver: ConfigVerifier,
-                scenario: list[ConfigCmd]) -> None:
+    # def main_driver_old(config_ver: ConfigVerifier,
+    #             scenario: list[ConfigCmd]) -> None:
     # commander_name = config_ver.commander_name
     # config_ver.log_ver.add_call_seq(
     #     name='main_driver',
@@ -6585,74 +6771,36 @@ class TestSmartThreadScenarios:
     """Test class for SmartThread scenarios."""
 
     ####################################################################
-    # test_smart_thread_scenarios
+    # test_smart_thread_simple_scenarios
     ####################################################################
-    def test_smart_thread_scenarios(
+    def test_smart_thread_simple_scenarios(
             self,
-            config_scenario_arg: list[ConfigCmd],
-            #f1_create_arg: int,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
-        """Test configuration scenarios.
+        """Test meta configuration scenarios.
 
         Args:
-            config_scenario_arg: fixture for scenario to perform
             caplog: pytest fixture to capture log output
 
         """
 
-        ################################################################
-        # f1
-        ################################################################
-        def f1(f1_name: str, f1_config_ver: ConfigVerifier):
-            log_msg_f1 = f'f1 entered for {f1_name}'
-            log_ver.add_msg(log_level=logging.DEBUG,
-                            log_msg=log_msg_f1)
-            logger.debug(log_msg_f1)
+        # args_for_scenario_builder: dict[str, Any] = {
+        #     'timeout_type': timeout_type_arg,
+        #     'num_receivers': num_receivers_arg,
+        #     'num_active_no_delay_senders': num_active_no_delay_senders_arg,
+        #     'num_active_delay_senders': num_active_delay_senders_arg,
+        #     'num_send_exit_senders': num_send_exit_senders_arg,
+        #     'num_nosend_exit_senders': num_nosend_exit_senders_arg,
+        #     'num_unreg_senders': num_unreg_senders_arg,
+        #     'num_reg_senders': num_reg_senders_arg
+        # }
 
-            f1_driver(f1_name=f1_name, f1_config_ver=f1_config_ver)
+        args_for_scenario_builder: dict[str, Any] = {}
 
-            ############################################################
-            # exit
-            ############################################################
-            log_msg_f1 = f'f1 exiting for {f1_name}'
-            log_ver.add_msg(log_level=logging.DEBUG,
-                            log_msg=log_msg_f1)
-            logger.debug(log_msg_f1)
-
-        ################################################################
-        # Set up log verification and start tests
-        ################################################################
-        log_ver = LogVer(log_name=__name__)
-        log_ver.add_call_seq(name='alpha',
-                             seq=get_formatted_call_sequence())
-
-        log_msg = 'mainline entered'
-        log_ver.add_msg(log_msg=log_msg)
-        logger.debug(log_msg)
-
-        # log_msg = f'random_seed_arg: {random_seed_arg}'
-        # log_ver.add_msg(log_msg=log_msg)
-        # logger.debug(log_msg)
-
-        msgs = Msgs()
-
-        config_ver = ConfigVerifier(log_ver=log_ver,
-                                    msgs=msgs,
-                                    commander_name='alpha')
-
-        main_driver(config_ver=config_ver,
-                    scenario=config_scenario_arg)
-        # random.seed(random_seed_arg)
-
-        ################################################################
-        # check log results
-        ################################################################
-        match_results = log_ver.get_match_results(caplog=caplog)
-        log_ver.print_match_results(match_results)
-        log_ver.verify_log_results(match_results)
-
-        logger.debug('mainline exiting')
+        self.scenario_driver(
+            scenario_builder=ConfigVerifier.build_simple_scenario(),
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
 
     ####################################################################
     # test_smart_thread_msg_timeout_scenarios
@@ -6884,7 +7032,7 @@ class TestSmartThreadScenarios:
     ####################################################################
     def scenario_driver(
             self,
-            scenario_builder: Callable[..., list[ConfigCmds]],
+            scenario_builder: Callable[..., None],
             scenario_builder_args: dict[str, Any],
             caplog_to_use: pytest.CaptureFixture[str]
     ) -> None:
@@ -6906,7 +7054,7 @@ class TestSmartThreadScenarios:
                             log_msg=log_msg_f1)
             logger.debug(log_msg_f1)
 
-            f1_driver(f1_name=f1_name, f1_config_ver=f1_config_ver)
+            f1_config_ver.f1_driver(f1_name=f1_name)
 
             ############################################################
             # exit
@@ -6948,8 +7096,8 @@ class TestSmartThreadScenarios:
             names=[config_ver.commander_name],
             join_target_names=names))
 
-        main_driver(config_ver=config_ver,
-                    scenario=scenario)
+        config_ver.main_driver(config_ver=config_ver,
+                               scenario=scenario)
 
         ################################################################
         # check log results
@@ -6985,7 +7133,7 @@ class TestSmartThreadScenarios:
     #                         log_msg=log_msg_f1)
     #         logger.debug(log_msg_f1)
     #
-    #         f1_driver(f1_name=f1_name, f1_config_ver=f1_config_ver)
+    #         f1_config_ver.f1_driver(f1_name=f1_name)
     #
     #         ############################################################
     #         # exit
