@@ -843,7 +843,9 @@ class VerifyActive(ConfigCmd):
         Args:
             name: name of thread running the command
         """
-        self.config_ver.verify_is_active(names=self.exp_active_names)
+        self.config_ver.verify_is_active(
+            cmd_runner=name,
+            exp_active_names=self.exp_active_names)
 
 
 ########################################################################
@@ -949,6 +951,118 @@ class VerifyRegistered(ConfigCmd):
         self.config_ver.verify_is_registered(
             cmd_runner=name,
             exp_registered_names=self.exp_registered_names)
+
+
+########################################################################
+# VerifyPaired
+########################################################################
+class VerifyPaired(ConfigCmd):
+    def __init__(self,
+                 cmd_runners: StrOrList,
+                 exp_paired_names: StrOrList) -> None:
+        super().__init__(cmd_runners=cmd_runners)
+
+        if isinstance(exp_paired_names, str):
+            exp_paired_names = [exp_paired_names]
+        self.exp_paired_names = exp_paired_names
+
+        self.arg_list += ['exp_paired_names']
+
+    def run_process(self, name: str) -> None:
+        """Run the command.
+
+        Args:
+            name: name of thread running the command
+        """
+        self.config_ver.verify_paired(
+            cmd_runner=name,
+            exp_paired_names=self.exp_paired_names)
+
+########################################################################
+# VerifyPairedHalf
+########################################################################
+class VerifyPairedHalf(ConfigCmd):
+    def __init__(self,
+                 cmd_runners: StrOrList,
+                 pair_names: list[str],
+                 exp_paired_names: StrOrList) -> None:
+        super().__init__(cmd_runners=cmd_runners)
+
+        self.pair_names = pair_names
+        if isinstance(exp_paired_names, str):
+            exp_paired_names = [exp_paired_names]
+        self.exp_paired_names = exp_paired_names
+
+        self.arg_list += ['pair_names',
+                          'exp_paired_names']
+
+    def run_process(self, name: str) -> None:
+        """Run the command.
+
+        Args:
+            name: name of thread running the command
+        """
+        self.config_ver.verify_paired_half(
+            cmd_runner=name,
+            pair_names=self.pair_names,
+            exp_paired_names=self.exp_paired_names)
+
+########################################################################
+# VerifyPairedNot
+########################################################################
+class VerifyPairedNot(ConfigCmd):
+    def __init__(self,
+                 cmd_runners: StrOrList,
+                 exp_not_paired_names: StrOrList) -> None:
+        super().__init__(cmd_runners=cmd_runners)
+
+        if isinstance(exp_not_paired_names, str):
+            exp_not_paired_names = [exp_not_paired_names]
+        self.exp_not_paired_names = exp_not_paired_names
+
+        self.arg_list += ['exp_not_paired_names']
+
+    def run_process(self, name: str) -> None:
+        """Run the command.
+
+        Args:
+            name: name of thread running the command
+        """
+        self.config_ver.verify_paired_not(
+            cmd_runner=name,
+            exp_not_paired_names=self.exp_not_paired_names)
+
+########################################################################
+# VerifyStatus
+########################################################################
+class VerifyStatus(ConfigCmd):
+    def __init__(self,
+                 cmd_runners: StrOrList,
+                 check_status_names: StrOrList,
+                 expected_status: st.ThreadStatus
+                 ) -> None:
+        super().__init__(cmd_runners=cmd_runners)
+
+        if isinstance(check_status_names, str):
+            check_status_names = [check_status_names]
+        self.check_status_names = check_status_names
+
+        self.expected_status = expected_status
+
+        self.arg_list += ['check_status_names',
+                          'expected_status']
+
+    def run_process(self, name: str) -> None:
+        """Run the command.
+
+        Args:
+            name: name of thread running the command
+        """
+        self.config_ver.verify_status(
+            cmd_runner=name,
+            check_status_names=self.check_status_names,
+            expected_status=self.expected_status)
+
 
 ########################################################################
 # timeout_type used to specify whether to use timeout on various cmds
@@ -2946,9 +3060,9 @@ class ConfigVerifier:
             self.add_msg(VerifyInRegistryNot(
                 cmd_runners=self.commander_name,
                 exp_notin_registry_names=join_target_names))
-
-                ConfigCmd(cmd=ConfigCmds.VerifyPairedNot,
-                          cmd_runner=join_target_names)])
+            self.add_cmd(VerifyPairedNot(
+                cmd_runners=self.commander_name,
+                exp_not_paired_names=join_target_names))
 
         if validate_config:
             self.add_cmd(ValidateConfig(cmd_runners=self.commander_name))
@@ -3886,23 +4000,23 @@ class ConfigVerifier:
                 join_target_names=exit_names))
 
             for exit_name in exit_names:
-                ret_suite.extend([ConfigCmd(
-                    cmd=ConfigCmds.VerifyPairedNot,
-                    cmd_runner=[exit_name, sender_names[0]])])
+                self.add_cmd(VerifyPairedNot(
+                    cmd_runners=self.commander_name,
+                    exp_not_paired_names=[exit_name, sender_names[0]]))
 
             if num_senders >= 2:
                 for exit_name in exit_names:
-                    ret_suite.extend([ConfigCmd(
-                        cmd=ConfigCmds.VerifyPairedHalf,
-                        cmd_runner=[exit_name, sender_names[1]],
-                        half_paired_names=[sender_names[1]])])
+                    self.add_cmd(VerifyPairedHalf(
+                        cmd_runners=self.commander_name,
+                        pair_names=[exit_name, sender_names[1]],
+                        exp_paired_names=sender_names[1]))
 
             if num_senders == 3:
                 for exit_name in exit_names:
-                    ret_suite.extend([ConfigCmd(
-                        cmd=ConfigCmds.VerifyPairedHalf,
-                        cmd_runner=[exit_name, sender_names[2]],
-                        half_paired_names=[sender_names[2]])])
+                    self.add_cmd(VerifyPairedHalf(
+                        cmd_runners=self.commander_name,
+                        pair_names=[exit_name, sender_names[2]],
+                        exp_paired_names=sender_names[2]))
 
         all_targets: list[str] = (active_target_names
                                   + registered_target_names
@@ -4086,12 +4200,9 @@ class ConfigVerifier:
 
             for sender_name in sender_names:
                 exp_not_paired = [sender_name] + exit_names
-                ret_suite.extend([ConfigCmd(
-                    cmd=ConfigCmds.VerifyPairedNot,
-                    cmd_runner=exp_not_paired)])
-
-        return ret_suite
-
+                self.add_cmd(VerifyPairedNot(
+                    cmd_runners=self.commander_name,
+                    exp_not_paired_names=exp_not_paired))
 
     ################################################################
     # build_start_suite
@@ -4157,14 +4268,12 @@ class ConfigVerifier:
     # build_unreg_suite
     ################################################################
     def build_unreg_suite(self,
-                          names: list[str]) -> list[ConfigCmd]:
+                          names: list[str]) -> None:
         """Return a list of ConfigCmd items for unregister.
 
         Args:
             names: thread name to be unregistered
 
-        Returns:
-            a list of ConfigCmd items
         """
         if not set(names).issubset(self.registered_names):
             self.abort_all_f1_threads()
@@ -4176,16 +4285,15 @@ class ConfigVerifier:
                                 unregister_targets=names))
         self.add_msg(VerifyInRegistryNot(
             cmd_runners=self.commander_name,
-            exp_notin_registry_names=names))
-
-            ConfigCmd(cmd=ConfigCmds.VerifyPairedNot, cmd_runner=names)]
+            exp_not_in_registry_names=names))
+        self.add_cmd(VerifyPairedNot(
+            cmd_runners=self.commander_name,
+            exp_not_paired_names=names))
 
         self.add_cmd(ValidateConfig(cmd_runners=self.commander_name))
 
         self.registered_names -= set(names)
         self.unregistered_names |= set(names)
-
-        return ret_suite
 
     ################################################################
     # build_unreg_suite_num
@@ -5770,19 +5878,27 @@ class ConfigVerifier:
     ####################################################################
     # verify_is_active
     ####################################################################
-    def verify_is_active(self, names: list[str]) -> None:
+    def verify_is_active(self,
+                         cmd_runner: str,
+                         exp_active_names: list[str]) -> None:
         """Verify that the given names are active.
 
         Args:
-            names: names of the threads to check for being active
+            cmd_runner: thread doing the verify
+            exp_active_names: names of the threads to check for being
+                active
 
         """
-        self.verify_in_registry(names=names)
-        self.verify_is_alive(names=names)
-        self.verify_status(names=names,
-                           expected_status=st.ThreadStatus.Alive)
+        self.verify_in_registry(names=exp_active_names)
+        self.verify_is_alive(names=exp_active_names)
+        self.verify_status(
+            cmd_runner=cmd_runner,
+            check_status_names=exp_active_names,
+            expected_status=st.ThreadStatus.Alive)
         if len(names) > 1:
-            self.verify_paired(names=names):
+            self.verify_paired(
+                cmd_runner=cmd_runner,
+                exp_paired_names=exp_active_names):
 
     ####################################################################
     # verify_is_alive
@@ -5848,22 +5964,28 @@ class ConfigVerifier:
         """
         self.verify_in_registry(names=exp_registered_names)
         self.verify_is_alive_not(names=exp_registered_names)
-        self.verify_status(names=exp_registered_names,
-                           expected_status=st.ThreadStatus.Registered)
+        self.verify_status(
+            cmd_runner=cmd_runner,
+            check_status_names=exp_registered_names,
+            expected_status=st.ThreadStatus.Registered)
         if len(exp_registered_names) > 1:
             self.verify_paired(names=exp_registered_names)
 
     ####################################################################
     # verify_paired
     ####################################################################
-    def verify_paired(self, names: list[str]) -> None:
+    def verify_paired(self,
+                      cmd_runner: str,
+                      exp_paired_names: list[str]) -> None:
         """Verify that the given names are paired.
 
         Args:
-            names: names of the threads to check for being paired
+            cmd_runner: thread doing tyhe verify
+            exp_paired_names: names of the threads to check for being
+                paired
 
         """
-        pair_keys = combinations(sorted(names), 2)
+        pair_keys = combinations(sorted(exp_paired_names), 2)
         for pair_key in pair_keys:
             if pair_key not in st.SmartThread._pair_array:
                 self.abort_all_f1_threads()
@@ -5902,15 +6024,19 @@ class ConfigVerifier:
     ####################################################################
     # verify_paired_half
     ####################################################################
-    def verify_paired_half(self, names: list[str],
+    def verify_paired_half(self,
+                           cmd_runner: str,
+                           pair_names: list[str],
                            half_paired_names: list[str]) -> None:
         """Verify that the given names are half paired.
 
         Args:
-            names: names of the threads to check for being half paired
+            cmd_runner: thread doing the verify
+            pair_names: names of the threads that form pair keys for
+                half paired names
             half_paired_names: the names that should be in pair array
         """
-        pair_keys = combinations(sorted(names), 2)
+        pair_keys = combinations(sorted(pair_names), 2)
         for pair_key in pair_keys:
             if pair_key not in st.SmartThread._pair_array:
                 self.abort_all_f1_threads()
@@ -5959,14 +6085,18 @@ class ConfigVerifier:
     ####################################################################
     # verify_paired_not
     ####################################################################
-    def verify_paired_not(self, names: list[str]) -> None:
+    def verify_paired_not(self,
+                          cmd_runner: str,
+                          exp_not_paired_names: list[str]) -> None:
         """Verify that the given names are not paired.
 
         Args:
-            names: names of the threads to check for being not paired
+            cmd_runner: thread doing the verify
+            exp_not_paired_names: names of the threads to check for
+                being not paired
 
         """
-        pair_keys = combinations(sorted(names), 2)
+        pair_keys = combinations(sorted(exp_not_paired_names), 2)
         for pair_key in pair_keys:
             if pair_key in st.SmartThread._pair_array:
                 self.abort_all_f1_threads()
@@ -5983,16 +6113,20 @@ class ConfigVerifier:
     ####################################################################
     # verify_status
     ####################################################################
-    def verify_status(self, names: list[str],
+    def verify_status(self,
+                      cmd_runner: str,
+                      check_status_names: list[str],
                       expected_status: st.ThreadStatus) -> None:
         """Verify that the given names have the given status.
 
         Args:
-            names: names of the threads to check for the given status
+            cmd_runner: thread doing the verify
+            check_status_names: names of the threads to check for the
+                given status
             expected_status: the status each thread is expected to have
 
         """
-        for name in names:
+        for name in check_status_names:
             if not st.SmartThread._registry[name].status == expected_status:
                 self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
