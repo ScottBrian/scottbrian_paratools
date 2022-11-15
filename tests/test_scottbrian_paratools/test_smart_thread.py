@@ -243,11 +243,12 @@ class ConfirmResponse(ConfigCmd):
                 # this name then the command was completed. Remove the
                 # target name and break to start looking again with one
                 # less target until no targets remain.
-                if self.serial_num in self.config_ver.completed_cmds[name]:
+                if (self.confirm_serial_num in
+                        self.config_ver.completed_cmds[name]):
                     work_confirmers.remove(name)
                     break
-            time.sleep(0.1)
-            if time.time() - start_time > 600:
+            time.sleep(0.2)
+            if time.time() - start_time > 6:
                 raise CmdTimedOut('ConfirmResponse took too long waiting '
                                   f'for {work_confirmers} to complete '
                                   f'cmd {self.confirm_cmd} with '
@@ -2585,7 +2586,9 @@ class ConfigVerifier:
             self.add_log_msg(f'aborting f1_thread {name}, '
                              f'thread.is_alive(): {thread.thread.is_alive()}.')
             if thread.thread.is_alive():
-                self.msgs.queue_msg(name, Exit(cmd_runners=name))
+                exit_cmd = Exit(cmd_runners=name)
+                self.add_cmd_info(exit_cmd)
+                self.msgs.queue_msg(name, exit_cmd)
 
     ####################################################################
     # add_thread
@@ -2597,17 +2600,38 @@ class ConfigVerifier:
         Args:
             cmd: command to add
 
+        Returns:
+            the serial number for the command
+
+        """
+        serial_num = self.add_cmd_info(cmd=cmd, frame_num=2)
+        self.cmd_suite.append(cmd)
+        return serial_num
+
+    ####################################################################
+    # add_thread
+    ####################################################################
+    def add_cmd_info(self,
+                     cmd: ConfigCmd,
+                     frame_num: int = 1) -> int:
+        """Add a command to the deque.
+
+        Args:
+            cmd: command to add
+
+        Returns:
+            the serial number for the command
         """
         self.cmd_serial_num += 1
         cmd.serial_num = self.cmd_serial_num
 
-        frame = _getframe(1)
+        frame = _getframe(frame_num)
         caller_info = get_caller_info(frame)
         cmd.line_num = caller_info.line_num
         cmd.config_ver = self
-        self.cmd_suite.append(cmd)
 
         return self.cmd_serial_num
+
 
     ####################################################################
     # add_log_msg
@@ -3104,6 +3128,8 @@ class ConfigVerifier:
         if names:
             self.add_cmd(Exit(cmd_runners=names))
             if validate_config:
+                self.add_cmd(Pause(cmd_runners=self.commander_name,
+                                   pause_seconds=.2))
                 self.add_cmd(VerifyAliveNot(cmd_runners=self.commander_name,
                                             exp_not_alive_names=names))
                 self.add_cmd(VerifyStatus(
