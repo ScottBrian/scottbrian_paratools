@@ -343,7 +343,7 @@ class SmartThread:
     def __init__(self, *,
                  name: str,
                  target: Optional[Callable[..., Any]] = None,
-                 args: Optional[tuple[...]] = None,
+                 args: Optional[tuple[Any, ...]] = None,
                  kwargs: Optional[dict[str, Any]] = None,
                  thread: Optional[threading.Thread] = None,
                  auto_start: Optional[bool] = True,
