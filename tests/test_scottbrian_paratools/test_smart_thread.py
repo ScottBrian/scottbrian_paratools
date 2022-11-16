@@ -1986,7 +1986,7 @@ def num_active_delay_senders_arg(request: Any) -> int:
 # num_senders_exit_before_arg
 ###############################################################################
 num_send_exit_senders_arg_list = [0, 1, 2]
-# num_send_exit_senders_arg_list = [0]
+num_send_exit_senders_arg_list = [1]
 
 
 @pytest.fixture(params=num_send_exit_senders_arg_list)  # type: ignore
@@ -2026,7 +2026,7 @@ def num_nosend_exit_senders_arg(request: Any) -> int:
 # num_unreg_senders_arg
 ###############################################################################
 num_unreg_senders_arg_list = [0, 1, 2]
-# num_unreg_senders_arg_list = [2]
+num_unreg_senders_arg_list = [1]
 
 
 @pytest.fixture(params=num_unreg_senders_arg_list)  # type: ignore
@@ -2046,7 +2046,7 @@ def num_unreg_senders_arg(request: Any) -> int:
 # num_reg_senders_arg
 ###############################################################################
 num_reg_senders_arg_list = [0, 1, 2]
-# num_reg_senders_arg_list = [2]
+num_reg_senders_arg_list = [1]
 
 @pytest.fixture(params=num_reg_senders_arg_list)  # type: ignore
 def num_reg_senders_arg(request: Any) -> int:
@@ -2499,6 +2499,7 @@ class ConfigVerifier:
     def __init__(self,
                  commander_name: str,
                  log_ver: LogVer,
+                 caplog_to_use: pytest.CaptureFixture[str],
                  msgs: Msgs,
                  max_msgs: Optional[int] = 10) -> None:
         """Initialize the ConfigVerifier.
@@ -2530,6 +2531,7 @@ class ConfigVerifier:
         self.expected_pairs: dict[tuple[str, str],
                                   dict[str, ThreadPairStatus]] = {}
         self.log_ver = log_ver
+        self.caplog_to_use = caplog_to_use
         self.msgs = msgs
         self.ops_lock = threading.Lock()
         self.commander_thread: Optional[st.SmartThread] = None
@@ -2577,6 +2579,25 @@ class ConfigVerifier:
                     comma = ', '  # after first item, now need comma
 
         return f'{classname}({parms})'
+
+    ####################################################################
+    # find_log_msgs
+    ####################################################################
+    def find_log_msgs(self,
+                     search_msgs: StrOrList) -> bool:
+        if isinstance(search_msgs, str):
+            search_msgs = [search_msgs]
+        work_msgs: list[re.Pattern] = []
+        for msg in search_msgs:
+            work_msgs.append(re.compile(re.escape(msg)))
+        found_idxes: set[int] = set()
+        for log_tuple in self.caplog_to_use.record_tuples:
+            for idx, msg in enumerate(work_msgs):
+                if msg.match(log_tuple[2]):
+                    found_idxes |= {idx}
+                    if len(found_idxes) == len(work_msgs):
+                        return True
+        return False
 
     ####################################################################
     # abort_all_f1_threads
@@ -4683,23 +4704,32 @@ class ConfigVerifier:
                 raise InvalidConfigurationDetected(
                     f'dec_ops_count for for pair_key {pair_key}, '
                     f'name {target} was decremented below zero')
-            if (self.expected_pairs[pair_key][
-                target].pending_ops_count == 0
-                    and remote not in self.expected_pairs[
-                        pair_key].keys()):
-                del self.expected_pairs[pair_key]
-                self.add_log_msg(f'{target} entered _refresh_pair_array')
-                self.add_log_msg(re.escape(
+            # if (self.expected_pairs[pair_key][
+            #     target].pending_ops_count == 0
+            #         and remote not in self.expected_pairs[
+            #             pair_key].keys()):
+            if self.expected_pairs[pair_key][target].pending_ops_count == 0:
+                log_msg1 = f'{target} entered _refresh_pair_array'
+                log_msg2 = (
                     f"{target} removed status_blocks entry "
                     f"for pair_key = {pair_key}, "
-                    f"name = {target}"))
-                self.add_log_msg(re.escape(
+                    f"name = {target}")
+                log_msg3 = (
                     f'{target} removed _pair_array entry'
-                    f' for pair_key = {pair_key}'))
-                self.add_log_msg(re.escape(
+                    f' for pair_key = {pair_key}')
+                log_msg4 = (
                     f'{target} updated _pair_array at UTC '
-                    f'{pair_array_update_times.pop().strftime("%H:%M:%S.%f")}'
-                ))
+                    f'{pair_array_update_times.pop().strftime("%H:%M:%S.%f")}')
+                search_msgs: list[str] = [log_msg1,
+                                          log_msg2,
+                                          log_msg3,
+                                          log_msg4]
+                if self.find_log_msgs(search_msgs=search_msgs):
+                    del self.expected_pairs[pair_key]
+                    self.add_log_msg(log_msg1)
+                    self.add_log_msg(re.escape(log_msg2))
+                    self.add_log_msg(re.escape(log_msg3))
+                    self.add_log_msg(re.escape(log_msg4))
 
     ####################################################################
     # dec_recv_timeout
@@ -4805,36 +4835,37 @@ class ConfigVerifier:
             self.add_log_msg(f'{name} entered _refresh_pair_array')
 
             pair_keys_to_delete = []
-            for pair_key in self.expected_pairs:
-                if remote not in pair_key:
-                    continue
-                if remote == pair_key[0]:
-                    other_name = pair_key[1]
-                else:
-                    other_name = pair_key[0]
+            with self.ops_lock:
+                for pair_key in self.expected_pairs:
+                    if remote not in pair_key:
+                        continue
+                    if remote == pair_key[0]:
+                        other_name = pair_key[1]
+                    else:
+                        other_name = pair_key[0]
 
-                if remote not in self.expected_pairs[pair_key].keys():
-                    self.abort_all_f1_threads()
-                    raise InvalidConfigurationDetected(
-                        f'The expected_pairs for pair_key {pair_key} '
-                        'contains an entry of '
-                        f'{self.expected_pairs[pair_key]}  which does not '
-                        f'include the remote {remote} being deleted')
-                if other_name not in self.expected_pairs[pair_key].keys():
-                    pair_keys_to_delete.append(pair_key)
-                elif self.expected_pairs[pair_key][
-                        other_name].pending_ops_count == 0:
-                    pair_keys_to_delete.append(pair_key)
+                    if remote not in self.expected_pairs[pair_key].keys():
+                        self.abort_all_f1_threads()
+                        raise InvalidConfigurationDetected(
+                            f'The expected_pairs for pair_key {pair_key} '
+                            'contains an entry of '
+                            f'{self.expected_pairs[pair_key]}  which does not '
+                            f'include the remote {remote} being deleted')
+                    if other_name not in self.expected_pairs[pair_key].keys():
+                        pair_keys_to_delete.append(pair_key)
+                    elif self.expected_pairs[pair_key][
+                            other_name].pending_ops_count == 0:
+                        pair_keys_to_delete.append(pair_key)
+                        self.add_log_msg(re.escape(
+                            f"{name} removed status_blocks entry "
+                            f"for pair_key = {pair_key}, "
+                            f"name = {other_name}"))
+                    else:
+                        del self.expected_pairs[pair_key][remote]
                     self.add_log_msg(re.escape(
                         f"{name} removed status_blocks entry "
                         f"for pair_key = {pair_key}, "
-                        f"name = {other_name}"))
-                else:
-                    del self.expected_pairs[pair_key][remote]
-                self.add_log_msg(re.escape(
-                    f"{name} removed status_blocks entry "
-                    f"for pair_key = {pair_key}, "
-                    f"name = {remote}"))
+                        f"name = {remote}"))
 
             for pair_key in pair_keys_to_delete:
                 del self.expected_pairs[pair_key]
@@ -7150,6 +7181,7 @@ class TestSmartThreadScenarios:
 
         config_ver = ConfigVerifier(commander_name=commander_name,
                                     log_ver=log_ver,
+                                    caplog_to_use=caplog_to_use,
                                     msgs=msgs,
                                     max_msgs=10)
 
