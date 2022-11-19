@@ -4,8 +4,9 @@
 # Standard Library
 ###############################################################################
 from abc import ABC, abstractmethod
-from collections import deque
+from collections import deque, defaultdict
 from dataclasses import dataclass
+import dataclasses
 from datetime import datetime
 from enum import Enum, auto
 from itertools import combinations
@@ -109,9 +110,6 @@ class ConfigCmd(ABC):
         for key, item in self.specified_args.items():
             if item:  # if not None
                 if key in self.arg_list:
-                    if key == 'f1_create_items':
-                        print(f'found my {key=}')
-                        print(f'{item=}')
                     if type(item) is str:
                         parms += comma + f"{key}='{item}'"
                     else:
@@ -173,7 +171,7 @@ class ConfirmResponse(ConfigCmd):
                     work_confirmers.remove(name)
                     break
             time.sleep(0.2)
-            if time.time() - start_time > 6:
+            if time.time() - start_time > 60:
                 raise CmdTimedOut('ConfirmResponse took too long waiting '
                                   f'for {work_confirmers} to complete '
                                   f'cmd {self.confirm_cmd} with '
@@ -1800,7 +1798,7 @@ def num_senders_arg(request: Any) -> int:
 # num_receivers_arg
 ###############################################################################
 num_receivers_arg_list = [1, 2, 3]
-# num_receivers_arg_list = [2, 3]
+num_receivers_arg_list = [2]
 
 
 @pytest.fixture(params=num_receivers_arg_list)  # type: ignore
@@ -1857,7 +1855,7 @@ def num_active_delay_senders_arg(request: Any) -> int:
 # num_senders_exit_before_arg
 ###############################################################################
 num_send_exit_senders_arg_list = [0, 1, 2]
-# num_send_exit_senders_arg_list = [1]
+num_send_exit_senders_arg_list = [2]
 
 
 @pytest.fixture(params=num_send_exit_senders_arg_list)  # type: ignore
@@ -1873,9 +1871,9 @@ def num_send_exit_senders_arg(request: Any) -> int:
     return cast(int, request.param)
 
 
-###############################################################################
+########################################################################
 # num_senders_exit_before_arg
-###############################################################################
+########################################################################
 num_nosend_exit_senders_arg_list = [0, 1, 2]
 # num_nosend_exit_senders_arg_list = [1]
 
@@ -1917,7 +1915,7 @@ def num_unreg_senders_arg(request: Any) -> int:
 # num_reg_senders_arg
 ###############################################################################
 num_reg_senders_arg_list = [0, 1, 2]
-# num_reg_senders_arg_list = [1]
+num_reg_senders_arg_list = [1]
 
 @pytest.fixture(params=num_reg_senders_arg_list)  # type: ignore
 def num_reg_senders_arg(request: Any) -> int:
@@ -2318,7 +2316,8 @@ class ThreadTracker:
     is_auto_started: bool
     status: st.ThreadStatus
     thread_repr: str
-    transitioning_from: Optional[st.ThreadStatus] = None
+    found_del_pairs: dict[tuple[str, str, str], int]
+    num_refresh: int = 1
 
     # expected_last_reg_updates: deque
 
@@ -2377,6 +2376,8 @@ class ConfigVerifier:
         self.created_names: list[str] = []
         self.max_msgs = max_msgs
         self.join_target_names: list[str] = []
+        self.send_exit_sender_names: list[str] = []
+        self.receiver_names: list[str] = []
 
         self.pending_ops_counts: dict[tuple[str, str], dict[str, int]] = {}
         self.expected_num_recv_timouts: int = 0
@@ -2422,20 +2423,27 @@ class ConfigVerifier:
     # find_log_msgs
     ####################################################################
     def find_log_msgs(self,
-                     search_msgs: StrOrList) -> bool:
+                      search_msgs: StrOrList,
+                      num_instances: int = 1) -> bool:
         if isinstance(search_msgs, str):
             search_msgs = [search_msgs]
         work_msgs: list[re.Pattern] = []
         for msg in search_msgs:
             work_msgs.append(re.compile(re.escape(msg)))
-        found_idxes: set[int] = set()
+        # found_idxes: set[int] = set()
+        found_idxes: list[int] = []
+        for idx in range(len(work_msgs)):
+            found_idxes.append(0)
         for log_tuple in self.caplog_to_use.record_tuples:
             for idx, msg in enumerate(work_msgs):
                 if msg.match(log_tuple[2]):
-                    found_idxes |= {idx}
-                    if len(found_idxes) == len(work_msgs):
-                        return True
-        return False
+                    found_idxes[idx] += 1
+                    # if len(found_idxes) == len(work_msgs):
+                    #     return True
+        for cnt in found_idxes:
+            if cnt != num_instances:
+                return False
+        return True
 
     ####################################################################
     # abort_all_f1_threads
@@ -2491,7 +2499,6 @@ class ConfigVerifier:
 
         return self.cmd_serial_num
 
-
     ####################################################################
     # add_log_msg
     ####################################################################
@@ -2546,7 +2553,8 @@ class ConfigVerifier:
             exiting=False,
             is_auto_started=auto_start,
             status=expected_status,
-            thread_repr=thread_repr
+            thread_repr=thread_repr,
+            found_del_pairs=defaultdict(int)
         )
 
         log_arrays = list(thread.reg_log_array.copy())
@@ -3613,8 +3621,10 @@ class ConfigVerifier:
         if len(all_sender_names) % 2 == 0:
             log_msg = f'recv_msg log test: {self.get_ptime()}'
         else:
-            log_msg=None
+            log_msg = None
 
+        self.send_exit_sender_names = send_exit_sender_names.copy()
+        self.receiver_names = receiver_names.copy()
         ################################################################
         # setup the messages to send
         ################################################################
@@ -4474,33 +4484,103 @@ class ConfigVerifier:
                                        for the log msgs
         """
         pair_key = st.SmartThread._get_pair_key(target, remote)
+        doc_log_msg = (f'dec_ops_count entered for {target=} with '
+                       f'{pair_key=}')
+        self.log_ver.add_msg(log_msg=re.escape(doc_log_msg))
+        logger.debug(doc_log_msg)
 
-        if self.expected_pairs[pair_key][target].pending_ops_count == 1:
+        if (self.expected_pairs[pair_key][target].pending_ops_count == 1
+                and remote in self.send_exit_sender_names):
+            # Determine first whether we were a deferred delete.
+            # might need to add serial numbers to the recv_msg in case
+            # we have multiple recv_msgs
+            num_found = self.expected_registered[target].num_refresh
             log_msg1 = f'{target} entered _refresh_pair_array'
-            log_msg2 = (
-                f"{target} removed status_blocks entry "
-                f"for pair_key = {pair_key}, "
-                f"name = {target}")
-            log_msg3 = (
-                f'{target} removed _pair_array entry'
-                f' for pair_key = {pair_key}')
-            log_msg4 = (
-                f'{target} updated _pair_array at UTC '
-                f'{pair_array_update_times.pop().strftime("%H:%M:%S.%f")}')
-            search_msgs: list[str] = [log_msg1,
-                                      log_msg2,
-                                      log_msg3,
-                                      log_msg4]
-            if self.find_log_msgs(search_msgs=search_msgs):
+            if self.find_log_msgs(search_msgs=log_msg1,
+                                  num_instances=num_found+1):
+                self.expected_registered[target].num_refresh += 1
                 self.add_log_msg(log_msg1)
-                self.add_log_msg(re.escape(log_msg2))
-                self.add_log_msg(re.escape(log_msg3))
-                self.add_log_msg(re.escape(log_msg4))
+                # at this point we need to wait for mock delete to go
+                # first
+                start_time = time.time()
                 while True:
                     with self.ops_lock:
                         if pair_key in self.deleted_remotes:
                             break
                     time.sleep(.2)
+                    if time.time() - start_time > 5:
+                        raise CmdTimedOut(
+                            f'{target} in dec_ops_count timed out '
+                            f'waiting for delete of {pair_key=}')
+                # Next, we need to figure out whether we did our own
+                # delete and possible the delete for another receiver
+                update_time_msg_found = False
+                for receiver_name in self.receiver_names:
+                    for sender_name in self.send_exit_sender_names:
+                        pair_key2 = st.SmartThread._get_pair_key(
+                            receiver_name,
+                            sender_name)
+                        fdp_key = (pair_key2[0], pair_key2[1], receiver_name)
+                        num_found = self.expected_registered[
+                                target].found_del_pairs[fdp_key]
+                        # print(f'\n{target} before:\n',
+                        #       self.expected_registered[
+                        #         target].found_del_pairs)
+                        #time.sleep(1)
+                        # See if we removed the receiver (might be us).
+                        # Note that the sender will have been deleted by
+                        # the join if it went first (in which case we
+                        # will find one of the receivers doing the
+                        # delete for themselves or others.
+                        log_msg2 = (
+                            f"{target} removed status_blocks entry "
+                            f"for pair_key = {pair_key2}, "
+                            f"name = {receiver_name}")
+                        log_msg3 = (
+                            f'{target} removed _pair_array entry'
+                            f' for pair_key = {pair_key2}')
+                        doc_log_msg = (
+                            f'dec_ops_count calling find_log_msgs for '
+                            f' {fdp_key=} and {num_found=}')
+                        self.log_ver.add_msg(log_msg=re.escape(doc_log_msg))
+                        logger.debug(doc_log_msg)
+                        if self.find_log_msgs(
+                                search_msgs=[log_msg2, log_msg3],
+                                num_instances=num_found+1):
+                            doc_log_msg = (
+                                f'dec_ops_count find_log_msgs found '
+                                f' {fdp_key=} and {num_found=}')
+                            self.log_ver.add_msg(
+                                log_msg=re.escape(doc_log_msg))
+                            logger.debug(doc_log_msg)
+                            self.add_log_msg(re.escape(log_msg2))
+                            self.add_log_msg(re.escape(log_msg3))
+
+                            self.expected_registered[
+                                target].found_del_pairs[fdp_key] += 1
+                            # print(f'\n{target} after:\n',
+                            #       self.expected_registered[
+                            #     target].found_del_pairs)
+                            with self.ops_lock:
+                                self.deleted_remotes.append(pair_key2)
+                            # Now find the correct time message
+                            copy_times = pair_array_update_times.copy()
+                            copy_times.reverse()
+                            # print(f'\n{target} in dec_ops_count with 2 '
+                            #       f'{copy_times=}')
+                            time.sleep(.5)
+                            if not update_time_msg_found:
+                                for update_time in copy_times:
+                                    update_time_str = update_time.strftime(
+                                        "%H:%M:%S.%f")
+                                    log_msg4 = (
+                                        f'{target} updated _pair_array at UTC '
+                                        f'{update_time_str}')
+                                    if self.find_log_msgs(
+                                            search_msgs=log_msg4):
+                                        update_time_msg_found = True
+                                        self.add_log_msg(re.escape(log_msg4))
+                                        break
 
         with self.ops_lock:
             self.expected_pairs[pair_key][target].pending_ops_count -= 1
