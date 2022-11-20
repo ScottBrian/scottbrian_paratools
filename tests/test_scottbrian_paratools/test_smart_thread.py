@@ -1,12 +1,11 @@
 """test_smart_thread.py module."""
 
-###############################################################################
+########################################################################
 # Standard Library
-###############################################################################
+########################################################################
 from abc import ABC, abstractmethod
 from collections import deque, defaultdict
 from dataclasses import dataclass
-import dataclasses
 from datetime import datetime
 from enum import Enum, auto
 from itertools import combinations
@@ -19,18 +18,18 @@ from typing import (Any, Callable, cast, Type, TypeAlias, TYPE_CHECKING,
                     Optional, Union)
 import threading
 
-###############################################################################
+########################################################################
 # Third Party
-###############################################################################
+########################################################################
 import pytest
 from scottbrian_utils.msgs import Msgs
 from scottbrian_utils.log_verifier import LogVer
 from scottbrian_utils.diag_msg import (get_formatted_call_sequence,
                                        get_caller_info)
 
-###############################################################################
+########################################################################
 # Local
-###############################################################################
+########################################################################
 import scottbrian_paratools.smart_thread as st
 
 logger = logging.getLogger(__name__)
@@ -42,9 +41,9 @@ IntOrFloat: TypeAlias = Union[int, float]
 StrOrList: TypeAlias = Union[str, list[str]]
 
 
-###############################################################################
+########################################################################
 # SmartThread test exceptions
-###############################################################################
+########################################################################
 class ErrorTstSmartThread(Exception):
     """Base class for exception in this module."""
     pass
@@ -1798,7 +1797,7 @@ def num_senders_arg(request: Any) -> int:
 # num_receivers_arg
 ###############################################################################
 num_receivers_arg_list = [1, 2, 3]
-num_receivers_arg_list = [2]
+# num_receivers_arg_list = [2]
 
 
 @pytest.fixture(params=num_receivers_arg_list)  # type: ignore
@@ -1855,7 +1854,7 @@ def num_active_delay_senders_arg(request: Any) -> int:
 # num_senders_exit_before_arg
 ###############################################################################
 num_send_exit_senders_arg_list = [0, 1, 2]
-num_send_exit_senders_arg_list = [2]
+# num_send_exit_senders_arg_list = [2]
 
 
 @pytest.fixture(params=num_send_exit_senders_arg_list)  # type: ignore
@@ -1915,7 +1914,7 @@ def num_unreg_senders_arg(request: Any) -> int:
 # num_reg_senders_arg
 ###############################################################################
 num_reg_senders_arg_list = [0, 1, 2]
-num_reg_senders_arg_list = [1]
+# num_reg_senders_arg_list = [1]
 
 @pytest.fixture(params=num_reg_senders_arg_list)  # type: ignore
 def num_reg_senders_arg(request: Any) -> int:
@@ -2082,6 +2081,7 @@ def num_no_delay_exit_arg(request: Any) -> int:
         The params values are returned one at a time
     """
     return cast(int, request.param)
+
 
 ###############################################################################
 # num_delay_exit_arg
@@ -2317,7 +2317,7 @@ class ThreadTracker:
     status: st.ThreadStatus
     thread_repr: str
     found_del_pairs: dict[tuple[str, str, str], int]
-    num_refresh: int = 1
+    num_refresh: int = 0
 
     # expected_last_reg_updates: deque
 
@@ -2382,6 +2382,7 @@ class ConfigVerifier:
         self.pending_ops_counts: dict[tuple[str, str], dict[str, int]] = {}
         self.expected_num_recv_timouts: int = 0
         self.deleted_remotes: list[tuple[str, str]] = []
+        self.pair_array_refresh_count: dict[str, int] = defaultdict(int)
         self.f1_thread_names: dict[str, bool] = {
             'beta': True,
             'charlie': True,
@@ -2458,7 +2459,7 @@ class ConfigVerifier:
                 self.msgs.queue_msg(name, exit_cmd)
 
     ####################################################################
-    # add_thread
+    # add_cmd
     ####################################################################
     def add_cmd(self,
                 cmd: ConfigCmd) -> int:
@@ -2476,7 +2477,7 @@ class ConfigVerifier:
         return serial_num
 
     ####################################################################
-    # add_thread
+    # add_cmd_info
     ####################################################################
     def add_cmd_info(self,
                      cmd: ConfigCmd,
@@ -2669,6 +2670,9 @@ class ConfigVerifier:
             'from ThreadStatus.Initializing to ThreadStatus.Registered')
 
         self.add_log_msg(f'{name} entered _refresh_pair_array')
+        self.pair_array_refresh_count[name] += 1
+
+        self.handle_deferred_delete_log_msgs(cmd_runner=name)
 
         self.add_log_msg(re.escape(
             f'{name} updated _pair_array at UTC '
@@ -2697,9 +2701,9 @@ class ConfigVerifier:
                     f'{name} set status for thread {name} '
                     f'from ThreadStatus.Registered to ThreadStatus.Alive')
 
-    ################################################################
+    ####################################################################
     # build_config
-    ################################################################
+    ####################################################################
     def build_config(self,
                      cmd_runner: str,
                      num_registered: Optional[int] = 0,
@@ -2958,9 +2962,9 @@ class ConfigVerifier:
         if validate_config:
             self.add_cmd(ValidateConfig(cmd_runners=self.commander_name))
 
-    ################################################################
+    ####################################################################
     # build_exit_suite
-    ################################################################
+    ####################################################################
     def build_exit_suite(self,
                          names: list[str],
                          validate_config: Optional[bool] = True
@@ -3002,9 +3006,9 @@ class ConfigVerifier:
         self.active_names -= set(names)
         self.stopped_names |= set(names)
 
-    ################################################################
+    ####################################################################
     # build_exit_suite_num
-    ################################################################
+    ####################################################################
     def build_exit_suite_num(self,
                              num_to_exit: int) -> None:
         """Return a list of ConfigCmd items for unregister.
@@ -3029,9 +3033,9 @@ class ConfigVerifier:
 
         return self.build_exit_suite(names=names)
 
-    ################################################################
+    ####################################################################
     # build_f1_create_suite_num
-    ################################################################
+    ####################################################################
     def build_f1_create_suite_num(self,
                                   num_to_create: int,
                                   auto_start: Optional[bool] = True,
@@ -3067,9 +3071,9 @@ class ConfigVerifier:
         self.build_create_suite(f1_create_items=f1_create_items,
                                 validate_config=validate_config)
 
-    ################################################################
+    ####################################################################
     # build_join_suite
-    ################################################################
+    ####################################################################
     def build_join_suite(self,
                          cmd_runners: StrOrList,
                          join_target_names: list[str],
@@ -3112,9 +3116,9 @@ class ConfigVerifier:
         self.unregistered_names |= set(join_target_names)
         self.stopped_names -= set(join_target_names)
 
-    ################################################################
+    ####################################################################
     # build_join_suite
-    ################################################################
+    ####################################################################
     def build_join_suite_num(self,
                              cmd_runners: StrOrList,
                              num_to_join: int) -> None:
@@ -3142,9 +3146,9 @@ class ConfigVerifier:
             cmd_runners=cmd_runners,
             join_target_names=names)
 
-    ################################################################
+    ####################################################################
     # build_join_timeout_suite
-    ################################################################
+    ####################################################################
     def build_join_timeout_suite(
             self,
             timeout_type: TimeoutType,
@@ -3427,9 +3431,9 @@ class ConfigVerifier:
                  confirm_serial_num=join_serial_num,
                  confirmers=active_no_target_names[0]))
 
-    ################################################################
+    ####################################################################
     # build_msg_suite
-    ################################################################
+    ####################################################################
     def build_msg_suite(self,
                         from_names: list[str],
                         to_names: list[str]) -> None:
@@ -3451,9 +3455,9 @@ class ConfigVerifier:
                     senders=from_names,
                     exp_msgs=msgs_to_send))
 
-    ################################################################
+    ####################################################################
     # build_recv_msg_timeout_suite
-    ################################################################
+    ####################################################################
     def build_recv_msg_timeout_suite(
             self,
             timeout_type: TimeoutType,
@@ -3769,9 +3773,9 @@ class ConfigVerifier:
                  confirm_serial_num=recv_msg_serial_num,
                  confirmers=receiver_names))
 
-    ################################################################
+    ####################################################################
     # build_msg_timeout_suite
-    ################################################################
+    ####################################################################
     def build_send_msg_timeout_suite(self,
                                      timeout_type: TimeoutType,
                                      num_senders: Optional[int] = 1,
@@ -3920,9 +3924,9 @@ class ConfigVerifier:
                             msgs_to_send=sender_1_msg_1,
                             log_msg=log_msg))
 
-                ################################################################
+                ########################################################
                 # confirm the send_msg
-                ################################################################
+                ########################################################
                 self.add_cmd(
                     ConfirmResponse(cmd_runners=self.commander_name,
                                     confirm_cmd='SendMsg',
@@ -3939,9 +3943,9 @@ class ConfigVerifier:
                             receivers=sender_names[2],
                             msgs_to_send=sender_2_msg_1))
 
-                ################################################################
+                ########################################################
                 # confirm the send_msg
-                ################################################################
+                ########################################################
                 self.add_cmd(
                     ConfirmResponse(cmd_runners=[self.commander_name],
                                     confirm_cmd='SendMsg',
@@ -3957,9 +3961,9 @@ class ConfigVerifier:
                             msgs_to_send=sender_2_msg_2,
                             log_msg=log_msg))
 
-                ################################################################
+                ########################################################
                 # confirm the send_msg
-                ################################################################
+                ########################################################
                 self.add_cmd(
                     ConfirmResponse(cmd_runners=[self.commander_name],
                                     confirm_cmd='SendMsg',
@@ -3981,9 +3985,9 @@ class ConfigVerifier:
                             receivers=full_q_names,
                             msgs_to_send=sender_msgs))
 
-                ################################################################
+                ########################################################
                 # confirm the send_msg
-                ################################################################
+                ########################################################
                 self.add_cmd(
                     ConfirmResponse(cmd_runners=[self.commander_name],
                                     confirm_cmd='SendMsg',
@@ -4199,9 +4203,9 @@ class ConfigVerifier:
                     cmd_runners=self.commander_name,
                     exp_not_paired_names=exp_not_paired))
 
-    ################################################################
+    ####################################################################
     # build_simple_scenario
-    ################################################################
+    ####################################################################
 
     def build_simple_scenario(self) -> None:
         """Add config cmds to the scenario queue.
@@ -4237,9 +4241,9 @@ class ConfigVerifier:
         self.add_cmd(ValidateConfig(
             cmd_runners='alpha'))
 
-    ################################################################
+    ####################################################################
     # build_start_suite
-    ################################################################
+    ####################################################################
     def build_start_suite(self,
                           start_names: list[str],
                           validate_config: Optional[bool] = True
@@ -4270,9 +4274,9 @@ class ConfigVerifier:
         self.registered_names -= set(start_names)
         self.active_names |= set(start_names)
 
-    ################################################################
+    ####################################################################
     # build_start_suite_num
-    ################################################################
+    ####################################################################
     def build_start_suite_num(self,
                               num_to_start: int) -> None:
         """Return a list of ConfigCmd items for unregister.
@@ -4297,9 +4301,9 @@ class ConfigVerifier:
         return self.build_start_suite(start_names=names)
 
 
-    ################################################################
+    ####################################################################
     # build_unreg_suite
-    ################################################################
+    ####################################################################
     def build_unreg_suite(self,
                           names: list[str]) -> None:
         """Return a list of ConfigCmd items for unregister.
@@ -4328,9 +4332,9 @@ class ConfigVerifier:
         self.registered_names -= set(names)
         self.unregistered_names |= set(names)
 
-    ################################################################
+    ####################################################################
     # build_unreg_suite_num
-    ################################################################
+    ####################################################################
     def build_unreg_suite_num(self,
                               num_to_unreg: int) -> None:
         """Return a list of ConfigCmd items for unregister.
@@ -4354,9 +4358,9 @@ class ConfigVerifier:
 
         return self.build_unreg_suite(names=names)
 
-    ################################################################
+    ####################################################################
     # choose_names
-    ################################################################
+    ####################################################################
     def choose_names(
             self,
             name_collection: set[str],
@@ -4470,35 +4474,36 @@ class ConfigVerifier:
     # dec_ops_count
     ####################################################################
     def dec_ops_count(self,
-                      target: str,
+                      cmd_runner: str,
                       remote: str,
-                      pair_array_update_times: deque):
+                      update_time: datetime):
         """Decrement the pending operations count.
 
         Args:
-            target: the names of the thread whose count is to be
-                      decremented
-            remote: the name of the threads that is paired with
-                         the target
-            pair_array_update_times: pair array update times to be used
-                                       for the log msgs
+            cmd_runner: the names of the thread whose count is to be
+                decremented
+            remote: the name of the threads that is paired with the
+                cmd_runner
+            update_time: pair array update time to be used for the log
+                msgs
         """
-        pair_key = st.SmartThread._get_pair_key(target, remote)
-        doc_log_msg = (f'dec_ops_count entered for {target=} with '
+        pair_key = st.SmartThread._get_pair_key(cmd_runner, remote)
+        doc_log_msg = (f'dec_ops_count entered for {cmd_runner=} with '
                        f'{pair_key=}')
         self.log_ver.add_msg(log_msg=re.escape(doc_log_msg))
         logger.debug(doc_log_msg)
 
-        if (self.expected_pairs[pair_key][target].pending_ops_count == 1
-                and remote in self.send_exit_sender_names):
+        # if (self.expected_pairs[pair_key][cmd_runner].pending_ops_count == 1
+        #         and remote in self.send_exit_sender_names):
+        if (self.expected_pairs[pair_key][cmd_runner].pending_ops_count == 1):
             # Determine first whether we were a deferred delete.
             # might need to add serial numbers to the recv_msg in case
             # we have multiple recv_msgs
-            num_found = self.expected_registered[target].num_refresh
-            log_msg1 = f'{target} entered _refresh_pair_array'
+            num_found = self.pair_array_refresh_count[cmd_runner]
+            log_msg1 = f'{cmd_runner} entered _refresh_pair_array'
             if self.find_log_msgs(search_msgs=log_msg1,
                                   num_instances=num_found+1):
-                self.expected_registered[target].num_refresh += 1
+                self.pair_array_refresh_count[cmd_runner] += 1
                 self.add_log_msg(log_msg1)
                 # at this point we need to wait for mock delete to go
                 # first
@@ -4510,93 +4515,33 @@ class ConfigVerifier:
                     time.sleep(.2)
                     if time.time() - start_time > 5:
                         raise CmdTimedOut(
-                            f'{target} in dec_ops_count timed out '
+                            f'{cmd_runner} in dec_ops_count timed out '
                             f'waiting for delete of {pair_key=}')
+
                 # Next, we need to figure out whether we did our own
                 # delete and possible the delete for another receiver
-                update_time_msg_found = False
-                for receiver_name in self.receiver_names:
-                    for sender_name in self.send_exit_sender_names:
-                        pair_key2 = st.SmartThread._get_pair_key(
-                            receiver_name,
-                            sender_name)
-                        fdp_key = (pair_key2[0], pair_key2[1], receiver_name)
-                        num_found = self.expected_registered[
-                                target].found_del_pairs[fdp_key]
-                        # print(f'\n{target} before:\n',
-                        #       self.expected_registered[
-                        #         target].found_del_pairs)
-                        #time.sleep(1)
-                        # See if we removed the receiver (might be us).
-                        # Note that the sender will have been deleted by
-                        # the join if it went first (in which case we
-                        # will find one of the receivers doing the
-                        # delete for themselves or others.
-                        log_msg2 = (
-                            f"{target} removed status_blocks entry "
-                            f"for pair_key = {pair_key2}, "
-                            f"name = {receiver_name}")
-                        log_msg3 = (
-                            f'{target} removed _pair_array entry'
-                            f' for pair_key = {pair_key2}')
-                        doc_log_msg = (
-                            f'dec_ops_count calling find_log_msgs for '
-                            f' {fdp_key=} and {num_found=}')
-                        self.log_ver.add_msg(log_msg=re.escape(doc_log_msg))
-                        logger.debug(doc_log_msg)
-                        if self.find_log_msgs(
-                                search_msgs=[log_msg2, log_msg3],
-                                num_instances=num_found+1):
-                            doc_log_msg = (
-                                f'dec_ops_count find_log_msgs found '
-                                f' {fdp_key=} and {num_found=}')
-                            self.log_ver.add_msg(
-                                log_msg=re.escape(doc_log_msg))
-                            logger.debug(doc_log_msg)
-                            self.add_log_msg(re.escape(log_msg2))
-                            self.add_log_msg(re.escape(log_msg3))
-
-                            self.expected_registered[
-                                target].found_del_pairs[fdp_key] += 1
-                            # print(f'\n{target} after:\n',
-                            #       self.expected_registered[
-                            #     target].found_del_pairs)
-                            with self.ops_lock:
-                                self.deleted_remotes.append(pair_key2)
-                            # Now find the correct time message
-                            copy_times = pair_array_update_times.copy()
-                            copy_times.reverse()
-                            # print(f'\n{target} in dec_ops_count with 2 '
-                            #       f'{copy_times=}')
-                            time.sleep(.5)
-                            if not update_time_msg_found:
-                                for update_time in copy_times:
-                                    update_time_str = update_time.strftime(
-                                        "%H:%M:%S.%f")
-                                    log_msg4 = (
-                                        f'{target} updated _pair_array at UTC '
-                                        f'{update_time_str}')
-                                    if self.find_log_msgs(
-                                            search_msgs=log_msg4):
-                                        update_time_msg_found = True
-                                        self.add_log_msg(re.escape(log_msg4))
-                                        break
+                if self.handle_deferred_delete_log_msgs(cmd_runner=cmd_runner):
+                    update_time_str = update_time.strftime("%H:%M:%S.%f")
+                    log_msg2 = (
+                        f'{cmd_runner} updated _pair_array at UTC '
+                        f'{update_time_str}')
+                    self.add_log_msg(re.escape(log_msg2))
 
         with self.ops_lock:
-            self.expected_pairs[pair_key][target].pending_ops_count -= 1
-            if self.expected_pairs[pair_key][target].pending_ops_count < 0:
+            self.expected_pairs[pair_key][cmd_runner].pending_ops_count -= 1
+            if self.expected_pairs[pair_key][cmd_runner].pending_ops_count < 0:
                 self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f'dec_ops_count for for pair_key {pair_key}, '
-                    f'name {target} was decremented below zero')
-            if (self.expected_pairs[pair_key][target].pending_ops_count == 0
+                    f'name {cmd_runner} was decremented below zero')
+            if (self.expected_pairs[pair_key][cmd_runner].pending_ops_count == 0
                     and remote not in self.expected_pairs[
                         pair_key].keys()):
                 del self.expected_pairs[pair_key]
 
     ####################################################################
     # dec_recv_timeout
-    ###################################################################
+    ####################################################################
     def dec_recv_timeout(self):
         with self.ops_lock:
             self.expected_num_recv_timouts -= 1
@@ -4775,9 +4720,9 @@ class ConfigVerifier:
         else:
             return self.expected_registered[name].is_alive
 
-    ################################################################
+    ####################################################################
     # get_ptime
-    ################################################################
+    ####################################################################
     @staticmethod
     def get_ptime() -> str:
         """Returns a printable UTC time stamp.
@@ -4790,9 +4735,95 @@ class ConfigVerifier:
 
         return print_time
 
-    ################################################################
+    ####################################################################
+    # get_ptime
+    ####################################################################
+    def handle_deferred_delete_log_msgs(self,
+                                        cmd_runner: str) -> bool:
+        """Issue the log message for a deferred delete
+
+        Args:
+            cmd_runner: thread doing the delete
+
+        Returns:
+            True if the refresh array was updated, False otherwise
+        """
+        # Next, we need to figure out whether we did our own
+        # delete and possible the delete for another receiver
+        refresh_array_updated = False
+        for receiver_name in self.receiver_names:
+            for sender_name in self.send_exit_sender_names:
+                pair_key = st.SmartThread._get_pair_key(
+                    receiver_name,
+                    sender_name)
+                fdp_key = (pair_key[0], pair_key[1], receiver_name)
+                num_found = self.expected_registered[
+                    cmd_runner].found_del_pairs[fdp_key]
+                # print(f'\n{cmd_runner} before:\n',
+                #       self.expected_registered[
+                #         cmd_runner].found_del_pairs)
+                # time.sleep(1)
+                # See if we removed the receiver (might be us).
+                # Note that the sender will have been deleted by
+                # the join if it went first (in which case we
+                # will find one of the receivers doing the
+                # delete for themselves or others.
+                log_msg2 = (
+                    f"{cmd_runner} removed status_blocks entry "
+                    f"for pair_key = {pair_key}, "
+                    f"name = {receiver_name}")
+                log_msg3 = (
+                    f'{cmd_runner} removed _pair_array entry'
+                    f' for pair_key = {pair_key}')
+                # doc_log_msg = (
+                #     f'dec_ops_count calling find_log_msgs for '
+                #     f' {fdp_key=} and {num_found=}')
+                # self.log_ver.add_msg(log_msg=re.escape(doc_log_msg))
+                # logger.debug(doc_log_msg)
+                if self.find_log_msgs(
+                        search_msgs=[log_msg2, log_msg3],
+                        num_instances=num_found + 1):
+                    # doc_log_msg = (
+                    #     f'dec_ops_count find_log_msgs found '
+                    #     f' {fdp_key=} and {num_found=}')
+                    # self.log_ver.add_msg(
+                    #     log_msg=re.escape(doc_log_msg))
+                    # logger.debug(doc_log_msg)
+                    refresh_array_updated = True
+                    self.add_log_msg(re.escape(log_msg2))
+                    self.add_log_msg(re.escape(log_msg3))
+
+                    self.expected_registered[
+                        cmd_runner].found_del_pairs[fdp_key] += 1
+                    # print(f'\n{cmd_runner} after:\n',
+                    #       self.expected_registered[
+                    #     cmd_runner].found_del_pairs)
+                    with self.ops_lock:
+                        self.deleted_remotes.append(pair_key)
+                    # Now find the correct time message
+                    # copy_times = pair_array_update_times.copy()
+                    # copy_times.reverse()
+                    # print(f'\n{cmd_runner} in dec_ops_count with 2 '
+                    #       f'{copy_times=}')
+                    # time.sleep(.5)
+                    # if not update_time_msg_found:
+                    #     # for update_time in copy_times:
+                    #     # update_time = pair_array_update_times.pop()
+                    #     update_time_str = update_time.strftime(
+                    #         "%H:%M:%S.%f")
+                    #     log_msg4 = (
+                    #         f'{cmd_runner} updated _pair_array at UTC '
+                    #         f'{update_time_str}')
+                    #     if self.find_log_msgs(
+                    #             search_msgs=log_msg4):
+                    #         update_time_msg_found = True
+                    #         self.add_log_msg(re.escape(log_msg4))
+                    #         break
+        return refresh_array_updated
+
+    ####################################################################
     # handle_join
-    ################################################################
+    ####################################################################
     def handle_join(self,
                     cmd_runner: str,
                     join_names: list[str],
@@ -4834,9 +4865,9 @@ class ConfigVerifier:
                 process='join'
             )
 
-    ################################################################
+    ####################################################################
     # handle_join_tof
-    ################################################################
+    ####################################################################
     def handle_join_tof(self,
                         cmd_runner: str,
                         join_names: list[str],
@@ -4881,9 +4912,9 @@ class ConfigVerifier:
                 process='join'
             )
 
-    ################################################################
+    ####################################################################
     # handle_join_tot
-    ################################################################
+    ####################################################################
     def handle_join_tot(self,
                         cmd_runner: str,
                         join_names: list[str],
@@ -4939,9 +4970,9 @@ class ConfigVerifier:
                 process='join'
             )
 
-    ################################################################
+    ####################################################################
     # handle_recv_msg
-    ################################################################
+    ####################################################################
     def handle_recv_msg(self,
                         cmd_runner: str,
                         senders: list[str],
@@ -4979,12 +5010,12 @@ class ConfigVerifier:
 
             assert recvd_msg == exp_msgs[from_name]
 
-            copy_pair_deque = (
+            update_time = (
                 self.all_threads[cmd_runner]
-                .time_last_pair_array_update.copy())
+                .time_last_pair_array_update[-1])
             self.dec_ops_count(cmd_runner,
                                from_name,
-                               copy_pair_deque)
+                               update_time=update_time)
 
             recv_log_msg = f"{cmd_runner} received msg from {from_name}"
             self.log_ver.add_msg(
@@ -4992,9 +5023,9 @@ class ConfigVerifier:
                 log_level=logging.INFO,
                 log_msg=recv_log_msg)
 
-    ################################################################
+    ####################################################################
     # handle_recv_msg_tof
-    ################################################################
+    ####################################################################
     def handle_recv_msg_tof(self,
                             cmd_runner: str,
                             senders: list[str],
@@ -5035,12 +5066,12 @@ class ConfigVerifier:
 
             assert recvd_msg == exp_msgs[from_name]
 
-            copy_pair_deque = (
+            update_time = (
                 self.all_threads[cmd_runner]
-                .time_last_pair_array_update.copy())
+                .time_last_pair_array_update[-1])
             self.dec_ops_count(cmd_runner,
                                from_name,
-                               copy_pair_deque)
+                               update_time=update_time)
 
             recv_log_msg = f"{cmd_runner} received msg from {from_name}"
             self.log_ver.add_msg(
@@ -5048,9 +5079,9 @@ class ConfigVerifier:
                 log_level=logging.INFO,
                 log_msg=recv_log_msg)
 
-    ################################################################
+    ####################################################################
     # handle_recv_msg_tot
-    ################################################################
+    ####################################################################
     def handle_recv_msg_tot(self,
                             cmd_runner: str,
                             senders: list[str],
@@ -5117,12 +5148,12 @@ class ConfigVerifier:
             if 'exiting' in enter_exit_list:
                 assert recvd_msg == exp_msgs[from_name]
 
-                copy_pair_deque = (
+                update_time = (
                     self.all_threads[cmd_runner]
-                    .time_last_pair_array_update.copy())
+                    .time_last_pair_array_update[-1])
                 self.dec_ops_count(cmd_runner,
                                    from_name,
-                                   copy_pair_deque)
+                                   update_time=update_time)
 
                 recv_log_msg = f"{cmd_runner} received msg from {from_name}"
                 self.log_ver.add_msg(
@@ -5130,9 +5161,9 @@ class ConfigVerifier:
                     log_level=logging.INFO,
                     log_msg=recv_log_msg)
 
-    ################################################################
+    ####################################################################
     # handle_send_msg
-    ################################################################
+    ####################################################################
     def handle_send_msg(self,
                         cmd_runner: str,
                         receivers: list[str],
@@ -5175,9 +5206,9 @@ class ConfigVerifier:
                 log_level=logging.INFO,
                 log_msg=log_msg)
 
-    ################################################################
+    ####################################################################
     # handle_send_msg_tof
-    ################################################################
+    ####################################################################
     def handle_send_msg_tof(
             self,
             cmd_runner: str,
@@ -5224,9 +5255,9 @@ class ConfigVerifier:
                 log_level=logging.INFO,
                 log_msg=log_msg)
 
-    ################################################################
+    ####################################################################
     # handle_send_msg_tot
-    ################################################################
+    ####################################################################
     def handle_send_msg_tot(
             self,
             cmd_runner: str,
@@ -5344,9 +5375,9 @@ class ConfigVerifier:
                     else:
                         self.pending_ops_counts[pair_key][target] = 1
 
-    ################################################################
+    ####################################################################
     # log_name_groups
-    ################################################################
+    ####################################################################
     def log_name_groups(self) -> None:
         """Issue log msgs to show the names in each set."""
         log_msg = f'unregistered_names: {sorted(self.unregistered_names)}'
@@ -5450,7 +5481,6 @@ class ConfigVerifier:
             cmd_runner: name of thread doing the unregister
             unregister_targets: names of threads to be unregistered
         """
-        self.commander_thread.unregister(targets=set(unregister_targets))
         self.all_threads[cmd_runner].unregister(
             targets=set(unregister_targets))
 
@@ -6043,9 +6073,9 @@ class ConfigVerifier:
             assert time.time() < start_time + 30  # allow 30 seconds
 
 
-################################################################
+########################################################################
 # expand_cmds
-################################################################
+########################################################################
 def expand_list(nested_list: list[Any]) -> list[Any]:
     """Return a list of items from a nested list of lists.
 
@@ -6064,9 +6094,9 @@ def expand_list(nested_list: list[Any]) -> list[Any]:
     return ret_list
 
 
-###############################################################################
+########################################################################
 # OuterThreadApp class
-###############################################################################
+########################################################################
 # class OuterThreadApp(threading.Thread):
 #     """Outer thread app for test."""
 #     def __init__(self,
@@ -6141,9 +6171,9 @@ def expand_list(nested_list: list[Any]) -> list[Any]:
 #         self.cmds.get_cmd('beta')
 #
 #         logger.debug('beta run exiting')
-################################################################
+########################################################################
 # outer_f1
-################################################################
+########################################################################
 def outer_f1(f1_name: str, f1_config_ver: ConfigVerifier):
     log_msg_f1 = f'outer_f1 entered for {f1_name}'
     f1_config_ver.log_ver.add_msg(log_msg=log_msg_f1)
@@ -6151,9 +6181,9 @@ def outer_f1(f1_name: str, f1_config_ver: ConfigVerifier):
 
     f1_config_ver.f1_driver(f1_name=f1_name)
 
-    ############################################################
+    ####################################################################
     # exit
-    ############################################################
+    ####################################################################
     log_msg_f1 = f'outer_f1 exiting for {f1_name}'
     f1_config_ver.log_ver.add_msg(log_msg=log_msg_f1)
     logger.debug(log_msg_f1)
@@ -6510,9 +6540,9 @@ class TestSmartThreadScenarios:
 
         logger.debug('mainline exiting')
 
-    # ####################################################################
+    # ##################################################################
     # # test_smart_thread_scenarios
-    # ####################################################################
+    # ##################################################################
     # def test_smart_thread_random_scenarios(
     #         self,
     #         random_seed_arg: int,
