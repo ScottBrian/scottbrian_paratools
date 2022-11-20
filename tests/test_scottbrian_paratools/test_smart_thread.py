@@ -568,6 +568,7 @@ class RecvMsg(ConfigCmd):
                  cmd_runners: StrOrList,
                  senders: StrOrList,
                  exp_msgs: dict[str, Any],
+                 del_deferred: Optional[StrOrList] = None,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
@@ -576,6 +577,10 @@ class RecvMsg(ConfigCmd):
             senders = [senders]
         self.senders = senders
         self.exp_msgs = exp_msgs
+
+        if isinstance(del_deferred, str):
+            del_deferred = [del_deferred]
+        self.del_deferred = del_deferred
         self.log_msg = log_msg
 
         self.arg_list += ['senders']
@@ -589,6 +594,7 @@ class RecvMsg(ConfigCmd):
         self.config_ver.handle_recv_msg(cmd_runner=name,
                                         senders=self.senders,
                                         exp_msgs=self.exp_msgs,
+                                        del_deferred=self.del_deferred,
                                         log_msg=self.log_msg)
 
 
@@ -601,10 +607,12 @@ class RecvMsgTimeoutFalse(RecvMsg):
                  senders: StrOrList,
                  exp_msgs: dict[str, Any],
                  timeout: IntOrFloat,
+                 del_deferred: Optional[StrOrList] = None,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners,
                          senders=senders,
                          exp_msgs=exp_msgs,
+                         del_deferred=del_deferred,
                          log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
 
@@ -623,6 +631,7 @@ class RecvMsgTimeoutFalse(RecvMsg):
             senders=self.senders,
             exp_msgs=self.exp_msgs,
             timeout=self.timeout,
+            del_deferred=self.del_deferred,
             log_msg=self.log_msg)
 
 
@@ -636,11 +645,13 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
                  exp_msgs: dict[str, Any],
                  timeout: IntOrFloat,
                  timeout_names: StrOrList,
+                 del_deferred: Optional[StrOrList] = None,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners,
                          senders=senders,
                          exp_msgs=exp_msgs,
                          timeout=timeout,
+                         del_deferred=del_deferred,
                          log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
 
@@ -662,6 +673,7 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
             exp_msgs=self.exp_msgs,
             timeout=self.timeout,
             timeout_names=self.timeout_names,
+            del_deferred=self.del_deferred,
             log_msg=self.log_msg)
 
 
@@ -2382,7 +2394,16 @@ class ConfigVerifier:
         self.pending_ops_counts: dict[tuple[str, str], dict[str, int]] = {}
         self.expected_num_recv_timouts: int = 0
         self.deleted_remotes: list[tuple[str, str]] = []
+        self.deleted_remotes_pending_count: dict[str, int] = defaultdict(int)
+        self.deleted_remotes_complete_count: dict[str, int] = defaultdict(int)
         self.pair_array_refresh_count: dict[str, int] = defaultdict(int)
+        self.del_def_pairs_count: dict[
+            tuple[str, str, str], int] = defaultdict(int)
+        self.del_def_pairs_msg_count: dict[
+            tuple[str, str, str], int] = defaultdict(int)
+        self.del_def_pairs_msg_ind_count: dict[
+            tuple[str, str, str, str], int] = defaultdict(int)
+
         self.f1_thread_names: dict[str, bool] = {
             'beta': True,
             'charlie': True,
@@ -3642,7 +3663,9 @@ class ConfigVerifier:
             recv_msg_serial_num = self.add_cmd(
                 RecvMsg(cmd_runners=receiver_names,
                         senders=all_sender_names,
-                        exp_msgs=sender_msgs,log_msg=log_msg))
+                        exp_msgs=sender_msgs,
+                        del_deferred=send_exit_sender_names,
+                        log_msg=log_msg))
         elif timeout_type == TimeoutType.TimeoutFalse:
             confirm_cmd_to_use = 'RecvMsgTimeoutFalse'
             recv_msg_serial_num = self.add_cmd(
@@ -3651,6 +3674,7 @@ class ConfigVerifier:
                     senders=all_sender_names,
                     exp_msgs=sender_msgs,
                     timeout=2,
+                    del_deferred=send_exit_sender_names,
                     log_msg=log_msg))
 
         else:  # TimeoutType.TimeoutTrue
@@ -3662,6 +3686,7 @@ class ConfigVerifier:
                     exp_msgs=sender_msgs,
                     timeout=2,
                     timeout_names=all_timeout_names,
+                    del_deferred=send_exit_sender_names,
                     log_msg=log_msg))
 
         ################################################################
@@ -3768,10 +3793,11 @@ class ConfigVerifier:
         # finally, confirm the recv_msg is done
         ################################################################
         self.add_cmd(
-            ConfirmResponse(cmd_runners=[self.commander_name],
-                 confirm_cmd=confirm_cmd_to_use,
-                 confirm_serial_num=recv_msg_serial_num,
-                 confirmers=receiver_names))
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd=confirm_cmd_to_use,
+                confirm_serial_num=recv_msg_serial_num,
+                confirmers=receiver_names))
 
     ####################################################################
     # build_msg_timeout_suite
@@ -4147,7 +4173,8 @@ class ConfigVerifier:
                     recv_msg_serial_num = self.add_cmd(
                         RecvMsg(cmd_runners=sender_names[1],
                                 senders=exit_name,
-                                exp_msgs=sender_1_msg_1))
+                                exp_msgs=sender_1_msg_1,
+                                del_deferred=exit_name))
 
                     ####################################################
                     # confirm the recv_msg
@@ -4163,7 +4190,8 @@ class ConfigVerifier:
                     recv_msg_serial_num = self.add_cmd(
                         RecvMsg(cmd_runners=sender_names[2],
                                 senders=exit_name,
-                                exp_msgs=sender_2_msg_1))
+                                exp_msgs=sender_2_msg_1,
+                                del_deferred=exit_name))
 
                     ####################################################
                     # confirm the recv_msg
@@ -4177,7 +4205,8 @@ class ConfigVerifier:
                     recv_msg_serial_num = self.add_cmd(
                         RecvMsg(cmd_runners=sender_names[2],
                                 senders=exit_name,
-                                exp_msgs=sender_2_msg_2))
+                                exp_msgs=sender_2_msg_2,
+                                del_deferred=exit_name))
 
                     ####################################################
                     # confirm the recv_msg
@@ -4495,7 +4524,7 @@ class ConfigVerifier:
 
         # if (self.expected_pairs[pair_key][cmd_runner].pending_ops_count == 1
         #         and remote in self.send_exit_sender_names):
-        if (self.expected_pairs[pair_key][cmd_runner].pending_ops_count == 1):
+        if self.expected_pairs[pair_key][cmd_runner].pending_ops_count == 1:
             # Determine first whether we were a deferred delete.
             # might need to add serial numbers to the recv_msg in case
             # we have multiple recv_msgs
@@ -4510,7 +4539,9 @@ class ConfigVerifier:
                 start_time = time.time()
                 while True:
                     with self.ops_lock:
-                        if pair_key in self.deleted_remotes:
+                        # if pair_key in self.deleted_remotes:
+                        if (self.deleted_remotes_complete_count[remote]
+                                == self.deleted_remotes_pending_count[remote]):
                             break
                     time.sleep(.2)
                     if time.time() - start_time > 5:
@@ -4519,7 +4550,7 @@ class ConfigVerifier:
                             f'waiting for delete of {pair_key=}')
 
                 # Next, we need to figure out whether we did our own
-                # delete and possible the delete for another receiver
+                # delete and/or the delete for another receiver
                 if self.handle_deferred_delete_log_msgs(cmd_runner=cmd_runner):
                     update_time_str = update_time.strftime("%H:%M:%S.%f")
                     log_msg2 = (
@@ -4608,6 +4639,7 @@ class ConfigVerifier:
                     self.add_log_msg(re.escape(log_msg))
 
             del self.expected_registered[remote]
+            self.deleted_remotes_complete_count[remote] += 1
             self.add_log_msg(f'{remote} removed from registry')
 
             self.add_log_msg(f'{name} entered _refresh_pair_array')
@@ -4751,14 +4783,21 @@ class ConfigVerifier:
         # Next, we need to figure out whether we did our own
         # delete and possible the delete for another receiver
         refresh_array_updated = False
-        for receiver_name in self.receiver_names:
-            for sender_name in self.send_exit_sender_names:
-                pair_key = st.SmartThread._get_pair_key(
-                    receiver_name,
-                    sender_name)
-                fdp_key = (pair_key[0], pair_key[1], receiver_name)
-                num_found = self.expected_registered[
-                    cmd_runner].found_del_pairs[fdp_key]
+        # for receiver_name in self.receiver_names:
+        #     for sender_name in self.send_exit_sender_names:
+        #         pair_key = st.SmartThread._get_pair_key(
+        #             receiver_name,
+        #             sender_name)
+        #         fdp_key = (pair_key[0], pair_key[1], receiver_name)
+        #         num_found = self.expected_registered[
+        #             cmd_runner].found_del_pairs[fdp_key]
+        for del_def_key, count in self.del_def_pairs_count.items():
+            if self.del_def_pairs_msg_count[del_def_key] < count:
+                ind_key = (del_def_key[0],
+                           del_def_key[1],
+                           del_def_key[2],
+                           cmd_runner)
+                num_found = self.del_def_pairs_msg_ind_count[ind_key]
                 # print(f'\n{cmd_runner} before:\n',
                 #       self.expected_registered[
                 #         cmd_runner].found_del_pairs)
@@ -4768,6 +4807,8 @@ class ConfigVerifier:
                 # the join if it went first (in which case we
                 # will find one of the receivers doing the
                 # delete for themselves or others.
+                pair_key = (del_def_key[0], del_def_key[1])
+                receiver_name = del_def_key[2]
                 log_msg2 = (
                     f"{cmd_runner} removed status_blocks entry "
                     f"for pair_key = {pair_key}, "
@@ -4793,32 +4834,17 @@ class ConfigVerifier:
                     self.add_log_msg(re.escape(log_msg2))
                     self.add_log_msg(re.escape(log_msg3))
 
-                    self.expected_registered[
-                        cmd_runner].found_del_pairs[fdp_key] += 1
+                    self.del_def_pairs_msg_count[del_def_key] += 1
+                    self.del_def_pairs_msg_ind_count[ind_key] += 1
+
+                    # self.expected_registered[
+                    #     cmd_runner].found_del_pairs[fdp_key] += 1
                     # print(f'\n{cmd_runner} after:\n',
                     #       self.expected_registered[
                     #     cmd_runner].found_del_pairs)
                     with self.ops_lock:
                         self.deleted_remotes.append(pair_key)
-                    # Now find the correct time message
-                    # copy_times = pair_array_update_times.copy()
-                    # copy_times.reverse()
-                    # print(f'\n{cmd_runner} in dec_ops_count with 2 '
-                    #       f'{copy_times=}')
-                    # time.sleep(.5)
-                    # if not update_time_msg_found:
-                    #     # for update_time in copy_times:
-                    #     # update_time = pair_array_update_times.pop()
-                    #     update_time_str = update_time.strftime(
-                    #         "%H:%M:%S.%f")
-                    #     log_msg4 = (
-                    #         f'{cmd_runner} updated _pair_array at UTC '
-                    #         f'{update_time_str}')
-                    #     if self.find_log_msgs(
-                    #             search_msgs=log_msg4):
-                    #         update_time_msg_found = True
-                    #         self.add_log_msg(re.escape(log_msg4))
-                    #         break
+
         return refresh_array_updated
 
     ####################################################################
@@ -4840,6 +4866,9 @@ class ConfigVerifier:
         self.log_ver.add_call_seq(
             name='handle_join',
             seq='test_smart_thread.py::ConfigVerifier.handle_join')
+
+        for join_name in join_names:
+            self.deleted_remotes_pending_count[join_name] += 1
 
         self.all_threads[cmd_runner].join(
             targets=set(join_names),
@@ -4886,6 +4915,9 @@ class ConfigVerifier:
         self.log_ver.add_call_seq(
             name='handle_join_tof',
             seq='test_smart_thread.py::ConfigVerifier.handle_join_tof')
+
+        for join_name in join_names:
+            self.deleted_remotes_pending_count[join_name] += 1
 
         self.all_threads[cmd_runner].join(
             targets=set(join_names),
@@ -4936,6 +4968,11 @@ class ConfigVerifier:
             name='handle_join_tot',
             seq='test_smart_thread.py::ConfigVerifier.handle_join_tot')
 
+        for join_name in join_names:
+            if timeout_names and join_name in timeout_names:
+                continue
+            self.deleted_remotes_pending_count[join_name] += 1
+
         with pytest.raises(st.SmartThreadJoinTimedOut):
             self.all_threads[cmd_runner].join(
                 targets=set(join_names),
@@ -4977,6 +5014,7 @@ class ConfigVerifier:
                         cmd_runner: str,
                         senders: list[str],
                         exp_msgs: Any,
+                        del_deferred: Union[list[str], None],
                         log_msg: str) -> None:
 
         """Handle the send_recv_cmd execution and log msgs.
@@ -4985,12 +5023,24 @@ class ConfigVerifier:
             cmd_runner: name of thread doing the cmd
             senders: names of the senders
             exp_msgs: expected messages by sender name
+            del_deferred: names of senders who might exit and cause the
+                receiver to be marked as delete deferred
             log_msg: log message to isee on recv_msg
 
         """
         self.log_ver.add_call_seq(
             name='handle_recv_msg',
             seq='test_smart_thread.py::ConfigVerifier.handle_recv_msg')
+
+        if del_deferred:
+            with self.ops_lock:
+                for del_sender in del_deferred:
+                    pair_key = st.SmartThread._get_pair_key(cmd_runner,
+                                                            del_sender)
+                    del_def_key: tuple[str, str, str] = (pair_key[0],
+                                                         pair_key[1],
+                                                         cmd_runner)
+                    self.del_def_pairs_count[del_def_key] += 1
 
         for from_name in senders:
             recvd_msg = self.all_threads[cmd_runner].recv_msg(
@@ -5031,6 +5081,7 @@ class ConfigVerifier:
                             senders: list[str],
                             exp_msgs: Any,
                             timeout: IntOrFloat,
+                            del_deferred: Union[list[str], None],
                             log_msg: str) -> None:
 
         """Handle the send_recv_cmd execution and log msgs.
@@ -5040,12 +5091,24 @@ class ConfigVerifier:
             senders: names of the senders
             exp_msgs: expected messages by sender name
             timeout: number of seconds to wait for message
+            del_deferred: names of senders who might exit and cause the
+                receiver to be marked as delete deferred
             log_msg: log message to isee on recv_msg
 
         """
         self.log_ver.add_call_seq(
             name='handle_recv_msg_tof',
             seq='test_smart_thread.py::ConfigVerifier.handle_recv_msg_tof')
+
+        if del_deferred:
+            with self.ops_lock:
+                for del_sender in del_deferred:
+                    pair_key = st.SmartThread._get_pair_key(cmd_runner,
+                                                            del_sender)
+                    del_def_key: tuple[str, str, str] = (pair_key[0],
+                                                         pair_key[1],
+                                                         cmd_runner)
+                    self.del_def_pairs_count[del_def_key] += 1
 
         for from_name in senders:
             recvd_msg = self.all_threads[cmd_runner].recv_msg(
@@ -5088,6 +5151,7 @@ class ConfigVerifier:
                             exp_msgs: Any,
                             timeout: IntOrFloat,
                             timeout_names: list[str],
+                            del_deferred: Union[list[str], None],
                             log_msg: str) -> None:
 
         """Handle the send_recv_cmd execution and log msgs.
@@ -5099,12 +5163,25 @@ class ConfigVerifier:
             timeout: number of seconds to wait for message
             timeout_names: names of senders that are delayed to cause a
                 timeout while receiving
+            del_deferred: names of senders who might exit and cause the
+                receiver to be marked as delete deferred
             log_msg: log message to isee on recv_msg
 
         """
         self.log_ver.add_call_seq(
             name='handle_recv_msg_tot',
             seq='test_smart_thread.py::ConfigVerifier.handle_recv_msg_tot')
+
+        if del_deferred:
+            with self.ops_lock:
+                for del_sender in del_deferred:
+                    pair_key = st.SmartThread._get_pair_key(cmd_runner,
+                                                            del_sender)
+                    del_def_key: tuple[str, str, str] = (pair_key[0],
+                                                         pair_key[1],
+                                                         cmd_runner)
+                    self.del_def_pairs_count[del_def_key] += 1
+
         timeout_true_value = timeout
         for from_name in senders:
             enter_exit_list = ('entered', 'exiting')
