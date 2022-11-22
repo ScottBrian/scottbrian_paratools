@@ -747,13 +747,14 @@ class SmartThread:
         sb = self._common_setup(targets=targets, timeout=None)
 
         # if caller specified a log message to issue
-        caller_info = ''
+        log_msg_part2 = ''
         if log_msg and self.debug_logging_enabled:
-            caller_info = get_formatted_call_sequence(latest=1, depth=1)
+            log_msg_part2 = (
+                f'{self.name} to unregister {sb.targets} '
+                f'{get_formatted_call_sequence(latest=1, depth=1)} '
+                f'{log_msg}')
             self.logger.debug(
-                f'unregister() entered by {self.name} to unregister '
-                f' {sb.targets} '
-                f'{caller_info} {log_msg}')
+                f'unregister() entered: {log_msg_part2}')
 
         work_targets = sb.targets.copy()
 
@@ -801,10 +802,9 @@ class SmartThread:
 
             time.sleep(0.2)
 
-        if log_msg and self.debug_logging_enabled:
+        if log_msg_part2:
             self.logger.debug(
-                f'join() by {self.name} to join {sb.targets} exiting. '
-                f'{caller_info} {log_msg}')
+                f'unregister() exiting: {log_msg_part2}')
 
     ####################################################################
     # join
@@ -857,12 +857,14 @@ class SmartThread:
         sb = self._common_setup(targets=targets, timeout=timeout)
 
         # if caller specified a log message to issue
-        caller_info = ''
+        log_msg_part2 = ''
         if log_msg and self.debug_logging_enabled:
-            caller_info = get_formatted_call_sequence(latest=1, depth=1)
+            log_msg_part2 = (
+                f'{self.name} to join {sorted(sb.targets)}. '
+                f'{get_formatted_call_sequence(latest=1, depth=1)} '
+                f'{log_msg}')
             self.logger.debug(
-                f'join() entered: {self.name} to join {sorted(sb.targets)}. '
-                f'{caller_info} {log_msg}')
+                f'join() entered: {log_msg_part2}')
 
         work_targets = sb.targets.copy()
 
@@ -923,10 +925,9 @@ class SmartThread:
 
             time.sleep(0.2)
 
-        if log_msg and self.debug_logging_enabled:
+        if log_msg_part2:
             self.logger.debug(
-                f'join() exiting: {self.name} to join {sorted(sb.targets)}. '
-                f'{caller_info} {log_msg}')
+                f'join() exiting: {log_msg_part2}')
 
     ####################################################################
     # _get_pair_key
@@ -950,7 +951,7 @@ class SmartThread:
             return name1, name0
 
     ###########################################################################
-    # _refresh_remote_array
+    # _refresh_pair_array
     ###########################################################################
     def _refresh_pair_array(self) -> None:
         """Update the connection pair array from the _registry.

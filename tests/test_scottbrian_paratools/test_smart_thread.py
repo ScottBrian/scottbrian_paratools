@@ -2349,6 +2349,7 @@ class ConfigVerifier:
                  log_ver: LogVer,
                  caplog_to_use: pytest.CaptureFixture[str],
                  msgs: Msgs,
+                 # commander_thread: Optional[threading.Thread] = None,
                  max_msgs: Optional[int] = 10) -> None:
         """Initialize the ConfigVerifier.
 
@@ -2549,7 +2550,7 @@ class ConfigVerifier:
                    expected_status: st.ThreadStatus,
                    thread_repr: str,
                    reg_update_time: datetime,
-                   pair_array_update_time: datetime
+                   pair_array_update_time: Optional[datetime] = None
                    ) -> None:
         """Add a thread to the ConfigVerifier.
 
@@ -2695,9 +2696,10 @@ class ConfigVerifier:
 
         self.handle_deferred_delete_log_msgs(cmd_runner=name)
 
-        self.add_log_msg(re.escape(
-            f'{name} updated _pair_array at UTC '
-            f'{pair_array_update_time.strftime("%H:%M:%S.%f")}'))
+        if pair_array_update_time:
+            self.add_log_msg(re.escape(
+                f'{name} updated _pair_array at UTC '
+                f'{pair_array_update_time.strftime("%H:%M:%S.%f")}'))
 
         self.add_log_msg(
             f'{name} did register update at UTC '
@@ -2754,8 +2756,6 @@ class ConfigVerifier:
                 + num_active
                 + num_stopped) <= len(self.thread_names)
         assert num_active >= 1  # always need at least 1 for commander
-
-        ret_suite = []
 
         if not self.commander_thread_config_built:
             self.build_create_suite(commander_name=self.commander_name)
@@ -2917,7 +2917,6 @@ class ConfigVerifier:
         Returns:
             a list of ConfigCmd items
         """
-        ret_suite = []
         if commander_name:
             if not {commander_name}.issubset(self.unregistered_names):
                 self.abort_all_f1_threads()
@@ -4428,10 +4427,17 @@ class ConfigVerifier:
                                 name: str,
                                 auto_start: bool) -> None:
         """Create the commander thread."""
-
-        self.commander_thread = st.SmartThread(
-            name=name, auto_start=auto_start, max_msgs=self.max_msgs)
+        if not self.commander_thread:
+            self.commander_thread = st.SmartThread(
+                name=name, auto_start=auto_start, max_msgs=self.max_msgs)
         self.all_threads[name] = self.commander_thread
+
+        if self.commander_thread.time_last_pair_array_update:
+            pair_array_update_time = (
+                self.commander_thread.time_last_pair_array_update[-1])
+        else:
+            pair_array_update_time = None
+
         self.add_thread(
             name=name,
             thread=self.commander_thread,
@@ -4441,8 +4447,7 @@ class ConfigVerifier:
             thread_repr=repr(self.commander_thread),
             reg_update_time=self.commander_thread
             .time_last_registry_update[-1],
-            pair_array_update_time=self.commander_thread
-            .time_last_pair_array_update[-1]
+            pair_array_update_time=pair_array_update_time
         )
 
     ####################################################################
@@ -4979,13 +4984,13 @@ class ConfigVerifier:
                 timeout=timeout,
                 log_msg=log_msg)
 
-        log_msg = (
+        timeout_log_msg = (
             f'{cmd_runner} raising SmartThreadJoinTimedOut '
             f'waiting for {sorted(set(timeout_names))}')
         self.log_ver.add_msg(
             log_name='scottbrian_paratools.smart_thread',
             log_level=logging.ERROR,
-            log_msg=re.escape(log_msg))
+            log_msg=re.escape(timeout_log_msg))
 
         if log_msg:
             log_msg_2 = (
@@ -5592,7 +5597,7 @@ class ConfigVerifier:
                 self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f'SmartThread registry has entry for name {name} '
-                    f'that has satus of {thread.status} '
+                    f'that has status of {thread.status} '
                     f'which does not match the expected_registered '
                     f'status of {self.expected_registered[name].status}')
 
@@ -6174,41 +6179,39 @@ def expand_list(nested_list: list[Any]) -> list[Any]:
 ########################################################################
 # OuterThreadApp class
 ########################################################################
-# class OuterThreadApp(threading.Thread):
-#     """Outer thread app for test."""
-#     def __init__(self,
-#                  config_ver: ConfigVerifier,
-#                  scenario: list[ConfigCmd]
-#                  ) -> None:
-#         """Initialize the object.
-#
-#         Args:
-#             config_ver: configuration verifier and test support methods
-#             scenario: list of commands to run
-#
-#         """
-#         super().__init__()
-#         self.config_ver = config_ver
-#         self.scenario = scenario
-#         self.smart_thread = st.SmartThread()
-#
-#     def run(self) -> None:
-#         """Run the test."""
-#         print('beta run started')
-#
-#         # normally, the add_desc is done just after the instantiation, but
-#         # in this case the thread is not made alive until now, and the
-#         # add_desc checks that the thread is alive
-#         self.descs.add_desc(SmartThreadDesc(smart_thread=self.t_pair))
-#
-#         self.cmds.queue_cmd('alpha')
-#
-#         self.t_pair.pair_with(remote_name='alpha')
-#         self.descs.paired('alpha', 'beta')
-#
-#         self.cmds.get_cmd('beta')
-#
-#         logger.debug('beta run exiting')
+class OuterThreadApp(threading.Thread):
+    """Outer thread app for test."""
+    def __init__(self,
+                 config_ver: ConfigVerifier,
+                 name: str,
+                 # auto_start: bool,
+                 max_msgs: int
+                 ) -> None:
+        """Initialize the object.
+
+        Args:
+            config_ver: configuration verifier and test support methods
+            name: name of thread
+            auto_start: True, start thread
+            max_msgs: max number of messages for msg_q
+
+        """
+        super().__init__()
+        self.config_ver = config_ver
+        self.smart_thread = st.SmartThread(
+            name=name,
+            thread=self,
+            auto_start=False,
+            max_msgs=max_msgs)
+        self.config_ver.commander_thread = self.smart_thread
+
+    def run(self) -> None:
+        """Run the test."""
+        self.smart_thread._set_status(
+            target_thread=self.smart_thread,
+            new_status=st.ThreadStatus.Alive)
+        self.config_ver.main_driver()
+
 
 
 # ###############################################################################
@@ -6306,6 +6309,104 @@ class TestSmartThreadScenarios:
             scenario_builder=ConfigVerifier.build_simple_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
+
+    ####################################################################
+    # test_smart_thread_meta_scenarios
+    ####################################################################
+    def test_config_build_scenarios(
+            self,
+            num_registered_1_arg: int,
+            num_active_1_arg: int,
+            num_stopped_1_arg: int,
+            num_registered_2_arg: int,
+            num_active_2_arg: int,
+            num_stopped_2_arg: int,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            num_registered_1_arg: number of threads to initially build
+                as registered
+            num_active_1_arg: number of threads to initially build as
+                active
+            num_stopped_1_arg: number of threads to initially build as
+                stopped
+            num_registered_2_arg: number of threads to reconfigured as
+                registered
+            num_active_2_arg: number of threads to reconfigured as
+                active
+            num_stopped_2_arg: number of threads to reconfigured as
+                stopped
+            caplog: pytest fixture to capture log output
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {
+            'num_registered_1': num_registered_1_arg,
+            'num_active_1': num_active_1_arg,
+            'num_stopped_1': num_stopped_1_arg,
+            'num_registered_2': num_registered_2_arg,
+            'num_active_2': num_active_2_arg,
+            'num_stopped_2': num_stopped_2_arg,
+        }
+
+        self.scenario_driver(
+            scenario_builder=ConfigVerifier.build_config_build_suite,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
+
+    ####################################################################
+    # test_smart_thread_join_errors
+    ####################################################################
+    def test_join_timeout_scenarios(
+            self,
+            timeout_type_arg: TimeoutType,
+            num_active_no_target_arg: int,
+            num_no_delay_exit_arg: int,
+            num_delay_exit_arg: int,
+            num_no_delay_unreg_arg: int,
+            num_delay_unreg_arg: int,
+            num_no_delay_reg_arg: int,
+            num_delay_reg_arg: int,
+            caplog: pytest.CaptureFixture[str]
+            ) -> None:
+        """Test error cases in the _regref remote array method.
+
+        Args:
+            caplog: pytest fixture to capture log output
+
+        """
+        assert num_active_no_target_arg > 0
+        if timeout_type_arg == TimeoutType.TimeoutNone:
+            if (num_no_delay_exit_arg
+                    + num_delay_exit_arg
+                    + num_no_delay_unreg_arg
+                    + num_delay_unreg_arg
+                    + num_no_delay_reg_arg
+                    + num_delay_reg_arg) == 0:
+                return
+        else:
+            if (num_delay_exit_arg
+                    + num_delay_unreg_arg
+                    + num_delay_reg_arg) == 0:
+                return
+
+        args_for_scenario_builder: dict[str, Any] = {
+            'timeout_type': timeout_type_arg,
+            'num_active_no_target': num_active_no_target_arg,
+            'num_no_delay_exit': num_no_delay_exit_arg,
+            'num_delay_exit': num_delay_exit_arg,
+            'num_no_delay_unreg': num_no_delay_unreg_arg,
+            'num_delay_unreg': num_delay_unreg_arg,
+            'num_no_delay_reg': num_no_delay_reg_arg,
+            'num_delay_reg': num_delay_reg_arg
+        }
+
+        self.scenario_driver(
+            scenario_builder=ConfigVerifier.build_join_timeout_suite,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
+
 
     ####################################################################
     # test_smart_thread_msg_timeout_scenarios
@@ -6436,103 +6537,6 @@ class TestSmartThreadScenarios:
             caplog_to_use=caplog)
 
     ####################################################################
-    # test_smart_thread_meta_scenarios
-    ####################################################################
-    def test_config_build_scenarios(
-            self,
-            num_registered_1_arg: int,
-            num_active_1_arg: int,
-            num_stopped_1_arg: int,
-            num_registered_2_arg: int,
-            num_active_2_arg: int,
-            num_stopped_2_arg: int,
-            caplog: pytest.CaptureFixture[str]
-    ) -> None:
-        """Test meta configuration scenarios.
-
-        Args:
-            num_registered_1_arg: number of threads to initially build
-                as registered
-            num_active_1_arg: number of threads to initially build as
-                active
-            num_stopped_1_arg: number of threads to initially build as
-                stopped
-            num_registered_2_arg: number of threads to reconfigured as
-                registered
-            num_active_2_arg: number of threads to reconfigured as
-                active
-            num_stopped_2_arg: number of threads to reconfigured as
-                stopped
-            caplog: pytest fixture to capture log output
-
-        """
-        args_for_scenario_builder: dict[str, Any] = {
-            'num_registered_1': num_registered_1_arg,
-            'num_active_1': num_active_1_arg,
-            'num_stopped_1': num_stopped_1_arg,
-            'num_registered_2': num_registered_2_arg,
-            'num_active_2': num_active_2_arg,
-            'num_stopped_2': num_stopped_2_arg,
-        }
-
-        self.scenario_driver(
-            scenario_builder=ConfigVerifier.build_config_build_suite,
-            scenario_builder_args=args_for_scenario_builder,
-            caplog_to_use=caplog)
-
-    ####################################################################
-    # test_smart_thread_join_errors
-    ####################################################################
-    def test_join_timeout_scenarios(
-            self,
-            timeout_type_arg: TimeoutType,
-            num_active_no_target_arg: int,
-            num_no_delay_exit_arg: int,
-            num_delay_exit_arg: int,
-            num_no_delay_unreg_arg: int,
-            num_delay_unreg_arg: int,
-            num_no_delay_reg_arg: int,
-            num_delay_reg_arg: int,
-            caplog: pytest.CaptureFixture[str]
-            ) -> None:
-        """Test error cases in the _regref remote array method.
-
-        Args:
-            caplog: pytest fixture to capture log output
-
-        """
-        assert num_active_no_target_arg > 0
-        if timeout_type_arg == TimeoutType.TimeoutNone:
-            if (num_no_delay_exit_arg
-                    + num_delay_exit_arg
-                    + num_no_delay_unreg_arg
-                    + num_delay_unreg_arg
-                    + num_no_delay_reg_arg
-                    + num_delay_reg_arg) == 0:
-                return
-        else:
-            if (num_delay_exit_arg
-                    + num_delay_unreg_arg
-                    + num_delay_reg_arg) == 0:
-                return
-
-        args_for_scenario_builder: dict[str, Any] = {
-            'timeout_type': timeout_type_arg,
-            'num_active_no_target': num_active_no_target_arg,
-            'num_no_delay_exit': num_no_delay_exit_arg,
-            'num_delay_exit': num_delay_exit_arg,
-            'num_no_delay_unreg': num_no_delay_unreg_arg,
-            'num_delay_unreg': num_delay_unreg_arg,
-            'num_no_delay_reg': num_no_delay_reg_arg,
-            'num_delay_reg': num_delay_reg_arg
-        }
-
-        self.scenario_driver(
-            scenario_builder=ConfigVerifier.build_join_timeout_suite,
-            scenario_builder_args=args_for_scenario_builder,
-            caplog_to_use=caplog)
-
-    ####################################################################
     # test_smart_thread_msg_timeout_scenarios
     ####################################################################
     def scenario_driver(
@@ -6605,7 +6609,15 @@ class TestSmartThreadScenarios:
             cmd_runners=[config_ver.commander_name],
             join_target_names=names)
 
-        config_ver.main_driver()
+        outer_thread_app = OuterThreadApp(
+            config_ver=config_ver,
+            name=commander_name,
+            max_msgs=10)
+
+        # config_ver.main_driver()
+        outer_thread_app.start()
+
+        outer_thread_app.join()
 
         ################################################################
         # check log results
