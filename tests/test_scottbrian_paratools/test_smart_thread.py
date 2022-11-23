@@ -36,9 +36,64 @@ logger = logging.getLogger(__name__)
 logger.debug('about to start the tests')
 
 
+########################################################################
+# Type alias
+########################################################################
 IntOrFloat: TypeAlias = Union[int, float]
 
 StrOrList: TypeAlias = Union[str, list[str]]
+
+
+########################################################################
+# CommanderConfig
+########################################################################
+class CommanderConfig(Enum):
+    ScriptStyle = auto()
+    CurrentThreadApp = auto()
+    RemoteThreadApp = auto()
+
+
+########################################################################
+# timeout_type used to specify whether to use timeout on various cmds
+########################################################################
+class TimeoutType(Enum):
+    TimeoutNone = auto()
+    TimeoutFalse = auto()
+    TimeoutTrue = auto()
+
+
+########################################################################
+# Test settings
+########################################################################
+timeout_type_arg_list = [TimeoutType.TimeoutNone,
+                         TimeoutType.TimeoutFalse,
+                         TimeoutType.TimeoutTrue]
+# timeout_type_arg_list = [TimeoutType.TimeoutNone]
+
+
+########################################################################
+# Test settings for test_recv_timeout_scenarios
+########################################################################
+num_receivers_arg_list = [1, 2, 3]
+# num_receivers_arg_list = [2]
+
+num_active_no_delay_senders_arg_list = [0, 1, 2]
+# num_active_no_delay_senders_arg_list = [0]
+
+num_active_delay_senders_arg_list = [0, 1, 2]
+# num_active_delay_senders_arg_list = [1]
+
+num_send_exit_senders_arg_list = [0, 1, 2]
+# num_send_exit_senders_arg_list = [2]
+
+num_nosend_exit_senders_arg_list = [0, 1, 2]
+# num_nosend_exit_senders_arg_list = [2]
+
+num_unreg_senders_arg_list = [0, 1, 2]
+# num_unreg_senders_arg_list = [2]
+
+num_reg_senders_arg_list = [0, 1, 2]
+# num_reg_senders_arg_list = [0]
 
 
 ########################################################################
@@ -1091,15 +1146,6 @@ class WaitForSendTimeouts(ConfigCmd):
 
 
 ########################################################################
-# timeout_type used to specify whether to use timeout on various cmds
-########################################################################
-class TimeoutType(Enum):
-    TimeoutNone = auto()
-    TimeoutFalse = auto()
-    TimeoutTrue = auto()
-
-
-########################################################################
 # 0) start alpha, beta, and charlie threads
 # 1) beta and charlie send msg to alpha
 # 2) beta and charlie exit
@@ -1768,11 +1814,6 @@ def num_stopped_2_arg(request: Any) -> int:
 ###############################################################################
 # timeout_type_arg
 ###############################################################################
-timeout_type_arg_list = [TimeoutType.TimeoutNone,
-                         TimeoutType.TimeoutFalse,
-                         TimeoutType.TimeoutTrue]
-# timeout_type_arg_list = [TimeoutType.TimeoutTrue]
-
 @pytest.fixture(params=timeout_type_arg_list)  # type: ignore
 def timeout_type_arg(request: Any) -> TimeoutType:
     """Type of send_msg timeout to test.
@@ -1808,10 +1849,6 @@ def num_senders_arg(request: Any) -> int:
 ###############################################################################
 # num_receivers_arg
 ###############################################################################
-num_receivers_arg_list = [1, 2, 3]
-# num_receivers_arg_list = [2]
-
-
 @pytest.fixture(params=num_receivers_arg_list)  # type: ignore
 def num_receivers_arg(request: Any) -> int:
     """Number of threads to receive msgs.
@@ -1826,10 +1863,6 @@ def num_receivers_arg(request: Any) -> int:
 ###############################################################################
 # num_active_no_delay_senders_arg
 ###############################################################################
-num_active_no_delay_senders_arg_list = [0, 1, 2]
-# num_active_no_delay_senders_arg_list = [0]
-
-
 @pytest.fixture(params=num_active_no_delay_senders_arg_list)  # type: ignore
 def num_active_no_delay_senders_arg(request: Any) -> int:
     """Number of threads to send msg immediately.
@@ -1845,10 +1878,6 @@ def num_active_no_delay_senders_arg(request: Any) -> int:
 ###############################################################################
 # num_active_delay_senders_arg
 ###############################################################################
-num_active_delay_senders_arg_list = [0, 1, 2]
-# num_active_delay_senders_arg_list = [1]
-
-
 @pytest.fixture(params=num_active_delay_senders_arg_list)  # type: ignore
 def num_active_delay_senders_arg(request: Any) -> int:
     """Number of threads to send msg after a delay.
@@ -1865,10 +1894,6 @@ def num_active_delay_senders_arg(request: Any) -> int:
 ###############################################################################
 # num_senders_exit_before_arg
 ###############################################################################
-num_send_exit_senders_arg_list = [0, 1, 2]
-# num_send_exit_senders_arg_list = [2]
-
-
 @pytest.fixture(params=num_send_exit_senders_arg_list)  # type: ignore
 def num_send_exit_senders_arg(request: Any) -> int:
     """Number of threads to send msg and then exit.
@@ -1885,10 +1910,6 @@ def num_send_exit_senders_arg(request: Any) -> int:
 ########################################################################
 # num_senders_exit_before_arg
 ########################################################################
-num_nosend_exit_senders_arg_list = [0, 1, 2]
-# num_nosend_exit_senders_arg_list = [1]
-
-
 @pytest.fixture(params=num_nosend_exit_senders_arg_list)  # type: ignore
 def num_nosend_exit_senders_arg(request: Any) -> int:
     """Number of threads to exit and send msg after create (resurrect).
@@ -1905,10 +1926,6 @@ def num_nosend_exit_senders_arg(request: Any) -> int:
 ###############################################################################
 # num_unreg_senders_arg
 ###############################################################################
-num_unreg_senders_arg_list = [0, 1, 2]
-# num_unreg_senders_arg_list = [1]
-
-
 @pytest.fixture(params=num_unreg_senders_arg_list)  # type: ignore
 def num_unreg_senders_arg(request: Any) -> int:
     """Number of threads to be unregistered and send msg after create.
@@ -1925,9 +1942,6 @@ def num_unreg_senders_arg(request: Any) -> int:
 ###############################################################################
 # num_reg_senders_arg
 ###############################################################################
-num_reg_senders_arg_list = [0, 1, 2]
-# num_reg_senders_arg_list = [1]
-
 @pytest.fixture(params=num_reg_senders_arg_list)  # type: ignore
 def num_reg_senders_arg(request: Any) -> int:
     """Number of threads to be registered and send msg after start.
@@ -2394,7 +2408,6 @@ class ConfigVerifier:
 
         self.pending_ops_counts: dict[tuple[str, str], dict[str, int]] = {}
         self.expected_num_recv_timouts: int = 0
-        self.deleted_remotes: list[tuple[str, str]] = []
         self.deleted_remotes_pending_count: dict[str, int] = defaultdict(int)
         self.deleted_remotes_complete_count: dict[str, int] = defaultdict(int)
         self.pair_array_refresh_count: dict[str, int] = defaultdict(int)
@@ -2404,6 +2417,8 @@ class ConfigVerifier:
             tuple[str, str, str], int] = defaultdict(int)
         self.del_def_pairs_msg_ind_count: dict[
             tuple[str, str, str, str], int] = defaultdict(int)
+        self.del_nondef_pairs_msg_count: dict[
+            tuple[str, str, str], int] = defaultdict(int)
 
         self.f1_thread_names: dict[str, bool] = {
             'beta': True,
@@ -4544,7 +4559,6 @@ class ConfigVerifier:
                 start_time = time.time()
                 while True:
                     with self.ops_lock:
-                        # if pair_key in self.deleted_remotes:
                         if (self.deleted_remotes_complete_count[remote]
                                 == self.deleted_remotes_pending_count[remote]):
                             break
@@ -4666,18 +4680,37 @@ class ConfigVerifier:
                             'contains an entry of '
                             f'{self.expected_pairs[pair_key]}  which does not '
                             f'include the remote {remote} being deleted')
+                    # if other_name not in self.expected_pairs[pair_key].keys():
+                    #     pair_keys_to_delete.append(pair_key)
+                    # elif self.expected_pairs[pair_key][
+                    #         other_name].pending_ops_count == 0:
+                    #     pair_keys_to_delete.append(pair_key)
+                    #     self.add_log_msg(re.escape(
+                    #         f"{name} removed status_blocks entry "
+                    #         f"for pair_key = {pair_key}, "
+                    #         f"name = {other_name}"))
+                    # else:
+                    #     del self.expected_pairs[pair_key][remote]
+
                     if other_name not in self.expected_pairs[pair_key].keys():
                         pair_keys_to_delete.append(pair_key)
-                    elif self.expected_pairs[pair_key][
-                            other_name].pending_ops_count == 0:
-                        pair_keys_to_delete.append(pair_key)
-                        self.add_log_msg(re.escape(
+                    else:
+                        nondef_key = (
+                        pair_key[0], pair_key[1], other_name, name)
+                        num_non_def = self.del_nondef_pairs_msg_count[
+                            nondef_key]
+                        nondef_log_msg = (
                             f"{name} removed status_blocks entry "
                             f"for pair_key = {pair_key}, "
-                            f"name = {other_name}"))
-                    else:
-                        del self.expected_pairs[pair_key][remote]
-                        self.deleted_remotes.append(pair_key)
+                            f"name = {other_name}")
+                        if self.find_log_msgs(
+                                search_msgs=nondef_log_msg,
+                                num_instances=num_non_def + 1):
+                            self.del_nondef_pairs_msg_count[nondef_key] += 1
+                            pair_keys_to_delete.append(pair_key)
+                            self.add_log_msg(re.escape(nondef_log_msg))
+                        else:
+                            del self.expected_pairs[pair_key][remote]
                     self.add_log_msg(re.escape(
                         f"{name} removed status_blocks entry "
                         f"for pair_key = {pair_key}, "
@@ -4842,14 +4875,6 @@ class ConfigVerifier:
                     self.del_def_pairs_msg_count[del_def_key] += 1
                     self.del_def_pairs_msg_ind_count[ind_key] += 1
 
-                    # self.expected_registered[
-                    #     cmd_runner].found_del_pairs[fdp_key] += 1
-                    # print(f'\n{cmd_runner} after:\n',
-                    #       self.expected_registered[
-                    #     cmd_runner].found_del_pairs)
-                    with self.ops_lock:
-                        self.deleted_remotes.append(pair_key)
-
         return refresh_array_updated
 
     ####################################################################
@@ -4883,7 +4908,7 @@ class ConfigVerifier:
             log_msg_2 = (
                 f'{self.log_ver.get_call_seq("handle_join")} ')
             log_msg_3 = re.escape(f'{log_msg}')
-            for enter_exit in ('entered', 'exiting'):
+            for enter_exit in ('entry', 'exit'):
                 log_msg_1 = re.escape(
                     f'join() {enter_exit}: {cmd_runner} to join '
                     f'{sorted(set(join_names))}. ')
@@ -4933,7 +4958,7 @@ class ConfigVerifier:
             log_msg_2 = (
                 f'{self.log_ver.get_call_seq("handle_join_tof")} ')
             log_msg_3 = re.escape(f'{log_msg}')
-            for enter_exit in ('entered', 'exiting'):
+            for enter_exit in ('entry', 'exit'):
                 log_msg_1 = re.escape(
                     f'join() {enter_exit}: {cmd_runner} to join '
                     f'{sorted(set(join_names))}. ')
@@ -4997,7 +5022,7 @@ class ConfigVerifier:
                 f'{self.log_ver.get_call_seq("handle_join_tot")} ')
             log_msg_3 = re.escape(f'{log_msg}')
             log_msg_1 = re.escape(
-                f'join() entered: {cmd_runner} to join '
+                f'join() entry: {cmd_runner} to join '
                 f'{sorted(set(join_names))}. ')
 
             self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
@@ -5056,10 +5081,10 @@ class ConfigVerifier:
                 log_msg_2 = (
                     f'{self.log_ver.get_call_seq("handle_recv_msg")} ')
                 log_msg_3 = re.escape(f'{log_msg}')
-                for enter_exit in ('entered', 'exiting'):
+                for enter_exit in ('entry', 'exit'):
                     log_msg_1 = re.escape(
                         f'recv_msg() {enter_exit}: '
-                        f'{cmd_runner} <- {from_name} ')
+                        f'{cmd_runner} <- {from_name}. ')
 
                     self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
@@ -5125,10 +5150,10 @@ class ConfigVerifier:
                 log_msg_2 = (
                     f'{self.log_ver.get_call_seq("handle_recv_msg_tof")} ')
                 log_msg_3 = re.escape(f'{log_msg}')
-                for enter_exit in ('entered', 'exiting'):
+                for enter_exit in ('entry', 'exit'):
                     log_msg_1 = re.escape(
                         f'recv_msg() {enter_exit}: '
-                        f'{cmd_runner} <- {from_name} ')
+                        f'{cmd_runner} <- {from_name}. ')
 
                     self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
@@ -5189,14 +5214,14 @@ class ConfigVerifier:
 
         timeout_true_value = timeout
         for from_name in senders:
-            enter_exit_list = ('entered', 'exiting')
+            enter_exit_list = ('entry', 'exit')
             if from_name not in timeout_names:
                 recvd_msg = self.all_threads[cmd_runner].recv_msg(
                     remote=from_name,
                     timeout=timeout_true_value,
                     log_msg=log_msg)
             else:
-                enter_exit_list = ('entered', )
+                enter_exit_list = ('entry', )
                 with pytest.raises(st.SmartThreadRecvMsgTimedOut):
                     recvd_msg = self.all_threads[cmd_runner].recv_msg(
                         remote=from_name,
@@ -5223,11 +5248,11 @@ class ConfigVerifier:
                 for enter_exit in enter_exit_list:
                     log_msg_1 = re.escape(
                         f'recv_msg() {enter_exit}: '
-                        f'{cmd_runner} <- {from_name} ')
+                        f'{cmd_runner} <- {from_name}. ')
 
                     self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
-            if 'exiting' in enter_exit_list:
+            if 'exit' in enter_exit_list:
                 assert recvd_msg == exp_msgs[from_name]
 
                 update_time = (
@@ -5275,10 +5300,10 @@ class ConfigVerifier:
         if log_msg:
             log_msg_2 = f'{self.log_ver.get_call_seq("handle_send_msg")} '
             log_msg_3 = re.escape(f'{log_msg}')
-            for enter_exit in ('entered', 'exiting'):
+            for enter_exit in ('entry', 'exit'):
                 log_msg_1 = re.escape(
                     f'send_msg() {enter_exit}: {cmd_runner} -> '
-                    f'{set(receivers)} ')
+                    f'{set(receivers)}. ')
                 self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
         for name in ops_count_names:
@@ -5324,10 +5349,10 @@ class ConfigVerifier:
         if log_msg:
             log_msg_2 = f'{self.log_ver.get_call_seq("handle_send_msg_tof")} '
             log_msg_3 = re.escape(f'{log_msg}')
-            for enter_exit in ('entered', 'exiting'):
+            for enter_exit in ('entry', 'exit'):
                 log_msg_1 = re.escape(
                     f'send_msg() {enter_exit}: {cmd_runner} -> '
-                    f'{set(receivers)} ')
+                    f'{set(receivers)}. ')
                 self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
         for name in ops_count_names:
@@ -5410,8 +5435,8 @@ class ConfigVerifier:
             log_msg_2 = f'{self.log_ver.get_call_seq("handle_send_msg_tot")} '
             log_msg_3 = re.escape(f'{log_msg}')
             log_msg_1 = re.escape(
-                f'send_msg() entered: {cmd_runner} -> '
-                f'{set(receivers)} ')
+                f'send_msg() entry: {cmd_runner} -> '
+                f'{set(receivers)}. ')
             self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
         for name in ops_count_names:
@@ -6177,6 +6202,38 @@ def expand_list(nested_list: list[Any]) -> list[Any]:
 
 
 ########################################################################
+# CommanderCurrentApp class
+########################################################################
+class CommanderCurrentApp:
+    """Outer thread app for test."""
+    def __init__(self,
+                 config_ver: ConfigVerifier,
+                 name: str,
+                 max_msgs: int
+                 ) -> None:
+        """Initialize the object.
+
+        Args:
+            config_ver: configuration verifier and test support methods
+            name: name of thread
+            auto_start: True, start thread
+            max_msgs: max number of messages for msg_q
+
+        """
+        self.config_ver = config_ver
+        self.smart_thread = st.SmartThread(
+            name=name,
+            auto_start=False,
+            max_msgs=max_msgs)
+
+        self.config_ver.commander_thread = self.smart_thread
+
+    def run(self) -> None:
+        """Run the test."""
+        self.config_ver.main_driver()
+
+
+########################################################################
 # OuterThreadApp class
 ########################################################################
 class OuterThreadApp(threading.Thread):
@@ -6203,6 +6260,7 @@ class OuterThreadApp(threading.Thread):
             thread=self,
             auto_start=False,
             max_msgs=max_msgs)
+
         self.config_ver.commander_thread = self.smart_thread
 
     def run(self) -> None:
@@ -6407,7 +6465,6 @@ class TestSmartThreadScenarios:
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 
-
     ####################################################################
     # test_smart_thread_msg_timeout_scenarios
     ####################################################################
@@ -6508,18 +6565,28 @@ class TestSmartThreadScenarios:
             caplog: pytest fixture to capture log output
 
         """
+        total_arg_counts = (
+                num_active_targets_arg
+                + num_registered_targets_arg
+                + num_unreg_timeouts_arg
+                + num_exit_timeouts_arg
+                + num_full_q_timeouts_arg)
         if timeout_type_arg == TimeoutType.TimeoutNone:
-            if (num_active_targets_arg
-                    + num_registered_targets_arg
-                    + num_unreg_timeouts_arg
-                    + num_exit_timeouts_arg
-                    + num_full_q_timeouts_arg) == 0:
+            if total_arg_counts == 0:
                 return
         else:
             if (num_unreg_timeouts_arg
                     + num_exit_timeouts_arg
                     + num_full_q_timeouts_arg) == 0:
                 return
+
+        command_config_num = total_arg_counts % 3
+        if command_config_num == 0:
+            commander_config = CommanderConfig.ScriptStyle
+        elif command_config_num == 1:
+            commander_config = CommanderConfig.CurrentThreadApp
+        else:
+            commander_config = CommanderConfig.RemoteThreadApp
 
         args_for_scenario_builder: dict[str, Any] = {
             'timeout_type': timeout_type_arg,
@@ -6534,7 +6601,8 @@ class TestSmartThreadScenarios:
         self.scenario_driver(
             scenario_builder=ConfigVerifier.build_send_msg_timeout_suite,
             scenario_builder_args=args_for_scenario_builder,
-            caplog_to_use=caplog)
+            caplog_to_use=caplog,
+            commander_config=commander_config)
 
     ####################################################################
     # test_smart_thread_msg_timeout_scenarios
@@ -6543,7 +6611,8 @@ class TestSmartThreadScenarios:
             self,
             scenario_builder: Callable[..., None],
             scenario_builder_args: dict[str, Any],
-            caplog_to_use: pytest.CaptureFixture[str]
+            caplog_to_use: pytest.CaptureFixture[str],
+            commander_config: CommanderConfig = CommanderConfig.ScriptStyle
     ) -> None:
         """Build and run a scenario.
 
@@ -6551,6 +6620,7 @@ class TestSmartThreadScenarios:
             scenario_builder: the ConfigVerifier builder method to call
             scenario_builder_args: the args to pass to the builder
             caplog_to_use: the capsys to capture log messages
+            commander_config: specifies how the commander will run
 
         """
 
@@ -6609,15 +6679,24 @@ class TestSmartThreadScenarios:
             cmd_runners=[config_ver.commander_name],
             join_target_names=names)
 
-        outer_thread_app = OuterThreadApp(
-            config_ver=config_ver,
-            name=commander_name,
-            max_msgs=10)
-
-        # config_ver.main_driver()
-        outer_thread_app.start()
-
-        outer_thread_app.join()
+        ################################################################
+        # start commander
+        ################################################################
+        if commander_config == CommanderConfig.ScriptStyle:
+            config_ver.main_driver()
+        elif commander_config == CommanderConfig.CurrentThreadApp:
+            commander_current_app = CommanderCurrentApp(
+                config_ver=config_ver,
+                name=commander_name,
+                max_msgs=10)
+            commander_current_app.run()
+        elif commander_config == CommanderConfig.RemoteThreadApp:
+            outer_thread_app = OuterThreadApp(
+                config_ver=config_ver,
+                name=commander_name,
+                max_msgs=10)
+            outer_thread_app.start()
+            outer_thread_app.join()
 
         ################################################################
         # check log results

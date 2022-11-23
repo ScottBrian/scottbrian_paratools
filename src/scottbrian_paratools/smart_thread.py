@@ -55,6 +55,7 @@ from datetime import datetime
 from enum import auto, Enum, Flag
 import logging
 import queue
+import sys
 import threading
 import time
 from typing import (Any, Callable, ClassVar, Optional, Type,
@@ -747,14 +748,20 @@ class SmartThread:
         sb = self._common_setup(targets=targets, timeout=None)
 
         # if caller specified a log message to issue
-        log_msg_part2 = ''
+        # log_msg_part2 = ''
+        # if log_msg and self.debug_logging_enabled:
+        #     log_msg_part2 = (
+        #         f'{self.name} to unregister {sb.targets} '
+        #         f'{get_formatted_call_sequence(latest=1, depth=1)} '
+        #         f'{log_msg}')
+        #     self.logger.debug(
+        #         f'unregister() entered: {log_msg_part2}')
         if log_msg and self.debug_logging_enabled:
-            log_msg_part2 = (
-                f'{self.name} to unregister {sb.targets} '
-                f'{get_formatted_call_sequence(latest=1, depth=1)} '
-                f'{log_msg}')
-            self.logger.debug(
-                f'unregister() entered: {log_msg_part2}')
+            exit_log_msg = self._issue_entry_log_msg(
+                prefix=f'{self.name} to unregister {sb.targets}.',
+                log_msg=log_msg)
+        else:
+            exit_log_msg = None
 
         work_targets = sb.targets.copy()
 
@@ -802,9 +809,42 @@ class SmartThread:
 
             time.sleep(0.2)
 
-        if log_msg_part2:
-            self.logger.debug(
-                f'unregister() exiting: {log_msg_part2}')
+        if exit_log_msg:
+            self.logger.debug(exit_log_msg)
+
+    ####################################################################
+    # issue_entry_log_msg
+    ####################################################################
+    def _issue_entry_log_msg(
+            self,
+            log_msg: str,
+            prefix: Optional[str] = '',
+            ) -> str:
+        """Issue an entry log message.
+
+        Args:
+            log_msg: log message to issue
+            prefix: beginning of log message specific to service
+
+        Returns:
+            the log message to use for the exit call
+        """
+        try:
+            # sys._getframe is faster than inspect.currentframe
+            frame = sys._getframe(1)
+            caller_name = frame.f_code.co_name
+        except Exception:  # possibly _getframe missing
+            caller_name = 'unknown'
+        finally:
+            del frame  # important to prevent storage leak
+
+        log_msg_part2 = (
+            f'{get_formatted_call_sequence(latest=2, depth=1)} '
+            f'{log_msg}')
+        entry_log_msg = f'{caller_name}() entry: {prefix} {log_msg_part2}'
+        exit_msg = f'{caller_name}() exit: {prefix} {log_msg_part2}'
+        self.logger.debug(entry_log_msg)
+        return exit_msg
 
     ####################################################################
     # join
@@ -857,14 +897,20 @@ class SmartThread:
         sb = self._common_setup(targets=targets, timeout=timeout)
 
         # if caller specified a log message to issue
-        log_msg_part2 = ''
+        # log_msg_part2 = ''
+        # if log_msg and self.debug_logging_enabled:
+        #     log_msg_part2 = (
+        #         f'{self.name} to join {sorted(sb.targets)}. '
+        #         f'{get_formatted_call_sequence(latest=1, depth=1)} '
+        #         f'{log_msg}')
+        #     self.logger.debug(
+        #         f'join() entered: {log_msg_part2}')
         if log_msg and self.debug_logging_enabled:
-            log_msg_part2 = (
-                f'{self.name} to join {sorted(sb.targets)}. '
-                f'{get_formatted_call_sequence(latest=1, depth=1)} '
-                f'{log_msg}')
-            self.logger.debug(
-                f'join() entered: {log_msg_part2}')
+            exit_log_msg = self._issue_entry_log_msg(
+                prefix=f'to join {sorted(sb.targets)}.',
+                log_msg=log_msg)
+        else:
+            exit_log_msg = None
 
         work_targets = sb.targets.copy()
 
@@ -925,9 +971,8 @@ class SmartThread:
 
             time.sleep(0.2)
 
-        if log_msg_part2:
-            self.logger.debug(
-                f'join() exiting: {log_msg_part2}')
+        if exit_log_msg:
+            self.logger.debug(exit_log_msg)
 
     ####################################################################
     # _get_pair_key
@@ -1163,11 +1208,17 @@ class SmartThread:
         sb = self._common_setup(targets=targets, timeout=timeout)
 
         # if caller specified a log message to issue
-        caller_info = ''
+        # caller_info = ''
+        # if log_msg and self.debug_logging_enabled:
+        #     caller_info = get_formatted_call_sequence(latest=1, depth=1)
+        #     self.logger.debug(f'send_msg() entered: {self.name} -> {targets} '
+        #                       f'{caller_info} {log_msg}')
         if log_msg and self.debug_logging_enabled:
-            caller_info = get_formatted_call_sequence(latest=1, depth=1)
-            self.logger.debug(f'send_msg() entered: {self.name} -> {targets} '
-                              f'{caller_info} {log_msg}')
+            exit_log_msg = self._issue_entry_log_msg(
+                prefix=f'{self.name} -> {targets}.',
+                log_msg=log_msg)
+        else:
+            exit_log_msg = None
 
         work_targets = sb.targets.copy()
         self.remotes_unregistered = set()
@@ -1247,9 +1298,8 @@ class SmartThread:
             time.sleep(0.1)
 
         # if caller specified a log message to issue
-        if log_msg and self.debug_logging_enabled:
-            self.logger.debug(f'send_msg() exiting: {self.name} -> '
-                              f'{sb.targets} {caller_info} {log_msg}')
+        if exit_log_msg:
+            self.logger.debug(exit_log_msg)
 
     ####################################################################
     # recv_msg
@@ -1278,12 +1328,18 @@ class SmartThread:
         timer = Timer(timeout=timeout,
                       default_timeout=self.default_timeout)
 
-        caller_info = ''
+        # caller_info = ''
+        # if log_msg and self.debug_logging_enabled:
+        #     caller_info = get_formatted_call_sequence(latest=1, depth=1)
+        #     self.logger.debug(
+        #         f'recv_msg() entered: {self.name} <- {remote} '
+        #         f'{caller_info} {log_msg}')
         if log_msg and self.debug_logging_enabled:
-            caller_info = get_formatted_call_sequence(latest=1, depth=1)
-            self.logger.debug(
-                f'recv_msg() entered: {self.name} <- {remote} '
-                f'{caller_info} {log_msg}')
+            exit_log_msg = self._issue_entry_log_msg(
+                prefix=f'{self.name} <- {remote}.',
+                log_msg=log_msg)
+        else:
+            exit_log_msg = None
         pair_key = self._get_pair_key(self.name, remote)
         do_refresh = False
         while True:
@@ -1367,10 +1423,8 @@ class SmartThread:
                 self._refresh_pair_array()
 
         # if caller specified a log message to issue
-        if log_msg and self.debug_logging_enabled:
-            self.logger.debug(
-                f'recv_msg() exiting: {self.name} <- {remote} '
-                f'{caller_info} {log_msg}')
+        if exit_log_msg:
+            self.logger.debug(exit_log_msg)
 
         return ret_msg
 
@@ -1530,12 +1584,20 @@ class SmartThread:
         sb = self._common_setup(targets=targets, timeout=timeout)
 
         # if caller specified a log message to issue
-        caller_info = ''
+        # caller_info = ''
+        # if log_msg and self.debug_logging_enabled:
+        #     code_msg = f' with code: {code}' if code else ''
+        #     caller_info = get_formatted_call_sequence(latest=1, depth=1)
+        #     self.logger.debug(f'resume() entered{code_msg} by {self.name} to '
+        #                       f'resume {targets} {caller_info} {log_msg}')
         if log_msg and self.debug_logging_enabled:
-            code_msg = f' with code: {code}' if code else ''
-            caller_info = get_formatted_call_sequence(latest=1, depth=1)
-            self.logger.debug(f'resume() entered{code_msg} by {self.name} to '
-                              f'resume {targets} {caller_info} {log_msg}')
+            code_msg = f' with code: {code}.' if code else ''
+            exit_log_msg = self._issue_entry_log_msg(
+                prefix=f'{self.name} to resume targets '
+                       f'{sb.targets}{code_msg}.',
+                log_msg=log_msg)
+        else:
+            exit_log_msg = None
 
         ################################################################
         # Cases where we loop until remote is ready:
@@ -1674,10 +1736,8 @@ class SmartThread:
             time.sleep(0.2)
 
         # if caller specified a log message to issue
-        if log_msg and self.debug_logging_enabled:
-            self.logger.debug(f'resume() by {self.name} to resume '
-                              f'{sb.targets} exiting '
-                              f'{caller_info} {log_msg}')
+        if exit_log_msg:
+            self.logger.debug(exit_log_msg)
 
     ####################################################################
     # sync
@@ -1737,11 +1797,18 @@ class SmartThread:
         # get SetupBlock with targets in a set and a timer object
         sb = self._common_setup(targets=targets, timeout=timeout)
 
-        caller_info = ''
+        # caller_info = ''
+        # if log_msg and self.debug_logging_enabled:
+        #     caller_info = get_formatted_call_sequence(latest=1, depth=1)
+        #     self.logger.debug(f'sync() entered by {self.name} to sync with '
+        #                       f'{targets} {caller_info} {log_msg}')
         if log_msg and self.debug_logging_enabled:
-            caller_info = get_formatted_call_sequence(latest=1, depth=1)
-            self.logger.debug(f'sync() entered by {self.name} to sync with '
-                              f'{targets} {caller_info} {log_msg}')
+            timeout_msg = f' with {timeout=}' if timeout else ''
+            exit_log_msg = self._issue_entry_log_msg(
+                prefix=f'{self.name} to sync with {sb.targets}{timeout_msg}.',
+                log_msg=log_msg)
+        else:
+            exit_log_msg = None
 
         self.sync_request = True
         self.resume(targets=sb.targets,
@@ -1752,9 +1819,8 @@ class SmartThread:
             self.wait(remote=remote, timeout=sb.timer.remaining_time())
 
         self.sync_request = False
-        if log_msg and self.debug_logging_enabled:
-            self.logger.debug(f'sync() by {self.name} to sync with '
-                              f'{sb.targets} exiting {caller_info} {log_msg}')
+        if exit_log_msg:
+            self.logger.debug(exit_log_msg)
 
     ####################################################################
     # wait
@@ -1833,6 +1899,13 @@ class SmartThread:
             caller_info = get_formatted_call_sequence(latest=1, depth=1)
             self.logger.debug(f'wait() entered by {self.name} to wait for '
                               f'{remote} {caller_info} {log_msg}')
+        if log_msg and self.debug_logging_enabled:
+            timeout_msg = f' with {timeout=}' if timeout else ''
+            exit_log_msg = self._issue_entry_log_msg(
+                prefix=f'{self.name} to wait for {sb.targets}{timeout_msg}.',
+                log_msg=log_msg)
+        else:
+            exit_log_msg = None
 
         while True:
             # we need to handle the case where a remote we want to wait
@@ -2002,10 +2075,8 @@ class SmartThread:
 
             time.sleep(0.2)
 
-        if log_msg and self.debug_logging_enabled:
-            self.logger.debug(
-                f'wait() by {self.name} to wait for {remote} exiting '
-                f' {caller_info} {log_msg}')
+        if exit_log_msg:
+            self.logger.debug(exit_log_msg)
 
     ####################################################################
     # _common_setup
