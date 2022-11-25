@@ -813,40 +813,6 @@ class SmartThread:
             self.logger.debug(exit_log_msg)
 
     ####################################################################
-    # issue_entry_log_msg
-    ####################################################################
-    def _issue_entry_log_msg(
-            self,
-            log_msg: str,
-            prefix: Optional[str] = '',
-            ) -> str:
-        """Issue an entry log message.
-
-        Args:
-            log_msg: log message to issue
-            prefix: beginning of log message specific to service
-
-        Returns:
-            the log message to use for the exit call
-        """
-        try:
-            # sys._getframe is faster than inspect.currentframe
-            frame = sys._getframe(1)
-            caller_name = frame.f_code.co_name
-        except Exception:  # possibly _getframe missing
-            caller_name = 'unknown'
-        finally:
-            del frame  # important to prevent storage leak
-
-        log_msg_part2 = (
-            f'{get_formatted_call_sequence(latest=2, depth=1)} '
-            f'{log_msg}')
-        entry_log_msg = f'{caller_name}() entry: {prefix} {log_msg_part2}'
-        exit_msg = f'{caller_name}() exit: {prefix} {log_msg_part2}'
-        self.logger.debug(entry_log_msg)
-        return exit_msg
-
-    ####################################################################
     # join
     ####################################################################
     def join(self, *,
@@ -907,7 +873,7 @@ class SmartThread:
         #         f'join() entered: {log_msg_part2}')
         if log_msg and self.debug_logging_enabled:
             exit_log_msg = self._issue_entry_log_msg(
-                prefix=f'to join {sorted(sb.targets)}.',
+                prefix=f'{self.name} to join {sorted(sb.targets)}.',
                 log_msg=log_msg)
         else:
             exit_log_msg = None
@@ -2102,6 +2068,40 @@ class SmartThread:
             targets = {targets}
 
         return SetupBlock(targets=targets, timer=timer)
+
+    ####################################################################
+    # issue_entry_log_msg
+    ####################################################################
+    def _issue_entry_log_msg(
+            self,
+            log_msg: str,
+            prefix: Optional[str] = '',
+            ) -> str:
+        """Issue an entry log message.
+
+        Args:
+            log_msg: log message to issue
+            prefix: beginning of log message specific to service
+
+        Returns:
+            the log message to use for the exit call
+        """
+        try:
+            # sys._getframe is faster than inspect.currentframe
+            frame = sys._getframe(1)
+            caller_name = frame.f_code.co_name
+        except Exception:  # possibly _getframe missing
+            caller_name = 'unknown'
+        finally:
+            del frame  # important to prevent storage leak
+
+        log_msg_part2 = (
+            f'{get_formatted_call_sequence(latest=2, depth=1)} '
+            f'{log_msg}')
+        entry_log_msg = f'{caller_name}() entry: {prefix} {log_msg_part2}'
+        exit_msg = f'{caller_name}() exit: {prefix} {log_msg_part2}'
+        self.logger.debug(entry_log_msg)
+        return exit_msg
 
     ####################################################################
     # verify_thread_is_current

@@ -70,6 +70,26 @@ timeout_type_arg_list = [TimeoutType.TimeoutNone,
                          TimeoutType.TimeoutTrue]
 # timeout_type_arg_list = [TimeoutType.TimeoutNone]
 
+########################################################################
+# Test settings for test_config_build_scenarios
+########################################################################
+num_registered_1_arg_list = [0, 1, 2]
+# num_registered_1_arg_list = [0]
+
+num_active_1_arg_list = [1, 2, 3]
+# num_active_1_arg_list = [2]
+
+num_stopped_1_arg_list = [0, 1, 2]
+# num_stopped_1_arg_list = [2]
+
+num_registered_2_arg_list = [0, 1, 2]
+# num_registered_2_arg_list = [2]
+
+num_active_2_arg_list = [1, 2, 3]
+# num_active_2_arg_list = [3]
+
+num_stopped_2_arg_list = [0, 1, 2]
+# num_stopped_2_arg_list = [0]
 
 ########################################################################
 # Test settings for test_recv_timeout_scenarios
@@ -1266,9 +1286,6 @@ def num_threads_arg(request: Any) -> int:
 ###############################################################################
 # num_registered_1_arg
 ###############################################################################
-num_registered_1_arg_list = [0, 1, 2]
-
-
 @pytest.fixture(params=num_registered_1_arg_list)  # type: ignore
 def num_registered_1_arg(request: Any) -> int:
     """Number of threads to configur as registered.
@@ -1285,9 +1302,6 @@ def num_registered_1_arg(request: Any) -> int:
 ###############################################################################
 # num_active_1_arg
 ###############################################################################
-num_active_1_arg_list = [1, 2, 3]
-
-
 @pytest.fixture(params=num_active_1_arg_list)  # type: ignore
 def num_active_1_arg(request: Any) -> int:
     """Number of threads to configur as registered.
@@ -1304,9 +1318,6 @@ def num_active_1_arg(request: Any) -> int:
 ###############################################################################
 # num_stopped_1_arg
 ###############################################################################
-num_stopped_1_arg_list = [0, 1, 2]
-
-
 @pytest.fixture(params=num_stopped_1_arg_list)  # type: ignore
 def num_stopped_1_arg(request: Any) -> int:
     """Number of threads to configur as registered.
@@ -1323,9 +1334,6 @@ def num_stopped_1_arg(request: Any) -> int:
 ###############################################################################
 # num_registered_2_arg
 ###############################################################################
-num_registered_2_arg_list = [0, 1, 2]
-
-
 @pytest.fixture(params=num_registered_2_arg_list)  # type: ignore
 def num_registered_2_arg(request: Any) -> int:
     """Number of threads to configur as registered.
@@ -1342,9 +1350,6 @@ def num_registered_2_arg(request: Any) -> int:
 ###############################################################################
 # num_active_2_arg
 ###############################################################################
-num_active_2_arg_list = [1, 2, 3]
-
-
 @pytest.fixture(params=num_active_2_arg_list)  # type: ignore
 def num_active_2_arg(request: Any) -> int:
     """Number of threads to configur as registered.
@@ -1361,9 +1366,6 @@ def num_active_2_arg(request: Any) -> int:
 ###############################################################################
 # num_stopped_2_arg
 ###############################################################################
-num_stopped_2_arg_list = [0, 1, 2]
-
-
 @pytest.fixture(params=num_stopped_2_arg_list)  # type: ignore
 def num_stopped_2_arg(request: Any) -> int:
     """Number of threads to configur as registered.
@@ -1986,6 +1988,7 @@ class ConfigVerifier:
             tuple[str, str, str, str], int] = defaultdict(int)
         self.del_nondef_pairs_msg_count: dict[
             tuple[str, str, str], int] = defaultdict(int)
+        self.status_array_log_counts: dict[str] = defaultdict(int)
 
     ####################################################################
     # __repr__
@@ -2013,32 +2016,6 @@ class ConfigVerifier:
                     comma = ', '  # after first item, now need comma
 
         return f'{classname}({parms})'
-
-    ####################################################################
-    # find_log_msgs
-    ####################################################################
-    def find_log_msgs(self,
-                      search_msgs: StrOrList,
-                      num_instances: int = 1) -> bool:
-        if isinstance(search_msgs, str):
-            search_msgs = [search_msgs]
-        work_msgs: list[re.Pattern] = []
-        for msg in search_msgs:
-            work_msgs.append(re.compile(re.escape(msg)))
-        # found_idxes: set[int] = set()
-        found_idxes: list[int] = []
-        for idx in range(len(work_msgs)):
-            found_idxes.append(0)
-        for log_tuple in self.caplog_to_use.record_tuples:
-            for idx, msg in enumerate(work_msgs):
-                if msg.match(log_tuple[2]):
-                    found_idxes[idx] += 1
-                    # if len(found_idxes) == len(work_msgs):
-                    #     return True
-        for cnt in found_idxes:
-            if cnt != num_instances:
-                return False
-        return True
 
     ####################################################################
     # abort_all_f1_threads
@@ -2244,30 +2221,39 @@ class ConfigVerifier:
             f'{name} obtained _registry_lock, '
             'class name = SmartThread')
 
-        for a_name, tracker in self.expected_registered.items():
-            # ignore the new thread for now - we are in reg cleanup just
-            # before we add the new thread
-            if a_name == name:
-                continue
-            if a_name in log_array.status_array:
-                is_alive = log_array.status_array[a_name].is_alive
-                status = log_array.status_array[a_name].status
-                repr_to_use = tracker.thread_repr
-                if 'OuterF1ThreadApp' in repr_to_use:
-                    if is_alive:
-                        repr_to_use = repr_to_use.replace(
-                            'stopped',
-                            'started')
-                    else:
-                        repr_to_use = repr_to_use.replace(
-                            'started',
-                            'stopped')
-                log_msg = (
-                    f"key = {a_name}, item = {repr_to_use}, "
-                    "item.thread.is_alive() = "
-                    f"{is_alive}, "
-                    f"status: {status}")
-                self.add_log_msg(re.escape(log_msg))
+        self.handle_exp_status_log_msgs(log_array=log_array, name=name)
+        # for a_name, tracker in self.expected_registered.items():
+        #     # ignore the new thread for now - we are in reg cleanup just
+        #     # before we add the new thread
+        #     if a_name == name:
+        #         continue
+        #     if a_name in log_array.status_array:
+        #         is_alive = log_array.status_array[a_name].is_alive
+        #         status = log_array.status_array[a_name].status
+        #         repr_to_use = tracker.thread_repr
+        #         if 'OuterF1ThreadApp' in repr_to_use:
+        #             if is_alive:
+        #                 repr_to_use = repr_to_use.replace(
+        #                     'stopped',
+        #                     'started')
+        #                 if status != st.ThreadStatus.Registered:
+        #                     repr_to_use = repr_to_use.replace(
+        #                         'initial',
+        #                         'started')
+        #             else:
+        #                 repr_to_use = repr_to_use.replace(
+        #                     'started',
+        #                     'stopped')
+        #                 if status != st.ThreadStatus.Registered:
+        #                     repr_to_use = repr_to_use.replace(
+        #                         'initial',
+        #                         'started')
+        #         log_msg = (
+        #             f"key = {a_name}, item = {repr_to_use}, "
+        #             "item.thread.is_alive() = "
+        #             f"{is_alive}, "
+        #             f"status: {status}")
+        #         self.add_log_msg(re.escape(log_msg))
 
         self.add_log_msg(
             f'{name} set status for thread {name} '
@@ -4275,27 +4261,36 @@ class ConfigVerifier:
                 f'from {from_status} to '
                 f'{st.ThreadStatus.Stopped}')
 
-            for thread_name, tracker in self.expected_registered.items():
-                if thread_name in log_array.status_array:
-                    is_alive = log_array.status_array[thread_name].is_alive
-                    status = log_array.status_array[thread_name].status
-                    repr_to_use = tracker.thread_repr
-                    if 'OuterF1ThreadApp' in repr_to_use:
-                        if is_alive:
-                            repr_to_use = repr_to_use.replace(
-                                'stopped',
-                                'started')
-                        else:
-                            repr_to_use = repr_to_use.replace(
-                                'started',
-                                'stopped')
-
-                    log_msg = (
-                        f"key = {thread_name}, item = {repr_to_use}, "
-                        "item.thread.is_alive() = "
-                        f"{is_alive}, "
-                        f"status: {status}")
-                    self.add_log_msg(re.escape(log_msg))
+            self.handle_exp_status_log_msgs(log_array=log_array)
+            # for thread_name, tracker in self.expected_registered.items():
+            #     if thread_name in log_array.status_array:
+            #         is_alive = log_array.status_array[thread_name].is_alive
+            #         status = log_array.status_array[thread_name].status
+            #         repr_to_use = tracker.thread_repr
+            #         if 'OuterF1ThreadApp' in repr_to_use:
+            #             if is_alive:
+            #                 repr_to_use = repr_to_use.replace(
+            #                     'stopped',
+            #                     'started')
+            #                 if status != st.ThreadStatus.Registered:
+            #                     repr_to_use = repr_to_use.replace(
+            #                         'initial',
+            #                         'started')
+            #             else:
+            #                 repr_to_use = repr_to_use.replace(
+            #                     'started',
+            #                     'stopped')
+            #                 if status != st.ThreadStatus.Registered:
+            #                     repr_to_use = repr_to_use.replace(
+            #                         'initial',
+            #                         'started')
+            #
+            #         log_msg = (
+            #             f"key = {thread_name}, item = {repr_to_use}, "
+            #             "item.thread.is_alive() = "
+            #             f"{is_alive}, "
+            #             f"status: {status}")
+            #         self.add_log_msg(re.escape(log_msg))
 
             del self.expected_registered[remote]
             self.deleted_remotes_complete_count[remote] += 1
@@ -4416,6 +4411,32 @@ class ConfigVerifier:
             self.completed_cmds[f1_name].append(cmd.serial_num)
 
     ####################################################################
+    # find_log_msgs
+    ####################################################################
+    def find_log_msgs(self,
+                      search_msgs: StrOrList,
+                      num_instances: int = 1) -> bool:
+        if isinstance(search_msgs, str):
+            search_msgs = [search_msgs]
+        work_msgs: list[re.Pattern] = []
+        for msg in search_msgs:
+            work_msgs.append(re.compile(re.escape(msg)))
+        # found_idxes: set[int] = set()
+        found_idxes: list[int] = []
+        for idx in range(len(work_msgs)):
+            found_idxes.append(0)
+        for log_tuple in self.caplog_to_use.record_tuples:
+            for idx, msg in enumerate(work_msgs):
+                if msg.match(log_tuple[2]):
+                    found_idxes[idx] += 1
+                    # if len(found_idxes) == len(work_msgs):
+                    #     return True
+        for cnt in found_idxes:
+            if cnt != num_instances:
+                return False
+        return True
+
+    ####################################################################
     # get_is_alive
     ####################################################################
     def get_is_alive(self, name: str) -> bool:
@@ -4429,6 +4450,33 @@ class ConfigVerifier:
             return self.expected_registered[name].thread.thread.is_alive()
         else:
             return self.expected_registered[name].is_alive
+
+    ####################################################################
+    # get_log_msg
+    ####################################################################
+    def get_log_msg(self,
+                    search_msg: str,
+                    skip_num: int) -> str:
+        """Search for a log message and return it.
+
+        Args:
+            search_msg: log message to search for as a regex
+            skip_num: number of matches to skip
+        Returns:
+            the log message if found, otherwise an empty string
+        """
+        # print(f'entry get_log_msg, search_msg: {search_msg}')
+        search_pattern: re.Pattern = re.compile(search_msg)
+        num_found = 0
+        for log_tuple in self.caplog_to_use.record_tuples:
+            # if log_tuple[2].startswith('key ='):
+            # print(f'found key = with {num_found=}', log_tuple[2])
+            if search_pattern.match(log_tuple[2]):
+                num_found += 1
+                if num_found == skip_num + 1:
+                    # print(f'returning with {num_found=}', log_tuple[2])
+                    return log_tuple[2]
+        return ''
 
     ####################################################################
     # get_ptime
@@ -4516,6 +4564,68 @@ class ConfigVerifier:
                     self.del_def_pairs_msg_ind_count[ind_key] += 1
 
         return refresh_array_updated
+
+    ####################################################################
+    # handle_exp_status_log_msgs
+    ####################################################################
+    def handle_exp_status_log_msgs(self,
+                                   log_array: st.SmartThread.LogStatusBlocks,
+                                   name: Optional[str] = None
+                                   ) -> None:
+        """Add a thread to the ConfigVerifier.
+
+        Args:
+            log_array: status blocks for log messages
+            name: name to check to skip log msg
+        """
+        for a_name, tracker in self.expected_registered.items():
+            # ignore the new thread for now - we are in reg cleanup just
+            # before we add the new thread
+            if name and a_name == name:
+                continue
+            search_msg = f'key = {a_name}, item = SmartThread'
+            num_found = self.status_array_log_counts[a_name]
+            log_msg = self.get_log_msg(search_msg=search_msg,
+                                       skip_num=num_found)
+            if log_msg:
+                self.status_array_log_counts[a_name] += 1
+                self.add_log_msg(re.escape(log_msg))
+            # else:
+            #     raise InvalidConfigurationDetected(
+            #         f'Expected log message for {a_name} '
+            #         f'was not found, {num_found=}')
+            # if a_name in log_array.status_array:
+            #     is_alive = log_array.status_array[a_name].is_alive
+            #     status = log_array.status_array[a_name].status
+            #     if status == st.ThreadStatus.Registered:
+            #         repr_to_use = tracker.thread_repr
+            #     else:
+            #         repr_to_use = repr(tracker.thread)
+            #     # print(f'before: {repr_to_use=}')
+            #     if 'OuterF1ThreadApp' in repr_to_use:
+            #         if is_alive:
+            #             repr_to_use = repr_to_use.replace(
+            #                 'stopped',
+            #                 'started')
+            #             if status != st.ThreadStatus.Registered:
+            #                 repr_to_use = repr_to_use.replace(
+            #                     'initial',
+            #                     'started')
+            #         else:
+            #             repr_to_use = repr_to_use.replace(
+            #                 'started',
+            #                 'stopped')
+            #             if status != st.ThreadStatus.Registered:
+            #                 repr_to_use = repr_to_use.replace(
+            #                     'initial',
+            #                     'stopped')
+            #     # print(f'after: {repr_to_use=}')
+            #     log_msg = (
+            #         f"key = {a_name}, item = {repr_to_use}, "
+            #         "item.thread.is_alive() = "
+            #         f"{is_alive}, "
+            #         f"status: {status}")
+            #     self.add_log_msg(re.escape(log_msg))
 
     ####################################################################
     # handle_join
