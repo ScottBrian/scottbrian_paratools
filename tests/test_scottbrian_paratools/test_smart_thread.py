@@ -52,7 +52,12 @@ class AppConfig(Enum):
     CurrentThreadApp = auto()
     RemoteThreadApp = auto()
 
-
+########################################################################
+# Test settings
+########################################################################
+commander_config_arg_list = [AppConfig.ScriptStyle,
+                             AppConfig.CurrentThreadApp,
+                             AppConfig.RemoteThreadApp]
 ########################################################################
 # timeout_type used to specify whether to use timeout on various cmds
 ########################################################################
@@ -1380,6 +1385,22 @@ def num_stopped_2_arg(request: Any) -> int:
 
 
 ###############################################################################
+# commander_config_arg
+###############################################################################
+@pytest.fixture(params=commander_config_arg_list)  # type: ignore
+def commander_config_arg(request: Any) -> AppConfig:
+    """Type of send_msg timeout to test.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(AppConfig, request.param)
+
+
+###############################################################################
 # timeout_type_arg
 ###############################################################################
 @pytest.fixture(params=timeout_type_arg_list)  # type: ignore
@@ -1944,7 +1965,7 @@ class ConfigVerifier:
         self.commander_thread_config_built = False
         self.cmd_suite: deque[ConfigCmd] = deque()
         self.cmd_serial_num: int = 0
-        self.completed_cmds: dict[str, list[int]] = {}
+        self.completed_cmds: dict[str, list[int]] = defaultdict(list)
         self.f1_process_cmds: dict[str, bool] = {}
         self.thread_names: list[str] = [
             'alpha', 'beta', 'charlie', 'delta',
@@ -1988,7 +2009,7 @@ class ConfigVerifier:
             tuple[str, str, str, str], int] = defaultdict(int)
         self.del_nondef_pairs_msg_count: dict[
             tuple[str, str, str], int] = defaultdict(int)
-        self.status_array_log_counts: dict[str] = defaultdict(int)
+        self.status_array_log_counts: dict[str, int] = defaultdict(int)
 
     ####################################################################
     # __repr__
@@ -2222,38 +2243,6 @@ class ConfigVerifier:
             'class name = SmartThread')
 
         self.handle_exp_status_log_msgs(log_array=log_array, name=name)
-        # for a_name, tracker in self.expected_registered.items():
-        #     # ignore the new thread for now - we are in reg cleanup just
-        #     # before we add the new thread
-        #     if a_name == name:
-        #         continue
-        #     if a_name in log_array.status_array:
-        #         is_alive = log_array.status_array[a_name].is_alive
-        #         status = log_array.status_array[a_name].status
-        #         repr_to_use = tracker.thread_repr
-        #         if 'OuterF1ThreadApp' in repr_to_use:
-        #             if is_alive:
-        #                 repr_to_use = repr_to_use.replace(
-        #                     'stopped',
-        #                     'started')
-        #                 if status != st.ThreadStatus.Registered:
-        #                     repr_to_use = repr_to_use.replace(
-        #                         'initial',
-        #                         'started')
-        #             else:
-        #                 repr_to_use = repr_to_use.replace(
-        #                     'started',
-        #                     'stopped')
-        #                 if status != st.ThreadStatus.Registered:
-        #                     repr_to_use = repr_to_use.replace(
-        #                         'initial',
-        #                         'started')
-        #         log_msg = (
-        #             f"key = {a_name}, item = {repr_to_use}, "
-        #             "item.thread.is_alive() = "
-        #             f"{is_alive}, "
-        #             f"status: {status}")
-        #         self.add_log_msg(re.escape(log_msg))
 
         self.add_log_msg(
             f'{name} set status for thread {name} '
@@ -3879,18 +3868,102 @@ class ConfigVerifier:
                                           =AppConfig.RemoteThreadApp)]))
         self.add_cmd(Pause(
             cmd_runners='alpha',
-            pause_seconds=1))
+            pause_seconds=0.5))
+        self.add_cmd(CreateF1NoStart(
+            cmd_runners='alpha',
+            f1_create_items=[F1CreateItem(name='delta',
+                                          auto_start=False,
+                                          target_rtn=outer_f1,
+                                          app_config
+                                          =AppConfig.ScriptStyle),
+                             F1CreateItem(name='echo',
+                                          auto_start=False,
+                                          target_rtn=outer_f1,
+                                          app_config
+                                          =AppConfig.RemoteThreadApp)]))
+        self.add_cmd(VerifyInRegistry(
+            cmd_runners='alpha',
+            exp_in_registry_names=['alpha', 'beta', 'charlie', 'delta',
+                                   'echo']))
+        self.add_cmd(VerifyAlive(
+            cmd_runners='alpha',
+            exp_alive_names=['alpha', 'beta', 'charlie']))
+        self.add_cmd(VerifyAliveNot(
+            cmd_runners='alpha',
+            exp_not_alive_names=['delta', 'echo']))
+        self.add_cmd(VerifyActive(
+            cmd_runners='alpha',
+            exp_active_names=['alpha', 'beta', 'charlie']))
+        self.add_cmd(VerifyRegistered(
+            cmd_runners='alpha',
+            exp_registered_names=['delta', 'echo']))
+        self.add_cmd(VerifyStatus(
+            cmd_runners='alpha',
+            check_status_names=['alpha', 'beta', 'charlie'],
+            expected_status=st.ThreadStatus.Alive))
+        self.add_cmd(VerifyStatus(
+            cmd_runners='alpha',
+            check_status_names=['delta', 'echo'],
+            expected_status=st.ThreadStatus.Registered))
+        self.add_cmd(VerifyPaired(
+            cmd_runners='alpha',
+            exp_paired_names=['alpha', 'beta', 'charlie', 'delta', 'echo']))
+        self.add_cmd(StartThread(
+            cmd_runners='alpha',
+            start_names=['delta', 'echo']))
+        self.add_cmd(VerifyAlive(
+            cmd_runners='alpha',
+            exp_alive_names=['alpha', 'beta', 'charlie', 'delta', 'echo']))
+        self.add_cmd(VerifyActive(
+            cmd_runners='alpha',
+            exp_active_names=['alpha', 'beta', 'charlie', 'delta', 'echo']))
+        self.add_cmd(VerifyStatus(
+            cmd_runners='alpha',
+            check_status_names=['alpha', 'beta', 'charlie', 'delta', 'echo'],
+            expected_status=st.ThreadStatus.Alive))
         self.add_cmd(ValidateConfig(
             cmd_runners='alpha'))
-        self.add_cmd(Exit(cmd_runners=['beta', 'charlie']))
-        self.add_cmd(Pause(
-            cmd_runners='alpha',
-            pause_seconds=1))
+        ################################################################
+        # send_msg
+        ################################################################
+        msgs_to_send: dict[str, Any] = {'delta': 'send msg from delta',
+                                        'echo': 'send msg from echo'}
+        send_msg_serial_num = self.add_cmd(
+            SendMsg(cmd_runners=['delta', 'echo'],
+                    receivers=['alpha', 'beta', 'charlie'],
+                    msgs_to_send=msgs_to_send))
+
+        ################################################################
+        # confirm the send_msg
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(cmd_runners='alpha',
+                            confirm_cmd='SendMsg',
+                            confirm_serial_num=send_msg_serial_num,
+                            confirmers=['delta', 'echo']))
+        ################################################################
+        # recv_msg
+        ################################################################
+        recv_msg_serial_num = self.add_cmd(
+            RecvMsg(cmd_runners=['alpha', 'beta', 'charlie'],
+                    senders=['delta', 'echo'],
+                    exp_msgs=msgs_to_send,
+                    log_msg='RecvMsg log message'))
+
+        ################################################################
+        # confirm the recv_msg
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(cmd_runners='alpha',
+                            confirm_cmd='RecvMsg',
+                            confirm_serial_num=recv_msg_serial_num,
+                            confirmers=['alpha', 'beta', 'charlie']))
+        self.add_cmd(Exit(cmd_runners=['beta', 'charlie', 'delta', 'echo']))
         self.add_cmd(ValidateConfig(
             cmd_runners='alpha'))
         self.add_cmd(Join(
             cmd_runners='alpha',
-            join_names=['beta', 'charlie']))
+            join_names=['beta', 'charlie', 'delta', 'echo']))
         self.add_cmd(ValidateConfig(
             cmd_runners='alpha'))
 
@@ -4093,14 +4166,6 @@ class ConfigVerifier:
             auto_start: indicates whether the create should start the
                           thread
         """
-        # Create a new entry for this thread in the completed cmds
-        # dictionary, but only if there is nothing there yet. We need
-        # to preserve what is already there on thread resurrection.
-        # Note also that we need to do this before we actually start the
-        # thread so that it will be in place as soon as the thread
-        # begins to run.
-        if name not in self.completed_cmds:
-            self.completed_cmds[name] = []
         self.f1_process_cmds[name] = True
 
         if app_config == AppConfig.ScriptStyle:
@@ -4509,14 +4574,6 @@ class ConfigVerifier:
         # Next, we need to figure out whether we did our own
         # delete and possible the delete for another receiver
         refresh_array_updated = False
-        # for receiver_name in self.receiver_names:
-        #     for sender_name in self.send_exit_sender_names:
-        #         pair_key = st.SmartThread._get_pair_key(
-        #             receiver_name,
-        #             sender_name)
-        #         fdp_key = (pair_key[0], pair_key[1], receiver_name)
-        #         num_found = self.expected_registered[
-        #             cmd_runner].found_del_pairs[fdp_key]
         for del_def_key, count in self.del_def_pairs_count.items():
             if self.del_def_pairs_msg_count[del_def_key] < count:
                 ind_key = (del_def_key[0],
@@ -4524,10 +4581,6 @@ class ConfigVerifier:
                            del_def_key[2],
                            cmd_runner)
                 num_found = self.del_def_pairs_msg_ind_count[ind_key]
-                # print(f'\n{cmd_runner} before:\n',
-                #       self.expected_registered[
-                #         cmd_runner].found_del_pairs)
-                # time.sleep(1)
                 # See if we removed the receiver (might be us).
                 # Note that the sender will have been deleted by
                 # the join if it went first (in which case we
@@ -4542,20 +4595,9 @@ class ConfigVerifier:
                 log_msg3 = (
                     f'{cmd_runner} removed _pair_array entry'
                     f' for pair_key = {pair_key}')
-                # doc_log_msg = (
-                #     f'dec_ops_count calling find_log_msgs for '
-                #     f' {fdp_key=} and {num_found=}')
-                # self.log_ver.add_msg(log_msg=re.escape(doc_log_msg))
-                # logger.debug(doc_log_msg)
                 if self.find_log_msgs(
                         search_msgs=[log_msg2, log_msg3],
                         num_instances=num_found + 1):
-                    # doc_log_msg = (
-                    #     f'dec_ops_count find_log_msgs found '
-                    #     f' {fdp_key=} and {num_found=}')
-                    # self.log_ver.add_msg(
-                    #     log_msg=re.escape(doc_log_msg))
-                    # logger.debug(doc_log_msg)
                     refresh_array_updated = True
                     self.add_log_msg(re.escape(log_msg2))
                     self.add_log_msg(re.escape(log_msg3))
@@ -4583,49 +4625,20 @@ class ConfigVerifier:
             # before we add the new thread
             if name and a_name == name:
                 continue
-            search_msg = f'key = {a_name}, item = SmartThread'
-            num_found = self.status_array_log_counts[a_name]
-            log_msg = self.get_log_msg(search_msg=search_msg,
-                                       skip_num=num_found)
-            if log_msg:
-                self.status_array_log_counts[a_name] += 1
-                self.add_log_msg(re.escape(log_msg))
-            # else:
-            #     raise InvalidConfigurationDetected(
-            #         f'Expected log message for {a_name} '
-            #         f'was not found, {num_found=}')
-            # if a_name in log_array.status_array:
-            #     is_alive = log_array.status_array[a_name].is_alive
-            #     status = log_array.status_array[a_name].status
-            #     if status == st.ThreadStatus.Registered:
-            #         repr_to_use = tracker.thread_repr
-            #     else:
-            #         repr_to_use = repr(tracker.thread)
-            #     # print(f'before: {repr_to_use=}')
-            #     if 'OuterF1ThreadApp' in repr_to_use:
-            #         if is_alive:
-            #             repr_to_use = repr_to_use.replace(
-            #                 'stopped',
-            #                 'started')
-            #             if status != st.ThreadStatus.Registered:
-            #                 repr_to_use = repr_to_use.replace(
-            #                     'initial',
-            #                     'started')
-            #         else:
-            #             repr_to_use = repr_to_use.replace(
-            #                 'started',
-            #                 'stopped')
-            #             if status != st.ThreadStatus.Registered:
-            #                 repr_to_use = repr_to_use.replace(
-            #                     'initial',
-            #                     'stopped')
-            #     # print(f'after: {repr_to_use=}')
-            #     log_msg = (
-            #         f"key = {a_name}, item = {repr_to_use}, "
-            #         "item.thread.is_alive() = "
-            #         f"{is_alive}, "
-            #         f"status: {status}")
-            #     self.add_log_msg(re.escape(log_msg))
+            # we should normally find the message, but if not, try
+            # again after a short sleep to let the log capyure catch up
+            num_tries_remaining = 2
+            while num_tries_remaining > 0:
+                search_msg = f'key = {a_name}, item = SmartThread'
+                num_found = self.status_array_log_counts[a_name]
+                log_msg = self.get_log_msg(search_msg=search_msg,
+                                           skip_num=num_found)
+                if log_msg:
+                    self.status_array_log_counts[a_name] += 1
+                    self.add_log_msg(re.escape(log_msg))
+                    break
+                num_tries_remaining -= 1
+                time.sleep(.5)
 
     ####################################################################
     # handle_join
@@ -4840,9 +4853,12 @@ class ConfigVerifier:
 
             assert recvd_msg == exp_msgs[from_name]
 
-            update_time = (
-                self.all_threads[cmd_runner]
-                .time_last_pair_array_update[-1])
+            if self.all_threads[cmd_runner].time_last_pair_array_update:
+                update_time = (
+                    self.all_threads[cmd_runner]
+                    .time_last_pair_array_update[-1])
+            else:
+                update_time = datetime(2022, 1, 1)
             self.dec_ops_count(cmd_runner,
                                from_name,
                                update_time=update_time)
@@ -4909,9 +4925,12 @@ class ConfigVerifier:
 
             assert recvd_msg == exp_msgs[from_name]
 
-            update_time = (
-                self.all_threads[cmd_runner]
-                .time_last_pair_array_update[-1])
+            if self.all_threads[cmd_runner].time_last_pair_array_update:
+                update_time = (
+                    self.all_threads[cmd_runner]
+                    .time_last_pair_array_update[-1])
+            else:
+                update_time = datetime(2022, 1, 1)
             self.dec_ops_count(cmd_runner,
                                from_name,
                                update_time=update_time)
@@ -5005,9 +5024,12 @@ class ConfigVerifier:
             if 'exit' in enter_exit_list:
                 assert recvd_msg == exp_msgs[from_name]
 
-                update_time = (
-                    self.all_threads[cmd_runner]
-                    .time_last_pair_array_update[-1])
+                if self.all_threads[cmd_runner].time_last_pair_array_update:
+                    update_time = (
+                        self.all_threads[cmd_runner]
+                        .time_last_pair_array_update[-1])
+                else:
+                    update_time = datetime(2022, 1, 1)
                 self.dec_ops_count(cmd_runner,
                                    from_name,
                                    update_time=update_time)
@@ -5276,6 +5298,7 @@ class ConfigVerifier:
 
             if self.commander_name in cmd.cmd_runners:
                 cmd.run_process(name=self.commander_name)
+                self.completed_cmds[self.commander_name].append(cmd.serial_num)
 
     ####################################################################
     # set_is_alive
@@ -6138,12 +6161,14 @@ class TestSmartThreadScenarios:
     ####################################################################
     def test_smart_thread_simple_scenarios(
             self,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.CaptureFixture[str],
+            commander_config_arg: AppConfig
     ) -> None:
         """Test meta configuration scenarios.
 
         Args:
             caplog: pytest fixture to capture log output
+            commander_config_arg: specifies the config for the commander
 
         """
 
@@ -6163,7 +6188,8 @@ class TestSmartThreadScenarios:
         self.scenario_driver(
             scenario_builder=ConfigVerifier.build_simple_scenario,
             scenario_builder_args=args_for_scenario_builder,
-            caplog_to_use=caplog)
+            caplog_to_use=caplog,
+            commander_config=commander_config_arg)
 
     ####################################################################
     # test_smart_thread_meta_scenarios
