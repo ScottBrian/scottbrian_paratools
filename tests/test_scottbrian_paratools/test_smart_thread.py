@@ -1971,12 +1971,20 @@ class ThreadPairStatus:
     pending_ops_count: int
     # expected_last_reg_updates: deque
 
+
 @dataclass
 class MonitorItem:
     """Class keeps track of threads to add, start, delete, unreg."""
     cmd_runner: str
     target_name: str
     process_name: str
+
+
+hour_match = '([01][0-9]|20|21|22|23)'
+min_sec_match = '[0-5][0-9]'
+micro_sec_match = '[0-9]{6,6}'
+time_match = (f'{hour_match}:{min_sec_match}:{min_sec_match}\.'
+              f'{micro_sec_match}')
 
 
 class ConfigVerifier:
@@ -2052,6 +2060,8 @@ class ConfigVerifier:
         self.found_del_log_msgs: int = 0
         self.found_reg_log_msgs: int = 0
         self.found_utc_log_msgs: dict[tuple[str, str], int] = defaultdict(int)
+        self.found_update_pair_array_log_msgs: dict[str, int] = defaultdict(
+            int)
 
         self.monitor_thread.start()
 
@@ -2090,12 +2100,6 @@ class ConfigVerifier:
         self.log_ver.add_msg(log_msg=re.escape(log_msg))
         logger.debug(log_msg)
 
-        hour_match = '([01][0-9]|20|21|22|23)'
-        min_sec_match = '[0-5][0-9]'
-        micro_sec_match = '[0-9]{6,6}'
-        time_match = (f'{hour_match}:{min_sec_match}:{min_sec_match}\.'
-                      f'{micro_sec_match}')
-
         reg_search_msg = f'[a-z]+ did registry update at UTC {time_match}'
         del_search_msg = '[a-z]+ did successful (unregister|join) of [a-z]+\.'
 
@@ -2121,7 +2125,7 @@ class ConfigVerifier:
             #     process = split_msg[3]
             #     target_name = split_msg[5]
             if not found_del_msg:
-                time.sleep(.5)
+                time.sleep(.1)
                 continue
 
             if found_del_msg:
@@ -2143,22 +2147,18 @@ class ConfigVerifier:
                 #     f"{cmd_runner} did cleanup of registry at UTC "
                 #     f'{time_match}, '
                 #     f"deleted \['{target_name}'\]")
-                utc_search_msg = (
-                    f"{cmd_runner} did cleanup of registry at UTC "
-                    f"{time_match}, deleted")
-
-                found_utc_msg = self.get_log_msg(
-                    search_msg=utc_search_msg,
-                    skip_num=self.found_utc_log_msgs[pair_key])
-                if found_utc_msg:
-                    log_msg = 'monitor found a utc msg'
-                    self.log_ver.add_msg(log_msg=re.escape(log_msg))
-                    logger.debug(log_msg)
-                    self.del_thread(
-                        cmd_runner=cmd_runner,
-                        del_name=target_name,
-                        process=process,
-                        utc_msg=found_utc_msg)
+                #
+                # found_utc_msg = self.get_log_msg(
+                #     search_msg=utc_search_msg,
+                #     skip_num=self.found_utc_log_msgs[pair_key])
+                # if found_utc_msg:
+                #     log_msg = 'monitor found a utc msg'
+                #     self.log_ver.add_msg(log_msg=re.escape(log_msg))
+                #     logger.debug(log_msg)
+                self.del_thread(
+                    cmd_runner=cmd_runner,
+                    del_name=target_name,
+                    process=process)
 
             # if not self.monitor_del_items:
             #     time.sleep(0.1)
@@ -2285,6 +2285,8 @@ class ConfigVerifier:
             found_del_pairs=defaultdict(int)
         )
 
+        update_pair_array_msg_needed = False
+
         log_arrays = list(thread.reg_log_array.copy())
         log_arrays.reverse()
 
@@ -2329,6 +2331,7 @@ class ConfigVerifier:
                         f"{name} created "
                         "_refresh_pair_array with "
                         f"pair_key = {pair_key}"))
+                    update_pair_array_msg_needed = True
 
                     for pair_name in pair_key:
                         self.add_log_msg(re.escape(
@@ -2365,6 +2368,7 @@ class ConfigVerifier:
                         f"{name} added status_blocks entry "
                         f"for pair_key = {pair_key}, "
                         f"name = {name}"))
+                    update_pair_array_msg_needed = True
 
         ################################################################
         # add log msgs
@@ -2388,11 +2392,6 @@ class ConfigVerifier:
 
         self.handle_deferred_delete_log_msgs(cmd_runner=name)
 
-        if pair_array_update_time:
-            self.add_log_msg(re.escape(
-                f'{name} updated _pair_array at UTC '
-                f'{pair_array_update_time.strftime("%H:%M:%S.%f")}'))
-
         self.add_log_msg(
             f'{name} did registry update at UTC '
             f'{reg_update_time.strftime("%H:%M:%S.%f")}')
@@ -2412,9 +2411,19 @@ class ConfigVerifier:
                 'status: ThreadStatus.Alive'))
         else:
             if self.expected_registered[name].is_alive:
+                update_pair_array_msg_needed = True
                 self.add_log_msg(
                     f'{name} set status for thread {name} '
                     f'from ThreadStatus.Registered to ThreadStatus.Alive')
+        if update_pair_array_msg_needed:
+            upa_search_msg = (
+                f"{name} updated _pair_array at UTC {time_match}")
+            found_upa_msg = self.get_log_msg(
+                search_msg=upa_search_msg,
+                skip_num=self.found_update_pair_array_log_msgs[name])
+            if found_upa_msg:
+                self.found_update_pair_array_log_msgs[name] += 1
+                self.add_log_msg(re.escape(found_upa_msg))
 
     ####################################################################
     # build_config
@@ -4105,9 +4114,9 @@ class ConfigVerifier:
         self.add_cmd(Join(
             cmd_runners='alpha',
             join_names=['beta', 'charlie', 'delta', 'echo']))
-        self.add_cmd(Pause(
-            cmd_runners='alpha',
-            pause_seconds=2))
+        # self.add_cmd(Pause(
+        #     cmd_runners='alpha',
+        #     pause_seconds=2))
         self.add_cmd(ValidateConfig(
             cmd_runners='alpha'))
 
@@ -4428,8 +4437,7 @@ class ConfigVerifier:
     def del_thread(self,
                    cmd_runner: str,
                    del_name: str,
-                   process: str,  # join or unregister
-                   utc_msg: str
+                   process: str
                    ) -> None:
         """Delete the thread from the ConfigVerifier.
 
@@ -4437,7 +4445,6 @@ class ConfigVerifier:
             cmd_runner: name of thread doing the delete (for log msg)
             del_name: name of thread to be deleted
             process: names the process, either join or unregister
-            utc_msg: update msg with time
         """
         log_msg = (f'del_thread entered: {cmd_runner=}, '
                    f'{del_name=}, {process=}')
@@ -4450,7 +4457,7 @@ class ConfigVerifier:
             self.all_threads[cmd_runner].time_last_pair_array_update.copy())
         # copy_reg_deque.rotate(num_remotes)
         copy_pair_deque.rotate(1)
-
+        updated_pair_array_msg_needed = False
         if process == 'join':
             # process_names = self.all_threads[name].join_names.copy()
             # log_arrays = self.all_threads[name].join_log_array.copy()
@@ -4563,18 +4570,45 @@ class ConfigVerifier:
                     f"{cmd_runner} removed status_blocks entry "
                     f"for pair_key = {pair_key}, "
                     f"name = {del_name}"))
+                updated_pair_array_msg_needed = True
 
             for pair_key in pair_keys_to_delete:
                 del self.expected_pairs[pair_key]
                 self.add_log_msg(re.escape(
                     f'{cmd_runner} removed _pair_array entry'
                     f' for pair_key = {pair_key}'))
+                updated_pair_array_msg_needed = True
 
-            self.add_log_msg(re.escape(
-                f'{cmd_runner} updated _pair_array at UTC '
-                f'{copy_pair_deque.popleft().strftime("%H:%M:%S.%f")}')
-            )
-            self.add_log_msg(re.escape(utc_msg))
+            # self.add_log_msg(re.escape(
+            #     f'{cmd_runner} updated _pair_array at UTC '
+            #     f'{copy_pair_deque.popleft().strftime("%H:%M:%S.%f")}')
+            # )
+            if updated_pair_array_msg_needed:
+                upa_search_msg = (
+                    f"{cmd_runner} updated _pair_array at UTC {time_match}")
+                found_upa_msg = self.get_log_msg(
+                    search_msg=upa_search_msg,
+                    skip_num=self.found_update_pair_array_log_msgs[cmd_runner])
+                if found_upa_msg:
+                    self.found_update_pair_array_log_msgs[cmd_runner] += 1
+                    self.add_log_msg(re.escape(found_upa_msg))
+
+            pair_key = st.SmartThread._get_pair_key(cmd_runner,
+                                                    del_name)
+            utc_search_msg = (
+                f"{cmd_runner} did cleanup of registry at UTC "
+                f'{time_match}, '
+                f"deleted \['{del_name}'\]")
+
+            found_utc_msg = self.get_log_msg(
+                search_msg=utc_search_msg,
+                skip_num=self.found_utc_log_msgs[pair_key])
+            if found_utc_msg:
+                log_msg = 'del_thread found a utc msg'
+                self.log_ver.add_msg(log_msg=re.escape(log_msg))
+                logger.debug(log_msg)
+
+                self.add_log_msg(re.escape(found_utc_msg))
             # self.add_log_msg(re.escape(
             #     f"{cmd_runner} did cleanup of registry at UTC "
             #     f'{copy_reg_deque.popleft().strftime("%H:%M:%S.%f")}, '
