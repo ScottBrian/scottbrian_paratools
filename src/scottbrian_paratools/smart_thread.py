@@ -559,7 +559,7 @@ class SmartThread:
         return True
 
     ####################################################################
-    # register
+    # _register
     ####################################################################
     def _register(self) -> None:
         """Register SmartThread in the class registry.
@@ -608,7 +608,7 @@ class SmartThread:
                 print_time = (SmartThread._registry_last_update
                               .strftime("%H:%M:%S.%f"))
                 self.logger.debug(
-                    f'{self.name} did register update at UTC {print_time}')
+                    f'{self.name} did registry update at UTC {print_time}')
                 self._refresh_pair_array()
             elif SmartThread._registry[self.name] != self:
                 raise SmartThreadNameAlreadyInUse(
@@ -658,7 +658,7 @@ class SmartThread:
         for key in keys_to_del:
             del SmartThread._registry[key]
             changed = True
-            self.logger.debug(f'{key} removed from registry')
+            self.logger.debug(f'{self.name} removed {key} from registry')
 
         # update time only when we made a change, otherwise we can
         # get into an update loop where each remote sees that

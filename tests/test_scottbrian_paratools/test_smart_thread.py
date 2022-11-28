@@ -328,6 +328,7 @@ class CreateF1AutoStart(ConfigCmd):
         """
         for f1_item in self.f1_create_items:
             self.config_ver.create_f1_thread(
+                cmd_runner=name,
                 name=f1_item.name,
                 target=f1_item.target_rtn,
                 app_config=f1_item.app_config,
@@ -354,6 +355,7 @@ class CreateF1NoStart(CreateF1AutoStart):
         """
         for f1_item in self.f1_create_items:
             self.config_ver.create_f1_thread(
+                cmd_runner=name,
                 name=f1_item.name,
                 target=f1_item.target_rtn,
                 app_config=f1_item.app_config,
@@ -1970,10 +1972,10 @@ class ThreadPairStatus:
     # expected_last_reg_updates: deque
 
 @dataclass
-class MonitorDelItem:
-    """Class that keeps track of threads to delete."""
+class MonitorItem:
+    """Class keeps track of threads to add, start, delete, unreg."""
     cmd_runner: str
-    del_name: str
+    target_name: str
     process_name: str
 
 
@@ -1999,7 +2001,6 @@ class ConfigVerifier:
         self.monitor_thread = threading.Thread(target=self.monitor)
         self.monitor_exit = False
         self.monitor_del_items: list[MonitorDelItem] = []
-        self.monitor_thread.start()
 
         self.cmd_suite: deque[ConfigCmd] = deque()
         self.cmd_serial_num: int = 0
@@ -2048,6 +2049,11 @@ class ConfigVerifier:
         self.del_nondef_pairs_msg_count: dict[
             tuple[str, str, str], int] = defaultdict(int)
         self.status_array_log_counts: dict[str, int] = defaultdict(int)
+        self.found_del_log_msgs: int = 0
+        self.found_reg_log_msgs: int = 0
+        self.found_utc_log_msgs: dict[tuple[str, str], int] = defaultdict(int)
+
+        self.monitor_thread.start()
 
     ####################################################################
     # __repr__
@@ -2080,18 +2086,92 @@ class ConfigVerifier:
     # monitor
     ####################################################################
     def monitor(self):
+        log_msg = 'monitor entered'
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(log_msg)
+
+        hour_match = '([01][0-9]|20|21|22|23)'
+        min_sec_match = '[0-5][0-9]'
+        micro_sec_match = '[0-9]{6,6}'
+        time_match = (f'{hour_match}:{min_sec_match}:{min_sec_match}\.'
+                      f'{micro_sec_match}')
+
+        reg_search_msg = f'[a-z]+ did registry update at UTC {time_match}'
+        del_search_msg = '[a-z]+ did successful (unregister|join) of [a-z]+\.'
+
         while not self.monitor_exit:
-            if not self.monitor_del_items:
-                time.sleep(0.1)
+            log_msg = 'monitor about to search'
+            self.log_ver.add_msg(log_msg=re.escape(log_msg))
+            logger.debug(log_msg)
+
+            # found_reg_msg, reg_pos = self.get_log_msg(
+            #     search_msg=reg_search_msg,
+            #     skip_num=self.found_reg_log_msgs)
+            found_del_msg = self.get_log_msg(
+                search_msg=del_search_msg,
+                skip_num=self.found_del_log_msgs)
+
+            # if reg_pos == -1 and del_pos == -1:
+            #     time.sleep(.01)
+            #     continue
+            # if reg_pos < del_pos:
+            #     self.found_reg_log_msgs += 1
+            #     split_msg = found_reg_msg.split()
+            #     cmd_runner = split_msg[0]
+            #     process = split_msg[3]
+            #     target_name = split_msg[5]
+            if not found_del_msg:
+                time.sleep(.5)
                 continue
-            with self.ops_lock:
-                for item in self.monitor_del_items:
-                    if item.del_name not in st.SmartThread._registry:
-                        self.del_thread(cmd_runner=item.cmd_runner,
-                                        del_name=item.del_name,
-                                        process=item.process_name)
-                        self.monitor_del_items.remove(item)
-                        break
+
+            if found_del_msg:
+                log_msg = 'monitor found a del msg'
+                self.log_ver.add_msg(log_msg=re.escape(log_msg))
+                logger.debug(log_msg)
+
+                self.found_del_log_msgs += 1
+
+                split_msg = found_del_msg.split()
+                cmd_runner = split_msg[0]
+                process = split_msg[3]
+                target_name = split_msg[5].removesuffix('.')
+
+                pair_key = st.SmartThread._get_pair_key(cmd_runner,
+                                                        target_name)
+
+                # utc_search_msg = (
+                #     f"{cmd_runner} did cleanup of registry at UTC "
+                #     f'{time_match}, '
+                #     f"deleted \['{target_name}'\]")
+                utc_search_msg = (
+                    f"{cmd_runner} did cleanup of registry at UTC "
+                    f"{time_match}, deleted")
+
+                found_utc_msg = self.get_log_msg(
+                    search_msg=utc_search_msg,
+                    skip_num=self.found_utc_log_msgs[pair_key])
+                if found_utc_msg:
+                    log_msg = 'monitor found a utc msg'
+                    self.log_ver.add_msg(log_msg=re.escape(log_msg))
+                    logger.debug(log_msg)
+                    self.del_thread(
+                        cmd_runner=cmd_runner,
+                        del_name=target_name,
+                        process=process,
+                        utc_msg=found_utc_msg)
+
+            # if not self.monitor_del_items:
+            #     time.sleep(0.1)
+            #     continue
+            # with self.ops_lock:
+            #
+            #     for item in self.monitor_del_items:
+            #         if item.del_name not in st.SmartThread._registry:
+            #             self.del_thread(cmd_runner=item.cmd_runner,
+            #                             del_name=item.target_name,
+            #                             process=item.process_name)
+            #             self.monitor_del_items.remove(item)
+            #             break
 
     ####################################################################
     # abort_all_f1_threads
@@ -2314,7 +2394,7 @@ class ConfigVerifier:
                 f'{pair_array_update_time.strftime("%H:%M:%S.%f")}'))
 
         self.add_log_msg(
-            f'{name} did register update at UTC '
+            f'{name} did registry update at UTC '
             f'{reg_update_time.strftime("%H:%M:%S.%f")}')
 
         if self.expected_registered[name].is_auto_started:
@@ -4025,6 +4105,9 @@ class ConfigVerifier:
         self.add_cmd(Join(
             cmd_runners='alpha',
             join_names=['beta', 'charlie', 'delta', 'echo']))
+        self.add_cmd(Pause(
+            cmd_runners='alpha',
+            pause_seconds=2))
         self.add_cmd(ValidateConfig(
             cmd_runners='alpha'))
 
@@ -4213,6 +4296,7 @@ class ConfigVerifier:
     # create_f1_thread
     ####################################################################
     def create_f1_thread(self,
+                         cmd_runner: str,
                          target: Callable,
                          name: str,
                          app_config: AppConfig,
@@ -4221,6 +4305,7 @@ class ConfigVerifier:
         """Create the f1_thread.
 
         Args:
+            cmd_runner: name of thread doing the create
             target: the f1 routine that the thread will run
             name: name of the thread
             app_config: specifies the style of app to create
@@ -4340,147 +4425,144 @@ class ConfigVerifier:
     ####################################################################
     # del_thread
     ####################################################################
-    # def del_thread(self,
-    #                name: str,
-    #                num_remotes: int,
-    #                process: str  # join or unregister
-    #                ) -> None:
     def del_thread(self,
                    cmd_runner: str,
                    del_name: str,
-                   process: str  # join or unregister
+                   process: str,  # join or unregister
+                   utc_msg: str
                    ) -> None:
         """Delete the thread from the ConfigVerifier.
 
         Args:
             cmd_runner: name of thread doing the delete (for log msg)
-            num_remotes: number of threads to be deleted
+            del_name: name of thread to be deleted
             process: names the process, either join or unregister
+            utc_msg: update msg with time
         """
         log_msg = (f'del_thread entered: {cmd_runner=}, '
                    f'{del_name=}, {process=}')
         self.log_ver.add_msg(log_msg=re.escape(log_msg))
         logger.debug(log_msg)
 
-        copy_reg_deque = (
-            self.all_threads[name].time_last_registry_update.copy())
+        # copy_reg_deque = (
+        #     self.all_threads[name].time_last_registry_update.copy())
         copy_pair_deque = (
-            self.all_threads[name].time_last_pair_array_update.copy())
-        copy_reg_deque.rotate(num_remotes)
-        copy_pair_deque.rotate(num_remotes)
+            self.all_threads[cmd_runner].time_last_pair_array_update.copy())
+        # copy_reg_deque.rotate(num_remotes)
+        copy_pair_deque.rotate(1)
 
         if process == 'join':
-            process_names = self.all_threads[name].join_names.copy()
+            # process_names = self.all_threads[name].join_names.copy()
             # log_arrays = self.all_threads[name].join_log_array.copy()
             from_status = st.ThreadStatus.Alive
         else:
-            process_names = self.all_threads[name].unregister_names.copy()
+            # process_names = self.all_threads[name].unregister_names.copy()
             # log_arrays = self.all_threads[name].unreg_log_array.copy()
             from_status = st.ThreadStatus.Registered
 
-        process_names.rotate(num_remotes)
+        # process_names.rotate(num_remotes)
         # log_arrays.rotate(num_remotes)
 
-        for idx in range(num_remotes):
-            remote = process_names.popleft()
-            # log_array = log_arrays.popleft()
-            self.expected_registered[remote].is_alive = False
-            self.expected_registered[remote].status = st.ThreadStatus.Stopped
-            self.add_log_msg(
-                f'{cmd_runner} set status for thread '
-                f'{remote} '
-                f'from {from_status} to '
-                f'{st.ThreadStatus.Stopped}')
+        # for idx in range(num_remotes):
+        # remote = process_names.popleft()
+        # log_array = log_arrays.popleft()
+        self.expected_registered[del_name].is_alive = False
+        self.expected_registered[del_name].status = st.ThreadStatus.Stopped
+        self.add_log_msg(
+            f'{cmd_runner} set status for thread '
+            f'{del_name} '
+            f'from {from_status} to '
+            f'{st.ThreadStatus.Stopped}')
 
-            self.handle_exp_status_log_msgs()
-            # for thread_name, tracker in self.expected_registered.items():
-            #     if thread_name in log_array.status_array:
-            #         is_alive = log_array.status_array[thread_name].is_alive
-            #         status = log_array.status_array[thread_name].status
-            #         repr_to_use = tracker.thread_repr
-            #         if 'OuterF1ThreadApp' in repr_to_use:
-            #             if is_alive:
-            #                 repr_to_use = repr_to_use.replace(
-            #                     'stopped',
-            #                     'started')
-            #                 if status != st.ThreadStatus.Registered:
-            #                     repr_to_use = repr_to_use.replace(
-            #                         'initial',
-            #                         'started')
-            #             else:
-            #                 repr_to_use = repr_to_use.replace(
-            #                     'started',
-            #                     'stopped')
-            #                 if status != st.ThreadStatus.Registered:
-            #                     repr_to_use = repr_to_use.replace(
-            #                         'initial',
-            #                         'started')
-            #
-            #         log_msg = (
-            #             f"key = {thread_name}, item = {repr_to_use}, "
-            #             "item.thread.is_alive() = "
-            #             f"{is_alive}, "
-            #             f"status: {status}")
-            #         self.add_log_msg(re.escape(log_msg))
+        self.handle_exp_status_log_msgs()
+        # for thread_name, tracker in self.expected_registered.items():
+        #     if thread_name in log_array.status_array:
+        #         is_alive = log_array.status_array[thread_name].is_alive
+        #         status = log_array.status_array[thread_name].status
+        #         repr_to_use = tracker.thread_repr
+        #         if 'OuterF1ThreadApp' in repr_to_use:
+        #             if is_alive:
+        #                 repr_to_use = repr_to_use.replace(
+        #                     'stopped',
+        #                     'started')
+        #                 if status != st.ThreadStatus.Registered:
+        #                     repr_to_use = repr_to_use.replace(
+        #                         'initial',
+        #                         'started')
+        #             else:
+        #                 repr_to_use = repr_to_use.replace(
+        #                     'started',
+        #                     'stopped')
+        #                 if status != st.ThreadStatus.Registered:
+        #                     repr_to_use = repr_to_use.replace(
+        #                         'initial',
+        #                         'started')
+        #
+        #         log_msg = (
+        #             f"key = {thread_name}, item = {repr_to_use}, "
+        #             "item.thread.is_alive() = "
+        #             f"{is_alive}, "
+        #             f"status: {status}")
+        #         self.add_log_msg(re.escape(log_msg))
 
-            del self.expected_registered[remote]
-            self.deleted_remotes_complete_count[remote] += 1
-            self.add_log_msg(f'{remote} removed from registry')
+        del self.expected_registered[del_name]
+        self.deleted_remotes_complete_count[del_name] += 1
+        self.add_log_msg(f'{cmd_runner} removed {del_name} from registry')
 
-            self.add_log_msg(f'{cmd_runner} entered _refresh_pair_array')
+        self.add_log_msg(f'{cmd_runner} entered _refresh_pair_array')
 
-            pair_keys_to_delete = []
-            with self.ops_lock:
-                for pair_key in self.expected_pairs:
-                    if remote not in pair_key:
-                        continue
-                    if remote == pair_key[0]:
-                        other_name = pair_key[1]
-                    else:
-                        other_name = pair_key[0]
+        pair_keys_to_delete = []
+        with self.ops_lock:
+            for pair_key in self.expected_pairs:
+                if del_name not in pair_key:
+                    continue
+                if del_name == pair_key[0]:
+                    other_name = pair_key[1]
+                else:
+                    other_name = pair_key[0]
 
-                    if remote not in self.expected_pairs[pair_key].keys():
-                        self.abort_all_f1_threads()
-                        raise InvalidConfigurationDetected(
-                            f'The expected_pairs for pair_key {pair_key} '
-                            'contains an entry of '
-                            f'{self.expected_pairs[pair_key]}  which does not '
-                            f'include the remote {remote} being deleted')
-                    # if other_name not in self.expected_pairs[pair_key].keys():
-                    #     pair_keys_to_delete.append(pair_key)
-                    # elif self.expected_pairs[pair_key][
-                    #         other_name].pending_ops_count == 0:
-                    #     pair_keys_to_delete.append(pair_key)
-                    #     self.add_log_msg(re.escape(
-                    #         f"{name} removed status_blocks entry "
-                    #         f"for pair_key = {pair_key}, "
-                    #         f"name = {other_name}"))
-                    # else:
-                    #     del self.expected_pairs[pair_key][remote]
+                if del_name not in self.expected_pairs[pair_key].keys():
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'The expected_pairs for pair_key {pair_key} '
+                        'contains an entry of '
+                        f'{self.expected_pairs[pair_key]}  which does not '
+                        f'include the {del_name=} being deleted')
+                # if other_name not in self.expected_pairs[pair_key].keys():
+                #     pair_keys_to_delete.append(pair_key)
+                # elif self.expected_pairs[pair_key][
+                #         other_name].pending_ops_count == 0:
+                #     pair_keys_to_delete.append(pair_key)
+                #     self.add_log_msg(re.escape(
+                #         f"{name} removed status_blocks entry "
+                #         f"for pair_key = {pair_key}, "
+                #         f"name = {other_name}"))
+                # else:
+                #     del self.expected_pairs[pair_key][remote]
 
-                    if other_name not in self.expected_pairs[pair_key].keys():
-                        pair_keys_to_delete.append(pair_key)
-                    else:
-                        nondef_key = (
-                        pair_key[0], pair_key[1], other_name, cmd_runner)
-                        num_non_def = self.del_nondef_pairs_msg_count[
-                            nondef_key]
-                        nondef_log_msg = (
-                            f"{cmd_runner} removed status_blocks entry "
-                            f"for pair_key = {pair_key}, "
-                            f"name = {other_name}")
-                        if self.find_log_msgs(
-                                search_msgs=nondef_log_msg,
-                                num_instances=num_non_def + 1):
-                            self.del_nondef_pairs_msg_count[nondef_key] += 1
-                            pair_keys_to_delete.append(pair_key)
-                            self.add_log_msg(re.escape(nondef_log_msg))
-                        else:
-                            del self.expected_pairs[pair_key][remote]
-                    self.add_log_msg(re.escape(
+                if other_name not in self.expected_pairs[pair_key].keys():
+                    pair_keys_to_delete.append(pair_key)
+                else:
+                    nondef_key = (
+                    pair_key[0], pair_key[1], other_name, cmd_runner)
+                    num_non_def = self.del_nondef_pairs_msg_count[
+                        nondef_key]
+                    nondef_log_msg = (
                         f"{cmd_runner} removed status_blocks entry "
                         f"for pair_key = {pair_key}, "
-                        f"name = {remote}"))
+                        f"name = {other_name}")
+                    if self.find_log_msgs(
+                            search_msgs=nondef_log_msg,
+                            num_instances=num_non_def + 1):
+                        self.del_nondef_pairs_msg_count[nondef_key] += 1
+                        pair_keys_to_delete.append(pair_key)
+                        self.add_log_msg(re.escape(nondef_log_msg))
+                    else:
+                        del self.expected_pairs[pair_key][del_name]
+                self.add_log_msg(re.escape(
+                    f"{cmd_runner} removed status_blocks entry "
+                    f"for pair_key = {pair_key}, "
+                    f"name = {del_name}"))
 
             for pair_key in pair_keys_to_delete:
                 del self.expected_pairs[pair_key]
@@ -4492,14 +4574,14 @@ class ConfigVerifier:
                 f'{cmd_runner} updated _pair_array at UTC '
                 f'{copy_pair_deque.popleft().strftime("%H:%M:%S.%f")}')
             )
-
-            self.add_log_msg(re.escape(
-                f"{cmd_runner} did cleanup of registry at UTC "
-                f'{copy_reg_deque.popleft().strftime("%H:%M:%S.%f")}, '
-                f"deleted ['{remote}']"))
+            self.add_log_msg(re.escape(utc_msg))
+            # self.add_log_msg(re.escape(
+            #     f"{cmd_runner} did cleanup of registry at UTC "
+            #     f'{copy_reg_deque.popleft().strftime("%H:%M:%S.%f")}, '
+            #     f"deleted ['{del_name}']"))
 
             self.add_log_msg(f'{cmd_runner} did successful '
-                             f'{process} of {remote}.')
+                             f'{process} of {del_name}.')
 
     ####################################################################
     # del_thread
@@ -4906,14 +4988,14 @@ class ConfigVerifier:
 
                 self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
-        num_joins = len(join_names)
-
-        if num_joins > 0:
-            self.del_thread(
-                name=cmd_runner,
-                num_remotes=num_joins,
-                process='join'
-            )
+        # num_joins = len(join_names)
+        #
+        # if num_joins > 0:
+        #     self.del_thread(
+        #         name=cmd_runner,
+        #         num_remotes=num_joins,
+        #         process='join'
+        #     )
 
     ####################################################################
     # handle_join_tof
@@ -4956,14 +5038,14 @@ class ConfigVerifier:
 
                 self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
-        num_joins = len(join_names)
-
-        if num_joins > 0:
-            self.del_thread(
-                name=cmd_runner,
-                num_remotes=num_joins,
-                process='join'
-            )
+        # num_joins = len(join_names)
+        #
+        # if num_joins > 0:
+        #     self.del_thread(
+        #         name=cmd_runner,
+        #         num_remotes=num_joins,
+        #         process='join'
+        #     )
 
     ####################################################################
     # handle_join_tot
@@ -5021,12 +5103,12 @@ class ConfigVerifier:
         num_joins = (len(join_names)
                      - len(timeout_names))
 
-        if num_joins > 0:
-            self.del_thread(
-                name=cmd_runner,
-                num_remotes=num_joins,
-                process='join'
-            )
+        # if num_joins > 0:
+        #     self.del_thread(
+        #         name=cmd_runner,
+        #         num_remotes=num_joins,
+        #         process='join'
+        #     )
 
     ####################################################################
     # handle_recv_msg
@@ -5622,11 +5704,11 @@ class ConfigVerifier:
         self.all_threads[cmd_runner].unregister(
             targets=set(unregister_targets))
 
-        self.del_thread(
-            name=cmd_runner,
-            num_remotes=len(unregister_targets),
-            process='unregister'
-        )
+        # self.del_thread(
+        #     name=cmd_runner,
+        #     num_remotes=len(unregister_targets),
+        #     process='unregister'
+        # )
 
     ####################################################################
     # validate_config
