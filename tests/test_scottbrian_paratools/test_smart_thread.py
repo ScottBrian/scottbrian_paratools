@@ -79,22 +79,22 @@ timeout_type_arg_list = [TimeoutType.TimeoutNone,
 # Test settings for test_config_build_scenarios
 ########################################################################
 num_registered_1_arg_list = [0, 1, 2]
-# num_registered_1_arg_list = [0]
+num_registered_1_arg_list = [0, 0, 0]
 
 num_active_1_arg_list = [1, 2, 3]
-# num_active_1_arg_list = [2]
+num_active_1_arg_list = [2]
 
 num_stopped_1_arg_list = [0, 1, 2]
-# num_stopped_1_arg_list = [2]
+num_stopped_1_arg_list = [2]
 
 num_registered_2_arg_list = [0, 1, 2]
-# num_registered_2_arg_list = [2]
+num_registered_2_arg_list = [2]
 
 num_active_2_arg_list = [1, 2, 3]
-# num_active_2_arg_list = [3]
+num_active_2_arg_list = [1]
 
 num_stopped_2_arg_list = [0, 1, 2]
-# num_stopped_2_arg_list = [0]
+num_stopped_2_arg_list = [0]
 
 ########################################################################
 # Test settings for test_recv_timeout_scenarios
@@ -151,6 +151,11 @@ class InvalidInputDetected(ErrorTstSmartThread):
 
 class CmdTimedOut(ErrorTstSmartThread):
     """The cmd took to long."""
+    pass
+
+
+class FailedToFindLogMsg(ErrorTstSmartThread):
+    """An expected log message was not found."""
     pass
 
 
@@ -1978,6 +1983,7 @@ class MonitorAddItem:
     thread_alive: bool
     auto_start: bool
     expected_status: st.ThreadStatus
+    add_event: threading.Event
 
 @dataclass
 class MonitorItem:
@@ -1985,6 +1991,7 @@ class MonitorItem:
     cmd_runner: str
     target_name: str
     process_name: str
+    # del_event: threading.Event
 
 
 hour_match = '([01][0-9]|20|21|22|23)'
@@ -2062,8 +2069,8 @@ class ConfigVerifier:
             tuple[str, str, str], int] = defaultdict(int)
         self.del_def_pairs_msg_ind_count: dict[
             tuple[str, str, str, str], int] = defaultdict(int)
-        self.del_nondef_pairs_msg_count: dict[
-            tuple[str, str, str], int] = defaultdict(int)
+        # self.del_nondef_pairs_msg_count: dict[
+        #     tuple[str, str, str], int] = defaultdict(int)
         self.status_array_log_counts: dict[str, int] = defaultdict(int)
         self.found_del_log_msgs: int = 0
         self.found_reg_log_msgs: int = 0
@@ -2112,9 +2119,9 @@ class ConfigVerifier:
         del_search_msg = '[a-z]+ did successful (unregister|join) of [a-z]+\.'
 
         while not self.monitor_exit:
-            log_msg = 'monitor about to search'
-            self.log_ver.add_msg(log_msg=re.escape(log_msg))
-            logger.debug(log_msg)
+            # log_msg = 'monitor about to search'
+            # self.log_ver.add_msg(log_msg=re.escape(log_msg))
+            # logger.debug(log_msg)
 
             found_reg_msg, reg_pos = self.get_log_msg(
                 search_msg=reg_search_msg,
@@ -2124,7 +2131,7 @@ class ConfigVerifier:
                 skip_num=self.found_del_log_msgs)
 
             if reg_pos == -1 and del_pos == -1:
-                time.sleep(.01)
+                time.sleep(.05)
                 continue
             if reg_pos >= 0 and del_pos >= 0:
                 if reg_pos < del_pos:
@@ -2133,7 +2140,7 @@ class ConfigVerifier:
                     found_reg_msg = ''
 
             if found_del_msg:
-                log_msg = 'monitor found a del msg'
+                log_msg = f'monitor {found_del_msg=}'
                 self.log_ver.add_msg(log_msg=re.escape(log_msg))
                 logger.debug(log_msg)
 
@@ -2147,7 +2154,8 @@ class ConfigVerifier:
                 self.del_thread(
                     cmd_runner=cmd_runner,
                     del_name=target_name,
-                    process=process)
+                    process=process,
+                    del_msg_idx=del_pos)
 
                 with self.ops_lock:
                     for item in self.monitor_del_items:
@@ -2158,11 +2166,9 @@ class ConfigVerifier:
                             break
 
             if found_reg_msg:
-                log_msg = 'monitor found a reg msg'
+                log_msg = f'monitor {found_reg_msg=}'
                 self.log_ver.add_msg(log_msg=re.escape(log_msg))
                 logger.debug(log_msg)
-
-                self.found_reg_log_msgs += 1
 
                 split_msg = found_reg_msg.split()
                 cmd_runner = split_msg[0]
@@ -2170,6 +2176,7 @@ class ConfigVerifier:
                 with self.ops_lock:
                     for item in self.monitor_add_items:
                         if item.cmd_runner == cmd_runner:
+                            item.add_event.set()
                             self.add_thread(
                                 name=cmd_runner,
                                 thread_alive=item.thread_alive,
@@ -2177,8 +2184,8 @@ class ConfigVerifier:
                                 expected_status=item.expected_status,
                                 reg_update_msg=found_reg_msg)
 
-
                             self.monitor_add_items.remove(item)
+                            self.found_reg_log_msgs += 1
                             break
 
     ####################################################################
@@ -4279,39 +4286,36 @@ class ConfigVerifier:
                                 name: str,
                                 auto_start: bool) -> None:
         """Create the commander thread."""
+        create_event = threading.Event()
+
         if not self.commander_thread:
             self.commander_thread = st.SmartThread(
                 name=name, auto_start=auto_start, max_msgs=self.max_msgs)
         self.all_threads[name] = self.commander_thread
 
-        # if self.commander_thread.time_last_pair_array_update:
-        #     pair_array_update_time = (
-        #         self.commander_thread.time_last_pair_array_update[-1])
-        # else:
-        #     pair_array_update_time = None
-
         self.monitor_add_items.append(MonitorAddItem(
             cmd_runner=name,
             thread_alive=True,
             auto_start=False,
-            expected_status=st.ThreadStatus.Alive))
+            expected_status=st.ThreadStatus.Alive,
+            add_event=create_event))
 
-        item_found = True
-        while item_found:
-            item_found = False
-            with self.ops_lock:
-                for item in self.monitor_add_items:
-                    if item.cmd_runner == name:
-                        item_found = True
-                        time.sleep(0.1)
+        log_msg = 'create_commander_thread waiting for monitor'
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(log_msg)
+        create_event.wait()
+        # item_found = True
+        # while item_found:
+        #     item_found = False
+        #     with self.ops_lock:
+        #         for item in self.monitor_add_items:
+        #             if item.cmd_runner == name:
+        #                 item_found = True
+        #                 time.sleep(0.1)
 
-        # self.add_thread(
-        #     name=name,
-        #     thread_alive=True,
-        #     auto_start=False,
-        #     expected_status=st.ThreadStatus.Alive,
-        #     reg_update_time=self.commander_thread
-        #     .time_last_registry_update[-1])
+        log_msg = 'create_commander_thread exiting'
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(log_msg)
 
     ####################################################################
     # create_f1_thread
@@ -4351,32 +4355,35 @@ class ConfigVerifier:
 
         self.f1_threads[name] = f1_thread
         self.all_threads[name] = f1_thread
+
         if auto_start:
             exp_status = st.ThreadStatus.Alive
         else:
             exp_status = st.ThreadStatus.Registered
-
+        create_event = threading.Event()
         self.monitor_add_items.append(MonitorAddItem(
             cmd_runner=name,
             thread_alive=auto_start,
             auto_start=auto_start,
-            expected_status=exp_status))
+            expected_status=exp_status,
+            add_event=create_event))
 
-        item_found = True
-        while item_found:
-            item_found = False
-            with self.ops_lock:
-                for item in self.monitor_add_items:
-                    if item.cmd_runner == name:
-                        item_found = True
-                        time.sleep(0.1)
+        log_msg = 'create_f1_thread waiting for monitor'
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(log_msg)
+        create_event.wait()
+        # item_found = True
+        # while item_found:
+        #     item_found = False
+        #     with self.ops_lock:
+        #         for item in self.monitor_add_items:
+        #             if item.cmd_runner == name:
+        #                 item_found = True
+        #                 time.sleep(0.1)
 
-        # self.add_thread(
-        #     name=name,
-        #     thread_alive=auto_start,
-        #     auto_start=auto_start,
-        #     expected_status=exp_status,
-        #     reg_update_time=f1_thread.time_last_registry_update[-1])
+        log_msg = 'create_f1_thread exiting'
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(log_msg)
 
     ####################################################################
     # dec_ops_count
@@ -4461,7 +4468,8 @@ class ConfigVerifier:
     def del_thread(self,
                    cmd_runner: str,
                    del_name: str,
-                   process: str
+                   process: str,
+                   del_msg_idx: int
                    ) -> None:
         """Delete the thread from the ConfigVerifier.
 
@@ -4469,6 +4477,7 @@ class ConfigVerifier:
             cmd_runner: name of thread doing the delete (for log msg)
             del_name: name of thread to be deleted
             process: names the process, either join or unregister
+            del_msg_idx: index in the log for the del message
         """
         log_msg = (f'del_thread entered: {cmd_runner=}, '
                    f'{del_name=}, {process=}')
@@ -4477,10 +4486,10 @@ class ConfigVerifier:
 
         # copy_reg_deque = (
         #     self.all_threads[name].time_last_registry_update.copy())
-        copy_pair_deque = (
-            self.all_threads[cmd_runner].time_last_pair_array_update.copy())
+        # copy_pair_deque = (
+        #     self.all_threads[cmd_runner].time_last_pair_array_update.copy())
         # copy_reg_deque.rotate(num_remotes)
-        copy_pair_deque.rotate(1)
+        # copy_pair_deque.rotate(1)
         updated_pair_array_msg_needed = False
         if process == 'join':
             # process_names = self.all_threads[name].join_names.copy()
@@ -4574,21 +4583,50 @@ class ConfigVerifier:
                 if other_name not in self.expected_pairs[pair_key].keys():
                     pair_keys_to_delete.append(pair_key)
                 else:
-                    nondef_key = (
-                    pair_key[0], pair_key[1], other_name, cmd_runner)
-                    num_non_def = self.del_nondef_pairs_msg_count[
-                        nondef_key]
+                    removed_search = (f'{cmd_runner} removed '
+                                      f'{del_name} from registry')
+                    removed_msg, rem_idx = self.get_log_msg(
+                        search_msg=removed_search,
+                        skip_num=0,
+                        start_idx=0,
+                        end_idx=del_msg_idx,
+                        reverse_search=True)
+                    if rem_idx == -1:
+                        raise FailedToFindLogMsg('Missing log msg '
+                                                 f'{removed_search=}')
+
+                    # nondef_key = (
+                    # pair_key[0], pair_key[1], other_name, cmd_runner)
+                    # num_non_def = self.del_nondef_pairs_msg_count[
+                    #     nondef_key]
                     nondef_log_msg = (
                         f"{cmd_runner} removed status_blocks entry "
                         f"for pair_key = {pair_key}, "
                         f"name = {other_name}")
-                    if self.find_log_msgs(
-                            search_msgs=nondef_log_msg,
-                            num_instances=num_non_def + 1):
-                        self.del_nondef_pairs_msg_count[nondef_key] += 1
+                    ndef_msg, ndef_idx = self.get_log_msg(
+                        search_msg=re.escape(nondef_log_msg),
+                        skip_num=0,
+                        start_idx=rem_idx,
+                        end_idx=-1,
+                        reverse_search=False)
+                    # if self.find_log_msgs(
+                    #         search_msgs=nondef_log_msg,
+                    #         num_instances=num_non_def + 1):
+                    if ndef_msg:
+                        # self.del_nondef_pairs_msg_count[nondef_key] += 1
                         pair_keys_to_delete.append(pair_key)
                         self.add_log_msg(re.escape(nondef_log_msg))
+                        log_msg = (f'del_thread for {cmd_runner=}, '
+                                   f'{del_name=}, {process=} '
+                                   f'found at {ndef_idx=}, {nondef_log_msg=}')
+                        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+                        logger.debug(log_msg)
                     else:
+                        log_msg = (f'del_thread for {cmd_runner=}, '
+                                   f'{del_name=}, {process=} '
+                                   f'did not find {nondef_log_msg=}')
+                        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+                        logger.debug(log_msg)
                         del self.expected_pairs[pair_key][del_name]
                 self.add_log_msg(re.escape(
                     f"{cmd_runner} removed status_blocks entry "
@@ -4597,6 +4635,11 @@ class ConfigVerifier:
                 updated_pair_array_msg_needed = True
 
             for pair_key in pair_keys_to_delete:
+                log_msg = (f'del_thread for {cmd_runner=}, '
+                           f'{del_name=}, {process=} deleted '
+                           f'{pair_key=}')
+                self.log_ver.add_msg(log_msg=re.escape(log_msg))
+                logger.debug(log_msg)
                 del self.expected_pairs[pair_key]
                 self.add_log_msg(re.escape(
                     f'{cmd_runner} removed _pair_array entry'
@@ -4642,6 +4685,10 @@ class ConfigVerifier:
             self.add_log_msg(f'{cmd_runner} did successful '
                              f'{process} of {del_name}.')
 
+        log_msg = (f'del_thread exit: {cmd_runner=}, '
+                   f'{del_name=}, {process=}')
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(log_msg)
     ####################################################################
     # del_thread
     ####################################################################
@@ -4857,19 +4904,35 @@ class ConfigVerifier:
         work_msgs: list[re.Pattern] = []
         for msg in search_msgs:
             work_msgs.append(re.compile(re.escape(msg)))
-        # found_idxes: set[int] = set()
-        found_idxes: list[int] = []
-        for idx in range(len(work_msgs)):
-            found_idxes.append(0)
-        for log_tuple in self.caplog_to_use.record_tuples:
-            for idx, msg in enumerate(work_msgs):
-                if msg.match(log_tuple[2]):
-                    found_idxes[idx] += 1
-                    # if len(found_idxes) == len(work_msgs):
-                    #     return True
-        for cnt in found_idxes:
-            if cnt != num_instances:
+        num_tries_remaining = 2
+        while num_tries_remaining:
+            num_tries_remaining -= 1
+            found_idxes: list[int] = []
+            for idx in range(len(work_msgs)):
+                found_idxes.append(0)
+            for log_tuple in self.caplog_to_use.record_tuples:
+                for idx, msg in enumerate(work_msgs):
+                    if msg.match(log_tuple[2]):
+                        found_idxes[idx] += 1
+                        # if len(found_idxes) == len(work_msgs):
+                        #     return True
+            failed_instance_count = False
+            for cnt in found_idxes:
+                if cnt != num_instances:
+                    failed_instance_count = True
+                    break
+
+            if failed_instance_count:
+                if num_tries_remaining:
+                    time.sleep(1.5)
+                    continue
                 return False
+
+            if num_tries_remaining == 1:
+                return True
+            else:
+                assert False
+
         return True
 
     ####################################################################
@@ -4892,22 +4955,42 @@ class ConfigVerifier:
     ####################################################################
     def get_log_msg(self,
                     search_msg: str,
-                    skip_num: int) -> str:
+                    skip_num: int = 0,
+                    start_idx: int = 0,
+                    end_idx: int = -1,
+                    reverse_search: bool = False) -> str:
         """Search for a log message and return it.
 
         Args:
             search_msg: log message to search for as a regex
             skip_num: number of matches to skip
+            start_idx: index from which to start
+            end_idx: index of 1 past the index at which to stop
+            reverse_search: indicates whether to search from the bottom
+
         Returns:
             the log message if found, otherwise an empty string
         """
         search_pattern: re.Pattern = re.compile(search_msg)
-        num_found = 0
-        for idx, log_tuple in enumerate(self.caplog_to_use.record_tuples):
+        num_skipped = 0
+        work_log = self.caplog_to_use.record_tuples.copy()
+
+        if end_idx == -1:
+            end_idx = len(work_log)
+
+        work_log = work_log[start_idx:end_idx]
+        if reverse_search:
+            work_log.reverse()
+
+        for idx, log_tuple in enumerate(work_log):
             if search_pattern.match(log_tuple[2]):
-                num_found += 1
-                if num_found == skip_num + 1:
-                    return log_tuple[2], idx
+                if num_skipped == skip_num:
+                    if reverse_search:
+                        ret_idx = start_idx + (len(work_log) - idx) - 1
+                    else:
+                        ret_idx = start_idx + idx
+                    return log_tuple[2], ret_idx
+                num_skipped += 1
 
         return '', -1
 
@@ -5048,8 +5131,16 @@ class ConfigVerifier:
 
                 self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
+        log_msg = 'handle_join waiting for monitor'
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(log_msg)
+
+
         while self.monitor_del_items:
             time.sleep(0.1)
+        log_msg = 'handle_join exiting'
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(log_msg)
 
     ####################################################################
     # handle_join_tof
@@ -5096,8 +5187,14 @@ class ConfigVerifier:
 
                 self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
+        log_msg = 'handle_join_tof waiting for monitor'
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(log_msg)
         while self.monitor_del_items:
             time.sleep(0.1)
+        log_msg = 'handle_join_tof exiting'
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(log_msg)
 
     ####################################################################
     # handle_join_tot
@@ -5156,8 +5253,14 @@ class ConfigVerifier:
 
             self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
+        log_msg = 'handle_join_tot waiting for monitor'
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(log_msg)
         while self.monitor_del_items:
             time.sleep(0.1)
+        log_msg = 'handle_join_tot exiting'
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(log_msg)
 
     ####################################################################
     # handle_recv_msg
