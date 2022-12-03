@@ -102,9 +102,10 @@ def thread_exc(monkeypatch: Any) -> "ExcHook":
         exc_err_msg = (f'SmartEvent excepthook: {args.exc_type}, '
                        f'{args.exc_value}, {args.exc_traceback},'
                        f' {args.thread}')
-        traceback.print_tb(args.exc_traceback)
-        logger.debug(exc_err_msg)
+        exc_err_msg = (f'SmartEvent excepthook: {args.exc_type}, '
+                       f'{args.exc_traceback}')
         current_thread = threading.current_thread()
+        logging.exception(f'exception caught for {current_thread}')
         logger.debug(f'excepthook current thread is {current_thread}')
         # ExcHook.exc_err_msg1 = exc_err_msg
         exc_hook.exc_err_msg1 = exc_err_msg

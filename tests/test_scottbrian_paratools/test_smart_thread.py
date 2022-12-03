@@ -73,28 +73,28 @@ class TimeoutType(Enum):
 timeout_type_arg_list = [TimeoutType.TimeoutNone,
                          TimeoutType.TimeoutFalse,
                          TimeoutType.TimeoutTrue]
-# timeout_type_arg_list = [TimeoutType.TimeoutNone]
+timeout_type_arg_list = [TimeoutType.TimeoutTrue]
 
 ########################################################################
 # Test settings for test_config_build_scenarios
 ########################################################################
 num_registered_1_arg_list = [0, 1, 2]
-num_registered_1_arg_list = [0, 0, 0]
+# num_registered_1_arg_list = [0, 0, 0]
 
 num_active_1_arg_list = [1, 2, 3]
-num_active_1_arg_list = [2]
+# num_active_1_arg_list = [2]
 
 num_stopped_1_arg_list = [0, 1, 2]
-num_stopped_1_arg_list = [2]
+# num_stopped_1_arg_list = [2]
 
 num_registered_2_arg_list = [0, 1, 2]
-num_registered_2_arg_list = [2]
+# num_registered_2_arg_list = [2]
 
 num_active_2_arg_list = [1, 2, 3]
-num_active_2_arg_list = [1]
+# num_active_2_arg_list = [1]
 
 num_stopped_2_arg_list = [0, 1, 2]
-num_stopped_2_arg_list = [0]
+# num_stopped_2_arg_list = [0]
 
 ########################################################################
 # Test settings for test_recv_timeout_scenarios
@@ -119,6 +119,28 @@ num_unreg_senders_arg_list = [0, 1, 2]
 
 num_reg_senders_arg_list = [0, 1, 2]
 # num_reg_senders_arg_list = [0]
+
+########################################################################
+# Test settings for test_send_msg_timeout_scenarios
+########################################################################
+num_senders_arg_list = [1, 2, 3]
+num_senders_arg_list = [2]
+
+num_active_targets_arg_list = [0, 1, 2]
+num_active_targets_arg_list = [0]
+
+num_registered_targets_arg_list = [0, 1, 2]
+num_registered_targets_arg_list = [0]
+
+num_unreg_timeouts_arg_list = [0, 1, 2]
+num_unreg_timeouts_arg_list = [0]
+
+num_exit_timeouts_arg_list = [0, 1, 2]
+num_exit_timeouts_arg_list = [1]
+
+num_full_q_timeouts_arg_list = [0, 1, 2]
+num_full_q_timeouts_arg_list = [0]
+
 
 
 ########################################################################
@@ -1451,9 +1473,6 @@ def timeout_type_arg(request: Any) -> TimeoutType:
 ###############################################################################
 # num_senders_arg
 ###############################################################################
-num_senders_arg_list = [1, 2, 3]
-
-
 @pytest.fixture(params=num_senders_arg_list)  # type: ignore
 def num_senders_arg(request: Any) -> int:
     """Number of threads to send msg.
@@ -1579,10 +1598,6 @@ def num_reg_senders_arg(request: Any) -> int:
 ###############################################################################
 # num_active_targets_arg
 ###############################################################################
-num_active_targets_arg_list = [0, 1, 2]
-# num_active_targets_arg_list = [1]
-
-
 @pytest.fixture(params=num_active_targets_arg_list)  # type: ignore
 def num_active_targets_arg(request: Any) -> int:
     """Number of threads to be active at time of send.
@@ -1599,10 +1614,6 @@ def num_active_targets_arg(request: Any) -> int:
 ###############################################################################
 # num_registered_targets_arg
 ###############################################################################
-num_registered_targets_arg_list = [0, 1, 2]
-# num_registered_targets_arg_list = [0]
-
-
 @pytest.fixture(params=num_registered_targets_arg_list)  # type: ignore
 def num_registered_targets_arg(request: Any) -> int:
     """Number of threads to be registered at time of send.
@@ -1619,9 +1630,6 @@ def num_registered_targets_arg(request: Any) -> int:
 ########################################################################
 # num_exit_timeouts_arg
 ########################################################################
-num_exit_timeouts_arg_list = [0, 1, 2]
-
-
 @pytest.fixture(params=num_exit_timeouts_arg_list)  # type: ignore
 def num_exit_timeouts_arg(request: Any) -> int:
     """Number of threads to exit before msg is sent.
@@ -1638,9 +1646,6 @@ def num_exit_timeouts_arg(request: Any) -> int:
 ########################################################################
 # num_unreg_timeouts_arg
 ########################################################################
-num_unreg_timeouts_arg_list = [0, 1, 2]
-
-
 @pytest.fixture(params=num_unreg_timeouts_arg_list)  # type: ignore
 def num_unreg_timeouts_arg(request: Any) -> int:
     """Number of threads to be unregistered at time of send.
@@ -1657,9 +1662,6 @@ def num_unreg_timeouts_arg(request: Any) -> int:
 ########################################################################
 # num_full_q_timeouts_arg
 ########################################################################
-num_full_q_timeouts_arg_list = [0, 1, 2]
-
-
 @pytest.fixture(params=num_full_q_timeouts_arg_list)  # type: ignore
 def num_full_q_timeouts_arg(request: Any) -> int:
     """Number of threads to have full queue at time of send.
@@ -1986,6 +1988,14 @@ class MonitorAddItem:
     add_event: threading.Event
 
 @dataclass
+class RecvEventItem:
+    """Class keeps track of threads to add, start, delete, unreg."""
+    recv_event: threading.Event
+    post_needed: bool
+    del_deferred: bool
+    senders: list[str]
+
+@dataclass
 class MonitorItem:
     """Class keeps track of threads to add, start, delete, unreg."""
     cmd_runner: str
@@ -2074,9 +2084,12 @@ class ConfigVerifier:
         self.status_array_log_counts: dict[str, int] = defaultdict(int)
         self.found_del_log_msgs: int = 0
         self.found_reg_log_msgs: int = 0
+        self.found_upa_log_msgs: int = 0
+        self.found_rec_log_msgs: int = 0
         self.found_utc_log_msgs: dict[tuple[str, str], int] = defaultdict(int)
         self.found_update_pair_array_log_msgs: dict[str, int] = defaultdict(
             int)
+        self.recv_msg_event_items: dict[str, RecvEventItem] = {}
 
         self.monitor_thread.start()
 
@@ -2117,6 +2130,8 @@ class ConfigVerifier:
 
         reg_search_msg = f'[a-z]+ did registry update at UTC {time_match}'
         del_search_msg = '[a-z]+ did successful (unregister|join) of [a-z]+\.'
+        upa_search_msg = (f'[a-z]+ updated _pair_array at UTC {time_match}')
+        recv_msg_search = f'[a-z]+ received msg from [a-z]+'
 
         while not self.monitor_exit:
             # log_msg = 'monitor about to search'
@@ -2129,15 +2144,48 @@ class ConfigVerifier:
             found_del_msg, del_pos = self.get_log_msg(
                 search_msg=del_search_msg,
                 skip_num=self.found_del_log_msgs)
+            found_upa_msg, upa_pos = self.get_log_msg(
+                search_msg=upa_search_msg,
+                skip_num=self.found_upa_log_msgs)
+            found_rec_msg, rec_pos = self.get_log_msg(
+                search_msg=recv_msg_search,
+                skip_num=self.found_rec_log_msgs)
 
-            if reg_pos == -1 and del_pos == -1:
+            if (reg_pos == -1
+                    and del_pos == -1
+                    and upa_pos == -1 and
+                    rec_pos == -1):
                 time.sleep(.05)
                 continue
-            if reg_pos >= 0 and del_pos >= 0:
-                if reg_pos < del_pos:
-                    found_del_msg = ''
-                else:
-                    found_reg_msg = ''
+
+            selection_pos: list[int] = []
+            if -1 < reg_pos:
+                selection_pos.append(reg_pos)
+            if -1 < del_pos:
+                selection_pos.append(del_pos)
+            if -1 < upa_pos:
+                selection_pos.append(upa_pos)
+            if -1 < rec_pos:
+                selection_pos.append(rec_pos)
+
+            min_pos = min(selection_pos)
+
+            if min_pos == reg_pos:
+                found_del_msg = ''
+                found_upa_msg = ''
+                found_rec_msg = ''
+            elif min_pos == del_pos:
+                found_reg_msg = ''
+                found_upa_msg = ''
+                found_rec_msg = ''
+            elif min_pos == upa_pos:
+                found_reg_msg = ''
+                found_del_msg = ''
+                found_rec_msg = ''
+            else:
+                found_reg_msg = ''
+                found_del_msg = ''
+                found_upa_msg = ''
 
             if found_del_msg:
                 log_msg = f'monitor {found_del_msg=}'
@@ -2176,17 +2224,49 @@ class ConfigVerifier:
                 with self.ops_lock:
                     for item in self.monitor_add_items:
                         if item.cmd_runner == cmd_runner:
-                            item.add_event.set()
+
                             self.add_thread(
                                 name=cmd_runner,
                                 thread_alive=item.thread_alive,
                                 auto_start=item.auto_start,
                                 expected_status=item.expected_status,
-                                reg_update_msg=found_reg_msg)
-
+                                reg_update_msg=found_reg_msg,
+                                reg_idx=reg_pos
+                            )
+                            item.add_event.set()
                             self.monitor_add_items.remove(item)
                             self.found_reg_log_msgs += 1
                             break
+
+            if found_upa_msg:
+                log_msg = f'monitor {found_upa_msg=}'
+                self.log_ver.add_msg(log_msg=re.escape(log_msg))
+                logger.debug(log_msg)
+
+                self.found_upa_log_msgs += 1
+
+                split_msg = found_upa_msg.split()
+                cmd_runner = split_msg[0]
+
+                self.handle_pair_array_update(
+                    cmd_runner=cmd_runner,
+                    upa_msg=found_upa_msg,
+                    upa_msg_idx=upa_pos)
+
+            if found_rec_msg:
+                log_msg = f'monitor {found_rec_msg=}'
+                self.log_ver.add_msg(log_msg=re.escape(log_msg))
+                logger.debug(log_msg)
+
+                self.found_rec_log_msgs += 1
+
+                split_msg = found_rec_msg.split()
+                cmd_runner = split_msg[0]
+                sender = split_msg[4]
+
+                self.dec_ops_count(
+                    cmd_runner=cmd_runner,
+                    sender=sender)
 
     ####################################################################
     # abort_all_f1_threads
@@ -2268,6 +2348,7 @@ class ConfigVerifier:
                    auto_start: bool,
                    expected_status: st.ThreadStatus,
                    reg_update_msg: str,
+                   reg_idx: int,
                    ) -> None:
         """Add a thread to the ConfigVerifier.
 
@@ -2277,6 +2358,7 @@ class ConfigVerifier:
             auto_start: indicates whether to start the thread
             expected_status: the expected ThreadStatus
             reg_update_msg: the register update msg use for the log msg
+            reg_idx: index of reg_update_msg in the log
         """
         log_msg = f'add_thread entered for {name}'
         self.log_ver.add_msg(log_msg=log_msg)
@@ -2387,7 +2469,8 @@ class ConfigVerifier:
             f'{name} obtained _registry_lock, '
             'class name = SmartThread')
 
-        self.handle_exp_status_log_msgs(name=name)
+        self.handle_exp_status_log_msgs(log_idx=reg_idx,
+                                        name=name)
 
         self.add_log_msg(
             f'{name} set status for thread {name} '
@@ -4390,58 +4473,56 @@ class ConfigVerifier:
     ####################################################################
     def dec_ops_count(self,
                       cmd_runner: str,
-                      remote: str,
-                      update_time: datetime):
+                      sender: str) -> None:
         """Decrement the pending operations count.
 
         Args:
             cmd_runner: the names of the thread whose count is to be
                 decremented
-            remote: the name of the threads that is paired with the
+            sender: the name of the threads that is paired with the
                 cmd_runner
-            update_time: pair array update time to be used for the log
-                msgs
+
         """
-        pair_key = st.SmartThread._get_pair_key(cmd_runner, remote)
+        pair_key = st.SmartThread._get_pair_key(cmd_runner, sender)
         doc_log_msg = (f'dec_ops_count entered for {cmd_runner=} with '
                        f'{pair_key=}')
         self.log_ver.add_msg(log_msg=re.escape(doc_log_msg))
         logger.debug(doc_log_msg)
 
         # if (self.expected_pairs[pair_key][cmd_runner].pending_ops_count == 1
-        #         and remote in self.send_exit_sender_names):
-        if self.expected_pairs[pair_key][cmd_runner].pending_ops_count == 1:
+        #         and sender in self.send_exit_sender_names):
+        # if self.expected_pairs[pair_key][cmd_runner].pending_ops_count == 1:
             # Determine first whether we were a deferred delete.
             # might need to add serial numbers to the recv_msg in case
             # we have multiple recv_msgs
-            num_found = self.pair_array_refresh_count[cmd_runner]
-            log_msg1 = f'{cmd_runner} entered _refresh_pair_array'
-            if self.find_log_msgs(search_msgs=log_msg1,
-                                  num_instances=num_found+1):
-                self.pair_array_refresh_count[cmd_runner] += 1
-                self.add_log_msg(log_msg1)
+            # num_found = self.pair_array_refresh_count[cmd_runner]
+            # log_msg1 = f'{cmd_runner} entered _refresh_pair_array'
+            # if self.find_log_msgs(search_msgs=log_msg1,
+            #                       num_instances=num_found+1):
+            #     self.pair_array_refresh_count[cmd_runner] += 1
+            #     self.add_log_msg(log_msg1)
                 # at this point we need to wait for mock delete to go
                 # first
-                start_time = time.time()
-                while True:
-                    with self.ops_lock:
-                        if (self.deleted_remotes_complete_count[remote]
-                                == self.deleted_remotes_pending_count[remote]):
-                            break
-                    time.sleep(.2)
-                    if time.time() - start_time > 5:
-                        raise CmdTimedOut(
-                            f'{cmd_runner} in dec_ops_count timed out '
-                            f'waiting for delete of {pair_key=}')
+                # start_time = time.time()
+                # while True:
+                #     with self.ops_lock:
+                #         if (self.deleted_senders_complete_count[sender]
+                #                 == self.deleted_senders_pending_count[sender]):
+                #             break
+                #     time.sleep(.2)
+                #     if time.time() - start_time > 5:
+                #         raise CmdTimedOut(
+                #             f'{cmd_runner} in dec_ops_count timed out '
+                #             f'waiting for delete of {pair_key=}')
 
                 # Next, we need to figure out whether we did our own
                 # delete and/or the delete for another receiver
-                if self.handle_deferred_delete_log_msgs(cmd_runner=cmd_runner):
-                    update_time_str = update_time.strftime("%H:%M:%S.%f")
-                    log_msg2 = (
-                        f'{cmd_runner} updated _pair_array at UTC '
-                        f'{update_time_str}')
-                    self.add_log_msg(re.escape(log_msg2))
+                # if self.handle_deferred_delete_log_msgs(cmd_runner=cmd_runner):
+                #     update_time_str = update_time.strftime("%H:%M:%S.%f")
+                #     log_msg2 = (
+                #         f'{cmd_runner} updated _pair_array at UTC '
+                #         f'{update_time_str}')
+                #     self.add_log_msg(re.escape(log_msg2))
 
         with self.ops_lock:
             self.expected_pairs[pair_key][cmd_runner].pending_ops_count -= 1
@@ -4450,10 +4531,19 @@ class ConfigVerifier:
                 raise InvalidConfigurationDetected(
                     f'dec_ops_count for for pair_key {pair_key}, '
                     f'name {cmd_runner} was decremented below zero')
-            if (self.expected_pairs[pair_key][cmd_runner].pending_ops_count == 0
-                    and remote not in self.expected_pairs[
-                        pair_key].keys()):
-                del self.expected_pairs[pair_key]
+
+            # we are done with this sender for this recv_msg
+            self.recv_msg_event_items[cmd_runner].senders.remove(sender)
+
+
+            # if sender not in self.expected_pairs[pair_key].keys():
+            #     self.recv_msg_event_items[cmd_runner].del_deferred = True
+            # if (not self.recv_msg_event_items[cmd_runner].senders
+            #         and self.recv_msg_event_items[cmd_runner].del_deferred)
+            # if (self.expected_pairs[pair_key][
+            #         cmd_runner].pending_ops_count == 0
+            #         and sender not in self.expected_pairs[pair_key].keys()):
+            #     del self.expected_pairs[pair_key]
 
     ####################################################################
     # dec_recv_timeout
@@ -4514,7 +4604,7 @@ class ConfigVerifier:
             f'from {from_status} to '
             f'{st.ThreadStatus.Stopped}')
 
-        self.handle_exp_status_log_msgs()
+        self.handle_exp_status_log_msgs(log_idx=del_msg_idx)
         # for thread_name, tracker in self.expected_registered.items():
         #     if thread_name in log_array.status_array:
         #         is_alive = log_array.status_array[thread_name].is_alive
@@ -4547,7 +4637,8 @@ class ConfigVerifier:
 
         del self.expected_registered[del_name]
         self.deleted_remotes_complete_count[del_name] += 1
-        self.add_log_msg(f'{cmd_runner} removed {del_name} from registry')
+        self.add_log_msg(f'{cmd_runner} removed {del_name} from registry '
+                         f'for {process=}')
 
         self.add_log_msg(f'{cmd_runner} entered _refresh_pair_array')
 
@@ -4689,168 +4780,75 @@ class ConfigVerifier:
                    f'{del_name=}, {process=}')
         self.log_ver.add_msg(log_msg=re.escape(log_msg))
         logger.debug(log_msg)
+
     ####################################################################
-    # del_thread
+    # handle_pair_array_update
     ####################################################################
-    # def del_thread(self,
-    #                name: str,
-    #                num_remotes: int,
-    #                process: str  # join or unregister
-    #                ) -> None:
-    # def del_thread(self,
-    #                cmd_runner: str,
-    #                del_name: str,
-    #                process: str  # join or unregister
-    #                ) -> None:
-    #     """Delete the thread from the ConfigVerifier.
-    #
-    #     Args:
-    #         cmd_runner: name of thread doing the delete (for log msg)
-    #         num_remotes: number of threads to be deleted
-    #         process: names the process, either join or unregister
-    #     """
-    #     log_msg = (f'del_thread entered: {cmd_runner=}, '
-    #                f'{del_name=}, {process=}')
-    #     self.log_ver.add_msg(log_msg=re.escape(log_msg))
-    #     logger.debug(log_msg)
-    #
-    #     copy_reg_deque = (
-    #         self.all_threads[name].time_last_registry_update.copy())
-    #     copy_pair_deque = (
-    #         self.all_threads[name].time_last_pair_array_update.copy())
-    #     copy_reg_deque.rotate(num_remotes)
-    #     copy_pair_deque.rotate(num_remotes)
-    #
-    #     if process == 'join':
-    #         process_names = self.all_threads[name].join_names.copy()
-    #         # log_arrays = self.all_threads[name].join_log_array.copy()
-    #         from_status = st.ThreadStatus.Alive
-    #     else:
-    #         process_names = self.all_threads[name].unregister_names.copy()
-    #         # log_arrays = self.all_threads[name].unreg_log_array.copy()
-    #         from_status = st.ThreadStatus.Registered
-    #
-    #     process_names.rotate(num_remotes)
-    #     # log_arrays.rotate(num_remotes)
-    #
-    #     for idx in range(num_remotes):
-    #         remote = process_names.popleft()
-    #         # log_array = log_arrays.popleft()
-    #         self.expected_registered[remote].is_alive = False
-    #         self.expected_registered[remote].status = st.ThreadStatus.Stopped
-    #         self.add_log_msg(
-    #             f'{name} set status for thread '
-    #             f'{remote} '
-    #             f'from {from_status} to '
-    #             f'{st.ThreadStatus.Stopped}')
-    #
-    #         self.handle_exp_status_log_msgs()
-    #         # for thread_name, tracker in self.expected_registered.items():
-    #         #     if thread_name in log_array.status_array:
-    #         #         is_alive = log_array.status_array[thread_name].is_alive
-    #         #         status = log_array.status_array[thread_name].status
-    #         #         repr_to_use = tracker.thread_repr
-    #         #         if 'OuterF1ThreadApp' in repr_to_use:
-    #         #             if is_alive:
-    #         #                 repr_to_use = repr_to_use.replace(
-    #         #                     'stopped',
-    #         #                     'started')
-    #         #                 if status != st.ThreadStatus.Registered:
-    #         #                     repr_to_use = repr_to_use.replace(
-    #         #                         'initial',
-    #         #                         'started')
-    #         #             else:
-    #         #                 repr_to_use = repr_to_use.replace(
-    #         #                     'started',
-    #         #                     'stopped')
-    #         #                 if status != st.ThreadStatus.Registered:
-    #         #                     repr_to_use = repr_to_use.replace(
-    #         #                         'initial',
-    #         #                         'started')
-    #         #
-    #         #         log_msg = (
-    #         #             f"key = {thread_name}, item = {repr_to_use}, "
-    #         #             "item.thread.is_alive() = "
-    #         #             f"{is_alive}, "
-    #         #             f"status: {status}")
-    #         #         self.add_log_msg(re.escape(log_msg))
-    #
-    #         del self.expected_registered[remote]
-    #         self.deleted_remotes_complete_count[remote] += 1
-    #         self.add_log_msg(f'{remote} removed from registry')
-    #
-    #         self.add_log_msg(f'{name} entered _refresh_pair_array')
-    #
-    #         pair_keys_to_delete = []
-    #         with self.ops_lock:
-    #             for pair_key in self.expected_pairs:
-    #                 if remote not in pair_key:
-    #                     continue
-    #                 if remote == pair_key[0]:
-    #                     other_name = pair_key[1]
-    #                 else:
-    #                     other_name = pair_key[0]
-    #
-    #                 if remote not in self.expected_pairs[pair_key].keys():
-    #                     self.abort_all_f1_threads()
-    #                     raise InvalidConfigurationDetected(
-    #                         f'The expected_pairs for pair_key {pair_key} '
-    #                         'contains an entry of '
-    #                         f'{self.expected_pairs[pair_key]}  which does not '
-    #                         f'include the remote {remote} being deleted')
-    #                 # if other_name not in self.expected_pairs[pair_key].keys():
-    #                 #     pair_keys_to_delete.append(pair_key)
-    #                 # elif self.expected_pairs[pair_key][
-    #                 #         other_name].pending_ops_count == 0:
-    #                 #     pair_keys_to_delete.append(pair_key)
-    #                 #     self.add_log_msg(re.escape(
-    #                 #         f"{name} removed status_blocks entry "
-    #                 #         f"for pair_key = {pair_key}, "
-    #                 #         f"name = {other_name}"))
-    #                 # else:
-    #                 #     del self.expected_pairs[pair_key][remote]
-    #
-    #                 if other_name not in self.expected_pairs[pair_key].keys():
-    #                     pair_keys_to_delete.append(pair_key)
-    #                 else:
-    #                     nondef_key = (
-    #                     pair_key[0], pair_key[1], other_name, name)
-    #                     num_non_def = self.del_nondef_pairs_msg_count[
-    #                         nondef_key]
-    #                     nondef_log_msg = (
-    #                         f"{name} removed status_blocks entry "
-    #                         f"for pair_key = {pair_key}, "
-    #                         f"name = {other_name}")
-    #                     if self.find_log_msgs(
-    #                             search_msgs=nondef_log_msg,
-    #                             num_instances=num_non_def + 1):
-    #                         self.del_nondef_pairs_msg_count[nondef_key] += 1
-    #                         pair_keys_to_delete.append(pair_key)
-    #                         self.add_log_msg(re.escape(nondef_log_msg))
-    #                     else:
-    #                         del self.expected_pairs[pair_key][remote]
-    #                 self.add_log_msg(re.escape(
-    #                     f"{name} removed status_blocks entry "
-    #                     f"for pair_key = {pair_key}, "
-    #                     f"name = {remote}"))
-    #
-    #         for pair_key in pair_keys_to_delete:
-    #             del self.expected_pairs[pair_key]
-    #             self.add_log_msg(re.escape(
-    #                 f'{name} removed _pair_array entry'
-    #                 f' for pair_key = {pair_key}'))
-    #
-    #         self.add_log_msg(re.escape(
-    #             f'{name} updated _pair_array at UTC '
-    #             f'{copy_pair_deque.popleft().strftime("%H:%M:%S.%f")}')
-    #         )
-    #
-    #         self.add_log_msg(re.escape(
-    #             f"{name} did cleanup of registry at UTC "
-    #             f'{copy_reg_deque.popleft().strftime("%H:%M:%S.%f")}, '
-    #             f"deleted ['{remote}']"))
-    #
-    #         self.add_log_msg(f'{name} did successful {process} of {remote}.')
+    def handle_pair_array_update(self,
+                                 cmd_runner: str,
+                                 upa_msg: str,
+                                 upa_msg_idx: int) -> None:
+        """Handle update pair array log message.
+
+        Args:
+            cmd_runner: name of thread that did the pair array update
+            upa_msg: message for the pair array update
+            upa_msg_idx: index of the update message in the log
+        """
+        ################################################################
+        # determine whether the update is by create, join, unregister,
+        # or recv_msg
+        ################################################################
+        recv_msg_search = f'{cmd_runner} received msg from [a-z]+'
+        enter_rpa_search = (f'{cmd_runner} entered _refresh_pair_array '
+                            f'at UTC {time_match}')
+        reg_update_search = f'[a-z]+ did registry update at UTC {time_match}'
+        reg_remove_search = ('[a-z]+ removed [a-z]+ from registry for '
+                             'process=(join|unregister)')
+
+        recv_msg_msg, rmm_idx = self.get_log_msg(
+            search_msg=recv_msg_search,
+            skip_num=0,
+            start_idx=0,
+            end_idx=upa_msg_idx,
+            reverse_search=True)
+        if rmm_idx == -1:
+            return  # not a recv_msg update
+
+        enter_rpa_msg, erm_idx = self.get_log_msg(
+            search_msg=enter_rpa_search,
+            skip_num=0,
+            start_idx=rmm_idx,
+            end_idx=upa_msg_idx,
+            reverse_search=True)
+        if erm_idx == -1:
+            return  # not a recv_msg update
+
+        reg_update_msg, rum_idx = self.get_log_msg(
+            search_msg=reg_update_search,
+            skip_num=0,
+            start_idx=rmm_idx,
+            end_idx=upa_msg_idx,
+            reverse_search=True)
+        if rmm_idx < rum_idx:
+            return  # register did the update, not recv_msg
+
+        reg_remove_msg, rrm_idx = self.get_log_msg(
+            search_msg=reg_remove_search,
+            skip_num=0,
+            start_idx=rmm_idx,
+            end_idx=upa_msg_idx,
+            reverse_search=True)
+        if rmm_idx < rrm_idx:
+            return  # join or unregister did the update, not recv_msg
+
+        ################################################################
+        # At this point we know that the recv_msg did the update
+        ################################################################
+        self.update_pair_array(cmd_runner=cmd_runner,
+                               upa_msg=upa_msg)
+        if self.recv_msg_event_items[cmd_runner].post_needed:
+            self.recv_msg_event_items[cmd_runner].recv_event.set()
 
     ####################################################################
     # exit_thread
@@ -5062,11 +5060,13 @@ class ConfigVerifier:
     # handle_exp_status_log_msgs
     ####################################################################
     def handle_exp_status_log_msgs(self,
+                                   log_idx: int,
                                    name: Optional[str] = None
                                    ) -> None:
         """Add a thread to the ConfigVerifier.
 
         Args:
+            log_idx: index of either register or delete msg
             name: name to check to skip log msg
         """
         for a_name, tracker in self.expected_registered.items():
@@ -5075,19 +5075,24 @@ class ConfigVerifier:
             if name and a_name == name:
                 continue
             # we should normally find the message, but if not, try
-            # again after a short sleep to let the log capyure catch up
-            num_tries_remaining = 2
-            while num_tries_remaining > 0:
-                search_msg = f'key = {a_name}, item = SmartThread'
-                num_found = self.status_array_log_counts[a_name]
-                log_msg, log_pos = self.get_log_msg(search_msg=search_msg,
-                                                    skip_num=num_found)
-                if log_msg:
-                    self.status_array_log_counts[a_name] += 1
-                    self.add_log_msg(re.escape(log_msg))
-                    break
-                num_tries_remaining -= 1
-                time.sleep(.5)
+            # again after a short sleep to let the log capture catch up
+            # num_tries_remaining = 2
+            # while num_tries_remaining > 0:
+            search_msg = f'key = {a_name}, item = SmartThread'
+            # num_found = self.status_array_log_counts[a_name]
+            # log_msg, log_pos = self.get_log_msg(search_msg=search_msg,
+            #                                     skip_num=num_found)
+            log_msg, log_pos = self.get_log_msg(search_msg=search_msg,
+                                                skip_num=0,
+                                                start_idx=0,
+                                                end_idx=log_idx,
+                                                reverse_search=True)
+            if log_msg:
+                self.status_array_log_counts[a_name] += 1
+                self.add_log_msg(re.escape(log_msg))
+                # break
+            # num_tries_remaining -= 1
+            # time.sleep(.5)
 
     ####################################################################
     # handle_join
@@ -5287,6 +5292,17 @@ class ConfigVerifier:
             name='handle_recv_msg',
             seq='test_smart_thread.py::ConfigVerifier.handle_recv_msg')
 
+        handle_recv_log_msg = f'{cmd_runner=} handle_recv entry'
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(handle_recv_log_msg)
+
+        self.recv_msg_event_items[cmd_runner] = RecvEventItem(
+            recv_event=threading.Event(),
+            post_needed=True,
+            del_deferred=False,
+            senders=senders.copy()
+        )
+
         if del_deferred:
             with self.ops_lock:
                 for del_sender in del_deferred:
@@ -5315,21 +5331,44 @@ class ConfigVerifier:
 
             assert recvd_msg == exp_msgs[from_name]
 
-            if self.all_threads[cmd_runner].time_last_pair_array_update:
-                update_time = (
-                    self.all_threads[cmd_runner]
-                    .time_last_pair_array_update[-1])
-            else:
-                update_time = datetime(2022, 1, 1)
-            self.dec_ops_count(cmd_runner,
-                               from_name,
-                               update_time=update_time)
-
             recv_log_msg = f"{cmd_runner} received msg from {from_name}"
             self.log_ver.add_msg(
                 log_name='scottbrian_paratools.smart_thread',
                 log_level=logging.INFO,
                 log_msg=recv_log_msg)
+
+            # if self.all_threads[cmd_runner].time_last_pair_array_update:
+            #     update_time = (
+            #         self.all_threads[cmd_runner]
+            #         .time_last_pair_array_update[-1])
+            # else:
+            #     update_time = datetime(2022, 1, 1)
+            # self.dec_ops_count(cmd_runner,
+            #                    from_name,
+            #                    update_time=update_time)
+
+            # with self.ops_lock:
+            #     self.monitor_recv_items.append(MonitorRecvItem())
+            # log_msg = f'{cmd_runner=} handle_recv received msg ' \
+            #           f'from {from_name}'
+            # self.log_ver.add_msg(log_msg=re.escape(log_msg))
+            # logger.debug(log_msg)
+            # while self.monitor_del_items:
+            #     time.sleep(0.1)
+            # log_msg = f'{cmd_runner=} handle_recv exiting'
+            # self.log_ver.add_msg(log_msg=re.escape(log_msg))
+            # logger.debug(log_msg)
+
+        wait_log_msg = f'{cmd_runner=} handle_recv waiting for monitor'
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(wait_log_msg)
+
+        self.recv_msg_event_items[cmd_runner].recv_event.wait()
+
+        log_msg = f'{cmd_runner=} handle_recv exiting'
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(log_msg)
+
 
     ####################################################################
     # handle_recv_msg_tof
@@ -5387,15 +5426,15 @@ class ConfigVerifier:
 
             assert recvd_msg == exp_msgs[from_name]
 
-            if self.all_threads[cmd_runner].time_last_pair_array_update:
-                update_time = (
-                    self.all_threads[cmd_runner]
-                    .time_last_pair_array_update[-1])
-            else:
-                update_time = datetime(2022, 1, 1)
-            self.dec_ops_count(cmd_runner,
-                               from_name,
-                               update_time=update_time)
+            # if self.all_threads[cmd_runner].time_last_pair_array_update:
+            #     update_time = (
+            #         self.all_threads[cmd_runner]
+            #         .time_last_pair_array_update[-1])
+            # else:
+            #     update_time = datetime(2022, 1, 1)
+            # self.dec_ops_count(cmd_runner,
+            #                    from_name,
+            #                    update_time=update_time)
 
             recv_log_msg = f"{cmd_runner} received msg from {from_name}"
             self.log_ver.add_msg(
@@ -5486,15 +5525,15 @@ class ConfigVerifier:
             if 'exit' in enter_exit_list:
                 assert recvd_msg == exp_msgs[from_name]
 
-                if self.all_threads[cmd_runner].time_last_pair_array_update:
-                    update_time = (
-                        self.all_threads[cmd_runner]
-                        .time_last_pair_array_update[-1])
-                else:
-                    update_time = datetime(2022, 1, 1)
-                self.dec_ops_count(cmd_runner,
-                                   from_name,
-                                   update_time=update_time)
+                # if self.all_threads[cmd_runner].time_last_pair_array_update:
+                #     update_time = (
+                #         self.all_threads[cmd_runner]
+                #         .time_last_pair_array_update[-1])
+                # else:
+                #     update_time = datetime(2022, 1, 1)
+                # self.dec_ops_count(cmd_runner,
+                #                    from_name,
+                #                    update_time=update_time)
 
                 recv_log_msg = f"{cmd_runner} received msg from {from_name}"
                 self.log_ver.add_msg(
@@ -5864,6 +5903,59 @@ class ConfigVerifier:
         #     num_remotes=len(unregister_targets),
         #     process='unregister'
         # )
+
+    ####################################################################
+    # unregister_threads
+    ####################################################################
+    def update_pair_array(self,
+                          cmd_runner: str,
+                          upa_msg: str) -> None:
+        """Unregister the named threads.
+
+        Args:
+            cmd_runner: name of thread doing the update
+            upa_msg: message that got us here
+
+        """
+        updated_pair_array_msg_needed = False
+        pair_keys_to_delete = []
+        with self.ops_lock:
+            for pair_key in self.expected_pairs:
+                if pair_key[0] not in self.expected_registered:
+                    del self.expected_pairs[pair_key][pair_key[0]]
+                    updated_pair_array_msg_needed = True
+                    self.add_log_msg(re.escape(
+                        f"{cmd_runner} removed status_blocks entry "
+                        f"for pair_key = {pair_key}, "
+                        f"name = {pair_key[0]}"))
+                if pair_key[1] not in self.expected_registered:
+                    del self.expected_pairs[pair_key][pair_key[1]]
+                    updated_pair_array_msg_needed = True
+                    self.add_log_msg(re.escape(
+                        f"{cmd_runner} removed status_blocks entry "
+                        f"for pair_key = {pair_key}, "
+                        f"name = {pair_key[1]}"))
+                if len(self.expected_pairs[pair_key]) == 1:
+                    remaining_name = self.expected_pairs[pair_key].keys()
+                    if self.expected_pairs[pair_key][
+                            remaining_name].pending_ops_count == 0:
+                        del self.expected_pairs[pair_key][remaining_name]
+                        updated_pair_array_msg_needed = True
+                        self.add_log_msg(re.escape(
+                            f"{cmd_runner} removed status_blocks entry "
+                            f"for pair_key = {pair_key}, "
+                            f"name = {remaining_name}"))
+                if not self.expected_pairs[pair_key]:
+                    pair_keys_to_delete.append(pair_key)
+
+            for pair_key in pair_keys_to_delete:
+                del self.expected_pairs[pair_key]
+                self.add_log_msg(re.escape(
+                    f'{cmd_runner} removed _pair_array entry'
+                    f' for pair_key = {pair_key}'))
+                updated_pair_array_msg_needed = True
+        if updated_pair_array_msg_needed:
+            self.add_log_msg(re.escape(upa_msg))
 
     ####################################################################
     # validate_config
@@ -6856,7 +6948,7 @@ class TestSmartThreadScenarios:
             caplog_to_use=caplog)
 
     ####################################################################
-    # test_smart_thread_msg_timeout_scenarios
+    # test_send_msg_timeout_scenarios
     ####################################################################
     def test_send_msg_timeout_scenarios(
             self,
