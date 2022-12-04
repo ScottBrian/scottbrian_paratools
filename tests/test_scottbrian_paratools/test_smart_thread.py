@@ -2020,50 +2020,227 @@ class MsgType(Enum):
     RecvMsg = auto()
 
 
-class LogItem(ABC):
+class LogSearchItem(ABC):
     """Input to search log msgs."""
     def __init__(self,
                  search_str: str,
-                 target_rtn: Callable[LogItem, None]) -> None:
+                 config_ver: "ConfigVerifier") -> None:
         """Initialize the LogItem.
 
         Args:
             search_str: regex style search string
-            target_rtn: method that handles this msg
+            config_ver: configuration verifier
         """
-        self.search_str: str = search_str
-        self.target_rtn = target_rtn
-        self.found_msg: str = ''
-        self.log_idx: int = 0
-        self.cmd_runner: str = ''
-
-        self.target_name: str = ''
-        self.process_name: str = ''
+        self.search_pattern = re.compile(search_str)
+        self.config_ver: "ConfigVerifier" = config_ver
 
     @abstractmethod
-    def parse_msg(self):
+    def get_found_log_item(self) -> "LogFoundItem":
+        """Return a found log item."""
         pass
 
-
-class EnterRpaLogItem(LogItem):
+class EnterRpaLogSearchItem(LogSearchItem):
     """Input to search log msgs."""
 
     def __init__(self,
-                 search_str: str):
+                 config_ver: "ConfigVerifier") -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+        """
         super().__init__(
             search_str=f'[a-z]+ entered _refresh_pair_array',
-            target_rtn=ConfigVerifier.handle_enter_rpa_log_msg
+            config_ver=config_ver
         )
-        self.search_str: str = search_str
-        self.found_msg: str = ''
-        self.log_idx: int = 0
-        self.cmd_runner: str = ''
-        self.target_name: str = ''
-        self.process_name: str = ''
 
-    def parse_msg(self, found_msg: str):
-        self.found_msg = found_msg
-\
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int) -> "EnterRpaLogFoundItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            EnterRpaLogFoundItem containing found message and index
+        """
+        return EnterRpaLogFoundItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+
+class UpdatePaLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier") -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+        """
+        super().__init__(
+            search_str=f'[a-z]+ updated _pair_array at UTC {time_match}',
+            config_ver=config_ver
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int) -> "UpdatePaLogFoundItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            UpdatePaLogFoundItem containing found message and index
+        """
+        return UpdatePaLogFoundItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+
+class RegUpdateLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier") -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+        """
+        super().__init__(
+            search_str=f'[a-z]+ did registry update at UTC {time_match}',
+            config_ver=config_ver
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int) -> "RegUpdateLogFoundItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            UpdatePaLogFoundItem containing found message and index
+        """
+        return RegUpdateLogFoundItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+
+
+########################################################################
+# LogFoundItem
+########################################################################
+class LogFoundItem(ABC):
+    """Found log item."""
+    def __init__(self,
+                 found_log_msg: str,
+                 found_log_idx: int,
+                 config_ver: "ConfigVerifier") -> None:
+        """Initialize the LogItem.
+
+        Args:
+            found_log_msg: regex style search string
+            found_log_idx: index of log where the msg was found
+            config_ver: configuration verifier
+        """
+        self.found_log_msg: str = found_log_msg
+        self.found_log_idx = found_log_idx
+        self.config_ver: "ConfigVerifier" = config_ver
+
+    @abstractmethod
+    def run_process(self) -> None:
+        """Run the command for the log msg."""
+        pass
+
+
+class EnterRpaLogFoundItem(LogFoundItem):
+    """Found log item."""
+
+    def __init__(self,
+                 found_log_msg: str,
+                 found_log_idx: int,
+                 config_ver: "ConfigVerifier") -> None:
+        """Initialize the LogItem.
+
+        Args:
+            found_log_msg: regex style search string
+            found_log_idx: index of log where the msg was found
+            config_ver: configuration verifier
+        """
+        super().__init__(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=config_ver
+        )
+
+    def run_process(self):
+        self.config_ver.handle_enter_rpa_log_msg(
+            cmd_runner=self.found_log_msg.split(maxsplit=1)[0])
+
+
+class UpdatePaLogFoundItem(LogFoundItem):
+    """Found log item."""
+
+    def __init__(self,
+                 found_log_msg: str,
+                 found_log_idx: int,
+                 config_ver: "ConfigVerifier") -> None:
+        """Initialize the LogItem.
+
+        Args:
+            found_log_msg: regex style search string
+            found_log_idx: index of log where the msg was found
+            config_ver: configuration verifier
+        """
+        super().__init__(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=config_ver
+        )
+
+    def run_process(self):
+        self.config_ver.handle_pair_array_update(
+            cmd_runner=self.found_log_msg.split(maxsplit=1)[0],
+            upa_msg=self.found_log_msg,
+            upa_msg_idx=self.found_log_idx)
+
+class RegUpdateLogFoundItem(LogFoundItem):
+    """Found log item."""
+
+    def __init__(self,
+                 found_log_msg: str,
+                 found_log_idx: int,
+                 config_ver: "ConfigVerifier") -> None:
+        """Initialize the LogItem.
+
+        Args:
+            found_log_msg: regex style search string
+            found_log_idx: index of log where the msg was found
+            config_ver: configuration verifier
+        """
+        super().__init__(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=config_ver
+        )
+
+    def run_process(self):
+        self.config_ver.handle_reg_update(
+            cmd_runner=self.found_log_msg.split(maxsplit=1)[0],
+            reg_update_msg=self.found_log_msg,
+            reg_update_msg_idx=self.found_log_idx)
 
 
 enter_rpa_search = LogSearchItem(
@@ -2181,6 +2358,12 @@ class ConfigVerifier:
         self.found_update_pair_array_log_msgs: dict[str, int] = defaultdict(
             int)
         self.recv_msg_event_items: dict[str, RecvEventItem] = {}
+        self.pending_recv_msg_par: dict[str, bool] = defaultdict(bool)
+
+        self.start_log_idx: int = 0
+        self.log_search_items: tuple[LogSearchItem] = (
+            EnterRpaLogSearchItem(config_ver=self),)
+        self.log_found_items: deque[LogFoundItem] = deque()
 
         self.monitor_thread.start()
 
@@ -2211,6 +2394,157 @@ class ConfigVerifier:
 
         return f'{classname}({parms})'
 
+    # ####################################################################
+    # # monitor
+    # ####################################################################
+    # def monitor(self):
+    #     log_msg = 'monitor entered'
+    #     self.log_ver.add_msg(log_msg=re.escape(log_msg))
+    #     logger.debug(log_msg)
+    #
+    #     enter_rpa_search = f'[a-z]+ entered _refresh_pair_array'
+    #     reg_remove_search = ("[a-z]+ removed [a-z]+ from registry for "
+    #                          "process='(join|unregister)'")
+    #     reg_search_msg = f'[a-z]+ did registry update at UTC {time_match}'
+    #     del_search_msg = '[a-z]+ did successful (unregister|join) of [a-z]+\.'
+    #     upa_search_msg = (f'[a-z]+ updated _pair_array at UTC {time_match}')
+    #     recv_msg_search = f'[a-z]+ received msg from [a-z]+'
+    #
+    #     while not self.monitor_exit:
+    #         # log_msg = 'monitor about to search'
+    #         # self.log_ver.add_msg(log_msg=re.escape(log_msg))
+    #         # logger.debug(log_msg)
+    #
+    #         found_reg_msg, reg_pos = self.get_log_msg(
+    #             search_msg=reg_search_msg,
+    #             skip_num=self.found_reg_log_msgs)
+    #         found_del_msg, del_pos = self.get_log_msg(
+    #             search_msg=del_search_msg,
+    #             skip_num=self.found_del_log_msgs)
+    #         found_upa_msg, upa_pos = self.get_log_msg(
+    #             search_msg=upa_search_msg,
+    #             skip_num=self.found_upa_log_msgs)
+    #         found_rec_msg, rec_pos = self.get_log_msg(
+    #             search_msg=recv_msg_search,
+    #             skip_num=self.found_rec_log_msgs)
+    #
+    #         if (reg_pos == -1
+    #                 and del_pos == -1
+    #                 and upa_pos == -1 and
+    #                 rec_pos == -1):
+    #             time.sleep(.05)
+    #             continue
+    #
+    #         selection_pos: list[int] = []
+    #         if -1 < reg_pos:
+    #             selection_pos.append(reg_pos)
+    #         if -1 < del_pos:
+    #             selection_pos.append(del_pos)
+    #         if -1 < upa_pos:
+    #             selection_pos.append(upa_pos)
+    #         if -1 < rec_pos:
+    #             selection_pos.append(rec_pos)
+    #
+    #         min_pos = min(selection_pos)
+    #
+    #         if min_pos == reg_pos:
+    #             found_del_msg = ''
+    #             found_upa_msg = ''
+    #             found_rec_msg = ''
+    #         elif min_pos == del_pos:
+    #             found_reg_msg = ''
+    #             found_upa_msg = ''
+    #             found_rec_msg = ''
+    #         elif min_pos == upa_pos:
+    #             found_reg_msg = ''
+    #             found_del_msg = ''
+    #             found_rec_msg = ''
+    #         else:
+    #             found_reg_msg = ''
+    #             found_del_msg = ''
+    #             found_upa_msg = ''
+    #
+    #         if found_del_msg:
+    #             log_msg = f'monitor {found_del_msg=}'
+    #             self.log_ver.add_msg(log_msg=re.escape(log_msg))
+    #             logger.debug(log_msg)
+    #
+    #             self.found_del_log_msgs += 1
+    #
+    #             split_msg = found_del_msg.split()
+    #             cmd_runner = split_msg[0]
+    #             process = split_msg[3]
+    #             target_name = split_msg[5].removesuffix('.')
+    #
+    #             self.del_thread(
+    #                 cmd_runner=cmd_runner,
+    #                 del_name=target_name,
+    #                 process=process,
+    #                 del_msg_idx=del_pos)
+    #
+    #             with self.ops_lock:
+    #                 for item in self.monitor_del_items:
+    #                     if (item.cmd_runner == cmd_runner
+    #                             and item.target_name == target_name
+    #                             and item.process_name == 'join'):
+    #                         self.monitor_del_items.remove(item)
+    #                         break
+    #
+    #         if found_reg_msg:
+    #             log_msg = f'monitor {found_reg_msg=}'
+    #             self.log_ver.add_msg(log_msg=re.escape(log_msg))
+    #             logger.debug(log_msg)
+    #
+    #             split_msg = found_reg_msg.split()
+    #             cmd_runner = split_msg[0]
+    #
+    #             with self.ops_lock:
+    #                 for item in self.monitor_add_items:
+    #                     if item.cmd_runner == cmd_runner:
+    #
+    #                         self.add_thread(
+    #                             name=cmd_runner,
+    #                             thread_alive=item.thread_alive,
+    #                             auto_start=item.auto_start,
+    #                             expected_status=item.expected_status,
+    #                             reg_update_msg=found_reg_msg,
+    #                             reg_idx=reg_pos
+    #                         )
+    #                         item.add_event.set()
+    #                         self.monitor_add_items.remove(item)
+    #                         self.found_reg_log_msgs += 1
+    #                         break
+    #
+    #         if found_upa_msg:
+    #             log_msg = f'monitor {found_upa_msg=}'
+    #             self.log_ver.add_msg(log_msg=re.escape(log_msg))
+    #             logger.debug(log_msg)
+    #
+    #             self.found_upa_log_msgs += 1
+    #
+    #             split_msg = found_upa_msg.split()
+    #             cmd_runner = split_msg[0]
+    #
+    #             self.handle_pair_array_update(
+    #                 cmd_runner=cmd_runner,
+    #                 upa_msg=found_upa_msg,
+    #                 upa_msg_idx=upa_pos)
+    #
+    #         if found_rec_msg:
+    #             log_msg = f'monitor {found_rec_msg=}'
+    #             self.log_ver.add_msg(log_msg=re.escape(log_msg))
+    #             logger.debug(log_msg)
+    #
+    #             self.found_rec_log_msgs += 1
+    #
+    #             split_msg = found_rec_msg.split()
+    #             cmd_runner = split_msg[0]
+    #             sender = split_msg[4]
+    #
+    #             self.dec_ops_count(
+    #                 cmd_runner=cmd_runner,
+    #                 sender=sender)
+
     ####################################################################
     # monitor
     ####################################################################
@@ -2219,148 +2553,18 @@ class ConfigVerifier:
         self.log_ver.add_msg(log_msg=re.escape(log_msg))
         logger.debug(log_msg)
 
-        enter_rpa_search = f'[a-z]+ entered _refresh_pair_array'
-        reg_remove_search = ("[a-z]+ removed [a-z]+ from registry for "
-                             "process='(join|unregister)'")
-        reg_search_msg = f'[a-z]+ did registry update at UTC {time_match}'
-        del_search_msg = '[a-z]+ did successful (unregister|join) of [a-z]+\.'
-        upa_search_msg = (f'[a-z]+ updated _pair_array at UTC {time_match}')
-        recv_msg_search = f'[a-z]+ received msg from [a-z]+'
-
         while not self.monitor_exit:
             # log_msg = 'monitor about to search'
             # self.log_ver.add_msg(log_msg=re.escape(log_msg))
             # logger.debug(log_msg)
 
-            found_reg_msg, reg_pos = self.get_log_msg(
-                search_msg=reg_search_msg,
-                skip_num=self.found_reg_log_msgs)
-            found_del_msg, del_pos = self.get_log_msg(
-                search_msg=del_search_msg,
-                skip_num=self.found_del_log_msgs)
-            found_upa_msg, upa_pos = self.get_log_msg(
-                search_msg=upa_search_msg,
-                skip_num=self.found_upa_log_msgs)
-            found_rec_msg, rec_pos = self.get_log_msg(
-                search_msg=recv_msg_search,
-                skip_num=self.found_rec_log_msgs)
+            self.get_log_msgs()
 
-            if (reg_pos == -1
-                    and del_pos == -1
-                    and upa_pos == -1 and
-                    rec_pos == -1):
-                time.sleep(.05)
-                continue
+            while self.log_found_items:
+                found_log_item = self.log_found_items.popleft()
+                found_log_item.run_process()
 
-            selection_pos: list[int] = []
-            if -1 < reg_pos:
-                selection_pos.append(reg_pos)
-            if -1 < del_pos:
-                selection_pos.append(del_pos)
-            if -1 < upa_pos:
-                selection_pos.append(upa_pos)
-            if -1 < rec_pos:
-                selection_pos.append(rec_pos)
-
-            min_pos = min(selection_pos)
-
-            if min_pos == reg_pos:
-                found_del_msg = ''
-                found_upa_msg = ''
-                found_rec_msg = ''
-            elif min_pos == del_pos:
-                found_reg_msg = ''
-                found_upa_msg = ''
-                found_rec_msg = ''
-            elif min_pos == upa_pos:
-                found_reg_msg = ''
-                found_del_msg = ''
-                found_rec_msg = ''
-            else:
-                found_reg_msg = ''
-                found_del_msg = ''
-                found_upa_msg = ''
-
-            if found_del_msg:
-                log_msg = f'monitor {found_del_msg=}'
-                self.log_ver.add_msg(log_msg=re.escape(log_msg))
-                logger.debug(log_msg)
-
-                self.found_del_log_msgs += 1
-
-                split_msg = found_del_msg.split()
-                cmd_runner = split_msg[0]
-                process = split_msg[3]
-                target_name = split_msg[5].removesuffix('.')
-
-                self.del_thread(
-                    cmd_runner=cmd_runner,
-                    del_name=target_name,
-                    process=process,
-                    del_msg_idx=del_pos)
-
-                with self.ops_lock:
-                    for item in self.monitor_del_items:
-                        if (item.cmd_runner == cmd_runner
-                                and item.target_name == target_name
-                                and item.process_name == 'join'):
-                            self.monitor_del_items.remove(item)
-                            break
-
-            if found_reg_msg:
-                log_msg = f'monitor {found_reg_msg=}'
-                self.log_ver.add_msg(log_msg=re.escape(log_msg))
-                logger.debug(log_msg)
-
-                split_msg = found_reg_msg.split()
-                cmd_runner = split_msg[0]
-
-                with self.ops_lock:
-                    for item in self.monitor_add_items:
-                        if item.cmd_runner == cmd_runner:
-
-                            self.add_thread(
-                                name=cmd_runner,
-                                thread_alive=item.thread_alive,
-                                auto_start=item.auto_start,
-                                expected_status=item.expected_status,
-                                reg_update_msg=found_reg_msg,
-                                reg_idx=reg_pos
-                            )
-                            item.add_event.set()
-                            self.monitor_add_items.remove(item)
-                            self.found_reg_log_msgs += 1
-                            break
-
-            if found_upa_msg:
-                log_msg = f'monitor {found_upa_msg=}'
-                self.log_ver.add_msg(log_msg=re.escape(log_msg))
-                logger.debug(log_msg)
-
-                self.found_upa_log_msgs += 1
-
-                split_msg = found_upa_msg.split()
-                cmd_runner = split_msg[0]
-
-                self.handle_pair_array_update(
-                    cmd_runner=cmd_runner,
-                    upa_msg=found_upa_msg,
-                    upa_msg_idx=upa_pos)
-
-            if found_rec_msg:
-                log_msg = f'monitor {found_rec_msg=}'
-                self.log_ver.add_msg(log_msg=re.escape(log_msg))
-                logger.debug(log_msg)
-
-                self.found_rec_log_msgs += 1
-
-                split_msg = found_rec_msg.split()
-                cmd_runner = split_msg[0]
-                sender = split_msg[4]
-
-                self.dec_ops_count(
-                    cmd_runner=cmd_runner,
-                    sender=sender)
+            time.sleep(0.2)
 
     ####################################################################
     # abort_all_f1_threads
@@ -4937,14 +5141,16 @@ class ConfigVerifier:
     # handle_enter_rpa_log_msg
     ####################################################################
     def handle_enter_rpa_log_msg(self,
-                                 log_item: LogItem) -> None:
+                                 cmd_runner: str) -> None:
         """Drive the commands received on the command queue.
 
         Args:
-            log_item: log item for the rpa log msg
+            cmd_runner: name of thread doing the pair arrasy refresh
 
         """
-        pass
+        if self.pending_recv_msg_par[cmd_runner]:
+            self.pending_recv_msg_par = defaultdict(bool)
+            self.pending_recv_msg_par[cmd_runner] = True
 
 
     ####################################################################
@@ -5092,43 +5298,36 @@ class ConfigVerifier:
     ####################################################################
     # get_log_msgs
     ####################################################################
-    def get_log_msgs(self,
-                     search_msgs: list[LogSearchItem],
-                     start_idx: int = 0) -> deque:
-        """Search for a log messages and return them in order.
-
-        Args:
-            search_msgs: log messages to search for as a regex
-            start_idx: index from which to start
-
-        Returns:
-            the log messages if found, otherwise an empty deque
-        """
-        if isinstance(search_msgs, str):
-            search_msgs = [search_msgs]
-
-        ret_deque: deque[MsgType] = deque()
-        search_patterns: list[re.Pattern] = []
-        for search_msg in search_msgs:
-            search_patterns.append(re.compile(search_msg))
+    def get_log_msgs(self):
+        """Search for a log messages and return them in order."""
+        # we should never call with an non-empty deque
+        assert not self.log_found_items
 
         work_log = self.caplog_to_use.record_tuples.copy()
 
         end_idx = len(work_log)
 
-        work_log = work_log[start_idx:end_idx]
+        # return if no new log message have been issued since last call
+        if self.log_start_idx >= end_idx:
+            return
+
+        work_log = work_log[self.log_start_idx:end_idx]
         work_log.reverse()
 
+        start_idx = self.start_log_idx
+        found_idx = start_idx - 1
         for idx, log_tuple in enumerate(work_log):
-            for search_pattern in search_patterns:
-                if search_pattern.match(log_tuple[2]):
-                    ret_idx = start_idx + (len(work_log) - idx) - 1
-                    ret_deque.append(MsgType)
+            for log_search_item in self.log_search_items:
+                if log_search_item.search_pattern.match(log_tuple[2]):
+                    found_idx = start_idx + (len(work_log) - idx) - 1
+                    found_log_item = log_search_item.get_found_log_item(
+                        found_log_msg=log_tuple[2],
+                        log_idx=found_idx
+                    )
+                    self.log_found_items.append(found_log_item)
 
-                    return log_tuple[2], ret_idx
-
-
-        return '', -1
+        # update next starting point
+        self.start_log_idx = found_idx + 1
 
     ####################################################################
     # get_ptime
@@ -5678,6 +5877,38 @@ class ConfigVerifier:
         handle_recv_log_msg = f'{cmd_runner=} handle_recv_tof exiting'
         self.log_ver.add_msg(log_msg=re.escape(handle_recv_log_msg))
         logger.debug(handle_recv_log_msg)
+
+    ####################################################################
+    # handle_reg_update
+    ####################################################################
+    def handle_reg_update(self,
+                          cmd_runner: str,
+                          reg_update_msg: str,
+                          reg_update_msg_log_idx) -> None:
+
+        """Handle the send_cmd execution and log msgs.
+
+        Args:
+            cmd_runner: name of thread doing the cmd
+            reg_update_msg: register update log message
+            reg_update_msg_log_idx: index in the log for the message
+
+        """
+        with self.ops_lock:
+            for item in self.monitor_add_items:
+                if item.cmd_runner == cmd_runner:
+                    self.add_thread(
+                        name=cmd_runner,
+                        thread_alive=item.thread_alive,
+                        auto_start=item.auto_start,
+                        expected_status=item.expected_status,
+                        reg_update_msg=reg_update_msg,
+                        reg_idx=reg_update_msg_log_idx
+                    )
+                    item.add_event.set()
+                    self.monitor_add_items.remove(item)
+                    self.found_reg_log_msgs += 1
+                    break
 
     ####################################################################
     # handle_send_msg
