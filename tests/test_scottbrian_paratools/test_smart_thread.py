@@ -58,6 +58,8 @@ class AppConfig(Enum):
 commander_config_arg_list = [AppConfig.ScriptStyle,
                              AppConfig.CurrentThreadApp,
                              AppConfig.RemoteThreadApp]
+
+
 ########################################################################
 # timeout_type used to specify whether to use timeout on various cmds
 ########################################################################
@@ -73,7 +75,7 @@ class TimeoutType(Enum):
 timeout_type_arg_list = [TimeoutType.TimeoutNone,
                          TimeoutType.TimeoutFalse,
                          TimeoutType.TimeoutTrue]
-timeout_type_arg_list = [TimeoutType.TimeoutTrue]
+# timeout_type_arg_list = [TimeoutType.TimeoutTrue]
 
 ########################################################################
 # Test settings for test_config_build_scenarios
@@ -124,23 +126,22 @@ num_reg_senders_arg_list = [0, 1, 2]
 # Test settings for test_send_msg_timeout_scenarios
 ########################################################################
 num_senders_arg_list = [1, 2, 3]
-num_senders_arg_list = [2]
+# num_senders_arg_list = [2]
 
 num_active_targets_arg_list = [0, 1, 2]
-num_active_targets_arg_list = [0]
+# num_active_targets_arg_list = [0]
 
 num_registered_targets_arg_list = [0, 1, 2]
-num_registered_targets_arg_list = [0]
+# num_registered_targets_arg_list = [0]
 
 num_unreg_timeouts_arg_list = [0, 1, 2]
-num_unreg_timeouts_arg_list = [0]
+# num_unreg_timeouts_arg_list = [0]
 
 num_exit_timeouts_arg_list = [0, 1, 2]
-num_exit_timeouts_arg_list = [1]
+# num_exit_timeouts_arg_list = [1]
 
 num_full_q_timeouts_arg_list = [0, 1, 2]
-num_full_q_timeouts_arg_list = [0]
-
+# num_full_q_timeouts_arg_list = [0]
 
 
 ########################################################################
@@ -2010,6 +2011,97 @@ time_match = (f'{hour_match}:{min_sec_match}:{min_sec_match}\.'
               f'{micro_sec_match}')
 
 
+class MsgType(Enum):
+    EnterRpa = auto()
+    UpdateRpa = auto()
+    Register = auto()
+    RegRemove = auto()
+    Delete = auto()
+    RecvMsg = auto()
+
+
+class LogItem(ABC):
+    """Input to search log msgs."""
+    def __init__(self,
+                 search_str: str,
+                 target_rtn: Callable[LogItem, None]) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            search_str: regex style search string
+            target_rtn: method that handles this msg
+        """
+        self.search_str: str = search_str
+        self.target_rtn = target_rtn
+        self.found_msg: str = ''
+        self.log_idx: int = 0
+        self.cmd_runner: str = ''
+
+        self.target_name: str = ''
+        self.process_name: str = ''
+
+    @abstractmethod
+    def parse_msg(self):
+        pass
+
+
+class EnterRpaLogItem(LogItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 search_str: str):
+        super().__init__(
+            search_str=f'[a-z]+ entered _refresh_pair_array',
+            target_rtn=ConfigVerifier.handle_enter_rpa_log_msg
+        )
+        self.search_str: str = search_str
+        self.found_msg: str = ''
+        self.log_idx: int = 0
+        self.cmd_runner: str = ''
+        self.target_name: str = ''
+        self.process_name: str = ''
+
+    def parse_msg(self, found_msg: str):
+        self.found_msg = found_msg
+\
+
+
+enter_rpa_search = LogSearchItem(
+    msg_type=MsgType.EnterRpa,
+    search_str=f'[a-z]+ entered _refresh_pair_array')
+
+upa_search_msg = LogSearchItem(
+    msg_type=MsgType.UpdateRpa,
+    search_str=f'[a-z]+ updated _pair_array at UTC {time_match}')
+
+reg_search_msg = LogSearchItem(
+    msg_type=MsgType.Register,
+    search_str=f'[a-z]+ did registry update at UTC {time_match}')
+
+reg_remove_search = LogSearchItem(
+    msg_type=MsgType.RegRemove,
+    search_str=("[a-z]+ removed [a-z]+ from registry for "
+                "process='(join|unregister)'"))
+
+del_search_msg = LogSearchItem(
+    msg_type=MsgType.Delete,
+    search_str='[a-z]+ did successful (unregister|join) of [a-z]+\.')
+
+recv_msg_search = LogSearchItem(
+    msg_type=MsgType.RecvMsg,
+    search_str=f'[a-z]+ received msg from [a-z]+')
+
+
+@dataclass
+class LogMsgItem:
+    """Tracks register, join, unregister, and recv_msg log messages."""
+    msg_type: MsgType
+    log_idx: int
+    cmd_runner: str
+    target_name: str
+    process_name: str
+
+
 class ConfigVerifier:
     """Class that tracks and verifies the SmartThread configuration."""
 
@@ -2127,6 +2219,9 @@ class ConfigVerifier:
         self.log_ver.add_msg(log_msg=re.escape(log_msg))
         logger.debug(log_msg)
 
+        enter_rpa_search = f'[a-z]+ entered _refresh_pair_array'
+        reg_remove_search = ("[a-z]+ removed [a-z]+ from registry for "
+                             "process='(join|unregister)'")
         reg_search_msg = f'[a-z]+ did registry update at UTC {time_match}'
         del_search_msg = '[a-z]+ did successful (unregister|join) of [a-z]+\.'
         upa_search_msg = (f'[a-z]+ updated _pair_array at UTC {time_match}')
@@ -2373,15 +2468,6 @@ class ConfigVerifier:
         )
 
         update_pair_array_msg_needed = False
-
-        # log_arrays = list(thread.reg_log_array.copy())
-        # log_arrays.reverse()
-        #
-        # log_array = None
-        # for l_item in log_arrays:
-        #     if l_item.process_name == name:
-        #         log_array = l_item
-        #         break
 
         copy_exp_reg_keys = list(self.expected_registered.keys())
         # copy_exp_reg_keys = list(log_array.status_array.keys()) + [name]
@@ -4558,8 +4644,6 @@ class ConfigVerifier:
             # log_arrays = self.all_threads[name].join_log_array.copy()
             from_status = st.ThreadStatus.Alive
         else:
-            # process_names = self.all_threads[name].unregister_names.copy()
-            # log_arrays = self.all_threads[name].unreg_log_array.copy()
             from_status = st.ThreadStatus.Registered
 
         # process_names.rotate(num_remotes)
@@ -4777,8 +4861,8 @@ class ConfigVerifier:
         recv_msg_search = f'{cmd_runner} received msg from [a-z]+'
         enter_rpa_search = f'{cmd_runner} entered _refresh_pair_array'
         reg_update_search = f'[a-z]+ did registry update at UTC {time_match}'
-        reg_remove_search = ('[a-z]+ removed [a-z]+ from registry for '
-                             'process=(join|unregister)')
+        reg_remove_search = ("[a-z]+ removed [a-z]+ from registry for "
+                             "process='(join|unregister)'")
 
         recv_msg_msg, rmm_idx = self.get_log_msg(
             search_msg=recv_msg_search,
@@ -4848,6 +4932,20 @@ class ConfigVerifier:
         hpau_log_msg = f'handle_pair_array_update exit for {cmd_runner=}'
         self.log_ver.add_msg(log_msg=re.escape(hpau_log_msg))
         logger.debug(hpau_log_msg)
+
+    ####################################################################
+    # handle_enter_rpa_log_msg
+    ####################################################################
+    def handle_enter_rpa_log_msg(self,
+                                 log_item: LogItem) -> None:
+        """Drive the commands received on the command queue.
+
+        Args:
+            log_item: log item for the rpa log msg
+
+        """
+        pass
+
 
     ####################################################################
     # exit_thread
@@ -4988,6 +5086,47 @@ class ConfigVerifier:
                         ret_idx = start_idx + idx
                     return log_tuple[2], ret_idx
                 num_skipped += 1
+
+        return '', -1
+
+    ####################################################################
+    # get_log_msgs
+    ####################################################################
+    def get_log_msgs(self,
+                     search_msgs: list[LogSearchItem],
+                     start_idx: int = 0) -> deque:
+        """Search for a log messages and return them in order.
+
+        Args:
+            search_msgs: log messages to search for as a regex
+            start_idx: index from which to start
+
+        Returns:
+            the log messages if found, otherwise an empty deque
+        """
+        if isinstance(search_msgs, str):
+            search_msgs = [search_msgs]
+
+        ret_deque: deque[MsgType] = deque()
+        search_patterns: list[re.Pattern] = []
+        for search_msg in search_msgs:
+            search_patterns.append(re.compile(search_msg))
+
+        work_log = self.caplog_to_use.record_tuples.copy()
+
+        end_idx = len(work_log)
+
+        work_log = work_log[start_idx:end_idx]
+        work_log.reverse()
+
+        for idx, log_tuple in enumerate(work_log):
+            for search_pattern in search_patterns:
+                if search_pattern.match(log_tuple[2]):
+                    ret_idx = start_idx + (len(work_log) - idx) - 1
+                    ret_deque.append(MsgType)
+
+                    return log_tuple[2], ret_idx
+
 
         return '', -1
 

@@ -489,10 +489,6 @@ class SmartThread:
         self.time_last_registry_update: deque[datetime] = deque([], 32)
         self.join_names: deque[str] = deque([], 32)
         self.join_log_array: deque[SmartThread.LogStatusBlocks] = deque([], 32)
-        self.unregister_names: deque[str] = deque([], 32)
-        self.unreg_log_array: deque[SmartThread.LogStatusBlocks] = deque([],
-                                                                         32)
-        self.reg_log_array: deque[SmartThread.LogStatusBlocks] = deque([], 32)
 
         # register this new SmartThread so others can find us
         self._register()
@@ -590,11 +586,7 @@ class SmartThread:
                               f'class name = {self.__class__.__name__}')
 
             # Remove any old entries
-            status_array = self._clean_up_registry(process='register')
-            self.reg_log_array.append(
-                SmartThread.LogStatusBlocks(
-                    process_name=self.name,
-                    status_array=status_array))
+            self._clean_up_registry(process='register')
 
             # Add entry if not already present
             if self.name not in SmartThread._registry:
@@ -752,15 +744,6 @@ class SmartThread:
         # get SetupBlock with targets in a set and a timer object
         sb = self._common_setup(targets=targets, timeout=None)
 
-        # if caller specified a log message to issue
-        # log_msg_part2 = ''
-        # if log_msg and self.debug_logging_enabled:
-        #     log_msg_part2 = (
-        #         f'{self.name} to unregister {sb.targets} '
-        #         f'{get_formatted_call_sequence(latest=1, depth=1)} '
-        #         f'{log_msg}')
-        #     self.logger.debug(
-        #         f'unregister() entered: {log_msg_part2}')
         if log_msg and self.debug_logging_enabled:
             exit_log_msg = self._issue_entry_log_msg(
                 prefix=f'{self.name} to unregister {sb.targets}.',
@@ -791,13 +774,8 @@ class SmartThread:
                         target_thread=SmartThread._registry[remote],
                         new_status=ThreadStatus.Stopped)
                     # remove this thread from the registry
-                    status_array = self._clean_up_registry(
-                        process='unregister')
-                    self.unregister_names.append(remote)
-                    self.unreg_log_array.append(
-                        SmartThread.LogStatusBlocks(
-                            process_name=remote,
-                            status_array=status_array))
+                    self._clean_up_registry(process='unregister')
+
                     self.logger.debug(
                         f'{self.name} did successful unregister of '
                         f'{remote}.')
