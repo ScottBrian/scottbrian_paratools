@@ -328,16 +328,6 @@ class SmartThread:
     _pair_array_last_update: datetime = datetime(
         2000, 1, 1, 12, 0, 1)
 
-    @dataclass
-    class LogStatusBlock:
-        is_alive: bool
-        status: ThreadStatus
-
-    @dataclass
-    class LogStatusBlocks:
-        process_name: str
-        status_array: dict[str, "SmartThread.LogStatusBlock"]
-
     ####################################################################
     # __init__
     ####################################################################
@@ -483,13 +473,6 @@ class SmartThread:
         # _refresh_remote_array.
         self.remote_array: dict[str, SmartThread.ConnectionStatusBlock] = {}
 
-        # The following deques are used for testing and diagnostic
-        # purposes only.
-        self.time_last_pair_array_update: deque[datetime] = deque([], 32)
-        self.time_last_registry_update: deque[datetime] = deque([], 32)
-        self.join_names: deque[str] = deque([], 32)
-        self.join_log_array: deque[SmartThread.LogStatusBlocks] = deque([], 32)
-
         # register this new SmartThread so others can find us
         self._register()
 
@@ -595,8 +578,6 @@ class SmartThread:
                     target_thread=self,
                     new_status=ThreadStatus.Registered)
                 SmartThread._registry_last_update = datetime.utcnow()
-                self.time_last_registry_update.append(
-                    SmartThread._registry_last_update)
                 print_time = (SmartThread._registry_last_update
                               .strftime("%H:%M:%S.%f"))
                 self.logger.debug(
@@ -612,7 +593,7 @@ class SmartThread:
     ####################################################################
     def _clean_up_registry(self,
                            process: str
-                           ) -> dict[str, "SmartThread.LogStatusBlock"]:
+                           ) -> None:
         """Clean up any old not alive items in the registry.
 
         Args:
@@ -629,14 +610,10 @@ class SmartThread:
 
         """
         # Remove any old entries
-        ret_log_status_array: dict[str, "SmartThread.LogStatusBlock"] = {}
         keys_to_del = []
         for key, item in SmartThread._registry.items():
             is_alive: bool = item.thread.is_alive()
             status: ThreadStatus = item.status
-            ret_log_status_array[key] = SmartThread.LogStatusBlock(
-                is_alive=is_alive,
-                status=status)
             self.logger.debug(
                 f'key = {key}, item = {item}, '
                 f'item.thread.is_alive() = {is_alive}, '
@@ -666,13 +643,10 @@ class SmartThread:
         if changed:
             self._refresh_pair_array()
             SmartThread._registry_last_update = datetime.utcnow()
-            self.time_last_registry_update.append(
-                SmartThread._registry_last_update)
             print_time = (SmartThread._registry_last_update
                           .strftime("%H:%M:%S.%f"))
             self.logger.debug(f'{self.name} did cleanup of registry at UTC '
                               f'{print_time}, deleted {keys_to_del}')
-        return ret_log_status_array
 
     ####################################################################
     # start
@@ -898,13 +872,9 @@ class SmartThread:
                                 target_thread=SmartThread._registry[remote],
                                 new_status=ThreadStatus.Stopped)
                             # remove this thread from the registry
-                            status_array = self._clean_up_registry(
+                            self._clean_up_registry(
                                 process='join')
-                            self.join_names.append(remote)
-                            self.join_log_array.append(
-                                SmartThread.LogStatusBlocks(
-                                    process_name=remote,
-                                    status_array=status_array))
+
                             self.logger.debug(
                                 f'{self.name} did successful join of '
                                 f'{remote}.')
@@ -1090,9 +1060,6 @@ class SmartThread:
 
         if changed:
             SmartThread._pair_array_last_update = datetime.utcnow()
-            self.time_last_pair_array_update.append(
-                SmartThread._pair_array_last_update)
-
             print_time = (SmartThread._pair_array_last_update
                           .strftime("%H:%M:%S.%f"))
             self.logger.debug(
@@ -1101,8 +1068,7 @@ class SmartThread:
         # Update time_last_remote_check now that we know about any
         # changes. We must do this while still locked to avoid
         # missing an update by the remote.
-        self.time_last_remote_check = (SmartThread
-                                       ._pair_array_last_update)
+        self.time_last_remote_check = SmartThread._pair_array_last_update
 
     ####################################################################
     # send_msg

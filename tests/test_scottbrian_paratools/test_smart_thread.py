@@ -52,6 +52,7 @@ class AppConfig(Enum):
     CurrentThreadApp = auto()
     RemoteThreadApp = auto()
 
+
 ########################################################################
 # Test settings
 ########################################################################
@@ -1988,12 +1989,14 @@ class MonitorAddItem:
     expected_status: st.ThreadStatus
     add_event: threading.Event
 
+
 @dataclass
 class RecvEventItem:
     """Class keeps track of threads to add, start, delete, unreg."""
     recv_event: threading.Event
     deferred_post_needed: bool
     senders: list[str]
+
 
 @dataclass
 class MonitorItem:
@@ -2009,15 +2012,6 @@ min_sec_match = '[0-5][0-9]'
 micro_sec_match = '[0-9]{6,6}'
 time_match = (f'{hour_match}:{min_sec_match}:{min_sec_match}\.'
               f'{micro_sec_match}')
-
-
-class MsgType(Enum):
-    EnterRpa = auto()
-    UpdateRpa = auto()
-    Register = auto()
-    RegRemove = auto()
-    Delete = auto()
-    RecvMsg = auto()
 
 
 ########################################################################
@@ -2038,8 +2032,18 @@ class LogSearchItem(ABC):
         self.config_ver: "ConfigVerifier" = config_ver
 
     @abstractmethod
-    def get_found_log_item(self) -> "LogFoundItem":
-        """Return a found log item."""
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int) -> "LogFoundItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            LogFoundItem containing found message and index
+        """
         pass
 
 
@@ -2225,6 +2229,42 @@ class JoinUnregLogSearchItem(LogSearchItem):
 
 
 ########################################################################
+# RecvMsgLogSearchItem
+########################################################################
+class RecvMsgLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier") -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+        """
+        super().__init__(
+            search_str=f'[a-z]+ received msg from [a-z]+',
+            config_ver=config_ver
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int) -> "RecvMsgLogFoundItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            UpdatePaLogFoundItem containing found message and index
+        """
+        return RecvMsgLogFoundItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+
+########################################################################
 # LogFoundItem
 ########################################################################
 class LogFoundItem(ABC):
@@ -2307,6 +2347,7 @@ class UpdatePaLogFoundItem(LogFoundItem):
             upa_msg=self.found_log_msg,
             upa_msg_idx=self.found_log_idx)
 
+
 ########################################################################
 # RegUpdateLogFoundItem
 ########################################################################
@@ -2334,7 +2375,7 @@ class RegUpdateLogFoundItem(LogFoundItem):
         self.config_ver.handle_reg_update(
             cmd_runner=self.found_log_msg.split(maxsplit=1)[0],
             reg_update_msg=self.found_log_msg,
-            reg_update_msg_idx=self.found_log_idx)
+            reg_update_msg_log_idx=self.found_log_idx)
 
 
 ########################################################################
@@ -2396,42 +2437,43 @@ class JoinUnregLogFoundItem(LogFoundItem):
         )
 
 
+########################################################################
+# RecvMsgLogFoundItem
+########################################################################
+class RecvMsgLogFoundItem(LogFoundItem):
+    """Found log item."""
+
+    def __init__(self,
+                 found_log_msg: str,
+                 found_log_idx: int,
+                 config_ver: "ConfigVerifier") -> None:
+        """Initialize the LogItem.
+
+        Args:
+            found_log_msg: regex style search string
+            found_log_idx: index of log where the msg was found
+            config_ver: configuration verifier
+        """
+        super().__init__(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=config_ver
+        )
+
+    def run_process(self):
+        split_msg = self.found_log_msg.split()
+
+        self.config_ver.dec_ops_count(
+            cmd_runner=split_msg[0],
+            sender=split_msg[4])
 
 
-enter_rpa_search = LogSearchItem(
-    msg_type=MsgType.EnterRpa,
-    search_str=f'[a-z]+ entered _refresh_pair_array')
-
-upa_search_msg = LogSearchItem(
-    msg_type=MsgType.UpdateRpa,
-    search_str=f'[a-z]+ updated _pair_array at UTC {time_match}')
-
-reg_search_msg = LogSearchItem(
-    msg_type=MsgType.Register,
-    search_str=f'[a-z]+ did registry update at UTC {time_match}')
-
-reg_remove_search = LogSearchItem(
-    msg_type=MsgType.RegRemove,
-    search_str=("[a-z]+ removed [a-z]+ from registry for "
-                "process='(join|unregister)'"))
-
-del_search_msg = LogSearchItem(
-    msg_type=MsgType.Delete,
-    search_str='[a-z]+ did successful (unregister|join) of [a-z]+\.')
-
-recv_msg_search = LogSearchItem(
-    msg_type=MsgType.RecvMsg,
-    search_str=f'[a-z]+ received msg from [a-z]+')
-
-
-@dataclass
-class LogMsgItem:
-    """Tracks register, join, unregister, and recv_msg log messages."""
-    msg_type: MsgType
-    log_idx: int
-    cmd_runner: str
-    target_name: str
-    process_name: str
+LogSearchItems: TypeAlias = Union[EnterRpaLogSearchItem,
+                                  UpdatePaLogSearchItem,
+                                  RegUpdateLogSearchItem,
+                                  RegRemoveLogSearchItem,
+                                  JoinUnregLogSearchItem,
+                                  RecvMsgLogSearchItem]
 
 
 class ConfigVerifier:
@@ -2514,9 +2556,15 @@ class ConfigVerifier:
         self.recv_msg_event_items: dict[str, RecvEventItem] = {}
         self.pending_recv_msg_par: dict[str, bool] = defaultdict(bool)
 
-        self.start_log_idx: int = 0
-        self.log_search_items: tuple[LogSearchItem] = (
-            EnterRpaLogSearchItem(config_ver=self),)
+        self.log_start_idx: int = 0
+        self.log_search_items: tuple[LogSearchItems, ...] = (
+            EnterRpaLogSearchItem(config_ver=self),
+            UpdatePaLogSearchItem(config_ver=self),
+            RegUpdateLogSearchItem(config_ver=self),
+            RegRemoveLogSearchItem(config_ver=self),
+            JoinUnregLogSearchItem(config_ver=self),
+            RecvMsgLogSearchItem(config_ver=self)
+        )
         self.log_found_items: deque[LogFoundItem] = deque()
 
         self.monitor_thread.start()
@@ -4940,6 +4988,9 @@ class ConfigVerifier:
                     f'dec_ops_count for for pair_key {pair_key}, '
                     f'name {cmd_runner} was decremented below zero')
 
+            # indicate that this thread might need to update pair array
+            self.pending_recv_msg_par[cmd_runner] = True
+
             # remove sender from list if deferred delete is not needed
             self.recv_msg_event_items[cmd_runner].senders.remove(sender)
 
@@ -4990,26 +5041,12 @@ class ConfigVerifier:
         self.log_ver.add_msg(log_msg=re.escape(log_msg))
         logger.debug(log_msg)
 
-        # copy_reg_deque = (
-        #     self.all_threads[name].time_last_registry_update.copy())
-        # copy_pair_deque = (
-        #     self.all_threads[cmd_runner].time_last_pair_array_update.copy())
-        # copy_reg_deque.rotate(num_remotes)
-        # copy_pair_deque.rotate(1)
         updated_pair_array_msg_needed = False
         if process == 'join':
-            # process_names = self.all_threads[name].join_names.copy()
-            # log_arrays = self.all_threads[name].join_log_array.copy()
             from_status = st.ThreadStatus.Alive
         else:
             from_status = st.ThreadStatus.Registered
 
-        # process_names.rotate(num_remotes)
-        # log_arrays.rotate(num_remotes)
-
-        # for idx in range(num_remotes):
-        # remote = process_names.popleft()
-        # log_array = log_arrays.popleft()
         self.expected_registered[del_name].is_alive = False
         self.expected_registered[del_name].status = st.ThreadStatus.Stopped
         self.add_log_msg(
@@ -5354,22 +5391,24 @@ class ConfigVerifier:
             return
 
         work_log = work_log[self.log_start_idx:end_idx]
-        work_log.reverse()
+        # work_log.reverse()
 
-        start_idx = self.start_log_idx
+        start_idx = self.log_start_idx
         found_idx = start_idx - 1
+
         for idx, log_tuple in enumerate(work_log):
             for log_search_item in self.log_search_items:
                 if log_search_item.search_pattern.match(log_tuple[2]):
-                    found_idx = start_idx + (len(work_log) - idx) - 1
+                    # found_idx = start_idx + (len(work_log) - idx) - 1
+                    found_idx = start_idx + idx
                     found_log_item = log_search_item.get_found_log_item(
                         found_log_msg=log_tuple[2],
-                        log_idx=found_idx
+                        found_log_idx=found_idx
                     )
                     self.log_found_items.append(found_log_item)
 
         # update next starting point
-        self.start_log_idx = found_idx + 1
+        self.log_start_idx = found_idx + 1
 
     ####################################################################
     # get_ptime
@@ -5717,74 +5756,82 @@ class ConfigVerifier:
         hpau_log_msg = f'handle_pair_array_update entry for {cmd_runner=}'
         self.log_ver.add_msg(log_msg=re.escape(hpau_log_msg))
         logger.debug(hpau_log_msg)
-        ################################################################
-        # determine whether the update is by create, join, unregister,
-        # or recv_msg
-        ################################################################
-        recv_msg_search = f'{cmd_runner} received msg from [a-z]+'
-        enter_rpa_search = f'{cmd_runner} entered _refresh_pair_array'
-        reg_update_search = f'[a-z]+ did registry update at UTC {time_match}'
-        reg_remove_search = ("[a-z]+ removed [a-z]+ from registry for "
-                             "process='(join|unregister)'")
 
-        recv_msg_msg, rmm_idx = self.get_log_msg(
-            search_msg=recv_msg_search,
-            skip_num=0,
-            start_idx=0,
-            end_idx=upa_msg_idx,
-            reverse_search=True)
-        if rmm_idx == -1:
-            hpau_log_msg = (f'handle_pair_array_update for {cmd_runner=} '
-                            f'returning: recv_msg not found')
-            self.log_ver.add_msg(log_msg=re.escape(hpau_log_msg))
-            logger.debug(hpau_log_msg)
-            return  # not a recv_msg update
+        # if this is not for recv_msg then we have nothing to do here
+        if not self.pending_recv_msg_par[cmd_runner]:
+            return
 
-        enter_rpa_msg, erm_idx = self.get_log_msg(
-            search_msg=enter_rpa_search,
-            skip_num=0,
-            start_idx=rmm_idx,
-            end_idx=upa_msg_idx,
-            reverse_search=True)
-        if erm_idx == -1:
-            hpau_log_msg = (f'handle_pair_array_update for {cmd_runner=} '
-                            f'returning: enter _refresh_pair_array not found')
-            self.log_ver.add_msg(log_msg=re.escape(hpau_log_msg))
-            logger.debug(hpau_log_msg)
-            return  # not a recv_msg update
-
-        reg_update_msg, rum_idx = self.get_log_msg(
-            search_msg=reg_update_search,
-            skip_num=0,
-            start_idx=rmm_idx,
-            end_idx=upa_msg_idx,
-            reverse_search=True)
-        if rmm_idx < rum_idx:
-            hpau_log_msg = (f'handle_pair_array_update for {cmd_runner=} '
-                            f'returning: reg update found after recv_msg')
-            self.log_ver.add_msg(log_msg=re.escape(hpau_log_msg))
-            logger.debug(hpau_log_msg)
-            return  # register did the update, not recv_msg
-
-        reg_remove_msg, rrm_idx = self.get_log_msg(
-            search_msg=reg_remove_search,
-            skip_num=0,
-            start_idx=rmm_idx,
-            end_idx=upa_msg_idx,
-            reverse_search=True)
-        if rmm_idx < rrm_idx:
-            hpau_log_msg = (f'handle_pair_array_update for {cmd_runner=} '
-                            f'returning: reg remove found after recv_msg')
-            self.log_ver.add_msg(log_msg=re.escape(hpau_log_msg))
-            logger.debug(hpau_log_msg)
-            return  # join or unregister did the update, not recv_msg
+        # ################################################################
+        # # determine whether the update is by create, join, unregister,
+        # # or recv_msg
+        # ################################################################
+        # recv_msg_search = f'{cmd_runner} received msg from [a-z]+'
+        # enter_rpa_search = f'{cmd_runner} entered _refresh_pair_array'
+        # reg_update_search = f'[a-z]+ did registry update at UTC {time_match}'
+        # reg_remove_search = ("[a-z]+ removed [a-z]+ from registry for "
+        #                      "process='(join|unregister)'")
+        #
+        # recv_msg_msg, rmm_idx = self.get_log_msg(
+        #     search_msg=recv_msg_search,
+        #     skip_num=0,
+        #     start_idx=0,
+        #     end_idx=upa_msg_idx,
+        #     reverse_search=True)
+        # if rmm_idx == -1:
+        #     hpau_log_msg = (f'handle_pair_array_update for {cmd_runner=} '
+        #                     f'returning: recv_msg not found')
+        #     self.log_ver.add_msg(log_msg=re.escape(hpau_log_msg))
+        #     logger.debug(hpau_log_msg)
+        #     return  # not a recv_msg update
+        #
+        # enter_rpa_msg, erm_idx = self.get_log_msg(
+        #     search_msg=enter_rpa_search,
+        #     skip_num=0,
+        #     start_idx=rmm_idx,
+        #     end_idx=upa_msg_idx,
+        #     reverse_search=True)
+        # if erm_idx == -1:
+        #     hpau_log_msg = (f'handle_pair_array_update for {cmd_runner=} '
+        #                     f'returning: enter _refresh_pair_array not found')
+        #     self.log_ver.add_msg(log_msg=re.escape(hpau_log_msg))
+        #     logger.debug(hpau_log_msg)
+        #     return  # not a recv_msg update
+        #
+        # reg_update_msg, rum_idx = self.get_log_msg(
+        #     search_msg=reg_update_search,
+        #     skip_num=0,
+        #     start_idx=rmm_idx,
+        #     end_idx=upa_msg_idx,
+        #     reverse_search=True)
+        # if rmm_idx < rum_idx:
+        #     hpau_log_msg = (f'handle_pair_array_update for {cmd_runner=} '
+        #                     f'returning: reg update found after recv_msg')
+        #     self.log_ver.add_msg(log_msg=re.escape(hpau_log_msg))
+        #     logger.debug(hpau_log_msg)
+        #     return  # register did the update, not recv_msg
+        #
+        # reg_remove_msg, rrm_idx = self.get_log_msg(
+        #     search_msg=reg_remove_search,
+        #     skip_num=0,
+        #     start_idx=rmm_idx,
+        #     end_idx=upa_msg_idx,
+        #     reverse_search=True)
+        # if rmm_idx < rrm_idx:
+        #     hpau_log_msg = (f'handle_pair_array_update for {cmd_runner=} '
+        #                     f'returning: reg remove found after recv_msg')
+        #     self.log_ver.add_msg(log_msg=re.escape(hpau_log_msg))
+        #     logger.debug(hpau_log_msg)
+        #     return  # join or unregister did the update, not recv_msg
 
         ################################################################
         # At this point we know that the recv_msg did the update
         ################################################################
-        self.add_log_msg(re.escape(enter_rpa_msg))
+        self.add_log_msg(re.escape(
+            f'{cmd_runner} entered _refresh_pair_array'))
+
         self.update_pair_array(cmd_runner=cmd_runner,
                                upa_msg=upa_msg)
+
         if self.recv_msg_event_items[cmd_runner].deferred_post_needed:
             self.recv_msg_event_items[cmd_runner].recv_event.set()
             hpau_log_msg = (f'handle_pair_array_update for {cmd_runner=} '
@@ -6077,9 +6124,8 @@ class ConfigVerifier:
 
         """Handle the send_cmd execution and log msgs."""
         with self.ops_lock:
-            # a reg remove means that a recv_msg is no longer pending
+            # reg remove means that recv_msgs are no longer pending
             self.pending_recv_msg_par = defaultdict(bool)
-
 
     ####################################################################
     # handle_reg_update
@@ -6098,7 +6144,7 @@ class ConfigVerifier:
 
         """
         with self.ops_lock:
-            # a reg update means that a recv_msg is no longer pending
+            # reg update means that recv_msgs are no longer pending
             self.pending_recv_msg_par = defaultdict(bool)
 
             found_add_item = False
