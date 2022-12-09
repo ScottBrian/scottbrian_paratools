@@ -508,9 +508,10 @@ class SmartThread:
                 if key == 'target':
                     function_name = item.__name__
                     parms += ', ' + f'{key}={function_name}'
-                elif key in ('args', 'thread', 'default_timeout'):
-                    parms += ', ' + f'{key}={item}'
+                elif key in ('args', 'default_timeout'):
 
+                    parms += ', ' + f'{key}={item}'
+        # elif key in ('args', 'thread', 'default_timeout'):
         return f'{classname}({parms})'
 
     ####################################################################
@@ -664,12 +665,17 @@ class SmartThread:
         f1 beta entered
 
         """
+        # self.logger.debug(
+        #     f'{self.name} entry: start, thread.is_alive() = '
+        #     f'{self.thread.is_alive()}, '
+        #     f'status: {self.status}')
         with sel.SELockExcl(SmartThread._registry_lock):
             if not self.thread.is_alive():
                 self._set_status(
                     target_thread=self,
                     new_status=ThreadStatus.Starting)
-                self.thread.start()
+                # self.thread.start()
+                threading.Thread.start(self.thread)
 
             if self.thread.is_alive():
                 self._set_status(
@@ -1124,12 +1130,6 @@ class SmartThread:
         # get SetupBlock with targets in a set and a timer object
         sb = self._common_setup(targets=targets, timeout=timeout)
 
-        # if caller specified a log message to issue
-        # caller_info = ''
-        # if log_msg and self.debug_logging_enabled:
-        #     caller_info = get_formatted_call_sequence(latest=1, depth=1)
-        #     self.logger.debug(f'send_msg() entered: {self.name} -> {targets} '
-        #                       f'{caller_info} {log_msg}')
         if log_msg and self.debug_logging_enabled:
             exit_log_msg = self._issue_entry_log_msg(
                 prefix=f'{self.name} -> {targets}.',
@@ -1146,25 +1146,25 @@ class SmartThread:
                 pair_key = self._get_pair_key(self.name, remote)
                 with sel.SELockShare(SmartThread._registry_lock):
                     # If the remote is not yet ready, continue with
-                    # the next remote in the list
-                    if remote not in SmartThread._registry:
+                    # the next remote in the list.
+                    # We are OK with leaving a message in the receiver
+                    # msg_q if we think there is a chance the receiver
+                    # will recv_msg to get it. But, if the receiver is
+                    # stopped and is on its way out, its msg_q will be
+                    # deleted and the message will be lost. So we will
+                    # check for this and continue to wait in hopes that
+                    # the thread will be resurrected.
+                    if (remote not in SmartThread._registry
+                            or ((not SmartThread._registry[
+                                remote].thread.is_alive())
+                                and (SmartThread._registry[remote].status
+                                & (ThreadStatus.Alive
+                                   | ThreadStatus.Stopped)))):
                         self.remotes_unregistered |= {remote}
                         continue
 
-                    if not SmartThread._registry[remote].thread.is_alive():
-                        # we need to check the status for Alive or
-                        # Stopped before raising the not alive error
-                        # since the thread could be registered but not
-                        # yet started, in which case we need to give it
-                        # more time
-                        if (SmartThread._registry[remote].status
-                                & (ThreadStatus.Alive
-                                   | ThreadStatus.Stopped)):
-                            raise SmartThreadRemoteThreadNotAlive(
-                                f'{self.name} send_msg detected {remote} '
-                                'thread is not alive.')
                     # If here, remote is in registry and is alive or
-                    # hopefully soon to be alive.
+                    # will hopefully soon be alive.
                     # This also means we have an entry for the remote in
                     # the status_blocks in the connection array
                     try:
