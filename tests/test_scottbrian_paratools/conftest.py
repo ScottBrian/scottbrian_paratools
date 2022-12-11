@@ -35,6 +35,16 @@ logging.basicConfig(filename='ThreadComm.log',
                            '%(lineno)d '
                            '%(message)s')
 
+# logging.basicConfig(filename='ThreadComm.log',
+#                     filemode='w',
+#                     level=logging.DEBUG,
+#                     format='%(created)s '
+#                            '%(threadName)s '
+#                            '%(filename)s:'
+#                            '%(funcName)s:'
+#                            '%(lineno)d '
+#                            '%(message)s')
+
 logger = logging.getLogger(__name__)
 
 

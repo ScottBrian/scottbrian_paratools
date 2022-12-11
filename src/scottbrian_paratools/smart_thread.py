@@ -58,7 +58,7 @@ import queue
 import sys
 import threading
 import time
-from typing import (Any, Callable, ClassVar, Optional, Type,
+from typing import (Any, Callable, ClassVar, Optional, Type, TypeAlias,
                     TYPE_CHECKING, Union)
 
 ########################################################################
@@ -72,6 +72,9 @@ from scottbrian_utils.diag_msg import get_formatted_call_sequence
 from scottbrian_utils.timer import Timer
 from scottbrian_locking import se_lock as sel
 
+
+IntFloat: TypeAlias = Union[int, float]
+OptIntFloat: TypeAlias = Optional[IntFloat]
 
 ########################################################################
 # SmartThread class exceptions
@@ -338,7 +341,7 @@ class SmartThread:
                  kwargs: Optional[dict[str, Any]] = None,
                  thread: Optional[threading.Thread] = None,
                  auto_start: Optional[bool] = True,
-                 default_timeout: Optional[Union[int, float]] = None,
+                 default_timeout: OptIntFloat = None,
                  max_msgs: Optional[int] = 0
                  ) -> None:
         """Initialize an instance of the SmartThread class.
@@ -508,9 +511,9 @@ class SmartThread:
                 if key == 'target':
                     function_name = item.__name__
                     parms += ', ' + f'{key}={function_name}'
-                elif key in ('args', 'default_timeout'):
-
-                    parms += ', ' + f'{key}={item}'
+                elif key in ('args', 'thread', 'default_timeout'):
+                    if item is not self:  # avoid recursive repr loop
+                        parms += ', ' + f'{key}={item}'
         # elif key in ('args', 'thread', 'default_timeout'):
         return f'{classname}({parms})'
 
@@ -782,7 +785,7 @@ class SmartThread:
     def join(self, *,
              targets: Union[str, set[str]],
              log_msg: Optional[str] = None,
-             timeout: Optional[Union[int, float]] = None) -> None:
+             timeout: OptIntFloat = None) -> None:
         """Join with remote targets.
 
         Args:
@@ -1083,7 +1086,7 @@ class SmartThread:
                  targets: Union[str, set[str]],
                  msg: Any,
                  log_msg: Optional[str] = None,
-                 timeout: Optional[Union[int, float]] = None) -> None:
+                 timeout: OptIntFloat = None) -> None:
         """Send a msg.
 
         Args:
@@ -1224,7 +1227,7 @@ class SmartThread:
     def recv_msg(self,
                  remote: str,
                  log_msg: Optional[str] = None,
-                 timeout: Optional[Union[int, float]] = None) -> Any:
+                 timeout: OptIntFloat = None) -> Any:
         """Receive a msg.
 
         Args:
@@ -1352,7 +1355,7 @@ class SmartThread:
                   msg: Any,
                   remote: str,
                   log_msg: Optional[str] = None,
-                  timeout: Optional[Union[int, float]] = None) -> Any:
+                  timeout: OptIntFloat = None) -> Any:
         """Send a message and wait for reply.
 
         Args:
@@ -1449,11 +1452,12 @@ class SmartThread:
     ####################################################################
     # resume
     ####################################################################
-    def resume(self, *,
-               targets: Union[str, set[str]],
-               log_msg: Optional[str] = None,
-               timeout: Optional[Union[int, float]] = None,
-               code: Optional[Any] = None) -> None:
+    def smart_resume(self, *,
+                     targets: Union[str, set[str]],
+                     log_msg: Optional[str] = None,
+                     timeout: OptIntFloat = None,
+                     code: Optional[Any] = None,
+                     raise_not_alive: bool = True) -> None:
         """Resume a waiting or soon to be waiting thread.
 
         Args:
@@ -1461,6 +1465,12 @@ class SmartThread:
             log_msg: log msg to log
             timeout: number of seconds to allow for ``resume()`` to complete
             code: code that waiter can retrieve with ``get_code()``
+            raise_not_alive: If True, raise an error if any of the
+                target threads have ended. If False, continue to wait
+                for the target thread to become alive if not already
+                alive. In either case, a timeout will be recognized if
+                specified and the time expires before a thread is
+                recognized as having ended.
 
         Raises:
             SmartThreadRemoteThreadNotAlive: resume() detected remote
@@ -1659,10 +1669,10 @@ class SmartThread:
     ####################################################################
     # sync
     ####################################################################
-    def sync(self, *,
-             targets: Union[str, set[str]],
-             log_msg: Optional[str] = None,
-             timeout: Optional[Union[int, float]] = None):
+    def smart_sync(self, *,
+                   targets: Union[str, set[str]],
+                   log_msg: Optional[str] = None,
+                   timeout: OptIntFloat = None):
         """Sync up with the remote threads.
 
         Each of the targets does a resume request to pre-resume the
@@ -1742,16 +1752,25 @@ class SmartThread:
     ####################################################################
     # wait
     ####################################################################
-    def wait(self, *,
-             remote: str,
-             log_msg: Optional[str] = None,
-             timeout: Optional[Union[int, float]] = None) -> None:
+    def smart_wait(self, *,
+                   resume_name: str,
+                   log_msg: Optional[str] = None,
+                   timeout: OptIntFloat = None,
+                   raise_not_alive: bool = True) -> None:
         """Wait on event.
 
         Args:
-            remote: name of remote that we expect to resume us
+            resume_name: name of thread that we expect to resume us
             log_msg: log msg to log
-            timeout: number of seconds to allow for wait to complete
+            timeout: number of seconds to allow for wait to be
+                resumed
+            raise_not_alive: If True, raise an error if the resume_name
+                thread has ended. If False, continue to wait for a
+                resume with the expectation that the resume_name will
+                be restarted with a new thread. In either case, a
+                timeout will be recognized if specified and the time
+                expires before a thread is recognized as having ended.
+
 
         Raises:
             SmartThreadWaitDeadlockDetected: Two threads are
@@ -1811,11 +1830,6 @@ class SmartThread:
         # get SetupBlock with targets in a set and a timer object
         sb = self._common_setup(targets=remote, timeout=timeout)
 
-        caller_info = ''
-        if log_msg and self.debug_logging_enabled:
-            caller_info = get_formatted_call_sequence(latest=1, depth=1)
-            self.logger.debug(f'wait() entered by {self.name} to wait for '
-                              f'{remote} {caller_info} {log_msg}')
         if log_msg and self.debug_logging_enabled:
             timeout_msg = f' with {timeout=}' if timeout else ''
             exit_log_msg = self._issue_entry_log_msg(
@@ -2000,7 +2014,7 @@ class SmartThread:
     ####################################################################
     def _common_setup(self, *,
                       targets: Union[str, set[str]],
-                      timeout: Optional[Union[int, float]] = None
+                      timeout: OptIntFloat = None
                       ) -> SetupBlock:
         """Do common setup for each request.
 
