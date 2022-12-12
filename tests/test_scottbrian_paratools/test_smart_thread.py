@@ -77,8 +77,7 @@ class TimeoutType(Enum):
 timeout_type_arg_list = [TimeoutType.TimeoutNone,
                          TimeoutType.TimeoutFalse,
                          TimeoutType.TimeoutTrue]
-# timeout_type_arg_list = [TimeoutType.TimeoutFalse,
-#                          TimeoutType.TimeoutTrue]
+# timeout_type_arg_list = [TimeoutType.TimeoutNone]
 
 ########################################################################
 # Test settings for test_config_build_scenarios
@@ -108,22 +107,22 @@ num_receivers_arg_list = [1, 2, 3]
 # num_receivers_arg_list = [3]
 
 num_active_no_delay_senders_arg_list = [0, 1, 2]
-# num_active_no_delay_senders_arg_list = [1, 2]
+# num_active_no_delay_senders_arg_list = [0]  # .001
 
 num_active_delay_senders_arg_list = [0, 1, 2]
-# num_active_delay_senders_arg_list = [1, 2]
+# num_active_delay_senders_arg_list = [0]  # .65  0.0005
 
 num_send_exit_senders_arg_list = [0, 1, 2]
-# num_send_exit_senders_arg_list = [0]
+# num_send_exit_senders_arg_list = [2]  # .65  0.0007
 
 num_nosend_exit_senders_arg_list = [0, 1, 2]
-# num_nosend_exit_senders_arg_list = [2]
+# num_nosend_exit_senders_arg_list = [2]  # 1.05  0.50
 
 num_unreg_senders_arg_list = [0, 1, 2]
-# num_unreg_senders_arg_list = [1]
+# num_unreg_senders_arg_list = [2]  # .75 0.15
 
 num_reg_senders_arg_list = [0, 1, 2]
-# num_reg_senders_arg_list = [2]
+# num_reg_senders_arg_list = [2]  # .75 .06
 
 ########################################################################
 # Test settings for test_send_msg_timeout_scenarios
@@ -3663,6 +3662,14 @@ class ConfigVerifier:
                            + num_delay_unreg
                            + num_delay_reg) * 0.6))
 
+        if timeout_type == TimeoutType.TimeoutNone:
+            pause_time = 0.5
+        elif timeout_type == TimeoutType.TimeoutFalse:
+            pause_time = 0.5
+            timeout_time += (pause_time * 2)  # prevent timeout
+        else:  # timeout True
+            pause_time = timeout_time + 1  # force timeout
+
         self.build_config(
             cmd_runner=self.commander_name,
             num_registered=num_registered_needed,
@@ -3828,11 +3835,11 @@ class ConfigVerifier:
                 or timeout_type == TimeoutType.TimeoutFalse):
             self.add_cmd(
                 Pause(cmd_runners=self.commander_name,
-                      pause_seconds=1))
+                      pause_seconds=pause_time))
         elif timeout_type == TimeoutType.TimeoutTrue:
             self.add_cmd(
                 Pause(cmd_runners=self.commander_name,
-                      pause_seconds=timeout_time+1))
+                      pause_seconds=pause_time))
 
         ################################################################
         # handle delay_exit_names
@@ -3977,6 +3984,21 @@ class ConfigVerifier:
                 + num_send_exit_senders
                 + num_nosend_exit_senders
                 + 1)
+
+        timeout_time = ((num_active_no_delay_senders * 0.01)
+                      + (num_active_delay_senders * 0.01)
+                      + (num_send_exit_senders * 0.01)
+                      + (num_nosend_exit_senders * 0.5)
+                      + (num_unreg_senders * 0.2)
+                      + (num_reg_senders * 0.1))
+
+        if timeout_type == TimeoutType.TimeoutNone:
+            pause_time = 0.5
+        elif timeout_type == TimeoutType.TimeoutFalse:
+            pause_time = 0.5
+            timeout_time += (pause_time * 2)  # prevent timeout
+        else:  # timeout True
+            pause_time = timeout_time + 1  # force timeout
 
         self.build_config(
             cmd_runner=self.commander_name,
@@ -4125,15 +4147,10 @@ class ConfigVerifier:
                         receivers=receiver_names,
                         msgs_to_send=sender_msgs))
 
-        if (timeout_type == TimeoutType.TimeoutNone
-                or timeout_type == TimeoutType.TimeoutFalse):
-            self.add_cmd(
-                Pause(cmd_runners=self.commander_name,
-                      pause_seconds=1))
-        elif timeout_type == TimeoutType.TimeoutTrue:
-            self.add_cmd(
-                Pause(cmd_runners=self.commander_name,
-                      pause_seconds=3))
+        self.add_cmd(
+            Pause(cmd_runners=self.commander_name,
+                  pause_seconds=pause_time))
+        if timeout_type == TimeoutType.TimeoutTrue:
             self.add_cmd(WaitForRecvTimeouts(cmd_runners=self.commander_name))
 
         ################################################################
@@ -5910,10 +5927,13 @@ class ConfigVerifier:
                     self.deferred_dels[(cmd_runner, del_sender)] += 1
 
         self.monitor_event.set()
+        elapsed_time: float = 0
         for from_name in senders:
+            start_time = time.time()
             recvd_msg = self.all_threads[cmd_runner].recv_msg(
                 remote=from_name,
                 log_msg=log_msg)
+            elapsed_time += (time.time() - start_time)
 
             if log_msg:
                 log_msg_2 = (
@@ -5934,13 +5954,17 @@ class ConfigVerifier:
                 log_level=logging.INFO,
                 log_msg=recv_log_msg)
         self.monitor_event.set()
+
         wait_log_msg = f'{cmd_runner=} handle_recv waiting for monitor'
         self.log_ver.add_msg(log_msg=re.escape(wait_log_msg))
         logger.debug(wait_log_msg)
 
         self.recv_msg_event_items[cmd_runner].client_event.wait()
 
-        handle_recv_log_msg = f'{cmd_runner=} handle_recv exiting'
+        mean_elapsed_time = elapsed_time / len(senders)
+        handle_recv_log_msg = (f'{cmd_runner=} handle_recv exiting '
+                               f'{elapsed_time=}, {len(senders)=} '
+                               f'{mean_elapsed_time=}')
         self.log_ver.add_msg(log_msg=re.escape(handle_recv_log_msg))
         logger.debug(handle_recv_log_msg)
 
@@ -5988,11 +6012,14 @@ class ConfigVerifier:
                     self.deferred_dels[(cmd_runner, del_sender)] += 1
 
         self.monitor_event.set()
+        elapsed_time: float = 0
         for from_name in senders:
+            start_time = time.time()
             recvd_msg = self.all_threads[cmd_runner].recv_msg(
                 remote=from_name,
                 timeout=timeout,
                 log_msg=log_msg)
+            elapsed_time += (time.time() - start_time)
 
             if log_msg:
                 log_msg_2 = (
@@ -6014,13 +6041,16 @@ class ConfigVerifier:
                 log_msg=recv_log_msg)
 
         self.monitor_event.set()
+
         wait_log_msg = f'{cmd_runner=} handle_recv_tof waiting for monitor'
         self.log_ver.add_msg(log_msg=re.escape(wait_log_msg))
         logger.debug(wait_log_msg)
 
         self.recv_msg_event_items[cmd_runner].client_event.wait()
-
-        handle_recv_log_msg = f'{cmd_runner=} handle_recv_tof exiting'
+        mean_elapsed_time = elapsed_time / len(senders)
+        handle_recv_log_msg = (f'{cmd_runner=} handle_recv_tof exiting'
+                               f'{elapsed_time=}, {len(senders)=} '
+                               f'{mean_elapsed_time=}')
         self.log_ver.add_msg(log_msg=re.escape(handle_recv_log_msg))
         logger.debug(handle_recv_log_msg)
 
@@ -6060,6 +6090,7 @@ class ConfigVerifier:
             seq='test_smart_thread.py::ConfigVerifier.handle_recv_msg_tot')
 
         non_timeout_senders = list(set(senders) - set(timeout_names))
+
         if non_timeout_senders:
             self.recv_msg_event_items[cmd_runner] = MonitorEventItem(
                 client_event=threading.Event(),
@@ -6073,13 +6104,16 @@ class ConfigVerifier:
                     self.deferred_dels[(cmd_runner, del_sender)] += 1
         self.monitor_event.set()
         timeout_true_value = timeout
+        # elapsed_time: float = 0
         for from_name in senders:
             enter_exit_list = ('entry', 'exit')
             if from_name not in timeout_names:
+                # start_time = time.time()
                 recvd_msg = self.all_threads[cmd_runner].recv_msg(
                     remote=from_name,
                     timeout=timeout_true_value,
                     log_msg=log_msg)
+                # elapsed_time += (time.time() - start_time)
             else:
                 enter_exit_list = ('entry', )
                 with pytest.raises(st.SmartThreadRecvMsgTimedOut):
