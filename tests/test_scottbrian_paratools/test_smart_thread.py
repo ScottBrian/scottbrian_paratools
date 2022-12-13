@@ -77,7 +77,8 @@ class TimeoutType(Enum):
 timeout_type_arg_list = [TimeoutType.TimeoutNone,
                          TimeoutType.TimeoutFalse,
                          TimeoutType.TimeoutTrue]
-# timeout_type_arg_list = [TimeoutType.TimeoutNone]
+# timeout_type_arg_list = [TimeoutType.TimeoutFalse,
+#                          TimeoutType.TimeoutTrue]
 
 ########################################################################
 # Test settings for test_config_build_scenarios
@@ -128,22 +129,22 @@ num_reg_senders_arg_list = [0, 1, 2]
 # Test settings for test_send_msg_timeout_scenarios
 ########################################################################
 num_senders_arg_list = [1, 2, 3]
-# num_senders_arg_list = [2]
+# num_senders_arg_list = [3]
 
 num_active_targets_arg_list = [0, 1, 2]
-# num_active_targets_arg_list = [0]
+# num_active_targets_arg_list = [3]  # 0.12
 
 num_registered_targets_arg_list = [0, 1, 2]
-# num_registered_targets_arg_list = [0]
+# num_registered_targets_arg_list = [3]  # 0.11
 
 num_unreg_timeouts_arg_list = [0, 1, 2]
-# num_unreg_timeouts_arg_list = [0]
+# num_unreg_timeouts_arg_list = [3]  # 0.15
 
 num_exit_timeouts_arg_list = [0, 1, 2]
-# num_exit_timeouts_arg_list = [1]
+# num_exit_timeouts_arg_list = [3]  # 0.11
 
 num_full_q_timeouts_arg_list = [0, 1, 2]
-# num_full_q_timeouts_arg_list = [0]
+# num_full_q_timeouts_arg_list = [3]  # 0.11
 
 ########################################################################
 # Test settings for test_join_timeout_scenarios
@@ -283,7 +284,7 @@ class ConfirmResponse(ConfigCmd):
         self.confirmers = confirmers
         self.arg_list += ['confirm_cmd',
                           'confirm_serial_num',
-                          'targets']
+                          'confirmers']
 
     def run_process(self, name: str) -> None:
         """Run the command.
@@ -4305,14 +4306,23 @@ class ConfigVerifier:
         # messages that can be received
         assert num_exit_timeouts < self.max_msgs
 
-        ret_suite = []
-
         num_active_needed = (
                 num_senders
                 + num_active_targets
                 + num_exit_timeouts
                 + num_full_q_timeouts
                 + 1)
+
+        timeout_time = ((num_active_targets * 0.16)
+                        + (num_registered_targets * 0.16)
+                        + (num_unreg_timeouts * 0.16)
+                        + (num_exit_timeouts * 0.50)
+                        + (num_full_q_timeouts * 0.25 * self.max_msgs))
+
+        if timeout_type == TimeoutType.TimeoutFalse:
+            timeout_time *= 2  # prevent timeout
+        elif timeout_type == TimeoutType.TimeoutTrue:
+            timeout_time *= 0.5  # force timeout
 
         self.build_config(
             cmd_runner=self.commander_name,
@@ -4452,13 +4462,11 @@ class ConfigVerifier:
         ################################################################
         # send max msgs if needed
         ################################################################
-        # fullq_msgs: list[str] = []
         if full_q_names:
             for idx in range(self.max_msgs):
                 # send from each sender thread to ensure we get
                 # exactly max_msgs on each pair between sender and the
                 # full_q targets
-                # fullq_msgs.append(f'send test: {self.get_ptime()}')
                 send_msg_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=sender_names,
                             receivers=full_q_names,
@@ -4533,7 +4541,7 @@ class ConfigVerifier:
                     cmd_runners=sender_names,
                     receivers=all_targets,
                     msgs_to_send=sender_msgs,
-                    timeout=2.0,
+                    timeout=timeout_time,
                     unreg_timeout_names=unreg_timeout_names+exit_names,
                     fullq_timeout_names=full_q_names))
 
@@ -4546,7 +4554,7 @@ class ConfigVerifier:
                         cmd_runners=sender_names,
                         receivers=all_targets,
                         msgs_to_send=sender_msgs,
-                        timeout=3.0))
+                        timeout=timeout_time))
 
                 confirm_cmd_to_use = 'SendMsgTimeoutFalse'
             else:
@@ -4577,10 +4585,6 @@ class ConfigVerifier:
                                                         auto_start=True,
                                                         target_rtn=outer_f1,
                                                         app_config=app_config))
-                # for name in unreg_timeout_names + exit_names:
-                #     f1_create_items.append(F1CreateItem(name=name,
-                #                            auto_start=True,
-                #                            target_rtn=outer_f1))
                 self.build_create_suite(
                     f1_create_items=f1_create_items,
                     validate_config=False)
@@ -5906,10 +5910,8 @@ class ConfigVerifier:
             log_msg: log message to isee on recv_msg
 
         """
-        handle_recv_log_msg = (f'{cmd_runner=} handle_recv entry for '
-                               f'{senders=} and {del_deferred=}')
-        self.log_ver.add_msg(log_msg=re.escape(handle_recv_log_msg))
-        logger.debug(handle_recv_log_msg)
+        self.log_test_msg(f'handle_recv entry: {cmd_runner=}, '
+                          f'{senders=}, {del_deferred=}')
 
         self.log_ver.add_call_seq(
             name='handle_recv_msg',
@@ -5962,11 +5964,9 @@ class ConfigVerifier:
         self.recv_msg_event_items[cmd_runner].client_event.wait()
 
         mean_elapsed_time = elapsed_time / len(senders)
-        handle_recv_log_msg = (f'{cmd_runner=} handle_recv exiting '
-                               f'{elapsed_time=}, {len(senders)=} '
-                               f'{mean_elapsed_time=}')
-        self.log_ver.add_msg(log_msg=re.escape(handle_recv_log_msg))
-        logger.debug(handle_recv_log_msg)
+        self.log_test_msg(f'handle_recv exiting {cmd_runner=}, '
+                          f'{elapsed_time=}, {len(senders)=} '
+                          f'{mean_elapsed_time=}')
 
     ####################################################################
     # handle_recv_msg_tof
@@ -5991,10 +5991,8 @@ class ConfigVerifier:
             log_msg: log message to isee on recv_msg
 
         """
-        handle_recv_log_msg = (f'{cmd_runner=} handle_recv_tof entry for '
-                               f'{senders=} and {del_deferred=}')
-        self.log_ver.add_msg(log_msg=re.escape(handle_recv_log_msg))
-        logger.debug(handle_recv_log_msg)
+        self.log_test_msg(f'handle_recv_tof entry: {cmd_runner=}, '
+                          f'{senders=}, {del_deferred=}')
 
         self.log_ver.add_call_seq(
             name='handle_recv_msg_tof',
@@ -6048,11 +6046,9 @@ class ConfigVerifier:
 
         self.recv_msg_event_items[cmd_runner].client_event.wait()
         mean_elapsed_time = elapsed_time / len(senders)
-        handle_recv_log_msg = (f'{cmd_runner=} handle_recv_tof exiting'
-                               f'{elapsed_time=}, {len(senders)=} '
-                               f'{mean_elapsed_time=}')
-        self.log_ver.add_msg(log_msg=re.escape(handle_recv_log_msg))
-        logger.debug(handle_recv_log_msg)
+        self.log_test_msg(f'handle_recv_tof exit: {cmd_runner=}, '
+                          f'{elapsed_time=}, {len(senders)=}, '
+                          f'{mean_elapsed_time=}')
 
     ####################################################################
     # handle_recv_msg_tot
@@ -6080,10 +6076,8 @@ class ConfigVerifier:
             log_msg: log message to isee on recv_msg
 
         """
-        handle_recv_log_msg = (f'{cmd_runner=} handle_recv_tot entry for '
-                               f'{senders=} and {del_deferred=}')
-        self.log_ver.add_msg(log_msg=re.escape(handle_recv_log_msg))
-        logger.debug(handle_recv_log_msg)
+        self.log_test_msg(f'handle_recv_tot entry: {cmd_runner=}, '
+                          f'{senders=} and {del_deferred=}')
 
         self.log_ver.add_call_seq(
             name='handle_recv_msg_tot',
@@ -6164,9 +6158,7 @@ class ConfigVerifier:
 
             self.recv_msg_event_items[cmd_runner].client_event.wait()
 
-        handle_recv_log_msg = f'{cmd_runner=} handle_recv_tof exiting'
-        self.log_ver.add_msg(log_msg=re.escape(handle_recv_log_msg))
-        logger.debug(handle_recv_log_msg)
+        self.log_test_msg(f'handle_recv_tof exit: {cmd_runner=}')
 
     ####################################################################
     # handle_reg_remove
@@ -6265,16 +6257,20 @@ class ConfigVerifier:
             log_msg: log message for send_msg to issue
 
         """
+        self.log_test_msg(f'handle_send entry: {cmd_runner=}, {receivers=} ')
         self.log_ver.add_call_seq(
             name='handle_send_msg',
             seq='test_smart_thread.py::ConfigVerifier.handle_send_msg')
         ops_count_names = receivers.copy()
         self.inc_ops_count(ops_count_names, cmd_runner)
 
+        elapsed_time: float = 0
+        start_time = time.time()
         self.all_threads[cmd_runner].send_msg(
             targets=set(receivers),
             msg=msg_to_send,
             log_msg=log_msg)
+        elapsed_time += (time.time() - start_time)
 
         if log_msg:
             log_msg_2 = f'{self.log_ver.get_call_seq("handle_send_msg")} '
@@ -6291,6 +6287,11 @@ class ConfigVerifier:
                 log_name='scottbrian_paratools.smart_thread',
                 log_level=logging.INFO,
                 log_msg=log_msg)
+
+        mean_elapsed_time = elapsed_time / len(receivers)
+        self.log_test_msg(f'handle_send exit: {cmd_runner=} '
+                          f'{elapsed_time=}, {len(receivers)=} '
+                          f'{mean_elapsed_time=}')
 
     ####################################################################
     # handle_send_msg_tof
@@ -6550,6 +6551,20 @@ class ConfigVerifier:
         logger.debug(log_msg)
 
         log_msg = f'stopped_names: {sorted(self.stopped_names)}'
+        self.log_ver.add_msg(log_msg=re.escape(log_msg))
+        logger.debug(log_msg)
+
+    ####################################################################
+    # log_name_groups
+    ####################################################################
+    def log_test_msg(self,
+                     log_msg: str) -> None:
+        """Issue log msgs for test rtn.
+
+        Args:
+            log_msg: the message to log
+
+        """
         self.log_ver.add_msg(log_msg=re.escape(log_msg))
         logger.debug(log_msg)
 
