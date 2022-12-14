@@ -6231,7 +6231,7 @@ class ConfigVerifier:
             name='handle_resume',
             seq='test_smart_thread.py::ConfigVerifier.handle_resume')
 
-        self.all_threads[cmd_runner].smart_resume(wait_name=wait_name)
+        self.all_threads[cmd_runner].smart_resume(targets=wait_name)
 
         handle_resume_log_msg = (f'{cmd_runner=} handle_resume exit for '
                                  f'{wait_name=}')
@@ -6490,7 +6490,7 @@ class ConfigVerifier:
             name='handle_wait',
             seq='test_smart_thread.py::ConfigVerifier.handle_wait')
 
-        self.all_threads[cmd_runner].smart_wait(resume_name=resume_name)
+        self.all_threads[cmd_runner].smart_wait(remote=resume_name)
 
         handle_wait_log_msg = (f'{cmd_runner=} handle_wait exit for '
                                f'{resume_name=}')
