@@ -1046,8 +1046,14 @@ class SmartThread:
             if len(SmartThread._pair_array[pair_key].status_blocks) == 1:
                 thread_name = list(SmartThread._pair_array[
                         pair_key].status_blocks.keys())[0]
-                if SmartThread._pair_array[
-                        pair_key].status_blocks[thread_name].msg_q.empty():
+                if (SmartThread._pair_array[
+                        pair_key].status_blocks[thread_name].msg_q.empty()
+                        and not SmartThread._pair_array[
+                        pair_key].status_blocks[
+                            thread_name].wait_event.is_set()
+                        and not SmartThread._pair_array[
+                        pair_key].status_blocks[
+                            thread_name].sync_event.is_set()):
                     _ = SmartThread._pair_array[
                         pair_key].status_blocks.pop(thread_name, None)
                     self.logger.debug(
@@ -1846,6 +1852,7 @@ class SmartThread:
         else:
             exit_log_msg = None
 
+        do_refresh = False
         pair_key = self._get_pair_key(self.name, remote)
 
         while True:
@@ -1880,6 +1887,8 @@ class SmartThread:
 
                                 # be ready for next sync wait
                                 local_sb.sync_event.clear()
+                                if local_sb.del_deferred:
+                                    do_refresh = True
                                 break  # exit, we are done
                         else:
                             local_sb.wait_wait = True
@@ -1889,6 +1898,8 @@ class SmartThread:
 
                                 # be ready for next wait
                                 local_sb.wait_event.clear()
+                                if local_sb.del_deferred:
+                                    do_refresh = True
                                 break  # exit, we are done
 
                         local_sb.wait_timeout_specified = timeout_specified
@@ -2019,6 +2030,10 @@ class SmartThread:
                     raise SmartThreadWaitTimedOut(error_msg)
 
             time.sleep(0.2)
+
+        if do_refresh:
+            with sel.SELockExcl(SmartThread._registry_lock):
+                self._refresh_pair_array()
 
         if exit_log_msg:
             self.logger.debug(exit_log_msg)
