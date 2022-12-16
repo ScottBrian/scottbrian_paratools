@@ -525,8 +525,8 @@ class SmartThread:
     ####################################################################
     # _get_status
     ####################################################################
-    def _get_status(self,
-                    name: "SmartThread") -> ThreadStatus:
+    @staticmethod
+    def _get_status(name: "SmartThread") -> ThreadStatus:
         """Get the status of a thread.
 
         Args:
@@ -1692,7 +1692,8 @@ class SmartThread:
 
             if sb.timer.is_expired():
                 error_msg = (f'{self.name} timed out on a resume() request '
-                             f'while processing threads {work_targets}')
+                             'while processing threads '
+                             f'{sorted(work_targets)}')
                 self.logger.error(error_msg)
                 raise SmartThreadResumeTimedOut(error_msg)
 
