@@ -693,7 +693,9 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
 class Resume(ConfigCmd):
     def __init__(self,
                  cmd_runners: StrOrList,
-                 targets: StrOrList) -> None:
+                 targets: StrOrList,
+                 stopped_names: StrOrList,
+                 raise_not_alive: bool = True) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
@@ -701,7 +703,14 @@ class Resume(ConfigCmd):
             targets = [targets]
         self.targets = targets
 
-        self.arg_list += ['targets']
+        if isinstance(stopped_names, str):
+            stopped_names = [stopped_names]
+        self.stopped_names = stopped_names
+
+        self.raise_not_alive = raise_not_alive
+
+        self.arg_list += ['targets',
+                          'raise_not_alive']
 
     def run_process(self, name: str) -> None:
         """Run the command.
@@ -711,7 +720,9 @@ class Resume(ConfigCmd):
         """
         self.config_ver.handle_resume(
             cmd_runner=name,
-            targets=self.targets)
+            targets=self.targets,
+            stopped_names=self.stopped_names,
+            raise_not_alive=self.raise_not_alive)
 
 
 ########################################################################
@@ -721,9 +732,13 @@ class ResumeTimeoutFalse(Resume):
     def __init__(self,
                  cmd_runners: StrOrList,
                  targets: StrOrList,
-                 timeout: IntOrFloat) -> None:
+                 stopped_names: StrOrList,
+                 timeout: IntOrFloat,
+                 raise_not_alive: bool = True) -> None:
         super().__init__(cmd_runners=cmd_runners,
-                         targets=targets)
+                         targets=targets,
+                         stopped_names=stopped_names,
+                         raise_not_alive=raise_not_alive)
         self.specified_args = locals()  # used for __repr__
 
         self.timeout = timeout
@@ -739,7 +754,9 @@ class ResumeTimeoutFalse(Resume):
         self.config_ver.handle_resume_tof(
             cmd_runner=name,
             targets=self.targets,
-            timeout=self.timeout)
+            stopped_names=self.stopped_names,
+            timeout=self.timeout,
+            raise_not_alive=self.raise_not_alive)
 
 
 ########################################################################
@@ -749,11 +766,15 @@ class ResumeTimeoutTrue(ResumeTimeoutFalse):
     def __init__(self,
                  cmd_runners: StrOrList,
                  targets: StrOrList,
+                 stopped_names: StrOrList,
                  timeout: IntOrFloat,
-                 timeout_names: StrOrList) -> None:
+                 timeout_names: StrOrList,
+                 raise_not_alive: bool = True) -> None:
         super().__init__(cmd_runners=cmd_runners,
                          targets=targets,
-                         timeout=timeout)
+                         stopped_names=stopped_names,
+                         timeout=timeout,
+                         raise_not_alive=raise_not_alive)
         self.specified_args = locals()  # used for __repr__
 
         if isinstance(timeout_names, str):
@@ -771,10 +792,11 @@ class ResumeTimeoutTrue(ResumeTimeoutFalse):
         self.config_ver.handle_resume_tot(
             cmd_runner=name,
             targets=self.targets,
+            stopped_names=self.stopped_names,
             timeout=self.timeout,
-            timeout_names=self.timeout_names
+            timeout_names=self.timeout_names,
+            raise_not_alive=self.raise_not_alive
         )
-
 
 
 ########################################################################
@@ -4630,7 +4652,13 @@ class ConfigVerifier:
                                   + stopped_no_delay_targets
                                   + stopped_delay_targets)
 
-        timeout_names = unreg_delay_names + stopped_no_delay_targets
+        timeout_names = unreg_delay_names + stopped_delay_targets
+        stopped_names = stopped_no_delay_targets + stopped_delay_targets
+
+        if len(stopped_names) % 2:
+            raise_not_alive = True
+        else:
+            raise_not_alive = False
 
         ################################################################
         # issue smart_wait for active_target_names
@@ -4647,22 +4675,28 @@ class ConfigVerifier:
             resume_to_confirm = 'Resume'
             resume_serial_num = self.add_cmd(
                 Resume(cmd_runners=resumer_names,
-                       targets=all_targets))
+                       targets=all_targets,
+                       stopped_names=stopped_names,
+                       raise_not_alive=raise_not_alive))
         elif timeout_type == TimeoutType.TimeoutFalse:
             resume_to_confirm = 'ResumeTimeoutFalse'
             resume_serial_num = self.add_cmd(
                 ResumeTimeoutFalse(
                     cmd_runners=resumer_names,
                     targets=all_targets,
-                    timeout=timeout_time))
+                    stopped_names=stopped_names,
+                    timeout=timeout_time,
+                    raise_not_alive=raise_not_alive))
         else:
             resume_to_confirm = 'ResumeTimeoutTrue'
             resume_serial_num = self.add_cmd(
                 ResumeTimeoutTrue(
                     cmd_runners=resumer_names,
                     targets=all_targets,
+                    stopped_names=stopped_names,
                     timeout=timeout_time,
-                    timeout_names=timeout_names))
+                    timeout_names=timeout_names,
+                    raise_not_alive=raise_not_alive))
 
         ################################################################
         # create and start unreg_no_delay_names and build smart_wait
@@ -4680,17 +4714,19 @@ class ConfigVerifier:
                                                     target_rtn=outer_f1,
                                                     app_config=app_config))
 
-            wait_unreg_no_delay_serial_num = self.add_cmd(
-                Wait(cmd_runners=unreg_no_delay_names,
-                     remote=resumer_names))
+            if not (raise_not_alive and stopped_names):
+                wait_unreg_no_delay_serial_num = self.add_cmd(
+                    Wait(cmd_runners=unreg_no_delay_names,
+                         remote=resumer_names))
 
         ################################################################
         # wait for resume timeouts to be known
         ################################################################
-        self.add_cmd(WaitForResumeTimeouts(
-            cmd_runners=self.commander_name,
-            resumer_names=resumer_names,
-            timeout_names=timeout_names))
+        if not (raise_not_alive and stopped_names):
+            self.add_cmd(WaitForResumeTimeouts(
+                cmd_runners=self.commander_name,
+                resumer_names=resumer_names,
+                timeout_names=timeout_names))
 
         self.add_cmd(Pause(
             cmd_runners='alpha',
@@ -4721,9 +4757,11 @@ class ConfigVerifier:
                                                     target_rtn=outer_f1,
                                                     app_config=app_config))
 
-            wait_unreg_delay_serial_num = self.add_cmd(
-                Wait(cmd_runners=unreg_delay_names,
-                     remote=resumer_names))
+            if timeout_type != TimeoutType.TimeoutTrue:
+                if not (raise_not_alive and stopped_names):
+                    wait_unreg_delay_serial_num = self.add_cmd(
+                        Wait(cmd_runners=unreg_delay_names,
+                             remote=resumer_names))
 
         ################################################################
         # build stopped_no_delay_targets smart_wait
@@ -4754,9 +4792,10 @@ class ConfigVerifier:
                                                     target_rtn=outer_f1,
                                                     app_config=app_config))
 
-            wait_stopped_serial_num = self.add_cmd(
-                Wait(cmd_runners=stopped_no_delay_targets,
-                     remote=resumer_names))
+            if not (raise_not_alive and stopped_names):
+                wait_stopped_serial_num = self.add_cmd(
+                    Wait(cmd_runners=stopped_no_delay_targets,
+                         remote=resumer_names))
 
         ################################################################
         # build stopped_delay_targets smart_wait
@@ -4787,9 +4826,11 @@ class ConfigVerifier:
                                                     target_rtn=outer_f1,
                                                     app_config=app_config))
 
-            wait_stopped_res_serial_num = self.add_cmd(
-                Wait(cmd_runners=stopped_delay_targets,
-                     remote=resumer_names))
+            if timeout_type != TimeoutType.TimeoutTrue:
+                if not (raise_not_alive and stopped_names):
+                    wait_stopped_res_serial_num = self.add_cmd(
+                        Wait(cmd_runners=stopped_delay_targets,
+                             remote=resumer_names))
 
         ####################################################
         # confirm the active target waits
@@ -4813,43 +4854,49 @@ class ConfigVerifier:
         # confirm the unreg_no_delay_names
         ####################################################
         if unreg_no_delay_names:
-            self.add_cmd(
-                ConfirmResponse(
-                    cmd_runners=[self.commander_name],
-                    confirm_cmd='Wait',
-                    confirm_serial_num=wait_unreg_no_delay_serial_num,
-                    confirmers=unreg_no_delay_names))
+            if not (raise_not_alive and stopped_names):
+                self.add_cmd(
+                    ConfirmResponse(
+                        cmd_runners=[self.commander_name],
+                        confirm_cmd='Wait',
+                        confirm_serial_num=wait_unreg_no_delay_serial_num,
+                        confirmers=unreg_no_delay_names))
         ####################################################
         # confirm the unreg_delay_names
         ####################################################
         if unreg_delay_names:
-            self.add_cmd(
-                ConfirmResponse(
-                    cmd_runners=[self.commander_name],
-                    confirm_cmd='Wait',
-                    confirm_serial_num=wait_unreg_delay_serial_num,
-                    confirmers=unreg_delay_names))
+            if timeout_type != TimeoutType.TimeoutTrue:
+                if not (raise_not_alive and stopped_names):
+                    self.add_cmd(
+                        ConfirmResponse(
+                            cmd_runners=[self.commander_name],
+                            confirm_cmd='Wait',
+                            confirm_serial_num=wait_unreg_delay_serial_num,
+                            confirmers=unreg_delay_names))
         ####################################################
         # confirm the stopped_no_delay_targets
         ####################################################
         if stopped_no_delay_targets:
-            self.add_cmd(
-                ConfirmResponse(
-                    cmd_runners=[self.commander_name],
-                    confirm_cmd='Wait',
-                    confirm_serial_num=wait_stopped_serial_num,
-                    confirmers=stopped_no_delay_targets))
+            if not (raise_not_alive and stopped_names):
+                self.add_cmd(
+                    ConfirmResponse(
+                        cmd_runners=[self.commander_name],
+                        confirm_cmd='Wait',
+                        confirm_serial_num=wait_stopped_serial_num,
+                        confirmers=stopped_no_delay_targets))
 
         ####################################################
         # confirm the stopped_names
         ####################################################
         if stopped_delay_targets:
-            self.add_cmd(
-                ConfirmResponse(
-                    cmd_runners=[self.commander_name],
-                    confirm_cmd='Wait',
-                    confirm_serial_num=wait_stopped_res_serial_num,
-                    confirmers=stopped_names))
+            if timeout_type != TimeoutType.TimeoutTrue:
+                if not (raise_not_alive and stopped_names):
+                    self.add_cmd(
+                        ConfirmResponse(
+                            cmd_runners=[self.commander_name],
+                            confirm_cmd='Wait',
+                            confirm_serial_num=wait_stopped_res_serial_num,
+                            confirmers=stopped_names))
 
         ####################################################
         # confirm the resumer_names
@@ -6821,12 +6868,19 @@ class ConfigVerifier:
     ####################################################################
     def handle_resume(self,
                       cmd_runner: str,
-                      targets: list[str]):
+                      targets: list[str],
+                      stopped_names: list[str],
+                      raise_not_alive: bool):
         """Resume a waiter.
 
         Args:
             cmd_runner: thread doing the wait
             targets: names of threads to be resumed
+            stopped_names: threads that are stopped and will result in
+                a not alive error being raised if raise_not_alive is
+                True
+            raise_not_alive: specifies that smart_resume should raise an
+                error if any targets are not alive
         """
         self.log_test_msg(f'handle_resume entry: {cmd_runner=}, {targets=}')
 
@@ -6834,7 +6888,20 @@ class ConfigVerifier:
             name='handle_resume',
             seq='test_smart_thread.py::ConfigVerifier.handle_resume')
 
-        self.all_threads[cmd_runner].smart_resume(targets=targets)
+        if raise_not_alive and stopped_names:
+            with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
+                self.all_threads[cmd_runner].smart_resume(
+                    targets=targets,
+                    raise_not_alive=raise_not_alive)
+            error_msg = (f'while processing a smart_resume(), {cmd_runner} '
+                         f'detected that the following threads are '
+                         f'stopped: {sorted(stopped_names)}')
+            self.add_log_msg(new_log_msg=error_msg,
+                             log_level=logging.ERROR)
+        else:
+            self.all_threads[cmd_runner].smart_resume(
+                targets=targets,
+                raise_not_alive=raise_not_alive)
 
         self.log_test_msg(f'handle_resume exit: {cmd_runner=}, {targets=}')
 
@@ -6844,13 +6911,20 @@ class ConfigVerifier:
     def handle_resume_tof(self,
                           cmd_runner: str,
                           targets: list[str],
-                          timeout: IntOrFloat):
+                          stopped_names: list[str],
+                          timeout: IntOrFloat,
+                          raise_not_alive: bool):
         """Resume a waiter with timeout specified, no timeout happens.
 
         Args:
             cmd_runner: thread doing the wait
             targets: names of threads to be resumed
+            stopped_names: threads that are stopped and will result in
+                a not alive error being raised if raise_not_alive is
+                True
             timeout: timeout value for smart_resume
+            raise_not_alive: specifies that smart_resume should raise an
+                error if the target ios not alive
         """
         self.log_test_msg(f'handle_resume_tof entry: {cmd_runner=}, '
                           f'{targets=}, {timeout=}')
@@ -6859,8 +6933,22 @@ class ConfigVerifier:
             name='handle_resume',
             seq='test_smart_thread.py::ConfigVerifier.handle_resume')
 
-        self.all_threads[cmd_runner].smart_resume(targets=targets,
-                                                  timeout=timeout)
+        if raise_not_alive and stopped_names:
+            with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
+                self.all_threads[cmd_runner].smart_resume(
+                    targets=targets,
+                    timeout=timeout,
+                    raise_not_alive=raise_not_alive)
+            error_msg = (f'while processing a smart_resume(), {cmd_runner} '
+                         f'detected that the following threads are '
+                         f'stopped: {sorted(stopped_names)}')
+            self.add_log_msg(new_log_msg=error_msg,
+                             log_level=logging.ERROR)
+        else:
+            self.all_threads[cmd_runner].smart_resume(
+                targets=targets,
+                timeout=timeout,
+                raise_not_alive=raise_not_alive)
 
         self.log_test_msg(f'handle_resume_tof exit: {cmd_runner=}, '
                           f'{targets=}, {timeout=}')
@@ -6871,15 +6959,22 @@ class ConfigVerifier:
     def handle_resume_tot(self,
                           cmd_runner: str,
                           targets: list[str],
+                          stopped_names: list[str],
                           timeout: IntOrFloat,
-                          timeout_names: list[str]):
+                          timeout_names: list[str],
+                          raise_not_alive: bool):
         """Resume a waiter with timeout specified, timeout happens.
 
         Args:
             cmd_runner: thread doing the wait
             targets: names of threads to be resumed
+            stopped_names: threads that are stopped and will result in
+                a not alive error being raised if raise_not_alive is
+                True
             timeout: timeout value for smart_resume
             timeout_names: names of threads that are expected to timeout
+            raise_not_alive: specifies that smart_resume should raise an
+                error if the target ios not alive
         """
         self.log_test_msg(f'handle_resume_tot entry: {cmd_runner=}, '
                           f'{targets=}, {timeout=}, {timeout_names=}')
@@ -6888,9 +6983,27 @@ class ConfigVerifier:
             name='handle_resume',
             seq='test_smart_thread.py::ConfigVerifier.handle_resume')
 
-        with pytest.raises(st.SmartThreadResumeTimedOut):
-            self.all_threads[cmd_runner].smart_resume(targets=targets,
-                                                      timeout=timeout)
+        if raise_not_alive and stopped_names:
+            with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
+                self.all_threads[cmd_runner].smart_resume(
+                    targets=targets,
+                    timeout=timeout,
+                    raise_not_alive=raise_not_alive)
+            error_msg = (f'while processing a smart_resume(), {cmd_runner} '
+                         f'detected that the following threads are '
+                         f'stopped: {sorted(stopped_names)}')
+            self.add_log_msg(new_log_msg=error_msg,
+                             log_level=logging.ERROR)
+        else:
+            with pytest.raises(st.SmartThreadResumeTimedOut):
+                self.all_threads[cmd_runner].smart_resume(
+                    targets=targets,
+                    timeout=timeout,
+                    raise_not_alive=raise_not_alive)
+                error_msg = (f'{self.name} timed out on a resume() request '
+                             f'while processing threads {timeout_names}')
+                self.add_log_msg(new_log_msg=error_msg,
+                                 log_level=logging.ERROR)
 
         self.log_test_msg(f'handle_resume_tot exit: {cmd_runner=}, '
                           f'{targets=}, {timeout=}, {timeout_names=}')
