@@ -1597,6 +1597,9 @@ class SmartThread:
         #                                           wait
         ###############################################################
 
+        self.resume_remotes_stopped = set()
+        self.resume_remotes_unregistered = set()
+
         work_targets = sb.targets.copy()
 
         while work_targets:
@@ -1682,20 +1685,27 @@ class SmartThread:
                                 work_targets.remove(remote)
                                 break
 
-            # If threads are stopped and an error should be raised
-            if self.resume_remotes_stopped and raise_not_alive:
-                error_msg = (f'while processing a smart_resume(), {self.name} '
-                             f'detected that the following threads are '
-                             f'stopped: {sorted(self.resume_remotes_stopped)}')
-                self.logger.error(error_msg)
-                raise SmartThreadRemoteThreadNotAlive(error_msg)
+            if work_targets:  # if there remains targets
+                # If an error should be raised for stopped threads
+                # and we have stopped threads, and they are the only
+                # threads left to process
+                if (raise_not_alive
+                        and self.resume_remotes_stopped
+                        and (sorted(self.resume_remotes_stopped)
+                             == sorted(work_targets))):
+                    error_msg = ('while processing a smart_resume(), '
+                                 f'{self.name} detected that the following '
+                                 'threads are stopped: '
+                                 f'{sorted(self.resume_remotes_stopped)}')
+                    self.logger.error(error_msg)
+                    raise SmartThreadRemoteThreadNotAlive(error_msg)
 
-            if sb.timer.is_expired():
-                error_msg = (f'{self.name} timed out on a resume() request '
-                             'while processing threads '
-                             f'{sorted(work_targets)}')
-                self.logger.error(error_msg)
-                raise SmartThreadResumeTimedOut(error_msg)
+                if sb.timer.is_expired():
+                    error_msg = (f'{self.name} timed out on a resume() request '
+                                 'while processing threads '
+                                 f'{sorted(work_targets)}')
+                    self.logger.error(error_msg)
+                    raise SmartThreadResumeTimedOut(error_msg)
 
             time.sleep(0.2)
 
