@@ -471,9 +471,7 @@ class SmartThread:
         self.remotes_unregistered: set[str] = set()
         self.remotes_full_send_q: set[str] = set()
 
-        self.resume_remotes_unregistered: set[str] = set()
-        self.resume_remotes_stopped: set[str] = set()
-        self.wait_remotes_unregistered: set[str] = set()
+        self.resume_timeout_names: set[str] = set()
 
         # The following remote_array is used to keep track of who we
         # know and to process the various requests. The known remotes
@@ -526,7 +524,7 @@ class SmartThread:
     # _get_status
     ####################################################################
     @staticmethod
-    def _get_status(name: "SmartThread") -> ThreadStatus:
+    def _get_status(name: str) -> ThreadStatus:
         """Get the status of a thread.
 
         Args:
@@ -1597,12 +1595,12 @@ class SmartThread:
         #                                           wait
         ###############################################################
 
-        self.resume_remotes_stopped = set()
-        self.resume_remotes_unregistered = set()
+        self.resume_timeout_names = set()
 
         work_targets = sb.targets.copy()
 
         while work_targets:
+            work_targets_start_len = len(work_targets)
             for remote in work_targets:
                 pair_key = self._get_pair_key(self.name, remote)
                 with sel.SELockShare(SmartThread._registry_lock):
@@ -1615,26 +1613,15 @@ class SmartThread:
                     # deleted and the message will be lost. So we will
                     # check for this and continue to wait in hopes that
                     # the thread will be resurrected.
-                    if remote not in SmartThread._registry:
-                        self.resume_remotes_unregistered |= {remote}
-                        if remote in self.resume_remotes_stopped:
-                            self.resume_remotes_stopped -= {remote}
-                        continue
-                    if self._get_status(remote) == ThreadStatus.Stopped:
-                        self.resume_remotes_stopped |= {remote}
-                        if remote in self.resume_remotes_unregistered:
-                            self.resume_remotes_unregistered -= {remote}
+                    if (remote not in SmartThread._registry
+                            or self._get_status(remote)
+                            == ThreadStatus.Stopped):
                         continue
 
                     # If here, remote is in registry and is alive or
                     # will hopefully will be soon.
                     # This also means we have an entry for the remote in
                     # the status_blocks in the connection array
-                    if remote in self.resume_remotes_unregistered:
-                        self.resume_remotes_unregistered -= {remote}
-                    elif remote in self.resume_remotes_stopped:
-                        self.resume_remotes_stopped -= {remote}
-
                     with SmartThread._pair_array[pair_key].status_lock:
                         remote_sb = SmartThread._pair_array[
                                     pair_key].status_blocks[remote]
@@ -1685,24 +1672,29 @@ class SmartThread:
                                 work_targets.remove(remote)
                                 break
 
-            if work_targets:  # if there remains targets
+            # if no progress was made
+            if len(work_targets) == work_targets_start_len:
+
+                # make the work_targets visible to test cases
+                self.resume_timeout_names = work_targets
+
                 # If an error should be raised for stopped threads
-                # and we have stopped threads, and they are the only
-                # threads left to process
-                if (raise_not_alive
-                        and self.resume_remotes_stopped
-                        and (sorted(self.resume_remotes_stopped)
-                             == sorted(work_targets))):
-                    error_msg = ('while processing a smart_resume(), '
-                                 f'{self.name} detected that the following '
-                                 'threads are stopped: '
-                                 f'{sorted(self.resume_remotes_stopped)}')
-                    self.logger.error(error_msg)
-                    raise SmartThreadRemoteThreadNotAlive(error_msg)
+                if raise_not_alive:
+                    resume_remotes_stopped: set[str] = set()
+                    for remote in work_targets:
+                        if self._get_status(remote) == ThreadStatus.Stopped:
+                            resume_remotes_stopped |= {remote}
+                    if resume_remotes_stopped:
+                        error_msg = ('while processing a smart_resume(), '
+                                     f'{self.name} detected that the '
+                                     f'following threads are stopped: '
+                                     f'{sorted(resume_remotes_stopped)}')
+                        self.logger.error(error_msg)
+                        raise SmartThreadRemoteThreadNotAlive(error_msg)
 
                 if sb.timer.is_expired():
-                    error_msg = (f'{self.name} timed out on a resume() request '
-                                 'while processing threads '
+                    error_msg = (f'{self.name} timed out on a resume() '
+                                 'request while processing threads '
                                  f'{sorted(work_targets)}')
                     self.logger.error(error_msg)
                     raise SmartThreadResumeTimedOut(error_msg)

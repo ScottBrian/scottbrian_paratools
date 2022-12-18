@@ -175,7 +175,8 @@ num_delay_reg_arg_list = [0, 1, 2]
 ########################################################################
 num_resumers_arg_list = [1]
 num_active_arg_list = [0, 1, 2]
-num_registered_arg_list = [0, 1, 2]
+num_registered_before_arg_list = [0, 1, 2]
+num_registered_after_arg_list = [0, 1, 2]
 num_unreg_no_delay_arg_list = [0, 1, 2]
 num_unreg_delay_arg_list = [0, 1, 2]
 num_stopped_no_delay_arg_list = [0, 1, 2]
@@ -2133,10 +2134,26 @@ def num_active_arg(request: Any) -> int:
 
 
 ###############################################################################
-# num_registered_arg
+# num_registered_before_arg
 ###############################################################################
-@pytest.fixture(params=num_registered_arg_list)  # type: ignore
-def num_registered_arg(request: Any) -> int:
+@pytest.fixture(params=num_registered_before_arg_list)  # type: ignore
+def num_registered_before_arg(request: Any) -> int:
+    """Number opf registered threads.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
+###############################################################################
+# num_registered_after_arg
+###############################################################################
+@pytest.fixture(params=num_registered_after_arg_list)  # type: ignore
+def num_registered_after_arg(request: Any) -> int:
     """Number opf registered threads.
 
     Args:
@@ -4546,7 +4563,8 @@ class ConfigVerifier:
                                    timeout_type: TimeoutType,
                                    num_resumers: int,
                                    num_active: int,
-                                   num_registered: int,
+                                   num_registered_before: int,
+                                   num_registered_after: int,
                                    num_unreg_no_delay: int,
                                    num_unreg_delay: int,
                                    num_stopped_no_delay: int,
@@ -4560,7 +4578,10 @@ class ConfigVerifier:
                 or, by starting exited threads in time, not timeout
             num_resumers: number of threads doing resumes
             num_active: number threads active, thus no timeout
-            num_registered: number threads registered, thus no timeout
+            num_registered_before: number threads registered, thus no
+                 timeout, that wait before the resume is issued
+            num_registered_after: number threads registered, thus no
+                 timeout, that wait after the resume is issued
             num_unreg_no_delay: number threads unregistered before the
                 resume is done, and are then created and started within
                 the allowed timeout
@@ -4581,7 +4602,8 @@ class ConfigVerifier:
         # for the commander
         assert (num_resumers
                 + num_active
-                + num_registered
+                + num_registered_before
+                + num_registered_after
                 + num_unreg_no_delay
                 + num_unreg_delay
                 + num_stopped_no_delay
@@ -4595,7 +4617,8 @@ class ConfigVerifier:
                 + 1)  # plus 1 for commander
 
         timeout_time = ((num_active * 0.16)
-                        + (num_registered * 0.16)
+                        + (num_registered_before * 0.16)
+                        + (num_registered_after * 0.16)
                         + (num_unreg_no_delay * 0.16)
                         + (num_unreg_delay * 0.16)
                         + (num_stopped_no_delay * 0.16)
@@ -4611,7 +4634,7 @@ class ConfigVerifier:
 
         self.build_config(
             cmd_runner=self.commander_name,
-            num_registered=num_registered,
+            num_registered=num_registered_before + num_registered_after,
             num_active=num_active_needed,
             num_stopped=num_stopped_no_delay + num_stopped_delay
         )
@@ -4641,13 +4664,23 @@ class ConfigVerifier:
             var_name_for_log='active_target_names')
 
         ################################################################
-        # choose registered_names
+        # choose registered_names_before
         ################################################################
-        registered_names = self.choose_names(
-            name_collection=self.registered_names,
-            num_names_needed=num_registered,
-            update_collection=False,
-            var_name_for_log='registered_names')
+        registered_names_copy = self.registered_names.copy()
+        registered_names_before = self.choose_names(
+            name_collection=registered_names_copy,
+            num_names_needed=num_registered_before,
+            update_collection=True,
+            var_name_for_log='registered_names_before')
+
+        ################################################################
+        # choose registered_names_after
+        ################################################################
+        registered_names_after = self.choose_names(
+            name_collection=registered_names_copy,
+            num_names_needed=num_registered_after,
+            update_collection=True,
+            var_name_for_log='registered_names_after')
 
         ################################################################
         # choose unreg_no_delay_names
@@ -4688,7 +4721,8 @@ class ConfigVerifier:
             var_name_for_log='stopped_delay_targets')
 
         all_targets: list[str] = (active_target_names
-                                  + registered_names
+                                  + registered_names_before
+                                  + registered_names_after
                                   + unreg_no_delay_names
                                   + unreg_delay_names
                                   + stopped_no_delay_targets
@@ -4708,6 +4742,15 @@ class ConfigVerifier:
         if active_target_names:
             wait_active_target_serial_num = self.add_cmd(
                 Wait(cmd_runners=active_target_names,
+                     remote=resumer_names))
+
+        ################################################################
+        # start registered_names_before issue smart_wait
+        ################################################################
+        if registered_names_before:
+            self.build_start_suite(start_names=registered_names_before)
+            wait_reg_before_target_serial_num = self.add_cmd(
+                Wait(cmd_runners=registered_names_before,
                      remote=resumer_names))
 
         ################################################################
@@ -4741,6 +4784,16 @@ class ConfigVerifier:
                     raise_not_alive=raise_not_alive))
 
         ################################################################
+        # prevent stopped_no_delay from getting started too soon
+        ################################################################
+        if raise_not_alive and stopped_names:
+            self.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=[self.commander_name],
+                    confirm_cmd=resume_to_confirm,
+                    confirm_serial_num=resume_serial_num,
+                    confirmers=resumer_names))
+        ################################################################
         # create and start unreg_no_delay_names and build smart_wait
         ################################################################
         if unreg_no_delay_names:
@@ -4763,13 +4816,6 @@ class ConfigVerifier:
                 Wait(cmd_runners=unreg_no_delay_names,
                      remote=resumer_names))
 
-        ################################################################
-        # prevent stopped_no_delay from getting started too soon
-        ################################################################
-        if raise_not_alive and stopped_no_delay_targets:
-            self.add_cmd(Pause(
-                cmd_runners='alpha',
-                pause_seconds=0.5))
         ################################################################
         # build stopped_no_delay_targets smart_wait
         ################################################################
@@ -4816,12 +4862,12 @@ class ConfigVerifier:
             pause_seconds=pause_time))
 
         ################################################################
-        # start registered_names issue smart_wait
+        # start registered_names_after and issue smart_wait
         ################################################################
-        if registered_names:
-            self.build_start_suite(start_names=registered_names)
-            wait_reg_target_serial_num = self.add_cmd(
-                Wait(cmd_runners=registered_names,
+        if registered_names_after:
+            self.build_start_suite(start_names=registered_names_after)
+            wait_reg_after_target_serial_num = self.add_cmd(
+                Wait(cmd_runners=registered_names_after,
                      remote=resumer_names))
 
         ################################################################
@@ -4892,13 +4938,25 @@ class ConfigVerifier:
         ####################################################
         # confirm the registered target waits
         ####################################################
-        if registered_names:
+        if registered_names_before:
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
                     confirm_cmd='Wait',
-                    confirm_serial_num=wait_reg_target_serial_num,
-                    confirmers=registered_names))
+                    confirm_serial_num=wait_reg_before_target_serial_num,
+                    confirmers=registered_names_before))
+
+        ####################################################
+        # confirm the registered target waits
+        ####################################################
+        if registered_names_after:
+            self.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=[self.commander_name],
+                    confirm_cmd='Wait',
+                    confirm_serial_num=wait_reg_after_target_serial_num,
+                    confirmers=registered_names_after))
+
         ####################################################
         # confirm the unreg_no_delay_names
         ####################################################
@@ -5030,12 +5088,13 @@ class ConfigVerifier:
         ####################################################
         # confirm the resumer_names
         ####################################################
-        self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=[self.commander_name],
-                confirm_cmd=resume_to_confirm,
-                confirm_serial_num=resume_serial_num,
-                confirmers=resumer_names))
+        if not (raise_not_alive and stopped_names):
+            self.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=[self.commander_name],
+                    confirm_cmd=resume_to_confirm,
+                    confirm_serial_num=resume_serial_num,
+                    confirmers=resumer_names))
 
     ####################################################################
     # build_msg_timeout_suite
@@ -8317,25 +8376,8 @@ class ConfigVerifier:
         start_time = time.time()
         while work_resumers:
             for resumer in work_resumers:
-                test_timeouts: set[str] = set()
-                if resumer == self.commander_name:
-                    if self.commander_thread.resume_remotes_unregistered:
-                        test_timeouts = (
-                            self.commander_thread.resume_remotes_unregistered)
-                    if self.commander_thread.resume_remotes_stopped:
-                        test_timeouts |= (
-                            self.commander_thread.resume_remotes_stopped)
-                else:
-                    if self.all_threads[resumer].resume_remotes_unregistered:
-                        test_timeouts = (
-                            self.all_threads[
-                                resumer].resume_remotes_unregistered)
-                    if self.all_threads[resumer].resume_remotes_stopped:
-                        test_timeouts |= (
-                            self.all_threads[
-                                resumer].resume_remotes_stopped)
-
-                if timeouts == set(sorted(test_timeouts)):
+                if timeouts == set(sorted(self.all_threads[
+                                resumer].resume_timeout_names)):
                     work_resumers.remove(resumer)
                     break
 
@@ -8344,6 +8386,7 @@ class ConfigVerifier:
                 raise CmdTimedOut('wait_for_resume_timeouts timed out '
                                   f'with {work_resumers=}, '
                                   f'{timeouts=}, {sorted(test_timeouts)=}')
+
 
 ########################################################################
 # expand_cmds
@@ -8888,7 +8931,8 @@ class TestSmartThreadScenarios:
             timeout_type_arg: TimeoutType,
             num_resumers_arg: int,
             num_active_arg: int,
-            num_registered_arg: int,
+            num_registered_before_arg: int,
+            num_registered_after_arg: int,
             num_unreg_no_delay_arg: int,
             num_unreg_delay_arg: int,
             num_stopped_no_delay_arg: int,
@@ -8903,8 +8947,10 @@ class TestSmartThreadScenarios:
                 or, by starting exited threads in time, not timeout
             num_resumers_arg: number of threads doing resumes
             num_active_arg: number threads active, thus no timeout
-            num_registered_arg: number threads registered, thus no
-                timeout
+            num_registered_before_arg: number threads registered, thus
+                no timeout, issued before the resume is issued
+            num_registered_after_arg: number threads registered, thus no
+                timeout, issued after the resume is issued
             num_unreg_no_delay_arg: number threads unregistered before
                 the resume is done, and are then created and started
                 within the allowed timeout
@@ -8921,7 +8967,8 @@ class TestSmartThreadScenarios:
         """
         total_arg_counts = (
                 num_active_arg
-                + num_registered_arg
+                + num_registered_before_arg
+                + num_registered_after_arg
                 + num_unreg_no_delay_arg
                 + num_unreg_delay_arg
                 + num_stopped_no_delay_arg
@@ -8947,7 +8994,8 @@ class TestSmartThreadScenarios:
             'timeout_type': timeout_type_arg,
             'num_resumers': num_resumers_arg,
             'num_active': num_active_arg,
-            'num_registered': num_registered_arg,
+            'num_registered_before': num_registered_before_arg,
+            'num_registered_after': num_registered_after_arg,
             'num_unreg_no_delay': num_unreg_no_delay_arg,
             'num_unreg_delay': num_unreg_delay_arg,
             'num_stopped_no_delay': num_stopped_no_delay_arg,
