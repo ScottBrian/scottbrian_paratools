@@ -109,9 +109,9 @@ def thread_exc(monkeypatch: Any) -> "ExcHook":
     exc_hook = ExcHook()
 
     def mock_threading_excepthook(args):
-        exc_err_msg = (f'SmartEvent excepthook: {args.exc_type}, '
-                       f'{args.exc_value}, {args.exc_traceback},'
-                       f' {args.thread}')
+        # exc_err_msg = (f'SmartEvent excepthook: {args.exc_type}, '
+        #                f'{args.exc_value}, {args.exc_traceback},'
+        #                f' {args.thread}')
         exc_err_msg = (f'SmartEvent excepthook: {args.exc_type}, '
                        f'{args.exc_traceback}')
         current_thread = threading.current_thread()

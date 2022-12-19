@@ -1675,7 +1675,7 @@ class SmartThread:
             # if no progress was made
             if len(work_targets) == work_targets_start_len:
 
-                # make the work_targets visible to test cases
+                # make the timeout work_targets visible to test cases
                 self.resume_timeout_names = work_targets
 
                 # If an error should be raised for stopped threads

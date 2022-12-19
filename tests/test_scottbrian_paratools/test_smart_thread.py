@@ -77,8 +77,7 @@ class TimeoutType(Enum):
 timeout_type_arg_list = [TimeoutType.TimeoutNone,
                          TimeoutType.TimeoutFalse,
                          TimeoutType.TimeoutTrue]
-# timeout_type_arg_list = [TimeoutType.TimeoutFalse,
-#                          TimeoutType.TimeoutTrue]
+timeout_type_arg_list = [TimeoutType.TimeoutTrue]
 
 ########################################################################
 # Test settings for test_config_build_scenarios
@@ -4619,15 +4618,15 @@ class ConfigVerifier:
         timeout_time = ((num_active * 0.16)
                         + (num_registered_before * 0.16)
                         + (num_registered_after * 0.16)
-                        + (num_unreg_no_delay * 0.16)
+                        + (num_unreg_no_delay * 0.32)
                         + (num_unreg_delay * 0.16)
-                        + (num_stopped_no_delay * 0.16)
+                        + (num_stopped_no_delay * 0.32)
                         + (num_stopped_delay * 0.16))
 
         pause_time = 0.5
         if timeout_type == TimeoutType.TimeoutFalse:
-            timeout_time *= 2  # prevent timeout
-            pause_time = timeout_time * 0.25
+            timeout_time *= 4  # prevent timeout
+            pause_time = timeout_time * 0.10
         elif timeout_type == TimeoutType.TimeoutTrue:
             # timeout_time *= 0.5  # force timeout
             pause_time = timeout_time * 2
@@ -4731,7 +4730,7 @@ class ConfigVerifier:
         timeout_names = unreg_delay_names + stopped_delay_targets
         stopped_names = stopped_no_delay_targets + stopped_delay_targets
 
-        if len(stopped_names) % 2:
+        if len(all_targets) % 2:
             raise_not_alive = True
         else:
             raise_not_alive = False
@@ -4882,16 +4881,16 @@ class ConfigVerifier:
                     app_config = AppConfig.RemoteThreadApp
 
                 f1_create_items.append(F1CreateItem(name=name,
-                                                    auto_start=True,
+                                                    auto_start=False,
                                                     target_rtn=outer_f1,
                                                     app_config=app_config))
             self.build_create_suite(
                 f1_create_items=f1_create_items,
                 validate_config=False)
 
-            wait_unreg_delay_serial_num = self.add_cmd(
-                Wait(cmd_runners=unreg_delay_names,
-                     remote=resumer_names))
+            # wait_unreg_delay_serial_num = self.add_cmd(
+            #     Wait(cmd_runners=unreg_delay_names,
+            #          remote=resumer_names))
 
         ################################################################
         # build stopped_delay_targets smart_wait
@@ -4914,17 +4913,23 @@ class ConfigVerifier:
                     app_config = AppConfig.RemoteThreadApp
 
                 f1_create_items.append(F1CreateItem(name=name,
-                                                    auto_start=True,
+                                                    auto_start=False,
                                                     target_rtn=outer_f1,
                                                     app_config=app_config))
             self.build_create_suite(
                 f1_create_items=f1_create_items,
                 validate_config=False)
 
+            self.build_start_suite(start_names=stopped_delay_targets)
             wait_stopped_delay_serial_num = self.add_cmd(
                 Wait(cmd_runners=stopped_delay_targets,
                      remote=resumer_names))
 
+        if unreg_delay_names:
+            self.build_start_suite(start_names=unreg_delay_names)
+            wait_unreg_delay_serial_num = self.add_cmd(
+                Wait(cmd_runners=unreg_delay_names,
+                     remote=resumer_names))
         ####################################################
         # confirm the active target waits
         ####################################################
@@ -7188,11 +7193,11 @@ class ConfigVerifier:
                     targets=targets,
                     timeout=timeout,
                     raise_not_alive=raise_not_alive)
-                error_msg = (f'{self.name} timed out on a resume() request '
-                             f'while processing threads '
-                             f'{sorted(timeout_names)}')
-                self.add_log_msg(new_log_msg=re.escape(error_msg),
-                                 log_level=logging.ERROR)
+            error_msg = (f'{cmd_runner} timed out on a resume() request '
+                         f'while processing threads '
+                         f'{sorted(timeout_names)}')
+            self.add_log_msg(new_log_msg=re.escape(error_msg),
+                             log_level=logging.ERROR)
 
         self.log_test_msg(f'handle_resume_tot exit: {cmd_runner=}, '
                           f'{targets=}, {timeout=}, {timeout_names=}')
@@ -8376,8 +8381,9 @@ class ConfigVerifier:
         start_time = time.time()
         while work_resumers:
             for resumer in work_resumers:
-                if timeouts == set(sorted(self.all_threads[
-                                resumer].resume_timeout_names)):
+                test_timeouts = set(sorted(self.all_threads[
+                                resumer].resume_timeout_names))
+                if timeouts == test_timeouts:
                     work_resumers.remove(resumer)
                     break
 
@@ -8977,7 +8983,7 @@ class TestSmartThreadScenarios:
             if total_arg_counts == 0:
                 return
         else:
-            if (num_unreg_delay_arg + num_stopped_no_delay_arg) == 0:
+            if (num_unreg_delay_arg + num_stopped_delay_arg) == 0:
                 return
 
         command_config_num = total_arg_counts % 4
