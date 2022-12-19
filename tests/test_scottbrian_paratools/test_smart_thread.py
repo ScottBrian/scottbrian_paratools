@@ -77,7 +77,7 @@ class TimeoutType(Enum):
 timeout_type_arg_list = [TimeoutType.TimeoutNone,
                          TimeoutType.TimeoutFalse,
                          TimeoutType.TimeoutTrue]
-timeout_type_arg_list = [TimeoutType.TimeoutTrue]
+# timeout_type_arg_list = [TimeoutType.TimeoutTrue]
 
 ########################################################################
 # Test settings for test_config_build_scenarios
@@ -172,7 +172,7 @@ num_delay_reg_arg_list = [0, 1, 2]
 ########################################################################
 # Test settings for test_resume_timeout_scenarios
 ########################################################################
-num_resumers_arg_list = [1]
+num_resumers_arg_list = [1, 2, 3]
 num_active_arg_list = [0, 1, 2]
 num_registered_before_arg_list = [0, 1, 2]
 num_registered_after_arg_list = [0, 1, 2]
@@ -180,6 +180,17 @@ num_unreg_no_delay_arg_list = [0, 1, 2]
 num_unreg_delay_arg_list = [0, 1, 2]
 num_stopped_no_delay_arg_list = [0, 1, 2]
 num_stopped_delay_arg_list = [0, 1, 2]
+
+########################################################################
+# Test settings for test_wait_timeout_scenarios
+########################################################################
+num_waiters_arg_list = [1, 2, 3]
+num_active_no_delay_resumers_arg_list = [0, 1, 2]
+num_active_delay_resumers_arg_list = [0, 1, 2]
+num_resume_exit_arg_list = [0, 1, 2]
+num_noresume_exit_arg_list = [0, 1, 2]
+num_unreg_resumers_arg_list = [0, 1, 2]
+num_reg_resumers_arg_list = [0, 1, 2]
 
 
 ########################################################################
@@ -2216,6 +2227,113 @@ def num_stopped_no_delay_arg(request: Any) -> int:
 ###############################################################################
 @pytest.fixture(params=num_stopped_delay_arg_list)  # type: ignore
 def num_stopped_delay_arg(request: Any) -> int:
+    """Number stopped threads quickly joined, created, and started.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
+########################################################################
+# num_waiters_arg
+########################################################################
+@pytest.fixture(params=num_waiters_arg_list)  # type: ignore
+def num_waiters_arg(request: Any) -> int:
+    """Number stopped threads quickly joined, created, and started.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+########################################################################
+# num_active_no_delay_resumers_arg
+########################################################################
+@pytest.fixture(params=num_active_no_delay_resumers_arg_list)  # type: ignore
+def num_active_no_delay_resumers_arg(request: Any) -> int:
+    """Number stopped threads quickly joined, created, and started.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
+########################################################################
+# num_active_delay_resumers_arg
+########################################################################
+@pytest.fixture(params=num_active_delay_resumers_arg_list)  # type: ignore
+def num_active_delay_resumers_arg(request: Any) -> int:
+    """Number stopped threads quickly joined, created, and started.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+########################################################################
+# num_resume_exit_arg
+########################################################################
+@pytest.fixture(params=num_resume_exit_arg_list)  # type: ignore
+def num_resume_exit_arg(request: Any) -> int:
+    """Number stopped threads quickly joined, created, and started.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+########################################################################
+# num_noresume_exit_arg
+########################################################################
+@pytest.fixture(params=num_noresume_exit_arg_list)  # type: ignore
+def num_noresume_exit_arg(request: Any) -> int:
+    """Number stopped threads quickly joined, created, and started.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+########################################################################
+# num_unreg_resumers_arg
+########################################################################
+@pytest.fixture(params=num_unreg_resumers_arg_list)  # type: ignore
+def num_unreg_resumers_arg(request: Any) -> int:
+    """Number stopped threads quickly joined, created, and started.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+########################################################################
+# num_reg_resumers_arg
+########################################################################
+@pytest.fixture(params=num_reg_resumers_arg_list)  # type: ignore
+def num_reg_resumers_arg(request: Any) -> int:
     """Number stopped threads quickly joined, created, and started.
 
     Args:
@@ -8678,7 +8796,7 @@ class TestSmartThreadScenarios:
             commander_config=commander_config_arg)
 
     ####################################################################
-    # test_smart_thread_meta_scenarios
+    # test_config_build_scenarios
     ####################################################################
     def test_config_build_scenarios(
             self,
@@ -8775,7 +8893,7 @@ class TestSmartThreadScenarios:
             caplog_to_use=caplog)
 
     ####################################################################
-    # test_smart_thread_msg_timeout_scenarios
+    # test_recv_msg_timeout_scenarios
     ####################################################################
     def test_recv_msg_timeout_scenarios(
             self,
@@ -8930,7 +9048,7 @@ class TestSmartThreadScenarios:
             commander_config=commander_config)
 
     ####################################################################
-    # test_send_msg_timeout_scenarios
+    # test_resume_timeout_scenarios
     ####################################################################
     def test_resume_timeout_scenarios(
             self,
@@ -9013,6 +9131,89 @@ class TestSmartThreadScenarios:
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
             commander_config=commander_config)
+
+    ####################################################################
+    # test_wait_timeout_scenarios
+    ####################################################################
+    def test_wait_timeout_scenarios(
+            self,
+            timeout_type_arg: TimeoutType,
+            num_waiters_arg: int,
+            num_active_no_delay_resumers_arg: int,
+            num_active_delay_resumers_arg: int,
+            num_resume_exit_arg: int,
+            num_noresume_exit_arg: int,
+            num_unreg_resumers_arg: int,
+            num_reg_resumers_arg: int,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            timeout_type_arg: specifies whether the recv_msg should
+                be coded with timeout and whether the recv_msg should
+                succeed or fail with a timeout
+            num_waiters_arg: number of threads that will do the wait
+            num_active_no_delay_resumers_arg: number of threads that are
+                active and will do the resumer immediately
+            num_active_delay_resumers_arg: number of threads that are
+                active and will do the resumer after a delay
+            num_resume_exit_arg: number of threads that are active
+                and will do the resumer and then exit
+            num_noresume_exit_arg: number of threads that are
+                active and will not do the resumer and then exit
+            num_unreg_resumers_arg: number of threads that are
+                unregistered and will be created and started and then
+                do the resumer
+            num_reg_resumers_arg: number of threads that are registered
+                and will be started and then do the resumer
+            caplog: pytest fixture to capture log output
+
+        """
+        total_arg_counts = (
+                num_active_no_delay_resumers_arg
+                + num_active_delay_resumers_arg
+                + num_resume_exit_arg
+                + num_noresume_exit_arg
+                + num_unreg_resumers_arg
+                + num_reg_resumers_arg)
+        if timeout_type_arg == TimeoutType.TimeoutNone:
+            if total_arg_counts == 0:
+                return
+        else:
+            if (num_active_delay_resumers_arg
+                    + num_noresume_exit_arg
+                    + num_unreg_resumers_arg
+                    + num_reg_resumers_arg) == 0:
+                return
+
+        command_config_num = total_arg_counts % 4
+        if command_config_num == 0:
+            commander_config = AppConfig.ScriptStyle
+        elif command_config_num == 1:
+            commander_config = AppConfig.CurrentThreadApp
+        elif command_config_num == 2:
+            commander_config = AppConfig.RemoteThreadApp
+        else:
+            commander_config = AppConfig.RemoteSmartThreadApp
+
+        args_for_scenario_builder: dict[str, Any] = {
+            'timeout_type': timeout_type_arg,
+            'num_waiters': num_waiters_arg,
+            'num_active_no_delay_resumers': num_active_no_delay_resumers_arg,
+            'num_active_delay_resumers': num_active_delay_resumers_arg,
+            'num_send_exit_resumers': num_resume_exit_arg,
+            'num_nosend_exit_resumers': num_noresume_exit_arg,
+            'num_unreg_resumers': num_unreg_resumers_arg,
+            'num_reg_resumers': num_reg_resumers_arg
+        }
+
+        self.scenario_driver(
+            scenario_builder=ConfigVerifier.build_recv_msg_timeout_suite,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog,
+            commander_config=commander_config
+        )
 
     ####################################################################
     # test_smart_thread_msg_timeout_scenarios
