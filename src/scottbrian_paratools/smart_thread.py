@@ -2047,14 +2047,14 @@ class SmartThread:
                             remote].thread.is_alive()
                         remote_status = SmartThread._registry[remote].status
 
-                    error_msg =(
+                    error_msg = (
                         f'{self.name} raising SmartThreadWaitTimedOut waiting '
                         f'for a {wait_or_sync} resume from {remote} with '
                         f'{remote_is_alive=}, {remote_status=}')
 
-                    self.remote_array[remote].sync_wait = False
-                    self.remote_array[remote].wait_wait = False
-                    self.remote_array[remote].wait_timeout_specified = False
+                    local_sb.wait_wait = False
+                    local_sb.deadlock = False
+                    local_sb.wait_timeout_specified = False
 
                     self.logger.error(error_msg)
                     raise SmartThreadWaitTimedOut(error_msg)

@@ -1380,16 +1380,16 @@ class VerifyStatus(ConfigCmd):
 class Wait(ConfigCmd):
     def __init__(self,
                  cmd_runners: StrOrList,
-                 remote: StrOrList) -> None:
+                 resumers: StrOrList) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
 
-        if isinstance(remote, str):
-            remote = [remote]
-        self.remote = remote
+        if isinstance(resumers, str):
+            resumers = [resumers]
+        self.resumers = resumers
 
-        self.arg_list += ['remote']
+        self.arg_list += ['resumers']
 
     def run_process(self, name: str) -> None:
         """Run the command.
@@ -1399,7 +1399,66 @@ class Wait(ConfigCmd):
         """
         self.config_ver.handle_wait(
             cmd_runner=name,
-            remote=self.remote)
+            resumers=self.resumers)
+
+
+########################################################################
+# WaitTimeoutFalse
+########################################################################
+class WaitTimeoutFalse(Wait):
+    def __init__(self,
+                 cmd_runners: StrOrList,
+                 resumers: StrOrList,
+                 timeout: IntOrFloat) -> None:
+        super().__init__(cmd_runners=cmd_runners,
+                         resumers=resumers)
+        self.specified_args = locals()  # used for __repr__
+
+        self.timeout = timeout
+
+        self.arg_list += ['timeout']
+
+    def run_process(self, name: str) -> None:
+        """Run the command.
+
+        Args:
+            name: name of thread running the command
+        """
+        self.config_ver.handle_wait_tof(
+            cmd_runner=name,
+            resumers=self.resumers,
+            timeout=self.timeout)
+
+########################################################################
+# WaitTimeoutTrue
+########################################################################
+class WaitTimeoutTrue(WaitTimeoutFalse):
+    def __init__(self,
+                 cmd_runners: StrOrList,
+                 resumers: StrOrList,
+                 timeout: IntOrFloat,
+                 timeout_names: dict[str, tuple[bool, st.ThreadStatus]]
+                 ) -> None:
+        super().__init__(cmd_runners=cmd_runners,
+                         resumers=resumers,
+                         timeout=timeout)
+        self.specified_args = locals()  # used for __repr__
+
+        self.timeout_names = timeout_names
+
+        self.arg_list += ['timeout_names']
+
+    def run_process(self, name: str) -> None:
+        """Run the command.
+
+        Args:
+            name: name of thread running the command
+        """
+        self.config_ver.handle_wait_tot(
+            cmd_runner=name,
+            resumers=self.resumers,
+            timeout=self.timeout,
+            timeout_names=self.timeout_names)
 
 
 ########################################################################
@@ -4674,6 +4733,334 @@ class ConfigVerifier:
                 confirmers=receiver_names))
 
     ####################################################################
+    # build_recv_msg_timeout_suite
+    ####################################################################
+    def build_wait_timeout_suite(
+            self,
+            timeout_type: TimeoutType,
+            num_waiters: int,
+            num_active_no_delay_resumers: int,
+            num_active_delay_resumers: int,
+            num_resume_exit: int,
+            num_noresume_exit: int,
+            num_unreg_resumers: int,
+            num_reg_resumers: int) -> None:
+        """Return a list of ConfigCmd items for a msg timeout.
+
+        Args:
+            timeout_type: specifies whether the recv_msg should
+                be coded with timeout and whether the recv_msg should
+                succeed or fail with a timeout
+            num_waiters: number of threads that will do the wait
+            num_active_no_delay_resumers: number of threads that are
+                active and will do the resumer immediately
+            num_active_delay_resumers: number of threads that are active
+                and will do the resumer after a delay
+            num_resume_exit: number of threads that are active and will
+                do the resumer and then exit
+            num_noresume_exit: number of threads that are active and
+                will not do the resumer and then exit
+            num_unreg_resumers: number of threads that are unregistered
+                and will be created and started and then do the resumer
+            num_reg_resumers: number of threads that are registered and
+                will be started and then do the resumer
+
+        """
+        # Make sure we have enough threads. Note that we subtract 1 from
+        # the count of unregistered names to ensure we have one thread
+        # for the commander
+        assert (num_waiters
+                + num_active_no_delay_resumers
+                + num_active_delay_resumers
+                + num_resume_exit
+                + num_noresume_exit
+                + num_unreg_resumers
+                + num_reg_resumers) <= len(self.unregistered_names) - 1
+
+        assert num_waiters > 0
+
+        assert (num_active_no_delay_resumers
+                + num_active_delay_resumers
+                + num_resume_exit
+                + num_noresume_exit
+                + num_unreg_resumers
+                + num_reg_resumers) > 0
+
+        if (timeout_type == TimeoutType.TimeoutFalse
+                or timeout_type == TimeoutType.TimeoutTrue):
+            assert (num_active_delay_resumers
+                    + num_noresume_exit
+                    + num_unreg_resumers
+                    + num_reg_resumers) > 0
+
+        num_active_needed = (
+                num_waiters
+                + num_active_no_delay_resumers
+                + num_active_delay_resumers
+                + num_resume_exit
+                + num_noresume_exit
+                + 1)
+
+        timeout_time = ((num_active_no_delay_resumers * 0.01)
+                        + (num_active_delay_resumers * 0.01)
+                        + (num_resume_exit * 0.01)
+                        + (num_noresume_exit * 0.5)
+                        + (num_unreg_resumers * 0.2)
+                        + (num_reg_resumers * 0.1))
+
+        if timeout_type == TimeoutType.TimeoutNone:
+            pause_time = 0.5
+        elif timeout_type == TimeoutType.TimeoutFalse:
+            pause_time = 0.5
+            timeout_time += (pause_time * 2)  # prevent timeout
+        else:  # timeout True
+            pause_time = timeout_time + 1  # force timeout
+
+        self.build_config(
+            cmd_runner=self.commander_name,
+            num_registered=num_reg_resumers,
+            num_active=num_active_needed)
+
+        self.log_name_groups()
+
+        # active_names = self.active_names.copy()
+        # remove commander for now, but if we add it later we need to
+        # be careful not to exit the commander
+        active_names = self.active_names - {self.commander_name}
+
+        ################################################################
+        # choose waiter_names
+        ################################################################
+        waiter_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_waiters,
+            update_collection=True,
+            var_name_for_log='waiter_names')
+
+        ################################################################
+        # choose active_no_delay_resumer_names
+        ################################################################
+        active_no_delay_resumer_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_active_no_delay_resumers ,
+            update_collection=True,
+            var_name_for_log='active_no_delay_resumer_names')
+
+        ################################################################
+        # choose active_delay_resumer_names
+        ################################################################
+        active_delay_resumer_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_active_delay_resumers ,
+            update_collection=True,
+            var_name_for_log='active_delay_resumer_names')
+
+        ################################################################
+        # choose resume_exit_names
+        ################################################################
+        resume_exit_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_resume_exit  ,
+            update_collection=True,
+            var_name_for_log='resume_exit_names')
+
+        ################################################################
+        # choose noresume_exit_names
+        ################################################################
+        noresume_exit_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_noresume_exit  ,
+            update_collection=True,
+            var_name_for_log='noresume_exit_names')
+
+        ################################################################
+        # choose unreg_resumer_names
+        ################################################################
+        unreg_resumer_names = self.choose_names(
+            name_collection=self.unregistered_names,
+            num_names_needed=num_unreg_resumers ,
+            update_collection=False,
+            var_name_for_log='unreg_resumer_names')
+
+        ################################################################
+        # choose reg_resumer_names
+        ################################################################
+        reg_resumer_names = self.choose_names(
+            name_collection=self.registered_names,
+            num_names_needed=num_reg_resumers ,
+            update_collection=False,
+            var_name_for_log='reg_resumer_names')
+
+        ################################################################
+        # start by doing the recv_msgs, one for each sender
+        ################################################################
+        all_resumer_names: list[str] = (active_no_delay_resumer_names
+                                        + active_delay_resumer_names
+                                        + resume_exit_names
+                                        + noresume_exit_names
+                                        + unreg_resumer_names
+                                        + reg_resumer_names)
+
+        all_timeout_names: list[str] = (active_delay_resumer_names
+                                        + resume_exit_names
+                                        + noresume_exit_names
+                                        + unreg_resumer_names
+                                        + reg_resumer_names)
+
+        # self.set_recv_timeout(
+        #     num_timeouts=len(all_timeout_names) * num_waiters )
+
+        if len(all_resumer_names) % 2 == 0:
+            log_msg = f'wait log test: {self.get_ptime()}'
+        else:
+            log_msg = None
+
+        if timeout_type == TimeoutType.TimeoutNone:
+            confirm_cmd_to_use = 'Wait'
+            recv_msg_serial_num = self.add_cmd(
+                Wait(cmd_runners=waiter_names,
+                        senders=all_resumer_names,
+                        exp_msgs=sender_msgs,
+                        del_deferred=resume_exit_names,
+                        log_msg=log_msg))
+        elif timeout_type == TimeoutType.TimeoutFalse:
+            confirm_cmd_to_use = 'WaitTimeoutFalse'
+            recv_msg_serial_num = self.add_cmd(
+                WaitTimeoutFalse(
+                    cmd_runners=waiter_names,
+                    senders=all_resumer_names,
+                    exp_msgs=sender_msgs,
+                    timeout=2,
+                    del_deferred=resume_exit_names,
+                    log_msg=log_msg))
+
+        else:  # TimeoutType.TimeoutTrue
+            confirm_cmd_to_use = 'WaitTimeoutTrue'
+            recv_msg_serial_num = self.add_cmd(
+                WaitTimeoutTrue(
+                    cmd_runners=waiter_names,
+                    senders=all_resumer_names,
+                    exp_msgs=sender_msgs,
+                    timeout=2,
+                    timeout_names=all_timeout_names,
+                    del_deferred=resume_exit_names,
+                    log_msg=log_msg))
+
+        ################################################################
+        # do send_msg from active_no_delay_resumers
+        ################################################################
+        if active_no_delay_resumer_names:
+            self.add_cmd(
+                SendMsg(cmd_runners=active_no_delay_resumer_names,
+                        receivers=resumer_names,
+                        msgs_to_send=sender_msgs))
+
+        self.add_cmd(
+            Pause(cmd_runners=self.commander_name,
+                  pause_seconds=pause_time))
+        if timeout_type == TimeoutType.TimeoutTrue:
+            self.add_cmd(WaitForRecvTimeouts(cmd_runners=self.commander_name))
+
+        ################################################################
+        # do send_msg from active_delay_resumers
+        ################################################################
+        if active_delay_resumer_names:
+            self.add_cmd(
+                SendMsg(cmd_runners=active_delay_resumer_names,
+                        receivers=resumer_names,
+                        msgs_to_send=sender_msgs))
+
+        ################################################################
+        # do send_msg from resume_exit   and then exit
+        ################################################################
+        if resume_exit_names:
+            self.add_cmd(
+                SendMsg(cmd_runners=resume_exit_names,
+                        receivers=resumer_names,
+                        msgs_to_send=sender_msgs))
+
+            self.build_exit_suite(
+                names=resume_exit_names, validate_config=False)
+            self.build_join_suite(
+                cmd_runners=self.commander_name,
+                join_target_names=resume_exit_names,
+                validate_config=False)
+
+        ################################################################
+        # exit the noresume_exit  , then resurrect and do send_msg
+        ################################################################
+        if noresume_exit_names:
+            self.build_exit_suite(
+                names=noresume_exit_names, validate_config=False)
+            self.build_join_suite(
+                cmd_runners=self.commander_name,
+                join_target_names=noresume_exit_names,
+                validate_config=False)
+            f1_create_items: list[F1CreateItem] = []
+            for idx, name in enumerate(noresume_exit_names):
+                if idx % 2:
+                    app_config = AppConfig.ScriptStyle
+                else:
+                    app_config = AppConfig.RemoteThreadApp
+
+                f1_create_items.append(F1CreateItem(name=name,
+                                                    auto_start=True,
+                                                    target_rtn=outer_f1,
+                                                    app_config=app_config))
+            self.build_create_suite(
+                f1_create_items=f1_create_items,
+                validate_config=False)
+            self.add_cmd(
+                SendMsg(cmd_runners=noresume_exit_names,
+                        receivers=resumer_names,
+                        msgs_to_send=sender_msgs))
+
+        ################################################################
+        # create and start the unreg_resumers , then do send_msg
+        ################################################################
+        if unreg_resumer_names:
+            f1_create_items: list[F1CreateItem] = []
+            for idx, name in enumerate(unreg_resumer_names):
+                if idx % 2:
+                    app_config = AppConfig.ScriptStyle
+                else:
+                    app_config = AppConfig.RemoteThreadApp
+
+                f1_create_items.append(F1CreateItem(name=name,
+                                                    auto_start=True,
+                                                    target_rtn=outer_f1,
+                                                    app_config=app_config))
+            self.build_create_suite(
+                f1_create_items=f1_create_items,
+                validate_config=False)
+            self.add_cmd(
+                SendMsg(cmd_runners=unreg_resumer_names,
+                        receivers=resumer_names,
+                        msgs_to_send=sender_msgs))
+
+        ################################################################
+        # start the reg_resumers , then do send_msg
+        ################################################################
+        if reg_resumer_names:
+            self.build_start_suite(
+                start_names=reg_resumer_names,
+                validate_config=False)
+            self.add_cmd(
+                SendMsg(cmd_runners=reg_resumer_names,
+                        receivers=resumer_names,
+                        msgs_to_send=sender_msgs))
+
+        ################################################################
+        # finally, confirm the recv_msg is done
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd=confirm_cmd_to_use,
+                confirm_serial_num=recv_msg_serial_num,
+                confirmers=resumer_names))
+
+    ####################################################################
     # build_msg_timeout_suite
     ####################################################################
     def build_resume_timeout_suite(self,
@@ -4763,7 +5150,7 @@ class ConfigVerifier:
         active_names = self.active_names - {self.commander_name}
 
         ################################################################
-        # choose sender_names
+        # choose resumer_names
         ################################################################
         resumer_names = self.choose_names(
             name_collection=active_names,
@@ -4859,7 +5246,7 @@ class ConfigVerifier:
         if active_target_names:
             wait_active_target_serial_num = self.add_cmd(
                 Wait(cmd_runners=active_target_names,
-                     remote=resumer_names))
+                     resumers=resumer_names))
 
         ################################################################
         # start registered_names_before issue smart_wait
@@ -4868,7 +5255,7 @@ class ConfigVerifier:
             self.build_start_suite(start_names=registered_names_before)
             wait_reg_before_target_serial_num = self.add_cmd(
                 Wait(cmd_runners=registered_names_before,
-                     remote=resumer_names))
+                     resumers=resumer_names))
 
         ################################################################
         # issue smart_resume
@@ -4931,7 +5318,7 @@ class ConfigVerifier:
 
             wait_unreg_no_delay_serial_num = self.add_cmd(
                 Wait(cmd_runners=unreg_no_delay_names,
-                     remote=resumer_names))
+                     resumers=resumer_names))
 
         ################################################################
         # build stopped_no_delay_targets smart_wait
@@ -4963,7 +5350,7 @@ class ConfigVerifier:
 
             wait_stopped_no_delay_serial_num = self.add_cmd(
                 Wait(cmd_runners=stopped_no_delay_targets,
-                     remote=resumer_names))
+                     resumers=resumer_names))
 
         ################################################################
         # wait for resume timeouts to be known
@@ -4985,7 +5372,7 @@ class ConfigVerifier:
             self.build_start_suite(start_names=registered_names_after)
             wait_reg_after_target_serial_num = self.add_cmd(
                 Wait(cmd_runners=registered_names_after,
-                     remote=resumer_names))
+                     resumers=resumer_names))
 
         ################################################################
         # build unreg_delay_names smart_wait
@@ -5008,7 +5395,7 @@ class ConfigVerifier:
 
             # wait_unreg_delay_serial_num = self.add_cmd(
             #     Wait(cmd_runners=unreg_delay_names,
-            #          remote=resumer_names))
+            #          resumers=resumer_names))
 
         ################################################################
         # build stopped_delay_targets smart_wait
@@ -5041,13 +5428,13 @@ class ConfigVerifier:
             self.build_start_suite(start_names=stopped_delay_targets)
             wait_stopped_delay_serial_num = self.add_cmd(
                 Wait(cmd_runners=stopped_delay_targets,
-                     remote=resumer_names))
+                     resumers=resumer_names))
 
         if unreg_delay_names:
             self.build_start_suite(start_names=unreg_delay_names)
             wait_unreg_delay_serial_num = self.add_cmd(
                 Wait(cmd_runners=unreg_delay_names,
-                     remote=resumer_names))
+                     resumers=resumer_names))
         ####################################################
         # confirm the active target waits
         ####################################################
@@ -5786,7 +6173,7 @@ class ConfigVerifier:
         ################################################################
         self.add_cmd(
             Wait(cmd_runners='beta',
-                 remote='charlie'))
+                 resumers='charlie'))
         ################################################################
         # resume
         ################################################################
@@ -7555,25 +7942,96 @@ class ConfigVerifier:
     ####################################################################
     def handle_wait(self,
                     cmd_runner: str,
-                    remote: str):
+                    resumers: list[str]) -> None:
         """Wait for a resume.
 
         Args:
             cmd_runner: thread doing the wait
-            remote: thread doing the resume
+            resumers: threads doing the resume
         """
         self.log_test_msg(f'{cmd_runner=} handle_wait entry for '
-                          f'{remote=}')
+                          f'{resumers=}')
 
         self.log_ver.add_call_seq(
             name='handle_wait',
             seq='test_smart_thread.py::ConfigVerifier.handle_wait')
 
-        for rem in remote:
+        for rem in resumers:
             self.all_threads[cmd_runner].smart_wait(remote=rem)
 
         self.log_test_msg(f'{cmd_runner=} handle_wait exit for '
-                          f'{remote=}')
+                          f'{resumers=}')
+
+    ####################################################################
+    # handle_wait
+    ####################################################################
+    def handle_wait_tof(self,
+                        cmd_runner: str,
+                        resumers: list[str],
+                        timeout: IntOrFloat) -> None:
+        """Wait for a resume, timeout specified, timeout not expected.
+
+        Args:
+            cmd_runner: thread doing the wait
+            resumers: threads doing the resume
+            timeout: timeout value to specify on the smart_wait
+        """
+        self.log_test_msg(f'{cmd_runner=} handle_wait entry for '
+                          f'{resumers=}, {timeout=}')
+
+        self.log_ver.add_call_seq(
+            name='handle_wait',
+            seq='test_smart_thread.py::ConfigVerifier.handle_wait')
+
+        for rem in resumers:
+            self.all_threads[cmd_runner].smart_wait(remote=rem,
+                                                    timeout=timeout)
+
+        self.log_test_msg(f'{cmd_runner=} handle_wait exit for '
+                          f'{resumers=}, {timeout=}')
+
+    ####################################################################
+    # handle_wait
+    ####################################################################
+    def handle_wait_tot(self,
+                        cmd_runner: str,
+                        resumers: list[str],
+                        timeout: IntOrFloat,
+                        timeout_names: dict[str, tuple[bool, st.ThreadStatus]]
+                        ) -> None:
+        """Wait for a resume, timeout specified, timeout expected.
+
+        Args:
+            cmd_runner: thread doing the wait
+            resumers: threads doing the resume
+            timeout: timeout value to specify on the smart_wait
+            timeout_names: names expected to be in timeout msg
+        """
+        self.log_test_msg(f'{cmd_runner=} handle_wait entry for '
+                          f'{resumers=}, {timeout=}')
+
+        self.log_ver.add_call_seq(
+            name='handle_wait',
+            seq='test_smart_thread.py::ConfigVerifier.handle_wait')
+
+        for rem in resumers:
+            with pytest.raises(st.SmartThreadSmartWaitTimedOut):
+                self.all_threads[cmd_runner].smart_wait(remote=rem,
+                                                        timeout=timeout)
+
+            remote_is_alive = timeout_names[rem][0]
+            remote_status = timeout_names[rem][1]
+            self.add_log_msg(re.escape(
+                f'{cmd_runner} raising SmartThreadWaitTimedOut waiting '
+                f'for a smart_wait resume from {rem} with '
+                f'{remote_is_alive=}, {remote_status=}'))
+
+            self.add_log_msg(
+                'Raise SmartThreadSendMsgTimedOut',
+                log_level=logging.ERROR)
+
+        self.log_test_msg(f'{cmd_runner=} handle_wait exit for '
+                          f'{resumers=}, {timeout=}')
 
     ####################################################################
     # inc_ops_count
@@ -9202,14 +9660,14 @@ class TestSmartThreadScenarios:
             'num_waiters': num_waiters_arg,
             'num_active_no_delay_resumers': num_active_no_delay_resumers_arg,
             'num_active_delay_resumers': num_active_delay_resumers_arg,
-            'num_send_exit_resumers': num_resume_exit_arg,
-            'num_nosend_exit_resumers': num_noresume_exit_arg,
+            'num_resume_exit ': num_resume_exit_arg,
+            'num_noresume_exit ': num_noresume_exit_arg,
             'num_unreg_resumers': num_unreg_resumers_arg,
             'num_reg_resumers': num_reg_resumers_arg
         }
 
         self.scenario_driver(
-            scenario_builder=ConfigVerifier.build_recv_msg_timeout_suite,
+            scenario_builder=ConfigVerifier.build_wait_timeout_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
             commander_config=commander_config
