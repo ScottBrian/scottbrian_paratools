@@ -54,6 +54,13 @@ class AppConfig(Enum):
     RemoteSmartThreadApp = auto()
 
 
+@dataclass
+class AliveAndStatus:
+    is_alive: bool
+    status: st.ThreadStatus
+    
+DictAliveAndStatus: TypeAlias = dict[str, AliveAndStatus]     
+
 ########################################################################
 # Test settings
 ########################################################################
@@ -282,11 +289,11 @@ class ConfigCmd(ABC):
         return f'{classname}({parms})'
 
     @abstractmethod
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+           cmd_runner: name of thread running the command
         """
         pass
 
@@ -313,11 +320,11 @@ class ConfirmResponse(ConfigCmd):
                           'confirm_serial_num',
                           'confirmers']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+           cmd_runner: name of thread running the command
         """
         start_time = time.time()
         work_confirmers = self.confirmers.copy()
@@ -355,11 +362,11 @@ class ConfirmResponseNot(ConfirmResponse):
                          confirmers=confirmers)
         self.specified_args = locals()  # used for __repr__
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+           cmd_runner: name of thread running the command
         """
         for name in self.confirmers:
             # If the serial number is in the completed_cmds for
@@ -387,11 +394,11 @@ class CreateCommanderAutoStart(ConfigCmd):
         self.commander_name = commander_name
         self.arg_list += ['commander_name']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+           cmd_runner: name of thread running the command
         """
         self.config_ver.create_commander_thread(
             name=self.commander_name,
@@ -410,11 +417,11 @@ class CreateCommanderNoStart(CreateCommanderAutoStart):
                          commander_name=commander_name)
         self.specified_args = locals()  # used for __repr__
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+           cmd_runner: name of thread running the command
         """
         self.config_ver.create_commander_thread(
             name=self.commander_name,
@@ -436,15 +443,15 @@ class CreateF1AutoStart(ConfigCmd):
 
         self.args_list = ['f1_create_items']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+           cmd_runner: name of thread running the command
         """
         for f1_item in self.f1_create_items:
             self.config_ver.create_f1_thread(
-                cmd_runner=name,
+                cmd_runner=cmd_runner,
                 name=f1_item.name,
                 target=f1_item.target_rtn,
                 app_config=f1_item.app_config,
@@ -463,15 +470,15 @@ class CreateF1NoStart(CreateF1AutoStart):
                          f1_create_items=f1_create_items)
         self.specified_args = locals()  # used for __repr__
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         for f1_item in self.f1_create_items:
             self.config_ver.create_f1_thread(
-                cmd_runner=name,
+                cmd_runner=cmd_runner,
                 name=f1_item.name,
                 target=f1_item.target_rtn,
                 app_config=f1_item.app_config,
@@ -490,14 +497,14 @@ class ExitThread(ConfigCmd):
 
         self.stopped_by = stopped_by
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.exit_thread(
-            cmd_runner=name,
+            cmd_runner=cmd_runner,
             stopped_by=self.stopped_by)
 
 
@@ -518,13 +525,13 @@ class Join(ConfigCmd):
         self.log_msg = log_msg
         self.arg_list += ['join_names']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
-        self.config_ver.handle_join(cmd_runner=name,
+        self.config_ver.handle_join(cmd_runner=cmd_runner,
                                     join_names=self.join_names,
                                     log_msg=self.log_msg)
 
@@ -546,13 +553,13 @@ class JoinTimeoutFalse(Join):
         self.timeout = timeout
         self.arg_list += ['timeout']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
-        self.config_ver.handle_join_tof(cmd_runner=name,
+        self.config_ver.handle_join_tof(cmd_runner=cmd_runner,
                                         join_names=self.join_names,
                                         timeout=self.timeout,
                                         log_msg=self.log_msg)
@@ -579,20 +586,20 @@ class JoinTimeoutTrue(JoinTimeoutFalse):
         self.timeout_names = timeout_names
         self.arg_list += ['timeout_names']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         if self.timeout_names:
-            self.config_ver.handle_join_tot(cmd_runner=name,
+            self.config_ver.handle_join_tot(cmd_runner=cmd_runner,
                                             join_names=self.join_names,
                                             timeout=self.timeout,
                                             timeout_names=self.timeout_names,
                                             log_msg=self.log_msg)
         else:
-            self.config_ver.handle_join_tof(cmd_runner=name,
+            self.config_ver.handle_join_tof(cmd_runner=cmd_runner,
                                             join_names=self.join_names,
                                             timeout=self.timeout,
                                             log_msg=self.log_msg)
@@ -612,11 +619,11 @@ class Pause(ConfigCmd):
 
         self.arg_list += ['pause_seconds']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         time.sleep(self.pause_seconds)
 
@@ -645,13 +652,13 @@ class RecvMsg(ConfigCmd):
 
         self.arg_list += ['senders']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
-        self.config_ver.handle_recv_msg(cmd_runner=name,
+        self.config_ver.handle_recv_msg(cmd_runner=cmd_runner,
                                         senders=self.senders,
                                         exp_msgs=self.exp_msgs,
                                         del_deferred=self.del_deferred,
@@ -680,14 +687,14 @@ class RecvMsgTimeoutFalse(RecvMsg):
 
         self.arg_list += ['timeout']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.handle_recv_msg_tof(
-            cmd_runner=name,
+            cmd_runner=cmd_runner,
             senders=self.senders,
             exp_msgs=self.exp_msgs,
             timeout=self.timeout,
@@ -721,14 +728,14 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
 
         self.arg_list += ['timeout_names']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.handle_recv_msg_tot(
-            cmd_runner=name,
+            cmd_runner=cmd_runner,
             senders=self.senders,
             exp_msgs=self.exp_msgs,
             timeout=self.timeout,
@@ -762,14 +769,14 @@ class Resume(ConfigCmd):
         self.arg_list += ['targets',
                           'raise_not_alive']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.handle_resume(
-            cmd_runner=name,
+            cmd_runner=cmd_runner,
             targets=set(self.targets),
             stopped_names=self.stopped_names,
             raise_not_alive=self.raise_not_alive)
@@ -795,14 +802,14 @@ class ResumeTimeoutFalse(Resume):
 
         self.arg_list += ['timeout']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.handle_resume_tof(
-            cmd_runner=name,
+            cmd_runner=cmd_runner,
             targets=set(self.targets),
             stopped_names=self.stopped_names,
             timeout=self.timeout,
@@ -833,14 +840,14 @@ class ResumeTimeoutTrue(ResumeTimeoutFalse):
 
         self.arg_list += ['timeout_names']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.handle_resume_tot(
-            cmd_runner=name,
+            cmd_runner=cmd_runner,
             targets=set(self.targets),
             stopped_names=self.stopped_names,
             timeout=self.timeout,
@@ -869,16 +876,16 @@ class SendMsg(ConfigCmd):
 
         self.arg_list += ['receivers']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.handle_send_msg(
-            cmd_runner=name,
+            cmd_runner=cmd_runner,
             receivers=self.receivers,
-            msg_to_send=self.msgs_to_send[name],
+            msg_to_send=self.msgs_to_send[cmd_runner],
             log_msg=self.log_msg)
 
 
@@ -905,16 +912,16 @@ class SendMsgTimeoutFalse(SendMsg):
 
         self.arg_list += ['timeout']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.handle_send_msg_tof(
-            cmd_runner=name,
+            cmd_runner=cmd_runner,
             receivers=self.receivers,
-            msg_to_send=self.msgs_to_send[name],
+            msg_to_send=self.msgs_to_send[cmd_runner],
             timeout=self.timeout,
             log_msg=self.log_msg)
 
@@ -952,16 +959,16 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
             fullq_timeout_names = [fullq_timeout_names]
         self.fullq_timeout_names = fullq_timeout_names
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.handle_send_msg_tot(
-            cmd_runner=name,
+            cmd_runner=cmd_runner,
             receivers=self.receivers,
-            msg_to_send=self.msgs_to_send[name],
+            msg_to_send=self.msgs_to_send[cmd_runner],
             timeout=self.timeout,
             unreg_timeout_names=self.unreg_timeout_names,
             fullq_timeout_names=self.fullq_timeout_names,
@@ -984,14 +991,14 @@ class StartThread(ConfigCmd):
 
         self.arg_list += ['start_names']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.start_thread(
-            cmd_runner=name,
+            cmd_runner=cmd_runner,
             start_names=self.start_names)
 
 
@@ -1011,13 +1018,13 @@ class StopThread(ConfigCmd):
 
         self.arg_list += ['stop_names']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
-        self.config_ver.stop_thread(cmd_runner=name,
+        self.config_ver.stop_thread(cmd_runner=cmd_runner,
                                     stop_names=self.stop_names)
 
 
@@ -1037,14 +1044,14 @@ class Unregister(ConfigCmd):
 
         self.arg_list += ['unregister_targets']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.unregister_threads(
-            cmd_runner=name,
+            cmd_runner=cmd_runner,
             unregister_targets=self.unregister_targets)
 
 
@@ -1057,11 +1064,11 @@ class ValidateConfig(ConfigCmd):
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.validate_config()
 
@@ -1083,11 +1090,11 @@ class VerifyAlive(ConfigCmd):
 
         self.arg_list += ['exp_alive_names']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.verify_is_alive(names=self.exp_alive_names)
 
@@ -1108,11 +1115,11 @@ class VerifyAliveNot(ConfigCmd):
 
         self.arg_list += ['exp_not_alive_names']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.verify_is_alive_not(names=self.exp_not_alive_names)
 
@@ -1133,14 +1140,14 @@ class VerifyActive(ConfigCmd):
 
         self.arg_list += ['exp_active_names']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.verify_is_active(
-            cmd_runner=name,
+            cmd_runner=cmd_runner,
             exp_active_names=self.exp_active_names)
 
 
@@ -1164,11 +1171,11 @@ class VerifyCounts(ConfigCmd):
                           'exp_num_active',
                           'exp_num_stopped']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.verify_counts(num_registered=self.exp_num_registered,
                                       num_active=self.exp_num_active,
@@ -1191,14 +1198,14 @@ class VerifyInRegistry(ConfigCmd):
 
         self.arg_list += ['exp_in_registry_names']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.verify_in_registry(
-            cmd_runner=name,
+            cmd_runner=cmd_runner,
             exp_in_registry_names=self.exp_in_registry_names)
 
 
@@ -1218,14 +1225,14 @@ class VerifyInRegistryNot(ConfigCmd):
 
         self.arg_list += ['exp_not_in_registry_names']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.verify_in_registry_not(
-            cmd_runner=name,
+            cmd_runner=cmd_runner,
             exp_not_in_registry_names=self.exp_not_in_registry_names)
 
 
@@ -1245,14 +1252,14 @@ class VerifyRegistered(ConfigCmd):
 
         self.arg_list += ['exp_registered_names']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.verify_is_registered(
-            cmd_runner=name,
+            cmd_runner=cmd_runner,
             exp_registered_names=self.exp_registered_names)
 
 
@@ -1272,14 +1279,14 @@ class VerifyPaired(ConfigCmd):
 
         self.arg_list += ['exp_paired_names']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.verify_paired(
-            cmd_runner=name,
+            cmd_runner=cmd_runner,
             exp_paired_names=self.exp_paired_names)
 
 
@@ -1302,14 +1309,14 @@ class VerifyPairedHalf(ConfigCmd):
         self.arg_list += ['pair_names',
                           'exp_half_paired_names']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.verify_paired_half(
-            cmd_runner=name,
+            cmd_runner=cmd_runner,
             pair_names=self.pair_names,
             half_paired_names=self.exp_half_paired_names)
 
@@ -1330,14 +1337,14 @@ class VerifyPairedNot(ConfigCmd):
 
         self.arg_list += ['exp_not_paired_names']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.verify_paired_not(
-            cmd_runner=name,
+            cmd_runner=cmd_runner,
             exp_not_paired_names=self.exp_not_paired_names)
 
 
@@ -1362,14 +1369,14 @@ class VerifyStatus(ConfigCmd):
         self.arg_list += ['check_status_names',
                           'expected_status']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.verify_status(
-            cmd_runner=name,
+            cmd_runner=cmd_runner,
             check_status_names=self.check_status_names,
             expected_status=self.expected_status)
 
@@ -1380,26 +1387,28 @@ class VerifyStatus(ConfigCmd):
 class Wait(ConfigCmd):
     def __init__(self,
                  cmd_runners: StrOrList,
-                 resumers: StrOrList) -> None:
+                 resumers: DictAliveAndStatus,
+                 raise_not_alive: bool) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
-
-        if isinstance(resumers, str):
-            resumers = [resumers]
         self.resumers = resumers
+        self.raise_not_alive = raise_not_alive
 
-        self.arg_list += ['resumers']
+        self.arg_list += ['resumers',
+                          'raise_not_alive']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.handle_wait(
-            cmd_runner=name,
-            resumers=self.resumers)
+            cmd_runner=cmd_runner,
+            resumers=self.resumers,
+            raise_not_alive=self.raise_not_alive
+        )
 
 
 ########################################################################
@@ -1408,26 +1417,30 @@ class Wait(ConfigCmd):
 class WaitTimeoutFalse(Wait):
     def __init__(self,
                  cmd_runners: StrOrList,
-                 resumers: StrOrList,
+                 resumers: DictAliveAndStatus,
+                 raise_not_alive: bool,
                  timeout: IntOrFloat) -> None:
         super().__init__(cmd_runners=cmd_runners,
-                         resumers=resumers)
+                         resumers=resumers,
+                         raise_not_alive=raise_not_alive)
         self.specified_args = locals()  # used for __repr__
 
         self.timeout = timeout
 
         self.arg_list += ['timeout']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.handle_wait_tof(
-            cmd_runner=name,
+            cmd_runner=cmd_runner,
             resumers=self.resumers,
+            raise_not_alive=self.raise_not_alive,
             timeout=self.timeout)
+
 
 ########################################################################
 # WaitTimeoutTrue
@@ -1435,30 +1448,27 @@ class WaitTimeoutFalse(Wait):
 class WaitTimeoutTrue(WaitTimeoutFalse):
     def __init__(self,
                  cmd_runners: StrOrList,
-                 resumers: StrOrList,
+                 resumers: DictAliveAndStatus,
+                 raise_not_alive: bool,
                  timeout: IntOrFloat,
-                 timeout_names: dict[str, tuple[bool, st.ThreadStatus]]
                  ) -> None:
         super().__init__(cmd_runners=cmd_runners,
                          resumers=resumers,
+                         raise_not_alive=raise_not_alive,
                          timeout=timeout)
         self.specified_args = locals()  # used for __repr__
 
-        self.timeout_names = timeout_names
-
-        self.arg_list += ['timeout_names']
-
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.handle_wait_tot(
-            cmd_runner=name,
+            cmd_runner=cmd_runner,
             resumers=self.resumers,
-            timeout=self.timeout,
-            timeout_names=self.timeout_names)
+            raise_not_alive=self.raise_not_alive,
+            timeout=self.timeout)
 
 
 ########################################################################
@@ -1470,13 +1480,13 @@ class WaitForRecvTimeouts(ConfigCmd):
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
-        self.config_ver.wait_for_recv_msg_timeouts(cmd_runner=name)
+        self.config_ver.wait_for_recv_msg_timeouts(cmd_runner=cmd_runner)
 
 
 ########################################################################
@@ -1501,14 +1511,14 @@ class WaitForResumeTimeouts(ConfigCmd):
         self.arg_list += ['resumer_names',
                           'timeout_names']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.wait_for_resume_timeouts(
-            cmd_runner=name,
+            cmd_runner=cmd_runner,
             resumer_names=self.resumer_names,
             timeout_names=self.timeout_names)
 
@@ -1542,14 +1552,14 @@ class WaitForSendTimeouts(ConfigCmd):
                           'unreg_names',
                           'fullq_names']
 
-    def run_process(self, name: str) -> None:
+    def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
         Args:
-            name: name of thread running the command
+            cmd_runner: name of thread running the command
         """
         self.config_ver.wait_for_send_msg_timeouts(
-            cmd_runner=name,
+            cmd_runner=cmd_runner,
             sender_names=self.sender_names,
             unreg_names=self.unreg_names,
             fullq_names=self.fullq_names)
@@ -5240,13 +5250,18 @@ class ConfigVerifier:
         else:
             raise_not_alive = False
 
+        resumers_for_wait: DictAliveAndStatus = {}
+        for resumer in resumer_names:
+            resumers_for_wait[resumer].is_alive = True
+            resumers_for_wait[resumer].status = st.ThreadStatus.Alive
         ################################################################
         # issue smart_wait for active_target_names
         ################################################################
         if active_target_names:
             wait_active_target_serial_num = self.add_cmd(
                 Wait(cmd_runners=active_target_names,
-                     resumers=resumer_names))
+                     resumers=resumers_for_wait,
+                     raise_not_alive=True))
 
         ################################################################
         # start registered_names_before issue smart_wait
@@ -5255,7 +5270,8 @@ class ConfigVerifier:
             self.build_start_suite(start_names=registered_names_before)
             wait_reg_before_target_serial_num = self.add_cmd(
                 Wait(cmd_runners=registered_names_before,
-                     resumers=resumer_names))
+                     resumers=resumers_for_wait,
+                     raise_not_alive=True))
 
         ################################################################
         # issue smart_resume
@@ -5318,7 +5334,8 @@ class ConfigVerifier:
 
             wait_unreg_no_delay_serial_num = self.add_cmd(
                 Wait(cmd_runners=unreg_no_delay_names,
-                     resumers=resumer_names))
+                     resumers=resumers_for_wait,
+                     raise_not_alive=True))
 
         ################################################################
         # build stopped_no_delay_targets smart_wait
@@ -5350,7 +5367,8 @@ class ConfigVerifier:
 
             wait_stopped_no_delay_serial_num = self.add_cmd(
                 Wait(cmd_runners=stopped_no_delay_targets,
-                     resumers=resumer_names))
+                     resumers=resumers_for_wait,
+                     raise_not_alive=True))
 
         ################################################################
         # wait for resume timeouts to be known
@@ -5372,7 +5390,8 @@ class ConfigVerifier:
             self.build_start_suite(start_names=registered_names_after)
             wait_reg_after_target_serial_num = self.add_cmd(
                 Wait(cmd_runners=registered_names_after,
-                     resumers=resumer_names))
+                     resumers=resumers_for_wait,
+                     raise_not_alive=True))
 
         ################################################################
         # build unreg_delay_names smart_wait
@@ -5395,7 +5414,8 @@ class ConfigVerifier:
 
             # wait_unreg_delay_serial_num = self.add_cmd(
             #     Wait(cmd_runners=unreg_delay_names,
-            #          resumers=resumer_names))
+            #          resumers=resumers_for_wait,
+            #          raise_not_alive=True))
 
         ################################################################
         # build stopped_delay_targets smart_wait
@@ -5428,13 +5448,15 @@ class ConfigVerifier:
             self.build_start_suite(start_names=stopped_delay_targets)
             wait_stopped_delay_serial_num = self.add_cmd(
                 Wait(cmd_runners=stopped_delay_targets,
-                     resumers=resumer_names))
+                     resumers=resumers_for_wait,
+                     raise_not_alive=True))
 
         if unreg_delay_names:
             self.build_start_suite(start_names=unreg_delay_names)
             wait_unreg_delay_serial_num = self.add_cmd(
                 Wait(cmd_runners=unreg_delay_names,
-                     resumers=resumer_names))
+                     resumers=resumers_for_wait,
+                     raise_not_alive=True))
         ####################################################
         # confirm the active target waits
         ####################################################
@@ -6171,9 +6193,13 @@ class ConfigVerifier:
         ################################################################
         # wait
         ################################################################
+        resumers_for_wait: DictAliveAndStatus = {}
+        resumers_for_wait['charlie'].is_alive = True
+        resumers_for_wait['charlie'].status = st.ThreadStatus.Alive
         self.add_cmd(
             Wait(cmd_runners='beta',
-                 resumers='charlie'))
+                 resumers=resumers_for_wait,
+                 raise_not_alive=True))
         ################################################################
         # resume
         ################################################################
@@ -6669,7 +6695,7 @@ class ConfigVerifier:
 
             cmd: ConfigCmd = self.msgs.get_msg(f1_name, timeout=None)
 
-            cmd.run_process(name=f1_name)
+            cmd.run_process(cmd_runner=f1_name)
 
             self.completed_cmds[f1_name].append(cmd.serial_num)
 
@@ -7942,96 +7968,159 @@ class ConfigVerifier:
     ####################################################################
     def handle_wait(self,
                     cmd_runner: str,
-                    resumers: list[str]) -> None:
+                    resumers: DictAliveAndStatus,
+                    raise_not_alive: bool) -> None:
         """Wait for a resume.
 
         Args:
             cmd_runner: thread doing the wait
             resumers: threads doing the resume
+            raise_not_alive: specifies whether to raise error for a
+                stopped resumer
+
         """
         self.log_test_msg(f'{cmd_runner=} handle_wait entry for '
-                          f'{resumers=}')
+                          f'{resumers=}, {raise_not_alive=}')
 
         self.log_ver.add_call_seq(
             name='handle_wait',
             seq='test_smart_thread.py::ConfigVerifier.handle_wait')
 
-        for rem in resumers:
-            self.all_threads[cmd_runner].smart_wait(remote=rem)
+        for resumer in resumers.keys():
+            if (raise_not_alive
+                    and (resumers[resumer].status == st.ThreadStatus.Stopped)):
+                with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
+                    self.all_threads[cmd_runner].smart_wait(
+                        remote=resumer,
+                        raise_not_alive=raise_not_alive)
+
+                self.add_log_msg(
+                    new_log_msg=re.escape(
+                        f'{cmd_runner} smart_wait() detected thread '
+                        f'remote={resumer} has ended'),
+                    log_level=logging.ERROR)
+            else:
+                self.all_threads[cmd_runner].smart_wait(
+                    remote=resumer,
+                    raise_not_alive=raise_not_alive)
 
         self.log_test_msg(f'{cmd_runner=} handle_wait exit for '
-                          f'{resumers=}')
+                          f'{resumers=}, {raise_not_alive=}')
 
     ####################################################################
-    # handle_wait
+    # handle_wait_tof
     ####################################################################
     def handle_wait_tof(self,
                         cmd_runner: str,
-                        resumers: list[str],
+                        resumers: DictAliveAndStatus,
+                        raise_not_alive: bool,
                         timeout: IntOrFloat) -> None:
         """Wait for a resume, timeout specified, timeout not expected.
 
         Args:
             cmd_runner: thread doing the wait
             resumers: threads doing the resume
+            raise_not_alive: specifies whether to raise error for a
+                stopped resumer
             timeout: timeout value to specify on the smart_wait
         """
-        self.log_test_msg(f'{cmd_runner=} handle_wait entry for '
-                          f'{resumers=}, {timeout=}')
+        self.log_test_msg(f'{cmd_runner=} handle_wait_tof entry for '
+                          f'{resumers=}, {raise_not_alive=}, {timeout=}')
 
         self.log_ver.add_call_seq(
-            name='handle_wait',
-            seq='test_smart_thread.py::ConfigVerifier.handle_wait')
+            name='handle_wait_tof',
+            seq='test_smart_thread.py::ConfigVerifier.handle_wait_tof')
 
-        for rem in resumers:
-            self.all_threads[cmd_runner].smart_wait(remote=rem,
-                                                    timeout=timeout)
+        for resumer in resumers.keys():
+            if (raise_not_alive
+                    and (resumers[resumer].status == st.ThreadStatus.Stopped)):
+                with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
+                    self.all_threads[cmd_runner].smart_wait(
+                        remote=resumer,
+                        raise_not_alive=raise_not_alive,
+                        timeout=timeout
+                    )
 
-        self.log_test_msg(f'{cmd_runner=} handle_wait exit for '
-                          f'{resumers=}, {timeout=}')
+                self.add_log_msg(
+                    new_log_msg=re.escape(
+                        f'{cmd_runner} smart_wait() detected thread '
+                        f'remote={resumer} has ended'),
+                    log_level=logging.ERROR)
+            else:
+                self.all_threads[cmd_runner].smart_wait(
+                    remote=resumer,
+                    raise_not_alive=raise_not_alive,
+                    timeout=timeout
+                )
+
+        self.log_test_msg(f'{cmd_runner=} handle_wait_tof exit for '
+                          f'{resumers=}, {raise_not_alive=}, {timeout=}')
 
     ####################################################################
-    # handle_wait
+    # handle_wait_tot
     ####################################################################
     def handle_wait_tot(self,
                         cmd_runner: str,
-                        resumers: list[str],
+                        resumers: DictAliveAndStatus,
+                        raise_not_alive: bool,
                         timeout: IntOrFloat,
-                        timeout_names: dict[str, tuple[bool, st.ThreadStatus]]
                         ) -> None:
         """Wait for a resume, timeout specified, timeout expected.
 
         Args:
             cmd_runner: thread doing the wait
             resumers: threads doing the resume
+            raise_not_alive: specifies whether to raise error for a
+                stopped resumer
             timeout: timeout value to specify on the smart_wait
-            timeout_names: names expected to be in timeout msg
+
         """
-        self.log_test_msg(f'{cmd_runner=} handle_wait entry for '
-                          f'{resumers=}, {timeout=}')
+        self.log_test_msg(f'{cmd_runner=} handle_wait_tot entry for '
+                          f'{resumers=}, {raise_not_alive=}, {timeout=}')
 
         self.log_ver.add_call_seq(
             name='handle_wait',
             seq='test_smart_thread.py::ConfigVerifier.handle_wait')
 
-        for rem in resumers:
-            with pytest.raises(st.SmartThreadSmartWaitTimedOut):
-                self.all_threads[cmd_runner].smart_wait(remote=rem,
-                                                        timeout=timeout)
+        for resumer in resumers.keys():
+            if (raise_not_alive
+                    and (resumers[resumer].status == st.ThreadStatus.Stopped)):
+                with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
+                    self.all_threads[cmd_runner].smart_wait(
+                        remote=resumer,
+                        raise_not_alive=raise_not_alive,
+                        timeout=timeout
+                    )
 
-            remote_is_alive = timeout_names[rem][0]
-            remote_status = timeout_names[rem][1]
-            self.add_log_msg(re.escape(
-                f'{cmd_runner} raising SmartThreadWaitTimedOut waiting '
-                f'for a smart_wait resume from {rem} with '
-                f'{remote_is_alive=}, {remote_status=}'))
+                self.add_log_msg(
+                    new_log_msg=re.escape(
+                        f'{cmd_runner} smart_wait() detected thread '
+                        f'remote={resumer} has ended'),
+                    log_level=logging.ERROR)
+            elif resumers[resumer].status != st.ThreadStatus.Alive:
+                with pytest.raises(st.SmartThreadSmartWaitTimedOut):
+                    self.all_threads[cmd_runner].smart_wait(
+                        remote=resumer,
+                        raise_not_alive=raise_not_alive,
+                        timeout=timeout
+                    )
 
-            self.add_log_msg(
-                'Raise SmartThreadSendMsgTimedOut',
-                log_level=logging.ERROR)
+                remote_is_alive = resumers[resumer].is_alive
+                remote_status = resumers[resumer].status
 
-        self.log_test_msg(f'{cmd_runner=} handle_wait exit for '
-                          f'{resumers=}, {timeout=}')
+                self.add_log_msg(re.escape(
+                    f'{cmd_runner} raising SmartThreadWaitTimedOut waiting '
+                    f'for a smart_wait resume from {resumer} with '
+                    f'{remote_is_alive=}, {remote_status=}'))
+            else:
+                self.all_threads[cmd_runner].smart_wait(
+                    remote=resumer,
+                    raise_not_alive=raise_not_alive,
+                    timeout=timeout
+                )
+
+        self.log_test_msg(f'{cmd_runner=} handle_wait_tot exit for '
+                          f'{resumers=}, {raise_not_alive=}, {timeout=}')
 
     ####################################################################
     # inc_ops_count
@@ -8126,7 +8215,7 @@ class ConfigVerifier:
                                     msg=cmd)
 
             if self.commander_name in cmd.cmd_runners:
-                cmd.run_process(name=self.commander_name)
+                cmd.run_process(cmd_runner=self.commander_name)
                 self.completed_cmds[self.commander_name].append(cmd.serial_num)
 
         self.monitor_exit = True

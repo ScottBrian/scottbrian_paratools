@@ -76,6 +76,7 @@ from scottbrian_locking import se_lock as sel
 IntFloat: TypeAlias = Union[int, float]
 OptIntFloat: TypeAlias = Optional[IntFloat]
 
+
 ########################################################################
 # SmartThread class exceptions
 ########################################################################
@@ -285,29 +286,12 @@ class SmartThread:
 
     ####################################################################
     # ConnectionStatusBlock
-    # Each remote_array entry is a ConnectionStatusBlock which is used
-    # to coordinate the various actions involved in satisfying a
-    # send_msg, recv_msg, wait, resume, or sync request.
+    # Coordinates the various actions involved in satisfying a
+    # send_msg, recv_msg, smart_wait, smart_resume, or smart_sync
+    # request.
     ####################################################################
     @dataclass
     class ConnectionStatusBlock:
-        """Connection status block."""
-        remote_smart_thread: "SmartThread"
-        status_lock: threading.Lock
-        event: threading.Event
-        sync_event: threading.Event
-        msg_q: queue.Queue[Any]
-        remote_msg_q: queue.Queue[Any] = None
-        pair_status: PairStatus = PairStatus.NotReady
-        code: Any = None
-        wait_wait: bool = False
-        sync_wait: bool = False
-        wait_timeout_specified: bool = False
-        deadlock: bool = False
-        conflict: bool = False
-
-    @dataclass
-    class ConnectionStatusBlock2:
         """Connection status block."""
         wait_event: threading.Event
         sync_event: threading.Event
@@ -325,7 +309,7 @@ class SmartThread:
         """ConnectionPair class."""
         status_lock: threading.Lock
         pair_status: PairStatus
-        status_blocks: dict[str, "SmartThread.ConnectionStatusBlock2"]
+        status_blocks: dict[str, "SmartThread.ConnectionStatusBlock"]
 
     _pair_array: ClassVar[
         dict[tuple[str, str], "SmartThread.ConnectionPair"]] = {}
@@ -472,12 +456,6 @@ class SmartThread:
         self.remotes_full_send_q: set[str] = set()
 
         self.resume_timeout_names: set[str] = set()
-
-        # The following remote_array is used to keep track of who we
-        # know and to process the various requests. The known remotes
-        # are obtained from the SmartThread._registry as updated in
-        # _refresh_remote_array.
-        self.remote_array: dict[str, SmartThread.ConnectionStatusBlock] = {}
 
         # register this new SmartThread so others can find us
         self._register()
@@ -1027,7 +1005,7 @@ class SmartThread:
                         # add an entry for this thread
                         SmartThread._pair_array[
                             pair_key].status_blocks[
-                            name] = SmartThread.ConnectionStatusBlock2(
+                            name] = SmartThread.ConnectionStatusBlock(
                                     wait_event=threading.Event(),
                                     sync_event=threading.Event(),
                                     msg_q=queue.Queue(maxsize=self.max_msgs))
