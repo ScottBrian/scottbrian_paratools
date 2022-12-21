@@ -4920,50 +4920,67 @@ class ConfigVerifier:
         # self.set_recv_timeout(
         #     num_timeouts=len(all_timeout_names) * num_waiters )
 
-        if len(all_resumer_names) % 2 == 0:
+        if (len(all_resumer_names) + TimeoutType.value) % 2 == 0:
             log_msg = f'wait log test: {self.get_ptime()}'
         else:
             log_msg = None
 
+        if (len(all_resumer_names) + TimeoutType.value) % 2:
+            raise_not_alive = True
+        else:
+            raise_not_alive = False
+
+        resumers_for_wait: DictAliveAndStatus = {}
+        for resumer in (active_no_delay_resumer_names
+                        + active_delay_resumer_names
+                        + resume_exit_names):
+            resumers_for_wait[resumer].is_alive = True
+            resumers_for_wait[resumer].status = st.ThreadStatus.Alive
+
+        for resumer in noresume_exit_names:
+            resumers_for_wait[resumer].is_alive = False
+            resumers_for_wait[resumer].status = st.ThreadStatus.Stopped
+
+        for resumer in unreg_resumer_names:
+            resumers_for_wait[resumer].is_alive = False
+            resumers_for_wait[resumer].status = st.ThreadStatus.Unregistered
+
+        for resumer in unreg_resumer_names:
+            resumers_for_wait[resumer].is_alive = False
+            resumers_for_wait[resumer].status = st.ThreadStatus.Registered
+
         if timeout_type == TimeoutType.TimeoutNone:
             confirm_cmd_to_use = 'Wait'
-            recv_msg_serial_num = self.add_cmd(
+            wait_serial_num = self.add_cmd(
                 Wait(cmd_runners=waiter_names,
-                        senders=all_resumer_names,
-                        exp_msgs=sender_msgs,
-                        del_deferred=resume_exit_names,
-                        log_msg=log_msg))
+                     resumers=resumers_for_wait,
+                     raise_not_alive=raise_not_alive))
+
         elif timeout_type == TimeoutType.TimeoutFalse:
             confirm_cmd_to_use = 'WaitTimeoutFalse'
-            recv_msg_serial_num = self.add_cmd(
+            wait_serial_num = self.add_cmd(
                 WaitTimeoutFalse(
                     cmd_runners=waiter_names,
-                    senders=all_resumer_names,
-                    exp_msgs=sender_msgs,
-                    timeout=2,
-                    del_deferred=resume_exit_names,
-                    log_msg=log_msg))
+                    resumers=resumers_for_wait,
+                    raise_not_alive=raise_not_alive,
+                    timeout=timeout_time))
 
         else:  # TimeoutType.TimeoutTrue
             confirm_cmd_to_use = 'WaitTimeoutTrue'
-            recv_msg_serial_num = self.add_cmd(
+            wait_serial_num = self.add_cmd(
                 WaitTimeoutTrue(
                     cmd_runners=waiter_names,
-                    senders=all_resumer_names,
-                    exp_msgs=sender_msgs,
-                    timeout=2,
-                    timeout_names=all_timeout_names,
-                    del_deferred=resume_exit_names,
-                    log_msg=log_msg))
+                    resumers=resumers_for_wait,
+                    raise_not_alive=raise_not_alive,
+                    timeout=timeout_time))
 
         ################################################################
-        # do send_msg from active_no_delay_resumers
+        # do resume from active_no_delay_resumers
         ################################################################
         if active_no_delay_resumer_names:
             self.add_cmd(
-                SendMsg(cmd_runners=active_no_delay_resumer_names,
-                        receivers=resumer_names,
-                        msgs_to_send=sender_msgs))
+                Resume(cmd_runners=active_no_delay_resumer_names,
+                       stopped_names=[]))
 
         self.add_cmd(
             Pause(cmd_runners=self.commander_name,

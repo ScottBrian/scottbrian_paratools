@@ -2023,7 +2023,7 @@ class SmartThread:
                     if remote in SmartThread._registry:
                         remote_is_alive = SmartThread._registry[
                             remote].thread.is_alive()
-                        remote_status = SmartThread._registry[remote].status
+                        remote_status = self._get_status(remote)
 
                     error_msg = (
                         f'{self.name} raising SmartThreadWaitTimedOut waiting '
