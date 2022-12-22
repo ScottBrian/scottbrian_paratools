@@ -1496,7 +1496,12 @@ class SmartThread:
                it again as a **pre-resume**.
             3) If one thread makes a ``resume()`` request and the other thread
                becomes not alive, the ``resume()`` request raises a
-               **SmartThreadRemoteThreadNotAlive** error.
+               **SmartThreadRemoteThreadNotAlive** error, but only when
+               raise_not_alive is True.
+            4) The reason for allowing multiple targets is in support of
+               a sync request among many threads. When one can also
+               resume many non-sync waiters at once, it does not seem to
+               be useful at this time.
 
         :Example: instantiate SmartThread and ``resume()`` event that function
                     waits on

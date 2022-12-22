@@ -59,7 +59,21 @@ class AliveAndStatus:
     is_alive: bool
     status: st.ThreadStatus
     
-DictAliveAndStatus: TypeAlias = dict[str, AliveAndStatus]     
+
+DictAliveAndStatus: TypeAlias = dict[str, AliveAndStatus]
+
+
+########################################################################
+# ResumeStyles
+########################################################################
+class Actors(Enum):
+    ActiveNoDelayActor = auto()
+    ActiveDelayActor = auto()
+    ActionExitActor = auto()
+    NoActionExitActor = auto()
+    UnregActor = auto()
+    RegActor = auto()
+
 
 ########################################################################
 # Test settings
@@ -192,12 +206,30 @@ num_stopped_delay_arg_list = [0, 1, 2]
 # Test settings for test_wait_timeout_scenarios
 ########################################################################
 num_waiters_arg_list = [1, 2, 3]
-num_active_no_delay_resumers_arg_list = [0, 1, 2]
-num_active_delay_resumers_arg_list = [0, 1, 2]
-num_resume_exit_arg_list = [0, 1, 2]
-num_noresume_exit_arg_list = [0, 1, 2]
-num_unreg_resumers_arg_list = [0, 1, 2]
-num_reg_resumers_arg_list = [0, 1, 2]
+
+actor_1_arg_list = [Actors.ActiveNoDelayActor,
+                    Actors.ActiveDelayActor,
+                    Actors.ActionExitActor,
+                    Actors.NoActionExitActor,
+                    Actors.UnregActor,
+                    Actors.RegActor]
+num_actor_1_arg_list = [1, 2, 3]
+
+actor_2_arg_list = [Actors.ActiveNoDelayActor,
+                    Actors.ActiveDelayActor,
+                    Actors.ActionExitActor,
+                    Actors.NoActionExitActor,
+                    Actors.UnregActor,
+                    Actors.RegActor]
+num_actor_2_arg_list = [1, 2, 3]
+
+actor_3_arg_list = [Actors.ActiveNoDelayActor,
+                    Actors.ActiveDelayActor,
+                    Actors.ActionExitActor,
+                    Actors.NoActionExitActor,
+                    Actors.UnregActor,
+                    Actors.RegActor]
+num_actor_3_arg_list = [1, 2, 3]
 
 
 ########################################################################
@@ -2322,6 +2354,103 @@ def num_waiters_arg(request: Any) -> int:
     """
     return cast(int, request.param)
 
+
+########################################################################
+# actor_1_arg
+########################################################################
+@pytest.fixture(params=actor_1_arg_list)  # type: ignore
+def actor_1_arg(request: Any) -> Actors:
+    """Type of actor tpo perfom the cmd.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(Actors, request.param)
+
+
+########################################################################
+# num_actor_1_arg
+########################################################################
+@pytest.fixture(params=num_actor_1_arg_list)  # type: ignore
+def num_actor_1_arg(request: Any) -> int:
+    """Number of actors for actor style 1.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
+########################################################################
+# actor_2_arg
+########################################################################
+@pytest.fixture(params=actor_2_arg_list)  # type: ignore
+def actor_2_arg(request: Any) -> Actors:
+    """Type of actor tpo perfom the cmd.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(Actors, request.param)
+
+
+########################################################################
+# num_actor_2_arg
+########################################################################
+@pytest.fixture(params=num_actor_2_arg_list)  # type: ignore
+def num_actor_2_arg(request: Any) -> int:
+    """Number of actors for actor style 1.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
+########################################################################
+# actor_3_arg
+########################################################################
+@pytest.fixture(params=actor_3_arg_list)  # type: ignore
+def actor_3_arg(request: Any) -> Actors:
+    """Type of actor tpo perfom the cmd.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(Actors, request.param)
+
+
+########################################################################
+# num_actor_3_arg
+########################################################################
+@pytest.fixture(params=num_actor_3_arg_list)  # type: ignore
+def num_actor_3_arg(request: Any) -> int:
+    """Number of actors for actor style 1.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
 ########################################################################
 # num_active_no_delay_resumers_arg
 ########################################################################
@@ -2353,6 +2482,7 @@ def num_active_delay_resumers_arg(request: Any) -> int:
     """
     return cast(int, request.param)
 
+
 ########################################################################
 # num_resume_exit_arg
 ########################################################################
@@ -2367,6 +2497,7 @@ def num_resume_exit_arg(request: Any) -> int:
         The params values are returned one at a time
     """
     return cast(int, request.param)
+
 
 ########################################################################
 # num_noresume_exit_arg
@@ -2383,6 +2514,7 @@ def num_noresume_exit_arg(request: Any) -> int:
     """
     return cast(int, request.param)
 
+
 ########################################################################
 # num_unreg_resumers_arg
 ########################################################################
@@ -2397,6 +2529,7 @@ def num_unreg_resumers_arg(request: Any) -> int:
         The params values are returned one at a time
     """
     return cast(int, request.param)
+
 
 ########################################################################
 # num_reg_resumers_arg
@@ -4743,93 +4876,82 @@ class ConfigVerifier:
                 confirmers=receiver_names))
 
     ####################################################################
-    # build_recv_msg_timeout_suite
+    # build_wait_timeout_suite
     ####################################################################
     def build_wait_timeout_suite(
             self,
             timeout_type: TimeoutType,
             num_waiters: int,
-            num_active_no_delay_resumers: int,
-            num_active_delay_resumers: int,
-            num_resume_exit: int,
-            num_noresume_exit: int,
-            num_unreg_resumers: int,
-            num_reg_resumers: int) -> None:
-        """Return a list of ConfigCmd items for a msg timeout.
+            actor_list: list[tuple[Actors, int]]) -> None:
+        """Adds cmds to the cmd queue.
 
         Args:
             timeout_type: specifies whether the recv_msg should
                 be coded with timeout and whether the recv_msg should
                 succeed or fail with a timeout
             num_waiters: number of threads that will do the wait
-            num_active_no_delay_resumers: number of threads that are
-                active and will do the resumer immediately
-            num_active_delay_resumers: number of threads that are active
-                and will do the resumer after a delay
-            num_resume_exit: number of threads that are active and will
-                do the resumer and then exit
-            num_noresume_exit: number of threads that are active and
-                will not do the resumer and then exit
-            num_unreg_resumers: number of threads that are unregistered
-                and will be created and started and then do the resumer
-            num_reg_resumers: number of threads that are registered and
-                will be started and then do the resumer
+            actor_list: contains the actor style and number of threads
+                that will do that style
 
         """
+
+        class Actors(Enum):
+            ActiveNoDelayActor = auto()
+            ActiveDelayActor = auto()
+            ActionExitActor = auto()
+            NoActionExitActor = auto()
+            UnregActor = auto()
+            RegActor = auto()
+        actions: dict[Actors, list[Any]] = {
+            ActiveNoDelayActor: [],
+            ActiveDelayActor: [],
+            ActionExitActor: [],
+            NoActionExitActor: [],
+            UnregActor: [],
+            RegActor: [],
+        }
         # Make sure we have enough threads. Note that we subtract 1 from
         # the count of unregistered names to ensure we have one thread
         # for the commander
+        num_actor_threads = 0
+        num_registered_threads_needed = 0
+        num_active_threads_needed = 0
+
+        for actor in actor_list:
+            num_actor_threads += actor[1]
+            if (actor[0] == ActiveNoDelayActor
+                    or actor[0] == ActiveDelayActor
+                    or actor[0] == ActionExitActor
+                    or actor[0] == NoActionExitActor):
+                num_active_threads_needed += actor[1]
+            elif actor[0] == RegActor:
+                num_registered_threads_needed += actor[1]
+
+
         assert (num_waiters
-                + num_active_no_delay_resumers
-                + num_active_delay_resumers
-                + num_resume_exit
-                + num_noresume_exit
-                + num_unreg_resumers
-                + num_reg_resumers) <= len(self.unregistered_names) - 1
+                + num_actor_threads) <= len(self.unregistered_names) - 1
 
         assert num_waiters > 0
 
-        assert (num_active_no_delay_resumers
-                + num_active_delay_resumers
-                + num_resume_exit
-                + num_noresume_exit
-                + num_unreg_resumers
-                + num_reg_resumers) > 0
-
-        if (timeout_type == TimeoutType.TimeoutFalse
-                or timeout_type == TimeoutType.TimeoutTrue):
-            assert (num_active_delay_resumers
-                    + num_noresume_exit
-                    + num_unreg_resumers
-                    + num_reg_resumers) > 0
-
-        num_active_needed = (
-                num_waiters
-                + num_active_no_delay_resumers
-                + num_active_delay_resumers
-                + num_resume_exit
-                + num_noresume_exit
-                + 1)
-
-        timeout_time = ((num_active_no_delay_resumers * 0.01)
-                        + (num_active_delay_resumers * 0.01)
-                        + (num_resume_exit * 0.01)
-                        + (num_noresume_exit * 0.5)
-                        + (num_unreg_resumers * 0.2)
-                        + (num_reg_resumers * 0.1))
-
-        if timeout_type == TimeoutType.TimeoutNone:
-            pause_time = 0.5
-        elif timeout_type == TimeoutType.TimeoutFalse:
-            pause_time = 0.5
-            timeout_time += (pause_time * 2)  # prevent timeout
-        else:  # timeout True
-            pause_time = timeout_time + 1  # force timeout
+        # timeout_time = ((num_active_no_delay_resumers * 0.01)
+        #                 + (num_active_delay_resumers * 0.01)
+        #                 + (num_resume_exit * 0.01)
+        #                 + (num_noresume_exit * 0.5)
+        #                 + (num_unreg_resumers * 0.2)
+        #                 + (num_reg_resumers * 0.1))
+        #
+        # if timeout_type == TimeoutType.TimeoutNone:
+        #     pause_time = 0.5
+        # elif timeout_type == TimeoutType.TimeoutFalse:
+        #     pause_time = 0.5
+        #     timeout_time += (pause_time * 2)  # prevent timeout
+        # else:  # timeout True
+        #     pause_time = timeout_time + 1  # force timeout
 
         self.build_config(
             cmd_runner=self.commander_name,
-            num_registered=num_reg_resumers,
-            num_active=num_active_needed)
+            num_registered=num_registered_threads_needed,
+            num_active=num_active_threads_needed)
 
         self.log_name_groups()
 
@@ -4949,6 +5071,37 @@ class ConfigVerifier:
             resumers_for_wait[resumer].is_alive = False
             resumers_for_wait[resumer].status = st.ThreadStatus.Registered
 
+        ################################################################
+        # do resume from active_no_delay_resumers
+        ################################################################
+        if active_no_delay_resumer_names:
+            self.add_cmd(
+                Resume(cmd_runners=active_no_delay_resumer_names,
+                       targets=waiter_names,
+                       stopped_names=[]))
+
+        ################################################################
+        # do send_msg from resume_exit   and then exit
+        ################################################################
+        if resume_exit_names:
+            self.add_cmd(
+                Resume(cmd_runners=resume_exit_names,
+                       targets=waiter_names,
+                       stopped_names=[]))
+
+            self.build_exit_suite(
+                names=resume_exit_names, validate_config=False)
+            self.build_join_suite(
+                cmd_runners=self.commander_name,
+                join_target_names=resume_exit_names,
+                validate_config=False)
+            self.add_cmd(VerifyPairedHalf(cmd_runners=self.commander_name,
+                                          pair_names=resume_exit_names,
+                                          exp_half_paired_names=waiter_names))
+
+        ################################################################
+        # do waits
+        ################################################################
         if timeout_type == TimeoutType.TimeoutNone:
             confirm_cmd_to_use = 'Wait'
             wait_serial_num = self.add_cmd(
@@ -4974,14 +5127,6 @@ class ConfigVerifier:
                     raise_not_alive=raise_not_alive,
                     timeout=timeout_time))
 
-        ################################################################
-        # do resume from active_no_delay_resumers
-        ################################################################
-        if active_no_delay_resumer_names:
-            self.add_cmd(
-                Resume(cmd_runners=active_no_delay_resumer_names,
-                       stopped_names=[]))
-
         self.add_cmd(
             Pause(cmd_runners=self.commander_name,
                   pause_seconds=pause_time))
@@ -4997,21 +5142,7 @@ class ConfigVerifier:
                         receivers=resumer_names,
                         msgs_to_send=sender_msgs))
 
-        ################################################################
-        # do send_msg from resume_exit   and then exit
-        ################################################################
-        if resume_exit_names:
-            self.add_cmd(
-                SendMsg(cmd_runners=resume_exit_names,
-                        receivers=resumer_names,
-                        msgs_to_send=sender_msgs))
 
-            self.build_exit_suite(
-                names=resume_exit_names, validate_config=False)
-            self.build_join_suite(
-                cmd_runners=self.commander_name,
-                join_target_names=resume_exit_names,
-                validate_config=False)
 
         ################################################################
         # exit the noresume_exit  , then resurrect and do send_msg
@@ -5086,6 +5217,106 @@ class ConfigVerifier:
                 confirm_cmd=confirm_cmd_to_use,
                 confirm_serial_num=recv_msg_serial_num,
                 confirmers=resumer_names))
+
+    ####################################################################
+    # build_wait_active_suite
+    ####################################################################
+    def build_wait_active_no_delay_suite(
+            self,
+            timeout_type: TimeoutType,
+            waiter_names: str,
+            num_actors: int,
+            active_names: list[str]) -> None:
+        """Adds cmds to the cmd queue.
+
+        Args:
+            timeout_type: specifies whether the recv_msg should
+                be coded with timeout and whether the recv_msg should
+                succeed or fail with a timeout
+            waiter_names: names of threads that will do the wait
+            num_actors: number of threads that will do the resume
+            active_names: list of active names to choose from
+
+        """
+        if (num_actors + timeout_type.value) % 2:
+            raise_not_alive = True
+        else:
+            raise_not_alive = False
+
+        active_no_delay_resumer_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_actors,
+            update_collection=True,
+            var_name_for_log='active_no_delay_resumer_names')
+
+        resumers_for_wait: DictAliveAndStatus = {}
+        for resumer in active_no_delay_resumer_names:
+            resumers_for_wait[resumer].is_alive = True
+            resumers_for_wait[resumer].status = st.ThreadStatus.Alive
+
+        if timeout_type == TimeoutType.TimeoutTrue:
+            timeout_time = 0.5
+            pause_time = timeout_time
+            confirm_cmd_to_use = 'WaitTimeoutTrue'
+            wait_serial_num = self.add_cmd(
+                WaitTimeoutTrue(
+                    cmd_runners=waiter_names,
+                    resumers=resumers_for_wait,
+                    raise_not_alive=raise_not_alive,
+                    timeout=timeout_time))
+
+            self.add_cmd(
+                Pause(cmd_runners=self.commander_name,
+                      pause_seconds=pause_time))
+
+        resume_cmd_serial_num = self.add_cmd(
+            Resume(cmd_runners=active_no_delay_resumer_names,
+                   targets=waiter_names,
+                   stopped_names=[]))
+
+        if timeout_type == TimeoutType.TimeoutNone:
+            confirm_cmd_to_use = 'Wait'
+            wait_serial_num = self.add_cmd(
+                Wait(cmd_runners=waiter_names,
+                     resumers=resumers_for_wait,
+                     raise_not_alive=raise_not_alive))
+
+        elif timeout_type == TimeoutType.TimeoutFalse:
+            timeout_time = 3
+            confirm_cmd_to_use = 'WaitTimeoutFalse'
+            wait_serial_num = self.add_cmd(
+                WaitTimeoutFalse(
+                    cmd_runners=waiter_names,
+                    resumers=resumers_for_wait,
+                    raise_not_alive=raise_not_alive,
+                    timeout=timeout_time))
+
+        else:  # TimeoutType.TimeoutTrue
+            confirm_cmd_to_use = 'WaitTimeoutTrue'
+            wait_serial_num = self.add_cmd(
+                WaitTimeoutTrue(
+                    cmd_runners=waiter_names,
+                    resumers=resumers_for_wait,
+                    raise_not_alive=raise_not_alive,
+                    timeout=timeout_time))
+        wait_serial_num = self.add_cmd(
+            Wait(cmd_runners=waiter_names,
+                 resumers=active_no_delay_resumer_names,
+                 raise_not_alive=True))
+
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd='Resume',
+                confirm_serial_num=resume_cmd_serial_num,
+                confirmers=active_no_delay_resumer_names))
+
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd='Wait',
+                confirm_serial_num=wait_serial_num,
+                confirmers=waiter_names))
 
     ####################################################################
     # build_msg_timeout_suite
@@ -9703,12 +9934,12 @@ class TestSmartThreadScenarios:
             self,
             timeout_type_arg: TimeoutType,
             num_waiters_arg: int,
-            num_active_no_delay_resumers_arg: int,
-            num_active_delay_resumers_arg: int,
-            num_resume_exit_arg: int,
-            num_noresume_exit_arg: int,
-            num_unreg_resumers_arg: int,
-            num_reg_resumers_arg: int,
+            actor_1_arg: Actors,
+            num_actor_1_arg: int,
+            actor_2_arg: Actors,
+            num_actor_2_arg: int,
+            actor_3_arg: Actors,
+            num_actor_3_arg: int,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
         """Test meta configuration scenarios.
@@ -9718,38 +9949,19 @@ class TestSmartThreadScenarios:
                 be coded with timeout and whether the recv_msg should
                 succeed or fail with a timeout
             num_waiters_arg: number of threads that will do the wait
-            num_active_no_delay_resumers_arg: number of threads that are
-                active and will do the resumer immediately
-            num_active_delay_resumers_arg: number of threads that are
-                active and will do the resumer after a delay
-            num_resume_exit_arg: number of threads that are active
-                and will do the resumer and then exit
-            num_noresume_exit_arg: number of threads that are
-                active and will not do the resumer and then exit
-            num_unreg_resumers_arg: number of threads that are
-                unregistered and will be created and started and then
-                do the resumer
-            num_reg_resumers_arg: number of threads that are registered
-                and will be started and then do the resumer
+            actor_1_arg: type of actor that will do the first resume
+            num_actor_1_arg: number of actor 1 threads
+            actor_2_arg: type of actor that will do the first resume
+            num_actor_2_arg: number of actor 2 threads
+            actor_3_arg: type of actor that will do the first resume
+            num_actor_3_arg: number of actor 3 threads
             caplog: pytest fixture to capture log output
 
         """
         total_arg_counts = (
-                num_active_no_delay_resumers_arg
-                + num_active_delay_resumers_arg
-                + num_resume_exit_arg
-                + num_noresume_exit_arg
-                + num_unreg_resumers_arg
-                + num_reg_resumers_arg)
-        if timeout_type_arg == TimeoutType.TimeoutNone:
-            if total_arg_counts == 0:
-                return
-        else:
-            if (num_active_delay_resumers_arg
-                    + num_noresume_exit_arg
-                    + num_unreg_resumers_arg
-                    + num_reg_resumers_arg) == 0:
-                return
+                num_actor_1_arg
+                + num_actor_2_arg
+                + num_actor_3_arg)
 
         command_config_num = total_arg_counts % 4
         if command_config_num == 0:
@@ -9764,12 +9976,9 @@ class TestSmartThreadScenarios:
         args_for_scenario_builder: dict[str, Any] = {
             'timeout_type': timeout_type_arg,
             'num_waiters': num_waiters_arg,
-            'num_active_no_delay_resumers': num_active_no_delay_resumers_arg,
-            'num_active_delay_resumers': num_active_delay_resumers_arg,
-            'num_resume_exit ': num_resume_exit_arg,
-            'num_noresume_exit ': num_noresume_exit_arg,
-            'num_unreg_resumers': num_unreg_resumers_arg,
-            'num_reg_resumers': num_reg_resumers_arg
+            'actor_list': [(actor_1_arg, num_actor_1_arg),
+                           (actor_2_arg, num_actor_2_arg),
+                           (actor_3_arg, num_actor_3_arg)]
         }
 
         self.scenario_driver(
