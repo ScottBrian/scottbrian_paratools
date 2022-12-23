@@ -8,7 +8,7 @@ from collections import deque, defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum, auto
-from itertools import combinations
+from itertools import combinations, chain
 import logging
 import random
 import re
@@ -67,8 +67,8 @@ DictAliveAndStatus: TypeAlias = dict[str, AliveAndStatus]
 # ResumeStyles
 ########################################################################
 class Actors(Enum):
-    ActiveNoDelayActor = auto()
-    ActiveDelayActor = auto()
+    ActiveBeforeActor = auto()
+    ActiveAfterActor = auto()
     ActionExitActor = auto()
     NoActionExitActor = auto()
     UnregActor = auto()
@@ -207,24 +207,27 @@ num_stopped_delay_arg_list = [0, 1, 2]
 ########################################################################
 num_waiters_arg_list = [1, 2, 3]
 
-actor_1_arg_list = [Actors.ActiveNoDelayActor,
-                    Actors.ActiveDelayActor,
+actor_1_arg_list = [Actors.ActiveBeforeActor,
+                    Actors.ActiveAfterActor,
                     Actors.ActionExitActor,
                     Actors.NoActionExitActor,
                     Actors.UnregActor,
                     Actors.RegActor]
+actor_1_arg_list = [Actors.ActiveBeforeActor,
+                    Actors.ActiveAfterActor,
+                    Actors.ActionExitActor]
 num_actor_1_arg_list = [1, 2, 3]
 
-actor_2_arg_list = [Actors.ActiveNoDelayActor,
-                    Actors.ActiveDelayActor,
+actor_2_arg_list = [Actors.ActiveBeforeActor,
+                    Actors.ActiveAfterActor,
                     Actors.ActionExitActor,
                     Actors.NoActionExitActor,
                     Actors.UnregActor,
                     Actors.RegActor]
 num_actor_2_arg_list = [1, 2, 3]
 
-actor_3_arg_list = [Actors.ActiveNoDelayActor,
-                    Actors.ActiveDelayActor,
+actor_3_arg_list = [Actors.ActiveBeforeActor,
+                    Actors.ActiveAfterActor,
                     Actors.ActionExitActor,
                     Actors.NoActionExitActor,
                     Actors.UnregActor,
@@ -2451,100 +2454,100 @@ def num_actor_3_arg(request: Any) -> int:
     return cast(int, request.param)
 
 
-########################################################################
-# num_active_no_delay_resumers_arg
-########################################################################
-@pytest.fixture(params=num_active_no_delay_resumers_arg_list)  # type: ignore
-def num_active_no_delay_resumers_arg(request: Any) -> int:
-    """Number stopped threads quickly joined, created, and started.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-########################################################################
-# num_active_delay_resumers_arg
-########################################################################
-@pytest.fixture(params=num_active_delay_resumers_arg_list)  # type: ignore
-def num_active_delay_resumers_arg(request: Any) -> int:
-    """Number stopped threads quickly joined, created, and started.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-########################################################################
-# num_resume_exit_arg
-########################################################################
-@pytest.fixture(params=num_resume_exit_arg_list)  # type: ignore
-def num_resume_exit_arg(request: Any) -> int:
-    """Number stopped threads quickly joined, created, and started.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-########################################################################
-# num_noresume_exit_arg
-########################################################################
-@pytest.fixture(params=num_noresume_exit_arg_list)  # type: ignore
-def num_noresume_exit_arg(request: Any) -> int:
-    """Number stopped threads quickly joined, created, and started.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-########################################################################
-# num_unreg_resumers_arg
-########################################################################
-@pytest.fixture(params=num_unreg_resumers_arg_list)  # type: ignore
-def num_unreg_resumers_arg(request: Any) -> int:
-    """Number stopped threads quickly joined, created, and started.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-########################################################################
-# num_reg_resumers_arg
-########################################################################
-@pytest.fixture(params=num_reg_resumers_arg_list)  # type: ignore
-def num_reg_resumers_arg(request: Any) -> int:
-    """Number stopped threads quickly joined, created, and started.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
+# ########################################################################
+# # num_active_no_delay_resumers_arg
+# ########################################################################
+# @pytest.fixture(params=num_active_no_delay_resumers_arg_list)  # type: ignore
+# def num_active_no_delay_resumers_arg(request: Any) -> int:
+#     """Number stopped threads quickly joined, created, and started.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return cast(int, request.param)
+#
+#
+# ########################################################################
+# # num_active_delay_resumers_arg
+# ########################################################################
+# @pytest.fixture(params=num_active_delay_resumers_arg_list)  # type: ignore
+# def num_active_delay_resumers_arg(request: Any) -> int:
+#     """Number stopped threads quickly joined, created, and started.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return cast(int, request.param)
+#
+#
+# ########################################################################
+# # num_resume_exit_arg
+# ########################################################################
+# @pytest.fixture(params=num_resume_exit_arg_list)  # type: ignore
+# def num_resume_exit_arg(request: Any) -> int:
+#     """Number stopped threads quickly joined, created, and started.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return cast(int, request.param)
+#
+#
+# ########################################################################
+# # num_noresume_exit_arg
+# ########################################################################
+# @pytest.fixture(params=num_noresume_exit_arg_list)  # type: ignore
+# def num_noresume_exit_arg(request: Any) -> int:
+#     """Number stopped threads quickly joined, created, and started.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return cast(int, request.param)
+#
+#
+# ########################################################################
+# # num_unreg_resumers_arg
+# ########################################################################
+# @pytest.fixture(params=num_unreg_resumers_arg_list)  # type: ignore
+# def num_unreg_resumers_arg(request: Any) -> int:
+#     """Number stopped threads quickly joined, created, and started.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return cast(int, request.param)
+#
+#
+# ########################################################################
+# # num_reg_resumers_arg
+# ########################################################################
+# @pytest.fixture(params=num_reg_resumers_arg_list)  # type: ignore
+# def num_reg_resumers_arg(request: Any) -> int:
+#     """Number stopped threads quickly joined, created, and started.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return cast(int, request.param)
 
 
 ###############################################################################
@@ -2662,6 +2665,7 @@ class ThreadTracker:
 class ThreadPairStatus:
     """Class that keeps pair status."""
     pending_ops_count: int
+    pending_wait_count: int
     # expected_last_reg_updates: deque
 
 
@@ -4878,75 +4882,54 @@ class ConfigVerifier:
     ####################################################################
     # build_wait_timeout_suite
     ####################################################################
-    def build_wait_timeout_suite(
+    def build_wait_scenario_suite(
             self,
-            timeout_type: TimeoutType,
             num_waiters: int,
             actor_list: list[tuple[Actors, int]]) -> None:
         """Adds cmds to the cmd queue.
 
         Args:
-            timeout_type: specifies whether the recv_msg should
-                be coded with timeout and whether the recv_msg should
-                succeed or fail with a timeout
             num_waiters: number of threads that will do the wait
             actor_list: contains the actor style and number of threads
                 that will do that style
 
         """
-
-        class Actors(Enum):
-            ActiveNoDelayActor = auto()
-            ActiveDelayActor = auto()
-            ActionExitActor = auto()
-            NoActionExitActor = auto()
-            UnregActor = auto()
-            RegActor = auto()
-        actions: dict[Actors, list[Any]] = {
-            ActiveNoDelayActor: [],
-            ActiveDelayActor: [],
-            ActionExitActor: [],
-            NoActionExitActor: [],
-            UnregActor: [],
-            RegActor: [],
+        actions: dict[Actors, Callable[..., None]] = {
+            Actors.ActiveBeforeActor:
+                self.build_resume_before_wait_timeout_suite,
+            Actors.ActiveAfterActor:
+                self.build_resume_after_wait_timeout_suite,
+            Actors.ActionExitActor:
+                self.build_resume_exit_wait_timeout_suite,
+            Actors.NoActionExitActor:
+                self.build_resume_before_wait_timeout_suite,
+            Actors.UnregActor:
+                self.build_resume_before_wait_timeout_suite,
+            Actors.RegActor:
+                self.build_resume_before_wait_timeout_suite,
         }
         # Make sure we have enough threads. Note that we subtract 1 from
         # the count of unregistered names to ensure we have one thread
         # for the commander
         num_actor_threads = 0
         num_registered_threads_needed = 0
-        num_active_threads_needed = 0
+        num_active_threads_needed = 1  # start with 1 for commander
 
         for actor in actor_list:
             num_actor_threads += actor[1]
-            if (actor[0] == ActiveNoDelayActor
-                    or actor[0] == ActiveDelayActor
-                    or actor[0] == ActionExitActor
-                    or actor[0] == NoActionExitActor):
+            if (actor[0] == Actors.ActiveBeforeActor
+                    or actor[0] == Actors.ActiveAfterActor
+                    or actor[0] == Actors.ActionExitActor
+                    or actor[0] == Actors.NoActionExitActor):
                 num_active_threads_needed += actor[1]
-            elif actor[0] == RegActor:
+            elif actor[0] == Actors.RegActor:
                 num_registered_threads_needed += actor[1]
-
 
         assert (num_waiters
                 + num_actor_threads) <= len(self.unregistered_names) - 1
 
         assert num_waiters > 0
-
-        # timeout_time = ((num_active_no_delay_resumers * 0.01)
-        #                 + (num_active_delay_resumers * 0.01)
-        #                 + (num_resume_exit * 0.01)
-        #                 + (num_noresume_exit * 0.5)
-        #                 + (num_unreg_resumers * 0.2)
-        #                 + (num_reg_resumers * 0.1))
-        #
-        # if timeout_type == TimeoutType.TimeoutNone:
-        #     pause_time = 0.5
-        # elif timeout_type == TimeoutType.TimeoutFalse:
-        #     pause_time = 0.5
-        #     timeout_time += (pause_time * 2)  # prevent timeout
-        # else:  # timeout True
-        #     pause_time = timeout_time + 1  # force timeout
+        num_active_threads_needed += num_waiters
 
         self.build_config(
             cmd_runner=self.commander_name,
@@ -4960,363 +4943,304 @@ class ConfigVerifier:
         # be careful not to exit the commander
         active_names = self.active_names - {self.commander_name}
 
-        ################################################################
-        # choose waiter_names
-        ################################################################
         waiter_names = self.choose_names(
             name_collection=active_names,
             num_names_needed=num_waiters,
             update_collection=True,
             var_name_for_log='waiter_names')
 
-        ################################################################
-        # choose active_no_delay_resumer_names
-        ################################################################
-        active_no_delay_resumer_names = self.choose_names(
-            name_collection=active_names,
-            num_names_needed=num_active_no_delay_resumers ,
-            update_collection=True,
-            var_name_for_log='active_no_delay_resumer_names')
+        for actor in actor_list:
+            actions[actor[0]](waiter_names=waiter_names,
+                              num_actors=actor[1],
+                              active_names=active_names)
 
-        ################################################################
-        # choose active_delay_resumer_names
-        ################################################################
-        active_delay_resumer_names = self.choose_names(
-            name_collection=active_names,
-            num_names_needed=num_active_delay_resumers ,
-            update_collection=True,
-            var_name_for_log='active_delay_resumer_names')
+    ####################################################################
+    # powerset
+    ####################################################################
+    @staticmethod
+    def powerset(names: list[str]):
+        """Returns a generator powerset of the input list of names.
 
-        ################################################################
-        # choose resume_exit_names
-        ################################################################
-        resume_exit_names = self.choose_names(
-            name_collection=active_names,
-            num_names_needed=num_resume_exit  ,
-            update_collection=True,
-            var_name_for_log='resume_exit_names')
+        Args:
+            names: names to use to make a powerset
 
-        ################################################################
-        # choose noresume_exit_names
-        ################################################################
-        noresume_exit_names = self.choose_names(
-            name_collection=active_names,
-            num_names_needed=num_noresume_exit  ,
-            update_collection=True,
-            var_name_for_log='noresume_exit_names')
-
-        ################################################################
-        # choose unreg_resumer_names
-        ################################################################
-        unreg_resumer_names = self.choose_names(
-            name_collection=self.unregistered_names,
-            num_names_needed=num_unreg_resumers ,
-            update_collection=False,
-            var_name_for_log='unreg_resumer_names')
-
-        ################################################################
-        # choose reg_resumer_names
-        ################################################################
-        reg_resumer_names = self.choose_names(
-            name_collection=self.registered_names,
-            num_names_needed=num_reg_resumers ,
-            update_collection=False,
-            var_name_for_log='reg_resumer_names')
-
-        ################################################################
-        # start by doing the recv_msgs, one for each sender
-        ################################################################
-        all_resumer_names: list[str] = (active_no_delay_resumer_names
-                                        + active_delay_resumer_names
-                                        + resume_exit_names
-                                        + noresume_exit_names
-                                        + unreg_resumer_names
-                                        + reg_resumer_names)
-
-        all_timeout_names: list[str] = (active_delay_resumer_names
-                                        + resume_exit_names
-                                        + noresume_exit_names
-                                        + unreg_resumer_names
-                                        + reg_resumer_names)
-
-        # self.set_recv_timeout(
-        #     num_timeouts=len(all_timeout_names) * num_waiters )
-
-        if (len(all_resumer_names) + TimeoutType.value) % 2 == 0:
-            log_msg = f'wait log test: {self.get_ptime()}'
-        else:
-            log_msg = None
-
-        if (len(all_resumer_names) + TimeoutType.value) % 2:
-            raise_not_alive = True
-        else:
-            raise_not_alive = False
-
-        resumers_for_wait: DictAliveAndStatus = {}
-        for resumer in (active_no_delay_resumer_names
-                        + active_delay_resumer_names
-                        + resume_exit_names):
-            resumers_for_wait[resumer].is_alive = True
-            resumers_for_wait[resumer].status = st.ThreadStatus.Alive
-
-        for resumer in noresume_exit_names:
-            resumers_for_wait[resumer].is_alive = False
-            resumers_for_wait[resumer].status = st.ThreadStatus.Stopped
-
-        for resumer in unreg_resumer_names:
-            resumers_for_wait[resumer].is_alive = False
-            resumers_for_wait[resumer].status = st.ThreadStatus.Unregistered
-
-        for resumer in unreg_resumer_names:
-            resumers_for_wait[resumer].is_alive = False
-            resumers_for_wait[resumer].status = st.ThreadStatus.Registered
-
-        ################################################################
-        # do resume from active_no_delay_resumers
-        ################################################################
-        if active_no_delay_resumer_names:
-            self.add_cmd(
-                Resume(cmd_runners=active_no_delay_resumer_names,
-                       targets=waiter_names,
-                       stopped_names=[]))
-
-        ################################################################
-        # do send_msg from resume_exit   and then exit
-        ################################################################
-        if resume_exit_names:
-            self.add_cmd(
-                Resume(cmd_runners=resume_exit_names,
-                       targets=waiter_names,
-                       stopped_names=[]))
-
-            self.build_exit_suite(
-                names=resume_exit_names, validate_config=False)
-            self.build_join_suite(
-                cmd_runners=self.commander_name,
-                join_target_names=resume_exit_names,
-                validate_config=False)
-            self.add_cmd(VerifyPairedHalf(cmd_runners=self.commander_name,
-                                          pair_names=resume_exit_names,
-                                          exp_half_paired_names=waiter_names))
-
-        ################################################################
-        # do waits
-        ################################################################
-        if timeout_type == TimeoutType.TimeoutNone:
-            confirm_cmd_to_use = 'Wait'
-            wait_serial_num = self.add_cmd(
-                Wait(cmd_runners=waiter_names,
-                     resumers=resumers_for_wait,
-                     raise_not_alive=raise_not_alive))
-
-        elif timeout_type == TimeoutType.TimeoutFalse:
-            confirm_cmd_to_use = 'WaitTimeoutFalse'
-            wait_serial_num = self.add_cmd(
-                WaitTimeoutFalse(
-                    cmd_runners=waiter_names,
-                    resumers=resumers_for_wait,
-                    raise_not_alive=raise_not_alive,
-                    timeout=timeout_time))
-
-        else:  # TimeoutType.TimeoutTrue
-            confirm_cmd_to_use = 'WaitTimeoutTrue'
-            wait_serial_num = self.add_cmd(
-                WaitTimeoutTrue(
-                    cmd_runners=waiter_names,
-                    resumers=resumers_for_wait,
-                    raise_not_alive=raise_not_alive,
-                    timeout=timeout_time))
-
-        self.add_cmd(
-            Pause(cmd_runners=self.commander_name,
-                  pause_seconds=pause_time))
-        if timeout_type == TimeoutType.TimeoutTrue:
-            self.add_cmd(WaitForRecvTimeouts(cmd_runners=self.commander_name))
-
-        ################################################################
-        # do send_msg from active_delay_resumers
-        ################################################################
-        if active_delay_resumer_names:
-            self.add_cmd(
-                SendMsg(cmd_runners=active_delay_resumer_names,
-                        receivers=resumer_names,
-                        msgs_to_send=sender_msgs))
-
-
-
-        ################################################################
-        # exit the noresume_exit  , then resurrect and do send_msg
-        ################################################################
-        if noresume_exit_names:
-            self.build_exit_suite(
-                names=noresume_exit_names, validate_config=False)
-            self.build_join_suite(
-                cmd_runners=self.commander_name,
-                join_target_names=noresume_exit_names,
-                validate_config=False)
-            f1_create_items: list[F1CreateItem] = []
-            for idx, name in enumerate(noresume_exit_names):
-                if idx % 2:
-                    app_config = AppConfig.ScriptStyle
-                else:
-                    app_config = AppConfig.RemoteThreadApp
-
-                f1_create_items.append(F1CreateItem(name=name,
-                                                    auto_start=True,
-                                                    target_rtn=outer_f1,
-                                                    app_config=app_config))
-            self.build_create_suite(
-                f1_create_items=f1_create_items,
-                validate_config=False)
-            self.add_cmd(
-                SendMsg(cmd_runners=noresume_exit_names,
-                        receivers=resumer_names,
-                        msgs_to_send=sender_msgs))
-
-        ################################################################
-        # create and start the unreg_resumers , then do send_msg
-        ################################################################
-        if unreg_resumer_names:
-            f1_create_items: list[F1CreateItem] = []
-            for idx, name in enumerate(unreg_resumer_names):
-                if idx % 2:
-                    app_config = AppConfig.ScriptStyle
-                else:
-                    app_config = AppConfig.RemoteThreadApp
-
-                f1_create_items.append(F1CreateItem(name=name,
-                                                    auto_start=True,
-                                                    target_rtn=outer_f1,
-                                                    app_config=app_config))
-            self.build_create_suite(
-                f1_create_items=f1_create_items,
-                validate_config=False)
-            self.add_cmd(
-                SendMsg(cmd_runners=unreg_resumer_names,
-                        receivers=resumer_names,
-                        msgs_to_send=sender_msgs))
-
-        ################################################################
-        # start the reg_resumers , then do send_msg
-        ################################################################
-        if reg_resumer_names:
-            self.build_start_suite(
-                start_names=reg_resumer_names,
-                validate_config=False)
-            self.add_cmd(
-                SendMsg(cmd_runners=reg_resumer_names,
-                        receivers=resumer_names,
-                        msgs_to_send=sender_msgs))
-
-        ################################################################
-        # finally, confirm the recv_msg is done
-        ################################################################
-        self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=[self.commander_name],
-                confirm_cmd=confirm_cmd_to_use,
-                confirm_serial_num=recv_msg_serial_num,
-                confirmers=resumer_names))
+        """
+        # powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)
+        return chain.from_iterable(
+            combinations(names, r) for r in range(len(names) + 1))
 
     ####################################################################
     # build_wait_active_suite
     ####################################################################
-    def build_wait_active_no_delay_suite(
+    def build_resume_before_wait_timeout_suite(
             self,
-            timeout_type: TimeoutType,
-            waiter_names: str,
+            waiter_names: list[str],
             num_actors: int,
             active_names: list[str]) -> None:
         """Adds cmds to the cmd queue.
 
         Args:
-            timeout_type: specifies whether the recv_msg should
-                be coded with timeout and whether the recv_msg should
-                succeed or fail with a timeout
             waiter_names: names of threads that will do the wait
             num_actors: number of threads that will do the resume
             active_names: list of active names to choose from
 
         """
-        if (num_actors + timeout_type.value) % 2:
-            raise_not_alive = True
-        else:
-            raise_not_alive = False
+        raise_not_alive = True
 
-        active_no_delay_resumer_names = self.choose_names(
+        active_before_resumer_names = self.choose_names(
             name_collection=active_names,
             num_names_needed=num_actors,
             update_collection=True,
-            var_name_for_log='active_no_delay_resumer_names')
+            var_name_for_log='active_before_resumer_names')
 
         resumers_for_wait: DictAliveAndStatus = {}
-        for resumer in active_no_delay_resumer_names:
-            resumers_for_wait[resumer].is_alive = True
-            resumers_for_wait[resumer].status = st.ThreadStatus.Alive
+        for resumer in active_before_resumer_names:
+            resumers_for_wait[resumer] = AliveAndStatus(
+                is_alive=True,
+                status=st.ThreadStatus.Alive)
 
-        if timeout_type == TimeoutType.TimeoutTrue:
-            timeout_time = 0.5
-            pause_time = timeout_time
-            confirm_cmd_to_use = 'WaitTimeoutTrue'
-            wait_serial_num = self.add_cmd(
-                WaitTimeoutTrue(
-                    cmd_runners=waiter_names,
-                    resumers=resumers_for_wait,
-                    raise_not_alive=raise_not_alive,
-                    timeout=timeout_time))
+        ################################################################
+        # Loop to do combinations of resume names, the waiter names that
+        # will be resumed - the remaining waiter names will timeout
+        ################################################################
+        for target_names in self.powerset(waiter_names.copy()):
+            timeout_names = waiter_names
+            if target_names:
+                target_names = list(target_names)
+                ########################################################
+                # resume the waiters that are expected to succeed
+                ########################################################
+                resume_cmd_serial_num = self.add_cmd(
+                    Resume(cmd_runners=active_before_resumer_names,
+                           targets=target_names,
+                           stopped_names=[]))
+                self.add_cmd(
+                    ConfirmResponse(
+                        cmd_runners=[self.commander_name],
+                        confirm_cmd='Resume',
+                        confirm_serial_num=resume_cmd_serial_num,
+                        confirmers=active_before_resumer_names))
 
-            self.add_cmd(
-                Pause(cmd_runners=self.commander_name,
-                      pause_seconds=pause_time))
+                timeout_time = 1.5
+                wait_serial_num = self.add_cmd(
+                    WaitTimeoutFalse(
+                        cmd_runners=target_names,
+                        resumers=resumers_for_wait,
+                        raise_not_alive=raise_not_alive,
+                        timeout=timeout_time))
+                self.add_cmd(
+                    ConfirmResponse(
+                        cmd_runners=[self.commander_name],
+                        confirm_cmd='WaitTimeoutFalse',
+                        confirm_serial_num=wait_serial_num,
+                        confirmers=target_names))
 
-        resume_cmd_serial_num = self.add_cmd(
-            Resume(cmd_runners=active_no_delay_resumer_names,
-                   targets=waiter_names,
-                   stopped_names=[]))
+                timeout_names = list(set(waiter_names) - set(target_names))
 
-        if timeout_type == TimeoutType.TimeoutNone:
-            confirm_cmd_to_use = 'Wait'
-            wait_serial_num = self.add_cmd(
-                Wait(cmd_runners=waiter_names,
-                     resumers=resumers_for_wait,
-                     raise_not_alive=raise_not_alive))
+            if timeout_names:
+                ########################################################
+                # the timeout_names are expected to timeout since they
+                # were not resumed
+                ########################################################
+                timeout_time = 0.5
+                wait_serial_num = self.add_cmd(
+                    WaitTimeoutTrue(
+                        cmd_runners=timeout_names,
+                        resumers=resumers_for_wait,
+                        raise_not_alive=raise_not_alive,
+                        timeout=timeout_time))
+                self.add_cmd(
+                    ConfirmResponse(
+                        cmd_runners=[self.commander_name],
+                        confirm_cmd='WaitTimeoutTrue',
+                        confirm_serial_num=wait_serial_num,
+                        confirmers=timeout_names))
 
-        elif timeout_type == TimeoutType.TimeoutFalse:
-            timeout_time = 3
-            confirm_cmd_to_use = 'WaitTimeoutFalse'
-            wait_serial_num = self.add_cmd(
-                WaitTimeoutFalse(
-                    cmd_runners=waiter_names,
-                    resumers=resumers_for_wait,
-                    raise_not_alive=raise_not_alive,
-                    timeout=timeout_time))
+    ####################################################################
+    # build_wait_active_suite
+    ####################################################################
+    def build_resume_after_wait_timeout_suite(
+            self,
+            waiter_names: list[str],
+            num_actors: int,
+            active_names: list[str]) -> None:
+        """Adds cmds to the cmd queue.
 
-        else:  # TimeoutType.TimeoutTrue
-            confirm_cmd_to_use = 'WaitTimeoutTrue'
-            wait_serial_num = self.add_cmd(
-                WaitTimeoutTrue(
-                    cmd_runners=waiter_names,
-                    resumers=resumers_for_wait,
-                    raise_not_alive=raise_not_alive,
-                    timeout=timeout_time))
-        wait_serial_num = self.add_cmd(
-            Wait(cmd_runners=waiter_names,
-                 resumers=active_no_delay_resumer_names,
-                 raise_not_alive=True))
+        Args:
+            waiter_names: names of threads that will do the wait
+            num_actors: number of threads that will do the resume
+            active_names: list of active names to choose from
 
-        self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=[self.commander_name],
-                confirm_cmd='Resume',
-                confirm_serial_num=resume_cmd_serial_num,
-                confirmers=active_no_delay_resumer_names))
+        """
+        raise_not_alive = True
 
-        self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=[self.commander_name],
-                confirm_cmd='Wait',
-                confirm_serial_num=wait_serial_num,
-                confirmers=waiter_names))
+        active_after_resumer_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_actors,
+            update_collection=True,
+            var_name_for_log='active_after_resumer_names')
+
+        resumers_for_wait: DictAliveAndStatus = {}
+        for resumer in active_after_resumer_names:
+            resumers_for_wait[resumer] = AliveAndStatus(
+                is_alive=True,
+                status=st.ThreadStatus.Alive)
+
+        ################################################################
+        # Loop to do combinations of resume names, the waiter names that
+        # will be resumed - the remaining waiter names will timeout
+        ################################################################
+        for target_names in self.powerset(waiter_names.copy()):
+            timeout_names = waiter_names
+            if target_names:
+                ########################################################
+                # resume the waiters that are expected to succeed
+                ########################################################
+                timeout_time = 1.5
+                wait_serial_num = self.add_cmd(
+                    WaitTimeoutFalse(
+                        cmd_runners=list(target_names),
+                        resumers=resumers_for_wait,
+                        raise_not_alive=raise_not_alive,
+                        timeout=timeout_time))
+
+                resume_cmd_serial_num = self.add_cmd(
+                    Resume(cmd_runners=active_after_resumer_names,
+                           targets=list(target_names),
+                           stopped_names=[]))
+                self.add_cmd(
+                    ConfirmResponse(
+                        cmd_runners=[self.commander_name],
+                        confirm_cmd='Resume',
+                        confirm_serial_num=resume_cmd_serial_num,
+                        confirmers=active_after_resumer_names))
+
+                self.add_cmd(
+                    ConfirmResponse(
+                        cmd_runners=[self.commander_name],
+                        confirm_cmd='WaitTimeoutFalse',
+                        confirm_serial_num=wait_serial_num,
+                        confirmers=list(target_names)))
+
+                timeout_names = list(set(waiter_names) - set(target_names))
+
+            if timeout_names:
+                ########################################################
+                # the timeout_names are expected to timeout since they
+                # were not resumed
+                ########################################################
+                timeout_time = 0.5
+                wait_serial_num = self.add_cmd(
+                    WaitTimeoutTrue(
+                        cmd_runners=timeout_names,
+                        resumers=resumers_for_wait,
+                        raise_not_alive=raise_not_alive,
+                        timeout=timeout_time))
+                self.add_cmd(
+                    ConfirmResponse(
+                        cmd_runners=[self.commander_name],
+                        confirm_cmd='WaitTimeoutTrue',
+                        confirm_serial_num=wait_serial_num,
+                        confirmers=timeout_names))
+
+    ####################################################################
+    # build_wait_active_suite
+    ####################################################################
+    def build_resume_exit_wait_timeout_suite(
+            self,
+            waiter_names: list[str],
+            num_actors: int,
+            active_names: list[str]) -> None:
+        """Adds cmds to the cmd queue.
+
+        Args:
+            waiter_names: names of threads that will do the wait
+            num_actors: number of threads that will do the resume
+            active_names: list of active names to choose from
+
+        """
+        raise_not_alive = True
+
+        resume_exit_resumer_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_actors,
+            update_collection=True,
+            var_name_for_log='resume_exit_resumer_names')
+
+        resumers_for_wait: DictAliveAndStatus = {}
+        for resumer in resume_exit_resumer_names:
+            resumers_for_wait[resumer] = AliveAndStatus(
+                is_alive=True,
+                status=st.ThreadStatus.Alive)
+
+        ################################################################
+        # Loop to do combinations of resume names, the waiter names that
+        # will be resumed - the remaining waiter names will timeout
+        ################################################################
+        for target_names in self.powerset(waiter_names.copy()):
+            timeout_names = waiter_names
+            if target_names:
+                target_names = list(target_names)
+                ########################################################
+                # resume the waiters that are expected to succeed
+                ########################################################
+                resume_cmd_serial_num = self.add_cmd(
+                    Resume(cmd_runners=resume_exit_resumer_names,
+                           targets=target_names,
+                           stopped_names=[]))
+
+                self.add_cmd(
+                    ConfirmResponse(
+                        cmd_runners=[self.commander_name],
+                        confirm_cmd='Resume',
+                        confirm_serial_num=resume_cmd_serial_num,
+                        confirmers=resume_exit_resumer_names))
+
+                self.build_exit_suite(names=resume_exit_resumer_names)
+                self.build_join_suite(
+                    cmd_runners=self.commander_name,
+                    join_target_names=resume_exit_resumer_names)
+
+                for waiter_name in target_names:
+                    self.add_cmd(VerifyPairedHalf(
+                        cmd_runners=self.commander_name,
+                        pair_names=resume_exit_resumer_names + [waiter_name],
+                        exp_half_paired_names=waiter_name))
+
+                timeout_time = 1.5
+                wait_serial_num = self.add_cmd(
+                    WaitTimeoutFalse(
+                        cmd_runners=target_names,
+                        resumers=resumers_for_wait,
+                        raise_not_alive=raise_not_alive,
+                        timeout=timeout_time))
+                self.add_cmd(
+                    ConfirmResponse(
+                        cmd_runners=[self.commander_name],
+                        confirm_cmd='WaitTimeoutFalse',
+                        confirm_serial_num=wait_serial_num,
+                        confirmers=target_names))
+
+                timeout_names = list(set(waiter_names) - set(target_names))
+
+            if timeout_names:
+                ########################################################
+                # the timeout_names are expected to timeout since they
+                # were not resumed
+                ########################################################
+                timeout_time = 0.5
+                wait_serial_num = self.add_cmd(
+                    WaitTimeoutTrue(
+                        cmd_runners=timeout_names,
+                        resumers=resumers_for_wait,
+                        raise_not_alive=raise_not_alive,
+                        timeout=timeout_time))
+                self.add_cmd(
+                    ConfirmResponse(
+                        cmd_runners=[self.commander_name],
+                        confirm_cmd='WaitTimeoutTrue',
+                        confirm_serial_num=wait_serial_num,
+                        confirmers=timeout_names))
 
     ####################################################################
     # build_msg_timeout_suite
@@ -6735,10 +6659,8 @@ class ConfigVerifier:
 
         """
         pair_key = st.SmartThread._get_pair_key(cmd_runner, sender)
-        doc_log_msg = (f'dec_ops_count entered for {cmd_runner=} with '
-                       f'{pair_key=}')
-        self.log_ver.add_msg(log_msg=re.escape(doc_log_msg))
-        logger.debug(doc_log_msg)
+        self.log_test_msg(
+            f'dec_ops_count entry: {cmd_runner=}, {pair_key=}')
 
         with self.ops_lock:
             self.expected_pairs[pair_key][cmd_runner].pending_ops_count -= 1
@@ -8345,7 +8267,7 @@ class ConfigVerifier:
                         f'{cmd_runner} smart_wait() detected thread '
                         f'remote={resumer} has ended'),
                     log_level=logging.ERROR)
-            elif resumers[resumer].status != st.ThreadStatus.Alive:
+            else:
                 with pytest.raises(st.SmartThreadSmartWaitTimedOut):
                     self.all_threads[cmd_runner].smart_wait(
                         remote=resumer,
@@ -8357,15 +8279,10 @@ class ConfigVerifier:
                 remote_status = resumers[resumer].status
 
                 self.add_log_msg(re.escape(
-                    f'{cmd_runner} raising SmartThreadWaitTimedOut waiting '
-                    f'for a smart_wait resume from {resumer} with '
-                    f'{remote_is_alive=}, {remote_status=}'))
-            else:
-                self.all_threads[cmd_runner].smart_wait(
-                    remote=resumer,
-                    raise_not_alive=raise_not_alive,
-                    timeout=timeout
-                )
+                    f'{cmd_runner} raising SmartThreadSmartWaitTimedOut '
+                    f'waiting for a smart_wait resume from {resumer} with '
+                    f'{remote_is_alive=}, {remote_status=}'),
+                    log_level=logging.ERROR)
 
         self.log_test_msg(f'{cmd_runner=} handle_wait_tot exit for '
                           f'{resumers=}, {raise_not_alive=}, {timeout=}')
@@ -9930,19 +9847,18 @@ class TestSmartThreadScenarios:
     ####################################################################
     # test_wait_timeout_scenarios
     ####################################################################
-    def test_wait_timeout_scenarios(
+    def test_wait_scenarios(
             self,
-            timeout_type_arg: TimeoutType,
             num_waiters_arg: int,
             actor_1_arg: Actors,
             num_actor_1_arg: int,
-            actor_2_arg: Actors,
-            num_actor_2_arg: int,
-            actor_3_arg: Actors,
-            num_actor_3_arg: int,
+            # actor_2_arg: Actors,
+            # num_actor_2_arg: int,
+            # actor_3_arg: Actors,
+            # num_actor_3_arg: int,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
-        """Test meta configuration scenarios.
+        """Test wait scenarios.
 
         Args:
             timeout_type_arg: specifies whether the recv_msg should
@@ -9959,9 +9875,8 @@ class TestSmartThreadScenarios:
 
         """
         total_arg_counts = (
-                num_actor_1_arg
-                + num_actor_2_arg
-                + num_actor_3_arg)
+                num_waiters_arg
+                + num_actor_1_arg)
 
         command_config_num = total_arg_counts % 4
         if command_config_num == 0:
@@ -9973,16 +9888,19 @@ class TestSmartThreadScenarios:
         else:
             commander_config = AppConfig.RemoteSmartThreadApp
 
+        # args_for_scenario_builder: dict[str, Any] = {
+        #     'num_waiters': num_waiters_arg,
+        #     'actor_list': [(actor_1_arg, num_actor_1_arg),
+        #                    (actor_2_arg, num_actor_2_arg),
+        #                    (actor_3_arg, num_actor_3_arg)]
+        # }
         args_for_scenario_builder: dict[str, Any] = {
-            'timeout_type': timeout_type_arg,
             'num_waiters': num_waiters_arg,
-            'actor_list': [(actor_1_arg, num_actor_1_arg),
-                           (actor_2_arg, num_actor_2_arg),
-                           (actor_3_arg, num_actor_3_arg)]
+            'actor_list': [(actor_1_arg, num_actor_1_arg)]
         }
 
         self.scenario_driver(
-            scenario_builder=ConfigVerifier.build_wait_timeout_suite,
+            scenario_builder=ConfigVerifier.build_wait_scenario_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
             commander_config=commander_config
@@ -10044,7 +9962,7 @@ class TestSmartThreadScenarios:
         logger.debug(log_msg)
 
         log_msg = f'scenario args: {scenario_builder_args}'
-        log_ver.add_msg(log_msg=log_msg)
+        log_ver.add_msg(log_msg=re.escape(log_msg))
         logger.debug(log_msg)
 
         random.seed(42)

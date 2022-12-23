@@ -185,7 +185,7 @@ class SmartThreadResumeTimedOut(SmartThreadError):
     pass
 
 
-class SmartThreadWaitTimedOut(SmartThreadError):
+class SmartThreadSmartWaitTimedOut(SmartThreadError):
     """SmartThread exception wait timed out."""
     pass
 
@@ -1803,8 +1803,9 @@ class SmartThread:
                 by thread {self.name} but remote thread {remote}
                 detected deadlock instead which indicates that the
                 remote thread did not make a matching sync request.
-            SmartThreadWaitTimedOut: this thread timed out on a wait
-                request waiting for a resume from the remote thread.
+            SmartThreadSmartWaitTimedOut: this thread timed out on a
+                wait request waiting for a resume from the remote
+                thread.
             SmartThreadRemoteThreadNotAlive: this thread wait detected
                 the remote thread is not alive.
 
@@ -2031,16 +2032,16 @@ class SmartThread:
                         remote_status = self._get_status(remote)
 
                     error_msg = (
-                        f'{self.name} raising SmartThreadWaitTimedOut waiting '
-                        f'for a {wait_or_sync} resume from {remote} with '
-                        f'{remote_is_alive=}, {remote_status=}')
+                        f'{self.name} raising SmartThreadSmartWaitTimedOut '
+                        f'waiting for a {wait_or_sync} resume from {remote} '
+                        f'with {remote_is_alive=}, {remote_status=}')
 
                     local_sb.wait_wait = False
                     local_sb.deadlock = False
                     local_sb.wait_timeout_specified = False
 
                     self.logger.error(error_msg)
-                    raise SmartThreadWaitTimedOut(error_msg)
+                    raise SmartThreadSmartWaitTimedOut(error_msg)
 
             time.sleep(0.2)
 
