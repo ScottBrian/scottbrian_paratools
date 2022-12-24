@@ -206,6 +206,7 @@ num_stopped_delay_arg_list = [0, 1, 2]
 # Test settings for test_wait_timeout_scenarios
 ########################################################################
 num_waiters_arg_list = [1, 2, 3]
+num_actors_arg_list = [1, 2, 3]
 
 actor_1_arg_list = [Actors.ActiveBeforeActor,
                     Actors.ActiveAfterActor,
@@ -213,10 +214,11 @@ actor_1_arg_list = [Actors.ActiveBeforeActor,
                     Actors.ExitActionActor,
                     Actors.UnregActor,
                     Actors.RegActor]
-actor_1_arg_list = [Actors.ActiveBeforeActor,
-                    Actors.ActiveAfterActor,
-                    Actors.ActionExitActor,
-                    Actors.ExitActionActor]
+# actor_1_arg_list = [Actors.ActiveBeforeActor,
+#                     Actors.ActiveAfterActor,
+#                     Actors.ActionExitActor,
+#                     Actors.ExitActionActor,
+#                     Actors.UnregActor]
 num_actor_1_arg_list = [1, 2, 3]
 
 actor_2_arg_list = [Actors.ActiveBeforeActor,
@@ -2354,6 +2356,22 @@ def num_stopped_delay_arg(request: Any) -> int:
 ########################################################################
 @pytest.fixture(params=num_waiters_arg_list)  # type: ignore
 def num_waiters_arg(request: Any) -> int:
+    """Number stopped threads quickly joined, created, and started.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
+########################################################################
+# num_actors_arg
+########################################################################
+@pytest.fixture(params=num_actors_arg_list)  # type: ignore
+def num_actors_arg(request: Any) -> int:
     """Number stopped threads quickly joined, created, and started.
 
     Args:
@@ -4756,13 +4774,14 @@ class ConfigVerifier:
     def build_wait_scenario_suite(
             self,
             num_waiters: int,
-            actor_list: list[tuple[Actors, int]]) -> None:
+            num_actors: int,
+            actor_list: list[Actors]) -> None:
         """Adds cmds to the cmd queue.
 
         Args:
             num_waiters: number of threads that will do the wait
-            actor_list: contains the actor style and number of threads
-                that will do that style
+            num_actors: number of threads that will do the resume
+            actor_list: contains the actors
 
         """
         actions: dict[Actors, Callable[..., None]] = {
@@ -4775,36 +4794,23 @@ class ConfigVerifier:
             Actors.ExitActionActor:
                 self.build_exit_resume_wait_timeout_suite,
             Actors.UnregActor:
-                self.build_resume_before_wait_timeout_suite,
+                self.build_unreg_resume_wait_timeout_suite,
             Actors.RegActor:
-                self.build_resume_before_wait_timeout_suite,
+                self.build_reg_resume_wait_timeout_suite,
         }
         # Make sure we have enough threads. Note that we subtract 1 from
         # the count of unregistered names to ensure we have one thread
         # for the commander
-        num_actor_threads = 0
-        num_registered_threads_needed = 0
-        num_active_threads_needed = 1  # start with 1 for commander
-
-        for actor in actor_list:
-            num_actor_threads += actor[1]
-            if (actor[0] == Actors.ActiveBeforeActor
-                    or actor[0] == Actors.ActiveAfterActor
-                    or actor[0] == Actors.ActionExitActor
-                    or actor[0] == Actors.ExitActionActor):
-                num_active_threads_needed += actor[1]
-            elif actor[0] == Actors.RegActor:
-                num_registered_threads_needed += actor[1]
-
-        assert (num_waiters
-                + num_actor_threads) <= len(self.unregistered_names) - 1
 
         assert num_waiters > 0
-        num_active_threads_needed += num_waiters
+        assert num_actors > 0
+        assert (num_waiters + num_actors) <= len(self.unregistered_names) - 1
+
+        # number needed for waiters, actors, and commander
+        num_active_threads_needed = num_waiters + num_actors + 1
 
         self.build_config(
             cmd_runner=self.commander_name,
-            num_registered=num_registered_threads_needed,
             num_active=num_active_threads_needed)
 
         self.log_name_groups()
@@ -4820,10 +4826,15 @@ class ConfigVerifier:
             update_collection=True,
             var_name_for_log='waiter_names')
 
+        actor_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_actors,
+            update_collection=True,
+            var_name_for_log='actor_names')
+
         for actor in actor_list:
-            actions[actor[0]](waiter_names=waiter_names,
-                              num_actors=actor[1],
-                              active_names=active_names)
+            actions[actor](waiter_names=waiter_names,
+                           actor_names=actor_names)
 
     ####################################################################
     # powerset
@@ -4846,26 +4857,18 @@ class ConfigVerifier:
     def build_resume_before_wait_timeout_suite(
             self,
             waiter_names: list[str],
-            num_actors: int,
-            active_names: set[str]) -> None:
+            actor_names: list[str]) -> None:
         """Adds cmds to the cmd queue.
 
         Args:
             waiter_names: names of threads that will do the wait
-            num_actors: number of threads that will do the resume
-            active_names: list of active names to choose from
+            actor_names: names of threads that will do the resume
 
         """
         raise_not_alive = True
 
-        active_before_resumer_names = self.choose_names(
-            name_collection=active_names,
-            num_names_needed=num_actors,
-            update_collection=True,
-            var_name_for_log='active_before_resumer_names')
-
         resumers_for_wait: DictAliveAndStatus = {}
-        for resumer in active_before_resumer_names:
+        for resumer in actor_names:
             resumers_for_wait[resumer] = AliveAndStatus(
                 is_alive=True,
                 status=st.ThreadStatus.Alive)
@@ -4882,7 +4885,7 @@ class ConfigVerifier:
                 # resume the waiters that are expected to succeed
                 ########################################################
                 resume_cmd_serial_num = self.add_cmd(
-                    Resume(cmd_runners=active_before_resumer_names,
+                    Resume(cmd_runners=actor_names,
                            targets=target_names,
                            stopped_names=[]))
                 self.add_cmd(
@@ -4890,7 +4893,7 @@ class ConfigVerifier:
                         cmd_runners=[self.commander_name],
                         confirm_cmd='Resume',
                         confirm_serial_num=resume_cmd_serial_num,
-                        confirmers=active_before_resumer_names))
+                        confirmers=actor_names))
 
                 timeout_time = 1.5
                 wait_serial_num = self.add_cmd(
@@ -4933,26 +4936,18 @@ class ConfigVerifier:
     def build_resume_after_wait_timeout_suite(
             self,
             waiter_names: list[str],
-            num_actors: int,
-            active_names: set[str]) -> None:
+            actor_names: list[str]) -> None:
         """Adds cmds to the cmd queue.
 
         Args:
             waiter_names: names of threads that will do the wait
-            num_actors: number of threads that will do the resume
-            active_names: list of active names to choose from
+            actor_names: names of threads that will do the resume
 
         """
         raise_not_alive = True
 
-        active_after_resumer_names = self.choose_names(
-            name_collection=active_names,
-            num_names_needed=num_actors,
-            update_collection=True,
-            var_name_for_log='active_after_resumer_names')
-
         resumers_for_wait: DictAliveAndStatus = {}
-        for resumer in active_after_resumer_names:
+        for resumer in actor_names:
             resumers_for_wait[resumer] = AliveAndStatus(
                 is_alive=True,
                 status=st.ThreadStatus.Alive)
@@ -4976,7 +4971,7 @@ class ConfigVerifier:
                         timeout=timeout_time))
 
                 resume_cmd_serial_num = self.add_cmd(
-                    Resume(cmd_runners=active_after_resumer_names,
+                    Resume(cmd_runners=actor_names,
                            targets=list(target_names),
                            stopped_names=[]))
                 self.add_cmd(
@@ -4984,7 +4979,7 @@ class ConfigVerifier:
                         cmd_runners=[self.commander_name],
                         confirm_cmd='Resume',
                         confirm_serial_num=resume_cmd_serial_num,
-                        confirmers=active_after_resumer_names))
+                        confirmers=actor_names))
 
                 self.add_cmd(
                     ConfirmResponse(
@@ -5020,26 +5015,18 @@ class ConfigVerifier:
     def build_resume_exit_wait_timeout_suite(
             self,
             waiter_names: list[str],
-            num_actors: int,
-            active_names: set[str]) -> None:
+            actor_names: list[str]) -> None:
         """Adds cmds to the cmd queue.
 
         Args:
             waiter_names: names of threads that will do the wait
-            num_actors: number of threads that will do the resume
-            active_names: list of active names to choose from
+            actor_names: names of threads that will do the resume
 
         """
         raise_not_alive = True
 
-        resume_exit_resumer_names = self.choose_names(
-            name_collection=active_names,
-            num_names_needed=num_actors,
-            update_collection=True,
-            var_name_for_log='resume_exit_resumer_names')
-
         resumers_for_wait: DictAliveAndStatus = {}
-        for resumer in resume_exit_resumer_names:
+        for resumer in actor_names:
             resumers_for_wait[resumer] = AliveAndStatus(
                 is_alive=True,
                 status=st.ThreadStatus.Alive)
@@ -5056,7 +5043,7 @@ class ConfigVerifier:
                 # resume the waiters that are expected to succeed
                 ########################################################
                 resume_cmd_serial_num = self.add_cmd(
-                    Resume(cmd_runners=resume_exit_resumer_names,
+                    Resume(cmd_runners=actor_names,
                            targets=target_names,
                            stopped_names=[]))
 
@@ -5065,14 +5052,14 @@ class ConfigVerifier:
                         cmd_runners=[self.commander_name],
                         confirm_cmd='Resume',
                         confirm_serial_num=resume_cmd_serial_num,
-                        confirmers=resume_exit_resumer_names))
+                        confirmers=actor_names))
 
-                self.build_exit_suite(names=resume_exit_resumer_names)
+                self.build_exit_suite(names=actor_names)
                 self.build_join_suite(
                     cmd_runners=self.commander_name,
-                    join_target_names=resume_exit_resumer_names)
+                    join_target_names=actor_names)
 
-                for resumer_name in resume_exit_resumer_names:
+                for resumer_name in actor_names:
                     self.add_cmd(VerifyPairedHalf(
                         cmd_runners=self.commander_name,
                         removed_names=resumer_name,
@@ -5093,7 +5080,7 @@ class ConfigVerifier:
                         confirmers=target_names))
 
                 f1_create_items: list[F1CreateItem] = []
-                for idx, name in enumerate(resume_exit_resumer_names):
+                for idx, name in enumerate(actor_names):
                     if idx % 2:
                         app_config = AppConfig.ScriptStyle
                     else:
@@ -5134,22 +5121,14 @@ class ConfigVerifier:
     def build_exit_resume_wait_timeout_suite(
             self,
             waiter_names: list[str],
-            num_actors: int,
-            active_names: set[str]) -> None:
+            actor_names: list[str]) -> None:
         """Adds cmds to the cmd queue.
 
         Args:
             waiter_names: names of threads that will do the wait
-            num_actors: number of threads that will do the resume
-            active_names: list of active names to choose from
+            actor_names: names of threads that will do the resume
 
         """
-        exit_resume_resumer_names = self.choose_names(
-            name_collection=active_names,
-            num_names_needed=num_actors,
-            update_collection=True,
-            var_name_for_log='exit_resume_resumer_names')
-
         ################################################################
         # Loop to do combinations of resume names, the waiter names that
         # will be resumed - the remaining waiter names will timeout
@@ -5160,14 +5139,14 @@ class ConfigVerifier:
             if len(target_names) % 2:
                 raise_not_alive = True
                 resumers_for_wait: DictAliveAndStatus = {}
-                for resumer in exit_resume_resumer_names:
+                for resumer in actor_names:
                     resumers_for_wait[resumer] = AliveAndStatus(
                         is_alive=False,
                         status=st.ThreadStatus.Stopped)
             else:
                 raise_not_alive = False
                 resumers_for_wait: DictAliveAndStatus = {}
-                for resumer in exit_resume_resumer_names:
+                for resumer in actor_names:
                     resumers_for_wait[resumer] = AliveAndStatus(
                         is_alive=True,
                         status=st.ThreadStatus.Alive)
@@ -5175,7 +5154,7 @@ class ConfigVerifier:
             if target_names:
                 target_names = list(target_names)
 
-                timeout_time = 1.5
+                timeout_time = 3.0
                 wait_serial_num = self.add_cmd(
                     WaitTimeoutFalse(
                         cmd_runners=target_names,
@@ -5183,7 +5162,7 @@ class ConfigVerifier:
                         raise_not_alive=raise_not_alive,
                         timeout=timeout_time))
 
-                self.build_exit_suite(names=exit_resume_resumer_names)
+                self.build_exit_suite(names=actor_names)
 
                 if raise_not_alive:
                     self.add_cmd(
@@ -5195,10 +5174,10 @@ class ConfigVerifier:
 
                 self.build_join_suite(
                     cmd_runners=self.commander_name,
-                    join_target_names=exit_resume_resumer_names)
+                    join_target_names=actor_names)
 
                 f1_create_items: list[F1CreateItem] = []
-                for idx, name in enumerate(exit_resume_resumer_names):
+                for idx, name in enumerate(actor_names):
                     if idx % 2:
                         app_config = AppConfig.ScriptStyle
                     else:
@@ -5217,7 +5196,7 @@ class ConfigVerifier:
                     # resume the waiters that are expected to succeed
                     ########################################################
                     resume_cmd_serial_num = self.add_cmd(
-                        Resume(cmd_runners=exit_resume_resumer_names,
+                        Resume(cmd_runners=actor_names,
                                targets=target_names,
                                stopped_names=[]))
 
@@ -5226,7 +5205,7 @@ class ConfigVerifier:
                             cmd_runners=[self.commander_name],
                             confirm_cmd='Resume',
                             confirm_serial_num=resume_cmd_serial_num,
-                            confirmers=exit_resume_resumer_names))
+                            confirmers=actor_names))
 
                     self.add_cmd(
                         ConfirmResponse(
@@ -5246,15 +5225,15 @@ class ConfigVerifier:
                 exit_was_done = False
                 if len(timeout_names) % 2:
                     resumers_for_wait: DictAliveAndStatus = {}
-                    for resumer in exit_resume_resumer_names:
+                    for resumer in actor_names:
                         resumers_for_wait[resumer] = AliveAndStatus(
                             is_alive=False,
                             status=st.ThreadStatus.Stopped)
-                    self.build_exit_suite(names=exit_resume_resumer_names)
+                    self.build_exit_suite(names=actor_names)
                     exit_was_done = True
                 else:
                     resumers_for_wait: DictAliveAndStatus = {}
-                    for resumer in exit_resume_resumer_names:
+                    for resumer in actor_names:
                         resumers_for_wait[resumer] = AliveAndStatus(
                             is_alive=True,
                             status=st.ThreadStatus.Alive)
@@ -5275,10 +5254,10 @@ class ConfigVerifier:
                 if exit_was_done:
                     self.build_join_suite(
                         cmd_runners=self.commander_name,
-                        join_target_names=exit_resume_resumer_names)
+                        join_target_names=actor_names)
 
                     f1_create_items: list[F1CreateItem] = []
-                    for idx, name in enumerate(exit_resume_resumer_names):
+                    for idx, name in enumerate(actor_names):
                         if idx % 2:
                             app_config = AppConfig.ScriptStyle
                         else:
@@ -5292,6 +5271,180 @@ class ConfigVerifier:
                     self.build_create_suite(
                         f1_create_items=f1_create_items,
                         validate_config=False)
+
+    ####################################################################
+    # build_wait_active_suite
+    ####################################################################
+    def build_unreg_resume_wait_timeout_suite(
+            self,
+            waiter_names: list[str],
+            actor_names: list[str]) -> None:
+        """Adds cmds to the cmd queue.
+
+        Args:
+            waiter_names: names of threads that will do the wait
+            actor_names: names of threads that will do the resume
+
+        """
+        ################################################################
+        # Loop to do combinations of resume names, the waiter names that
+        # will be resumed - the remaining waiter names will timeout
+        ################################################################
+        raise_not_alive = True
+        resumers_for_wait: DictAliveAndStatus = {}
+        for resumer in actor_names:
+            resumers_for_wait[resumer] = AliveAndStatus(
+                is_alive=True,
+                status=st.ThreadStatus.Alive)
+
+        for target_names in self.powerset(waiter_names.copy()):
+            if target_names:
+                target_names = list(target_names)
+
+                ########################################################
+                # get actors into unreg state
+                ########################################################
+                self.build_exit_suite(names=actor_names)
+                self.build_join_suite(
+                    cmd_runners=self.commander_name,
+                    join_target_names=actor_names)
+
+                ########################################################
+                # do the wait
+                ########################################################
+                wait_serial_num = self.add_cmd(
+                    Wait(
+                        cmd_runners=target_names,
+                        resumers=resumers_for_wait,
+                        raise_not_alive=raise_not_alive))
+
+                ########################################################
+                # get actors into active state
+                ########################################################
+                f1_create_items: list[F1CreateItem] = []
+                for idx, name in enumerate(actor_names):
+                    if idx % 2:
+                        app_config = AppConfig.ScriptStyle
+                    else:
+                        app_config = AppConfig.RemoteThreadApp
+
+                    f1_create_items.append(F1CreateItem(name=name,
+                                                        auto_start=True,
+                                                        target_rtn=outer_f1,
+                                                        app_config=app_config))
+                self.build_create_suite(
+                    f1_create_items=f1_create_items,
+                    validate_config=False)
+
+                ########################################################
+                # resume the waiters
+                ########################################################
+                resume_cmd_serial_num = self.add_cmd(
+                    Resume(cmd_runners=actor_names,
+                           targets=target_names,
+                           stopped_names=[]))
+
+                self.add_cmd(
+                    ConfirmResponse(
+                        cmd_runners=[self.commander_name],
+                        confirm_cmd='Resume',
+                        confirm_serial_num=resume_cmd_serial_num,
+                        confirmers=actor_names))
+
+                self.add_cmd(
+                    ConfirmResponse(
+                        cmd_runners=[self.commander_name],
+                        confirm_cmd='Wait',
+                        confirm_serial_num=wait_serial_num,
+                        confirmers=target_names))
+
+    ####################################################################
+    # build_wait_active_suite
+    ####################################################################
+    def build_reg_resume_wait_timeout_suite(
+            self,
+            waiter_names: list[str],
+            actor_names: list[str]) -> None:
+        """Adds cmds to the cmd queue.
+
+        Args:
+            waiter_names: names of threads that will do the wait
+            actor_names: names of threads that will do the resume
+
+        """
+        ################################################################
+        # Loop to do combinations of resume names, the waiter names that
+        # will be resumed - the remaining waiter names will timeout
+        ################################################################
+        raise_not_alive = True
+        resumers_for_wait: DictAliveAndStatus = {}
+        for resumer in actor_names:
+            resumers_for_wait[resumer] = AliveAndStatus(
+                is_alive=True,
+                status=st.ThreadStatus.Alive)
+
+        for target_names in self.powerset(waiter_names.copy()):
+            if target_names:
+                target_names = list(target_names)
+
+                ########################################################
+                # get actors into reg state
+                ########################################################
+                self.build_exit_suite(names=actor_names)
+                self.build_join_suite(
+                    cmd_runners=self.commander_name,
+                    join_target_names=actor_names)
+
+                f1_create_items: list[F1CreateItem] = []
+                for idx, name in enumerate(actor_names):
+                    if idx % 2:
+                        app_config = AppConfig.ScriptStyle
+                    else:
+                        app_config = AppConfig.RemoteThreadApp
+
+                    f1_create_items.append(F1CreateItem(name=name,
+                                                        auto_start=False,
+                                                        target_rtn=outer_f1,
+                                                        app_config=app_config))
+                self.build_create_suite(
+                    f1_create_items=f1_create_items,
+                    validate_config=False)
+
+                ########################################################
+                # do the wait
+                ########################################################
+                wait_serial_num = self.add_cmd(
+                    Wait(
+                        cmd_runners=target_names,
+                        resumers=resumers_for_wait,
+                        raise_not_alive=raise_not_alive))
+
+                ########################################################
+                # get actors into active state
+                ########################################################
+                self.build_start_suite(start_names=actor_names)
+
+                ########################################################
+                # resume the waiters
+                ########################################################
+                resume_cmd_serial_num = self.add_cmd(
+                    Resume(cmd_runners=actor_names,
+                           targets=target_names,
+                           stopped_names=[]))
+
+                self.add_cmd(
+                    ConfirmResponse(
+                        cmd_runners=[self.commander_name],
+                        confirm_cmd='Resume',
+                        confirm_serial_num=resume_cmd_serial_num,
+                        confirmers=actor_names))
+
+                self.add_cmd(
+                    ConfirmResponse(
+                        cmd_runners=[self.commander_name],
+                        confirm_cmd='Wait',
+                        confirm_serial_num=wait_serial_num,
+                        confirmers=target_names))
 
     ####################################################################
     # build_msg_timeout_suite
@@ -9956,33 +10109,26 @@ class TestSmartThreadScenarios:
     def test_wait_scenarios(
             self,
             num_waiters_arg: int,
+            num_actors_arg: int,
             actor_1_arg: Actors,
-            num_actor_1_arg: int,
-            # actor_2_arg: Actors,
-            # num_actor_2_arg: int,
-            # actor_3_arg: Actors,
-            # num_actor_3_arg: int,
+            actor_2_arg: Actors,
+            actor_3_arg: Actors,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
         """Test wait scenarios.
 
         Args:
-            timeout_type_arg: specifies whether the recv_msg should
-                be coded with timeout and whether the recv_msg should
-                succeed or fail with a timeout
             num_waiters_arg: number of threads that will do the wait
+            num_actors_arg: number of actor threads
             actor_1_arg: type of actor that will do the first resume
-            num_actor_1_arg: number of actor 1 threads
-            actor_2_arg: type of actor that will do the first resume
-            num_actor_2_arg: number of actor 2 threads
-            actor_3_arg: type of actor that will do the first resume
-            num_actor_3_arg: number of actor 3 threads
+            actor_2_arg: type of actor that will do the second resume
+            actor_3_arg: type of actor that will do the third resume
             caplog: pytest fixture to capture log output
 
         """
         total_arg_counts = (
                 num_waiters_arg
-                + num_actor_1_arg)
+                + num_actors_arg)
 
         command_config_num = total_arg_counts % 4
         if command_config_num == 0:
@@ -10002,7 +10148,8 @@ class TestSmartThreadScenarios:
         # }
         args_for_scenario_builder: dict[str, Any] = {
             'num_waiters': num_waiters_arg,
-            'actor_list': [(actor_1_arg, num_actor_1_arg)]
+            'num_actors': num_actors_arg,
+            'actor_list': [actor_1_arg, actor_2_arg, actor_3_arg,]
         }
 
         self.scenario_driver(
