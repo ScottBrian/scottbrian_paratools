@@ -374,11 +374,14 @@ class ConfirmResponse(ConfigCmd):
                     work_confirmers.remove(name)
                     break
             time.sleep(0.2)
-            if time.time() - start_time > 60:
-                raise CmdTimedOut('ConfirmResponse took too long waiting '
+            timeout_value = 60
+            if time.time() - start_time > timeout_value:
+                raise CmdTimedOut('ConfirmResponse serial_num '
+                                  f'{self.serial_num} took longer than '
+                                  f'{timeout_value} seconds waiting '
                                   f'for {work_confirmers} to complete '
                                   f'cmd {self.confirm_cmd} with '
-                                  f'serial_num {self.serial_num}.')
+                                  f'serial_num {self.confirm_serial_num}.')
 
 
 ########################################################################
@@ -1331,17 +1334,20 @@ class VerifyPaired(ConfigCmd):
 class VerifyPairedHalf(ConfigCmd):
     def __init__(self,
                  cmd_runners: StrOrList,
-                 pair_names: list[str],
+                 removed_names: StrOrList,
                  exp_half_paired_names: StrOrList) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
-        self.pair_names = pair_names
+        if isinstance(removed_names, str):
+            removed_names = [removed_names]
+        self.removed_names = removed_names
+
         if isinstance(exp_half_paired_names, str):
             exp_half_paired_names = [exp_half_paired_names]
         self.exp_half_paired_names = exp_half_paired_names
 
-        self.arg_list += ['pair_names',
+        self.arg_list += ['removed_names',
                           'exp_half_paired_names']
 
     def run_process(self, cmd_runner: str) -> None:
@@ -1352,8 +1358,8 @@ class VerifyPairedHalf(ConfigCmd):
         """
         self.config_ver.verify_paired_half(
             cmd_runner=cmd_runner,
-            pair_names=self.pair_names,
-            half_paired_names=self.exp_half_paired_names)
+            removed_names=self.removed_names,
+            exp_half_paired_names=self.exp_half_paired_names)
 
 
 ########################################################################
@@ -2665,7 +2671,7 @@ class ThreadTracker:
 class ThreadPairStatus:
     """Class that keeps pair status."""
     pending_ops_count: int
-    pending_wait_count: int
+    # pending_wait_count: int
     # expected_last_reg_updates: deque
 
 
@@ -2982,6 +2988,42 @@ class RecvMsgLogSearchItem(LogSearchItem):
 
 
 ########################################################################
+# RecvMsgLogSearchItem
+########################################################################
+class WaitResumedLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier") -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+        """
+        super().__init__(
+            search_str=f'[a-z]+ smart_wait resumed by [a-z]+',
+            config_ver=config_ver
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int) -> "WaitResumedLogFoundItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            WaitResumedLogFoundItem containing found message and index
+        """
+        return WaitResumedLogFoundItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+
+########################################################################
 # StartedLogSearchItem
 ########################################################################
 class StartedLogSearchItem(LogSearchItem):
@@ -3287,6 +3329,37 @@ class RecvMsgLogFoundItem(LogFoundItem):
 
 
 ########################################################################
+# RecvMsgLogFoundItem
+########################################################################
+class WaitResumedLogFoundItem(LogFoundItem):
+    """Found log item."""
+
+    def __init__(self,
+                 found_log_msg: str,
+                 found_log_idx: int,
+                 config_ver: "ConfigVerifier") -> None:
+        """Initialize the LogItem.
+
+        Args:
+            found_log_msg: msg that was found
+            found_log_idx: index of log where the msg was found
+            config_ver: configuration verifier
+        """
+        super().__init__(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=config_ver
+        )
+
+    def run_process(self):
+        split_msg = self.found_log_msg.split()
+
+        self.config_ver.dec_ops_count(
+            cmd_runner=split_msg[0],
+            sender=split_msg[4])
+
+
+########################################################################
 # StartedLogFoundItem
 ########################################################################
 class StartedLogFoundItem(LogFoundItem):
@@ -3348,15 +3421,17 @@ class StoppedLogFoundItem(LogFoundItem):
             log_idx=self.found_log_idx)
 
 
-LogSearchItems: TypeAlias = Union[EnterRpaLogSearchItem,
-                                  UpdatePaLogSearchItem,
-                                  RegUpdateLogSearchItem,
-                                  RegRemoveLogSearchItem,
-                                  CleanRegLogSearchItem,
-                                  JoinUnregLogSearchItem,
-                                  RecvMsgLogSearchItem,
-                                  StartedLogSearchItem,
-                                  StoppedLogSearchItem]
+LogSearchItems: TypeAlias = Union[
+    EnterRpaLogSearchItem,
+    UpdatePaLogSearchItem,
+    RegUpdateLogSearchItem,
+    RegRemoveLogSearchItem,
+    CleanRegLogSearchItem,
+    JoinUnregLogSearchItem,
+    RecvMsgLogSearchItem,
+    WaitResumedLogSearchItem,
+    StartedLogSearchItem,
+    StoppedLogSearchItem]
 
 
 class ConfigVerifier:
@@ -3447,6 +3522,7 @@ class ConfigVerifier:
             CleanRegLogSearchItem(config_ver=self),
             JoinUnregLogSearchItem(config_ver=self),
             RecvMsgLogSearchItem(config_ver=self),
+            WaitResumedLogSearchItem(config_ver=self),
             StartedLogSearchItem(config_ver=self),
             StoppedLogSearchItem(config_ver=self)
         )
@@ -3724,7 +3800,7 @@ class ConfigVerifier:
             f'{cmd_runner} set status for thread {cmd_runner} '
             'from ThreadStatus.Initializing to ThreadStatus.Registered')
 
-        self.add_log_msg(f'{cmd_runner} entered _refresh_pair_array')
+        # self.add_log_msg(f'{cmd_runner} entered _refresh_pair_array')
 
         # self.handle_deferred_delete_log_msgs(cmd_runner=cmd_runner)
         # handle any deferred deletes
@@ -5201,11 +5277,11 @@ class ConfigVerifier:
                     cmd_runners=self.commander_name,
                     join_target_names=resume_exit_resumer_names)
 
-                for waiter_name in target_names:
+                for resumer_name in resume_exit_resumer_names:
                     self.add_cmd(VerifyPairedHalf(
                         cmd_runners=self.commander_name,
-                        pair_names=resume_exit_resumer_names + [waiter_name],
-                        exp_half_paired_names=waiter_name))
+                        removed_names=resumer_name,
+                        exp_half_paired_names=target_names))
 
                 timeout_time = 1.5
                 wait_serial_num = self.add_cmd(
@@ -5220,6 +5296,21 @@ class ConfigVerifier:
                         confirm_cmd='WaitTimeoutFalse',
                         confirm_serial_num=wait_serial_num,
                         confirmers=target_names))
+
+                f1_create_items: list[F1CreateItem] = []
+                for idx, name in enumerate(resume_exit_resumer_names):
+                    if idx % 2:
+                        app_config = AppConfig.ScriptStyle
+                    else:
+                        app_config = AppConfig.RemoteThreadApp
+
+                    f1_create_items.append(F1CreateItem(name=name,
+                                                        auto_start=True,
+                                                        target_rtn=outer_f1,
+                                                        app_config=app_config))
+                self.build_create_suite(
+                    f1_create_items=f1_create_items,
+                    validate_config=False)
 
                 timeout_names = list(set(waiter_names) - set(target_names))
 
@@ -6066,14 +6157,14 @@ class ConfigVerifier:
                 for exit_name in exit_names:
                     self.add_cmd(VerifyPairedHalf(
                         cmd_runners=self.commander_name,
-                        pair_names=[exit_name, sender_names[1]],
+                        removed_names=exit_name,
                         exp_half_paired_names=sender_names[1]))
 
             if num_senders == 3:
                 for exit_name in exit_names:
                     self.add_cmd(VerifyPairedHalf(
                         cmd_runners=self.commander_name,
-                        pair_names=[exit_name, sender_names[2]],
+                        removed_names=exit_name,
                         exp_half_paired_names=sender_names[2]))
 
         all_targets: list[str] = (active_target_names
@@ -6744,7 +6835,7 @@ class ConfigVerifier:
         self.add_log_msg(f'{cmd_runner} removed {del_name} from registry '
                          f'for {process=}')
 
-        self.add_log_msg(f'{cmd_runner} entered _refresh_pair_array')
+        # self.add_log_msg(f'{cmd_runner} entered _refresh_pair_array')
 
         pair_keys_to_delete = []
         with self.ops_lock:
@@ -7082,7 +7173,7 @@ class ConfigVerifier:
 
         """
         # There could be zero, one, or several threads that have
-        # received a message aad have the potential to update the
+        # received a message and have the potential to update the
         # pair array in the case where a deferred delete was done.
         # These thread names will have been added to the
         # pending_recv_msg_par when they issued the recv_msg log msg.
@@ -7094,6 +7185,8 @@ class ConfigVerifier:
         # remain pending until the third step occurs, the pair array
         # updated log message is issued. Any other case will cause us to
         # reset the pending_recv_msg_par to empty.
+        self.add_log_msg(re.escape(
+            f'{cmd_runner} entered _refresh_pair_array'))
         with self.ops_lock:
             if self.pending_recv_msg_par[cmd_runner]:
                 self.pending_recv_msg_par = defaultdict(bool)
@@ -7405,9 +7498,7 @@ class ConfigVerifier:
             upa_msg: message for the pair array update
             upa_msg_idx: index of the update message in the log
         """
-        hpau_log_msg = f'handle_pair_array_update entry for {cmd_runner=}'
-        self.log_ver.add_msg(log_msg=re.escape(hpau_log_msg))
-        logger.debug(hpau_log_msg)
+        self.log_test_msg(f'handle_pair_array_update entry for {cmd_runner=}')
 
         # save msg for del_thread
         self.last_update_pair_array_log_msg = upa_msg
@@ -7423,18 +7514,20 @@ class ConfigVerifier:
         ################################################################
         # At this point we know that the recv_msg did the update
         ################################################################
-        self.add_log_msg(re.escape(
-            f'{cmd_runner} entered _refresh_pair_array'))
+        # self.add_log_msg(re.escape(
+        #     f'{cmd_runner} entered _refresh_pair_array'))
 
         self.update_pair_array(cmd_runner=cmd_runner,
                                upa_msg=upa_msg)
 
-        if self.recv_msg_event_items[cmd_runner].deferred_post_needed:
-            self.recv_msg_event_items[cmd_runner].client_event.set()
+        # we need to resume the waiting threads
+        for name, item in self.recv_msg_event_items.items():
+            if item.deferred_post_needed:
+                item.client_event.set()
+        # if self.recv_msg_event_items[cmd_runner].deferred_post_needed:
+        #     self.recv_msg_event_items[cmd_runner].client_event.set()
 
-        hpau_log_msg = f'handle_pair_array_update exit for {cmd_runner=}'
-        self.log_ver.add_msg(log_msg=re.escape(hpau_log_msg))
-        logger.debug(hpau_log_msg)
+        self.log_test_msg(f'handle_pair_array_update exit for {cmd_runner=}')
 
     ####################################################################
     # handle_recv_msg
@@ -7793,6 +7886,7 @@ class ConfigVerifier:
             self.add_log_msg(new_log_msg=re.escape(error_msg),
                              log_level=logging.ERROR)
         else:
+            self.inc_ops_count(targets.copy(), cmd_runner)
             self.all_threads[cmd_runner].smart_resume(
                 targets=targets,
                 raise_not_alive=raise_not_alive)
@@ -7839,6 +7933,7 @@ class ConfigVerifier:
             self.add_log_msg(new_log_msg=re.escape(error_msg),
                              log_level=logging.ERROR)
         else:
+            self.inc_ops_count(targets.copy(), cmd_runner)
             self.all_threads[cmd_runner].smart_resume(
                 targets=targets,
                 timeout=timeout,
@@ -8156,6 +8251,18 @@ class ConfigVerifier:
             name='handle_wait',
             seq='test_smart_thread.py::ConfigVerifier.handle_wait')
 
+        non_stopped_resumers = set(resumers)
+        for resumer in resumers.keys():
+            if (raise_not_alive
+                    and (resumers[resumer].status == st.ThreadStatus.Stopped)):
+                non_stopped_resumers -= {resumer}
+        if non_stopped_resumers:
+            self.recv_msg_event_items[cmd_runner] = MonitorEventItem(
+                client_event=threading.Event(),
+                deferred_post_needed=False,
+                targets=list(non_stopped_resumers)
+            )
+
         for resumer in resumers.keys():
             if (raise_not_alive
                     and (resumers[resumer].status == st.ThreadStatus.Stopped)):
@@ -8173,6 +8280,17 @@ class ConfigVerifier:
                 self.all_threads[cmd_runner].smart_wait(
                     remote=resumer,
                     raise_not_alive=raise_not_alive)
+                self.monitor_event.set()
+                self.add_log_msg(
+                    new_log_msg=(f'{cmd_runner} smart_wait resumed by '
+                                 f'{resumer}'),
+                    log_level=logging.INFO)
+
+        if non_stopped_resumers:
+            self.log_test_msg(
+                f'{cmd_runner=} handle_wait waiting for monitor')
+
+            self.recv_msg_event_items[cmd_runner].client_event.wait()
 
         self.log_test_msg(f'{cmd_runner=} handle_wait exit for '
                           f'{resumers=}, {raise_not_alive=}')
@@ -8201,6 +8319,18 @@ class ConfigVerifier:
             name='handle_wait_tof',
             seq='test_smart_thread.py::ConfigVerifier.handle_wait_tof')
 
+        non_stopped_resumers = set(resumers)
+        for resumer in resumers.keys():
+            if (raise_not_alive
+                    and (resumers[resumer].status == st.ThreadStatus.Stopped)):
+                non_stopped_resumers -= {resumer}
+        if non_stopped_resumers:
+            self.recv_msg_event_items[cmd_runner] = MonitorEventItem(
+                client_event=threading.Event(),
+                deferred_post_needed=False,
+                targets=list(non_stopped_resumers)
+            )
+
         for resumer in resumers.keys():
             if (raise_not_alive
                     and (resumers[resumer].status == st.ThreadStatus.Stopped)):
@@ -8222,6 +8352,17 @@ class ConfigVerifier:
                     raise_not_alive=raise_not_alive,
                     timeout=timeout
                 )
+                self.monitor_event.set()
+                self.add_log_msg(
+                    new_log_msg=(f'{cmd_runner} smart_wait resumed by '
+                                 f'{resumer}'),
+                    log_level=logging.INFO)
+
+        if non_stopped_resumers:
+            self.log_test_msg(
+                f'{cmd_runner=} handle_wait_tof waiting for monitor')
+
+            self.recv_msg_event_items[cmd_runner].client_event.wait()
 
         self.log_test_msg(f'{cmd_runner=} handle_wait_tof exit for '
                           f'{resumers=}, {raise_not_alive=}, {timeout=}')
@@ -8679,7 +8820,9 @@ class ConfigVerifier:
                 if (self.expected_pairs[pair_key][
                     name].pending_ops_count != 0
                         and st.SmartThread._pair_array[
-                            pair_key].status_blocks[name].msg_q.empty()):
+                            pair_key].status_blocks[name].msg_q.empty()
+                        and not st.SmartThread._pair_array[
+                            pair_key].status_blocks[name].wait_event.is_set()):
                     ops_count = self.expected_pairs[pair_key][
                         name].pending_ops_count
                     self.abort_all_f1_threads()
@@ -9003,60 +9146,57 @@ class ConfigVerifier:
     ####################################################################
     def verify_paired_half(self,
                            cmd_runner: str,
-                           pair_names: list[str],
-                           half_paired_names: list[str]) -> None:
+                           removed_names: list[str],
+                           exp_half_paired_names: list[str]) -> None:
         """Verify that the given names are half paired.
 
         Args:
             cmd_runner: thread doing the verify
-            pair_names: names of the threads that form pair keys for
-                half paired names
-            half_paired_names: the names that should be in pair array
+            removed_names: names of the threads that were removed
+            exp_half_paired_names: the names that should be in pair array
         """
-        pair_keys = combinations(sorted(pair_names), 2)
-        for pair_key in pair_keys:
-            if pair_key not in st.SmartThread._pair_array:
-                self.abort_all_f1_threads()
-                raise InvalidConfigurationDetected(
-                    f'verify_paired_half found {pair_key=} is not '
-                    f'in the real pair_array')
-            num_real_status_blocks = len(st.SmartThread._pair_array[
-                    pair_key].status_blocks)
-            if num_real_status_blocks != 1:
-                self.abort_all_f1_threads()
-                raise InvalidConfigurationDetected(
-                    f'verify_paired_half found '
-                    f'{num_real_status_blocks=} is not equal to 1 '
-                    f'in the real pair_array')
-            for name in half_paired_names:
-                if (name in pair_key
-                        and name not in st.SmartThread._pair_array[
-                            pair_key].status_blocks):
+        for removed_name in removed_names:
+            for exp_remaining_name in exp_half_paired_names:
+                pair_key = st.SmartThread._get_pair_key(removed_name,
+                                                        exp_remaining_name)
+                if pair_key not in st.SmartThread._pair_array:
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'verify_paired_half found {pair_key=} is not '
+                        f'in the real pair_array')
+                num_real_status_blocks = len(st.SmartThread._pair_array[
+                        pair_key].status_blocks)
+                if num_real_status_blocks != 1:
                     self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f'verify_paired_half found '
-                        f'{name=} does not have a status block '
+                        f'{num_real_status_blocks=} is not equal to 1 '
+                        f'in the real pair_array')
+                if exp_remaining_name not in st.SmartThread._pair_array[
+                                pair_key].status_blocks:
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'verify_paired_half found '
+                        f'{exp_remaining_name=} does not have a status block '
                         f'in the real pair_array for {pair_key=}.')
 
-            if pair_key not in self.expected_pairs:
-                self.abort_all_f1_threads()
-                raise InvalidConfigurationDetected(
-                    f'verify_paired_half found {pair_key=} is not '
-                    f'in the mock pair_array')
-            num_mock_status_blocks = len(self.expected_pairs[pair_key])
-            if num_mock_status_blocks != 1:
-                self.abort_all_f1_threads()
-                raise InvalidConfigurationDetected(
-                    f'verify_paired_half found '
-                    f'{num_mock_status_blocks=} is not 1 '
-                    f'in the mock pair_array')
-            for name in half_paired_names:
-                if (name in pair_key
-                        and name not in self.expected_pairs[pair_key]):
+                if pair_key not in self.expected_pairs:
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'verify_paired_half found {pair_key=} is not '
+                        f'in the mock pair_array')
+                num_mock_status_blocks = len(self.expected_pairs[pair_key])
+                if num_mock_status_blocks != 1:
                     self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f'verify_paired_half found '
-                        f'{name=} does not have a status block '
+                        f'{num_mock_status_blocks=} is not 1 '
+                        f'in the mock pair_array')
+                if exp_remaining_name not in self.expected_pairs[pair_key]:
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'verify_paired_half found '
+                        f'{exp_remaining_name=} does not have a status block '
                         f'in the mock pair_array for {pair_key=}.')
 
     ####################################################################

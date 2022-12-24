@@ -1903,6 +1903,9 @@ class SmartThread:
                                 local_sb.sync_event.clear()
                                 if local_sb.del_deferred:
                                     do_refresh = True
+                                self.logger.info(
+                                    f'{self.name} smart_sync resumed by '
+                                    f'{remote}')
                                 break  # exit, we are done
                         else:
                             local_sb.wait_wait = True
@@ -1914,6 +1917,9 @@ class SmartThread:
                                 local_sb.wait_event.clear()
                                 if local_sb.del_deferred:
                                     do_refresh = True
+                                self.logger.info(
+                                    f'{self.name} smart_wait resumed by '
+                                    f'{remote}')
                                 break  # exit, we are done
 
                         local_sb.wait_timeout_specified = timeout_specified
