@@ -2700,6 +2700,403 @@ time_match = (f'{hour_match}:{min_sec_match}:{min_sec_match}\.'
               f'{micro_sec_match}')
 
 
+# ########################################################################
+# # LogSearchItem
+# ########################################################################
+# class LogSearchItem(ABC):
+#     """Input to search log msgs."""
+#     def __init__(self,
+#                  search_str: str,
+#                  config_ver: "ConfigVerifier") -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             search_str: regex style search string
+#             config_ver: configuration verifier
+#         """
+#         self.search_pattern = re.compile(search_str)
+#         self.config_ver: "ConfigVerifier" = config_ver
+#
+#     @abstractmethod
+#     def get_found_log_item(self,
+#                            found_log_msg: str,
+#                            found_log_idx: int) -> "LogFoundItem":
+#         """Return a found log item.
+#
+#         Args:
+#             found_log_msg: log msg that was found
+#             found_log_idx: index in the log where message was found
+#
+#         Returns:
+#             LogFoundItem containing found message and index
+#         """
+#         pass
+#
+#
+# ########################################################################
+# # EnterRpaLogSearchItem
+# ########################################################################
+# class EnterRpaLogSearchItem(LogSearchItem):
+#     """Input to search log msgs."""
+#
+#     def __init__(self,
+#                  config_ver: "ConfigVerifier") -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             config_ver: configuration verifier
+#         """
+#         super().__init__(
+#             search_str=f'[a-z]+ entered _refresh_pair_array',
+#             config_ver=config_ver
+#         )
+#
+#     def get_found_log_item(self,
+#                            found_log_msg: str,
+#                            found_log_idx: int) -> "EnterRpaLogFoundItem":
+#         """Return a found log item.
+#
+#         Args:
+#             found_log_msg: log msg that was found
+#             found_log_idx: index in the log where message was found
+#
+#         Returns:
+#             EnterRpaLogFoundItem containing found message and index
+#         """
+#         return EnterRpaLogFoundItem(
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx,
+#             config_ver=self.config_ver)
+#
+#
+# ########################################################################
+# # UpdatePaLogSearchItem
+# ########################################################################
+# class UpdatePaLogSearchItem(LogSearchItem):
+#     """Input to search log msgs."""
+#
+#     def __init__(self,
+#                  config_ver: "ConfigVerifier") -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             config_ver: configuration verifier
+#         """
+#         super().__init__(
+#             search_str=f'[a-z]+ updated _pair_array at UTC {time_match}',
+#             config_ver=config_ver
+#         )
+#
+#     def get_found_log_item(self,
+#                            found_log_msg: str,
+#                            found_log_idx: int) -> "UpdatePaLogFoundItem":
+#         """Return a found log item.
+#
+#         Args:
+#             found_log_msg: log msg that was found
+#             found_log_idx: index in the log where message was found
+#
+#         Returns:
+#             UpdatePaLogFoundItem containing found message and index
+#         """
+#         return UpdatePaLogFoundItem(
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx,
+#             config_ver=self.config_ver)
+#
+#
+# ########################################################################
+# # RegUpdateLogSearchItem
+# ########################################################################
+# class RegUpdateLogSearchItem(LogSearchItem):
+#     """Input to search log msgs."""
+#
+#     def __init__(self,
+#                  config_ver: "ConfigVerifier") -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             config_ver: configuration verifier
+#         """
+#         super().__init__(
+#             search_str=f'[a-z]+ did registry update at UTC {time_match}',
+#             config_ver=config_ver
+#         )
+#
+#     def get_found_log_item(self,
+#                            found_log_msg: str,
+#                            found_log_idx: int) -> "RegUpdateLogFoundItem":
+#         """Return a found log item.
+#
+#         Args:
+#             found_log_msg: log msg that was found
+#             found_log_idx: index in the log where message was found
+#
+#         Returns:
+#             RegUpdateLogFoundItem containing found message and index
+#         """
+#         return RegUpdateLogFoundItem(
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx,
+#             config_ver=self.config_ver)
+#
+#
+# ########################################################################
+# # RegUpdateLogSearchItem
+# ########################################################################
+# class RegRemoveLogSearchItem(LogSearchItem):
+#     """Input to search log msgs."""
+#
+#     def __init__(self,
+#                  config_ver: "ConfigVerifier") -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             config_ver: configuration verifier
+#         """
+#         super().__init__(
+#             search_str=("[a-z]+ removed [a-z]+ from registry for "
+#                         "process='(join|unregister)'"),
+#             config_ver=config_ver
+#         )
+#
+#     def get_found_log_item(self,
+#                            found_log_msg: str,
+#                            found_log_idx: int) -> "RegRemoveLogFoundItem":
+#         """Return a found log item.
+#
+#         Args:
+#             found_log_msg: log msg that was found
+#             found_log_idx: index in the log where message was found
+#
+#         Returns:
+#             RegRemoveLogFoundItem containing found message and index
+#         """
+#         return RegRemoveLogFoundItem(
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx,
+#             config_ver=self.config_ver)
+#
+#
+# ########################################################################
+# # RegUpdateLogSearchItem
+# ########################################################################
+# class CleanRegLogSearchItem(LogSearchItem):
+#     """Input to search log msgs."""
+#
+#     def __init__(self,
+#                  config_ver: "ConfigVerifier") -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             config_ver: configuration verifier
+#         """
+#         super().__init__(
+#             search_str=(f"[a-z]+ did cleanup of registry at UTC {time_match}, "
+#                         "deleted \['[a-z]+'\]"),
+#             config_ver=config_ver
+#         )
+#
+#     def get_found_log_item(self,
+#                            found_log_msg: str,
+#                            found_log_idx: int) -> "CleanRegLogFoundItem":
+#         """Return a found log item.
+#
+#         Args:
+#             found_log_msg: log msg that was found
+#             found_log_idx: index in the log where message was found
+#
+#         Returns:
+#             CleanRegLogFoundItem containing found message and index
+#         """
+#         return CleanRegLogFoundItem(
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx,
+#             config_ver=self.config_ver)
+#
+#
+# ########################################################################
+# # RegUpdateLogSearchItem
+# ########################################################################
+# class JoinUnregLogSearchItem(LogSearchItem):
+#     """Input to search log msgs."""
+#
+#     def __init__(self,
+#                  config_ver: "ConfigVerifier") -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             config_ver: configuration verifier
+#         """
+#         super().__init__(
+#             search_str='[a-z]+ did successful (unregister|join) of [a-z]+\.',
+#             config_ver=config_ver
+#         )
+#
+#     def get_found_log_item(self,
+#                            found_log_msg: str,
+#                            found_log_idx: int) -> "JoinUnregLogFoundItem":
+#         """Return a found log item.
+#
+#         Args:
+#             found_log_msg: log msg that was found
+#             found_log_idx: index in the log where message was found
+#
+#         Returns:
+#             JoinUnregLogFoundItem containing found message and index
+#         """
+#         return JoinUnregLogFoundItem(
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx,
+#             config_ver=self.config_ver)
+#
+#
+# ########################################################################
+# # RecvMsgLogSearchItem
+# ########################################################################
+# class RecvMsgLogSearchItem(LogSearchItem):
+#     """Input to search log msgs."""
+#
+#     def __init__(self,
+#                  config_ver: "ConfigVerifier") -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             config_ver: configuration verifier
+#         """
+#         super().__init__(
+#             search_str=f'[a-z]+ received msg from [a-z]+',
+#             config_ver=config_ver
+#         )
+#
+#     def get_found_log_item(self,
+#                            found_log_msg: str,
+#                            found_log_idx: int) -> "RecvMsgLogFoundItem":
+#         """Return a found log item.
+#
+#         Args:
+#             found_log_msg: log msg that was found
+#             found_log_idx: index in the log where message was found
+#
+#         Returns:
+#             RecvMsgLogFoundItem containing found message and index
+#         """
+#         return RecvMsgLogFoundItem(
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx,
+#             config_ver=self.config_ver)
+#
+#
+# ########################################################################
+# # RecvMsgLogSearchItem
+# ########################################################################
+# class WaitResumedLogSearchItem(LogSearchItem):
+#     """Input to search log msgs."""
+#
+#     def __init__(self,
+#                  config_ver: "ConfigVerifier") -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             config_ver: configuration verifier
+#         """
+#         super().__init__(
+#             search_str=f'[a-z]+ smart_wait resumed by [a-z]+',
+#             config_ver=config_ver
+#         )
+#
+#     def get_found_log_item(self,
+#                            found_log_msg: str,
+#                            found_log_idx: int) -> "WaitResumedLogFoundItem":
+#         """Return a found log item.
+#
+#         Args:
+#             found_log_msg: log msg that was found
+#             found_log_idx: index in the log where message was found
+#
+#         Returns:
+#             WaitResumedLogFoundItem containing found message and index
+#         """
+#         return WaitResumedLogFoundItem(
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx,
+#             config_ver=self.config_ver)
+#
+#
+# ########################################################################
+# # StartedLogSearchItem
+# ########################################################################
+# class StartedLogSearchItem(LogSearchItem):
+#     """Input to search log msgs."""
+#
+#     def __init__(self,
+#                  config_ver: "ConfigVerifier") -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             config_ver: configuration verifier
+#         """
+#         super().__init__(
+#             search_str=('[a-z]+ thread started, thread.is_alive\(\) = True, '
+#                         'status: ThreadStatus.Alive'),
+#             config_ver=config_ver
+#         )
+#
+#     def get_found_log_item(self,
+#                            found_log_msg: str,
+#                            found_log_idx: int) -> "StartedLogFoundItem":
+#         """Return a found log item.
+#
+#         Args:
+#             found_log_msg: log msg that was found
+#             found_log_idx: index in the log where message was found
+#
+#         Returns:
+#             StartedLogFoundItem containing found message and index
+#         """
+#         return StartedLogFoundItem(
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx,
+#             config_ver=self.config_ver)
+#
+#
+# ########################################################################
+# # StoppedLogSearchItem
+# ########################################################################
+# class StoppedLogSearchItem(LogSearchItem):
+#     """Input to search log msgs."""
+#
+#     def __init__(self,
+#                  config_ver: "ConfigVerifier") -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             config_ver: configuration verifier
+#         """
+#         super().__init__(
+#             search_str='[a-z]+ has been stopped by [a-z]+',
+#             config_ver=config_ver
+#         )
+#
+#     def get_found_log_item(self,
+#                            found_log_msg: str,
+#                            found_log_idx: int) -> "StoppedLogFoundItem":
+#         """Return a found log item.
+#
+#         Args:
+#             found_log_msg: log msg that was found
+#             found_log_idx: index in the log where message was found
+#
+#         Returns:
+#             StartedLogFoundItem containing found message and index
+#         """
+#         return StoppedLogFoundItem(
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx,
+#             config_ver=self.config_ver)
+#
+
+
 ########################################################################
 # LogSearchItem
 ########################################################################
@@ -2707,7 +3104,10 @@ class LogSearchItem(ABC):
     """Input to search log msgs."""
     def __init__(self,
                  search_str: str,
-                 config_ver: "ConfigVerifier") -> None:
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
         """Initialize the LogItem.
 
         Args:
@@ -2716,11 +3116,13 @@ class LogSearchItem(ABC):
         """
         self.search_pattern = re.compile(search_str)
         self.config_ver: "ConfigVerifier" = config_ver
+        self.found_log_msg = found_log_msg
+        self.found_log_idx = found_log_idx
 
     @abstractmethod
     def get_found_log_item(self,
                            found_log_msg: str,
-                           found_log_idx: int) -> "LogFoundItem":
+                           found_log_idx: int) -> "LogSearchItem":
         """Return a found log item.
 
         Args:
@@ -2732,6 +3134,11 @@ class LogSearchItem(ABC):
         """
         pass
 
+    @abstractmethod
+    def run_process(self) -> None:
+        """Run the command for the log msg."""
+        pass
+
 
 ########################################################################
 # EnterRpaLogSearchItem
@@ -2740,7 +3147,10 @@ class EnterRpaLogSearchItem(LogSearchItem):
     """Input to search log msgs."""
 
     def __init__(self,
-                 config_ver: "ConfigVerifier") -> None:
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
         """Initialize the LogItem.
 
         Args:
@@ -2748,12 +3158,14 @@ class EnterRpaLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=f'[a-z]+ entered _refresh_pair_array',
-            config_ver=config_ver
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
         )
 
     def get_found_log_item(self,
                            found_log_msg: str,
-                           found_log_idx: int) -> "EnterRpaLogFoundItem":
+                           found_log_idx: int) -> "EnterRpaLogSearchItem":
         """Return a found log item.
 
         Args:
@@ -2761,12 +3173,16 @@ class EnterRpaLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
 
         Returns:
-            EnterRpaLogFoundItem containing found message and index
+            EnterRpaLogSearchItem containing found message and index
         """
-        return EnterRpaLogFoundItem(
+        return EnterRpaLogSearchItem(
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
+
+    def run_process(self):
+        self.config_ver.handle_enter_rpa_log_msg(
+            cmd_runner=self.found_log_msg.split(maxsplit=1)[0])
 
 
 ########################################################################
@@ -2776,7 +3192,10 @@ class UpdatePaLogSearchItem(LogSearchItem):
     """Input to search log msgs."""
 
     def __init__(self,
-                 config_ver: "ConfigVerifier") -> None:
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
         """Initialize the LogItem.
 
         Args:
@@ -2784,12 +3203,14 @@ class UpdatePaLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=f'[a-z]+ updated _pair_array at UTC {time_match}',
-            config_ver=config_ver
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
         )
 
     def get_found_log_item(self,
                            found_log_msg: str,
-                           found_log_idx: int) -> "UpdatePaLogFoundItem":
+                           found_log_idx: int) -> "UpdatePaLogSearchItem":
         """Return a found log item.
 
         Args:
@@ -2797,381 +3218,12 @@ class UpdatePaLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
 
         Returns:
-            UpdatePaLogFoundItem containing found message and index
+            UpdatePaLogSearchItem containing found message and index
         """
-        return UpdatePaLogFoundItem(
+        return UpdatePaLogSearchItem(
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
-
-
-########################################################################
-# RegUpdateLogSearchItem
-########################################################################
-class RegUpdateLogSearchItem(LogSearchItem):
-    """Input to search log msgs."""
-
-    def __init__(self,
-                 config_ver: "ConfigVerifier") -> None:
-        """Initialize the LogItem.
-
-        Args:
-            config_ver: configuration verifier
-        """
-        super().__init__(
-            search_str=f'[a-z]+ did registry update at UTC {time_match}',
-            config_ver=config_ver
-        )
-
-    def get_found_log_item(self,
-                           found_log_msg: str,
-                           found_log_idx: int) -> "RegUpdateLogFoundItem":
-        """Return a found log item.
-
-        Args:
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-
-        Returns:
-            RegUpdateLogFoundItem containing found message and index
-        """
-        return RegUpdateLogFoundItem(
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx,
-            config_ver=self.config_ver)
-
-
-########################################################################
-# RegUpdateLogSearchItem
-########################################################################
-class RegRemoveLogSearchItem(LogSearchItem):
-    """Input to search log msgs."""
-
-    def __init__(self,
-                 config_ver: "ConfigVerifier") -> None:
-        """Initialize the LogItem.
-
-        Args:
-            config_ver: configuration verifier
-        """
-        super().__init__(
-            search_str=("[a-z]+ removed [a-z]+ from registry for "
-                        "process='(join|unregister)'"),
-            config_ver=config_ver
-        )
-
-    def get_found_log_item(self,
-                           found_log_msg: str,
-                           found_log_idx: int) -> "RegRemoveLogFoundItem":
-        """Return a found log item.
-
-        Args:
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-
-        Returns:
-            RegRemoveLogFoundItem containing found message and index
-        """
-        return RegRemoveLogFoundItem(
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx,
-            config_ver=self.config_ver)
-
-
-########################################################################
-# RegUpdateLogSearchItem
-########################################################################
-class CleanRegLogSearchItem(LogSearchItem):
-    """Input to search log msgs."""
-
-    def __init__(self,
-                 config_ver: "ConfigVerifier") -> None:
-        """Initialize the LogItem.
-
-        Args:
-            config_ver: configuration verifier
-        """
-        super().__init__(
-            search_str=(f"[a-z]+ did cleanup of registry at UTC {time_match}, "
-                        "deleted \['[a-z]+'\]"),
-            config_ver=config_ver
-        )
-
-    def get_found_log_item(self,
-                           found_log_msg: str,
-                           found_log_idx: int) -> "CleanRegLogFoundItem":
-        """Return a found log item.
-
-        Args:
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-
-        Returns:
-            CleanRegLogFoundItem containing found message and index
-        """
-        return CleanRegLogFoundItem(
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx,
-            config_ver=self.config_ver)
-
-
-########################################################################
-# RegUpdateLogSearchItem
-########################################################################
-class JoinUnregLogSearchItem(LogSearchItem):
-    """Input to search log msgs."""
-
-    def __init__(self,
-                 config_ver: "ConfigVerifier") -> None:
-        """Initialize the LogItem.
-
-        Args:
-            config_ver: configuration verifier
-        """
-        super().__init__(
-            search_str='[a-z]+ did successful (unregister|join) of [a-z]+\.',
-            config_ver=config_ver
-        )
-
-    def get_found_log_item(self,
-                           found_log_msg: str,
-                           found_log_idx: int) -> "JoinUnregLogFoundItem":
-        """Return a found log item.
-
-        Args:
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-
-        Returns:
-            JoinUnregLogFoundItem containing found message and index
-        """
-        return JoinUnregLogFoundItem(
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx,
-            config_ver=self.config_ver)
-
-
-########################################################################
-# RecvMsgLogSearchItem
-########################################################################
-class RecvMsgLogSearchItem(LogSearchItem):
-    """Input to search log msgs."""
-
-    def __init__(self,
-                 config_ver: "ConfigVerifier") -> None:
-        """Initialize the LogItem.
-
-        Args:
-            config_ver: configuration verifier
-        """
-        super().__init__(
-            search_str=f'[a-z]+ received msg from [a-z]+',
-            config_ver=config_ver
-        )
-
-    def get_found_log_item(self,
-                           found_log_msg: str,
-                           found_log_idx: int) -> "RecvMsgLogFoundItem":
-        """Return a found log item.
-
-        Args:
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-
-        Returns:
-            RecvMsgLogFoundItem containing found message and index
-        """
-        return RecvMsgLogFoundItem(
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx,
-            config_ver=self.config_ver)
-
-
-########################################################################
-# RecvMsgLogSearchItem
-########################################################################
-class WaitResumedLogSearchItem(LogSearchItem):
-    """Input to search log msgs."""
-
-    def __init__(self,
-                 config_ver: "ConfigVerifier") -> None:
-        """Initialize the LogItem.
-
-        Args:
-            config_ver: configuration verifier
-        """
-        super().__init__(
-            search_str=f'[a-z]+ smart_wait resumed by [a-z]+',
-            config_ver=config_ver
-        )
-
-    def get_found_log_item(self,
-                           found_log_msg: str,
-                           found_log_idx: int) -> "WaitResumedLogFoundItem":
-        """Return a found log item.
-
-        Args:
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-
-        Returns:
-            WaitResumedLogFoundItem containing found message and index
-        """
-        return WaitResumedLogFoundItem(
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx,
-            config_ver=self.config_ver)
-
-
-########################################################################
-# StartedLogSearchItem
-########################################################################
-class StartedLogSearchItem(LogSearchItem):
-    """Input to search log msgs."""
-
-    def __init__(self,
-                 config_ver: "ConfigVerifier") -> None:
-        """Initialize the LogItem.
-
-        Args:
-            config_ver: configuration verifier
-        """
-        super().__init__(
-            search_str=('[a-z]+ thread started, thread.is_alive\(\) = True, '
-                        'status: ThreadStatus.Alive'),
-            config_ver=config_ver
-        )
-
-    def get_found_log_item(self,
-                           found_log_msg: str,
-                           found_log_idx: int) -> "StartedLogFoundItem":
-        """Return a found log item.
-
-        Args:
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-
-        Returns:
-            StartedLogFoundItem containing found message and index
-        """
-        return StartedLogFoundItem(
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx,
-            config_ver=self.config_ver)
-
-
-########################################################################
-# StoppedLogSearchItem
-########################################################################
-class StoppedLogSearchItem(LogSearchItem):
-    """Input to search log msgs."""
-
-    def __init__(self,
-                 config_ver: "ConfigVerifier") -> None:
-        """Initialize the LogItem.
-
-        Args:
-            config_ver: configuration verifier
-        """
-        super().__init__(
-            search_str='[a-z]+ has been stopped by [a-z]+',
-            config_ver=config_ver
-        )
-
-    def get_found_log_item(self,
-                           found_log_msg: str,
-                           found_log_idx: int) -> "StoppedLogFoundItem":
-        """Return a found log item.
-
-        Args:
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-
-        Returns:
-            StartedLogFoundItem containing found message and index
-        """
-        return StoppedLogFoundItem(
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx,
-            config_ver=self.config_ver)
-
-
-########################################################################
-# LogFoundItem
-########################################################################
-class LogFoundItem(ABC):
-    """Found log item."""
-    def __init__(self,
-                 found_log_msg: str,
-                 found_log_idx: int,
-                 config_ver: "ConfigVerifier") -> None:
-        """Initialize the LogItem.
-
-        Args:
-            found_log_msg: msg that was found
-            found_log_idx: index of log where the msg was found
-            config_ver: configuration verifier
-        """
-        self.found_log_msg: str = found_log_msg
-        self.found_log_idx = found_log_idx
-        self.config_ver: "ConfigVerifier" = config_ver
-
-    @abstractmethod
-    def run_process(self) -> None:
-        """Run the command for the log msg."""
-        pass
-
-
-########################################################################
-# EnterRpaLogFoundItem
-########################################################################
-class EnterRpaLogFoundItem(LogFoundItem):
-    """Found log item."""
-
-    def __init__(self,
-                 found_log_msg: str,
-                 found_log_idx: int,
-                 config_ver: "ConfigVerifier") -> None:
-        """Initialize the LogItem.
-
-        Args:
-            found_log_msg: msg that was found
-            found_log_idx: index of log where the msg was found
-            config_ver: configuration verifier
-        """
-        super().__init__(
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx,
-            config_ver=config_ver
-        )
-
-    def run_process(self):
-        self.config_ver.handle_enter_rpa_log_msg(
-            cmd_runner=self.found_log_msg.split(maxsplit=1)[0])
-
-
-########################################################################
-# UpdatePaLogFoundItem
-########################################################################
-class UpdatePaLogFoundItem(LogFoundItem):
-    """Found log item."""
-
-    def __init__(self,
-                 found_log_msg: str,
-                 found_log_idx: int,
-                 config_ver: "ConfigVerifier") -> None:
-        """Initialize the LogItem.
-
-        Args:
-            found_log_msg: msg that was found
-            found_log_idx: index of log where the msg was found
-            config_ver: configuration verifier
-        """
-        super().__init__(
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx,
-            config_ver=config_ver
-        )
 
     def run_process(self):
         self.config_ver.handle_pair_array_update(
@@ -3181,27 +3233,44 @@ class UpdatePaLogFoundItem(LogFoundItem):
 
 
 ########################################################################
-# RegUpdateLogFoundItem
+# RegUpdateLogSearchItem
 ########################################################################
-class RegUpdateLogFoundItem(LogFoundItem):
-    """Found log item."""
+class RegUpdateLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
 
     def __init__(self,
-                 found_log_msg: str,
-                 found_log_idx: int,
-                 config_ver: "ConfigVerifier") -> None:
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
         """Initialize the LogItem.
 
         Args:
-            found_log_msg: msg that was found
-            found_log_idx: index of log where the msg was found
             config_ver: configuration verifier
         """
         super().__init__(
+            search_str=f'[a-z]+ did registry update at UTC {time_match}',
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int) -> "RegUpdateLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            RegUpdateLogSearchItem containing found message and index
+        """
+        return RegUpdateLogSearchItem(
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
-            config_ver=config_ver
-        )
+            config_ver=self.config_ver)
 
     def run_process(self):
         self.config_ver.handle_reg_update(
@@ -3211,81 +3280,134 @@ class RegUpdateLogFoundItem(LogFoundItem):
 
 
 ########################################################################
-# RegUpdateLogFoundItem
+# RegRemoveLogSearchItem
 ########################################################################
-class RegRemoveLogFoundItem(LogFoundItem):
-    """Found log item."""
+class RegRemoveLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
 
     def __init__(self,
-                 found_log_msg: str,
-                 found_log_idx: int,
-                 config_ver: "ConfigVerifier") -> None:
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
         """Initialize the LogItem.
 
         Args:
-            found_log_msg: msg that was found
-            found_log_idx: index of log where the msg was found
             config_ver: configuration verifier
         """
         super().__init__(
+            search_str=("[a-z]+ removed [a-z]+ from registry for "
+                        "process='(join|unregister)'"),
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int) -> "RegRemoveLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            RegRemoveLogSearchItem containing found message and index
+        """
+        return RegRemoveLogSearchItem(
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
-            config_ver=config_ver
-        )
+            config_ver=self.config_ver)
 
     def run_process(self):
         self.config_ver.handle_reg_remove()
 
 
 ########################################################################
-# RegUpdateLogFoundItem
+# CleanRegLogSearchItem
 ########################################################################
-class CleanRegLogFoundItem(LogFoundItem):
-    """Found log item."""
+class CleanRegLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
 
     def __init__(self,
-                 found_log_msg: str,
-                 found_log_idx: int,
-                 config_ver: "ConfigVerifier") -> None:
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
         """Initialize the LogItem.
 
         Args:
-            found_log_msg: msg that was found
-            found_log_idx: index of log where the msg was found
             config_ver: configuration verifier
         """
         super().__init__(
+            search_str=(f"[a-z]+ did cleanup of registry at UTC {time_match}, "
+                        "deleted \['[a-z]+'\]"),
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int) -> "CleanRegLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            CleanRegLogSearchItem containing found message and index
+        """
+        return CleanRegLogSearchItem(
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
-            config_ver=config_ver
-        )
+            config_ver=self.config_ver)
 
     def run_process(self):
         self.config_ver.last_clean_reg_log_msg = self.found_log_msg
 
 
 ########################################################################
-# RegUpdateLogFoundItem
+# JoinUnregLogSearchItem
 ########################################################################
-class JoinUnregLogFoundItem(LogFoundItem):
-    """Found log item."""
+class JoinUnregLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
 
     def __init__(self,
-                 found_log_msg: str,
-                 found_log_idx: int,
-                 config_ver: "ConfigVerifier") -> None:
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
         """Initialize the LogItem.
 
         Args:
-            found_log_msg: msg that was found
-            found_log_idx: index of log where the msg was found
             config_ver: configuration verifier
         """
         super().__init__(
+            search_str='[a-z]+ did successful (unregister|join) of [a-z]+\.',
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int) -> "JoinUnregLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            JoinUnregLogSearchItem containing found message and index
+        """
+        return JoinUnregLogSearchItem(
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
-            config_ver=config_ver
-        )
+            config_ver=self.config_ver)
 
     def run_process(self):
         split_msg = self.found_log_msg.split()
@@ -3298,27 +3420,44 @@ class JoinUnregLogFoundItem(LogFoundItem):
 
 
 ########################################################################
-# RecvMsgLogFoundItem
+# RecvMsgLogSearchItem
 ########################################################################
-class RecvMsgLogFoundItem(LogFoundItem):
-    """Found log item."""
+class RecvMsgLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
 
     def __init__(self,
-                 found_log_msg: str,
-                 found_log_idx: int,
-                 config_ver: "ConfigVerifier") -> None:
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
         """Initialize the LogItem.
 
         Args:
-            found_log_msg: msg that was found
-            found_log_idx: index of log where the msg was found
             config_ver: configuration verifier
         """
         super().__init__(
+            search_str=f'[a-z]+ received msg from [a-z]+',
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int) -> "RecvMsgLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            RecvMsgLogSearchItem containing found message and index
+        """
+        return RecvMsgLogSearchItem(
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
-            config_ver=config_ver
-        )
+            config_ver=self.config_ver)
 
     def run_process(self):
         split_msg = self.found_log_msg.split()
@@ -3329,27 +3468,44 @@ class RecvMsgLogFoundItem(LogFoundItem):
 
 
 ########################################################################
-# RecvMsgLogFoundItem
+# WaitResumedLogSearchItem
 ########################################################################
-class WaitResumedLogFoundItem(LogFoundItem):
-    """Found log item."""
+class WaitResumedLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
 
     def __init__(self,
-                 found_log_msg: str,
-                 found_log_idx: int,
-                 config_ver: "ConfigVerifier") -> None:
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
         """Initialize the LogItem.
 
         Args:
-            found_log_msg: msg that was found
-            found_log_idx: index of log where the msg was found
             config_ver: configuration verifier
         """
         super().__init__(
+            search_str=f'[a-z]+ smart_wait resumed by [a-z]+',
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int) -> "WaitResumedLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            WaitResumedLogSearchItem containing found message and index
+        """
+        return WaitResumedLogSearchItem(
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
-            config_ver=config_ver
-        )
+            config_ver=self.config_ver)
 
     def run_process(self):
         split_msg = self.found_log_msg.split()
@@ -3360,27 +3516,45 @@ class WaitResumedLogFoundItem(LogFoundItem):
 
 
 ########################################################################
-# StartedLogFoundItem
+# StartedLogSearchItem
 ########################################################################
-class StartedLogFoundItem(LogFoundItem):
-    """Found log item."""
+class StartedLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
 
     def __init__(self,
-                 found_log_msg: str,
-                 found_log_idx: int,
-                 config_ver: "ConfigVerifier") -> None:
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
         """Initialize the LogItem.
 
         Args:
-            found_log_msg: msg that was found
-            found_log_idx: index of log where the msg was found
             config_ver: configuration verifier
         """
         super().__init__(
+            search_str=('[a-z]+ thread started, thread.is_alive\(\) = True, '
+                        'status: ThreadStatus.Alive'),
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int) -> "StartedLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            StartedLogSearchItem containing found message and index
+        """
+        return StartedLogSearchItem(
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
-            config_ver=config_ver
-        )
+            config_ver=self.config_ver)
 
     def run_process(self):
         split_msg = self.found_log_msg.split()
@@ -3390,27 +3564,44 @@ class StartedLogFoundItem(LogFoundItem):
 
 
 ########################################################################
-# StoppedLogFoundItem
+# StoppedLogSearchItem
 ########################################################################
-class StoppedLogFoundItem(LogFoundItem):
-    """Found log item."""
+class StoppedLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
 
     def __init__(self,
-                 found_log_msg: str,
-                 found_log_idx: int,
-                 config_ver: "ConfigVerifier") -> None:
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
         """Initialize the LogItem.
 
         Args:
-            found_log_msg: msg that was found
-            found_log_idx: index of log where the msg was found
             config_ver: configuration verifier
         """
         super().__init__(
+            search_str='[a-z]+ has been stopped by [a-z]+',
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int) -> "StoppedLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            StoppedLogSearchItem containing found message and index
+        """
+        return StoppedLogSearchItem(
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
-            config_ver=config_ver
-        )
+            config_ver=self.config_ver)
 
     def run_process(self):
         split_msg = self.found_log_msg.split()
@@ -3419,6 +3610,331 @@ class StoppedLogFoundItem(LogFoundItem):
             cmd_runner=split_msg[5],
             stopped_name=split_msg[0],
             log_idx=self.found_log_idx)
+
+
+# ########################################################################
+# # LogFoundItem
+# ########################################################################
+# class LogFoundItem(ABC):
+#     """Found log item."""
+#     def __init__(self,
+#                  found_log_msg: str,
+#                  found_log_idx: int,
+#                  config_ver: "ConfigVerifier") -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             found_log_msg: msg that was found
+#             found_log_idx: index of log where the msg was found
+#             config_ver: configuration verifier
+#         """
+#         self.found_log_msg: str = found_log_msg
+#         self.found_log_idx = found_log_idx
+#         self.config_ver: "ConfigVerifier" = config_ver
+#
+#     @abstractmethod
+#     def run_process(self) -> None:
+#         """Run the command for the log msg."""
+#         pass
+#
+#
+# ########################################################################
+# # EnterRpaLogFoundItem
+# ########################################################################
+# class EnterRpaLogFoundItem(LogFoundItem):
+#     """Found log item."""
+#
+#     def __init__(self,
+#                  found_log_msg: str,
+#                  found_log_idx: int,
+#                  config_ver: "ConfigVerifier") -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             found_log_msg: msg that was found
+#             found_log_idx: index of log where the msg was found
+#             config_ver: configuration verifier
+#         """
+#         super().__init__(
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx,
+#             config_ver=config_ver
+#         )
+#
+#     def run_process(self):
+#         self.config_ver.handle_enter_rpa_log_msg(
+#             cmd_runner=self.found_log_msg.split(maxsplit=1)[0])
+#
+#
+# ########################################################################
+# # UpdatePaLogFoundItem
+# ########################################################################
+# class UpdatePaLogFoundItem(LogFoundItem):
+#     """Found log item."""
+#
+#     def __init__(self,
+#                  found_log_msg: str,
+#                  found_log_idx: int,
+#                  config_ver: "ConfigVerifier") -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             found_log_msg: msg that was found
+#             found_log_idx: index of log where the msg was found
+#             config_ver: configuration verifier
+#         """
+#         super().__init__(
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx,
+#             config_ver=config_ver
+#         )
+#
+#     def run_process(self):
+#         self.config_ver.handle_pair_array_update(
+#             cmd_runner=self.found_log_msg.split(maxsplit=1)[0],
+#             upa_msg=self.found_log_msg,
+#             upa_msg_idx=self.found_log_idx)
+#
+#
+# ########################################################################
+# # RegUpdateLogFoundItem
+# ########################################################################
+# class RegUpdateLogFoundItem(LogFoundItem):
+#     """Found log item."""
+#
+#     def __init__(self,
+#                  found_log_msg: str,
+#                  found_log_idx: int,
+#                  config_ver: "ConfigVerifier") -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             found_log_msg: msg that was found
+#             found_log_idx: index of log where the msg was found
+#             config_ver: configuration verifier
+#         """
+#         super().__init__(
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx,
+#             config_ver=config_ver
+#         )
+#
+#     def run_process(self):
+#         self.config_ver.handle_reg_update(
+#             cmd_runner=self.found_log_msg.split(maxsplit=1)[0],
+#             reg_update_msg=self.found_log_msg,
+#             reg_update_msg_log_idx=self.found_log_idx)
+#
+#
+# ########################################################################
+# # RegUpdateLogFoundItem
+# ########################################################################
+# class RegRemoveLogFoundItem(LogFoundItem):
+#     """Found log item."""
+#
+#     def __init__(self,
+#                  found_log_msg: str,
+#                  found_log_idx: int,
+#                  config_ver: "ConfigVerifier") -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             found_log_msg: msg that was found
+#             found_log_idx: index of log where the msg was found
+#             config_ver: configuration verifier
+#         """
+#         super().__init__(
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx,
+#             config_ver=config_ver
+#         )
+#
+#     def run_process(self):
+#         self.config_ver.handle_reg_remove()
+#
+#
+# ########################################################################
+# # RegUpdateLogFoundItem
+# ########################################################################
+# class CleanRegLogFoundItem(LogFoundItem):
+#     """Found log item."""
+#
+#     def __init__(self,
+#                  found_log_msg: str,
+#                  found_log_idx: int,
+#                  config_ver: "ConfigVerifier") -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             found_log_msg: msg that was found
+#             found_log_idx: index of log where the msg was found
+#             config_ver: configuration verifier
+#         """
+#         super().__init__(
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx,
+#             config_ver=config_ver
+#         )
+#
+#     def run_process(self):
+#         self.config_ver.last_clean_reg_log_msg = self.found_log_msg
+#
+#
+# ########################################################################
+# # RegUpdateLogFoundItem
+# ########################################################################
+# class JoinUnregLogFoundItem(LogFoundItem):
+#     """Found log item."""
+#
+#     def __init__(self,
+#                  found_log_msg: str,
+#                  found_log_idx: int,
+#                  config_ver: "ConfigVerifier") -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             found_log_msg: msg that was found
+#             found_log_idx: index of log where the msg was found
+#             config_ver: configuration verifier
+#         """
+#         super().__init__(
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx,
+#             config_ver=config_ver
+#         )
+#
+#     def run_process(self):
+#         split_msg = self.found_log_msg.split()
+#         self.config_ver.handle_join_unreg_update(
+#             cmd_runner=split_msg[0],
+#             target_name=split_msg[5].removesuffix('.'),
+#             process=split_msg[3],
+#             found_log_msg_idx=self.found_log_idx
+#         )
+#
+#
+# ########################################################################
+# # RecvMsgLogFoundItem
+# ########################################################################
+# class RecvMsgLogFoundItem(LogFoundItem):
+#     """Found log item."""
+#
+#     def __init__(self,
+#                  found_log_msg: str,
+#                  found_log_idx: int,
+#                  config_ver: "ConfigVerifier") -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             found_log_msg: msg that was found
+#             found_log_idx: index of log where the msg was found
+#             config_ver: configuration verifier
+#         """
+#         super().__init__(
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx,
+#             config_ver=config_ver
+#         )
+#
+#     def run_process(self):
+#         split_msg = self.found_log_msg.split()
+#
+#         self.config_ver.dec_ops_count(
+#             cmd_runner=split_msg[0],
+#             sender=split_msg[4])
+#
+#
+# ########################################################################
+# # RecvMsgLogFoundItem
+# ########################################################################
+# class WaitResumedLogFoundItem(LogFoundItem):
+#     """Found log item."""
+#
+#     def __init__(self,
+#                  found_log_msg: str,
+#                  found_log_idx: int,
+#                  config_ver: "ConfigVerifier") -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             found_log_msg: msg that was found
+#             found_log_idx: index of log where the msg was found
+#             config_ver: configuration verifier
+#         """
+#         super().__init__(
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx,
+#             config_ver=config_ver
+#         )
+#
+#     def run_process(self):
+#         split_msg = self.found_log_msg.split()
+#
+#         self.config_ver.dec_ops_count(
+#             cmd_runner=split_msg[0],
+#             sender=split_msg[4])
+#
+#
+# ########################################################################
+# # StartedLogFoundItem
+# ########################################################################
+# class StartedLogFoundItem(LogFoundItem):
+#     """Found log item."""
+#
+#     def __init__(self,
+#                  found_log_msg: str,
+#                  found_log_idx: int,
+#                  config_ver: "ConfigVerifier") -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             found_log_msg: msg that was found
+#             found_log_idx: index of log where the msg was found
+#             config_ver: configuration verifier
+#         """
+#         super().__init__(
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx,
+#             config_ver=config_ver
+#         )
+#
+#     def run_process(self):
+#         split_msg = self.found_log_msg.split()
+#
+#         self.config_ver.handle_started_log_msg(
+#             cmd_runner=split_msg[0])
+#
+#
+# ########################################################################
+# # StoppedLogFoundItem
+# ########################################################################
+# class StoppedLogFoundItem(LogFoundItem):
+#     """Found log item."""
+#
+#     def __init__(self,
+#                  found_log_msg: str,
+#                  found_log_idx: int,
+#                  config_ver: "ConfigVerifier") -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             found_log_msg: msg that was found
+#             found_log_idx: index of log where the msg was found
+#             config_ver: configuration verifier
+#         """
+#         super().__init__(
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx,
+#             config_ver=config_ver
+#         )
+#
+#     def run_process(self):
+#         split_msg = self.found_log_msg.split()
+#
+#         self.config_ver.handle_stopped_log_msg(
+#             cmd_runner=split_msg[5],
+#             stopped_name=split_msg[0],
+#             log_idx=self.found_log_idx)
 
 
 LogSearchItems: TypeAlias = Union[
@@ -3531,7 +4047,7 @@ class ConfigVerifier:
 
         self.last_clean_reg_log_msg: str = ''
 
-        self.log_found_items: deque[LogFoundItem] = deque()
+        self.log_found_items: deque[LogSearchItem] = deque()
 
         self.monitor_event: threading.Event = threading.Event()
         self.monitor_condition: threading.Condition = threading.Condition()
