@@ -1776,14 +1776,14 @@ class SmartThread:
     # wait
     ####################################################################
     def smart_wait(self, *,
-                   remote: str,
+                   resumer: str,
                    log_msg: Optional[str] = None,
                    timeout: OptIntFloat = None,
                    raise_not_alive: bool = True) -> None:
         """Wait on event.
 
         Args:
-            remote: name of thread that we expect to resume us
+            resumer: name of thread that we expect to resume us
             log_msg: log msg to log
             timeout: number of seconds to allow for wait to be
                 resumed
@@ -1800,14 +1800,14 @@ class SmartThread:
                 deadlocked in a ''wait()'', each waiting on the other to
                 ``resume()`` their event.
             SmartThreadConflictDeadlockDetected: A sync request was made
-                by thread {self.name} but remote thread {remote}
+                by thread {self.name} but resumer thread {resumer}
                 detected deadlock instead which indicates that the
-                remote thread did not make a matching sync request.
+                resumer thread did not make a matching sync request.
             SmartThreadSmartWaitTimedOut: this thread timed out on a
-                wait request waiting for a resume from the remote
+                wait request waiting for a resume from the resumer
                 thread.
             SmartThreadRemoteThreadNotAlive: this thread wait detected
-                the remote thread is not alive.
+                the resumer thread is not alive.
 
         Notes:
             1) If one thread makes a ``sync()`` request without
@@ -1847,12 +1847,12 @@ class SmartThread:
         >>> alpha_smart_event = SmartThread(name='alpha')
         >>> f1_thread = threading.Thread(target=f1)
         >>> f1_thread.start()
-        >>> alpha_smart_event.wait(remote='beta')
+        >>> alpha_smart_event.wait(resumer='beta')
         >>> alpha_smart_event.join(targets='beta')
 
         """
         # get SetupBlock with targets in a set and a timer object
-        sb = self._common_setup(targets=remote, timeout=timeout)
+        sb = self._common_setup(targets=resumer, timeout=timeout)
         if sb.timer.remaining_time():
             timeout_specified = True
         else:
@@ -1867,16 +1867,16 @@ class SmartThread:
             exit_log_msg = None
 
         do_refresh = False
-        pair_key = self._get_pair_key(self.name, remote)
+        pair_key = self._get_pair_key(self.name, resumer)
 
         while True:
             with sel.SELockShare(SmartThread._registry_lock):
                 # The pair array will:
-                # 1) have an entry for both this thread and the remote
-                # 2) have an entry for only this thread if the remote
+                # 1) have an entry for both this thread and the resumer
+                # 2) have an entry for only this thread if the resumer
                 #    set the event for either wait or sync, or sent a
                 #    msg that has not yet been received, and then ended
-                # 3) neither thread if the remote has not yet registered
+                # 3) neither thread if the resumer has not yet registered
                 #    or has ended and did not set either event nor send
                 #    a msg that has not yet been received
                 if pair_key in SmartThread._pair_array:
@@ -1888,10 +1888,10 @@ class SmartThread:
                     # lock needed to coordinate conflict/deadlock
                     with SmartThread._pair_array[pair_key].status_lock:
 
-                        # We don't check to ensure remote is alive since
+                        # We don't check to ensure resumer is alive since
                         # it may have resumed us and then ended. So, we
                         # check the sync_event or wait_event first, and
-                        # then we will check to see whether the remote
+                        # then we will check to see whether the resumer
                         # is alive.
                         if self.sync_request:
                             local_sb.sync_wait = True
@@ -1905,7 +1905,7 @@ class SmartThread:
                                     do_refresh = True
                                 self.logger.info(
                                     f'{self.name} smart_sync resumed by '
-                                    f'{remote}')
+                                    f'{resumer}')
                                 break  # exit, we are done
                         else:
                             local_sb.wait_wait = True
@@ -1919,68 +1919,68 @@ class SmartThread:
                                     do_refresh = True
                                 self.logger.info(
                                     f'{self.name} smart_wait resumed by '
-                                    f'{remote}')
+                                    f'{resumer}')
                                 break  # exit, we are done
 
                         local_sb.wait_timeout_specified = timeout_specified
                         # Check for error conditions first before
-                        # checking whether the remote is alive. If the
-                        # remote detects a deadlock or conflict issue,
+                        # checking whether the resumer is alive. If the
+                        # resumer detects a deadlock or conflict issue,
                         # it will set the current sides bit and then
                         # raise an error and will likely be gone when we
                         # check. We want to raise the same error on
                         # this side.
                         #
-                        # self.deadlock is set only by the remote. So,
-                        # if self.deadlock is True, then remote has
+                        # self.deadlock is set only by the resumer. So,
+                        # if self.deadlock is True, then resumer has
                         # already detected the deadlock, set our flag,
                         # raised the deadlock on its side, and is now
                         # possibly ended or recovered and in a new wait.
-                        # If self.deadlock is False, and remote is
+                        # If self.deadlock is False, and resumer is
                         # waiting and is not resumed then it will not be
                         # getting resumed by us since we are also
-                        # waiting. So, we set self.remote.deadlock to
+                        # waiting. So, we set self.resumer.deadlock to
                         # tell it, and then we raise the error on our
                         # side. But, we don't do this if the
-                        # self.remote.deadlock is already on as that
-                        # suggests that we already told remote and
+                        # self.resumer.deadlock is already on as that
+                        # suggests that we already told resumer and
                         # raised the error, which implies that we are in
-                        # a new wait and the remote has not yet woken up
+                        # a new wait and the resumer has not yet woken up
                         # to deal with the earlier deadlock. We can
                         # simply ignore it for now.
-                        if remote in SmartThread._pair_array[
+                        if resumer in SmartThread._pair_array[
                                 pair_key].status_blocks:
-                            remote_sb = SmartThread._pair_array[
-                                pair_key].status_blocks[remote]
+                            resumer_sb = SmartThread._pair_array[
+                                pair_key].status_blocks[resumer]
                             if not (local_sb.wait_timeout_specified
-                                    or remote_sb.wait_timeout_specified
+                                    or resumer_sb.wait_timeout_specified
                                     or local_sb.deadlock
                                     or local_sb.conflict):
                                 # the following checks apply to both
                                 # sync_wait and wait_wait
-                                if (remote_sb.sync_wait
-                                        and not (remote_sb.sync_event.is_set()
-                                                 or remote_sb.conflict)):
-                                    remote_sb.conflict = True
+                                if (resumer_sb.sync_wait
+                                        and not (resumer_sb.sync_event.is_set()
+                                                 or resumer_sb.conflict)):
+                                    resumer_sb.conflict = True
                                     local_sb.conflict = True
                                     self.logger.debug(
                                         f'{self.name} detected conflict with '
-                                        f'{remote}')
-                                elif (remote_sb.wait_wait
+                                        f'{resumer}')
+                                elif (resumer_sb.wait_wait
                                         # I think this is a bug to check
                                         # our wait_event, so I comment
                                         # it out for now and change it
-                                        # to check the remote wait_event
+                                        # to check the resumer wait_event
                                         # and not
                                         # (local_sb.wait_event.is_set()
-                                        and not (remote_sb.wait_event.is_set()
-                                                 or remote_sb.deadlock
-                                                 or remote_sb.conflict)):
-                                    remote_sb.deadlock = True
+                                        and not (resumer_sb.wait_event.is_set()
+                                                 or resumer_sb.deadlock
+                                                 or resumer_sb.conflict)):
+                                    resumer_sb.deadlock = True
                                     local_sb.deadlock = True
                                     self.logger.debug(
                                         f'{self.name} detected deadlock with '
-                                        f'{remote}')
+                                        f'{resumer}')
 
                         if local_sb.conflict:
                             local_sb.wait_wait = False
@@ -1991,9 +1991,9 @@ class SmartThread:
                                 'SmartThreadConflictDeadlockDetected')
                             raise SmartThreadConflictDeadlockDetected(
                                 'A sync request was made by thread '
-                                f'{self.name} but remote thread '
-                                f'{remote} detected deadlock instead '
-                                'which indicates that the remote '
+                                f'{self.name} but resumer thread '
+                                f'{resumer} detected deadlock instead '
+                                'which indicates that the resumer '
                                 'thread did not make a matching sync '
                                 'request.')
 
@@ -2009,16 +2009,20 @@ class SmartThread:
                                 'waiting on the other to resume their '
                                 'wait_event.')
 
-                    if (remote in SmartThread._registry
+                    if (raise_not_alive
+                            and resumer in SmartThread._registry
                             and (not SmartThread._registry[
-                                     remote].thread.is_alive())
-                            and (SmartThread._registry[remote].status
+                                     resumer].thread.is_alive())
+                            and (SmartThread._registry[resumer].status
                                  & (ThreadStatus.Alive
                                     | ThreadStatus.Stopped))):
-                        if raise_not_alive:
-                            raise SmartThreadRemoteThreadNotAlive(
-                                f'{self.name} smart_wait() detected thread '
-                                f'{remote=} has ended')
+                        error_msg = (
+                            f'{self.name} raising '
+                            'SmartThreadRemoteThreadNotAlive. '
+                            f'{self.name} smart_wait is not resumed and '
+                            f'detected thread {resumer=} has ended')
+                        self.logger.error(error_msg)
+                        raise SmartThreadRemoteThreadNotAlive(error_msg)
 
                 # Note that the timer will never be expired if timeout
                 # was not specified either explicitly on the smart_wait
@@ -2030,17 +2034,17 @@ class SmartThread:
                     else:
                         wait_or_sync = 'smart_wait'
 
-                    remote_is_alive: bool = False
-                    remote_status: ThreadStatus = ThreadStatus.Unregistered
-                    if remote in SmartThread._registry:
-                        remote_is_alive = SmartThread._registry[
-                            remote].thread.is_alive()
-                        remote_status = self._get_status(remote)
+                    resumer_is_alive: bool = False
+                    resumer_status: ThreadStatus = ThreadStatus.Unregistered
+                    if resumer in SmartThread._registry:
+                        resumer_is_alive = SmartThread._registry[
+                            resumer].thread.is_alive()
+                        resumer_status = self._get_status(resumer)
 
                     error_msg = (
                         f'{self.name} raising SmartThreadSmartWaitTimedOut '
-                        f'waiting for a {wait_or_sync} resume from {remote} '
-                        f'with {remote_is_alive=}, {remote_status=}')
+                        f'waiting for a {wait_or_sync} resume from {resumer} '
+                        f'with {resumer_is_alive=}, {resumer_status=}')
 
                     local_sb.wait_wait = False
                     local_sb.deadlock = False

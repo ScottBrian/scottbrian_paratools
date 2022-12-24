@@ -70,7 +70,7 @@ class Actors(Enum):
     ActiveBeforeActor = auto()
     ActiveAfterActor = auto()
     ActionExitActor = auto()
-    NoActionExitActor = auto()
+    ExitActionActor = auto()
     UnregActor = auto()
     RegActor = auto()
 
@@ -210,18 +210,19 @@ num_waiters_arg_list = [1, 2, 3]
 actor_1_arg_list = [Actors.ActiveBeforeActor,
                     Actors.ActiveAfterActor,
                     Actors.ActionExitActor,
-                    Actors.NoActionExitActor,
+                    Actors.ExitActionActor,
                     Actors.UnregActor,
                     Actors.RegActor]
 actor_1_arg_list = [Actors.ActiveBeforeActor,
                     Actors.ActiveAfterActor,
-                    Actors.ActionExitActor]
+                    Actors.ActionExitActor,
+                    Actors.ExitActionActor]
 num_actor_1_arg_list = [1, 2, 3]
 
 actor_2_arg_list = [Actors.ActiveBeforeActor,
                     Actors.ActiveAfterActor,
                     Actors.ActionExitActor,
-                    Actors.NoActionExitActor,
+                    Actors.ExitActionActor,
                     Actors.UnregActor,
                     Actors.RegActor]
 num_actor_2_arg_list = [1, 2, 3]
@@ -229,7 +230,7 @@ num_actor_2_arg_list = [1, 2, 3]
 actor_3_arg_list = [Actors.ActiveBeforeActor,
                     Actors.ActiveAfterActor,
                     Actors.ActionExitActor,
-                    Actors.NoActionExitActor,
+                    Actors.ExitActionActor,
                     Actors.UnregActor,
                     Actors.RegActor]
 num_actor_3_arg_list = [1, 2, 3]
@@ -2700,403 +2701,6 @@ time_match = (f'{hour_match}:{min_sec_match}:{min_sec_match}\.'
               f'{micro_sec_match}')
 
 
-# ########################################################################
-# # LogSearchItem
-# ########################################################################
-# class LogSearchItem(ABC):
-#     """Input to search log msgs."""
-#     def __init__(self,
-#                  search_str: str,
-#                  config_ver: "ConfigVerifier") -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             search_str: regex style search string
-#             config_ver: configuration verifier
-#         """
-#         self.search_pattern = re.compile(search_str)
-#         self.config_ver: "ConfigVerifier" = config_ver
-#
-#     @abstractmethod
-#     def get_found_log_item(self,
-#                            found_log_msg: str,
-#                            found_log_idx: int) -> "LogFoundItem":
-#         """Return a found log item.
-#
-#         Args:
-#             found_log_msg: log msg that was found
-#             found_log_idx: index in the log where message was found
-#
-#         Returns:
-#             LogFoundItem containing found message and index
-#         """
-#         pass
-#
-#
-# ########################################################################
-# # EnterRpaLogSearchItem
-# ########################################################################
-# class EnterRpaLogSearchItem(LogSearchItem):
-#     """Input to search log msgs."""
-#
-#     def __init__(self,
-#                  config_ver: "ConfigVerifier") -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             config_ver: configuration verifier
-#         """
-#         super().__init__(
-#             search_str=f'[a-z]+ entered _refresh_pair_array',
-#             config_ver=config_ver
-#         )
-#
-#     def get_found_log_item(self,
-#                            found_log_msg: str,
-#                            found_log_idx: int) -> "EnterRpaLogFoundItem":
-#         """Return a found log item.
-#
-#         Args:
-#             found_log_msg: log msg that was found
-#             found_log_idx: index in the log where message was found
-#
-#         Returns:
-#             EnterRpaLogFoundItem containing found message and index
-#         """
-#         return EnterRpaLogFoundItem(
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx,
-#             config_ver=self.config_ver)
-#
-#
-# ########################################################################
-# # UpdatePaLogSearchItem
-# ########################################################################
-# class UpdatePaLogSearchItem(LogSearchItem):
-#     """Input to search log msgs."""
-#
-#     def __init__(self,
-#                  config_ver: "ConfigVerifier") -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             config_ver: configuration verifier
-#         """
-#         super().__init__(
-#             search_str=f'[a-z]+ updated _pair_array at UTC {time_match}',
-#             config_ver=config_ver
-#         )
-#
-#     def get_found_log_item(self,
-#                            found_log_msg: str,
-#                            found_log_idx: int) -> "UpdatePaLogFoundItem":
-#         """Return a found log item.
-#
-#         Args:
-#             found_log_msg: log msg that was found
-#             found_log_idx: index in the log where message was found
-#
-#         Returns:
-#             UpdatePaLogFoundItem containing found message and index
-#         """
-#         return UpdatePaLogFoundItem(
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx,
-#             config_ver=self.config_ver)
-#
-#
-# ########################################################################
-# # RegUpdateLogSearchItem
-# ########################################################################
-# class RegUpdateLogSearchItem(LogSearchItem):
-#     """Input to search log msgs."""
-#
-#     def __init__(self,
-#                  config_ver: "ConfigVerifier") -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             config_ver: configuration verifier
-#         """
-#         super().__init__(
-#             search_str=f'[a-z]+ did registry update at UTC {time_match}',
-#             config_ver=config_ver
-#         )
-#
-#     def get_found_log_item(self,
-#                            found_log_msg: str,
-#                            found_log_idx: int) -> "RegUpdateLogFoundItem":
-#         """Return a found log item.
-#
-#         Args:
-#             found_log_msg: log msg that was found
-#             found_log_idx: index in the log where message was found
-#
-#         Returns:
-#             RegUpdateLogFoundItem containing found message and index
-#         """
-#         return RegUpdateLogFoundItem(
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx,
-#             config_ver=self.config_ver)
-#
-#
-# ########################################################################
-# # RegUpdateLogSearchItem
-# ########################################################################
-# class RegRemoveLogSearchItem(LogSearchItem):
-#     """Input to search log msgs."""
-#
-#     def __init__(self,
-#                  config_ver: "ConfigVerifier") -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             config_ver: configuration verifier
-#         """
-#         super().__init__(
-#             search_str=("[a-z]+ removed [a-z]+ from registry for "
-#                         "process='(join|unregister)'"),
-#             config_ver=config_ver
-#         )
-#
-#     def get_found_log_item(self,
-#                            found_log_msg: str,
-#                            found_log_idx: int) -> "RegRemoveLogFoundItem":
-#         """Return a found log item.
-#
-#         Args:
-#             found_log_msg: log msg that was found
-#             found_log_idx: index in the log where message was found
-#
-#         Returns:
-#             RegRemoveLogFoundItem containing found message and index
-#         """
-#         return RegRemoveLogFoundItem(
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx,
-#             config_ver=self.config_ver)
-#
-#
-# ########################################################################
-# # RegUpdateLogSearchItem
-# ########################################################################
-# class CleanRegLogSearchItem(LogSearchItem):
-#     """Input to search log msgs."""
-#
-#     def __init__(self,
-#                  config_ver: "ConfigVerifier") -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             config_ver: configuration verifier
-#         """
-#         super().__init__(
-#             search_str=(f"[a-z]+ did cleanup of registry at UTC {time_match}, "
-#                         "deleted \['[a-z]+'\]"),
-#             config_ver=config_ver
-#         )
-#
-#     def get_found_log_item(self,
-#                            found_log_msg: str,
-#                            found_log_idx: int) -> "CleanRegLogFoundItem":
-#         """Return a found log item.
-#
-#         Args:
-#             found_log_msg: log msg that was found
-#             found_log_idx: index in the log where message was found
-#
-#         Returns:
-#             CleanRegLogFoundItem containing found message and index
-#         """
-#         return CleanRegLogFoundItem(
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx,
-#             config_ver=self.config_ver)
-#
-#
-# ########################################################################
-# # RegUpdateLogSearchItem
-# ########################################################################
-# class JoinUnregLogSearchItem(LogSearchItem):
-#     """Input to search log msgs."""
-#
-#     def __init__(self,
-#                  config_ver: "ConfigVerifier") -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             config_ver: configuration verifier
-#         """
-#         super().__init__(
-#             search_str='[a-z]+ did successful (unregister|join) of [a-z]+\.',
-#             config_ver=config_ver
-#         )
-#
-#     def get_found_log_item(self,
-#                            found_log_msg: str,
-#                            found_log_idx: int) -> "JoinUnregLogFoundItem":
-#         """Return a found log item.
-#
-#         Args:
-#             found_log_msg: log msg that was found
-#             found_log_idx: index in the log where message was found
-#
-#         Returns:
-#             JoinUnregLogFoundItem containing found message and index
-#         """
-#         return JoinUnregLogFoundItem(
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx,
-#             config_ver=self.config_ver)
-#
-#
-# ########################################################################
-# # RecvMsgLogSearchItem
-# ########################################################################
-# class RecvMsgLogSearchItem(LogSearchItem):
-#     """Input to search log msgs."""
-#
-#     def __init__(self,
-#                  config_ver: "ConfigVerifier") -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             config_ver: configuration verifier
-#         """
-#         super().__init__(
-#             search_str=f'[a-z]+ received msg from [a-z]+',
-#             config_ver=config_ver
-#         )
-#
-#     def get_found_log_item(self,
-#                            found_log_msg: str,
-#                            found_log_idx: int) -> "RecvMsgLogFoundItem":
-#         """Return a found log item.
-#
-#         Args:
-#             found_log_msg: log msg that was found
-#             found_log_idx: index in the log where message was found
-#
-#         Returns:
-#             RecvMsgLogFoundItem containing found message and index
-#         """
-#         return RecvMsgLogFoundItem(
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx,
-#             config_ver=self.config_ver)
-#
-#
-# ########################################################################
-# # RecvMsgLogSearchItem
-# ########################################################################
-# class WaitResumedLogSearchItem(LogSearchItem):
-#     """Input to search log msgs."""
-#
-#     def __init__(self,
-#                  config_ver: "ConfigVerifier") -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             config_ver: configuration verifier
-#         """
-#         super().__init__(
-#             search_str=f'[a-z]+ smart_wait resumed by [a-z]+',
-#             config_ver=config_ver
-#         )
-#
-#     def get_found_log_item(self,
-#                            found_log_msg: str,
-#                            found_log_idx: int) -> "WaitResumedLogFoundItem":
-#         """Return a found log item.
-#
-#         Args:
-#             found_log_msg: log msg that was found
-#             found_log_idx: index in the log where message was found
-#
-#         Returns:
-#             WaitResumedLogFoundItem containing found message and index
-#         """
-#         return WaitResumedLogFoundItem(
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx,
-#             config_ver=self.config_ver)
-#
-#
-# ########################################################################
-# # StartedLogSearchItem
-# ########################################################################
-# class StartedLogSearchItem(LogSearchItem):
-#     """Input to search log msgs."""
-#
-#     def __init__(self,
-#                  config_ver: "ConfigVerifier") -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             config_ver: configuration verifier
-#         """
-#         super().__init__(
-#             search_str=('[a-z]+ thread started, thread.is_alive\(\) = True, '
-#                         'status: ThreadStatus.Alive'),
-#             config_ver=config_ver
-#         )
-#
-#     def get_found_log_item(self,
-#                            found_log_msg: str,
-#                            found_log_idx: int) -> "StartedLogFoundItem":
-#         """Return a found log item.
-#
-#         Args:
-#             found_log_msg: log msg that was found
-#             found_log_idx: index in the log where message was found
-#
-#         Returns:
-#             StartedLogFoundItem containing found message and index
-#         """
-#         return StartedLogFoundItem(
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx,
-#             config_ver=self.config_ver)
-#
-#
-# ########################################################################
-# # StoppedLogSearchItem
-# ########################################################################
-# class StoppedLogSearchItem(LogSearchItem):
-#     """Input to search log msgs."""
-#
-#     def __init__(self,
-#                  config_ver: "ConfigVerifier") -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             config_ver: configuration verifier
-#         """
-#         super().__init__(
-#             search_str='[a-z]+ has been stopped by [a-z]+',
-#             config_ver=config_ver
-#         )
-#
-#     def get_found_log_item(self,
-#                            found_log_msg: str,
-#                            found_log_idx: int) -> "StoppedLogFoundItem":
-#         """Return a found log item.
-#
-#         Args:
-#             found_log_msg: log msg that was found
-#             found_log_idx: index in the log where message was found
-#
-#         Returns:
-#             StartedLogFoundItem containing found message and index
-#         """
-#         return StoppedLogFoundItem(
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx,
-#             config_ver=self.config_ver)
-#
-
-
 ########################################################################
 # LogSearchItem
 ########################################################################
@@ -3610,331 +3214,6 @@ class StoppedLogSearchItem(LogSearchItem):
             cmd_runner=split_msg[5],
             stopped_name=split_msg[0],
             log_idx=self.found_log_idx)
-
-
-# ########################################################################
-# # LogFoundItem
-# ########################################################################
-# class LogFoundItem(ABC):
-#     """Found log item."""
-#     def __init__(self,
-#                  found_log_msg: str,
-#                  found_log_idx: int,
-#                  config_ver: "ConfigVerifier") -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             found_log_msg: msg that was found
-#             found_log_idx: index of log where the msg was found
-#             config_ver: configuration verifier
-#         """
-#         self.found_log_msg: str = found_log_msg
-#         self.found_log_idx = found_log_idx
-#         self.config_ver: "ConfigVerifier" = config_ver
-#
-#     @abstractmethod
-#     def run_process(self) -> None:
-#         """Run the command for the log msg."""
-#         pass
-#
-#
-# ########################################################################
-# # EnterRpaLogFoundItem
-# ########################################################################
-# class EnterRpaLogFoundItem(LogFoundItem):
-#     """Found log item."""
-#
-#     def __init__(self,
-#                  found_log_msg: str,
-#                  found_log_idx: int,
-#                  config_ver: "ConfigVerifier") -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             found_log_msg: msg that was found
-#             found_log_idx: index of log where the msg was found
-#             config_ver: configuration verifier
-#         """
-#         super().__init__(
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx,
-#             config_ver=config_ver
-#         )
-#
-#     def run_process(self):
-#         self.config_ver.handle_enter_rpa_log_msg(
-#             cmd_runner=self.found_log_msg.split(maxsplit=1)[0])
-#
-#
-# ########################################################################
-# # UpdatePaLogFoundItem
-# ########################################################################
-# class UpdatePaLogFoundItem(LogFoundItem):
-#     """Found log item."""
-#
-#     def __init__(self,
-#                  found_log_msg: str,
-#                  found_log_idx: int,
-#                  config_ver: "ConfigVerifier") -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             found_log_msg: msg that was found
-#             found_log_idx: index of log where the msg was found
-#             config_ver: configuration verifier
-#         """
-#         super().__init__(
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx,
-#             config_ver=config_ver
-#         )
-#
-#     def run_process(self):
-#         self.config_ver.handle_pair_array_update(
-#             cmd_runner=self.found_log_msg.split(maxsplit=1)[0],
-#             upa_msg=self.found_log_msg,
-#             upa_msg_idx=self.found_log_idx)
-#
-#
-# ########################################################################
-# # RegUpdateLogFoundItem
-# ########################################################################
-# class RegUpdateLogFoundItem(LogFoundItem):
-#     """Found log item."""
-#
-#     def __init__(self,
-#                  found_log_msg: str,
-#                  found_log_idx: int,
-#                  config_ver: "ConfigVerifier") -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             found_log_msg: msg that was found
-#             found_log_idx: index of log where the msg was found
-#             config_ver: configuration verifier
-#         """
-#         super().__init__(
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx,
-#             config_ver=config_ver
-#         )
-#
-#     def run_process(self):
-#         self.config_ver.handle_reg_update(
-#             cmd_runner=self.found_log_msg.split(maxsplit=1)[0],
-#             reg_update_msg=self.found_log_msg,
-#             reg_update_msg_log_idx=self.found_log_idx)
-#
-#
-# ########################################################################
-# # RegUpdateLogFoundItem
-# ########################################################################
-# class RegRemoveLogFoundItem(LogFoundItem):
-#     """Found log item."""
-#
-#     def __init__(self,
-#                  found_log_msg: str,
-#                  found_log_idx: int,
-#                  config_ver: "ConfigVerifier") -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             found_log_msg: msg that was found
-#             found_log_idx: index of log where the msg was found
-#             config_ver: configuration verifier
-#         """
-#         super().__init__(
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx,
-#             config_ver=config_ver
-#         )
-#
-#     def run_process(self):
-#         self.config_ver.handle_reg_remove()
-#
-#
-# ########################################################################
-# # RegUpdateLogFoundItem
-# ########################################################################
-# class CleanRegLogFoundItem(LogFoundItem):
-#     """Found log item."""
-#
-#     def __init__(self,
-#                  found_log_msg: str,
-#                  found_log_idx: int,
-#                  config_ver: "ConfigVerifier") -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             found_log_msg: msg that was found
-#             found_log_idx: index of log where the msg was found
-#             config_ver: configuration verifier
-#         """
-#         super().__init__(
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx,
-#             config_ver=config_ver
-#         )
-#
-#     def run_process(self):
-#         self.config_ver.last_clean_reg_log_msg = self.found_log_msg
-#
-#
-# ########################################################################
-# # RegUpdateLogFoundItem
-# ########################################################################
-# class JoinUnregLogFoundItem(LogFoundItem):
-#     """Found log item."""
-#
-#     def __init__(self,
-#                  found_log_msg: str,
-#                  found_log_idx: int,
-#                  config_ver: "ConfigVerifier") -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             found_log_msg: msg that was found
-#             found_log_idx: index of log where the msg was found
-#             config_ver: configuration verifier
-#         """
-#         super().__init__(
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx,
-#             config_ver=config_ver
-#         )
-#
-#     def run_process(self):
-#         split_msg = self.found_log_msg.split()
-#         self.config_ver.handle_join_unreg_update(
-#             cmd_runner=split_msg[0],
-#             target_name=split_msg[5].removesuffix('.'),
-#             process=split_msg[3],
-#             found_log_msg_idx=self.found_log_idx
-#         )
-#
-#
-# ########################################################################
-# # RecvMsgLogFoundItem
-# ########################################################################
-# class RecvMsgLogFoundItem(LogFoundItem):
-#     """Found log item."""
-#
-#     def __init__(self,
-#                  found_log_msg: str,
-#                  found_log_idx: int,
-#                  config_ver: "ConfigVerifier") -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             found_log_msg: msg that was found
-#             found_log_idx: index of log where the msg was found
-#             config_ver: configuration verifier
-#         """
-#         super().__init__(
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx,
-#             config_ver=config_ver
-#         )
-#
-#     def run_process(self):
-#         split_msg = self.found_log_msg.split()
-#
-#         self.config_ver.dec_ops_count(
-#             cmd_runner=split_msg[0],
-#             sender=split_msg[4])
-#
-#
-# ########################################################################
-# # RecvMsgLogFoundItem
-# ########################################################################
-# class WaitResumedLogFoundItem(LogFoundItem):
-#     """Found log item."""
-#
-#     def __init__(self,
-#                  found_log_msg: str,
-#                  found_log_idx: int,
-#                  config_ver: "ConfigVerifier") -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             found_log_msg: msg that was found
-#             found_log_idx: index of log where the msg was found
-#             config_ver: configuration verifier
-#         """
-#         super().__init__(
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx,
-#             config_ver=config_ver
-#         )
-#
-#     def run_process(self):
-#         split_msg = self.found_log_msg.split()
-#
-#         self.config_ver.dec_ops_count(
-#             cmd_runner=split_msg[0],
-#             sender=split_msg[4])
-#
-#
-# ########################################################################
-# # StartedLogFoundItem
-# ########################################################################
-# class StartedLogFoundItem(LogFoundItem):
-#     """Found log item."""
-#
-#     def __init__(self,
-#                  found_log_msg: str,
-#                  found_log_idx: int,
-#                  config_ver: "ConfigVerifier") -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             found_log_msg: msg that was found
-#             found_log_idx: index of log where the msg was found
-#             config_ver: configuration verifier
-#         """
-#         super().__init__(
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx,
-#             config_ver=config_ver
-#         )
-#
-#     def run_process(self):
-#         split_msg = self.found_log_msg.split()
-#
-#         self.config_ver.handle_started_log_msg(
-#             cmd_runner=split_msg[0])
-#
-#
-# ########################################################################
-# # StoppedLogFoundItem
-# ########################################################################
-# class StoppedLogFoundItem(LogFoundItem):
-#     """Found log item."""
-#
-#     def __init__(self,
-#                  found_log_msg: str,
-#                  found_log_idx: int,
-#                  config_ver: "ConfigVerifier") -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             found_log_msg: msg that was found
-#             found_log_idx: index of log where the msg was found
-#             config_ver: configuration verifier
-#         """
-#         super().__init__(
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx,
-#             config_ver=config_ver
-#         )
-#
-#     def run_process(self):
-#         split_msg = self.found_log_msg.split()
-#
-#         self.config_ver.handle_stopped_log_msg(
-#             cmd_runner=split_msg[5],
-#             stopped_name=split_msg[0],
-#             log_idx=self.found_log_idx)
 
 
 LogSearchItems: TypeAlias = Union[
@@ -5493,8 +4772,8 @@ class ConfigVerifier:
                 self.build_resume_after_wait_timeout_suite,
             Actors.ActionExitActor:
                 self.build_resume_exit_wait_timeout_suite,
-            Actors.NoActionExitActor:
-                self.build_resume_before_wait_timeout_suite,
+            Actors.ExitActionActor:
+                self.build_exit_resume_wait_timeout_suite,
             Actors.UnregActor:
                 self.build_resume_before_wait_timeout_suite,
             Actors.RegActor:
@@ -5512,7 +4791,7 @@ class ConfigVerifier:
             if (actor[0] == Actors.ActiveBeforeActor
                     or actor[0] == Actors.ActiveAfterActor
                     or actor[0] == Actors.ActionExitActor
-                    or actor[0] == Actors.NoActionExitActor):
+                    or actor[0] == Actors.ExitActionActor):
                 num_active_threads_needed += actor[1]
             elif actor[0] == Actors.RegActor:
                 num_registered_threads_needed += actor[1]
@@ -5568,7 +4847,7 @@ class ConfigVerifier:
             self,
             waiter_names: list[str],
             num_actors: int,
-            active_names: list[str]) -> None:
+            active_names: set[str]) -> None:
         """Adds cmds to the cmd queue.
 
         Args:
@@ -5655,7 +4934,7 @@ class ConfigVerifier:
             self,
             waiter_names: list[str],
             num_actors: int,
-            active_names: list[str]) -> None:
+            active_names: set[str]) -> None:
         """Adds cmds to the cmd queue.
 
         Args:
@@ -5742,7 +5021,7 @@ class ConfigVerifier:
             self,
             waiter_names: list[str],
             num_actors: int,
-            active_names: list[str]) -> None:
+            active_names: set[str]) -> None:
         """Adds cmds to the cmd queue.
 
         Args:
@@ -5848,6 +5127,171 @@ class ConfigVerifier:
                         confirm_cmd='WaitTimeoutTrue',
                         confirm_serial_num=wait_serial_num,
                         confirmers=timeout_names))
+
+    ####################################################################
+    # build_wait_active_suite
+    ####################################################################
+    def build_exit_resume_wait_timeout_suite(
+            self,
+            waiter_names: list[str],
+            num_actors: int,
+            active_names: set[str]) -> None:
+        """Adds cmds to the cmd queue.
+
+        Args:
+            waiter_names: names of threads that will do the wait
+            num_actors: number of threads that will do the resume
+            active_names: list of active names to choose from
+
+        """
+        exit_resume_resumer_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_actors,
+            update_collection=True,
+            var_name_for_log='exit_resume_resumer_names')
+
+        ################################################################
+        # Loop to do combinations of resume names, the waiter names that
+        # will be resumed - the remaining waiter names will timeout
+        ################################################################
+        for target_names in self.powerset(waiter_names.copy()):
+            timeout_names = waiter_names
+
+            if len(target_names) % 2:
+                raise_not_alive = True
+                resumers_for_wait: DictAliveAndStatus = {}
+                for resumer in exit_resume_resumer_names:
+                    resumers_for_wait[resumer] = AliveAndStatus(
+                        is_alive=False,
+                        status=st.ThreadStatus.Stopped)
+            else:
+                raise_not_alive = False
+                resumers_for_wait: DictAliveAndStatus = {}
+                for resumer in exit_resume_resumer_names:
+                    resumers_for_wait[resumer] = AliveAndStatus(
+                        is_alive=True,
+                        status=st.ThreadStatus.Alive)
+
+            if target_names:
+                target_names = list(target_names)
+
+                timeout_time = 1.5
+                wait_serial_num = self.add_cmd(
+                    WaitTimeoutFalse(
+                        cmd_runners=target_names,
+                        resumers=resumers_for_wait,
+                        raise_not_alive=raise_not_alive,
+                        timeout=timeout_time))
+
+                self.build_exit_suite(names=exit_resume_resumer_names)
+
+                if raise_not_alive:
+                    self.add_cmd(
+                        ConfirmResponse(
+                            cmd_runners=[self.commander_name],
+                            confirm_cmd='WaitTimeoutFalse',
+                            confirm_serial_num=wait_serial_num,
+                            confirmers=target_names))
+
+                self.build_join_suite(
+                    cmd_runners=self.commander_name,
+                    join_target_names=exit_resume_resumer_names)
+
+                f1_create_items: list[F1CreateItem] = []
+                for idx, name in enumerate(exit_resume_resumer_names):
+                    if idx % 2:
+                        app_config = AppConfig.ScriptStyle
+                    else:
+                        app_config = AppConfig.RemoteThreadApp
+
+                    f1_create_items.append(F1CreateItem(name=name,
+                                                        auto_start=True,
+                                                        target_rtn=outer_f1,
+                                                        app_config=app_config))
+                self.build_create_suite(
+                    f1_create_items=f1_create_items,
+                    validate_config=False)
+
+                if not raise_not_alive:
+                    ########################################################
+                    # resume the waiters that are expected to succeed
+                    ########################################################
+                    resume_cmd_serial_num = self.add_cmd(
+                        Resume(cmd_runners=exit_resume_resumer_names,
+                               targets=target_names,
+                               stopped_names=[]))
+
+                    self.add_cmd(
+                        ConfirmResponse(
+                            cmd_runners=[self.commander_name],
+                            confirm_cmd='Resume',
+                            confirm_serial_num=resume_cmd_serial_num,
+                            confirmers=exit_resume_resumer_names))
+
+                    self.add_cmd(
+                        ConfirmResponse(
+                            cmd_runners=[self.commander_name],
+                            confirm_cmd='WaitTimeoutFalse',
+                            confirm_serial_num=wait_serial_num,
+                            confirmers=target_names))
+
+                timeout_names = list(set(waiter_names) - set(target_names))
+
+            if timeout_names:
+                ########################################################
+                # the timeout_names are expected to timeout since they
+                # were not resumed
+                ########################################################
+                raise_not_alive = True
+                exit_was_done = False
+                if len(timeout_names) % 2:
+                    resumers_for_wait: DictAliveAndStatus = {}
+                    for resumer in exit_resume_resumer_names:
+                        resumers_for_wait[resumer] = AliveAndStatus(
+                            is_alive=False,
+                            status=st.ThreadStatus.Stopped)
+                    self.build_exit_suite(names=exit_resume_resumer_names)
+                    exit_was_done = True
+                else:
+                    resumers_for_wait: DictAliveAndStatus = {}
+                    for resumer in exit_resume_resumer_names:
+                        resumers_for_wait[resumer] = AliveAndStatus(
+                            is_alive=True,
+                            status=st.ThreadStatus.Alive)
+
+                timeout_time = 0.5
+                wait_serial_num = self.add_cmd(
+                    WaitTimeoutTrue(
+                        cmd_runners=timeout_names,
+                        resumers=resumers_for_wait,
+                        raise_not_alive=raise_not_alive,
+                        timeout=timeout_time))
+                self.add_cmd(
+                    ConfirmResponse(
+                        cmd_runners=[self.commander_name],
+                        confirm_cmd='WaitTimeoutTrue',
+                        confirm_serial_num=wait_serial_num,
+                        confirmers=timeout_names))
+                if exit_was_done:
+                    self.build_join_suite(
+                        cmd_runners=self.commander_name,
+                        join_target_names=exit_resume_resumer_names)
+
+                    f1_create_items: list[F1CreateItem] = []
+                    for idx, name in enumerate(exit_resume_resumer_names):
+                        if idx % 2:
+                            app_config = AppConfig.ScriptStyle
+                        else:
+                            app_config = AppConfig.RemoteThreadApp
+
+                        f1_create_items.append(
+                            F1CreateItem(name=name,
+                                         auto_start=True,
+                                         target_rtn=outer_f1,
+                                         app_config=app_config))
+                    self.build_create_suite(
+                        f1_create_items=f1_create_items,
+                        validate_config=False)
 
     ####################################################################
     # build_msg_timeout_suite
@@ -8784,17 +8228,19 @@ class ConfigVerifier:
                     and (resumers[resumer].status == st.ThreadStatus.Stopped)):
                 with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                     self.all_threads[cmd_runner].smart_wait(
-                        remote=resumer,
+                        resumer=resumer,
                         raise_not_alive=raise_not_alive)
 
                 self.add_log_msg(
                     new_log_msg=re.escape(
-                        f'{cmd_runner} smart_wait() detected thread '
-                        f'remote={resumer} has ended'),
+                        f'{cmd_runner} raising '
+                        'SmartThreadRemoteThreadNotAlive. '
+                        f'{cmd_runner} smart_wait is not resumed and '
+                        f'detected thread {resumer=} has ended'),
                     log_level=logging.ERROR)
             else:
                 self.all_threads[cmd_runner].smart_wait(
-                    remote=resumer,
+                    resumer=resumer,
                     raise_not_alive=raise_not_alive)
                 self.monitor_event.set()
                 self.add_log_msg(
@@ -8852,19 +8298,21 @@ class ConfigVerifier:
                     and (resumers[resumer].status == st.ThreadStatus.Stopped)):
                 with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                     self.all_threads[cmd_runner].smart_wait(
-                        remote=resumer,
+                        resumer=resumer,
                         raise_not_alive=raise_not_alive,
                         timeout=timeout
                     )
 
                 self.add_log_msg(
                     new_log_msg=re.escape(
-                        f'{cmd_runner} smart_wait() detected thread '
-                        f'remote={resumer} has ended'),
+                        f'{cmd_runner} raising '
+                        'SmartThreadRemoteThreadNotAlive. '
+                        f'{cmd_runner} smart_wait is not resumed and '
+                        f'detected thread {resumer=} has ended'),
                     log_level=logging.ERROR)
             else:
                 self.all_threads[cmd_runner].smart_wait(
-                    remote=resumer,
+                    resumer=resumer,
                     raise_not_alive=raise_not_alive,
                     timeout=timeout
                 )
@@ -8914,31 +8362,33 @@ class ConfigVerifier:
                     and (resumers[resumer].status == st.ThreadStatus.Stopped)):
                 with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                     self.all_threads[cmd_runner].smart_wait(
-                        remote=resumer,
+                        resumer=resumer,
                         raise_not_alive=raise_not_alive,
                         timeout=timeout
                     )
 
                 self.add_log_msg(
                     new_log_msg=re.escape(
-                        f'{cmd_runner} smart_wait() detected thread '
-                        f'remote={resumer} has ended'),
+                        f'{cmd_runner} raising '
+                        'SmartThreadRemoteThreadNotAlive. '
+                        f'{cmd_runner} smart_wait is not resumed and '
+                        f'detected thread {resumer=} has ended'),
                     log_level=logging.ERROR)
             else:
                 with pytest.raises(st.SmartThreadSmartWaitTimedOut):
                     self.all_threads[cmd_runner].smart_wait(
-                        remote=resumer,
+                        resumer=resumer,
                         raise_not_alive=raise_not_alive,
                         timeout=timeout
                     )
 
-                remote_is_alive = resumers[resumer].is_alive
-                remote_status = resumers[resumer].status
+                resumer_is_alive = resumers[resumer].is_alive
+                resumer_status = resumers[resumer].status
 
                 self.add_log_msg(re.escape(
                     f'{cmd_runner} raising SmartThreadSmartWaitTimedOut '
                     f'waiting for a smart_wait resume from {resumer} with '
-                    f'{remote_is_alive=}, {remote_status=}'),
+                    f'{resumer_is_alive=}, {resumer_status=}'),
                     log_level=logging.ERROR)
 
         self.log_test_msg(f'{cmd_runner=} handle_wait_tot exit for '
