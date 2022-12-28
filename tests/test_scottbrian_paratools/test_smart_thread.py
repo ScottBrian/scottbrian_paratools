@@ -2704,6 +2704,7 @@ class MonitorAddItem:
 
 @dataclass
 class UpaItem:
+    upa_cmd_runner: str
     upa_type: str
     upa_target: str
     upa_def_del_name: str
@@ -3440,7 +3441,7 @@ class ConfigVerifier:
         self.recently_stopped: dict[str, int] = defaultdict(int)
 
         self.pending_recv_msg_par: dict[str, bool] = defaultdict(bool)
-        self.update_pair_array_items = dict[str, UpaItem] = {}
+        self.update_pair_array_items = deque[UpaItem] = deque()
 
         self.log_start_idx: int = 0
         self.log_search_items: tuple[LogSearchItems, ...] = (
@@ -3625,9 +3626,7 @@ class ConfigVerifier:
             reg_update_msg: the register update msg use for the log msg
             reg_idx: index of reg_update_msg in the log
         """
-        log_msg = f'add_thread entered for {cmd_runner}'
-        self.log_ver.add_msg(log_msg=log_msg)
-        logger.debug(log_msg)
+        self.log_test_msg(f'add_thread entered for {cmd_runner}')
 
         self.expected_registered[cmd_runner] = ThreadTracker(
             thread=self.all_threads[cmd_runner],
@@ -3638,79 +3637,79 @@ class ConfigVerifier:
             found_del_pairs=defaultdict(int)
         )
 
-        update_pair_array_msg_needed = False
-
-        if len(self.expected_registered.keys()) > 1:
-            pair_keys = combinations(
-                sorted(self.expected_registered.keys()), 2)
-            for pair_key in pair_keys:
-                if cmd_runner not in pair_key:
-                    continue
-                if cmd_runner == pair_key[0]:
-                    other_name = pair_key[1]
-                else:
-                    other_name = pair_key[0]
-                name_poc = 0
-                other_poc = 0
-                if pair_key in self.pending_ops_counts:
-                    if cmd_runner in self.pending_ops_counts[pair_key]:
-                        name_poc = self.pending_ops_counts[
-                            pair_key][cmd_runner]
-                        self.pending_ops_counts[pair_key][cmd_runner] = 0
-                    if other_name in self.pending_ops_counts[pair_key]:
-                        other_poc = self.pending_ops_counts[pair_key][
-                            other_name]
-                        self.pending_ops_counts[pair_key][other_name] = 0
-
-                if pair_key not in self.expected_pairs:
-                    self.expected_pairs[pair_key] = {
-                        cmd_runner: ThreadPairStatus(
-                            pending_ops_count=name_poc),
-                        other_name: ThreadPairStatus(
-                            pending_ops_count=other_poc)}
-                    self.add_log_msg(re.escape(
-                        f"{cmd_runner} created "
-                        "_refresh_pair_array with "
-                        f"pair_key = {pair_key}"))
-                    update_pair_array_msg_needed = True
-
-                    for pair_name in pair_key:
-                        self.add_log_msg(re.escape(
-                            f"{cmd_runner} added status_blocks entry "
-                            f"for pair_key = {pair_key}, "
-                            f"name = {pair_name}"))
-
-                # if pair_key already exists, we need to add name
-                # as a resurrected thread
-                else:  # we already have a pair_key, need to add name
-                    if not self.expected_pairs[pair_key]:
-                        self.abort_all_f1_threads()
-                        raise InvalidConfigurationDetected(
-                            'Attempt to add thread to existing pair array '
-                            'that has an empty ThreadPairStatus dict')
-                    if cmd_runner in self.expected_pairs[pair_key].keys():
-                        self.abort_all_f1_threads()
-                        raise InvalidConfigurationDetected(
-                            'Attempt to add thread to pair array that already '
-                            'has the thread in the pair array')
-                    if cmd_runner == pair_key[0]:
-                        other_name = pair_key[1]
-                    else:
-                        other_name = pair_key[0]
-                    if other_name not in self.expected_pairs[pair_key].keys():
-                        self.abort_all_f1_threads()
-                        raise InvalidConfigurationDetected(
-                            'Attempt to add thread to pair array that did '
-                            'not have the other name in the pair array')
-                    # looks OK, just add in the new name
-                    self.expected_pairs[pair_key][
-                        cmd_runner] = ThreadPairStatus(
-                        pending_ops_count=name_poc)
-                    self.add_log_msg(re.escape(
-                        f"{cmd_runner} added status_blocks entry "
-                        f"for pair_key = {pair_key}, "
-                        f"name = {cmd_runner}"))
-                    update_pair_array_msg_needed = True
+        # update_pair_array_msg_needed = False
+        #
+        # if len(self.expected_registered.keys()) > 1:
+        #     pair_keys = combinations(
+        #         sorted(self.expected_registered.keys()), 2)
+        #     for pair_key in pair_keys:
+        #         if cmd_runner not in pair_key:
+        #             continue
+        #         if cmd_runner == pair_key[0]:
+        #             other_name = pair_key[1]
+        #         else:
+        #             other_name = pair_key[0]
+        #         name_poc = 0
+        #         other_poc = 0
+        #         if pair_key in self.pending_ops_counts:
+        #             if cmd_runner in self.pending_ops_counts[pair_key]:
+        #                 name_poc = self.pending_ops_counts[
+        #                     pair_key][cmd_runner]
+        #                 self.pending_ops_counts[pair_key][cmd_runner] = 0
+        #             if other_name in self.pending_ops_counts[pair_key]:
+        #                 other_poc = self.pending_ops_counts[pair_key][
+        #                     other_name]
+        #                 self.pending_ops_counts[pair_key][other_name] = 0
+        #
+        #         if pair_key not in self.expected_pairs:
+        #             self.expected_pairs[pair_key] = {
+        #                 cmd_runner: ThreadPairStatus(
+        #                     pending_ops_count=name_poc),
+        #                 other_name: ThreadPairStatus(
+        #                     pending_ops_count=other_poc)}
+        #             self.add_log_msg(re.escape(
+        #                 f"{cmd_runner} created "
+        #                 "_refresh_pair_array with "
+        #                 f"pair_key = {pair_key}"))
+        #             update_pair_array_msg_needed = True
+        #
+        #             for pair_name in pair_key:
+        #                 self.add_log_msg(re.escape(
+        #                     f"{cmd_runner} added status_blocks entry "
+        #                     f"for pair_key = {pair_key}, "
+        #                     f"name = {pair_name}"))
+        #
+        #         # if pair_key already exists, we need to add name
+        #         # as a resurrected thread
+        #         else:  # we already have a pair_key, need to add name
+        #             if not self.expected_pairs[pair_key]:
+        #                 self.abort_all_f1_threads()
+        #                 raise InvalidConfigurationDetected(
+        #                     'Attempt to add thread to existing pair array '
+        #                     'that has an empty ThreadPairStatus dict')
+        #             if cmd_runner in self.expected_pairs[pair_key].keys():
+        #                 self.abort_all_f1_threads()
+        #                 raise InvalidConfigurationDetected(
+        #                     'Attempt to add thread to pair array that already '
+        #                     'has the thread in the pair array')
+        #             if cmd_runner == pair_key[0]:
+        #                 other_name = pair_key[1]
+        #             else:
+        #                 other_name = pair_key[0]
+        #             if other_name not in self.expected_pairs[pair_key].keys():
+        #                 self.abort_all_f1_threads()
+        #                 raise InvalidConfigurationDetected(
+        #                     'Attempt to add thread to pair array that did '
+        #                     'not have the other name in the pair array')
+        #             # looks OK, just add in the new name
+        #             self.expected_pairs[pair_key][
+        #                 cmd_runner] = ThreadPairStatus(
+        #                 pending_ops_count=name_poc)
+        #             self.add_log_msg(re.escape(
+        #                 f"{cmd_runner} added status_blocks entry "
+        #                 f"for pair_key = {pair_key}, "
+        #                 f"name = {cmd_runner}"))
+        #             update_pair_array_msg_needed = True
 
         ################################################################
         # add log msgs
@@ -7008,11 +7007,12 @@ class ConfigVerifier:
             if (self.expected_pairs[pair_key][
                     cmd_runner].pending_ops_count == 0
                     and sender not in self.expected_pairs[pair_key].keys()):
-                self.update_pair_array_items[cmd_runner] = UpaItem(
+                self.update_pair_array_items.append(UpaItem(
+                    upa_cmd_runner=cmd_runner,
                     upa_type=dec_ops_type,
                     upa_target=sender,
                     upa_def_del_name=cmd_runner,
-                    upa_process='')
+                    upa_process=''))
 
                 # we need to post later when we do the pair array update
                 self.recv_msg_event_items[
@@ -7763,24 +7763,30 @@ class ConfigVerifier:
         #     f'{cmd_runner} entered _refresh_pair_array'))
 
         with self.ops_lock:
-            for key, item in self.update_pair_array_items.items():
-                if item.upa_type == 'del':
-                    if key != cmd_runner:
-                        raise InvalidInputDetected(
-                            f'handle_pair_array_update {cmd_runner=} found '
-                            f'a upa_item for del for {key=} which is not '
-                            f'expected since the cmd_runner and key '
-                            f'should be one and the same')
+            while self.update_pair_array_items:
+                upa_item = self.update_pair_array_items.popleft()
+
+                if ((upa_item.upa_type == 'add' or upa_item.upa_type == 'del')
+                        and upa_item.upa_cmd_runner != cmd_runner):
+                    raise InvalidInputDetected(
+                        f'handle_pair_array_update {cmd_runner=} found '
+                        'a upa_item for add or del for '
+                        f'{upa_item.upa_cmd_runner=} which is '
+                        'not expected since the cmd_runner and key '
+                        'should be one and the same')
+
+                if upa_item.upa_type == 'add':
+                    self.update_pair_array_add(cmd_runner=cmd_runner,
+                                               upa_item=upa_item)
+                elif upa_item.upa_type == 'del':
                     self.update_pair_array_del(cmd_runner=cmd_runner,
-                                               upa_item=item)
+                                               upa_item=upa_item)
                 elif upa_item.upa_type == 'recv_msg':
                     self.update_pair_array_def_del(cmd_runner=cmd_runner,
                                                     upa_item=upa_item)
                 elif upa_item.upa_type == 'wait':
                     self.update_pair_array_def_del(cmd_runner=cmd_runner,
                                                     upa_item=upa_item)
-
-            self.update_pair_array_items = {}
 
         # del self.update_pair_array[cmd_runner]
 
@@ -8139,11 +8145,12 @@ class ConfigVerifier:
 
             # self.add_log_msg(f'{cmd_runner} entered _refresh_pair_array')
 
-            self.update_pair_array_items[cmd_runner] = UpaItem(
+            self.update_pair_array_items.append(UpaItem(
+                upa_cmd_runner=cmd_runner,
                 upa_type='del',
                 upa_target=del_name,
                 upa_def_del_name='',
-                upa_process=process)
+                upa_process=process))
 
     ####################################################################
     # handle_reg_update
@@ -9194,74 +9201,75 @@ class ConfigVerifier:
             upa_item: describes what the update is for
 
         """
-        del_name = upa_item.upa_target
-        process = upa_item.upa_process
-        pair_keys_to_delete = []
-        for pair_key in self.expected_pairs:
-            if del_name not in pair_key:
-                continue
-            if del_name == pair_key[0]:
-                other_name = pair_key[1]
-            else:
-                other_name = pair_key[0]
-
-            if del_name not in self.expected_pairs[pair_key].keys():
-                self.abort_all_f1_threads()
-                raise InvalidConfigurationDetected(
-                    f'The expected_pairs for pair_key {pair_key} '
-                    'contains an entry of '
-                    f'{self.expected_pairs[pair_key]}  which does not '
-                    f'include the {del_name=} being deleted')
-
-            if other_name not in self.expected_pairs[pair_key].keys():
-                pair_keys_to_delete.append(pair_key)
-            else:
-                if self.expected_pairs[pair_key][
-                    other_name].pending_ops_count == 0:
-                    pair_keys_to_delete.append(pair_key)
-                    self.add_log_msg(re.escape(
-                        f"{cmd_runner} removed status_blocks entry "
-                        f"for pair_key = {pair_key}, "
-                        f"name = {other_name}"))
+        if len(self.expected_registered.keys()) > 1:
+            pair_keys = combinations(
+                sorted(self.expected_registered.keys()), 2)
+            for pair_key in pair_keys:
+                if cmd_runner not in pair_key:
+                    continue
+                if cmd_runner == pair_key[0]:
+                    other_name = pair_key[1]
                 else:
-                    # remember for next update by recv_msg or wait
-                    del_def_key = (pair_key, other_name)
-                    self.del_deferred_list.append(del_def_key)
+                    other_name = pair_key[0]
+                name_poc = 0
+                other_poc = 0
+                if pair_key in self.pending_ops_counts:
+                    if cmd_runner in self.pending_ops_counts[pair_key]:
+                        name_poc = self.pending_ops_counts[
+                            pair_key][cmd_runner]
+                        self.pending_ops_counts[pair_key][cmd_runner] = 0
+                    if other_name in self.pending_ops_counts[pair_key]:
+                        other_poc = self.pending_ops_counts[pair_key][
+                            other_name]
+                        self.pending_ops_counts[pair_key][other_name] = 0
 
-                    # best we can do is delete the del_name for now
-                    del self.expected_pairs[pair_key][del_name]
+                if pair_key not in self.expected_pairs:
+                    self.expected_pairs[pair_key] = {
+                        cmd_runner: ThreadPairStatus(
+                            pending_ops_count=name_poc),
+                        other_name: ThreadPairStatus(
+                            pending_ops_count=other_poc)}
+                    self.add_log_msg(re.escape(
+                        f"{cmd_runner} created "
+                        "_refresh_pair_array with "
+                        f"pair_key = {pair_key}"))
 
-            self.add_log_msg(re.escape(
-                f"{cmd_runner} removed status_blocks entry "
-                f"for pair_key = {pair_key}, "
-                f"name = {del_name}"))
-            updated_pair_array_msg_needed = True
+                    for pair_name in pair_key:
+                        self.add_log_msg(re.escape(
+                            f"{cmd_runner} added status_blocks entry "
+                            f"for pair_key = {pair_key}, "
+                            f"name = {pair_name}"))
 
-        for pair_key in pair_keys_to_delete:
-            self.log_test_msg(f'update_pair_array_del for {cmd_runner=}, '
-                              f'{del_name=}, {process=} deleted '
-                              f'{pair_key=}')
-
-            del self.expected_pairs[pair_key]
-            self.add_log_msg(re.escape(
-                f'{cmd_runner} removed _pair_array entry'
-                f' for pair_key = {pair_key}'))
-            updated_pair_array_msg_needed = True
-
-        if updated_pair_array_msg_needed:
-            self.add_log_msg(re.escape(
-                self.last_update_pair_array_log_msg))
-
-        split_msg = self.last_clean_reg_log_msg.split()
-        if (split_msg[0] != cmd_runner
-                or split_msg[9] != f"['{del_name}']"):
-            raise FailedToFindLogMsg(f'del_thread {cmd_runner=}, '
-                                     f'{del_name} did not match '
-                                     f'{self.last_clean_reg_log_msg=} ')
-        self.add_log_msg(re.escape(self.last_clean_reg_log_msg))
-
-        self.add_log_msg(f'{cmd_runner} did successful '
-                         f'{process} of {del_name}.')
+                # if pair_key already exists, we need to add name
+                # as a resurrected thread
+                else:  # we already have a pair_key, need to add name
+                    if not self.expected_pairs[pair_key]:
+                        self.abort_all_f1_threads()
+                        raise InvalidConfigurationDetected(
+                            'Attempt to add thread to existing pair array '
+                            'that has an empty ThreadPairStatus dict')
+                    if cmd_runner in self.expected_pairs[pair_key].keys():
+                        self.abort_all_f1_threads()
+                        raise InvalidConfigurationDetected(
+                            'Attempt to add thread to pair array that already '
+                            'has the thread in the pair array')
+                    if cmd_runner == pair_key[0]:
+                        other_name = pair_key[1]
+                    else:
+                        other_name = pair_key[0]
+                    if other_name not in self.expected_pairs[pair_key].keys():
+                        self.abort_all_f1_threads()
+                        raise InvalidConfigurationDetected(
+                            'Attempt to add thread to pair array that did '
+                            'not have the other name in the pair array')
+                    # looks OK, just add in the new name
+                    self.expected_pairs[pair_key][
+                        cmd_runner] = ThreadPairStatus(
+                        pending_ops_count=name_poc)
+                    self.add_log_msg(re.escape(
+                        f"{cmd_runner} added status_blocks entry "
+                        f"for pair_key = {pair_key}, "
+                        f"name = {cmd_runner}"))
 
     ####################################################################
     # update_pair_array
