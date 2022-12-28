@@ -2706,6 +2706,7 @@ class MonitorAddItem:
 class UpaItem:
     upa_type: str
     upa_target: str
+    upa_def_del_name: str
     upa_process: str
 
 
@@ -3098,7 +3099,8 @@ class RecvMsgLogSearchItem(LogSearchItem):
 
         self.config_ver.dec_ops_count(
             cmd_runner=split_msg[0],
-            sender=split_msg[4])
+            sender=split_msg[4],
+            dec_ops_type='recv_msg')
 
 
 ########################################################################
@@ -3146,7 +3148,8 @@ class WaitResumedLogSearchItem(LogSearchItem):
 
         self.config_ver.dec_ops_count(
             cmd_runner=split_msg[0],
-            sender=split_msg[4])
+            sender=split_msg[4],
+            dec_ops_type='wait')
 
 
 ########################################################################
@@ -3246,6 +3249,104 @@ class StoppedLogSearchItem(LogSearchItem):
             log_idx=self.found_log_idx)
 
 
+########################################################################
+# RecvWaitingLogSearchItem
+########################################################################
+class RecvWaitingLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+        """
+        super().__init__(
+            search_str=('cmd_runner=[a-z]+ handle_(recv|recv_tof|recv_tot) '
+                        'waiting for monitor'),
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int) -> "RecvWaitingLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            RecvWaitingLogSearchItem containing found message and index
+        """
+        return RecvWaitingLogSearchItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+    def run_process(self):
+        split_msg = self.found_log_msg.split()
+        cmd_runner = split_msg[0].split(sep='=')[1]
+
+        self.config_ver.handle_recv_waiting_log_msg(
+            cmd_runner=cmd_runner)
+
+
+########################################################################
+# WaitWaitingLogSearchItem
+########################################################################
+class WaitWaitingLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+        """
+        super().__init__(
+            search_str=('cmd_runner=[a-z]+ handle_(wait|wait_tof) '
+                        'waiting for monitor'),
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int) -> "WaitWaitingLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            WaitWaitingLogSearchItem containing found message and index
+        """
+        return WaitWaitingLogSearchItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+    def run_process(self):
+        split_msg = self.found_log_msg.split()
+        cmd_runner = split_msg[0].split(sep='=')[1]
+
+        self.config_ver.handle_wait_waiting_log_msg(
+            cmd_runner=cmd_runner)
+
+
 LogSearchItems: TypeAlias = Union[
     EnterRpaLogSearchItem,
     UpdatePaLogSearchItem,
@@ -3256,7 +3357,9 @@ LogSearchItems: TypeAlias = Union[
     RecvMsgLogSearchItem,
     WaitResumedLogSearchItem,
     StartedLogSearchItem,
-    StoppedLogSearchItem]
+    StoppedLogSearchItem,
+    RecvWaitingLogSearchItem,
+    WaitWaitingLogSearchItem]
 
 
 class ConfigVerifier:
@@ -3350,7 +3453,9 @@ class ConfigVerifier:
             RecvMsgLogSearchItem(config_ver=self),
             WaitResumedLogSearchItem(config_ver=self),
             StartedLogSearchItem(config_ver=self),
-            StoppedLogSearchItem(config_ver=self)
+            StoppedLogSearchItem(config_ver=self),
+            RecvWaitingLogSearchItem(config_ver=self),
+            WaitWaitingLogSearchItem(config_ver=self)
         )
         self.last_update_pair_array_log_msg: str = ''
         self.add_thread_cmd_runner_for_upa_msg: str = ''
@@ -6865,7 +6970,8 @@ class ConfigVerifier:
     ####################################################################
     def dec_ops_count(self,
                       cmd_runner: str,
-                      sender: str) -> None:
+                      sender: str,
+                      dec_ops_type: str) -> None:
         """Decrement the pending operations count.
 
         Args:
@@ -6873,6 +6979,7 @@ class ConfigVerifier:
                 decremented
             sender: the name of the threads that is paired with the
                 cmd_runner
+            dec_ops_type: recv_msg or wait
 
         """
         pair_key = st.SmartThread._get_pair_key(cmd_runner, sender)
@@ -6901,6 +7008,12 @@ class ConfigVerifier:
             if (self.expected_pairs[pair_key][
                     cmd_runner].pending_ops_count == 0
                     and sender not in self.expected_pairs[pair_key].keys()):
+                self.update_pair_array_items[cmd_runner] = UpaItem(
+                    upa_type=dec_ops_type,
+                    upa_target=sender,
+                    upa_def_del_name=cmd_runner,
+                    upa_process='')
+
                 # we need to post later when we do the pair array update
                 self.recv_msg_event_items[
                     cmd_runner].deferred_post_needed = True
@@ -6971,77 +7084,77 @@ class ConfigVerifier:
         #     upa_target=del_name,
         #     upa_process=process)
 
-        pair_keys_to_delete = []
-        with self.ops_lock:
-            for pair_key in self.expected_pairs:
-                if del_name not in pair_key:
-                    continue
-                if del_name == pair_key[0]:
-                    other_name = pair_key[1]
-                else:
-                    other_name = pair_key[0]
-
-                if del_name not in self.expected_pairs[pair_key].keys():
-                    self.abort_all_f1_threads()
-                    raise InvalidConfigurationDetected(
-                        f'The expected_pairs for pair_key {pair_key} '
-                        'contains an entry of '
-                        f'{self.expected_pairs[pair_key]}  which does not '
-                        f'include the {del_name=} being deleted')
-
-                if other_name not in self.expected_pairs[pair_key].keys():
-                    pair_keys_to_delete.append(pair_key)
-                else:
-                    nondef_log_msg = (
-                        f"{cmd_runner} removed status_blocks entry "
-                        f"for pair_key = {pair_key}, "
-                        f"name = {other_name}")
-
-                    if self.expected_pairs[pair_key][
-                            other_name].pending_ops_count == 0:
-                        pair_keys_to_delete.append(pair_key)
-                        self.add_log_msg(re.escape(nondef_log_msg))
-                    else:
-                        del_def_key = (pair_key, other_name)
-                        self.del_deferred_list.append(del_def_key)
-
-                        # best we can do is delete the del_name for now
-                        del self.expected_pairs[pair_key][del_name]
-
-                self.add_log_msg(re.escape(
-                    f"{cmd_runner} removed status_blocks entry "
-                    f"for pair_key = {pair_key}, "
-                    f"name = {del_name}"))
-                updated_pair_array_msg_needed = True
-
-            for pair_key in pair_keys_to_delete:
-                self.log_test_msg(f'del_thread for {cmd_runner=}, '
-                                  f'{del_name=}, {process=} deleted '
-                                  f'{pair_key=}')
-                del self.expected_pairs[pair_key]
-                self.add_log_msg(re.escape(
-                    f'{cmd_runner} removed _pair_array entry'
-                    f' for pair_key = {pair_key}'))
-                updated_pair_array_msg_needed = True
-
-            # handle any deferred deletes
-            if self.handle_deferred_deletes(cmd_runner=cmd_runner):
-                updated_pair_array_msg_needed = True
-
-            if updated_pair_array_msg_needed:
-                self.add_log_msg(re.escape(
-                    self.last_update_pair_array_log_msg))
-
-            split_msg = self.last_clean_reg_log_msg.split()
-            if (split_msg[0] != cmd_runner
-                    or split_msg[9] != f"['{del_name}']"):
-                raise FailedToFindLogMsg(f'del_thread {cmd_runner=}, '
-                                         f'{del_name} did not match '
-                                         f'{self.last_clean_reg_log_msg=} ')
-            self.add_log_msg(re.escape(self.last_clean_reg_log_msg))
-
-            self.add_log_msg(f'{cmd_runner} did successful '
-                             f'{process} of {del_name}.')
+        # pair_keys_to_delete = []
+        # with self.ops_lock:
+        #     for pair_key in self.expected_pairs:
+        #         if del_name not in pair_key:
+        #             continue
+        #         if del_name == pair_key[0]:
+        #             other_name = pair_key[1]
+        #         else:
+        #             other_name = pair_key[0]
+        #
+        #         if del_name not in self.expected_pairs[pair_key].keys():
+        #             self.abort_all_f1_threads()
+        #             raise InvalidConfigurationDetected(
+        #                 f'The expected_pairs for pair_key {pair_key} '
+        #                 'contains an entry of '
+        #                 f'{self.expected_pairs[pair_key]}  which does not '
+        #                 f'include the {del_name=} being deleted')
+        #
+        #         if other_name not in self.expected_pairs[pair_key].keys():
+        #             pair_keys_to_delete.append(pair_key)
+        #         else:
+        #             nondef_log_msg = (
+        #                 f"{cmd_runner} removed status_blocks entry "
+        #                 f"for pair_key = {pair_key}, "
+        #                 f"name = {other_name}")
+        #
+        #             if self.expected_pairs[pair_key][
+        #                     other_name].pending_ops_count == 0:
+        #                 pair_keys_to_delete.append(pair_key)
+        #                 self.add_log_msg(re.escape(nondef_log_msg))
+        #             else:
+        #                 del_def_key = (pair_key, other_name)
+        #                 self.del_deferred_list.append(del_def_key)
+        #
+        #                 # best we can do is delete the del_name for now
+        #                 del self.expected_pairs[pair_key][del_name]
+        #
+        #         self.add_log_msg(re.escape(
+        #             f"{cmd_runner} removed status_blocks entry "
+        #             f"for pair_key = {pair_key}, "
+        #             f"name = {del_name}"))
+        #         updated_pair_array_msg_needed = True
+        #
+        #     for pair_key in pair_keys_to_delete:
+        #         self.log_test_msg(f'del_thread for {cmd_runner=}, '
+        #                           f'{del_name=}, {process=} deleted '
+        #                           f'{pair_key=}')
+        #         del self.expected_pairs[pair_key]
+        #         self.add_log_msg(re.escape(
+        #             f'{cmd_runner} removed _pair_array entry'
+        #             f' for pair_key = {pair_key}'))
+        #         updated_pair_array_msg_needed = True
+        #
+        #     # handle any deferred deletes
+        #     if self.handle_deferred_deletes(cmd_runner=cmd_runner):
+        #         updated_pair_array_msg_needed = True
+        #
+        #     if updated_pair_array_msg_needed:
+        #         self.add_log_msg(re.escape(
+        #             self.last_update_pair_array_log_msg))
+        #
+        #     split_msg = self.last_clean_reg_log_msg.split()
+        #     if (split_msg[0] != cmd_runner
+        #             or split_msg[9] != f"['{del_name}']"):
+        #         raise FailedToFindLogMsg(f'del_thread {cmd_runner=}, '
+        #                                  f'{del_name} did not match '
+        #                                  f'{self.last_clean_reg_log_msg=} ')
+        #     self.add_log_msg(re.escape(self.last_clean_reg_log_msg))
+        #
+        #     self.add_log_msg(f'{cmd_runner} did successful '
+        #                      f'{process} of {del_name}.')
 
         self.log_test_msg(f'del_thread exit: {cmd_runner=}, '
                           f'{del_name=}, {process=}')
@@ -7597,11 +7710,11 @@ class ConfigVerifier:
             found_log_msg_idx: index of the join unreg message in the
                 log
         """
-        self.del_thread(
-            cmd_runner=cmd_runner,
-            del_name=target_name,
-            process=process,
-            del_msg_idx=found_log_msg_idx)
+        # self.del_thread(
+        #     cmd_runner=cmd_runner,
+        #     del_name=target_name,
+        #     process=process,
+        #     del_msg_idx=found_log_msg_idx)
 
         if process == 'join':
             self.join_event_items[cmd_runner].targets.remove(target_name)
@@ -7649,11 +7762,30 @@ class ConfigVerifier:
         # self.add_log_msg(re.escape(
         #     f'{cmd_runner} entered _refresh_pair_array'))
 
-        upa_item = self.update_pair_array_items[cmd_runner]
-        self.update_pair_array(cmd_runner=cmd_runner,
-                               upa_msg=upa_msg,
-                               upa_item=upa_item)
+        with self.ops_lock:
+            for key, item in self.update_pair_array_items.items():
+                if item.upa_type == 'del':
+                    if key != cmd_runner:
+                        raise InvalidInputDetected(
+                            f'handle_pair_array_update {cmd_runner=} found '
+                            f'a upa_item for del for {key=} which is not '
+                            f'expected since the cmd_runner and key '
+                            f'should be one and the same')
+                    self.update_pair_array_del(cmd_runner=cmd_runner,
+                                               upa_item=item)
+                elif upa_item.upa_type == 'recv_msg':
+                    self.update_pair_array_def_del(cmd_runner=cmd_runner,
+                                                    upa_item=upa_item)
+                elif upa_item.upa_type == 'wait':
+                    self.update_pair_array_def_del(cmd_runner=cmd_runner,
+                                                    upa_item=upa_item)
+
+            self.update_pair_array_items = {}
+
         # del self.update_pair_array[cmd_runner]
+
+        # handle any deferred deletes
+        self.handle_deferred_deletes(cmd_runner=cmd_runner):
 
         # we need to resume the waiting threads
         for name, item in self.recv_msg_event_items.items():
@@ -7739,11 +7871,11 @@ class ConfigVerifier:
                 log_msg=recv_log_msg)
         self.monitor_event.set()
 
-        wait_log_msg = f'{cmd_runner=} handle_recv waiting for monitor'
-        self.log_ver.add_msg(log_msg=re.escape(wait_log_msg))
-        logger.debug(wait_log_msg)
+        self.log_test_msg(f'{cmd_runner=} handle_recv waiting for monitor')
 
         self.recv_msg_event_items[cmd_runner].client_event.wait()
+        with self.ops_lock:
+            del self.recv_msg_event_items[cmd_runner]
 
         mean_elapsed_time = elapsed_time / len(senders)
         self.log_test_msg(f'handle_recv exiting {cmd_runner=}, '
@@ -7822,11 +7954,12 @@ class ConfigVerifier:
 
         self.monitor_event.set()
 
-        wait_log_msg = f'{cmd_runner=} handle_recv_tof waiting for monitor'
-        self.log_ver.add_msg(log_msg=re.escape(wait_log_msg))
-        logger.debug(wait_log_msg)
+        self.log_test_msg(f'{cmd_runner=} handle_recv_tof waiting for monitor')
 
         self.recv_msg_event_items[cmd_runner].client_event.wait()
+        with self.ops_lock:
+            del self.recv_msg_event_items[cmd_runner]
+
         mean_elapsed_time = elapsed_time / len(senders)
         self.log_test_msg(f'handle_recv_tof exit: {cmd_runner=}, '
                           f'{elapsed_time=}, {len(senders)=}, '
@@ -7934,13 +8067,29 @@ class ConfigVerifier:
         self.monitor_event.set()
 
         if non_timeout_senders:
-            wait_log_msg = f'{cmd_runner=} handle_recv_tot waiting for monitor'
-            self.log_ver.add_msg(log_msg=re.escape(wait_log_msg))
-            logger.debug(wait_log_msg)
+            self.log_test_msg(
+                f'{cmd_runner=} handle_recv_tot waiting for monitor')
 
             self.recv_msg_event_items[cmd_runner].client_event.wait()
+            with self.ops_lock:
+                del self.recv_msg_event_items[cmd_runner]
 
         self.log_test_msg(f'handle_recv_tof exit: {cmd_runner=}')
+
+    ####################################################################
+    # handle_recv_waiting_log_msg
+    ####################################################################
+    def handle_recv_waiting_log_msg(self,
+                                    cmd_runner: str) -> None:
+
+        """Handle the send_cmd execution and log msgs.
+
+        Args:
+            cmd_runner: name of thread doing the cmd
+
+        """
+        self.recv_msg_event_items[cmd_runner].client_event.set()
+
 
     ####################################################################
     # handle_reg_remove
@@ -7968,7 +8117,6 @@ class ConfigVerifier:
             self.pending_recv_msg_par = defaultdict(bool)
 
         with self.ops_lock:
-            updated_pair_array_msg_needed = False
             if process == 'join':
                 from_status = st.ThreadStatus.Alive
             else:
@@ -7994,6 +8142,7 @@ class ConfigVerifier:
             self.update_pair_array_items[cmd_runner] = UpaItem(
                 upa_type='del',
                 upa_target=del_name,
+                upa_def_del_name='',
                 upa_process=process)
 
     ####################################################################
@@ -8479,6 +8628,8 @@ class ConfigVerifier:
                 f'{cmd_runner=} handle_wait waiting for monitor')
 
             self.recv_msg_event_items[cmd_runner].client_event.wait()
+            with self.ops_lock:
+                del self.recv_msg_event_items[cmd_runner]
 
         self.log_test_msg(f'{cmd_runner=} handle_wait exit for '
                           f'{resumers=}, {raise_not_alive=}')
@@ -8553,6 +8704,8 @@ class ConfigVerifier:
                 f'{cmd_runner=} handle_wait_tof waiting for monitor')
 
             self.recv_msg_event_items[cmd_runner].client_event.wait()
+            with self.ops_lock:
+                del self.recv_msg_event_items[cmd_runner]
 
         self.log_test_msg(f'{cmd_runner=} handle_wait_tof exit for '
                           f'{resumers=}, {raise_not_alive=}, {timeout=}')
@@ -8619,6 +8772,20 @@ class ConfigVerifier:
 
         self.log_test_msg(f'{cmd_runner=} handle_wait_tot exit for '
                           f'{resumers=}, {raise_not_alive=}, {timeout=}')
+
+    ####################################################################
+    # handle_wait_waiting_log_msg
+    ####################################################################
+    def handle_wait_waiting_log_msg(self,
+                                    cmd_runner: str) -> None:
+
+        """Handle the send_cmd execution and log msgs.
+
+        Args:
+            cmd_runner: name of thread doing the cmd
+
+        """
+        self.recv_msg_event_items[cmd_runner].client_event.set()
 
     ####################################################################
     # inc_ops_count
@@ -8879,147 +9046,146 @@ class ConfigVerifier:
         self.log_ver.add_msg(log_msg=re.escape(log_msg))
         logger.debug(log_msg)
 
+    # ####################################################################
+    # # update_pair_array
+    # ####################################################################
+    # def update_pair_array(self,
+    #                       cmd_runner: str,
+    #                       upa_item: UpaItem) -> None:
+    #     """Unregister the named threads.
+    #
+    #     Args:
+    #         cmd_runner: name of thread doing the update
+    #         upa_item: describes what the update is for
+    #
+    #     """
+    #     del_name = upa_item.upa_target
+    #     process = upa_item.upa_process
+    #     pair_keys_to_delete = []
+    #     with self.ops_lock:
+    #         for pair_key in self.expected_pairs:
+    #             if del_name not in pair_key:
+    #                 continue
+    #             if del_name == pair_key[0]:
+    #                 other_name = pair_key[1]
+    #             else:
+    #                 other_name = pair_key[0]
+    #
+    #             if del_name not in self.expected_pairs[pair_key].keys():
+    #                 self.abort_all_f1_threads()
+    #                 raise InvalidConfigurationDetected(
+    #                     f'The expected_pairs for pair_key {pair_key} '
+    #                     'contains an entry of '
+    #                     f'{self.expected_pairs[pair_key]}  which does not '
+    #                     f'include the {del_name=} being deleted')
+    #
+    #             if other_name not in self.expected_pairs[pair_key].keys():
+    #                 pair_keys_to_delete.append(pair_key)
+    #             else:
+    #                 nondef_log_msg = (
+    #                     f"{cmd_runner} removed status_blocks entry "
+    #                     f"for pair_key = {pair_key}, "
+    #                     f"name = {other_name}")
+    #
+    #                 if self.expected_pairs[pair_key][
+    #                         other_name].pending_ops_count == 0:
+    #                     pair_keys_to_delete.append(pair_key)
+    #                     self.add_log_msg(re.escape(nondef_log_msg))
+    #                 else:
+    #                     del_def_key = (pair_key, other_name)
+    #                     self.del_deferred_list.append(del_def_key)
+    #
+    #                     # best we can do is delete the del_name for now
+    #                     del self.expected_pairs[pair_key][del_name]
+    #
+    #             self.add_log_msg(re.escape(
+    #                 f"{cmd_runner} removed status_blocks entry "
+    #                 f"for pair_key = {pair_key}, "
+    #                 f"name = {del_name}"))
+    #             updated_pair_array_msg_needed = True
+    #
+    #         for pair_key in pair_keys_to_delete:
+    #             log_msg = (f'del_thread for {cmd_runner=}, '
+    #                        f'{del_name=}, {process=} deleted '
+    #                        f'{pair_key=}')
+    #             self.log_ver.add_msg(log_msg=re.escape(log_msg))
+    #             logger.debug(log_msg)
+    #             del self.expected_pairs[pair_key]
+    #             self.add_log_msg(re.escape(
+    #                 f'{cmd_runner} removed _pair_array entry'
+    #                 f' for pair_key = {pair_key}'))
+    #             updated_pair_array_msg_needed = True
+    #
+    #         # handle any deferred deletes
+    #         if self.handle_deferred_deletes(cmd_runner=cmd_runner):
+    #             updated_pair_array_msg_needed = True
+    #
+    #         if updated_pair_array_msg_needed:
+    #             self.add_log_msg(re.escape(
+    #                 self.last_update_pair_array_log_msg))
+    #
+    #         split_msg = self.last_clean_reg_log_msg.split()
+    #         if (split_msg[0] != cmd_runner
+    #                 or split_msg[9] != f"['{del_name}']"):
+    #             raise FailedToFindLogMsg(f'del_thread {cmd_runner=}, '
+    #                                      f'{del_name} did not match '
+    #                                      f'{self.last_clean_reg_log_msg=} ')
+    #         self.add_log_msg(re.escape(self.last_clean_reg_log_msg))
+    #
+    #         self.add_log_msg(f'{cmd_runner} did successful '
+    #                          f'{process} of {del_name}.')
+    #
+    #
+    #
+    #     updated_pair_array_msg_needed = False
+    #     pair_keys_to_delete = []
+    #     with self.ops_lock:
+    #         for pair_key in self.expected_pairs:
+    #             if (pair_key[0] not in self.expected_registered
+    #                     and pair_key[0] in self.expected_pairs[pair_key]):
+    #                 del self.expected_pairs[pair_key][pair_key[0]]
+    #                 updated_pair_array_msg_needed = True
+    #                 self.add_log_msg(re.escape(
+    #                     f"{cmd_runner} removed status_blocks entry "
+    #                     f"for pair_key = {pair_key}, "
+    #                     f"name = {pair_key[0]}"))
+    #             if (pair_key[1] not in self.expected_registered
+    #                     and pair_key[1] in self.expected_pairs[pair_key]):
+    #                 del self.expected_pairs[pair_key][pair_key[1]]
+    #                 updated_pair_array_msg_needed = True
+    #                 self.add_log_msg(re.escape(
+    #                     f"{cmd_runner} removed status_blocks entry "
+    #                     f"for pair_key = {pair_key}, "
+    #                     f"name = {pair_key[1]}"))
+    #             if len(self.expected_pairs[pair_key]) == 1:
+    #                 remaining_name = list(
+    #                     self.expected_pairs[pair_key].keys())[0]
+    #                 if self.expected_pairs[pair_key][
+    #                         remaining_name].pending_ops_count == 0:
+    #                     del self.expected_pairs[pair_key][remaining_name]
+    #                     updated_pair_array_msg_needed = True
+    #                     self.add_log_msg(re.escape(
+    #                         f"{cmd_runner} removed status_blocks entry "
+    #                         f"for pair_key = {pair_key}, "
+    #                         f"name = {remaining_name}"))
+    #             if not self.expected_pairs[pair_key]:
+    #                 pair_keys_to_delete.append(pair_key)
+    #
+    #         for pair_key in pair_keys_to_delete:
+    #             del self.expected_pairs[pair_key]
+    #             self.add_log_msg(re.escape(
+    #                 f'{cmd_runner} removed _pair_array entry'
+    #                 f' for pair_key = {pair_key}'))
+    #             updated_pair_array_msg_needed = True
+    #     # if updated_pair_array_msg_needed:
+    #     #     self.add_log_msg(re.escape(upa_msg))
+
     ####################################################################
     # update_pair_array
     ####################################################################
-    def update_pair_array(self,
-                          cmd_runner: str,
-                          upa_msg: str,
-                          upa_item: UpaItem) -> None:
-        """Unregister the named threads.
-
-        Args:
-            cmd_runner: name of thread doing the update
-            upa_msg: message that got us here
-            upa_item: describes what the update is for
-
-        """
-        pair_keys_to_delete = []
-        with self.ops_lock:
-            for pair_key in self.expected_pairs:
-                if del_name not in pair_key:
-                    continue
-                if del_name == pair_key[0]:
-                    other_name = pair_key[1]
-                else:
-                    other_name = pair_key[0]
-
-                if del_name not in self.expected_pairs[pair_key].keys():
-                    self.abort_all_f1_threads()
-                    raise InvalidConfigurationDetected(
-                        f'The expected_pairs for pair_key {pair_key} '
-                        'contains an entry of '
-                        f'{self.expected_pairs[pair_key]}  which does not '
-                        f'include the {del_name=} being deleted')
-
-                if other_name not in self.expected_pairs[pair_key].keys():
-                    pair_keys_to_delete.append(pair_key)
-                else:
-                    nondef_log_msg = (
-                        f"{cmd_runner} removed status_blocks entry "
-                        f"for pair_key = {pair_key}, "
-                        f"name = {other_name}")
-
-                    if self.expected_pairs[pair_key][
-                            other_name].pending_ops_count == 0:
-                        pair_keys_to_delete.append(pair_key)
-                        self.add_log_msg(re.escape(nondef_log_msg))
-                    else:
-                        del_def_key = (pair_key, other_name)
-                        self.del_deferred_list.append(del_def_key)
-
-                        # best we can do is delete the del_name for now
-                        del self.expected_pairs[pair_key][del_name]
-
-                self.add_log_msg(re.escape(
-                    f"{cmd_runner} removed status_blocks entry "
-                    f"for pair_key = {pair_key}, "
-                    f"name = {del_name}"))
-                updated_pair_array_msg_needed = True
-
-            for pair_key in pair_keys_to_delete:
-                log_msg = (f'del_thread for {cmd_runner=}, '
-                           f'{del_name=}, {process=} deleted '
-                           f'{pair_key=}')
-                self.log_ver.add_msg(log_msg=re.escape(log_msg))
-                logger.debug(log_msg)
-                del self.expected_pairs[pair_key]
-                self.add_log_msg(re.escape(
-                    f'{cmd_runner} removed _pair_array entry'
-                    f' for pair_key = {pair_key}'))
-                updated_pair_array_msg_needed = True
-
-            # handle any deferred deletes
-            if self.handle_deferred_deletes(cmd_runner=cmd_runner):
-                updated_pair_array_msg_needed = True
-
-            if updated_pair_array_msg_needed:
-                self.add_log_msg(re.escape(
-                    self.last_update_pair_array_log_msg))
-
-            split_msg = self.last_clean_reg_log_msg.split()
-            if (split_msg[0] != cmd_runner
-                    or split_msg[9] != f"['{del_name}']"):
-                raise FailedToFindLogMsg(f'del_thread {cmd_runner=}, '
-                                         f'{del_name} did not match '
-                                         f'{self.last_clean_reg_log_msg=} ')
-            self.add_log_msg(re.escape(self.last_clean_reg_log_msg))
-
-            self.add_log_msg(f'{cmd_runner} did successful '
-                             f'{process} of {del_name}.')
-
-
-
-        updated_pair_array_msg_needed = False
-        pair_keys_to_delete = []
-        with self.ops_lock:
-            for pair_key in self.expected_pairs:
-                if (pair_key[0] not in self.expected_registered
-                        and pair_key[0] in self.expected_pairs[pair_key]):
-                    del self.expected_pairs[pair_key][pair_key[0]]
-                    updated_pair_array_msg_needed = True
-                    self.add_log_msg(re.escape(
-                        f"{cmd_runner} removed status_blocks entry "
-                        f"for pair_key = {pair_key}, "
-                        f"name = {pair_key[0]}"))
-                if (pair_key[1] not in self.expected_registered
-                        and pair_key[1] in self.expected_pairs[pair_key]):
-                    del self.expected_pairs[pair_key][pair_key[1]]
-                    updated_pair_array_msg_needed = True
-                    self.add_log_msg(re.escape(
-                        f"{cmd_runner} removed status_blocks entry "
-                        f"for pair_key = {pair_key}, "
-                        f"name = {pair_key[1]}"))
-                if len(self.expected_pairs[pair_key]) == 1:
-                    remaining_name = list(
-                        self.expected_pairs[pair_key].keys())[0]
-                    if self.expected_pairs[pair_key][
-                            remaining_name].pending_ops_count == 0:
-                        del self.expected_pairs[pair_key][remaining_name]
-                        updated_pair_array_msg_needed = True
-                        self.add_log_msg(re.escape(
-                            f"{cmd_runner} removed status_blocks entry "
-                            f"for pair_key = {pair_key}, "
-                            f"name = {remaining_name}"))
-                if not self.expected_pairs[pair_key]:
-                    pair_keys_to_delete.append(pair_key)
-
-            for pair_key in pair_keys_to_delete:
-                del self.expected_pairs[pair_key]
-                self.add_log_msg(re.escape(
-                    f'{cmd_runner} removed _pair_array entry'
-                    f' for pair_key = {pair_key}'))
-                updated_pair_array_msg_needed = True
-        # if updated_pair_array_msg_needed:
-        #     self.add_log_msg(re.escape(upa_msg))
-
-    ####################################################################
-    # update_pair_array
-    ####################################################################
-    def update_pair_array_del(self,
-                              cmd_runner: str,
-                              upa_msg: str,
-                              upa_item: UpaItem) -> None:
+    def update_pair_array_add(self,
+                             cmd_runner: str,
+                             upa_item: UpaItem) -> None:
         """Unregister the named threads.
 
         Args:
@@ -9031,66 +9197,140 @@ class ConfigVerifier:
         del_name = upa_item.upa_target
         process = upa_item.upa_process
         pair_keys_to_delete = []
-        with self.ops_lock:
-            for pair_key in self.expected_pairs:
-                if del_name not in pair_key:
-                    continue
-                if del_name == pair_key[0]:
-                    other_name = pair_key[1]
-                else:
-                    other_name = pair_key[0]
+        for pair_key in self.expected_pairs:
+            if del_name not in pair_key:
+                continue
+            if del_name == pair_key[0]:
+                other_name = pair_key[1]
+            else:
+                other_name = pair_key[0]
 
-                if del_name not in self.expected_pairs[pair_key].keys():
-                    self.abort_all_f1_threads()
-                    raise InvalidConfigurationDetected(
-                        f'The expected_pairs for pair_key {pair_key} '
-                        'contains an entry of '
-                        f'{self.expected_pairs[pair_key]}  which does not '
-                        f'include the {del_name=} being deleted')
+            if del_name not in self.expected_pairs[pair_key].keys():
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'The expected_pairs for pair_key {pair_key} '
+                    'contains an entry of '
+                    f'{self.expected_pairs[pair_key]}  which does not '
+                    f'include the {del_name=} being deleted')
 
-                if other_name not in self.expected_pairs[pair_key].keys():
+            if other_name not in self.expected_pairs[pair_key].keys():
+                pair_keys_to_delete.append(pair_key)
+            else:
+                if self.expected_pairs[pair_key][
+                    other_name].pending_ops_count == 0:
                     pair_keys_to_delete.append(pair_key)
-                else:
-                    nondef_log_msg = (
+                    self.add_log_msg(re.escape(
                         f"{cmd_runner} removed status_blocks entry "
                         f"for pair_key = {pair_key}, "
-                        f"name = {other_name}")
+                        f"name = {other_name}"))
+                else:
+                    # remember for next update by recv_msg or wait
+                    del_def_key = (pair_key, other_name)
+                    self.del_deferred_list.append(del_def_key)
 
-                    if self.expected_pairs[pair_key][
-                            other_name].pending_ops_count == 0:
-                        pair_keys_to_delete.append(pair_key)
-                        self.add_log_msg(re.escape(nondef_log_msg))
-                    else:
-                        del_def_key = (pair_key, other_name)
-                        self.del_deferred_list.append(del_def_key)
+                    # best we can do is delete the del_name for now
+                    del self.expected_pairs[pair_key][del_name]
 
-                        # best we can do is delete the del_name for now
-                        del self.expected_pairs[pair_key][del_name]
+            self.add_log_msg(re.escape(
+                f"{cmd_runner} removed status_blocks entry "
+                f"for pair_key = {pair_key}, "
+                f"name = {del_name}"))
+            updated_pair_array_msg_needed = True
 
-                self.add_log_msg(re.escape(
-                    f"{cmd_runner} removed status_blocks entry "
-                    f"for pair_key = {pair_key}, "
-                    f"name = {del_name}"))
-                updated_pair_array_msg_needed = True
+        for pair_key in pair_keys_to_delete:
+            self.log_test_msg(f'update_pair_array_del for {cmd_runner=}, '
+                              f'{del_name=}, {process=} deleted '
+                              f'{pair_key=}')
 
-            for pair_key in pair_keys_to_delete:
-                self.log_test_msg(f'update_pair_array_del for {cmd_runner=}, '
-                                  f'{del_name=}, {process=} deleted '
-                                  f'{pair_key=}')
+            del self.expected_pairs[pair_key]
+            self.add_log_msg(re.escape(
+                f'{cmd_runner} removed _pair_array entry'
+                f' for pair_key = {pair_key}'))
+            updated_pair_array_msg_needed = True
 
-                del self.expected_pairs[pair_key]
-                self.add_log_msg(re.escape(
-                    f'{cmd_runner} removed _pair_array entry'
-                    f' for pair_key = {pair_key}'))
-                updated_pair_array_msg_needed = True
+        if updated_pair_array_msg_needed:
+            self.add_log_msg(re.escape(
+                self.last_update_pair_array_log_msg))
 
-            # handle any deferred deletes
-            if self.handle_deferred_deletes(cmd_runner=cmd_runner):
-                updated_pair_array_msg_needed = True
+        split_msg = self.last_clean_reg_log_msg.split()
+        if (split_msg[0] != cmd_runner
+                or split_msg[9] != f"['{del_name}']"):
+            raise FailedToFindLogMsg(f'del_thread {cmd_runner=}, '
+                                     f'{del_name} did not match '
+                                     f'{self.last_clean_reg_log_msg=} ')
+        self.add_log_msg(re.escape(self.last_clean_reg_log_msg))
 
-            if updated_pair_array_msg_needed:
-                self.add_log_msg(re.escape(
-                    self.last_update_pair_array_log_msg))
+        self.add_log_msg(f'{cmd_runner} did successful '
+                         f'{process} of {del_name}.')
+
+    ####################################################################
+    # update_pair_array
+    ####################################################################
+    def update_pair_array_del(self,
+                              cmd_runner: str,
+                              upa_item: UpaItem) -> None:
+        """Unregister the named threads.
+
+        Args:
+            cmd_runner: name of thread doing the update
+            upa_item: describes what the update is for
+
+        """
+        del_name = upa_item.upa_target
+        process = upa_item.upa_process
+        pair_keys_to_delete = []
+        for pair_key in self.expected_pairs:
+            if del_name not in pair_key:
+                continue
+            if del_name == pair_key[0]:
+                other_name = pair_key[1]
+            else:
+                other_name = pair_key[0]
+
+            if del_name not in self.expected_pairs[pair_key].keys():
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'The expected_pairs for pair_key {pair_key} '
+                    'contains an entry of '
+                    f'{self.expected_pairs[pair_key]}  which does not '
+                    f'include the {del_name=} being deleted')
+
+            if other_name not in self.expected_pairs[pair_key].keys():
+                pair_keys_to_delete.append(pair_key)
+            else:
+                if self.expected_pairs[pair_key][
+                        other_name].pending_ops_count == 0:
+                    pair_keys_to_delete.append(pair_key)
+                    self.add_log_msg(re.escape(
+                        f"{cmd_runner} removed status_blocks entry "
+                        f"for pair_key = {pair_key}, "
+                        f"name = {other_name}"))
+                else:
+                    # remember for next update by recv_msg or wait
+                    del_def_key = (pair_key, other_name)
+                    self.del_deferred_list.append(del_def_key)
+
+                    # best we can do is delete the del_name for now
+                    del self.expected_pairs[pair_key][del_name]
+
+            self.add_log_msg(re.escape(
+                f"{cmd_runner} removed status_blocks entry "
+                f"for pair_key = {pair_key}, "
+                f"name = {del_name}"))
+
+        for pair_key in pair_keys_to_delete:
+            self.log_test_msg(f'update_pair_array_del for {cmd_runner=}, '
+                              f'{del_name=}, {process=} deleted '
+                              f'{pair_key=}')
+
+            del self.expected_pairs[pair_key]
+            self.add_log_msg(re.escape(
+                f'{cmd_runner} removed _pair_array entry'
+                f' for pair_key = {pair_key}'))
+
+            # if updated_pair_array_msg_needed:
+            #     self.add_log_msg(re.escape(
+            #         self.last_update_pair_array_log_msg))
 
             split_msg = self.last_clean_reg_log_msg.split()
             if (split_msg[0] != cmd_runner
@@ -9103,50 +9343,46 @@ class ConfigVerifier:
             self.add_log_msg(f'{cmd_runner} did successful '
                              f'{process} of {del_name}.')
 
+    ####################################################################
+    # update_pair_array
+    ####################################################################
+    def update_pair_array_def_del(self,
+                                  cmd_runner: str,
+                                  upa_item: UpaItem) -> None:
+        """Unregister the named threads.
 
+        Args:
+            cmd_runner: name of thread doing the update
+            upa_item: describes what the update is for
 
-        updated_pair_array_msg_needed = False
-        pair_keys_to_delete = []
-        with self.ops_lock:
-            for pair_key in self.expected_pairs:
-                if (pair_key[0] not in self.expected_registered
-                        and pair_key[0] in self.expected_pairs[pair_key]):
-                    del self.expected_pairs[pair_key][pair_key[0]]
-                    updated_pair_array_msg_needed = True
-                    self.add_log_msg(re.escape(
-                        f"{cmd_runner} removed status_blocks entry "
-                        f"for pair_key = {pair_key}, "
-                        f"name = {pair_key[0]}"))
-                if (pair_key[1] not in self.expected_registered
-                        and pair_key[1] in self.expected_pairs[pair_key]):
-                    del self.expected_pairs[pair_key][pair_key[1]]
-                    updated_pair_array_msg_needed = True
-                    self.add_log_msg(re.escape(
-                        f"{cmd_runner} removed status_blocks entry "
-                        f"for pair_key = {pair_key}, "
-                        f"name = {pair_key[1]}"))
-                if len(self.expected_pairs[pair_key]) == 1:
-                    remaining_name = list(
-                        self.expected_pairs[pair_key].keys())[0]
-                    if self.expected_pairs[pair_key][
-                            remaining_name].pending_ops_count == 0:
-                        del self.expected_pairs[pair_key][remaining_name]
-                        updated_pair_array_msg_needed = True
-                        self.add_log_msg(re.escape(
-                            f"{cmd_runner} removed status_blocks entry "
-                            f"for pair_key = {pair_key}, "
-                            f"name = {remaining_name}"))
-                if not self.expected_pairs[pair_key]:
-                    pair_keys_to_delete.append(pair_key)
+        """
+        def_del_name = upa_item.upa_def_del_name
+        target_name = upa_item.upa_target
 
-            for pair_key in pair_keys_to_delete:
-                del self.expected_pairs[pair_key]
-                self.add_log_msg(re.escape(
-                    f'{cmd_runner} removed _pair_array entry'
-                    f' for pair_key = {pair_key}'))
-                updated_pair_array_msg_needed = True
-        # if updated_pair_array_msg_needed:
-        #     self.add_log_msg(re.escape(upa_msg))
+        # It is possible that the target_name could have been resurrected if
+        # an add was done between the time that recv_msg issued the
+        # recvd msg log msg its entry to refresh_pair_array. In this
+        # case, the updated pair array log message must be for some
+        # other update the recv_msg found, such as another deferred
+        # delete that was also done between the above mentioned events
+
+        pair_key = st.SmartThread._get_pair_key(def_del_name, target_name)
+
+        if (target_name not in self.expected_registered
+                and pair_key in self.expected_pairs
+                and target_name not in self.expected_pairs[pair_key].keys()
+                and self.expected_pairs[pair_key][
+                    def_del_name].pending_ops_count == 0):
+            del self.expected_pairs[pair_key]
+
+            self.add_log_msg(re.escape(
+                f"{cmd_runner} removed status_blocks entry "
+                f"for pair_key = {pair_key}, "
+                f"name = {def_del_name}"))
+
+            self.add_log_msg(re.escape(
+                f'{cmd_runner} removed _pair_array entry'
+                f' for pair_key = {pair_key}'))
 
     ####################################################################
     # validate_config
