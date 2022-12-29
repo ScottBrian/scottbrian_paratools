@@ -440,6 +440,7 @@ class CreateCommanderAutoStart(ConfigCmd):
            cmd_runner: name of thread running the command
         """
         self.config_ver.create_commander_thread(
+            cmd_runner=cmd_runner,
             name=self.commander_name,
             auto_start=True)
 
@@ -463,6 +464,7 @@ class CreateCommanderNoStart(CreateCommanderAutoStart):
            cmd_runner: name of thread running the command
         """
         self.config_ver.create_commander_thread(
+            cmd_runner=cmd_runner,
             name=self.commander_name,
             auto_start=False)
 
@@ -2699,7 +2701,6 @@ class MonitorAddItem:
     thread_alive: bool
     auto_start: bool
     expected_status: st.ThreadStatus
-    add_event: threading.Event
 
 
 @dataclass
@@ -3253,7 +3254,7 @@ class StoppedLogSearchItem(LogSearchItem):
 ########################################################################
 # RecvWaitingLogSearchItem
 ########################################################################
-class RecvWaitingLogSearchItem(LogSearchItem):
+class CmdWaitingLogSearchItem(LogSearchItem):
     """Input to search log msgs."""
 
     def __init__(self,
@@ -3266,9 +3267,20 @@ class RecvWaitingLogSearchItem(LogSearchItem):
         Args:
             config_ver: configuration verifier
         """
+        list_of_waiting_methods = ('(create_commander_thread'
+                                   '|create_f1_thread'
+                                   '|handle_recv'
+                                   '|handle_recv_tof'
+                                   '|handle_recv_tot'
+                                   '|handle_wait'
+                                   '|handle_wait_tof)')
         super().__init__(
-            search_str=('cmd_runner=[a-z]+ handle_(recv|recv_tof|recv_tot) '
-                        'waiting for monitor'),
+            # search_str=(f'cmd_runner=[a-z]+ {list_of_waiting_methods} '
+            #             'waiting for monitor'),
+            search_str=(f"cmd_runner='[a-z]+' create_commander_thread "
+                        "waiting for monitor"),
+            # search_str=(f"cmd_runner='[a-z]+' {list_of_waiting_methods} "
+            #             "waiting for monitor"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -3276,7 +3288,8 @@ class RecvWaitingLogSearchItem(LogSearchItem):
 
     def get_found_log_item(self,
                            found_log_msg: str,
-                           found_log_idx: int) -> "RecvWaitingLogSearchItem":
+                           found_log_idx: int
+                           ) -> "CmdWaitingLogSearchItem":
         """Return a found log item.
 
         Args:
@@ -3284,68 +3297,117 @@ class RecvWaitingLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
 
         Returns:
-            RecvWaitingLogSearchItem containing found message and index
+            CmdWaitingLogSearchItem containing found message and index
         """
-        return RecvWaitingLogSearchItem(
+        return CmdWaitingLogSearchItem(
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
     def run_process(self):
+        print(f'run_process entered with {self.found_log_msg=}')
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0].split(sep='=')[1]
+        cmd_runner = cmd_runner[1:-1]
 
-        self.config_ver.handle_recv_waiting_log_msg(
+        self.config_ver.handle_cmd_waiting_log_msg(
             cmd_runner=cmd_runner)
 
-
-########################################################################
-# WaitWaitingLogSearchItem
-########################################################################
-class WaitWaitingLogSearchItem(LogSearchItem):
-    """Input to search log msgs."""
-
-    def __init__(self,
-                 config_ver: "ConfigVerifier",
-                 found_log_msg: str = '',
-                 found_log_idx: int = 0,
-                 ) -> None:
-        """Initialize the LogItem.
-
-        Args:
-            config_ver: configuration verifier
-        """
-        super().__init__(
-            search_str=('cmd_runner=[a-z]+ handle_(wait|wait_tof) '
-                        'waiting for monitor'),
-            config_ver=config_ver,
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx
-        )
-
-    def get_found_log_item(self,
-                           found_log_msg: str,
-                           found_log_idx: int) -> "WaitWaitingLogSearchItem":
-        """Return a found log item.
-
-        Args:
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-
-        Returns:
-            WaitWaitingLogSearchItem containing found message and index
-        """
-        return WaitWaitingLogSearchItem(
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx,
-            config_ver=self.config_ver)
-
-    def run_process(self):
-        split_msg = self.found_log_msg.split()
-        cmd_runner = split_msg[0].split(sep='=')[1]
-
-        self.config_ver.handle_wait_waiting_log_msg(
-            cmd_runner=cmd_runner)
+# ########################################################################
+# # RecvWaitingLogSearchItem
+# ########################################################################
+# class RecvWaitingLogSearchItem(LogSearchItem):
+#     """Input to search log msgs."""
+#
+#     def __init__(self,
+#                  config_ver: "ConfigVerifier",
+#                  found_log_msg: str = '',
+#                  found_log_idx: int = 0,
+#                  ) -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             config_ver: configuration verifier
+#         """
+#         super().__init__(
+#             search_str=('cmd_runner=[a-z]+ handle_(recv|recv_tof|recv_tot) '
+#                         'waiting for monitor'),
+#             config_ver=config_ver,
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx
+#         )
+#
+#     def get_found_log_item(self,
+#                            found_log_msg: str,
+#                            found_log_idx: int) -> "RecvWaitingLogSearchItem":
+#         """Return a found log item.
+#
+#         Args:
+#             found_log_msg: log msg that was found
+#             found_log_idx: index in the log where message was found
+#
+#         Returns:
+#             RecvWaitingLogSearchItem containing found message and index
+#         """
+#         return RecvWaitingLogSearchItem(
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx,
+#             config_ver=self.config_ver)
+#
+#     def run_process(self):
+#         split_msg = self.found_log_msg.split()
+#         cmd_runner = split_msg[0].split(sep='=')[1]
+#
+#         self.config_ver.handle_recv_waiting_log_msg(
+#             cmd_runner=cmd_runner)
+#
+# ########################################################################
+# # WaitWaitingLogSearchItem
+# ########################################################################
+# class WaitWaitingLogSearchItem(LogSearchItem):
+#     """Input to search log msgs."""
+#
+#     def __init__(self,
+#                  config_ver: "ConfigVerifier",
+#                  found_log_msg: str = '',
+#                  found_log_idx: int = 0,
+#                  ) -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             config_ver: configuration verifier
+#         """
+#         super().__init__(
+#             search_str=('cmd_runner=[a-z]+ handle_(wait|wait_tof) '
+#                         'waiting for monitor'),
+#             config_ver=config_ver,
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx
+#         )
+#
+#     def get_found_log_item(self,
+#                            found_log_msg: str,
+#                            found_log_idx: int) -> "WaitWaitingLogSearchItem":
+#         """Return a found log item.
+#
+#         Args:
+#             found_log_msg: log msg that was found
+#             found_log_idx: index in the log where message was found
+#
+#         Returns:
+#             WaitWaitingLogSearchItem containing found message and index
+#         """
+#         return WaitWaitingLogSearchItem(
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx,
+#             config_ver=self.config_ver)
+#
+#     def run_process(self):
+#         split_msg = self.found_log_msg.split()
+#         cmd_runner = split_msg[0].split(sep='=')[1]
+#
+#         self.config_ver.handle_wait_waiting_log_msg(
+#             cmd_runner=cmd_runner)
 
 
 LogSearchItems: TypeAlias = Union[
@@ -3359,8 +3421,7 @@ LogSearchItems: TypeAlias = Union[
     WaitResumedLogSearchItem,
     StartedLogSearchItem,
     StoppedLogSearchItem,
-    RecvWaitingLogSearchItem,
-    WaitWaitingLogSearchItem]
+    CmdWaitingLogSearchItem]
 
 
 class ConfigVerifier:
@@ -3385,7 +3446,8 @@ class ConfigVerifier:
 
         self.monitor_thread = threading.Thread(target=self.monitor)
         self.monitor_exit = False
-        self.monitor_add_items: list[MonitorAddItem] = []
+        # self.monitor_add_items: list[MonitorAddItem] = []
+        self.monitor_add_items: dict[str, MonitorAddItem] = {}
 
         self.cmd_suite: deque[ConfigCmd] = deque()
         self.cmd_serial_num: int = 0
@@ -3430,18 +3492,19 @@ class ConfigVerifier:
         # self.found_utc_log_msgs: dict[tuple[str, str], int]= defaultdict(int)
         self.found_update_pair_array_log_msgs: dict[str, int] = defaultdict(
             int)
-        self.recv_msg_event_items: dict[str, MonitorEventItem] = {}
+        # self.recv_msg_event_items: dict[str, MonitorEventItem] = {}
         self.join_event_items: dict[str, MonitorEventItem] = {}
         self.unreg_event_items: dict[str, MonitorEventItem] = {}
         self.started_event_items: dict[str, MonitorEventItem] = {}
         self.stopped_event_items: dict[str, MonitorEventItem] = {}
+        self.cmd_waiting_event_items: dict[str, threading.Event] = {}
 
         self.stopping_names: list[str] = []
 
         self.recently_stopped: dict[str, int] = defaultdict(int)
 
-        self.pending_recv_msg_par: dict[str, bool] = defaultdict(bool)
-        self.update_pair_array_items = deque[UpaItem] = deque()
+        # self.pending_recv_msg_par: dict[str, bool] = defaultdict(bool)
+        self.update_pair_array_items: deque[UpaItem] = deque()
 
         self.log_start_idx: int = 0
         self.log_search_items: tuple[LogSearchItems, ...] = (
@@ -3455,8 +3518,7 @@ class ConfigVerifier:
             WaitResumedLogSearchItem(config_ver=self),
             StartedLogSearchItem(config_ver=self),
             StoppedLogSearchItem(config_ver=self),
-            RecvWaitingLogSearchItem(config_ver=self),
-            WaitWaitingLogSearchItem(config_ver=self)
+            CmdWaitingLogSearchItem(config_ver=self)
         )
         self.last_update_pair_array_log_msg: str = ''
         self.add_thread_cmd_runner_for_upa_msg: str = ''
@@ -3505,8 +3567,9 @@ class ConfigVerifier:
         logger.debug(log_msg)
 
         while not self.monitor_exit:
-
-            self.monitor_event.wait()
+            time.sleep(0.5)
+            self.log_test_msg('monitor having fun')
+            # self.monitor_event.wait()
             self.monitor_event.clear()
 
             self.get_log_msgs()
@@ -3523,9 +3586,9 @@ class ConfigVerifier:
                 logger.debug(log_msg)
 
                 found_log_item.run_process()
-                if not self.log_found_items:
-                    time.sleep(0.1)
-                    self.get_log_msgs()
+                # if not self.log_found_items:
+                #     time.sleep(0.1)
+                #     self.get_log_msgs()
 
             with self.monitor_condition:
                 self.monitor_condition.notify_all()
@@ -6686,9 +6749,12 @@ class ConfigVerifier:
         ################################################################
         # wait
         ################################################################
-        resumers_for_wait: DictAliveAndStatus = {}
-        resumers_for_wait['charlie'].is_alive = True
-        resumers_for_wait['charlie'].status = st.ThreadStatus.Alive
+        resumers_for_wait: DictAliveAndStatus = {
+            'charlie': AliveAndStatus(
+                is_alive=True,
+                status=st.ThreadStatus.Alive)
+        }
+
         self.add_cmd(
             Wait(cmd_runners='beta',
                  resumers=resumers_for_wait,
@@ -6698,7 +6764,8 @@ class ConfigVerifier:
         ################################################################
         self.add_cmd(
             Resume(cmd_runners='charlie',
-                   targets='beta'))
+                   targets='beta',
+                   stopped_names=[]))
 
         ################################################################
         # stop all threads
@@ -6871,29 +6938,38 @@ class ConfigVerifier:
     # create_commander_thread
     ####################################################################
     def create_commander_thread(self,
+                                cmd_runner: str,
                                 name: str,
                                 auto_start: bool) -> None:
-        """Create the commander thread."""
+        """Create the commander thread.
+
+        Args:
+            cmd_runner: name of thread doing the create
+            name: name of new commander thread
+            auto_start: specifies whether to start the thread
+        """
         if not self.commander_thread:
             self.commander_thread = st.SmartThread(
                 name=name, auto_start=auto_start, max_msgs=self.max_msgs)
         self.all_threads[name] = self.commander_thread
 
-        create_event = threading.Event()
         with self.ops_lock:
-            self.monitor_add_items.append(MonitorAddItem(
-                cmd_runner=name,
+            # self.monitor_add_items.append(MonitorAddItem(
+            self.monitor_add_items[cmd_runner] = MonitorAddItem(
+                cmd_runner=cmd_runner,
                 thread_alive=True,
                 auto_start=False,
-                expected_status=st.ThreadStatus.Alive,
-                add_event=create_event))
+                expected_status=st.ThreadStatus.Alive)
+            self.cmd_waiting_event_items[cmd_runner] = threading.Event()
 
         self.monitor_event.set()
 
-        log_msg = 'create_commander_thread waiting for monitor'
+        log_msg = f'{cmd_runner=} create_commander_thread waiting for monitor'
         self.log_ver.add_msg(log_msg=re.escape(log_msg))
         logger.debug(log_msg)
-        create_event.wait()
+        self.cmd_waiting_event_items[cmd_runner].wait()
+        with self.ops_lock:
+            del self.cmd_waiting_event_items[cmd_runner]
 
         log_msg = 'create_commander_thread exiting'
         self.log_ver.add_msg(log_msg=re.escape(log_msg))
@@ -6942,23 +7018,26 @@ class ConfigVerifier:
         else:
             exp_status = st.ThreadStatus.Registered
 
-        create_event = threading.Event()
-
         with self.ops_lock:
-            self.monitor_add_items.append(MonitorAddItem(
+            self.monitor_add_items[cmd_runner] = MonitorAddItem(
                 cmd_runner=name,
                 # thread_alive=auto_start,
                 thread_alive=False,
                 auto_start=auto_start,
                 # expected_status=exp_status,
-                expected_status=st.ThreadStatus.Registered,
-                add_event=create_event))
+                expected_status=st.ThreadStatus.Registered)
+
+            self.cmd_waiting_event_items[cmd_runner] = threading.Event()
 
         self.monitor_event.set()
-        log_msg = 'create_f1_thread waiting for monitor'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
-        create_event.wait()
+
+        # self.log_test_msg(f'{cmd_runner=} create_f1_thread waiting for '
+        #                   'monitor')
+        self.log_test_msg(f'{cmd_runner=} create_commander_thread waiting '
+                          f'for monitor')
+        self.cmd_waiting_event_items[cmd_runner].wait()
+        with self.ops_lock:
+            del self.cmd_waiting_event_items[cmd_runner]
 
         log_msg = 'create_f1_thread exiting'
         self.log_ver.add_msg(log_msg=re.escape(log_msg))
@@ -6998,10 +7077,10 @@ class ConfigVerifier:
                     f'name {cmd_runner} was decremented below zero')
 
             # indicate that this thread might need to update pair array
-            self.pending_recv_msg_par[cmd_runner] = True
+            # self.pending_recv_msg_par[cmd_runner] = True
 
             # remove sender from list if deferred delete is not needed
-            self.recv_msg_event_items[cmd_runner].targets.remove(sender)
+            # self.recv_msg_event_items[cmd_runner].targets.remove(sender)
 
             # determine whether deferred delete is needed
             if (self.expected_pairs[pair_key][
@@ -7015,18 +7094,18 @@ class ConfigVerifier:
                     upa_process=''))
 
                 # we need to post later when we do the pair array update
-                self.recv_msg_event_items[
-                    cmd_runner].deferred_post_needed = True
-                self.log_test_msg(f'dec_ops_count for {cmd_runner=} with '
-                                  f'{pair_key=} set deferred_post_needed')
+                # self.recv_msg_event_items[
+                #     cmd_runner].deferred_post_needed = True
+                # self.log_test_msg(f'dec_ops_count for {cmd_runner=} with '
+                #                   f'{pair_key=} set deferred_post_needed')
 
             # post handle_recv_msg if all receives are now processed
-            if (not self.recv_msg_event_items[cmd_runner].targets
-                    and not self.recv_msg_event_items[
-                        cmd_runner].deferred_post_needed):
-                self.recv_msg_event_items[cmd_runner].client_event.set()
-                self.log_test_msg(f'dec_ops_count for {cmd_runner=} with '
-                                  f'{pair_key=} set client_event')
+            # if (not self.recv_msg_event_items[cmd_runner].targets
+            #         and not self.recv_msg_event_items[
+            #             cmd_runner].deferred_post_needed):
+            #     self.recv_msg_event_items[cmd_runner].client_event.set()
+            #     self.log_test_msg(f'dec_ops_count for {cmd_runner=} with '
+            #                       f'{pair_key=} set client_event')
 
         self.log_test_msg(
             f'dec_ops_count exit: {cmd_runner=}, {pair_key=}')
@@ -7428,12 +7507,12 @@ class ConfigVerifier:
         # reset the pending_recv_msg_par to empty.
         self.add_log_msg(re.escape(
             f'{cmd_runner} entered _refresh_pair_array'))
-        with self.ops_lock:
-            if self.pending_recv_msg_par[cmd_runner]:
-                self.pending_recv_msg_par = defaultdict(bool)
-                self.pending_recv_msg_par[cmd_runner] = True
-            else:  # anyone else is no longer eligible either
-                self.pending_recv_msg_par = defaultdict(bool)
+        # with self.ops_lock:
+        #     if self.pending_recv_msg_par[cmd_runner]:
+        #         self.pending_recv_msg_par = defaultdict(bool)
+        #         self.pending_recv_msg_par[cmd_runner] = True
+        #     else:  # anyone else is no longer eligible either
+        #         self.pending_recv_msg_par = defaultdict(bool)
 
     ####################################################################
     # handle_exp_status_log_msgs
@@ -7741,26 +7820,9 @@ class ConfigVerifier:
         """
         self.log_test_msg(f'handle_pair_array_update entry for {cmd_runner=}')
 
-        self.add_log_msg(re.escape(upa_msg))
-
-        # save msg for del_thread
-        # self.last_update_pair_array_log_msg = upa_msg
-
-        # if self.add_thread_cmd_runner_for_upa_msg == cmd_runner:
-        #     self.add_log_msg(new_log_msg=re.escape(upa_msg))
-        #     self.add_thread_cmd_runner_for_upa_msg = ''
-
-        # if this is not for recv_msg then we have nothing to do here
-        # if not self.pending_recv_msg_par[cmd_runner]:
-        #     self.log_test_msg(
-        #         f'handle_pair_array_update not pending {cmd_runner=}')
-        #     return
-
-        ################################################################
-        # At this point we know that the recv_msg did the update
-        ################################################################
         # self.add_log_msg(re.escape(
         #     f'{cmd_runner} entered _refresh_pair_array'))
+        self.add_log_msg(re.escape(upa_msg))
 
         with self.ops_lock:
             while self.update_pair_array_items:
@@ -7787,25 +7849,8 @@ class ConfigVerifier:
                 elif upa_item.upa_type == 'wait':
                     self.update_pair_array_def_del(cmd_runner=cmd_runner,
                                                     upa_item=upa_item)
-
-        # del self.update_pair_array[cmd_runner]
-
         # handle any deferred deletes
-        self.handle_deferred_deletes(cmd_runner=cmd_runner):
-
-        # we need to resume the waiting threads
-        for name, item in self.recv_msg_event_items.items():
-            if item.deferred_post_needed:
-                item.client_event.set()
-                self.log_test_msg(
-                    f'handle_pair_array_update {cmd_runner=} '
-                    f'set client_event for {name}')
-            else:
-                self.log_test_msg(
-                    f'handle_pair_array_update {cmd_runner=} '
-                    f'did not set client_event for {name}')
-        # if self.recv_msg_event_items[cmd_runner].deferred_post_needed:
-        #     self.recv_msg_event_items[cmd_runner].client_event.set()
+        # self.handle_deferred_deletes(cmd_runner=cmd_runner):
 
         self.log_test_msg(f'handle_pair_array_update exit for {cmd_runner=}')
 
@@ -7837,11 +7882,11 @@ class ConfigVerifier:
             name='handle_recv_msg',
             seq='test_smart_thread.py::ConfigVerifier.handle_recv_msg')
 
-        self.recv_msg_event_items[cmd_runner] = MonitorEventItem(
-            client_event=threading.Event(),
-            deferred_post_needed=False,
-            targets=senders.copy()
-        )
+        # self.recv_msg_event_items[cmd_runner] = MonitorEventItem(
+        #     client_event=threading.Event(),
+        #     deferred_post_needed=False,
+        #     targets=senders.copy()
+        # )
 
         if del_deferred:
             with self.ops_lock:
@@ -7877,11 +7922,15 @@ class ConfigVerifier:
                 log_msg=recv_log_msg)
         self.monitor_event.set()
 
+        with self.ops_lock:
+            self.cmd_waiting_event_items[cmd_runner] = threading.Event()
+
         self.log_test_msg(f'{cmd_runner=} handle_recv waiting for monitor')
 
-        self.recv_msg_event_items[cmd_runner].client_event.wait()
+        self.cmd_waiting_event_items[cmd_runner].wait()
         with self.ops_lock:
-            del self.recv_msg_event_items[cmd_runner]
+            # del self.recv_msg_event_items[cmd_runner]
+            del self.cmd_waiting_event_items[cmd_runner]
 
         mean_elapsed_time = elapsed_time / len(senders)
         self.log_test_msg(f'handle_recv exiting {cmd_runner=}, '
@@ -7918,11 +7967,11 @@ class ConfigVerifier:
             name='handle_recv_msg_tof',
             seq='test_smart_thread.py::ConfigVerifier.handle_recv_msg_tof')
 
-        self.recv_msg_event_items[cmd_runner] = MonitorEventItem(
-            client_event=threading.Event(),
-            deferred_post_needed=False,
-            targets=senders.copy()
-        )
+        # self.recv_msg_event_items[cmd_runner] = MonitorEventItem(
+        #     client_event=threading.Event(),
+        #     deferred_post_needed=False,
+        #     targets=senders.copy()
+        # )
 
         if del_deferred:
             with self.ops_lock:
@@ -7960,11 +8009,14 @@ class ConfigVerifier:
 
         self.monitor_event.set()
 
+        with self.ops_lock:
+            self.cmd_waiting_event_items[cmd_runner] = threading.Event()
         self.log_test_msg(f'{cmd_runner=} handle_recv_tof waiting for monitor')
 
-        self.recv_msg_event_items[cmd_runner].client_event.wait()
+        self.cmd_waiting_event_items[cmd_runner].wait()
         with self.ops_lock:
-            del self.recv_msg_event_items[cmd_runner]
+            # del self.recv_msg_event_items[cmd_runner]
+            del self.cmd_waiting_event_items[cmd_runner]
 
         mean_elapsed_time = elapsed_time / len(senders)
         self.log_test_msg(f'handle_recv_tof exit: {cmd_runner=}, '
@@ -8006,12 +8058,12 @@ class ConfigVerifier:
 
         non_timeout_senders = list(set(senders) - set(timeout_names))
 
-        if non_timeout_senders:
-            self.recv_msg_event_items[cmd_runner] = MonitorEventItem(
-                client_event=threading.Event(),
-                deferred_post_needed=False,
-                targets=non_timeout_senders.copy()
-            )
+        # if non_timeout_senders:
+        #     self.recv_msg_event_items[cmd_runner] = MonitorEventItem(
+        #         client_event=threading.Event(),
+        #         deferred_post_needed=False,
+        #         targets=non_timeout_senders.copy()
+        #     )
 
         if del_deferred:
             with self.ops_lock:
@@ -8073,20 +8125,23 @@ class ConfigVerifier:
         self.monitor_event.set()
 
         if non_timeout_senders:
+            with self.ops_lock:
+                self.cmd_waiting_event_items[cmd_runner] = threading.Event()
             self.log_test_msg(
                 f'{cmd_runner=} handle_recv_tot waiting for monitor')
 
-            self.recv_msg_event_items[cmd_runner].client_event.wait()
+            self.cmd_waiting_event_items[cmd_runner].wait()
             with self.ops_lock:
-                del self.recv_msg_event_items[cmd_runner]
+                # del self.recv_msg_event_items[cmd_runner]
+                del self.cmd_waiting_event_items[cmd_runner]
 
         self.log_test_msg(f'handle_recv_tof exit: {cmd_runner=}')
 
     ####################################################################
     # handle_recv_waiting_log_msg
     ####################################################################
-    def handle_recv_waiting_log_msg(self,
-                                    cmd_runner: str) -> None:
+    def handle_cmd_waiting_log_msg(self,
+                                   cmd_runner: str) -> None:
 
         """Handle the send_cmd execution and log msgs.
 
@@ -8094,8 +8149,7 @@ class ConfigVerifier:
             cmd_runner: name of thread doing the cmd
 
         """
-        self.recv_msg_event_items[cmd_runner].client_event.set()
-
+        self.cmd_waiting_event_items[cmd_runner].set()
 
     ####################################################################
     # handle_reg_remove
@@ -8118,9 +8172,9 @@ class ConfigVerifier:
         self.log_test_msg(f'handle_reg_remove entered: {cmd_runner=}, '
                           f'{del_name=}, {process=}')
 
-        with self.ops_lock:
-            # reg remove means that recv_msgs are no longer pending
-            self.pending_recv_msg_par = defaultdict(bool)
+        # with self.ops_lock:
+        #     # reg remove means that recv_msgs are no longer pending
+        #     self.pending_recv_msg_par = defaultdict(bool)
 
         with self.ops_lock:
             if process == 'join':
@@ -8160,7 +8214,7 @@ class ConfigVerifier:
                           reg_update_msg: str,
                           reg_update_msg_log_idx) -> None:
 
-        """Handle the send_cmd execution and log msgs.
+        """Handle the reg update log msg.
 
         Args:
             cmd_runner: name of thread doing the cmd
@@ -8168,27 +8222,34 @@ class ConfigVerifier:
             reg_update_msg_log_idx: index in the log for the message
 
         """
-        with self.ops_lock:
-            # reg update means that recv_msgs are no longer pending
-            self.pending_recv_msg_par = defaultdict(bool)
+        # with self.ops_lock:
+        #     # reg update means that recv_msgs are no longer pending
+        #     self.pending_recv_msg_par = defaultdict(bool)
 
         found_add_item = False
         while not found_add_item:
             with self.ops_lock:
-                for item in self.monitor_add_items:
-                    if item.cmd_runner == cmd_runner:
-                        found_add_item = True
-                        self.add_thread(
-                            cmd_runner=cmd_runner,
-                            thread_alive=item.thread_alive,
-                            auto_start=item.auto_start,
-                            expected_status=item.expected_status,
-                            reg_update_msg=reg_update_msg,
-                            reg_idx=reg_update_msg_log_idx
-                        )
-                        item.add_event.set()
-                        self.monitor_add_items.remove(item)
-                        break
+                # for item in self.monitor_add_items:
+                if cmd_runner in self.monitor_add_items:
+                    found_add_item = True
+                    item = self.monitor_add_items[cmd_runner]
+                    self.add_thread(
+                        cmd_runner=cmd_runner,
+                        thread_alive=item.thread_alive,
+                        auto_start=item.auto_start,
+                        expected_status=item.expected_status,
+                        reg_update_msg=reg_update_msg,
+                        reg_idx=reg_update_msg_log_idx
+                    )
+                    # item.add_event.set()
+                    # self.monitor_add_items.remove(item)
+                    self.update_pair_array_items.append(UpaItem(
+                        upa_cmd_runner=cmd_runner,
+                        upa_type='add',
+                        upa_target='',
+                        upa_def_del_name='',
+                        upa_process=''))
+                    break
             if not found_add_item:
                 time.sleep(0.1)
 
@@ -8598,12 +8659,12 @@ class ConfigVerifier:
             if (raise_not_alive
                     and (resumers[resumer].status == st.ThreadStatus.Stopped)):
                 non_stopped_resumers -= {resumer}
-        if non_stopped_resumers:
-            self.recv_msg_event_items[cmd_runner] = MonitorEventItem(
-                client_event=threading.Event(),
-                deferred_post_needed=False,
-                targets=list(non_stopped_resumers)
-            )
+        # if non_stopped_resumers:
+        #     self.recv_msg_event_items[cmd_runner] = MonitorEventItem(
+        #         client_event=threading.Event(),
+        #         deferred_post_needed=False,
+        #         targets=list(non_stopped_resumers)
+        #     )
 
         for resumer in resumers.keys():
             if (raise_not_alive
@@ -8631,12 +8692,15 @@ class ConfigVerifier:
                     log_level=logging.INFO)
 
         if non_stopped_resumers:
+            with self.ops_lock:
+                self.cmd_waiting_event_items[cmd_runner] = threading.Event()
             self.log_test_msg(
                 f'{cmd_runner=} handle_wait waiting for monitor')
 
-            self.recv_msg_event_items[cmd_runner].client_event.wait()
+            self.cmd_waiting_event_items[cmd_runner].wait()
             with self.ops_lock:
-                del self.recv_msg_event_items[cmd_runner]
+                # del self.recv_msg_event_items[cmd_runner]
+                del self.cmd_waiting_event_items[cmd_runner]
 
         self.log_test_msg(f'{cmd_runner=} handle_wait exit for '
                           f'{resumers=}, {raise_not_alive=}')
@@ -8670,12 +8734,12 @@ class ConfigVerifier:
             if (raise_not_alive
                     and (resumers[resumer].status == st.ThreadStatus.Stopped)):
                 non_stopped_resumers -= {resumer}
-        if non_stopped_resumers:
-            self.recv_msg_event_items[cmd_runner] = MonitorEventItem(
-                client_event=threading.Event(),
-                deferred_post_needed=False,
-                targets=list(non_stopped_resumers)
-            )
+        # if non_stopped_resumers:
+        #     self.recv_msg_event_items[cmd_runner] = MonitorEventItem(
+        #         client_event=threading.Event(),
+        #         deferred_post_needed=False,
+        #         targets=list(non_stopped_resumers)
+        #     )
 
         for resumer in resumers.keys():
             if (raise_not_alive
@@ -8707,12 +8771,15 @@ class ConfigVerifier:
                     log_level=logging.INFO)
 
         if non_stopped_resumers:
+            with self.ops_lock:
+                self.cmd_waiting_event_items[cmd_runner] = threading.Event()
             self.log_test_msg(
                 f'{cmd_runner=} handle_wait_tof waiting for monitor')
 
-            self.recv_msg_event_items[cmd_runner].client_event.wait()
+            self.cmd_waiting_event_items[cmd_runner].wait()
             with self.ops_lock:
-                del self.recv_msg_event_items[cmd_runner]
+                # del self.recv_msg_event_items[cmd_runner]
+                del self.cmd_waiting_event_items[cmd_runner]
 
         self.log_test_msg(f'{cmd_runner=} handle_wait_tof exit for '
                           f'{resumers=}, {raise_not_alive=}, {timeout=}')
@@ -8780,19 +8847,19 @@ class ConfigVerifier:
         self.log_test_msg(f'{cmd_runner=} handle_wait_tot exit for '
                           f'{resumers=}, {raise_not_alive=}, {timeout=}')
 
-    ####################################################################
-    # handle_wait_waiting_log_msg
-    ####################################################################
-    def handle_wait_waiting_log_msg(self,
-                                    cmd_runner: str) -> None:
-
-        """Handle the send_cmd execution and log msgs.
-
-        Args:
-            cmd_runner: name of thread doing the cmd
-
-        """
-        self.recv_msg_event_items[cmd_runner].client_event.set()
+    # ####################################################################
+    # # handle_wait_waiting_log_msg
+    # ####################################################################
+    # def handle_wait_waiting_log_msg(self,
+    #                                 cmd_runner: str) -> None:
+    #
+    #     """Handle the send_cmd execution and log msgs.
+    #
+    #     Args:
+    #         cmd_runner: name of thread doing the cmd
+    #
+    #     """
+    #     self.recv_msg_event_items[cmd_runner].client_event.set()
 
     ####################################################################
     # inc_ops_count
