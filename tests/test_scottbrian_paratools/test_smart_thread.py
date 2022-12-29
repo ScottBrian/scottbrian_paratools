@@ -2879,7 +2879,9 @@ class RegUpdateLogSearchItem(LogSearchItem):
             config_ver: configuration verifier
         """
         super().__init__(
-            search_str=f'[a-z]+ did registry update at UTC {time_match}',
+            # search_str=f'[a-z]+ did registry update at UTC {time_match}',
+            search_str=(f'[a-z]+ added [a-z]+ to SmartThread registry at UTC '
+                        f'{time_match}'),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -2903,8 +2905,10 @@ class RegUpdateLogSearchItem(LogSearchItem):
             config_ver=self.config_ver)
 
     def run_process(self):
+        split_msg = self.found_log_msg.split()
         self.config_ver.handle_reg_update(
-            cmd_runner=self.found_log_msg.split(maxsplit=1)[0],
+            cmd_runner=split_msg[0],
+            new_name=split_msg[2],
             reg_update_msg=self.found_log_msg,
             reg_update_msg_log_idx=self.found_log_idx)
 
@@ -3673,6 +3677,7 @@ class ConfigVerifier:
     ####################################################################
     def add_thread(self,
                    cmd_runner: str,
+                   new_name: str,
                    thread_alive: bool,
                    auto_start: bool,
                    expected_status: st.ThreadStatus,
@@ -3682,17 +3687,19 @@ class ConfigVerifier:
         """Add a thread to the ConfigVerifier.
 
         Args:
-            cmd_runner: name to add
+            cmd_runner: name of thread doing the cmd
+            new_name: name of thread added to registry
             thread_alive: the expected is_alive flag
             auto_start: indicates whether to start the thread
             expected_status: the expected ThreadStatus
             reg_update_msg: the register update msg use for the log msg
             reg_idx: index of reg_update_msg in the log
         """
-        self.log_test_msg(f'add_thread entered for {cmd_runner}')
+        self.log_test_msg(f'add_thread entered for {cmd_runner=}, '
+                          f'{new_name=}')
 
-        self.expected_registered[cmd_runner] = ThreadTracker(
-            thread=self.all_threads[cmd_runner],
+        self.expected_registered[new_name] = ThreadTracker(
+            thread=self.all_threads[new_name],
             is_alive=thread_alive,
             exiting=False,
             is_auto_started=auto_start,
@@ -3778,50 +3785,49 @@ class ConfigVerifier:
         # add log msgs
         ################################################################
         self.add_log_msg(
-            f'{cmd_runner} set status for thread {cmd_runner} '
+            f'{cmd_runner} set status for thread {new_name} '
             'from undefined to ThreadStatus.Initializing')
 
-        class_name = self.all_threads[cmd_runner].__class__.__name__
+        class_name = self.all_threads[new_name].__class__.__name__
         self.add_log_msg(
             f'{cmd_runner} obtained _registry_lock, '
             f'class name = {class_name}')
 
         self.handle_exp_status_log_msgs(log_idx=reg_idx,
-                                        name=cmd_runner)
+                                        name=new_name)
 
         self.add_log_msg(
-            f'{cmd_runner} set status for thread {cmd_runner} '
+            f'{cmd_runner} set status for thread {new_name} '
             'from ThreadStatus.Initializing to ThreadStatus.Registered')
 
         # self.add_log_msg(f'{cmd_runner} entered _refresh_pair_array')
 
         # self.handle_deferred_delete_log_msgs(cmd_runner=cmd_runner)
         # handle any deferred deletes
-        self.handle_deferred_deletes(cmd_runner=cmd_runner)
+        # self.handle_deferred_deletes(cmd_runner=cmd_runner)
         self.add_log_msg(re.escape(reg_update_msg))
 
-        if (self.expected_registered[cmd_runner].is_auto_started
+        if (self.expected_registered[new_name].is_auto_started
                 or class_name == 'OuterSmartThreadApp'):
             self.add_log_msg(
-                f'{cmd_runner} set status for thread {cmd_runner} '
+                f'{cmd_runner} set status for thread {new_name} '
                 'from ThreadStatus.Registered to ThreadStatus.Starting')
 
             self.add_log_msg(
-                f'{cmd_runner} set status for thread {cmd_runner} '
+                f'{cmd_runner} set status for thread {new_name} '
                 f'from ThreadStatus.Starting to ThreadStatus.Alive')
 
             self.add_log_msg(re.escape(
-                f'{cmd_runner} thread started, '
+                f'{cmd_runner} started thread {new_name}, '
                 'thread.is_alive() = True, '
                 'status: ThreadStatus.Alive'))
         else:
-            if self.expected_registered[cmd_runner].is_alive:
-                update_pair_array_msg_needed = True
+            if self.expected_registered[new_name].is_alive:
                 self.add_log_msg(
-                    f'{cmd_runner} set status for thread {cmd_runner} '
+                    f'{cmd_runner} set status for thread {new_name} '
                     f'from ThreadStatus.Registered to ThreadStatus.Alive')
-        if update_pair_array_msg_needed:
-            self.add_thread_cmd_runner_for_upa_msg = cmd_runner
+        # if update_pair_array_msg_needed:
+        #     self.add_thread_cmd_runner_for_upa_msg = cmd_runner
 
     ####################################################################
     # build_config
@@ -8211,6 +8217,7 @@ class ConfigVerifier:
     ####################################################################
     def handle_reg_update(self,
                           cmd_runner: str,
+                          new_name: str,
                           reg_update_msg: str,
                           reg_update_msg_log_idx) -> None:
 
@@ -8218,6 +8225,7 @@ class ConfigVerifier:
 
         Args:
             cmd_runner: name of thread doing the cmd
+            new_name: name of thread added to the registry
             reg_update_msg: register update log message
             reg_update_msg_log_idx: index in the log for the message
 
@@ -8235,6 +8243,7 @@ class ConfigVerifier:
                     item = self.monitor_add_items[cmd_runner]
                     self.add_thread(
                         cmd_runner=cmd_runner,
+                        new_name=new_name,
                         thread_alive=item.thread_alive,
                         auto_start=item.auto_start,
                         expected_status=item.expected_status,
