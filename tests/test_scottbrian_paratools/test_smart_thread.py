@@ -3582,33 +3582,24 @@ class ConfigVerifier:
     # monitor
     ####################################################################
     def monitor(self):
-        log_msg = 'monitor entered'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
+        self.log_test_msg('monitor entered')
 
         while not self.monitor_exit:
-            time.sleep(0.5)
-            # self.log_test_msg('monitor having fun')
-            # self.monitor_event.wait()
+            self.monitor_event.wait()
             self.monitor_event.clear()
 
-            self.get_log_msgs()
+            while self.get_log_msgs():
+                while self.log_found_items:
+                    found_log_item = self.log_found_items.popleft()
 
-            while self.log_found_items:
-                found_log_item = self.log_found_items.popleft()
+                    # log the log msg being processed but mangle it a
+                    # little so we don't find it again and get into a
+                    # loop here
+                    found_msg = found_log_item.found_log_msg
+                    semi_msg = found_msg.replace(' ', ';', 3)
+                    self.log_test_msg(f'monitor processing msg: {semi_msg}')
 
-                # log the log msg being processed but mangle it a little
-                # so we don't find it again and get into a loop here
-                found_msg = found_log_item.found_log_msg
-                semi_msg = found_msg.replace(' ', ';', 3)
-                log_msg = f'monitor processing msg: {semi_msg}'
-                self.log_ver.add_msg(log_msg=re.escape(log_msg))
-                logger.debug(log_msg)
-
-                found_log_item.run_process()
-                # if not self.log_found_items:
-                #     time.sleep(0.1)
-                #     self.get_log_msgs()
+                    found_log_item.run_process()
 
             with self.monitor_condition:
                 self.monitor_condition.notify_all()
@@ -4563,6 +4554,91 @@ class ConfigVerifier:
                     exp_msgs=msgs_to_send))
 
     ####################################################################
+    # build_recv_msg_pau_suite
+    ####################################################################
+    def build_recv_msg_pau_suite(
+            self,
+            timeout_type: TimeoutType,
+            num_receivers: int,
+            num_active_no_delay_senders: int,
+            num_active_delay_senders: int,
+            num_send_exit_senders: int,
+            num_nosend_exit_senders: int,
+            num_unreg_senders: int,
+            num_reg_senders: int) -> None:
+        """Return a list of ConfigCmd items for a msg timeout.
+
+        Args:
+            timeout_type: specifies whether the recv_msg should
+                be coded with timeout and whether the recv_msg should
+                succeed or fail with a timeout
+            num_receivers: number of threads that will do the
+                recv_msg
+            num_active_no_delay_senders: number of threads that are
+                active and will do the send_msg immediately
+            num_active_delay_senders: number of threads that are active
+                and will do the send_msg after a delay
+            num_send_exit_senders: number of threads that are active
+                and will do the send_msg and then exit
+            num_nosend_exit_senders: number of threads that are
+                active and will not do the send_msg and then exit
+            num_unreg_senders: number of threads that are
+                unregistered and will be created and started and then
+                do the send_msg
+            num_reg_senders: number of threads that are registered
+                and will be started and then do the send_msg
+
+        """
+        self.build_config(
+            cmd_runner=self.commander_name,
+            num_registered=num_reg_senders,
+            num_active=num_active_needed)
+
+        ################################################################
+        # send a msg that will sit on the recv_msg msgq
+        ################################################################
+        send_msg_serial_num = self.add_cmd(
+            SendMsg(cmd_runners=active_no_delay_sender_names,
+                    receivers=receiver_names,
+                    msgs_to_send=sender_msgs))
+
+        ################################################################
+        # exit the sender to create a half paired case
+        ################################################################
+        self.build_exit_suite(
+            names=send_exit_sender_names, validate_config=False)
+        self.build_join_suite(
+            cmd_runners=self.commander_name,
+            join_target_names=send_exit_sender_names,
+            validate_config=False)
+
+        ################################################################
+        # resurrect the sender
+        ################################################################
+
+        ################################################################
+        # receive the message to allow the pair array to be updated
+        ################################################################
+        recv_msg_serial_num = self.add_cmd(
+            RecvMsg(cmd_runners=receiver_names,
+                    senders=all_sender_names,
+                    exp_msgs=sender_msgs,
+                    del_deferred=send_exit_sender_names,
+                    log_msg=log_msg))
+        ################################################################
+        # recv_msg does the deferred del update
+        ################################################################
+        ################################################################
+        # a different recv_msg does the deferred del update
+        ################################################################
+        ################################################################
+        # a create new thread does the deferred del update
+        ################################################################
+        ################################################################
+        # a delete thread does the deferred del update
+        ################################################################
+
+    ####################################################################
     # build_recv_msg_timeout_suite
     ####################################################################
     def build_recv_msg_timeout_suite(
@@ -4597,8 +4673,6 @@ class ConfigVerifier:
             num_reg_senders: number of threads that are registered
                 and will be started and then do the send_msg
 
-        Returns:
-            a list of ConfigCmd items
         """
         # Make sure we have enough threads. Note that we subtract 1 from
         # the count of unregistered names to ensure we have one thread
@@ -6943,6 +7017,7 @@ class ConfigVerifier:
 
         self.cmd_waiting_event_items[cmd_runner].wait()
         with self.ops_lock:
+            del self.monitor_add_items[cmd_runner]
             del self.cmd_waiting_event_items[cmd_runner]
             self.expected_registered[name].is_alive = True
             self.expected_registered[name].status = st.ThreadStatus.Alive
@@ -7013,6 +7088,7 @@ class ConfigVerifier:
                           f'for monitor')
         self.cmd_waiting_event_items[cmd_runner].wait()
         with self.ops_lock:
+            del self.monitor_add_items[cmd_runner]
             del self.cmd_waiting_event_items[cmd_runner]
 
         self.log_test_msg(f'create_f1_thread exiting: {cmd_runner=}, '
@@ -7361,8 +7437,12 @@ class ConfigVerifier:
     ####################################################################
     # get_log_msgs
     ####################################################################
-    def get_log_msgs(self):
-        """Search for a log messages and return them in order."""
+    def get_log_msgs(self) -> bool:
+        """Search for a log messages and return them in order.
+
+        Returns:
+            True, if messages were found, False otherwise
+        """
         # we should never call with an non-empty deque
         assert not self.log_found_items
 
@@ -7372,27 +7452,26 @@ class ConfigVerifier:
 
         # return if no new log message have been issued since last call
         if self.log_start_idx >= end_idx:
-            return
+            return False
 
         work_log = work_log[self.log_start_idx:end_idx]
-        # work_log.reverse()
 
-        start_idx = self.log_start_idx
-        found_idx = start_idx - 1
-
-        for idx, log_tuple in enumerate(work_log):
+        for idx, log_tuple in enumerate(work_log, self.log_start_idx):
             for log_search_item in self.log_search_items:
                 if log_search_item.search_pattern.match(log_tuple[2]):
-                    # found_idx = start_idx + (len(work_log) - idx) - 1
-                    found_idx = start_idx + idx
                     found_log_item = log_search_item.get_found_log_item(
                         found_log_msg=log_tuple[2],
-                        found_log_idx=found_idx
+                        found_log_idx=idx
                     )
                     self.log_found_items.append(found_log_item)
 
         # update next starting point
-        self.log_start_idx = found_idx + 1
+        self.log_start_idx = end_idx
+
+        if self.log_found_items:
+            return True
+        else:
+            return False
 
     ####################################################################
     # get_ptime
@@ -8226,6 +8305,7 @@ class ConfigVerifier:
                     )
                     # item.add_event.set()
                     # self.monitor_add_items.remove(item)
+
                     if new_name != self.commander_name:
                         self.update_pair_array_items.append(UpaItem(
                             upa_cmd_runner=cmd_runner,
@@ -10474,6 +10554,90 @@ class TestSmartThreadScenarios:
             scenario_builder=ConfigVerifier.build_join_timeout_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
+
+    ####################################################################
+    # test_recv_msg_pair_array_scenarios
+    ####################################################################
+    def test_recv_msg_pair_array_scenarios(
+            self,
+            timeout_type_arg: TimeoutType,
+            num_receivers_arg: int,
+            num_active_no_delay_senders_arg: int,
+            num_active_delay_senders_arg: int,
+            num_send_exit_senders_arg: int,
+            num_nosend_exit_senders_arg: int,
+            num_unreg_senders_arg: int,
+            num_reg_senders_arg: int,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            timeout_type_arg: specifies whether the recv_msg should
+                be coded with timeout and whether the recv_msg should
+                succeed or fail with a timeout
+            num_receivers_arg: number of threads that will do the
+                recv_msg
+            num_active_no_delay_senders_arg: number of threads that are
+                active and will do the send_msg immediately
+            num_active_delay_senders_arg: number of threads that are
+                active and will do the send_msg after a delay
+            num_send_exit_senders_arg: number of threads that are active
+                and will do the send_msg and then exit
+            num_nosend_exit_senders_arg: number of threads that are
+                active and will not do the send_msg and then exit
+            num_unreg_senders_arg: number of threads that are
+                unregistered and will be created and started and then
+                do the send_msg
+            num_reg_senders_arg: number of threads that are registered
+                and will be started and then do the send_msg
+            caplog: pytest fixture to capture log output
+
+        """
+        total_arg_counts = (
+                num_active_no_delay_senders_arg
+                + num_active_delay_senders_arg
+                + num_send_exit_senders_arg
+                + num_nosend_exit_senders_arg
+                + num_unreg_senders_arg
+                + num_reg_senders_arg)
+        if timeout_type_arg == TimeoutType.TimeoutNone:
+            if total_arg_counts == 0:
+                return
+        else:
+            if (num_active_delay_senders_arg
+                    + num_nosend_exit_senders_arg
+                    + num_unreg_senders_arg
+                    + num_reg_senders_arg) == 0:
+                return
+
+        command_config_num = total_arg_counts % 4
+        if command_config_num == 0:
+            commander_config = AppConfig.ScriptStyle
+        elif command_config_num == 1:
+            commander_config = AppConfig.CurrentThreadApp
+        elif command_config_num == 2:
+            commander_config = AppConfig.RemoteThreadApp
+        else:
+            commander_config = AppConfig.RemoteSmartThreadApp
+
+        args_for_scenario_builder: dict[str, Any] = {
+            'timeout_type': timeout_type_arg,
+            'num_receivers': num_receivers_arg,
+            'num_active_no_delay_senders': num_active_no_delay_senders_arg,
+            'num_active_delay_senders': num_active_delay_senders_arg,
+            'num_send_exit_senders': num_send_exit_senders_arg,
+            'num_nosend_exit_senders': num_nosend_exit_senders_arg,
+            'num_unreg_senders': num_unreg_senders_arg,
+            'num_reg_senders': num_reg_senders_arg
+        }
+
+        self.scenario_driver(
+            scenario_builder=ConfigVerifier.build_recv_msg_pau_suite,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog,
+            commander_config=commander_config
+        )
 
     ####################################################################
     # test_recv_msg_timeout_scenarios
