@@ -82,6 +82,8 @@ commander_config_arg_list = [AppConfig.ScriptStyle,
                              AppConfig.CurrentThreadApp,
                              AppConfig.RemoteThreadApp]
 
+# commander_config_arg_list = [AppConfig.RemoteThreadApp]
+
 
 ########################################################################
 # timeout_type used to specify whether to use timeout on various cmds
@@ -425,13 +427,16 @@ class ConfirmResponseNot(ConfirmResponse):
 class CreateCommanderAutoStart(ConfigCmd):
     def __init__(self,
                  cmd_runners: StrOrList,
-                 commander_name: str
+                 commander_name: str,
+                 thread_alive: bool = True
                  ) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
         self.commander_name = commander_name
-        self.arg_list += ['commander_name']
+        self.thread_alive = thread_alive
+        self.arg_list += ['commander_name',
+                          'thread_alive']
 
     def run_process(self, cmd_runner: str) -> None:
         """Run the command.
@@ -442,6 +447,7 @@ class CreateCommanderAutoStart(ConfigCmd):
         self.config_ver.create_commander_thread(
             cmd_runner=cmd_runner,
             name=self.commander_name,
+            thread_alive=self.thread_alive,
             auto_start=True)
 
 
@@ -451,10 +457,12 @@ class CreateCommanderAutoStart(ConfigCmd):
 class CreateCommanderNoStart(CreateCommanderAutoStart):
     def __init__(self,
                  cmd_runners: StrOrList,
-                 commander_name: str
+                 commander_name: str,
+                 thread_alive: bool = True
                  ) -> None:
         super().__init__(cmd_runners=cmd_runners,
-                         commander_name=commander_name)
+                         commander_name=commander_name,
+                         thread_alive=thread_alive)
         self.specified_args = locals()  # used for __repr__
 
     def run_process(self, cmd_runner: str) -> None:
@@ -466,6 +474,7 @@ class CreateCommanderNoStart(CreateCommanderAutoStart):
         self.config_ver.create_commander_thread(
             cmd_runner=cmd_runner,
             name=self.commander_name,
+            thread_alive=self.thread_alive,
             auto_start=False)
 
 
@@ -3579,7 +3588,7 @@ class ConfigVerifier:
 
         while not self.monitor_exit:
             time.sleep(0.5)
-            self.log_test_msg('monitor having fun')
+            # self.log_test_msg('monitor having fun')
             # self.monitor_event.wait()
             self.monitor_event.clear()
 
@@ -3714,80 +3723,6 @@ class ConfigVerifier:
             found_del_pairs=defaultdict(int)
         )
 
-        # update_pair_array_msg_needed = False
-        #
-        # if len(self.expected_registered.keys()) > 1:
-        #     pair_keys = combinations(
-        #         sorted(self.expected_registered.keys()), 2)
-        #     for pair_key in pair_keys:
-        #         if cmd_runner not in pair_key:
-        #             continue
-        #         if cmd_runner == pair_key[0]:
-        #             other_name = pair_key[1]
-        #         else:
-        #             other_name = pair_key[0]
-        #         name_poc = 0
-        #         other_poc = 0
-        #         if pair_key in self.pending_ops_counts:
-        #             if cmd_runner in self.pending_ops_counts[pair_key]:
-        #                 name_poc = self.pending_ops_counts[
-        #                     pair_key][cmd_runner]
-        #                 self.pending_ops_counts[pair_key][cmd_runner] = 0
-        #             if other_name in self.pending_ops_counts[pair_key]:
-        #                 other_poc = self.pending_ops_counts[pair_key][
-        #                     other_name]
-        #                 self.pending_ops_counts[pair_key][other_name] = 0
-        #
-        #         if pair_key not in self.expected_pairs:
-        #             self.expected_pairs[pair_key] = {
-        #                 cmd_runner: ThreadPairStatus(
-        #                     pending_ops_count=name_poc),
-        #                 other_name: ThreadPairStatus(
-        #                     pending_ops_count=other_poc)}
-        #             self.add_log_msg(re.escape(
-        #                 f"{cmd_runner} created "
-        #                 "_refresh_pair_array with "
-        #                 f"pair_key = {pair_key}"))
-        #             update_pair_array_msg_needed = True
-        #
-        #             for pair_name in pair_key:
-        #                 self.add_log_msg(re.escape(
-        #                     f"{cmd_runner} added status_blocks entry "
-        #                     f"for pair_key = {pair_key}, "
-        #                     f"name = {pair_name}"))
-        #
-        #         # if pair_key already exists, we need to add name
-        #         # as a resurrected thread
-        #         else:  # we already have a pair_key, need to add name
-        #             if not self.expected_pairs[pair_key]:
-        #                 self.abort_all_f1_threads()
-        #                 raise InvalidConfigurationDetected(
-        #                     'Attempt to add thread to existing pair array '
-        #                     'that has an empty ThreadPairStatus dict')
-        #             if cmd_runner in self.expected_pairs[pair_key].keys():
-        #                 self.abort_all_f1_threads()
-        #                 raise InvalidConfigurationDetected(
-        #                     'Attempt to add thread to pair array that already '
-        #                     'has the thread in the pair array')
-        #             if cmd_runner == pair_key[0]:
-        #                 other_name = pair_key[1]
-        #             else:
-        #                 other_name = pair_key[0]
-        #             if other_name not in self.expected_pairs[pair_key].keys():
-        #                 self.abort_all_f1_threads()
-        #                 raise InvalidConfigurationDetected(
-        #                     'Attempt to add thread to pair array that did '
-        #                     'not have the other name in the pair array')
-        #             # looks OK, just add in the new name
-        #             self.expected_pairs[pair_key][
-        #                 cmd_runner] = ThreadPairStatus(
-        #                 pending_ops_count=name_poc)
-        #             self.add_log_msg(re.escape(
-        #                 f"{cmd_runner} added status_blocks entry "
-        #                 f"for pair_key = {pair_key}, "
-        #                 f"name = {cmd_runner}"))
-        #             update_pair_array_msg_needed = True
-
         ################################################################
         # add log msgs
         ################################################################
@@ -3811,6 +3746,20 @@ class ConfigVerifier:
             self.add_log_msg(
                 f'{cmd_runner} set status for thread {new_name} '
                 'from ThreadStatus.Initializing to ThreadStatus.Registered')
+            if (self.expected_registered[new_name].is_auto_started
+                    or class_name == 'OuterSmartThreadApp'):
+                self.add_log_msg(
+                    f'{cmd_runner} set status for thread {new_name} '
+                    'from ThreadStatus.Registered to ThreadStatus.Starting')
+
+                self.add_log_msg(
+                    f'{cmd_runner} set status for thread {new_name} '
+                    f'from ThreadStatus.Starting to ThreadStatus.Alive')
+
+                self.add_log_msg(re.escape(
+                    f'{cmd_runner} started thread {new_name}, '
+                    'thread.is_alive(): True, '
+                    'status: ThreadStatus.Alive'))
 
         # self.add_log_msg(f'{cmd_runner} entered _refresh_pair_array')
 
@@ -3819,20 +3768,7 @@ class ConfigVerifier:
         # self.handle_deferred_deletes(cmd_runner=cmd_runner)
         self.add_log_msg(re.escape(reg_update_msg))
 
-        if (self.expected_registered[new_name].is_auto_started
-                or class_name == 'OuterSmartThreadApp'):
-            self.add_log_msg(
-                f'{cmd_runner} set status for thread {new_name} '
-                'from ThreadStatus.Registered to ThreadStatus.Starting')
 
-            self.add_log_msg(
-                f'{cmd_runner} set status for thread {new_name} '
-                f'from ThreadStatus.Starting to ThreadStatus.Alive')
-
-            self.add_log_msg(re.escape(
-                f'{cmd_runner} started thread {new_name}, '
-                'thread.is_alive(): True, '
-                'status: ThreadStatus.Alive'))
         # else:
         #     if self.expected_registered[new_name].is_alive:
         #         self.add_log_msg(
@@ -6652,13 +6588,26 @@ class ConfigVerifier:
     # build_simple_scenario
     ####################################################################
 
-    def build_simple_scenario(self) -> None:
+    def build_simple_scenario(self,
+                              thread_alive: bool,
+                              auto_start: bool) -> None:
         """Add config cmds to the scenario queue.
 
+        Args:
+            thread_alive: specifies whether the thread was started
+            auto_start: specifies whether the commander is auto_start
         """
-        self.add_cmd(CreateCommanderAutoStart(
-            cmd_runners='alpha',
-            commander_name='alpha'))
+        if auto_start:
+            self.add_cmd(CreateCommanderAutoStart(
+                cmd_runners='alpha',
+                commander_name='alpha',
+                thread_alive=thread_alive))
+        else:
+            self.add_cmd(CreateCommanderNoStart(
+                cmd_runners='alpha',
+                commander_name='alpha',
+                thread_alive=thread_alive))
+
         self.add_cmd(ValidateConfig(
             cmd_runners='alpha'))
         self.add_cmd(CreateF1AutoStart(
@@ -6958,40 +6907,47 @@ class ConfigVerifier:
     def create_commander_thread(self,
                                 cmd_runner: str,
                                 name: str,
+                                thread_alive: bool,
                                 auto_start: bool) -> None:
         """Create the commander thread.
 
         Args:
             cmd_runner: name of thread doing the create
             name: name of new commander thread
+            thread_alive: specifies whether the thread is already
+                started
             auto_start: specifies whether to start the thread
         """
+        self.log_test_msg(f'create_commander_thread entry: {cmd_runner=}')
         if not self.commander_thread:
             self.commander_thread = st.SmartThread(
                 name=name, auto_start=auto_start, max_msgs=self.max_msgs)
         self.all_threads[name] = self.commander_thread
 
+        if auto_start:
+            exp_status = st.ThreadStatus.Alive
+        else:
+            exp_status = st.ThreadStatus.Registered
         with self.ops_lock:
-            # self.monitor_add_items.append(MonitorAddItem(
             self.monitor_add_items[cmd_runner] = MonitorAddItem(
                 cmd_runner=cmd_runner,
-                thread_alive=True,
-                auto_start=False,
-                expected_status=st.ThreadStatus.Alive)
+                thread_alive=thread_alive,
+                auto_start=auto_start,
+                expected_status=exp_status)
             self.cmd_waiting_event_items[cmd_runner] = threading.Event()
 
         self.monitor_event.set()
 
-        log_msg = f'{cmd_runner=} create_commander_thread waiting for monitor'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
+        self.log_test_msg(f'{cmd_runner=} create_commander_thread waiting '
+                          f'for monitor')
+
         self.cmd_waiting_event_items[cmd_runner].wait()
         with self.ops_lock:
             del self.cmd_waiting_event_items[cmd_runner]
+            self.expected_registered[name].is_alive = True
+            self.expected_registered[name].status = st.ThreadStatus.Alive
 
-        log_msg = 'create_commander_thread exiting'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
+        self.log_test_msg(f'create_commander_thread exit: {cmd_runner=}')
 
     ####################################################################
     # create_f1_thread
@@ -9508,7 +9464,8 @@ class ConfigVerifier:
                 self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f'SmartThread registry has entry for name {name} '
-                    f'that is missing from the expected_registry ')
+                    'that is missing from the expected_registry. '
+                    f'{self.expected_registered.keys()=}')
             if (self.expected_registered[name].is_alive
                     != thread.thread.is_alive()):
                 self.abort_all_f1_threads()
@@ -10199,6 +10156,7 @@ class OuterThreadApp(threading.Thread):
 
         """
         super().__init__()
+        threading.current_thread().name = name
         self.config_ver = config_ver
         self.smart_thread = st.SmartThread(
             name=name,
@@ -10213,11 +10171,17 @@ class OuterThreadApp(threading.Thread):
         self.smart_thread._set_status(
             target_thread=self.smart_thread,
             new_status=st.ThreadStatus.Alive)
+        name = self.smart_thread.name
+        self.config_ver.add_log_msg(
+            f'{name} set status for thread {name} from '
+            'ThreadStatus.Registered to ThreadStatus.Alive'
+        )
+
         self.config_ver.main_driver()
 
 
 ########################################################################
-# OuterThreadApp class
+# OuterSmartThreadApp class
 ########################################################################
 class OuterSmartThreadApp(st.SmartThread, threading.Thread):
     """Outer thread app for test with both thread and SmartThread."""
@@ -10390,19 +10354,23 @@ class TestSmartThreadScenarios:
             commander_config_arg: specifies the config for the commander
 
         """
+        if commander_config_arg == AppConfig.ScriptStyle:
+            thread_alive = True
+            auto_start = True
+        elif commander_config_arg == AppConfig.CurrentThreadApp:
+            thread_alive = True
+            auto_start = False
+        elif commander_config_arg == AppConfig.RemoteThreadApp:
+            thread_alive = False
+            auto_start = False
+        elif commander_config_arg == AppConfig.RemoteSmartThreadApp:
+            thread_alive = False
+            auto_start = False
 
-        # args_for_scenario_builder: dict[str, Any] = {
-        #     'timeout_type': timeout_type_arg,
-        #     'num_receivers': num_receivers_arg,
-        #     'num_active_no_delay_senders': num_active_no_delay_senders_arg,
-        #     'num_active_delay_senders': num_active_delay_senders_arg,
-        #     'num_send_exit_senders': num_send_exit_senders_arg,
-        #     'num_nosend_exit_senders': num_nosend_exit_senders_arg,
-        #     'num_unreg_senders': num_unreg_senders_arg,
-        #     'num_reg_senders': num_reg_senders_arg
-        # }
-
-        args_for_scenario_builder: dict[str, Any] = {}
+        args_for_scenario_builder: dict[str, Any] = {
+            'thread_alive': thread_alive,
+            'auto_start': auto_start
+        }
 
         self.scenario_driver(
             scenario_builder=ConfigVerifier.build_simple_scenario,
