@@ -406,11 +406,6 @@ class SmartThread:
                 f'{name}.')
         self.name = name
 
-        self.status: ThreadStatus = ThreadStatus.Initializing
-        self.logger.debug(
-            f'{threading.current_thread().name} set status for thread '
-            f'{self.name} from undefined to {self.status}')
-
         if target and thread:
             raise SmartThreadMutuallyExclusiveTargetThreadSpecified(
                 'Attempted SmartThread instantiation with both target and '
@@ -443,6 +438,11 @@ class SmartThread:
             self.thread_create = ThreadCreate.Current
             self.thread = threading.current_thread()
             self.thread.name = name
+
+        self.status: ThreadStatus = ThreadStatus.Unregistered
+        self._set_status(
+            target_thread=self,
+            new_status=ThreadStatus.Initializing)
 
         self.auto_start = auto_start
 
@@ -582,9 +582,13 @@ class SmartThread:
             # Add entry if not already present
             if self.name not in SmartThread._registry:
                 SmartThread._registry[self.name] = self
+                if self.thread.is_alive():
+                    new_status = ThreadStatus.Alive
+                else:
+                    new_status = ThreadStatus.Registered
                 self._set_status(
                     target_thread=self,
-                    new_status=ThreadStatus.Registered)
+                    new_status=new_status)
                 SmartThread._registry_last_update = datetime.utcnow()
                 print_time = (SmartThread._registry_last_update
                               .strftime("%H:%M:%S.%f"))
@@ -974,10 +978,7 @@ class SmartThread:
         changed = False
         # scan registry and adjust status
         for name0, s_thread1 in (SmartThread._registry.items()):
-            if s_thread1.thread.is_alive():
-                if self._set_status(target_thread=s_thread1,
-                                    new_status=ThreadStatus.Alive):
-                    changed = True
+
             for name1, s_thread2 in (SmartThread._registry.items()):
                 if name0 == name1:
                     continue

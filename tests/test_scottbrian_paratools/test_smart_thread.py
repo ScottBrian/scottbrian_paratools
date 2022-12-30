@@ -2957,7 +2957,7 @@ class RegRemoveLogSearchItem(LogSearchItem):
     def run_process(self):
         split_msg = self.found_log_msg.split()
         process = split_msg[6].split(sep='=')[1]
-        process = process[1:-2]
+        process = process[1:-1]
 
         self.config_ver.handle_reg_remove(cmd_runner=split_msg[0],
                                           del_name=split_msg[2],
@@ -3007,6 +3007,7 @@ class CleanRegLogSearchItem(LogSearchItem):
             config_ver=self.config_ver)
 
     def run_process(self):
+        self.config_ver.add_log_msg(re.escape(self.found_log_msg))
         self.config_ver.last_clean_reg_log_msg = self.found_log_msg
 
 
@@ -3175,7 +3176,8 @@ class StartedLogSearchItem(LogSearchItem):
             config_ver: configuration verifier
         """
         super().__init__(
-            search_str=('[a-z]+ thread started, thread.is_alive\(\) = True, '
+            search_str=('[a-z]+ started thread [a-z]+, '
+                        'thread.is_alive\(\): True, '
                         'status: ThreadStatus.Alive'),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -3203,7 +3205,8 @@ class StartedLogSearchItem(LogSearchItem):
         split_msg = self.found_log_msg.split()
 
         self.config_ver.handle_started_log_msg(
-            cmd_runner=split_msg[0])
+            cmd_runner=split_msg[0],
+            started_name=split_msg[3][0:-1])
 
 
 ########################################################################
@@ -3273,18 +3276,22 @@ class CmdWaitingLogSearchItem(LogSearchItem):
         """
         list_of_waiting_methods = ('(create_commander_thread'
                                    '|create_f1_thread'
+                                   '|handle_join'
+                                   '|handle_join_tof'
+                                   '|handle_join_tot'
                                    '|handle_recv'
                                    '|handle_recv_tof'
                                    '|handle_recv_tot'
                                    '|handle_wait'
-                                   '|handle_wait_tof)')
+                                   '|handle_wait_tof'
+                                   '|unregister_threads)')
         super().__init__(
             # search_str=(f'cmd_runner=[a-z]+ {list_of_waiting_methods} '
             #             'waiting for monitor'),
-            search_str=(f"cmd_runner='[a-z]+' create_commander_thread "
-                        "waiting for monitor"),
-            # search_str=(f"cmd_runner='[a-z]+' {list_of_waiting_methods} "
+            # search_str=(f"cmd_runner='[a-z]+' create_commander_thread "
             #             "waiting for monitor"),
+            search_str=(f"cmd_runner='[a-z]+' {list_of_waiting_methods} "
+                        "waiting for monitor"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -3497,9 +3504,9 @@ class ConfigVerifier:
         self.found_update_pair_array_log_msgs: dict[str, int] = defaultdict(
             int)
         # self.recv_msg_event_items: dict[str, MonitorEventItem] = {}
-        self.join_event_items: dict[str, MonitorEventItem] = {}
-        self.unreg_event_items: dict[str, MonitorEventItem] = {}
-        self.started_event_items: dict[str, MonitorEventItem] = {}
+        # self.join_event_items: dict[str, MonitorEventItem] = {}
+        # self.unreg_event_items: dict[str, MonitorEventItem] = {}
+        # self.started_event_items: dict[str, MonitorEventItem] = {}
         self.stopped_event_items: dict[str, MonitorEventItem] = {}
         self.cmd_waiting_event_items: dict[str, threading.Event] = {}
 
@@ -3696,7 +3703,7 @@ class ConfigVerifier:
             reg_idx: index of reg_update_msg in the log
         """
         self.log_test_msg(f'add_thread entered for {cmd_runner=}, '
-                          f'{new_name=}')
+                          f'{new_name=}, {thread_alive=}, {expected_status=}')
 
         self.expected_registered[new_name] = ThreadTracker(
             thread=self.all_threads[new_name],
@@ -3786,7 +3793,7 @@ class ConfigVerifier:
         ################################################################
         self.add_log_msg(
             f'{cmd_runner} set status for thread {new_name} '
-            'from undefined to ThreadStatus.Initializing')
+            'from ThreadStatus.Unregistered to ThreadStatus.Initializing')
 
         class_name = self.all_threads[new_name].__class__.__name__
         self.add_log_msg(
@@ -3796,9 +3803,14 @@ class ConfigVerifier:
         self.handle_exp_status_log_msgs(log_idx=reg_idx,
                                         name=new_name)
 
-        self.add_log_msg(
-            f'{cmd_runner} set status for thread {new_name} '
-            'from ThreadStatus.Initializing to ThreadStatus.Registered')
+        if thread_alive:
+            self.add_log_msg(
+                f'{cmd_runner} set status for thread {new_name} '
+                'from ThreadStatus.Initializing to ThreadStatus.Alive')
+        else:
+            self.add_log_msg(
+                f'{cmd_runner} set status for thread {new_name} '
+                'from ThreadStatus.Initializing to ThreadStatus.Registered')
 
         # self.add_log_msg(f'{cmd_runner} entered _refresh_pair_array')
 
@@ -3819,13 +3831,13 @@ class ConfigVerifier:
 
             self.add_log_msg(re.escape(
                 f'{cmd_runner} started thread {new_name}, '
-                'thread.is_alive() = True, '
+                'thread.is_alive(): True, '
                 'status: ThreadStatus.Alive'))
-        else:
-            if self.expected_registered[new_name].is_alive:
-                self.add_log_msg(
-                    f'{cmd_runner} set status for thread {new_name} '
-                    f'from ThreadStatus.Registered to ThreadStatus.Alive')
+        # else:
+        #     if self.expected_registered[new_name].is_alive:
+        #         self.add_log_msg(
+        #             f'{cmd_runner} set status for thread {new_name} '
+        #             f'from ThreadStatus.Registered to ThreadStatus.Alive')
         # if update_pair_array_msg_needed:
         #     self.add_thread_cmd_runner_for_upa_msg = cmd_runner
 
@@ -7001,6 +7013,8 @@ class ConfigVerifier:
             auto_start: indicates whether the create should start the
                           thread
         """
+        self.log_test_msg(f'create_f1_thread entry: {cmd_runner=}, '
+                          f'{name=}')
         self.f1_process_cmds[name] = True
 
         if app_config == AppConfig.ScriptStyle:
@@ -7039,15 +7053,14 @@ class ConfigVerifier:
 
         # self.log_test_msg(f'{cmd_runner=} create_f1_thread waiting for '
         #                   'monitor')
-        self.log_test_msg(f'{cmd_runner=} create_commander_thread waiting '
+        self.log_test_msg(f'{cmd_runner=} create_f1_thread waiting '
                           f'for monitor')
         self.cmd_waiting_event_items[cmd_runner].wait()
         with self.ops_lock:
             del self.cmd_waiting_event_items[cmd_runner]
 
-        log_msg = 'create_f1_thread exiting'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
+        self.log_test_msg(f'create_f1_thread exiting: {cmd_runner=}, '
+                          f'{name=}')
 
     ####################################################################
     # dec_ops_count
@@ -7608,10 +7621,10 @@ class ConfigVerifier:
             name='handle_join',
             seq='test_smart_thread.py::ConfigVerifier.handle_join')
 
-        self.join_event_items[cmd_runner] = MonitorEventItem(
-            client_event=threading.Event(),
-            targets=join_names.copy()
-        )
+        # self.join_event_items[cmd_runner] = MonitorEventItem(
+        #     client_event=threading.Event(),
+        #     targets=join_names.copy()
+        # )
 
         self.monitor_event.set()
 
@@ -7635,16 +7648,17 @@ class ConfigVerifier:
 
                 self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
-        log_msg = 'handle_join waiting for monitor'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
+        with self.ops_lock:
+            self.cmd_waiting_event_items[cmd_runner] = threading.Event()
 
-        self.join_event_items[cmd_runner].client_event.wait()
+        self.log_test_msg(f'{cmd_runner=} handle_join waiting for monitor')
 
-        log_msg = (f'handle_join exiting with {elapsed_time=}, '
-                   f'{len(join_names)=}, {time_per_target=}')
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
+        self.cmd_waiting_event_items[cmd_runner].wait()
+        with self.ops_lock:
+            del self.cmd_waiting_event_items[cmd_runner]
+
+        self.log_test_msg(f'handle_join exiting with {elapsed_time=}, '
+                          f'{len(join_names)=}, {time_per_target=}')
 
     ####################################################################
     # handle_join_tof
@@ -7668,10 +7682,10 @@ class ConfigVerifier:
             name='handle_join_tof',
             seq='test_smart_thread.py::ConfigVerifier.handle_join_tof')
 
-        self.join_event_items[cmd_runner] = MonitorEventItem(
-            client_event=threading.Event(),
-            targets=join_names.copy()
-        )
+        # self.join_event_items[cmd_runner] = MonitorEventItem(
+        #     client_event=threading.Event(),
+        #     targets=join_names.copy()
+        # )
         self.monitor_event.set()
         start_time = time.time()
         self.all_threads[cmd_runner].join(
@@ -7692,17 +7706,17 @@ class ConfigVerifier:
 
                 self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
-        log_msg = 'handle_join_tof waiting for monitor'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
+        with self.ops_lock:
+            self.cmd_waiting_event_items[cmd_runner] = threading.Event()
 
-        self.join_event_items[cmd_runner].client_event.wait()
-        # while self.monitor_del_items:
-        #     time.sleep(0.1)
-        log_msg = (f'handle_join_tof exiting with {elapsed_time=}, '
-                   f'{len(join_names)=}, {time_per_target=}')
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
+        self.log_test_msg(f'{cmd_runner=} handle_join_tof waiting for monitor')
+
+        self.cmd_waiting_event_items[cmd_runner].wait()
+        with self.ops_lock:
+            del self.cmd_waiting_event_items[cmd_runner]
+
+        self.log_test_msg(f'handle_join_tof exiting with {elapsed_time=}, '
+                          f'{len(join_names)=}, {time_per_target=}')
 
     ####################################################################
     # handle_join_tot
@@ -7734,11 +7748,11 @@ class ConfigVerifier:
             target_names = join_names.copy()
 
         # wait for monitor if we have names that will be deleted
-        if target_names:
-            self.join_event_items[cmd_runner] = MonitorEventItem(
-                client_event=threading.Event(),
-                targets=target_names
-            )
+        # if target_names:
+        #     self.join_event_items[cmd_runner] = MonitorEventItem(
+        #         client_event=threading.Event(),
+        #         targets=target_names
+        #     )
         self.monitor_event.set()
         start_time = time.time()
         with pytest.raises(st.SmartThreadJoinTimedOut):
@@ -7768,15 +7782,18 @@ class ConfigVerifier:
             self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
         if target_names:
-            log_msg = 'handle_join_tot waiting for monitor'
-            self.log_ver.add_msg(log_msg=re.escape(log_msg))
-            logger.debug(log_msg)
-            self.join_event_items[cmd_runner].client_event.wait()
+            with self.ops_lock:
+                self.cmd_waiting_event_items[cmd_runner] = threading.Event()
 
-        log_msg = (f'handle_join_tot exiting with {elapsed_time=}, '
-                   f'{len(join_names)=}, {time_per_target=}')
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
+            self.log_test_msg(
+                f'{cmd_runner=} handle_join_tot waiting for monitor')
+
+            self.cmd_waiting_event_items[cmd_runner].wait()
+            with self.ops_lock:
+                del self.cmd_waiting_event_items[cmd_runner]
+
+        self.log_test_msg(f'handle_join_tot exiting with {elapsed_time=}, '
+                          f'{len(join_names)=}, {time_per_target=}')
 
     ####################################################################
     # handle_join_unreg_update
@@ -7801,14 +7818,15 @@ class ConfigVerifier:
         #     process=process,
         #     del_msg_idx=found_log_msg_idx)
 
-        if process == 'join':
-            self.join_event_items[cmd_runner].targets.remove(target_name)
-            if not self.join_event_items[cmd_runner].targets:
-                self.join_event_items[cmd_runner].client_event.set()
-        else:
-            self.unreg_event_items[cmd_runner].targets.remove(target_name)
-            if not self.unreg_event_items[cmd_runner].targets:
-                self.unreg_event_items[cmd_runner].client_event.set()
+        # if process == 'join':
+        #     self.join_event_items[cmd_runner].targets.remove(target_name)
+        #     if not self.join_event_items[cmd_runner].targets:
+        #         self.join_event_items[cmd_runner].client_event.set()
+        # else:
+        #     self.unreg_event_items[cmd_runner].targets.remove(target_name)
+        #     if not self.unreg_event_items[cmd_runner].targets:
+        #         self.unreg_event_items[cmd_runner].client_event.set()
+        pass
 
     ####################################################################
     # handle_pair_array_update
@@ -8252,12 +8270,13 @@ class ConfigVerifier:
                     )
                     # item.add_event.set()
                     # self.monitor_add_items.remove(item)
-                    self.update_pair_array_items.append(UpaItem(
-                        upa_cmd_runner=cmd_runner,
-                        upa_type='add',
-                        upa_target='',
-                        upa_def_del_name='',
-                        upa_process=''))
+                    if new_name != self.commander_name:
+                        self.update_pair_array_items.append(UpaItem(
+                            upa_cmd_runner=cmd_runner,
+                            upa_type='add',
+                            upa_target=new_name,
+                            upa_def_del_name='',
+                            upa_process=''))
                     break
             if not found_add_item:
                 time.sleep(0.1)
@@ -8601,14 +8620,18 @@ class ConfigVerifier:
     # handle_started_log_msg
     ####################################################################
     def handle_started_log_msg(self,
-                               cmd_runner: str) -> None:
+                               cmd_runner: str,
+                               started_name: str) -> None:
         """Set the status for a thread that was started.
 
         Args:
             cmd_runner: the names of the thread that was started
+            started_name: name of thread that was started
         """
-        self.expected_registered[cmd_runner].is_alive = True
-        self.expected_registered[cmd_runner].status = st.ThreadStatus.Alive
+        self.log_test_msg(f'handle_started_log_msg entry: {cmd_runner=}, '
+                          f'{started_name=}')
+        self.expected_registered[started_name].is_alive = True
+        self.expected_registered[started_name].status = st.ThreadStatus.Alive
         # self.started_event_items['alpha'].targets.remove(cmd_runner)
         # if not self.started_event_items['alpha'].targets:
         #     self.started_event_items['alpha'].client_event.set()
@@ -8998,16 +9021,14 @@ class ConfigVerifier:
             cmd_runner: thread doing the starts
             start_names: names of the threads to start
         """
-        start_thread_log_msg = (f'{cmd_runner=} start_thread entry '
-                                f'for {start_names=}')
-        self.log_ver.add_msg(log_msg=re.escape(start_thread_log_msg))
-        logger.debug(start_thread_log_msg)
+        self.log_test_msg(f'{cmd_runner=} start_thread entry '
+                          f'for {start_names=}')
 
-        self.started_event_items[cmd_runner] = MonitorEventItem(
-            client_event=threading.Event(),
-            deferred_post_needed=False,
-            targets=start_names.copy()
-        )
+        # self.started_event_items[cmd_runner] = MonitorEventItem(
+        #     client_event=threading.Event(),
+        #     deferred_post_needed=False,
+        #     targets=start_names.copy()
+        # )
         for start_name in start_names:
             self.monitor_event.set()
             self.all_threads[start_name].start()
@@ -9017,29 +9038,27 @@ class ConfigVerifier:
             self.monitor_event.set()
 
             self.add_log_msg(
-                f'{start_name} set status for thread {start_name} '
+                f'{cmd_runner} set status for thread {start_name} '
                 'from ThreadStatus.Registered to ThreadStatus.Starting')
             self.add_log_msg(
-                f'{start_name} set status for thread {start_name} '
+                f'{cmd_runner} set status for thread {start_name} '
                 f'from ThreadStatus.Starting to ThreadStatus.Alive')
             self.add_log_msg(re.escape(
-                f'{start_name} thread started, thread.is_alive() = True, '
-                'status: ThreadStatus.Alive'))
+                f'{cmd_runner} started thread {start_name}, '
+                'thread.is_alive(): True, status: ThreadStatus.Alive'))
 
         self.monitor_event.set()
-        start_log_msg = f'{cmd_runner=} start_thread waiting for monitor'
-        self.log_ver.add_msg(log_msg=re.escape(start_log_msg))
-        logger.debug(start_log_msg)
+        # start_log_msg = f'{cmd_runner=} start_thread waiting for monitor'
+        # self.log_ver.add_msg(log_msg=re.escape(start_log_msg))
+        # logger.debug(start_log_msg)
 
         # waiting forever here means alpha is not the cmd_runner for the
         # start_thread as hard coded in handle_started_log_msg.
         # need to fix that.
         # self.started_event_items[cmd_runner].client_event.wait()
 
-        start_thread_log_msg = (f'{cmd_runner=} start_thread exiting '
-                                f'for {start_names=}')
-        self.log_ver.add_msg(log_msg=re.escape(start_thread_log_msg))
-        logger.debug(start_thread_log_msg)
+        self.log_test_msg(f'{cmd_runner=} start_thread exiting '
+                          f'for {start_names=}')
 
     ####################################################################
     # stop_thread
@@ -9110,24 +9129,26 @@ class ConfigVerifier:
             cmd_runner: name of thread doing the unregister
             unregister_targets: names of threads to be unregistered
         """
-        self.unreg_event_items[cmd_runner] = MonitorEventItem(
-            client_event=threading.Event(),
-            targets=unregister_targets.copy()
-        )
+        # self.unreg_event_items[cmd_runner] = MonitorEventItem(
+        #     client_event=threading.Event(),
+        #     targets=unregister_targets.copy()
+        # )
         self.monitor_event.set()
         self.all_threads[cmd_runner].unregister(
             targets=set(unregister_targets))
         self.monitor_event.set()
 
-        log_msg = 'unregister_threads waiting for monitor'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
+        with self.ops_lock:
+            self.cmd_waiting_event_items[cmd_runner] = threading.Event()
 
-        self.unreg_event_items[cmd_runner].client_event.wait()
+        self.log_test_msg(f'{cmd_runner=} unregister_threads waiting for '
+                          f'monitor')
 
-        log_msg = 'unregister_threads exiting'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
+        self.cmd_waiting_event_items[cmd_runner].wait()
+        with self.ops_lock:
+            del self.cmd_waiting_event_items[cmd_runner]
+
+        self.log_test_msg(f'unregister_threads exiting: {cmd_runner=}')
 
     # ####################################################################
     # # update_pair_array
@@ -9267,33 +9288,40 @@ class ConfigVerifier:
     # update_pair_array
     ####################################################################
     def update_pair_array_add(self,
-                             cmd_runner: str,
-                             upa_item: UpaItem) -> None:
+                              cmd_runner: str,
+                              upa_item: UpaItem) -> None:
         """Unregister the named threads.
 
         Args:
             cmd_runner: name of thread doing the update
-            upa_msg: message that got us here
             upa_item: describes what the update is for
 
         """
+        self.log_test_msg(f'update_pair_array_add entry: {cmd_runner=}, '
+                          f'{upa_item=}')
+        self.log_test_msg(f'{self.expected_registered.keys()=}')
+        for pair_key in self.expected_pairs.keys():
+            self.log_test_msg(f'{pair_key} exists in pair_array '
+                              f'with {self.expected_pairs[pair_key]=}')
+
+        new_name = upa_item.upa_target
         if len(self.expected_registered.keys()) > 1:
             pair_keys = combinations(
                 sorted(self.expected_registered.keys()), 2)
             for pair_key in pair_keys:
-                if cmd_runner not in pair_key:
+                if new_name not in pair_key:
                     continue
-                if cmd_runner == pair_key[0]:
+                if new_name == pair_key[0]:
                     other_name = pair_key[1]
                 else:
                     other_name = pair_key[0]
                 name_poc = 0
                 other_poc = 0
                 if pair_key in self.pending_ops_counts:
-                    if cmd_runner in self.pending_ops_counts[pair_key]:
+                    if new_name in self.pending_ops_counts[pair_key]:
                         name_poc = self.pending_ops_counts[
-                            pair_key][cmd_runner]
-                        self.pending_ops_counts[pair_key][cmd_runner] = 0
+                            pair_key][new_name]
+                        self.pending_ops_counts[pair_key][new_name] = 0
                     if other_name in self.pending_ops_counts[pair_key]:
                         other_poc = self.pending_ops_counts[pair_key][
                             other_name]
@@ -9301,7 +9329,7 @@ class ConfigVerifier:
 
                 if pair_key not in self.expected_pairs:
                     self.expected_pairs[pair_key] = {
-                        cmd_runner: ThreadPairStatus(
+                        new_name: ThreadPairStatus(
                             pending_ops_count=name_poc),
                         other_name: ThreadPairStatus(
                             pending_ops_count=other_poc)}
@@ -9324,12 +9352,13 @@ class ConfigVerifier:
                         raise InvalidConfigurationDetected(
                             'Attempt to add thread to existing pair array '
                             'that has an empty ThreadPairStatus dict')
-                    if cmd_runner in self.expected_pairs[pair_key].keys():
+                    if new_name in self.expected_pairs[pair_key].keys():
                         self.abort_all_f1_threads()
                         raise InvalidConfigurationDetected(
-                            'Attempt to add thread to pair array that already '
+                            f'{cmd_runner} attempted to add {new_name} to '
+                            f'pair array for {pair_key=} that already '
                             'has the thread in the pair array')
-                    if cmd_runner == pair_key[0]:
+                    if new_name == pair_key[0]:
                         other_name = pair_key[1]
                     else:
                         other_name = pair_key[0]
@@ -9340,12 +9369,12 @@ class ConfigVerifier:
                             'not have the other name in the pair array')
                     # looks OK, just add in the new name
                     self.expected_pairs[pair_key][
-                        cmd_runner] = ThreadPairStatus(
+                        new_name] = ThreadPairStatus(
                         pending_ops_count=name_poc)
                     self.add_log_msg(re.escape(
                         f"{cmd_runner} added status_blocks entry "
                         f"for pair_key = {pair_key}, "
-                        f"name = {cmd_runner}"))
+                        f"name = {new_name}"))
 
     ####################################################################
     # update_pair_array
@@ -9416,16 +9445,16 @@ class ConfigVerifier:
             #     self.add_log_msg(re.escape(
             #         self.last_update_pair_array_log_msg))
 
-            split_msg = self.last_clean_reg_log_msg.split()
-            if (split_msg[0] != cmd_runner
-                    or split_msg[9] != f"['{del_name}']"):
-                raise FailedToFindLogMsg(f'del_thread {cmd_runner=}, '
-                                         f'{del_name} did not match '
-                                         f'{self.last_clean_reg_log_msg=} ')
-            self.add_log_msg(re.escape(self.last_clean_reg_log_msg))
+            # split_msg = self.last_clean_reg_log_msg.split()
+            # if (split_msg[0] != cmd_runner
+            #         or split_msg[9] != f"['{del_name}']"):
+            #     raise FailedToFindLogMsg(f'del_thread {cmd_runner=}, '
+            #                              f'{del_name} did not match '
+            #                              f'{self.last_clean_reg_log_msg=} ')
+            # self.add_log_msg(re.escape(self.last_clean_reg_log_msg))
 
-            self.add_log_msg(f'{cmd_runner} did successful '
-                             f'{process} of {del_name}.')
+        self.add_log_msg(f'{cmd_runner} did successful '
+                         f'{process} of {del_name}.')
 
     ####################################################################
     # update_pair_array
