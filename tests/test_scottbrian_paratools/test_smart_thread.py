@@ -76,6 +76,19 @@ class Actors(Enum):
 
 
 ########################################################################
+# DefDelTests
+########################################################################
+class DefDelTests(Enum):
+    Normal = auto()
+    Resurrection = auto()
+    OriginalRecvMsg = auto()
+    OtherRecvMsg = auto()
+    OriginalWait = auto()
+    OtherWait = auto()
+    DelThread = auto()
+    AddThread = auto()
+
+########################################################################
 # Test settings
 ########################################################################
 commander_config_arg_list = [AppConfig.ScriptStyle,
@@ -101,6 +114,19 @@ timeout_type_arg_list = [TimeoutType.TimeoutNone,
                          TimeoutType.TimeoutFalse,
                          TimeoutType.TimeoutTrue]
 # timeout_type_arg_list = [TimeoutType.TimeoutTrue]
+
+########################################################################
+# Test settings for test_def_del_scenarios
+########################################################################
+def_del_arg_list = [DefDelTests.Normal,
+                    DefDelTests.Resurrection,
+                    DefDelTests.OriginalRecvMsg,
+                    DefDelTests.OtherRecvMsg,
+                    DefDelTests.OriginalWait,
+                    DefDelTests.OtherWait,
+                    DefDelTests.DelThread,
+                    DefDelTests.AddThread]
+
 
 ########################################################################
 # Test settings for test_config_build_scenarios
@@ -1694,6 +1720,22 @@ class WaitForSendTimeouts(ConfigCmd):
 #         The params values are returned one at a time
 #     """
 #     return request.param
+
+
+###############################################################################
+# num_registered_1_arg
+###############################################################################
+@pytest.fixture(params=def_del_arg_list)  # type: ignore
+def def_del_arg(request: Any) -> DefDelTests:
+    """Type of deferred delete to do.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(DefDelTests, request.param)
 
 
 ###############################################################################
@@ -3462,6 +3504,8 @@ class ConfigVerifier:
         self.specified_args = locals()  # used for __repr__, see below
         self.commander_name = commander_name
         self.commander_thread_config_built = False
+        self.cmd_thread_alive = False
+        self.cmd_thread_auto_start = False
         self.create_commander_event: threading.Event = threading.Event()
 
         self.monitor_thread = threading.Thread(target=self.monitor)
@@ -4554,39 +4598,15 @@ class ConfigVerifier:
                     exp_msgs=msgs_to_send))
 
     ####################################################################
-    # build_recv_msg_pau_suite
+    # build_def_del_suite
     ####################################################################
-    def build_recv_msg_pau_suite(
+    def build_def_del_suite(
             self,
-            timeout_type: TimeoutType,
-            num_receivers: int,
-            num_active_no_delay_senders: int,
-            num_active_delay_senders: int,
-            num_send_exit_senders: int,
-            num_nosend_exit_senders: int,
-            num_unreg_senders: int,
-            num_reg_senders: int) -> None:
-        """Return a list of ConfigCmd items for a msg timeout.
+            def_del: DefDelTests) -> None:
+        """Return a list of ConfigCmd items for a deferred delete.
 
         Args:
-            timeout_type: specifies whether the recv_msg should
-                be coded with timeout and whether the recv_msg should
-                succeed or fail with a timeout
-            num_receivers: number of threads that will do the
-                recv_msg
-            num_active_no_delay_senders: number of threads that are
-                active and will do the send_msg immediately
-            num_active_delay_senders: number of threads that are active
-                and will do the send_msg after a delay
-            num_send_exit_senders: number of threads that are active
-                and will do the send_msg and then exit
-            num_nosend_exit_senders: number of threads that are
-                active and will not do the send_msg and then exit
-            num_unreg_senders: number of threads that are
-                unregistered and will be created and started and then
-                do the send_msg
-            num_reg_senders: number of threads that are registered
-                and will be started and then do the send_msg
+            def_del: specifies type of test to do
 
         """
         self.build_config(
@@ -6662,25 +6682,12 @@ class ConfigVerifier:
     # build_simple_scenario
     ####################################################################
 
-    def build_simple_scenario(self,
-                              thread_alive: bool,
-                              auto_start: bool) -> None:
-        """Add config cmds to the scenario queue.
+    def build_simple_scenario(self) -> None:
+        """Add config cmds to the scenario queue."""
 
-        Args:
-            thread_alive: specifies whether the thread was started
-            auto_start: specifies whether the commander is auto_start
-        """
-        if auto_start:
-            self.add_cmd(CreateCommanderAutoStart(
-                cmd_runners='alpha',
-                commander_name='alpha',
-                thread_alive=thread_alive))
-        else:
-            self.add_cmd(CreateCommanderNoStart(
-                cmd_runners='alpha',
-                commander_name='alpha',
-                thread_alive=thread_alive))
+        self.add_cmd(CreateCommanderAutoStart(
+            cmd_runners='alpha',
+            commander_name='alpha'))
 
         self.add_cmd(ValidateConfig(
             cmd_runners='alpha'))
@@ -7005,8 +7012,8 @@ class ConfigVerifier:
         with self.ops_lock:
             self.monitor_add_items[cmd_runner] = MonitorAddItem(
                 cmd_runner=cmd_runner,
-                thread_alive=thread_alive,
-                auto_start=auto_start,
+                thread_alive=self.cmd_thread_alive,
+                auto_start=self.cmd_thread_auto_start,
                 expected_status=exp_status)
             self.cmd_waiting_event_items[cmd_runner] = threading.Event()
 
@@ -10434,23 +10441,20 @@ class TestSmartThreadScenarios:
             commander_config_arg: specifies the config for the commander
 
         """
-        if commander_config_arg == AppConfig.ScriptStyle:
-            thread_alive = True
-            auto_start = True
-        elif commander_config_arg == AppConfig.CurrentThreadApp:
-            thread_alive = True
-            auto_start = False
-        elif commander_config_arg == AppConfig.RemoteThreadApp:
-            thread_alive = False
-            auto_start = False
-        elif commander_config_arg == AppConfig.RemoteSmartThreadApp:
-            thread_alive = False
-            auto_start = False
+        # if commander_config_arg == AppConfig.ScriptStyle:
+        #     thread_alive = True
+        #     auto_start = True
+        # elif commander_config_arg == AppConfig.CurrentThreadApp:
+        #     thread_alive = True
+        #     auto_start = False
+        # elif commander_config_arg == AppConfig.RemoteThreadApp:
+        #     thread_alive = False
+        #     auto_start = False
+        # elif commander_config_arg == AppConfig.RemoteSmartThreadApp:
+        #     thread_alive = False
+        #     auto_start = False
 
-        args_for_scenario_builder: dict[str, Any] = {
-            'thread_alive': thread_alive,
-            'auto_start': auto_start
-        }
+        args_for_scenario_builder: dict[str, Any] = {}
 
         self.scenario_driver(
             scenario_builder=ConfigVerifier.build_simple_scenario,
@@ -10558,39 +10562,15 @@ class TestSmartThreadScenarios:
     ####################################################################
     # test_recv_msg_pair_array_scenarios
     ####################################################################
-    def test_recv_msg_pair_array_scenarios(
+    def test_def_del_scenarios(
             self,
-            timeout_type_arg: TimeoutType,
-            num_receivers_arg: int,
-            num_active_no_delay_senders_arg: int,
-            num_active_delay_senders_arg: int,
-            num_send_exit_senders_arg: int,
-            num_nosend_exit_senders_arg: int,
-            num_unreg_senders_arg: int,
-            num_reg_senders_arg: int,
+            def_del_arg: DefDelTests,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
         """Test meta configuration scenarios.
 
         Args:
-            timeout_type_arg: specifies whether the recv_msg should
-                be coded with timeout and whether the recv_msg should
-                succeed or fail with a timeout
-            num_receivers_arg: number of threads that will do the
-                recv_msg
-            num_active_no_delay_senders_arg: number of threads that are
-                active and will do the send_msg immediately
-            num_active_delay_senders_arg: number of threads that are
-                active and will do the send_msg after a delay
-            num_send_exit_senders_arg: number of threads that are active
-                and will do the send_msg and then exit
-            num_nosend_exit_senders_arg: number of threads that are
-                active and will not do the send_msg and then exit
-            num_unreg_senders_arg: number of threads that are
-                unregistered and will be created and started and then
-                do the send_msg
-            num_reg_senders_arg: number of threads that are registered
-                and will be started and then do the send_msg
+            def_del_arg: specifies the type of test to do
             caplog: pytest fixture to capture log output
 
         """
@@ -10633,7 +10613,7 @@ class TestSmartThreadScenarios:
         }
 
         self.scenario_driver(
-            scenario_builder=ConfigVerifier.build_recv_msg_pau_suite,
+            scenario_builder=ConfigVerifier.build_def_del_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
             commander_config=commander_config
@@ -11023,18 +11003,24 @@ class TestSmartThreadScenarios:
                 name=commander_name,
                 max_msgs=10)
             config_ver.commander_thread = commander_thread
+            config_ver.cmd_thread_alive = True
+            config_ver.cmd_thread_auto_start = True
             config_ver.main_driver()
         elif commander_config == AppConfig.CurrentThreadApp:
             commander_current_app = CommanderCurrentApp(
                 config_ver=config_ver,
                 name=commander_name,
                 max_msgs=10)
+            config_ver.cmd_thread_alive = True
+            config_ver.cmd_thread_auto_start = False
             commander_current_app.run()
         elif commander_config == AppConfig.RemoteThreadApp:
             outer_thread_app = OuterThreadApp(
                 config_ver=config_ver,
                 name=commander_name,
                 max_msgs=10)
+            config_ver.cmd_thread_alive = False
+            config_ver.cmd_thread_auto_start = False
             outer_thread_app.start()
             outer_thread_app.join()
         elif commander_config == AppConfig.RemoteSmartThreadApp:
@@ -11042,6 +11028,8 @@ class TestSmartThreadScenarios:
                 config_ver=config_ver,
                 name=commander_name,
                 max_msgs=10)
+            config_ver.cmd_thread_alive = False
+            config_ver.cmd_thread_auto_start = False
             outer_thread_app.start()
             threading.Thread.join(outer_thread_app)
 
