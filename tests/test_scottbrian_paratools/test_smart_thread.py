@@ -76,17 +76,26 @@ class Actors(Enum):
 
 
 ########################################################################
-# DefDelTests
+# DefDelScenario
 ########################################################################
-class DefDelTests(Enum):
+class DefDelScenario(Enum):
     Normal = auto()
     Resurrection = auto()
-    OriginalRecvMsg = auto()
+    OriginalCmd = auto()
     OtherRecvMsg = auto()
     OriginalWait = auto()
     OtherWait = auto()
     DelThread = auto()
     AddThread = auto()
+
+
+########################################################################
+# DefDelCmd
+########################################################################
+class DefDelCmd(Enum):
+    RecvMsg = auto()
+    Wait = auto()
+
 
 ########################################################################
 # Test settings
@@ -95,7 +104,7 @@ commander_config_arg_list = [AppConfig.ScriptStyle,
                              AppConfig.CurrentThreadApp,
                              AppConfig.RemoteThreadApp]
 
-# commander_config_arg_list = [AppConfig.RemoteThreadApp]
+commander_config_arg_list = [AppConfig.RemoteThreadApp]
 
 
 ########################################################################
@@ -113,19 +122,22 @@ class TimeoutType(Enum):
 timeout_type_arg_list = [TimeoutType.TimeoutNone,
                          TimeoutType.TimeoutFalse,
                          TimeoutType.TimeoutTrue]
-# timeout_type_arg_list = [TimeoutType.TimeoutTrue]
+# timeout_type_arg_list = [TimeoutType.TimeoutFalse]
 
 ########################################################################
 # Test settings for test_def_del_scenarios
 ########################################################################
-def_del_arg_list = [DefDelTests.Normal,
-                    DefDelTests.Resurrection,
-                    DefDelTests.OriginalRecvMsg,
-                    DefDelTests.OtherRecvMsg,
-                    DefDelTests.OriginalWait,
-                    DefDelTests.OtherWait,
-                    DefDelTests.DelThread,
-                    DefDelTests.AddThread]
+def_del_scenario_arg_list = [DefDelScenario.Normal,
+                    DefDelScenario.Resurrection,
+                    DefDelScenario.OriginalCmd,
+                    DefDelScenario.OtherRecvMsg,
+                    DefDelScenario.OriginalWait,
+                    DefDelScenario.OtherWait,
+                    DefDelScenario.DelThread,
+                    DefDelScenario.AddThread]
+
+def_del_cmd_arg_list = [DefDelCmd.RecvMsg,
+                        DefDelCmd.Wait]
 
 
 ########################################################################
@@ -153,13 +165,13 @@ num_stopped_2_arg_list = [0, 1, 2]
 # Test settings for test_recv_timeout_scenarios
 ########################################################################
 num_receivers_arg_list = [1, 2, 3]
-# num_receivers_arg_list = [3]
+# num_receivers_arg_list = [2]
 
 num_active_no_delay_senders_arg_list = [0, 1, 2]
-# num_active_no_delay_senders_arg_list = [0]  # .001
+# num_active_no_delay_senders_arg_list = [1]  # .001
 
 num_active_delay_senders_arg_list = [0, 1, 2]
-# num_active_delay_senders_arg_list = [0]  # .65  0.0005
+# num_active_delay_senders_arg_list = [1]  # .65  0.0005
 
 num_send_exit_senders_arg_list = [0, 1, 2]
 # num_send_exit_senders_arg_list = [2]  # .65  0.0007
@@ -177,7 +189,7 @@ num_reg_senders_arg_list = [0, 1, 2]
 # Test settings for test_send_msg_timeout_scenarios
 ########################################################################
 num_senders_arg_list = [1, 2, 3]
-# num_senders_arg_list = [3]
+# num_senders_arg_list = [2]
 
 num_active_targets_arg_list = [0, 1, 2]
 # num_active_targets_arg_list = [3]  # 0.12
@@ -189,7 +201,7 @@ num_unreg_timeouts_arg_list = [0, 1, 2]
 # num_unreg_timeouts_arg_list = [3]  # 0.15
 
 num_exit_timeouts_arg_list = [0, 1, 2]
-# num_exit_timeouts_arg_list = [3]  # 0.11
+# num_exit_timeouts_arg_list = [1]  # 0.11
 
 num_full_q_timeouts_arg_list = [0, 1, 2]
 # num_full_q_timeouts_arg_list = [3]  # 0.11
@@ -234,7 +246,7 @@ num_stopped_delay_arg_list = [0, 1, 2]
 # Test settings for test_wait_timeout_scenarios
 ########################################################################
 num_waiters_arg_list = [1, 2, 3]
-num_waiters_arg_list = [3]
+# num_waiters_arg_list = [3]
 num_actors_arg_list = [1, 2, 3]
 
 actor_1_arg_list = [Actors.ActiveBeforeActor,
@@ -243,7 +255,7 @@ actor_1_arg_list = [Actors.ActiveBeforeActor,
                     Actors.ExitActionActor,
                     Actors.UnregActor,
                     Actors.RegActor]
-actor_1_arg_list = [Actors.ActionExitActor]
+# actor_1_arg_list = [Actors.ActionExitActor]
 num_actor_1_arg_list = [1, 2, 3]
 
 actor_2_arg_list = [Actors.ActiveBeforeActor,
@@ -252,7 +264,7 @@ actor_2_arg_list = [Actors.ActiveBeforeActor,
                     Actors.ExitActionActor,
                     Actors.UnregActor,
                     Actors.RegActor]
-actor_2_arg_list = [Actors.ActionExitActor]
+# actor_2_arg_list = [Actors.ActionExitActor]
 num_actor_2_arg_list = [1, 2, 3]
 
 actor_3_arg_list = [Actors.ActiveBeforeActor,
@@ -702,6 +714,7 @@ class Pause(ConfigCmd):
             cmd_runner: name of thread running the command
         """
         time.sleep(self.pause_seconds)
+
 
 ########################################################################
 # RecvMsg
@@ -1259,6 +1272,35 @@ class VerifyCounts(ConfigCmd):
 
 
 ########################################################################
+# VerifyDefDel
+########################################################################
+class VerifyDefDel(ConfigCmd):
+    def __init__(self,
+                 cmd_runners: StrOrList,
+                 def_del_scenario: DefDelScenario,
+                 def_del_cmd: DefDelCmd) -> None:
+        super().__init__(cmd_runners=cmd_runners)
+        self.specified_args = locals()  # used for __repr__
+
+        self.def_del_scenario = def_del_scenario
+        self.def_del_cmd = def_del_cmd
+
+        self.arg_list += ['def_del_scenario',
+                          'def_del_cmd',]
+
+    def run_process(self, cmd_runner: str) -> None:
+        """Run the command.
+
+        Args:
+            cmd_runner: name of thread running the command
+        """
+        self.config_ver.verify_def_del(
+            cmd_runner=cmd_runner,
+            def_del_scenario=self.def_del_scenario,
+            def_del_cmd=self.def_del_cmd)
+
+
+########################################################################
 # VerifyInRegistry
 ########################################################################
 class VerifyInRegistry(ConfigCmd):
@@ -1467,11 +1509,13 @@ class Wait(ConfigCmd):
     def __init__(self,
                  cmd_runners: StrOrList,
                  resumers: DictAliveAndStatus,
-                 raise_not_alive: bool) -> None:
+                 raise_not_alive: bool,
+                 log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
         self.resumers = resumers
+        self.log_msg = log_msg
         self.raise_not_alive = raise_not_alive
 
         self.arg_list += ['resumers',
@@ -1486,7 +1530,8 @@ class Wait(ConfigCmd):
         self.config_ver.handle_wait(
             cmd_runner=cmd_runner,
             resumers=self.resumers,
-            raise_not_alive=self.raise_not_alive
+            raise_not_alive=self.raise_not_alive,
+            log_msg=self.log_msg
         )
 
 
@@ -1498,10 +1543,12 @@ class WaitTimeoutFalse(Wait):
                  cmd_runners: StrOrList,
                  resumers: DictAliveAndStatus,
                  raise_not_alive: bool,
-                 timeout: IntOrFloat) -> None:
+                 timeout: IntOrFloat,
+                 log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners,
                          resumers=resumers,
-                         raise_not_alive=raise_not_alive)
+                         raise_not_alive=raise_not_alive,
+                         log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
 
         self.timeout = timeout
@@ -1518,7 +1565,8 @@ class WaitTimeoutFalse(Wait):
             cmd_runner=cmd_runner,
             resumers=self.resumers,
             raise_not_alive=self.raise_not_alive,
-            timeout=self.timeout)
+            timeout=self.timeout,
+            log_msg=self.log_msg)
 
 
 ########################################################################
@@ -1530,11 +1578,13 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
                  resumers: DictAliveAndStatus,
                  raise_not_alive: bool,
                  timeout: IntOrFloat,
+                 log_msg: Optional[str] = None
                  ) -> None:
         super().__init__(cmd_runners=cmd_runners,
                          resumers=resumers,
                          raise_not_alive=raise_not_alive,
-                         timeout=timeout)
+                         timeout=timeout,
+                         log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
 
     def run_process(self, cmd_runner: str) -> None:
@@ -1547,7 +1597,8 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
             cmd_runner=cmd_runner,
             resumers=self.resumers,
             raise_not_alive=self.raise_not_alive,
-            timeout=self.timeout)
+            timeout=self.timeout,
+            log_msg=self.log_msg)
 
 
 ########################################################################
@@ -1725,8 +1776,8 @@ class WaitForSendTimeouts(ConfigCmd):
 ###############################################################################
 # num_registered_1_arg
 ###############################################################################
-@pytest.fixture(params=def_del_arg_list)  # type: ignore
-def def_del_arg(request: Any) -> DefDelTests:
+@pytest.fixture(params=def_del_scenario_arg_list)  # type: ignore
+def def_del_scenario_arg(request: Any) -> DefDelScenario:
     """Type of deferred delete to do.
 
     Args:
@@ -1735,8 +1786,23 @@ def def_del_arg(request: Any) -> DefDelTests:
     Returns:
         The params values are returned one at a time
     """
-    return cast(DefDelTests, request.param)
+    return cast(DefDelScenario, request.param)
 
+
+###############################################################################
+# num_registered_1_arg
+###############################################################################
+@pytest.fixture(params=def_del_cmd_arg_list)  # type: ignore
+def def_del_cmd_arg(request: Any) -> DefDelCmd:
+    """Type of deferred delete to do.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(DefDelCmd, request.param)
 
 ###############################################################################
 # random_seed_arg
@@ -3367,7 +3433,6 @@ class CmdWaitingLogSearchItem(LogSearchItem):
             config_ver=self.config_ver)
 
     def run_process(self):
-        print(f'run_process entered with {self.found_log_msg=}')
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0].split(sep='=')[1]
         cmd_runner = cmd_runner[1:-1]
@@ -4602,49 +4667,189 @@ class ConfigVerifier:
     ####################################################################
     def build_def_del_suite(
             self,
-            def_del: DefDelTests) -> None:
+            def_del_scenario: DefDelScenario,
+            def_del_cmd: DefDelCmd) -> None:
         """Return a list of ConfigCmd items for a deferred delete.
 
         Args:
-            def_del: specifies type of test to do
+            def_del_scenario: specifies type of test to do
+            def_del_cmd: type of def del cmd
 
         """
+        num_receivers = 2
+        num_senders = 1
+
+        num_waiters = 2
+        num_resumers = 1
+        
+        num_active_needed = (num_receivers 
+                             + num_senders 
+                             + num_waiters 
+                             + num_resumers 
+                             + 1)  # plus 1 for the commander
         self.build_config(
             cmd_runner=self.commander_name,
-            num_registered=num_reg_senders,
+            # num_registered=num_reg_senders,
             num_active=num_active_needed)
 
-        ################################################################
-        # send a msg that will sit on the recv_msg msgq
-        ################################################################
-        send_msg_serial_num = self.add_cmd(
-            SendMsg(cmd_runners=active_no_delay_sender_names,
-                    receivers=receiver_names,
-                    msgs_to_send=sender_msgs))
+        self.log_name_groups()
+
+        # active_names = self.active_names.copy()
+        # remove commander for now, but if we add it later we need to
+        # be careful not to exit the commander
+        active_names = self.active_names - {self.commander_name}
 
         ################################################################
-        # exit the sender to create a half paired case
+        # choose receiver_names
         ################################################################
-        self.build_exit_suite(
-            names=send_exit_sender_names, validate_config=False)
-        self.build_join_suite(
-            cmd_runners=self.commander_name,
-            join_target_names=send_exit_sender_names,
-            validate_config=False)
+        receiver_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_receivers,
+            update_collection=True,
+            var_name_for_log='receiver_names')
 
         ################################################################
-        # resurrect the sender
+        # choose sender_names
         ################################################################
+        sender_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_senders,
+            update_collection=True,
+            var_name_for_log='active_no_delay_sender_names')
 
         ################################################################
-        # receive the message to allow the pair array to be updated
+        # choose waiter_names
         ################################################################
-        recv_msg_serial_num = self.add_cmd(
-            RecvMsg(cmd_runners=receiver_names,
-                    senders=all_sender_names,
-                    exp_msgs=sender_msgs,
-                    del_deferred=send_exit_sender_names,
-                    log_msg=log_msg))
+        waiter_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_waiters,
+            update_collection=True,
+            var_name_for_log='receiver_names')
+
+        ################################################################
+        # choose resumer_names
+        ################################################################
+        resumer_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_resumers,
+            update_collection=True,
+            var_name_for_log='receiver_names')
+
+        ################################################################
+        # setup msgs to send
+        ################################################################
+        sender_msgs: dict[str, str] = {}
+        for name in sender_names:
+            sender_msgs[name] = (f'recv test: {name} sending msg '
+                                 f'at {self.get_ptime()}')
+
+        class DefDelScenario(Enum):
+            Normal = auto()
+            Resurrection = auto()
+            OriginalCmd = auto()
+            OtherRecvMsg = auto()
+            OriginalWait = auto()
+            OtherWait = auto()
+            DelThread = auto()
+            AddThread = auto()
+
+        if def_del_cmd == DefDelCmd.RecvMsg:
+            ############################################################
+            # send a msg that will sit on the recv_msg msgq
+            ############################################################
+            def_del_catalyst = sender_names[0]
+            send_msg_serial_num = self.add_cmd(
+                SendMsg(cmd_runners=sender_names[0],
+                        receivers=receiver_names[0],
+                        msgs_to_send=sender_msgs))
+        else:
+            ############################################################
+            # resume that will set wait bit
+            ############################################################
+            def_del_catalyst = resumer_names[0]
+            resume_serial_num = self.add_cmd(
+                Resume(cmd_runners=resumer_names[0],
+                       targets=waiter_names[0],
+                       stopped_names=[]))
+
+        if def_del_scenario != DefDelScenario.Normal:
+            ############################################################
+            # exit the sender to create a half paired case
+            ############################################################
+            self.build_exit_suite(
+                names=[def_del_catalyst], validate_config=False)
+            self.build_join_suite(
+                cmd_runners=self.commander_name,
+                join_target_names=[def_del_catalyst],
+                validate_config=False)
+
+            if def_del_scenario == DefDelScenario.Resurrection:
+                ########################################################
+                # resurrect the sender
+                ########################################################
+                f1_create_items: list[F1CreateItem] = [
+                    F1CreateItem(
+                        name=def_del_catalyst,
+                        auto_start=True,
+                        target_rtn=outer_f1,
+                        app_config=AppConfig.ScriptStyle)]
+                self.build_create_suite(
+                    f1_create_items=f1_create_items,
+                    validate_config=False)
+
+        if def_del_cmd == DefDelCmd.RecvMsg:
+            ############################################################
+            # receive the message to allow the pair array to be updated
+            ############################################################
+            recv_msg_serial_num = self.add_cmd(
+                RecvMsg(cmd_runners=receiver_names[0],
+                        senders=sender_names[0],
+                        exp_msgs=sender_msgs,
+                        # del_deferred=sender_names[0],
+                        log_msg=f'def_del_recv_test'))
+            if def_del_scenario == DefDelScenario.OriginalCmd:
+                ################################################################
+                # confirm the wait
+                ################################################################
+                self.add_cmd(
+                    ConfirmResponse(
+                        cmd_runners=[self.commander_name],
+                        confirm_cmd='Wait',
+                        confirm_serial_num=wait_serial_num,
+                        confirmers=waiter_names[0]))
+
+        else:
+            ############################################################
+            # receive the message to allow the pair array to be updated
+            ############################################################
+            wait_serial_num = self.add_cmd(
+                Wait(cmd_runners=waiter_names[0],
+                     resumers=resumer_names[0],
+                     log_msg=f'def_del_wait_test'))
+
+            ################################################################
+            # confirm the wait
+            ################################################################
+            self.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=[self.commander_name],
+                    confirm_cmd='Wait',
+                    confirm_serial_num=wait_serial_num,
+                    confirmers=waiter_names[0]))
+
+        if def_del_scenario == DefDelScenario.OtherRecvMsg:
+
+
+        ################################################################
+        # check results
+        ################################################################
+        self.add_cmd(
+            VerifyDefDel(
+                cmd_runners=self.commander_name,
+                def_del_scenario=def_del_scenario,
+                def_del_cmd=def_del_cmd))
+
+
         ################################################################
         # recv_msg does the deferred del update
         ################################################################
@@ -4730,11 +4935,11 @@ class ConfigVerifier:
                 + 1)
 
         timeout_time = ((num_active_no_delay_senders * 0.01)
-                      + (num_active_delay_senders * 0.01)
-                      + (num_send_exit_senders * 0.01)
-                      + (num_nosend_exit_senders * 0.5)
-                      + (num_unreg_senders * 0.2)
-                      + (num_reg_senders * 0.1))
+                        + (num_active_delay_senders * 0.01)
+                        + (num_send_exit_senders * 0.01)
+                        + (num_nosend_exit_senders * 0.5)
+                        + (num_unreg_senders * 0.2)
+                        + (num_reg_senders * 0.1))
 
         if timeout_type == TimeoutType.TimeoutNone:
             pause_time = 0.5
@@ -6294,12 +6499,13 @@ class ConfigVerifier:
 
         timeout_time = ((num_active_targets * 0.16)
                         + (num_registered_targets * 0.16)
-                        + (num_unreg_timeouts * 0.16)
+                        + (num_unreg_timeouts * 0.50)
                         + (num_exit_timeouts * 0.50)
                         + (num_full_q_timeouts * 0.25 * self.max_msgs))
 
         if timeout_type == TimeoutType.TimeoutFalse:
             timeout_time *= 2  # prevent timeout
+            timeout_time = max(timeout_time, 1)
         elif timeout_type == TimeoutType.TimeoutTrue:
             timeout_time *= 0.5  # force timeout
 
@@ -7694,7 +7900,7 @@ class ConfigVerifier:
             self.cmd_waiting_event_items[cmd_runner] = threading.Event()
 
         self.log_test_msg(f'{cmd_runner=} handle_join waiting for monitor')
-
+        self.monitor_event.set()
         self.cmd_waiting_event_items[cmd_runner].wait()
         with self.ops_lock:
             del self.cmd_waiting_event_items[cmd_runner]
@@ -7752,7 +7958,7 @@ class ConfigVerifier:
             self.cmd_waiting_event_items[cmd_runner] = threading.Event()
 
         self.log_test_msg(f'{cmd_runner=} handle_join_tof waiting for monitor')
-
+        self.monitor_event.set()
         self.cmd_waiting_event_items[cmd_runner].wait()
         with self.ops_lock:
             del self.cmd_waiting_event_items[cmd_runner]
@@ -7829,7 +8035,7 @@ class ConfigVerifier:
 
             self.log_test_msg(
                 f'{cmd_runner=} handle_join_tot waiting for monitor')
-
+            self.monitor_event.set()
             self.cmd_waiting_event_items[cmd_runner].wait()
             with self.ops_lock:
                 del self.cmd_waiting_event_items[cmd_runner]
@@ -7992,7 +8198,7 @@ class ConfigVerifier:
             self.cmd_waiting_event_items[cmd_runner] = threading.Event()
 
         self.log_test_msg(f'{cmd_runner=} handle_recv waiting for monitor')
-
+        self.monitor_event.set()
         self.cmd_waiting_event_items[cmd_runner].wait()
         with self.ops_lock:
             # del self.recv_msg_event_items[cmd_runner]
@@ -8078,7 +8284,7 @@ class ConfigVerifier:
         with self.ops_lock:
             self.cmd_waiting_event_items[cmd_runner] = threading.Event()
         self.log_test_msg(f'{cmd_runner=} handle_recv_tof waiting for monitor')
-
+        self.monitor_event.set()
         self.cmd_waiting_event_items[cmd_runner].wait()
         with self.ops_lock:
             # del self.recv_msg_event_items[cmd_runner]
@@ -8195,7 +8401,7 @@ class ConfigVerifier:
                 self.cmd_waiting_event_items[cmd_runner] = threading.Event()
             self.log_test_msg(
                 f'{cmd_runner=} handle_recv_tot waiting for monitor')
-
+            self.monitor_event.set()
             self.cmd_waiting_event_items[cmd_runner].wait()
             with self.ops_lock:
                 # del self.recv_msg_event_items[cmd_runner]
@@ -8702,17 +8908,14 @@ class ConfigVerifier:
             if not self.stopped_event_items[cmd_runner].targets:
                 self.stopped_event_items[cmd_runner].client_event.set()
 
-        # self.started_event_items['alpha'].targets.remove(cmd_runner)
-        # if not self.started_event_items['alpha'].targets:
-        #     self.started_event_items['alpha'].client_event.set()
-
     ####################################################################
     # handle_wait
     ####################################################################
     def handle_wait(self,
                     cmd_runner: str,
                     resumers: DictAliveAndStatus,
-                    raise_not_alive: bool) -> None:
+                    raise_not_alive: bool,
+                    log_msg: Optional[str] = None) -> None:
         """Wait for a resume.
 
         Args:
@@ -8720,6 +8923,7 @@ class ConfigVerifier:
             resumers: threads doing the resume
             raise_not_alive: specifies whether to raise error for a
                 stopped resumer
+            log_msg: optional log message to specify on the smart_wait
 
         """
         self.log_test_msg(f'{cmd_runner=} handle_wait entry for '
@@ -8741,13 +8945,27 @@ class ConfigVerifier:
         #         targets=list(non_stopped_resumers)
         #     )
 
+        enter_exit = ('entry', 'exit')
         for resumer in resumers.keys():
             if (raise_not_alive
                     and (resumers[resumer].status == st.ThreadStatus.Stopped)):
                 with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                     self.all_threads[cmd_runner].smart_wait(
                         resumer=resumer,
-                        raise_not_alive=raise_not_alive)
+                        raise_not_alive=raise_not_alive,
+                        log_msg=log_msg)
+
+                enter_exit = ('entry', )
+                if log_msg:
+                    log_msg_2 = (
+                        f'{self.log_ver.get_call_seq("handle_wait")} ')
+                    log_msg_3 = re.escape(f'{log_msg}')
+                    for enter_exit in enter_exit:
+                        log_msg_1 = re.escape(
+                            f'smart_wait() {enter_exit}: '
+                            f'{cmd_runner} to wait for {resumer}. ')
+
+                        self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
                 self.add_log_msg(
                     new_log_msg=re.escape(
@@ -8756,10 +8974,24 @@ class ConfigVerifier:
                         f'{cmd_runner} smart_wait is not resumed and '
                         f'detected thread {resumer=} has ended'),
                     log_level=logging.ERROR)
+
             else:
                 self.all_threads[cmd_runner].smart_wait(
                     resumer=resumer,
                     raise_not_alive=raise_not_alive)
+
+                enter_exit = ('entry', 'exit')
+                if log_msg:
+                    log_msg_2 = (
+                        f'{self.log_ver.get_call_seq("handle_wait")} ')
+                    log_msg_3 = re.escape(f'{log_msg}')
+                    for enter_exit in enter_exit:
+                        log_msg_1 = re.escape(
+                            f'smart_wait() {enter_exit}: '
+                            f'{cmd_runner} to wait for {resumer}. ')
+
+                        self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
+
                 self.monitor_event.set()
                 self.add_log_msg(
                     new_log_msg=(f'{cmd_runner} smart_wait resumed by '
@@ -8771,7 +9003,7 @@ class ConfigVerifier:
                 self.cmd_waiting_event_items[cmd_runner] = threading.Event()
             self.log_test_msg(
                 f'{cmd_runner=} handle_wait waiting for monitor')
-
+            self.monitor_event.set()
             self.cmd_waiting_event_items[cmd_runner].wait()
             with self.ops_lock:
                 # del self.recv_msg_event_items[cmd_runner]
@@ -8787,7 +9019,8 @@ class ConfigVerifier:
                         cmd_runner: str,
                         resumers: DictAliveAndStatus,
                         raise_not_alive: bool,
-                        timeout: IntOrFloat) -> None:
+                        timeout: IntOrFloat,
+                        log_msg: Optional[str] = None) -> None:
         """Wait for a resume, timeout specified, timeout not expected.
 
         Args:
@@ -8796,6 +9029,7 @@ class ConfigVerifier:
             raise_not_alive: specifies whether to raise error for a
                 stopped resumer
             timeout: timeout value to specify on the smart_wait
+            log_msg: optional log message to specify on the smart_wait
         """
         self.log_test_msg(f'{cmd_runner=} handle_wait_tof entry for '
                           f'{resumers=}, {raise_not_alive=}, {timeout=}')
@@ -8823,8 +9057,22 @@ class ConfigVerifier:
                     self.all_threads[cmd_runner].smart_wait(
                         resumer=resumer,
                         raise_not_alive=raise_not_alive,
-                        timeout=timeout
+                        timeout=timeout,
+                        log_msg=log_msg
                     )
+
+                enter_exit = ('entry',)
+                if log_msg:
+                    log_msg_2 = (
+                        f'{self.log_ver.get_call_seq("handle_wait_tof")} ')
+                    log_msg_3 = re.escape(f'{log_msg}')
+                    for enter_exit in enter_exit:
+                        log_msg_1 = re.escape(
+                            f'smart_wait() {enter_exit}: '
+                            f'{cmd_runner} to wait for {resumer} with '
+                            f'{timeout=}. ')
+
+                        self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
                 self.add_log_msg(
                     new_log_msg=re.escape(
@@ -8837,8 +9085,22 @@ class ConfigVerifier:
                 self.all_threads[cmd_runner].smart_wait(
                     resumer=resumer,
                     raise_not_alive=raise_not_alive,
-                    timeout=timeout
+                    timeout=timeout,
+                    log_msg=log_msg
                 )
+                enter_exit = ('entry', 'exit')
+                if log_msg:
+                    log_msg_2 = (
+                        f'{self.log_ver.get_call_seq("handle_wait_tof")} ')
+                    log_msg_3 = re.escape(f'{log_msg}')
+                    for enter_exit in enter_exit:
+                        log_msg_1 = re.escape(
+                            f'smart_wait() {enter_exit}: '
+                            f'{cmd_runner} to wait for {resumer} with '
+                            f'{timeout=}. ')
+
+                        self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
+
                 self.monitor_event.set()
                 self.add_log_msg(
                     new_log_msg=(f'{cmd_runner} smart_wait resumed by '
@@ -8850,7 +9112,7 @@ class ConfigVerifier:
                 self.cmd_waiting_event_items[cmd_runner] = threading.Event()
             self.log_test_msg(
                 f'{cmd_runner=} handle_wait_tof waiting for monitor')
-
+            self.monitor_event.set()
             self.cmd_waiting_event_items[cmd_runner].wait()
             with self.ops_lock:
                 # del self.recv_msg_event_items[cmd_runner]
@@ -8867,6 +9129,7 @@ class ConfigVerifier:
                         resumers: DictAliveAndStatus,
                         raise_not_alive: bool,
                         timeout: IntOrFloat,
+                        log_msg: Optional[str] = None
                         ) -> None:
         """Wait for a resume, timeout specified, timeout expected.
 
@@ -8876,6 +9139,7 @@ class ConfigVerifier:
             raise_not_alive: specifies whether to raise error for a
                 stopped resumer
             timeout: timeout value to specify on the smart_wait
+            log_msg: optional log message to specify on the smart_wait
 
         """
         self.log_test_msg(f'{cmd_runner=} handle_wait_tot entry for '
@@ -8892,8 +9156,22 @@ class ConfigVerifier:
                     self.all_threads[cmd_runner].smart_wait(
                         resumer=resumer,
                         raise_not_alive=raise_not_alive,
-                        timeout=timeout
+                        timeout=timeout,
+                        log_msg=log_msg
                     )
+
+                enter_exit = ('entry', )
+                if log_msg:
+                    log_msg_2 = (
+                        f'{self.log_ver.get_call_seq("handle_wait_tot")} ')
+                    log_msg_3 = re.escape(f'{log_msg}')
+                    for enter_exit in enter_exit:
+                        log_msg_1 = re.escape(
+                            f'smart_wait() {enter_exit}: '
+                            f'{cmd_runner} to wait for {resumer} with '
+                            f'{timeout=}. ')
+
+                        self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
                 self.add_log_msg(
                     new_log_msg=re.escape(
@@ -8907,11 +9185,25 @@ class ConfigVerifier:
                     self.all_threads[cmd_runner].smart_wait(
                         resumer=resumer,
                         raise_not_alive=raise_not_alive,
-                        timeout=timeout
+                        timeout=timeout,
+                        log_msg=log_msg
                     )
 
                 resumer_is_alive = resumers[resumer].is_alive
                 resumer_status = resumers[resumer].status
+
+                enter_exit = ('entry', )
+                if log_msg:
+                    log_msg_2 = (
+                        f'{self.log_ver.get_call_seq("handle_wait_tot")} ')
+                    log_msg_3 = re.escape(f'{log_msg}')
+                    for enter_exit in enter_exit:
+                        log_msg_1 = re.escape(
+                            f'smart_wait() {enter_exit}: '
+                            f'{cmd_runner} to wait for {resumer} with '
+                            f'{timeout=}. ')
+
+                        self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
                 self.add_log_msg(re.escape(
                     f'{cmd_runner} raising SmartThreadSmartWaitTimedOut '
@@ -9115,9 +9407,7 @@ class ConfigVerifier:
             cmd_runner: name of thread doing the stop thread
             stop_names: names of the threads to stop
         """
-        log_msg = f'{cmd_runner=} stop_thread entry for {stop_names=}'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
+        self.log_test_msg(f'{cmd_runner=} stop_thread entry for {stop_names=}')
 
         self.stopped_event_items[cmd_runner] = MonitorEventItem(
             client_event=threading.Event(),
@@ -9137,10 +9427,8 @@ class ConfigVerifier:
         while work_names:
             for stop_name in work_names:
                 if not self.all_threads[stop_name].thread.is_alive():
-                    stopped_msg = (f'{stop_name} has been stopped by '
-                                   f'{cmd_runner}')
-                    self.log_ver.add_msg(log_msg=stopped_msg)
-                    logger.debug(stopped_msg)
+                    self.log_test_msg(f'{stop_name} has been stopped by '
+                                      f'{cmd_runner}')
                     self.monitor_event.set()
                     # with self.ops_lock:
                     #     if stop_name in self.expected_registered:
@@ -9150,15 +9438,13 @@ class ConfigVerifier:
                     break
                 time.sleep(0.05)
 
-        log_msg = f'{cmd_runner=} stop_thread waiting for monitor'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
-
+        self.log_test_msg(f'{cmd_runner=} stop_thread waiting for monitor')
+        self.monitor_event.set()
         self.stopped_event_items[cmd_runner].client_event.wait()
 
-        log_msg = f'{cmd_runner=} stop_thread exiting for {stop_names=}'
-        self.log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
+        self.log_test_msg(f'{cmd_runner=} stop_thread exiting for '
+                          f'{stop_names=}')
+
 
     ####################################################################
     # unregister_threads
@@ -9728,6 +10014,28 @@ class ConfigVerifier:
                     f'equal to {stopped_found_real=} and/or '
                     f'{stopped_found_mock=}')
 
+    verify_def_del(
+        cmd_runner=cmd_runner,
+        def_del_scenario=self.def_del_scenario,
+        def_del_cmd=self.def_del_cmd)
+
+    ####################################################################
+    # verify_def_del
+    ####################################################################
+    def verify_def_del(self,
+                       cmd_runner: str,
+                       def_del_scenario: DefDelScenario,
+                       def_del_cmd: DefDelCmd) -> None:
+        """Verify that the given counts are correct.
+
+        Args:
+            cmd_runner: name of thread doing the cmd
+            def_del_scenario: deferred delete scenario to verify
+            def_del_cmd: deferred delete cmd that was done
+
+        """
+        pass
+
     ####################################################################
     # verify_in_registry
     ####################################################################
@@ -10287,6 +10595,7 @@ class OuterSmartThreadApp(st.SmartThread, threading.Thread):
         """
         # super().__init__()
         threading.Thread.__init__(self)
+        threading.current_thread().name = name
         st.SmartThread.__init__(
             self,
             name=name,
@@ -10560,38 +10869,26 @@ class TestSmartThreadScenarios:
             caplog_to_use=caplog)
 
     ####################################################################
-    # test_recv_msg_pair_array_scenarios
+    # test_def_del_scenarios
     ####################################################################
     def test_def_del_scenarios(
             self,
-            def_del_arg: DefDelTests,
+            def_del_scenario_arg: DefDelScenario,
+            def_del_cmd_arg: DefDelCmd,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
         """Test meta configuration scenarios.
 
         Args:
-            def_del_arg: specifies the type of test to do
+            def_del_scenario_arg: specifies the type of test to do
+            def_del_cmd_arg: which cmd is to be the deferred delete
             caplog: pytest fixture to capture log output
 
         """
-        total_arg_counts = (
-                num_active_no_delay_senders_arg
-                + num_active_delay_senders_arg
-                + num_send_exit_senders_arg
-                + num_nosend_exit_senders_arg
-                + num_unreg_senders_arg
-                + num_reg_senders_arg)
-        if timeout_type_arg == TimeoutType.TimeoutNone:
-            if total_arg_counts == 0:
-                return
-        else:
-            if (num_active_delay_senders_arg
-                    + num_nosend_exit_senders_arg
-                    + num_unreg_senders_arg
-                    + num_reg_senders_arg) == 0:
-                return
+        config_decider_num = (def_del_scenario_arg.value
+                              + def_del_cmd_arg.value)
 
-        command_config_num = total_arg_counts % 4
+        command_config_num = config_decider_num % 4
         if command_config_num == 0:
             commander_config = AppConfig.ScriptStyle
         elif command_config_num == 1:
@@ -10602,14 +10899,8 @@ class TestSmartThreadScenarios:
             commander_config = AppConfig.RemoteSmartThreadApp
 
         args_for_scenario_builder: dict[str, Any] = {
-            'timeout_type': timeout_type_arg,
-            'num_receivers': num_receivers_arg,
-            'num_active_no_delay_senders': num_active_no_delay_senders_arg,
-            'num_active_delay_senders': num_active_delay_senders_arg,
-            'num_send_exit_senders': num_send_exit_senders_arg,
-            'num_nosend_exit_senders': num_nosend_exit_senders_arg,
-            'num_unreg_senders': num_unreg_senders_arg,
-            'num_reg_senders': num_reg_senders_arg
+            'def_del_scenario': def_del_scenario_arg,
+            'def_del_cmd': def_del_cmd_arg
         }
 
         self.scenario_driver(

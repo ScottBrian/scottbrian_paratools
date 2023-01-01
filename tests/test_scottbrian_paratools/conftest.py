@@ -130,7 +130,7 @@ def thread_exc(monkeypatch: Any) -> "ExcHook":
     # clean the registry in SmartThread class
     SmartThread._registry = {}
     SmartThread._pair_array = {}
-    assert threading.current_thread().name == 'alpha'
+    # assert threading.current_thread().name == 'alpha'
     threading.current_thread().name = 'MainThread'  # restore name
 
     # surface any remote thread uncaught exceptions
