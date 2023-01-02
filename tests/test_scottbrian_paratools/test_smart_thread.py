@@ -4677,19 +4677,26 @@ class ConfigVerifier:
 
         """
         num_receivers = 2
-        num_senders = 1
+        num_senders = 2
 
         num_waiters = 2
-        num_resumers = 1
+        num_resumers = 2
+
+        num_deletes = 1
+        num_creates = 1
+
+        num_lockers = 3
         
         num_active_needed = (num_receivers 
                              + num_senders 
                              + num_waiters 
-                             + num_resumers 
+                             + num_resumers
+                             + num_deletes
+                             + num_creates
+                             + num_lockers
                              + 1)  # plus 1 for the commander
         self.build_config(
             cmd_runner=self.commander_name,
-            # num_registered=num_reg_senders,
             num_active=num_active_needed)
 
         self.log_name_groups()
@@ -4736,6 +4743,15 @@ class ConfigVerifier:
             var_name_for_log='receiver_names')
 
         ################################################################
+        # choose locker_names
+        ################################################################
+        locker_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_lockers,
+            update_collection=True,
+            var_name_for_log='locker_names')
+
+        ################################################################
         # setup msgs to send
         ################################################################
         sender_msgs: dict[str, str] = {}
@@ -4748,7 +4764,6 @@ class ConfigVerifier:
             Resurrection = auto()
             OriginalCmd = auto()
             OtherRecvMsg = auto()
-            OriginalWait = auto()
             OtherWait = auto()
             DelThread = auto()
             AddThread = auto()
@@ -4758,19 +4773,31 @@ class ConfigVerifier:
             # send a msg that will sit on the recv_msg msgq
             ############################################################
             def_del_catalyst = sender_names[0]
-            send_msg_serial_num = self.add_cmd(
+            send_msg_serial_num_0 = self.add_cmd(
                 SendMsg(cmd_runners=sender_names[0],
                         receivers=receiver_names[0],
                         msgs_to_send=sender_msgs))
+            self.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=[self.commander_name],
+                    confirm_cmd='SendMsg',
+                    confirm_serial_num=send_msg_serial_num_0,
+                    confirmers=sender_names[0]))
         else:
             ############################################################
             # resume that will set wait bit
             ############################################################
             def_del_catalyst = resumer_names[0]
-            resume_serial_num = self.add_cmd(
+            resume_serial_num_0 = self.add_cmd(
                 Resume(cmd_runners=resumer_names[0],
                        targets=waiter_names[0],
                        stopped_names=[]))
+            self.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=[self.commander_name],
+                    confirm_cmd='Resume',
+                    confirm_serial_num=resume_serial_num_0,
+                    confirmers=resumer_names[0]))
 
         if def_del_scenario != DefDelScenario.Normal:
             ############################################################
@@ -4797,16 +4824,98 @@ class ConfigVerifier:
                     f1_create_items=f1_create_items,
                     validate_config=False)
 
+        ################################################################
+        # get lock to keep the first recv_msg/wait getting to far ahead
+        ################################################################
+        obtain_lock_serial_num_0 = self.add_cmd(
+            ObtainLock(cmd_runners=locker_names[0]))
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd='ObtainLock',
+                confirm_serial_num=obtain_lock_serial_num_0,
+                confirmers=locker_names[0]))
+
+        if def_del_scenario == DefDelScenario.OtherRecvMsg:
+            def_del_catalyst_1 = sender_names[1]
+            send_msg_serial_num_1 = self.add_cmd(
+                SendMsg(cmd_runners=sender_names[1],
+                        receivers=receiver_names[1],
+                        msgs_to_send=sender_msgs))
+
+            self.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=[self.commander_name],
+                    confirm_cmd='SendMsg',
+                    confirm_serial_num=send_msg_serial_num_1,
+                    confirmers=sender_names[1]))
+
+            ############################################################
+            # exit the sender to create a half paired case
+            ############################################################
+            self.build_exit_suite(
+                names=[def_del_catalyst_1], validate_config=False)
+            self.build_join_suite(
+                cmd_runners=self.commander_name,
+                join_target_names=[def_del_catalyst_1],
+                validate_config=False)
+
+            recv_msg_serial_num_1 = self.add_cmd(
+                RecvMsg(cmd_runners=receiver_names[1],
+                        senders=sender_names[1],
+                        exp_msgs=sender_msgs,
+                        # del_deferred=sender_names[0],
+                        log_msg=f'def_del_recv_test_1'))
+        elif def_del_scenario == DefDelScenario.OtherWait:
+            def_del_catalyst_1 = resumer_names[1]
+            resume_serial_num_1 = self.add_cmd(
+                Resume(cmd_runners=resumer_names[1],
+                       targets=waiter_names[1],
+                       stopped_names=[]))
+            self.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=[self.commander_name],
+                    confirm_cmd='Resume',
+                    confirm_serial_num=resume_serial_num_1,
+                    confirmers=resumer_names[1]))
+
+            ############################################################
+            # exit the sender to create a half paired case
+            ############################################################
+            self.build_exit_suite(
+                names=[def_del_catalyst_1], validate_config=False)
+            self.build_join_suite(
+                cmd_runners=self.commander_name,
+                join_target_names=[def_del_catalyst_1],
+                validate_config=False)
+
+            wait_serial_num_1 = self.add_cmd(
+                Wait(cmd_runners=waiter_names[1],
+                     resumers=resumer_names[1],
+                     log_msg=f'def_del_wait_test_1'))
+
+        ################################################################
+        # get lock to keep the second recv_msg/wait behind the first
+        ################################################################
+        obtain_lock_serial_num_1 = self.add_cmd(
+            ObtainLock(cmd_runners=locker_names[1]))
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd='ObtainLock',
+                confirm_serial_num=obtain_lock_serial_num_1,
+                confirmers=locker_names[1]))
+
         if def_del_cmd == DefDelCmd.RecvMsg:
             ############################################################
             # receive the message to allow the pair array to be updated
             ############################################################
-            recv_msg_serial_num = self.add_cmd(
+            recv_msg_serial_num_0 = self.add_cmd(
                 RecvMsg(cmd_runners=receiver_names[0],
                         senders=sender_names[0],
                         exp_msgs=sender_msgs,
                         # del_deferred=sender_names[0],
-                        log_msg=f'def_del_recv_test'))
+                        log_msg=f'def_del_recv_test_0'))
             if def_del_scenario == DefDelScenario.OriginalCmd:
                 ################################################################
                 # confirm the wait
@@ -4815,17 +4924,17 @@ class ConfigVerifier:
                     ConfirmResponse(
                         cmd_runners=[self.commander_name],
                         confirm_cmd='Wait',
-                        confirm_serial_num=wait_serial_num,
+                        confirm_serial_num=wait_serial_num_0,
                         confirmers=waiter_names[0]))
 
         else:
             ############################################################
             # receive the message to allow the pair array to be updated
             ############################################################
-            wait_serial_num = self.add_cmd(
+            wait_serial_num_0 = self.add_cmd(
                 Wait(cmd_runners=waiter_names[0],
                      resumers=resumer_names[0],
-                     log_msg=f'def_del_wait_test'))
+                     log_msg=f'def_del_wait_test_0'))
 
             ################################################################
             # confirm the wait
@@ -4834,11 +4943,69 @@ class ConfigVerifier:
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
                     confirm_cmd='Wait',
-                    confirm_serial_num=wait_serial_num,
+                    confirm_serial_num=wait_serial_num_0,
                     confirmers=waiter_names[0]))
 
-        if def_del_scenario == DefDelScenario.OtherRecvMsg:
+        ################################################################
+        # get lock to stop both recv_msg/wait combos from refresh
+        ################################################################
+        obtain_lock_serial_num_2 = self.add_cmd(
+            ObtainLock(cmd_runners=locker_names[2]))
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd='ObtainLock',
+                confirm_serial_num=obtain_lock_serial_num_2,
+                confirmers=locker_names[2]))
 
+        ################################################################
+        # release first lock to allow first recv_msg/wait to go
+        ################################################################
+        release_lock_serial_num_0 = self.add_cmd(
+            ReleaseLock(cmd_runners=locker_names[0]))
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd='ReleaseLock',
+                confirm_serial_num=release_lock_serial_num_0,
+                confirmers=locker_names[0]))
+
+        ################################################################
+        # release second lock to allow second recv_msg/wait to go
+        ################################################################
+        release_lock_serial_num_1 = self.add_cmd(
+            ReleaseLock(cmd_runners=locker_names[1]))
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd='ReleaseLock',
+                confirm_serial_num=release_lock_serial_num_1,
+                confirmers=locker_names[1]))
+        ################################################################
+        # swap lock positions of the two recv_msg/wait to refresh
+        ################################################################
+        swap_lock_serial_num_0 = self.add_cmd(
+            SwapLockPos(cmd_runners=locker_names[0],
+                        swap_positions=(1,2)
+                        ))
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd='ReleaseLock',
+                confirm_serial_num=swap_lock_serial_num_0,
+                confirmers=locker_names[0]))
+
+        ################################################################
+        # release third lock to allow both recv_msg/wait to refresh
+        ################################################################
+        release_lock_serial_num_2 = self.add_cmd(
+            ReleaseLock(cmd_runners=locker_names[2]))
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd='ReleaseLock',
+                confirm_serial_num=release_lock_serial_num_2,
+                confirmers=locker_names[2]))
 
         ################################################################
         # check results
