@@ -79,22 +79,20 @@ class Actors(Enum):
 # DefDelScenario
 ########################################################################
 class DefDelScenario(Enum):
-    Normal = auto()
-    Resurrection = auto()
-    OriginalCmd = auto()
-    OtherRecvMsg = auto()
-    OriginalWait = auto()
-    OtherWait = auto()
-    DelThread = auto()
-    AddThread = auto()
-
-
-########################################################################
-# DefDelCmd
-########################################################################
-class DefDelCmd(Enum):
-    RecvMsg = auto()
-    Wait = auto()
+    NormalRecv = auto()
+    NormalWait = auto()
+    ResurrectionRecv = auto()
+    ResurrectionWait = auto()
+    Recv0Recv1 = auto()
+    Recv1Recv0 = auto()
+    Wait0Wait1 = auto()
+    Wait1Wait0 = auto()
+    RecvWait = auto()
+    WaitRecv = auto()
+    RecvDel = auto()
+    RecvAdd = auto()
+    WaitDel = auto()
+    WaitAdd = auto()
 
 
 ########################################################################
@@ -127,17 +125,22 @@ timeout_type_arg_list = [TimeoutType.TimeoutNone,
 ########################################################################
 # Test settings for test_def_del_scenarios
 ########################################################################
-def_del_scenario_arg_list = [DefDelScenario.Normal,
-                    DefDelScenario.Resurrection,
-                    DefDelScenario.OriginalCmd,
-                    DefDelScenario.OtherRecvMsg,
-                    DefDelScenario.OriginalWait,
-                    DefDelScenario.OtherWait,
-                    DefDelScenario.DelThread,
-                    DefDelScenario.AddThread]
-
-def_del_cmd_arg_list = [DefDelCmd.RecvMsg,
-                        DefDelCmd.Wait]
+def_del_scenario_arg_list = [
+    DefDelScenario.NormalRecv,
+    DefDelScenario.NormalWait,
+    DefDelScenario.ResurrectionRecv,
+    DefDelScenario.ResurrectionWait,
+    DefDelScenario.Recv0Recv1,
+    DefDelScenario.Recv1Recv0,
+    DefDelScenario.Wait0Wait1,
+    DefDelScenario.Wait1Wait0,
+    DefDelScenario.RecvWait,
+    DefDelScenario.WaitRecv,
+    DefDelScenario.RecvDel,
+    DefDelScenario.RecvAdd,
+    DefDelScenario.WaitDel,
+    DefDelScenario.WaitAdd
+]
 
 
 ########################################################################
@@ -691,6 +694,88 @@ class JoinTimeoutTrue(JoinTimeoutFalse):
                                             join_names=self.join_names,
                                             timeout=self.timeout,
                                             log_msg=self.log_msg)
+
+
+########################################################################
+# LockObtain
+########################################################################
+class LockObtain(ConfigCmd):
+    def __init__(self,
+                 cmd_runners: StrOrList) -> None:
+        super().__init__(cmd_runners=cmd_runners)
+        self.specified_args = locals()  # used for __repr__
+
+    def run_process(self, cmd_runner: str) -> None:
+        """Run the command.
+
+        Args:
+            cmd_runner: name of thread running the command
+        """
+        self.config_ver.lock_obtain(cmd_runner=cmd_runner)
+
+
+########################################################################
+# LockRelease
+########################################################################
+class LockRelease(ConfigCmd):
+    def __init__(self,
+                 cmd_runners: StrOrList) -> None:
+        super().__init__(cmd_runners=cmd_runners)
+        self.specified_args = locals()  # used for __repr__
+
+    def run_process(self, cmd_runner: str) -> None:
+        """Run the command.
+
+        Args:
+            cmd_runner: name of thread running the command
+        """
+        self.config_ver.lock_release(cmd_runner=cmd_runner)
+
+
+########################################################################
+# LockSwap
+########################################################################
+class LockSwap(ConfigCmd):
+    def __init__(self,
+                 cmd_runners: StrOrList,
+                 new_positions: list[str]) -> None:
+        super().__init__(cmd_runners=cmd_runners)
+        self.specified_args = locals()  # used for __repr__
+
+        self.new_positions = new_positions
+        self.arg_list += ['new_positions']
+
+    def run_process(self, cmd_runner: str) -> None:
+        """Run the command.
+
+        Args:
+            cmd_runner: name of thread running the command
+        """
+        self.config_ver.lock_swap(cmd_runner=cmd_runner,
+                                  new_positions=self.new_positions)
+
+
+########################################################################
+# LockSwap
+########################################################################
+class LockVerify(ConfigCmd):
+    def __init__(self,
+                 cmd_runners: StrOrList,
+                 exp_positions: list[str]) -> None:
+        super().__init__(cmd_runners=cmd_runners)
+        self.specified_args = locals()  # used for __repr__
+
+        self.exp_positions = exp_positions
+        self.arg_list += ['exp_positions']
+
+    def run_process(self, cmd_runner: str) -> None:
+        """Run the command.
+
+        Args:
+            cmd_runner: name of thread running the command
+        """
+        self.config_ver.lock_verify(cmd_runner=cmd_runner,
+                                    exp_positions=self.exp_positions)
 
 
 ########################################################################
@@ -1277,16 +1362,13 @@ class VerifyCounts(ConfigCmd):
 class VerifyDefDel(ConfigCmd):
     def __init__(self,
                  cmd_runners: StrOrList,
-                 def_del_scenario: DefDelScenario,
-                 def_del_cmd: DefDelCmd) -> None:
+                 def_del_scenario: DefDelScenario) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
         self.def_del_scenario = def_del_scenario
-        self.def_del_cmd = def_del_cmd
 
-        self.arg_list += ['def_del_scenario',
-                          'def_del_cmd',]
+        self.arg_list += ['def_del_scenario']
 
     def run_process(self, cmd_runner: str) -> None:
         """Run the command.
@@ -1296,8 +1378,7 @@ class VerifyDefDel(ConfigCmd):
         """
         self.config_ver.verify_def_del(
             cmd_runner=cmd_runner,
-            def_del_scenario=self.def_del_scenario,
-            def_del_cmd=self.def_del_cmd)
+            def_del_scenario=self.def_del_scenario)
 
 
 ########################################################################
@@ -1788,21 +1869,6 @@ def def_del_scenario_arg(request: Any) -> DefDelScenario:
     """
     return cast(DefDelScenario, request.param)
 
-
-###############################################################################
-# num_registered_1_arg
-###############################################################################
-@pytest.fixture(params=def_del_cmd_arg_list)  # type: ignore
-def def_del_cmd_arg(request: Any) -> DefDelCmd:
-    """Type of deferred delete to do.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(DefDelCmd, request.param)
 
 ###############################################################################
 # random_seed_arg
@@ -4052,6 +4118,7 @@ class ConfigVerifier:
     ####################################################################
     def build_create_suite(
             self,
+            cmd_runner: Optional[str] = None,
             commander_name: Optional[str] = None,
             commander_auto_start: Optional[bool] = True,
             f1_create_items: Optional[list[F1CreateItem]] = None,
@@ -4060,6 +4127,7 @@ class ConfigVerifier:
         """Return a list of ConfigCmd items for a create.
 
         Args:
+            cmd_runner: name of thread to do the creates
             commander_name: specifies that a commander thread is to be
                 created with this name
             commander_auto_start: specifies whether to start the
@@ -4071,21 +4139,28 @@ class ConfigVerifier:
             a list of ConfigCmd items
         """
         if commander_name:
+            self.commander_name = commander_name
+        if cmd_runner:
+            cmd_runner_to_use = cmd_runner
+        else:
+            cmd_runner_to_use = self.commander_name
+        if commander_name:
             if not {commander_name}.issubset(self.unregistered_names):
                 raise InvalidInputDetected('Input commander name '
                                            f'{commander_name} not a subset of '
                                            'unregistered names '
                                            f'{self.unregistered_names}')
             self.unregistered_names -= {commander_name}
+
             if commander_auto_start:
                 self.add_cmd(
-                    CreateCommanderAutoStart(cmd_runners=commander_name,
+                    CreateCommanderAutoStart(cmd_runners=cmd_runner_to_use,
                                              commander_name=commander_name))
 
                 self.active_names |= {commander_name}
             else:
                 self.add_cmd(
-                    CreateCommanderNoStart(cmd_runners=commander_name,
+                    CreateCommanderNoStart(cmd_runners=cmd_runner_to_use,
                                            commander_name=commander_name))
                 self.registered_names |= {commander_name}
 
@@ -4111,40 +4186,45 @@ class ConfigVerifier:
             self.unregistered_names -= set(f1_names)
             if f1_auto_items:
                 self.add_cmd(
-                    CreateF1AutoStart(cmd_runners=self.commander_name,
+                    CreateF1AutoStart(cmd_runners=cmd_runner_to_use,
                                       f1_create_items=f1_auto_items))
 
                 self.active_names |= set(f1_auto_start_names)
             elif f1_no_start_items:
                 self.add_cmd(
-                    CreateF1NoStart(cmd_runners=self.commander_name,
+                    CreateF1NoStart(cmd_runners=cmd_runner_to_use,
                                     f1_create_items=f1_no_start_items))
                 self.registered_names |= set(f1_no_start_names)
 
         if self.registered_names:
             self.add_cmd(VerifyRegistered(
-                cmd_runners=self.commander_name,
+                cmd_runners=cmd_runner_to_use,
                 exp_registered_names=list(self.registered_names)))
 
         if self.active_names:
             self.add_cmd(VerifyActive(
-                cmd_runners=self.commander_name,
+                cmd_runners=cmd_runner_to_use,
                 exp_active_names=list(self.active_names)))
 
         if validate_config:
-            self.add_cmd(ValidateConfig(cmd_runners=self.commander_name))
+            self.add_cmd(ValidateConfig(cmd_runners=cmd_runner_to_use))
 
     ####################################################################
     # build_exit_suite
     ####################################################################
     def build_exit_suite(self,
+                         cmd_runner: str,
                          names: list[str],
                          validate_config: Optional[bool] = True
                          ) -> None:
-        """Return a list of ConfigCmd items for a exit.
+        """Add ConfigCmd items for an exit.
 
-        Returns:
-            a list of ConfigCmd items
+        Args:
+            cmd_runner: name of thread that will do the cmd
+            names: names of threads to exit
+            validate_config: specifies whether to validate the
+                configuration
+
         """
         if not set(names).issubset(self.active_names):
             self.abort_all_f1_threads()
@@ -4153,28 +4233,28 @@ class ConfigVerifier:
         active_names = list(self.active_names - set(names))
 
         if names:
-            self.add_cmd(StopThread(cmd_runners=self.commander_name,
+            self.add_cmd(StopThread(cmd_runners=cmd_runner,
                                     stop_names=names))
             if validate_config:
-                self.add_cmd(Pause(cmd_runners=self.commander_name,
+                self.add_cmd(Pause(cmd_runners=cmd_runner,
                                    pause_seconds=.2))
-                self.add_cmd(VerifyAliveNot(cmd_runners=self.commander_name,
+                self.add_cmd(VerifyAliveNot(cmd_runners=cmd_runner,
                                             exp_not_alive_names=names))
                 self.add_cmd(VerifyStatus(
-                    cmd_runners=self.commander_name,
+                    cmd_runners=cmd_runner,
                     check_status_names=names,
                     expected_status=st.ThreadStatus.Alive))
 
         if active_names and validate_config:
-            self.add_cmd(VerifyAlive(cmd_runners=self.commander_name,
+            self.add_cmd(VerifyAlive(cmd_runners=cmd_runner,
                                      exp_alive_names=active_names))
             self.add_cmd(VerifyStatus(
-                cmd_runners=self.commander_name,
+                cmd_runners=cmd_runner,
                 check_status_names=active_names,
                 expected_status=st.ThreadStatus.Alive))
 
         if validate_config:
-            self.add_cmd(ValidateConfig(cmd_runners=self.commander_name))
+            self.add_cmd(ValidateConfig(cmd_runners=cmd_runner))
 
         self.active_names -= set(names)
         self.stopped_names |= set(names)
@@ -4204,7 +4284,8 @@ class ConfigVerifier:
             random.sample(self.active_names - {self.commander_name},
                           num_to_exit))
 
-        return self.build_exit_suite(names=names)
+        return self.build_exit_suite(cmd_runner=self.commander_name,
+                                     names=names)
 
     ####################################################################
     # build_f1_create_suite_num
@@ -4545,7 +4626,8 @@ class ConfigVerifier:
         # handle no_delay_exit_names
         ################################################################
         if no_delay_exit_names:
-            self.build_exit_suite(names=no_delay_exit_names,
+            self.build_exit_suite(cmd_runner=self.commander_name,
+                                  names=no_delay_exit_names,
                                   validate_config=False)
 
         ################################################################
@@ -4566,7 +4648,8 @@ class ConfigVerifier:
 
             self.build_create_suite(f1_create_items=f1_create_items,
                                     validate_config=False)
-            self.build_exit_suite(names=no_delay_unreg_names,
+            self.build_exit_suite(cmd_runner=self.commander_name,
+                                  names=no_delay_unreg_names,
                                   validate_config=False)
 
         ################################################################
@@ -4575,7 +4658,8 @@ class ConfigVerifier:
         if no_delay_reg_names:
             self.build_start_suite(start_names=no_delay_reg_names,
                                    validate_config=False)
-            self.build_exit_suite(names=no_delay_reg_names,
+            self.build_exit_suite(cmd_runner=self.commander_name,
+                                  names=no_delay_reg_names,
                                   validate_config=False)
 
         ################################################################
@@ -4595,7 +4679,8 @@ class ConfigVerifier:
         # handle delay_exit_names
         ################################################################
         if delay_exit_names:
-            self.build_exit_suite(names=delay_exit_names,
+            self.build_exit_suite(cmd_runner=self.commander_name,
+                                  names=delay_exit_names,
                                   validate_config=False)
 
         ################################################################
@@ -4616,7 +4701,8 @@ class ConfigVerifier:
 
             self.build_create_suite(f1_create_items=f1_create_items,
                                     validate_config=False)
-            self.build_exit_suite(names=delay_unreg_names,
+            self.build_exit_suite(cmd_runner=self.commander_name,
+                                  names=delay_unreg_names,
                                   validate_config=False)
 
         ################################################################
@@ -4625,7 +4711,8 @@ class ConfigVerifier:
         if delay_reg_names:
             self.build_start_suite(start_names=delay_reg_names,
                                    validate_config=False)
-            self.build_exit_suite(names=delay_reg_names,
+            self.build_exit_suite(cmd_runner=self.commander_name,
+                                  names=delay_reg_names,
                                   validate_config=False)
 
         ################################################################
@@ -4667,13 +4754,11 @@ class ConfigVerifier:
     ####################################################################
     def build_def_del_suite(
             self,
-            def_del_scenario: DefDelScenario,
-            def_del_cmd: DefDelCmd) -> None:
+            def_del_scenario: DefDelScenario) -> None:
         """Return a list of ConfigCmd items for a deferred delete.
 
         Args:
             def_del_scenario: specifies type of test to do
-            def_del_cmd: type of def del cmd
 
         """
         num_receivers = 2
@@ -4685,6 +4770,8 @@ class ConfigVerifier:
         num_dels = 1
         num_adds = 1
 
+        num_deleter_adders = 1
+
         num_lockers = 3
         
         num_active_needed = (num_receivers 
@@ -4693,6 +4780,7 @@ class ConfigVerifier:
                              + num_resumers
                              + num_dels
                              + num_adds
+                             + num_deleter_adders
                              + num_lockers
                              + 1)  # plus 1 for the commander
         self.build_config(
@@ -4761,6 +4849,15 @@ class ConfigVerifier:
             var_name_for_log='add_names')
 
         ################################################################
+        # choose deleter_adder_names
+        ################################################################
+        deleter_adder_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_deleter_adders,
+            update_collection=True,
+            var_name_for_log='deleter_adder_names')
+
+        ################################################################
         # choose locker_names
         ################################################################
         locker_names = self.choose_names(
@@ -4777,21 +4874,21 @@ class ConfigVerifier:
             sender_msgs[name] = (f'recv test: {name} sending msg '
                                  f'at {self.get_ptime()}')
 
-        class DefDelScenario(Enum):
-            NormalRecv = auto()
-            NormalWait = auto()
-            ResurrectionRecv = auto()
-            ResurrectionWait = auto()
-            Recv0Recv1 = auto()
-            Recv1Recv0 = auto()
-            Wait0Wait1 = auto()
-            Wait1Wait0 = auto()
-            RecvWait = auto()
-            WaitRecv = auto()
-            RecvDel = auto()
-            RecvAdd = auto()
-            WaitDel = auto()
-            WaitAdd = auto()
+        # class DefDelScenario(Enum):
+        #     NormalRecv = auto()
+        #     NormalWait = auto()
+        #     ResurrectionRecv = auto()
+        #     ResurrectionWait = auto()
+        #     Recv0Recv1 = auto()
+        #     Recv1Recv0 = auto()
+        #     Wait0Wait1 = auto()
+        #     Wait1Wait0 = auto()
+        #     RecvWait = auto()
+        #     WaitRecv = auto()
+        #     RecvDel = auto()
+        #     RecvAdd = auto()
+        #     WaitDel = auto()
+        #     WaitAdd = auto()
 
         receivers: list[str] = []
         if (def_del_scenario == DefDelCmd.NormalRecv
@@ -4869,7 +4966,9 @@ class ConfigVerifier:
             # exit the sender to create a half paired case
             ############################################################
             self.build_exit_suite(
-                names=exit_names, validate_config=False)
+                cmd_runner=self.commander_name,
+                names=exit_names,
+                validate_config=False)
             self.build_join_suite(
                 cmd_runners=self.commander_name,
                 join_target_names=exit_names,
@@ -4896,31 +4995,54 @@ class ConfigVerifier:
         ################################################################
         obtain_lock_serial_num_0 = self.add_cmd(
             ObtainLock(cmd_runners=locker_names[0]))
+        lock_positions.append(locker_names[0])
+
+        # we can confirm only this first lock obtain
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
                 confirm_cmd='ObtainLock',
                 confirm_serial_num=obtain_lock_serial_num_0,
                 confirmers=locker_names[0]))
-        lock_positions.append(locker_names[0])
+
         ################################################################
         # do the first recv or wait
         ################################################################
-        if receivers:
+        if (def_del_scenario == DefDelCmd.NormalRecv
+                or def_del_scenario == DefDelCmd.ResurrectionRecv
+                or def_del_scenario == DefDelCmd.Recv0Recv1
+                or def_del_scenario == DefDelCmd.Recv1Recv0
+                or def_del_scenario == DefDelCmd.RecvWait
+                # or def_del_scenario == DefDelCmd.WaitRecv
+                or def_del_scenario == DefDelCmd.RecvDel
+                or def_del_scenario == DefDelCmd.RecvAdd):
             recv_msg_serial_num_0 = self.add_cmd(
                 RecvMsg(cmd_runners=receivers[0],
                         senders=sender_names[0],
                         exp_msgs=sender_msgs,
                         # del_deferred=sender_names[0],
                         log_msg=f'def_del_recv_test_0'))
+            first_cmd_lock_pos = receivers[0]
             lock_positions.append(receivers[0])
-        if waiters:
+
+        elif (def_del_scenario == DefDelCmd.NormalWait
+                or def_del_scenario == DefDelCmd.ResurrectionWait
+                or def_del_scenario == DefDelCmd.Wait0Wait1
+                or def_del_scenario == DefDelCmd.Wait1Wait0
+                # or def_del_scenario == DefDelCmd.RecvWait
+                or def_del_scenario == DefDelCmd.WaitRecv
+                or def_del_scenario == DefDelCmd.WaitDel
+                or def_del_scenario == DefDelCmd.WaitAdd):
             wait_serial_num_0 = self.add_cmd(
                 Wait(cmd_runners=waiters[0],
                      resumers=resumer_names[0],
                      log_msg=f'def_del_wait_test_0'))
+            first_cmd_lock_pos = waiters[0]
             lock_positions.append(waiters[0])
 
+        self.add_cmd(
+            VerifyLockPos(cmd_runners=self.commander_name,
+                          lock_positions=lock_positions))
         ################################################################
         # get lock to keep second recv_msg/wait/del/add behind first
         ################################################################
@@ -4928,37 +5050,45 @@ class ConfigVerifier:
             ObtainLock(cmd_runners=locker_names[1]))
         lock_positions.append(locker_names[1])
 
-        verify_lock_serial_num_1 = self.add_cmd(
+        self.add_cmd(
             VerifyLockPos(cmd_runners=self.commander_name,
                           lock_positions=lock_positions))
 
         ################################################################
         # do second recv_msg/wait/del/add behind first
         ################################################################
+        second_cmd_lock_pos: str = ''
         if (def_del_scenario == DefDelCmd.Recv0Recv1
-                or def_del_scenario == DefDelCmd.Recv1Recv0):
+                or def_del_scenario == DefDelCmd.Recv1Recv0
+                or def_del_scenario == DefDelCmd.WaitRecv):
             recv_msg_serial_num_1 = self.add_cmd(
                 RecvMsg(cmd_runners=receivers[1],
                         senders=sender_names[0],
                         exp_msgs=sender_msgs,
                         # del_deferred=sender_names[0],
                         log_msg=f'def_del_recv_test_1'))
+            second_cmd_lock_pos = receivers[1]
             lock_positions.append(receivers[1])
         elif (def_del_scenario == DefDelCmd.Wait0Wait1
-                or def_del_scenario == DefDelCmd.Wait1Wait0):
+                or def_del_scenario == DefDelCmd.Wait1Wait0
+                or def_del_scenario == DefDelCmd.RecvWait):
             wait_serial_num_1 = self.add_cmd(
                 Wait(cmd_runners=waiters[1],
                      resumers=resumer_names[1],
                      log_msg=f'def_del_wait_test_1'))
+            second_cmd_lock_pos = waiters[1]
             lock_positions.append(waiters[1])
         elif (def_del_scenario == DefDelCmd.RecvDel
               or def_del_scenario == DefDelCmd.WaitDel):
-            self.add_cmd(StopThread(cmd_runners=deleter_adder_names[0],
-                                    stop_names=del_names[0]))
+            self.build_exit_suite(
+                cmd_runner=deleter_adder_names[0],
+                names=del_names[0],
+                validate_config=False)
             self.build_join_suite(
                 cmd_runners=deleter_adder_names[0],
                 join_target_names=del_names[0],
                 validate_config=False)
+            second_cmd_lock_pos = deleter_adder_names[0]
             lock_positions.append(deleter_adder_names[0])
         elif (def_del_scenario == DefDelCmd.RecvAdd
               or def_del_scenario == DefDelCmd.WaitAdd):
@@ -4969,79 +5099,38 @@ class ConfigVerifier:
                     target_rtn=outer_f1,
                     app_config=AppConfig.ScriptStyle)]
             self.build_create_suite(
+                cmd_runner=deleter_adder_names[0],
                 f1_create_items=f1_create_items,
                 validate_config=False)
+            second_cmd_lock_pos = deleter_adder_names[0]
             lock_positions.append(deleter_adder_names[0])
 
-        ################################################################
-        # get lock to keep the second recv_msg/wait behind the first
-        ################################################################
-        obtain_lock_serial_num_1 = self.add_cmd(
-            ObtainLock(cmd_runners=locker_names[1]))
         self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=[self.commander_name],
-                confirm_cmd='ObtainLock',
-                confirm_serial_num=obtain_lock_serial_num_1,
-                confirmers=locker_names[1]))
-
-        if def_del_cmd == DefDelCmd.RecvMsg:
-            ############################################################
-            # receive the message to allow the pair array to be updated
-            ############################################################
-            recv_msg_serial_num_0 = self.add_cmd(
-                RecvMsg(cmd_runners=receiver_names[0],
-                        senders=sender_names[0],
-                        exp_msgs=sender_msgs,
-                        # del_deferred=sender_names[0],
-                        log_msg=f'def_del_recv_test_0'))
-            if def_del_scenario == DefDelScenario.OriginalCmd:
-                ################################################################
-                # confirm the wait
-                ################################################################
-                self.add_cmd(
-                    ConfirmResponse(
-                        cmd_runners=[self.commander_name],
-                        confirm_cmd='Wait',
-                        confirm_serial_num=wait_serial_num_0,
-                        confirmers=waiter_names[0]))
-
-        else:
-            ############################################################
-            # receive the message to allow the pair array to be updated
-            ############################################################
-            wait_serial_num_0 = self.add_cmd(
-                Wait(cmd_runners=waiter_names[0],
-                     resumers=resumer_names[0],
-                     log_msg=f'def_del_wait_test_0'))
-
-            ################################################################
-            # confirm the wait
-            ################################################################
-            self.add_cmd(
-                ConfirmResponse(
-                    cmd_runners=[self.commander_name],
-                    confirm_cmd='Wait',
-                    confirm_serial_num=wait_serial_num_0,
-                    confirmers=waiter_names[0]))
-
+            VerifyLockPos(cmd_runners=self.commander_name,
+                          lock_positions=lock_positions))
         ################################################################
-        # get lock to stop both recv_msg/wait combos from refresh
+        # get lock to keep freeze first and second recv_msg/wait just
+        # before the refresh so we can swap lock positions
         ################################################################
         obtain_lock_serial_num_2 = self.add_cmd(
             ObtainLock(cmd_runners=locker_names[2]))
+        lock_positions.append(locker_names[2])
         self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=[self.commander_name],
-                confirm_cmd='ObtainLock',
-                confirm_serial_num=obtain_lock_serial_num_2,
-                confirmers=locker_names[2]))
+            VerifyLockPos(cmd_runners=self.commander_name,
+                          lock_positions=lock_positions))
 
         ################################################################
         # release first lock to allow first recv_msg/wait to go
         ################################################################
         release_lock_serial_num_0 = self.add_cmd(
             ReleaseLock(cmd_runners=locker_names[0]))
+        lock_positions.remove(locker_names[0])
+
+        # releasing the first lock will allow the first recv/wait to go
+        # and then get the lock exclusive behind the last lock waiter
+        lock_positions.remove(first_cmd_lock_pos)
+        lock_positions.append(first_cmd_lock_pos)
+
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
@@ -5049,30 +5138,55 @@ class ConfigVerifier:
                 confirm_serial_num=release_lock_serial_num_0,
                 confirmers=locker_names[0]))
 
+        self.add_cmd(
+            VerifyLockPos(cmd_runners=self.commander_name,
+                          lock_positions=lock_positions))
         ################################################################
         # release second lock to allow second recv_msg/wait to go
         ################################################################
         release_lock_serial_num_1 = self.add_cmd(
             ReleaseLock(cmd_runners=locker_names[1]))
+        lock_positions.remove(locker_names[1])
+
+        # releasing the second lock will allow the second recv/wait to
+        # go and then get the lock exclusive behind the last lock waiter
+        if second_cmd_lock_pos:
+            lock_positions.remove(second_cmd_lock_pos)
+            lock_positions.append(second_cmd_lock_pos)
+
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
                 confirm_cmd='ReleaseLock',
                 confirm_serial_num=release_lock_serial_num_1,
                 confirmers=locker_names[1]))
-        ################################################################
-        # swap lock positions of the two recv_msg/wait to refresh
-        ################################################################
-        swap_lock_serial_num_0 = self.add_cmd(
-            SwapLockPos(cmd_runners=locker_names[0],
-                        swap_positions=(1,2)
-                        ))
+
         self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=[self.commander_name],
-                confirm_cmd='ReleaseLock',
-                confirm_serial_num=swap_lock_serial_num_0,
-                confirmers=locker_names[0]))
+            VerifyLockPos(cmd_runners=self.commander_name,
+                          lock_positions=lock_positions))
+        ################################################################
+        # At this point we will have the first cmd behind the third
+        # lock. If there is a second cmd, it will be behind the first
+        # cmd. We now need to swap the lock positions for some
+        # scenarios.
+        ################################################################
+        if (def_del_scenario == DefDelCmd.Recv1Recv0
+                or def_del_scenario == DefDelCmd.Wait1Wait0):
+            lock_pos_1 = lock_positions[1]
+            lock_positions[1] = lock_positions[2]
+            lock_positions[2] = lock_pos_1
+
+            assert lock_positions[0] == locker_names[2]
+            assert lock_positions[1] == second_cmd_lock_pos
+            assert lock_positions[2] == first_cmd_lock_pos
+
+            self.add_cmd(
+                SwapLockPos(cmd_runners=self.commander_name,
+                            new_positions=lock_positions
+                            ))
+            self.add_cmd(
+                VerifyLockPos(cmd_runners=self.commander_name,
+                              lock_positions=lock_positions))
 
         ################################################################
         # release third lock to allow both recv_msg/wait to refresh
@@ -5092,22 +5206,7 @@ class ConfigVerifier:
         self.add_cmd(
             VerifyDefDel(
                 cmd_runners=self.commander_name,
-                def_del_scenario=def_del_scenario,
-                def_del_cmd=def_del_cmd))
-
-
-        ################################################################
-        # recv_msg does the deferred del update
-        ################################################################
-        ################################################################
-        # a different recv_msg does the deferred del update
-        ################################################################
-        ################################################################
-        # a create new thread does the deferred del update
-        ################################################################
-        ################################################################
-        # a delete thread does the deferred del update
-        ################################################################
+                def_del_scenario=def_del_scenario))
 
     ####################################################################
     # build_recv_msg_timeout_suite
@@ -5367,7 +5466,9 @@ class ConfigVerifier:
                         msgs_to_send=sender_msgs))
 
             self.build_exit_suite(
-                names=send_exit_sender_names, validate_config=False)
+                cmd_runner=self.commander_name,
+                names=send_exit_sender_names,
+                validate_config=False)
             self.build_join_suite(
                 cmd_runners=self.commander_name,
                 join_target_names=send_exit_sender_names,
@@ -5378,7 +5479,9 @@ class ConfigVerifier:
         ################################################################
         if nosend_exit_sender_names:
             self.build_exit_suite(
-                names=nosend_exit_sender_names, validate_config=False)
+                cmd_runner=self.commander_name,
+                names=nosend_exit_sender_names,
+                validate_config=False)
             self.build_join_suite(
                 cmd_runners=self.commander_name,
                 join_target_names=nosend_exit_sender_names,
@@ -5733,7 +5836,8 @@ class ConfigVerifier:
                         confirm_serial_num=resume_cmd_serial_num,
                         confirmers=actor_names))
 
-                self.build_exit_suite(names=actor_names)
+                self.build_exit_suite(cmd_runner=self.commander_name,
+                                      names=actor_names)
                 self.build_join_suite(
                     cmd_runners=self.commander_name,
                     join_target_names=actor_names)
@@ -5841,7 +5945,8 @@ class ConfigVerifier:
                         raise_not_alive=raise_not_alive,
                         timeout=timeout_time))
 
-                self.build_exit_suite(names=actor_names)
+                self.build_exit_suite(cmd_runner=self.commander_name,
+                                      names=actor_names)
 
                 if raise_not_alive:
                     self.add_cmd(
@@ -5908,7 +6013,8 @@ class ConfigVerifier:
                         resumers_for_wait[resumer] = AliveAndStatus(
                             is_alive=False,
                             status=st.ThreadStatus.Stopped)
-                    self.build_exit_suite(names=actor_names)
+                    self.build_exit_suite(cmd_runner=self.commander_name,
+                                          names=actor_names)
                     exit_was_done = True
                 else:
                     resumers_for_wait: DictAliveAndStatus = {}
@@ -5983,7 +6089,8 @@ class ConfigVerifier:
                 ########################################################
                 # get actors into unreg state
                 ########################################################
-                self.build_exit_suite(names=actor_names)
+                self.build_exit_suite(cmd_runner=self.commander_name,
+                                      names=actor_names)
                 self.build_join_suite(
                     cmd_runners=self.commander_name,
                     join_target_names=actor_names)
@@ -6069,7 +6176,8 @@ class ConfigVerifier:
                 ########################################################
                 # get actors into reg state
                 ########################################################
-                self.build_exit_suite(names=actor_names)
+                self.build_exit_suite(cmd_runner=self.commander_name,
+                                      names=actor_names)
                 self.build_join_suite(
                     cmd_runners=self.commander_name,
                     join_target_names=actor_names)
@@ -6936,7 +7044,8 @@ class ConfigVerifier:
                                         confirm_serial_num=send_msg_serial_num,
                                         confirmers=sender_names))
 
-            self.build_exit_suite(names=exit_names)
+            self.build_exit_suite(cmd_runner=self.commander_name,
+                                  names=exit_names)
             self.build_join_suite(
                 cmd_runners=self.commander_name,
                 join_target_names=exit_names)
@@ -7119,7 +7228,8 @@ class ConfigVerifier:
             # pending messages, and then verify exit names and senders
             # are no longer paired
             if timeout_type != TimeoutType.TimeoutTrue:
-                self.build_exit_suite(names=exit_names)
+                self.build_exit_suite(cmd_runner=self.commander_name,
+                                      names=exit_names)
                 self.build_join_suite(
                     cmd_runners=self.commander_name,
                     join_target_names=exit_names)
@@ -9519,6 +9629,60 @@ class ConfigVerifier:
                                       f'{target=} set pending {ops_count=}')
 
         self.log_test_msg(f'inc_ops_count exit: {targets=}, {remote=}')
+
+    ####################################################################
+    # lock_obtain
+    ####################################################################
+    def lock_obtain(self, cmd_runner: str) -> None:
+        """Increment the pending operations count.
+
+        Args:
+            cmd_runner: name of thread that will get the lock
+        """
+        st.SmartThread._registry_lock.obtain_excl(timeout=60)
+
+    ####################################################################
+    # lock_obtain
+    ####################################################################
+    def lock_release(self, cmd_runner: str) -> None:
+        """Increment the pending operations count.
+
+        Args:
+            cmd_runner: name of thread that will get the lock
+        """
+        st.SmartThread._registry_lock.release()
+
+    ####################################################################
+    # lock_obtain
+    ####################################################################
+    def lock_swap(self,
+                  cmd_runner: str,
+                  new_positions: list[str]) -> None:
+        """Increment the pending operations count.
+
+        Args:
+            cmd_runner: name of thread that will get the lock
+            new_positions: the desired positions on the lock queue
+        """
+        for idx, pos_name in enumerate(new_positions):
+            if (st.SmartThread._registry_lock.owner_wait_q[idx].thread.name
+                    != pos_name):
+                save_pos = st.SmartThread._registry_lock.owner_wait_q[idx]
+                # find our desired position
+                new_pos = None
+                # for (idx2, owner_waiter in enumerate(
+                #            st.SmartThread._registry_lock.owner_wait_q)):
+                for idx2 in range(len(
+                        st.SmartThread._registry_lock.owner_wait_q)):
+
+                    if (st.SmartThread._registry_lock.owner_wait_q[idx2]
+                            .thread.name == pos_name):
+                        new_pos = st.SmartThread._registry_lock.owner_wait_q[idx2]
+                        break
+                assert new_pos is not None
+                st.SmartThread._registry_lock.owner_wait_q[idx] = new_pos
+                st.SmartThread._registry_lock.owner_wait_q[idx2] = save_pos
+
     ####################################################################
     # log_name_groups
     ####################################################################
@@ -10260,24 +10424,17 @@ class ConfigVerifier:
                     f'equal to {stopped_found_real=} and/or '
                     f'{stopped_found_mock=}')
 
-    verify_def_del(
-        cmd_runner=cmd_runner,
-        def_del_scenario=self.def_del_scenario,
-        def_del_cmd=self.def_del_cmd)
-
     ####################################################################
     # verify_def_del
     ####################################################################
     def verify_def_del(self,
                        cmd_runner: str,
-                       def_del_scenario: DefDelScenario,
-                       def_del_cmd: DefDelCmd) -> None:
+                       def_del_scenario: DefDelScenario) -> None:
         """Verify that the given counts are correct.
 
         Args:
             cmd_runner: name of thread doing the cmd
             def_del_scenario: deferred delete scenario to verify
-            def_del_cmd: deferred delete cmd that was done
 
         """
         pass
@@ -11120,21 +11277,16 @@ class TestSmartThreadScenarios:
     def test_def_del_scenarios(
             self,
             def_del_scenario_arg: DefDelScenario,
-            def_del_cmd_arg: DefDelCmd,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
         """Test meta configuration scenarios.
 
         Args:
             def_del_scenario_arg: specifies the type of test to do
-            def_del_cmd_arg: which cmd is to be the deferred delete
             caplog: pytest fixture to capture log output
 
         """
-        config_decider_num = (def_del_scenario_arg.value
-                              + def_del_cmd_arg.value)
-
-        command_config_num = config_decider_num % 4
+        command_config_num = def_del_scenario_arg.value % 4
         if command_config_num == 0:
             commander_config = AppConfig.ScriptStyle
         elif command_config_num == 1:
@@ -11145,8 +11297,7 @@ class TestSmartThreadScenarios:
             commander_config = AppConfig.RemoteSmartThreadApp
 
         args_for_scenario_builder: dict[str, Any] = {
-            'def_del_scenario': def_del_scenario_arg,
-            'def_del_cmd': def_del_cmd_arg
+            'def_del_scenario': def_del_scenario_arg
         }
 
         self.scenario_driver(
@@ -11526,7 +11677,8 @@ class TestSmartThreadScenarios:
         config_ver.add_cmd(ValidateConfig(cmd_runners=commander_name))
 
         names = list(config_ver.active_names - {commander_name})
-        config_ver.build_exit_suite(names=names)
+        config_ver.build_exit_suite(cmd_runner=self.commander_name,
+                                    names=names)
 
         config_ver.build_join_suite(
             cmd_runners=[config_ver.commander_name],
