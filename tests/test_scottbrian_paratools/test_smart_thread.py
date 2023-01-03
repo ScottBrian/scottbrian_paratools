@@ -322,6 +322,16 @@ class FailedToFindLogMsg(ErrorTstSmartThread):
     pass
 
 
+class FailedLockVerify(ErrorTstSmartThread):
+    """An expected lock position was not found."""
+    pass
+
+
+class FailedDefDelVerify(ErrorTstSmartThread):
+    """An expected condition was incorrect."""
+    pass
+
+
 ########################################################################
 # ConfigCmd
 ########################################################################
@@ -1362,11 +1372,26 @@ class VerifyCounts(ConfigCmd):
 class VerifyDefDel(ConfigCmd):
     def __init__(self,
                  cmd_runners: StrOrList,
-                 def_del_scenario: DefDelScenario) -> None:
+                 def_del_scenario: DefDelScenario,
+                 receiver_names: list[str],
+                 sender_names: list[str],
+                 waiter_names: list[str],
+                 resumer_names: list[str],
+                 del_names: list[str],
+                 add_names: list[str],
+                 deleter_adder_names: list[str]
+                 ) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
         self.def_del_scenario = def_del_scenario
+        self.receiver_names = receiver_names
+        self.sender_names = sender_names
+        self.waiter_names = waiter_names
+        self.resumer_names = resumer_names
+        self.del_names = del_names
+        self.add_names = add_names
+        self.deleter_adder_names = deleter_adder_names
 
         self.arg_list += ['def_del_scenario']
 
@@ -1378,7 +1403,15 @@ class VerifyDefDel(ConfigCmd):
         """
         self.config_ver.verify_def_del(
             cmd_runner=cmd_runner,
-            def_del_scenario=self.def_del_scenario)
+            def_del_scenario=self.def_del_scenario,
+            receiver_names=self.receiver_names,
+            sender_names=self.sender_names,
+            waiter_names=self.waiter_names,
+            resumer_names=self.resumer_names,
+            del_names=self.del_names,
+            add_names=self.add_names,
+            deleter_adder_names=self.deleter_adder_names
+        )
 
 
 ########################################################################
@@ -4994,14 +5027,14 @@ class ConfigVerifier:
         # get lock to keep the first recv_msg/wait getting to far ahead
         ################################################################
         obtain_lock_serial_num_0 = self.add_cmd(
-            ObtainLock(cmd_runners=locker_names[0]))
+            LockObtain(cmd_runners=locker_names[0]))
         lock_positions.append(locker_names[0])
 
         # we can confirm only this first lock obtain
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
-                confirm_cmd='ObtainLock',
+                confirm_cmd='LockObtain',
                 confirm_serial_num=obtain_lock_serial_num_0,
                 confirmers=locker_names[0]))
 
@@ -5041,18 +5074,18 @@ class ConfigVerifier:
             lock_positions.append(waiters[0])
 
         self.add_cmd(
-            VerifyLockPos(cmd_runners=self.commander_name,
-                          lock_positions=lock_positions))
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions))
         ################################################################
         # get lock to keep second recv_msg/wait/del/add behind first
         ################################################################
         obtain_lock_serial_num_1 = self.add_cmd(
-            ObtainLock(cmd_runners=locker_names[1]))
+            LockObtain(cmd_runners=locker_names[1]))
         lock_positions.append(locker_names[1])
 
         self.add_cmd(
-            VerifyLockPos(cmd_runners=self.commander_name,
-                          lock_positions=lock_positions))
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions))
 
         ################################################################
         # do second recv_msg/wait/del/add behind first
@@ -5106,24 +5139,24 @@ class ConfigVerifier:
             lock_positions.append(deleter_adder_names[0])
 
         self.add_cmd(
-            VerifyLockPos(cmd_runners=self.commander_name,
-                          lock_positions=lock_positions))
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions))
         ################################################################
         # get lock to keep freeze first and second recv_msg/wait just
         # before the refresh so we can swap lock positions
         ################################################################
         obtain_lock_serial_num_2 = self.add_cmd(
-            ObtainLock(cmd_runners=locker_names[2]))
+            LockObtain(cmd_runners=locker_names[2]))
         lock_positions.append(locker_names[2])
         self.add_cmd(
-            VerifyLockPos(cmd_runners=self.commander_name,
-                          lock_positions=lock_positions))
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions))
 
         ################################################################
         # release first lock to allow first recv_msg/wait to go
         ################################################################
         release_lock_serial_num_0 = self.add_cmd(
-            ReleaseLock(cmd_runners=locker_names[0]))
+            LockRelease(cmd_runners=locker_names[0]))
         lock_positions.remove(locker_names[0])
 
         # releasing the first lock will allow the first recv/wait to go
@@ -5134,18 +5167,18 @@ class ConfigVerifier:
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
-                confirm_cmd='ReleaseLock',
+                confirm_cmd='LockRelease',
                 confirm_serial_num=release_lock_serial_num_0,
                 confirmers=locker_names[0]))
 
         self.add_cmd(
-            VerifyLockPos(cmd_runners=self.commander_name,
-                          lock_positions=lock_positions))
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions))
         ################################################################
         # release second lock to allow second recv_msg/wait to go
         ################################################################
         release_lock_serial_num_1 = self.add_cmd(
-            ReleaseLock(cmd_runners=locker_names[1]))
+            LockRelease(cmd_runners=locker_names[1]))
         lock_positions.remove(locker_names[1])
 
         # releasing the second lock will allow the second recv/wait to
@@ -5157,13 +5190,13 @@ class ConfigVerifier:
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
-                confirm_cmd='ReleaseLock',
+                confirm_cmd='LockRelease',
                 confirm_serial_num=release_lock_serial_num_1,
                 confirmers=locker_names[1]))
 
         self.add_cmd(
-            VerifyLockPos(cmd_runners=self.commander_name,
-                          lock_positions=lock_positions))
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions))
         ################################################################
         # At this point we will have the first cmd behind the third
         # lock. If there is a second cmd, it will be behind the first
@@ -5181,22 +5214,21 @@ class ConfigVerifier:
             assert lock_positions[2] == first_cmd_lock_pos
 
             self.add_cmd(
-                SwapLockPos(cmd_runners=self.commander_name,
-                            new_positions=lock_positions
-                            ))
+                LockSwap(cmd_runners=self.commander_name,
+                         new_positions=lock_positions))
             self.add_cmd(
-                VerifyLockPos(cmd_runners=self.commander_name,
-                              lock_positions=lock_positions))
+                LockVerify(cmd_runners=self.commander_name,
+                           exp_positions=lock_positions))
 
         ################################################################
         # release third lock to allow both recv_msg/wait to refresh
         ################################################################
         release_lock_serial_num_2 = self.add_cmd(
-            ReleaseLock(cmd_runners=locker_names[2]))
+            LockRelease(cmd_runners=locker_names[2]))
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
-                confirm_cmd='ReleaseLock',
+                confirm_cmd='LockRelease',
                 confirm_serial_num=release_lock_serial_num_2,
                 confirmers=locker_names[2]))
 
@@ -5206,7 +5238,14 @@ class ConfigVerifier:
         self.add_cmd(
             VerifyDefDel(
                 cmd_runners=self.commander_name,
-                def_del_scenario=def_del_scenario))
+                def_del_scenario=def_del_scenario,
+                receiver_names=receiver_names,
+                sender_names=sender_names,
+                waiter_names=waiter_names,
+                resumer_names=resumer_names,
+                del_names=del_names,
+                add_names=add_names,
+                deleter_adder_names=deleter_adder_names))
 
     ####################################################################
     # build_recv_msg_timeout_suite
@@ -9664,24 +9703,55 @@ class ConfigVerifier:
             cmd_runner: name of thread that will get the lock
             new_positions: the desired positions on the lock queue
         """
-        for idx, pos_name in enumerate(new_positions):
-            if (st.SmartThread._registry_lock.owner_wait_q[idx].thread.name
-                    != pos_name):
-                save_pos = st.SmartThread._registry_lock.owner_wait_q[idx]
-                # find our desired position
-                new_pos = None
-                # for (idx2, owner_waiter in enumerate(
-                #            st.SmartThread._registry_lock.owner_wait_q)):
-                for idx2 in range(len(
-                        st.SmartThread._registry_lock.owner_wait_q)):
+        assert len(new_positions) == len(
+            st.SmartThread._registry_lock.owner_wait_q)
+        with self.ops_lock:
+            for idx, pos_name in enumerate(new_positions):
+                if (st.SmartThread._registry_lock.owner_wait_q[idx].thread.name
+                        != pos_name):
+                    save_pos = st.SmartThread._registry_lock.owner_wait_q[idx]
+                    # find our desired position
+                    new_pos = None
+                    # for (idx2, owner_waiter in enumerate(
+                    #            st.SmartThread._registry_lock.owner_wait_q)):
+                    for idx2 in range(len(
+                            st.SmartThread._registry_lock.owner_wait_q)):
 
-                    if (st.SmartThread._registry_lock.owner_wait_q[idx2]
-                            .thread.name == pos_name):
-                        new_pos = st.SmartThread._registry_lock.owner_wait_q[idx2]
-                        break
-                assert new_pos is not None
-                st.SmartThread._registry_lock.owner_wait_q[idx] = new_pos
-                st.SmartThread._registry_lock.owner_wait_q[idx2] = save_pos
+                        if (st.SmartThread._registry_lock.owner_wait_q[idx2]
+                                .thread.name == pos_name):
+                            new_pos = (
+                                st.SmartThread._registry_lock.owner_wait_q[
+                                    idx2])
+                            break
+                    assert new_pos is not None
+                    st.SmartThread._registry_lock.owner_wait_q[idx] = new_pos
+                    st.SmartThread._registry_lock.owner_wait_q[idx2] = save_pos
+
+    ####################################################################
+    # lock_verify
+    ####################################################################
+    def lock_verify(self,
+                    cmd_runner: str,
+                    exp_positions: list[str]) -> None:
+        """Increment the pending operations count.
+
+        Args:
+            cmd_runner: name of thread that will get the lock
+            exp_positions: the expected positions on the lock queue
+        """
+        assert len(exp_positions) == len(
+            st.SmartThread._registry_lock.owner_wait_q)
+        with self.ops_lock:
+            for idx, expected_name in enumerate(exp_positions):
+                if (st.SmartThread._registry_lock.owner_wait_q[idx].thread.name
+                        != expected_name):
+                    existing_name = (
+                        st.SmartThread._registry_lock.owner_wait_q[
+                            idx].thread.name)
+                    raise FailedLockVerify(f'lock_verify found that lock '
+                                           f'position {idx} contains '
+                                           f'{existing_name=} which does not '
+                                           f'match the {expected_name=}')
 
     ####################################################################
     # log_name_groups
@@ -10429,16 +10499,139 @@ class ConfigVerifier:
     ####################################################################
     def verify_def_del(self,
                        cmd_runner: str,
-                       def_del_scenario: DefDelScenario) -> None:
+                       def_del_scenario: DefDelScenario,
+                       receiver_names: list[str],
+                       sender_names: list[str],
+                       waiter_names: list[str],
+                       resumer_names: list[str],
+                       del_names: list[str],
+                       add_names: list[str],
+                       deleter_adder_names: list[str]
+                       ) -> None:
         """Verify that the given counts are correct.
 
         Args:
             cmd_runner: name of thread doing the cmd
             def_del_scenario: deferred delete scenario to verify
+            receiver_names: names that do recv_msg
+            sender_names: names that do send_msg
+            waiter_names: names that do smart_wait
+            resumer_names: names that do smart_resume
+            del_names: names deleted during recv or wait
+            add_names: names added during recv or wait
+            deleter_adder_names: names that do the add or delete
 
         """
-        pass
 
+        class DefDelScenario(Enum):
+            NormalRecv = auto()
+            NormalWait = auto()
+            ResurrectionRecv = auto()
+            ResurrectionWait = auto()
+            Recv0Recv1 = auto()
+            Recv1Recv0 = auto()
+            Wait0Wait1 = auto()
+            Wait1Wait0 = auto()
+            RecvWait = auto()
+            WaitRecv = auto()
+            RecvDel = auto()
+            RecvAdd = auto()
+            WaitDel = auto()
+            WaitAdd = auto()
+
+        ################################################################
+        # start by gathering log messages, both expected and not
+        ################################################################
+        ################################################################
+        # get first config_cmd recv_msg log msg
+        ################################################################
+        search_msg = ("config_cmd: RecvMsg\(serial=[0-9]+, line=[0-9]+, "
+                      f"cmd_runners='{receiver_names[0]}', "
+                      f"senders='{sender_names[0]}'\)")
+
+        cc_recv_0_log_msg, cc_recv_0_log_pos = self.get_log_msg(
+            search_msg=search_msg,
+            skip_num=0,
+            start_idx=0,
+            # end_idx=log_idx,
+            reverse_search=False)
+
+        ################################################################
+        # get first wait config_cmd log msg
+        ################################################################
+        search_msg = ("config_cmd: Wait\(serial=[0-9]+, line=[0-9]+, "
+                      f"cmd_runners='{waiter_names[0]}', "
+                      f"resumers='{resumer_names[0]}'\)")
+
+        cc_wait_0_log_msg, cc_wait_0_log_pos = self.get_log_msg(
+            search_msg=search_msg,
+            skip_num=0,
+            start_idx=0,
+            # end_idx=log_idx,
+            reverse_search=False)
+
+        if cc_recv_0_log_msg and cc_wait_0_log_msg:
+            raise FailedDefDelVerify('verify_def_del found both recv_msg '
+                                     'and wait initial config_cmd log '
+                                     'messages - only one or the other is '
+                                     'expected.'
+                                     f'{cc_recv_0_log_msg=}. '
+                                     f'{cc_wait_0_log_msg=}.')
+        if not cc_recv_0_log_msg and not cc_wait_0_log_msg:
+            raise FailedDefDelVerify('verify_def_del found neither recv_msg '
+                                     'nor wait initial config_cmd log '
+                                     'messages - one and only one is '
+                                     'expected.')
+        if cc_recv_0_log_msg:
+            start_log_idx = cc_recv_0_log_pos
+        else:
+            start_log_idx = cc_wait_0_log_pos
+
+        ################################################################
+        # get config_cmd log msg for VerifyDefDel
+        ################################################################
+        search_msg = ("config_cmd: VerifyDefDel\(serial=[0-9]+, line=[0-9]+, "
+                      f"cmd_runners='{self.commander_name}', "
+                      f"def_del_scenario=")
+
+        cc_verify_dd_log_msg, cc_verify_dd_log_pos = self.get_log_msg(
+            search_msg=search_msg,
+            skip_num=0,
+            start_idx=start_log_idx,
+            # end_idx=log_idx,
+            reverse_search=False)
+
+        if not cc_verify_dd_log_msg:
+            raise FailedDefDelVerify('verify_def_del failed to find the '
+                                     'VerifyDefDel config_cmd log msg')
+        end_log_idx = cc_verify_dd_log_pos
+
+        ################################################################
+        # get first recv_msg log msg
+        ################################################################
+        search_msg = (f'{receiver_names[0]} received msg from '
+                      f'{sender_names[0]}')
+
+        recv_0_log_msg, recv_0_log_pos = self.get_log_msg(
+            search_msg=search_msg,
+            skip_num=0,
+            start_idx=start_log_idx,
+            # end_idx=log_idx,
+            reverse_search=False)
+
+
+        ################################################################
+        # gather real variables
+        ################################################################
+
+        ################################################################
+        # gather mock variables
+        ################################################################
+        # if def_del_scenario == DefDelScenario.NormalRecv:
+            # verify msg received log msg
+            # verify ops_count is zero
+            # verify msg_q is empty
+            # verify del_deferred bit is OFF
     ####################################################################
     # verify_in_registry
     ####################################################################
@@ -11677,7 +11870,7 @@ class TestSmartThreadScenarios:
         config_ver.add_cmd(ValidateConfig(cmd_runners=commander_name))
 
         names = list(config_ver.active_names - {commander_name})
-        config_ver.build_exit_suite(cmd_runner=self.commander_name,
+        config_ver.build_exit_suite(cmd_runner=commander_name,
                                     names=names)
 
         config_ver.build_join_suite(
