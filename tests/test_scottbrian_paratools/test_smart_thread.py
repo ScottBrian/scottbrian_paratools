@@ -10454,6 +10454,26 @@ class ConfigVerifier:
             end_log_idx=end_log_idx)
 
         ################################################################
+        # get second wait pair array log msgs found
+        ################################################################
+        del_pa_msgs_found = self.find_def_del_pair_array_msgs(
+            cmd_runner=deleter_adder_names[0],
+            deleted_names=[sender_names[0], resumer_names[0]],
+            def_del_names=receiver_names + waiter_names,
+            start_log_idx=start_log_idx,
+            end_log_idx=end_log_idx)
+
+        ################################################################
+        # get second wait pair array log msgs found
+        ################################################################
+        add_pa_msgs_found = self.find_def_del_pair_array_msgs(
+            cmd_runner=deleter_adder_names[0],
+            deleted_names=[sender_names[0], resumer_names[0]],
+            def_del_names=receiver_names + waiter_names,
+            start_log_idx=start_log_idx,
+            end_log_idx=end_log_idx)
+
+        ################################################################
         # verify real variables
         ################################################################
         pair_key_exists: dict[tuple[str, str], bool] = {}
@@ -10498,7 +10518,11 @@ class ConfigVerifier:
                     or wait_0_pa_msgs_found.entered_rpa
                     or wait_0_pa_msgs_found.updated_pa
                     or wait_1_pa_msgs_found.entered_rpa
-                    or wait_1_pa_msgs_found.updated_pa):
+                    or wait_1_pa_msgs_found.updated_pa
+                    or del_pa_msgs_found.entered_rpa
+                    or del_pa_msgs_found.updated_pa
+                    or add_pa_msgs_found.entered_rpa
+                    or add_pa_msgs_found.updated_pa):
                 raise FailedDefDelVerify(
                     f'verify_def_del {def_del_scenario=} found an '
                     'unexpected pair array activity '
@@ -10508,7 +10532,11 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.entered_rpa=}, '
                     f'{wait_0_pa_msgs_found.updated_pa=}, '
                     f'{wait_1_pa_msgs_found.entered_rpa=}, '
-                    f'{wait_1_pa_msgs_found.updated_pa}')
+                    f'{wait_1_pa_msgs_found.updated_pa=}, '
+                    f'{del_pa_msgs_found.entered_rpa=}, ' 
+                    f'{del_pa_msgs_found.updated_pa=}, ' 
+                    f'{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'{add_pa_msgs_found.updated_pa=}')
             if (len(recv_0_pa_msgs_found.removed_sb_entry)
                     or len(recv_0_pa_msgs_found.removed_pa_entry)
                     or len(recv_1_pa_msgs_found.removed_sb_entry)
@@ -10516,7 +10544,11 @@ class ConfigVerifier:
                     or len(wait_0_pa_msgs_found.removed_sb_entry)
                     or len(wait_0_pa_msgs_found.removed_pa_entry)
                     or len(wait_1_pa_msgs_found.removed_sb_entry)
-                    or len(wait_1_pa_msgs_found.removed_pa_entry)):
+                    or len(wait_1_pa_msgs_found.removed_pa_entry)
+                    or len(del_pa_msgs_found.removed_sb_entry)
+                    or len(del_pa_msgs_found.removed_pa_entry)
+                    or len(add_pa_msgs_found.removed_sb_entry)
+                    or len(add_pa_msgs_found.removed_pa_entry)):
                 raise FailedDefDelVerify(
                     f'verify_def_del {def_del_scenario=} found an '
                     'unexpected pair array activity '
@@ -10527,7 +10559,11 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.removed_sb_entry=}, '
                     f'{wait_0_pa_msgs_found.removed_pa_entry=}, '
                     f'{wait_1_pa_msgs_found.removed_sb_entry=}, '
-                    f'{wait_1_pa_msgs_found.removed_pa_entry=}')
+                    f'{wait_1_pa_msgs_found.removed_pa_entry=}, '
+                    f'{del_pa_msgs_found.removed_sb_entry=}, '
+                    f'{del_pa_msgs_found.removed_pa_entry=}, '
+                    f'{add_pa_msgs_found.removed_sb_entry=}, '
+                    f'{add_pa_msgs_found.removed_pa_entry=}')
 
         ################################################################
         # verify for NormalWait and ResurrectionWait
@@ -10553,7 +10589,11 @@ class ConfigVerifier:
                     or wait_0_pa_msgs_found.entered_rpa
                     or wait_0_pa_msgs_found.updated_pa
                     or wait_1_pa_msgs_found.entered_rpa
-                    or wait_1_pa_msgs_found.updated_pa):
+                    or wait_1_pa_msgs_found.updated_pa
+                    or del_pa_msgs_found.entered_rpa
+                    or del_pa_msgs_found.updated_pa
+                    or add_pa_msgs_found.entered_rpa
+                    or add_pa_msgs_found.updated_pa):
                 raise FailedDefDelVerify(
                     f'verify_def_del {def_del_scenario=} found an '
                     'unexpected pair array activity '
@@ -10563,7 +10603,12 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.entered_rpa=}, '
                     f'{wait_0_pa_msgs_found.updated_pa=}, '
                     f'{wait_1_pa_msgs_found.entered_rpa=}, '
-                    f'{wait_1_pa_msgs_found.updated_pa}')
+                    f'{wait_1_pa_msgs_found.updated_pa=}, '
+                    f'{del_pa_msgs_found.entered_rpa=}, '
+                    f'{del_pa_msgs_found.updated_pa=}, '
+                    f'{add_pa_msgs_found.entered_rpa=}, '
+                    f'{add_pa_msgs_found.updated_pa=}')
+
             if (len(recv_0_pa_msgs_found.removed_sb_entry)
                     or len(recv_0_pa_msgs_found.removed_pa_entry)
                     or len(recv_1_pa_msgs_found.removed_sb_entry)
@@ -10571,7 +10616,11 @@ class ConfigVerifier:
                     or len(wait_0_pa_msgs_found.removed_sb_entry)
                     or len(wait_0_pa_msgs_found.removed_pa_entry)
                     or len(wait_1_pa_msgs_found.removed_sb_entry)
-                    or len(wait_1_pa_msgs_found.removed_pa_entry)):
+                    or len(wait_1_pa_msgs_found.removed_pa_entry)
+                    or len(del_pa_msgs_found.removed_sb_entry)
+                    or len(del_pa_msgs_found.removed_pa_entry)
+                    or len(add_pa_msgs_found.removed_sb_entry)
+                    or len(add_pa_msgs_found.removed_pa_entry)):
                 raise FailedDefDelVerify(
                     f'verify_def_del {def_del_scenario=} found an '
                     'unexpected pair array activity '
@@ -10582,7 +10631,11 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.removed_sb_entry=}, '
                     f'{wait_0_pa_msgs_found.removed_pa_entry=}, '
                     f'{wait_1_pa_msgs_found.removed_sb_entry=}, '
-                    f'{wait_1_pa_msgs_found.removed_pa_entry=}')
+                    f'{wait_1_pa_msgs_found.removed_pa_entry=}, '
+                    f'{del_pa_msgs_found.removed_sb_entry=}, '
+                    f'{del_pa_msgs_found.removed_pa_entry=}, '
+                    f'{add_pa_msgs_found.removed_sb_entry=}, '
+                    f'{add_pa_msgs_found.removed_pa_entry=}')
 
         ################################################################
         # verify for Recv0Recv1
@@ -10608,7 +10661,11 @@ class ConfigVerifier:
                     or wait_0_pa_msgs_found.entered_rpa
                     or wait_0_pa_msgs_found.updated_pa
                     or wait_1_pa_msgs_found.entered_rpa
-                    or wait_1_pa_msgs_found.updated_pa):
+                    or wait_1_pa_msgs_found.updated_pa
+                    or del_pa_msgs_found.entered_rpa
+                    or del_pa_msgs_found.updated_pa
+                    or add_pa_msgs_found.entered_rpa
+                    or add_pa_msgs_found.updated_pa):
                 raise FailedDefDelVerify(
                     f'verify_def_del {def_del_scenario=} found an '
                     'unexpected pair array activity '
@@ -10618,7 +10675,11 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.entered_rpa=}, '
                     f'{wait_0_pa_msgs_found.updated_pa=}, '
                     f'{wait_1_pa_msgs_found.entered_rpa=}, '
-                    f'{wait_1_pa_msgs_found.updated_pa}')
+                    f'{wait_1_pa_msgs_found.updated_pa=}, '
+                    f'{del_pa_msgs_found.entered_rpa=}, ' 
+                    f'{del_pa_msgs_found.updated_pa=}, ' 
+                    f'{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'{add_pa_msgs_found.updated_pa=}')
             if ((len(recv_0_pa_msgs_found.removed_sb_entry) == 0)
                     or (len(recv_0_pa_msgs_found.removed_pa_entry) == 0)
                     or len(recv_1_pa_msgs_found.removed_sb_entry)
@@ -10626,7 +10687,11 @@ class ConfigVerifier:
                     or len(wait_0_pa_msgs_found.removed_sb_entry)
                     or len(wait_0_pa_msgs_found.removed_pa_entry)
                     or len(wait_1_pa_msgs_found.removed_sb_entry)
-                    or len(wait_1_pa_msgs_found.removed_pa_entry)):
+                    or len(wait_1_pa_msgs_found.removed_pa_entry)
+                    or len(del_pa_msgs_found.removed_sb_entry)
+                    or len(del_pa_msgs_found.removed_pa_entry)
+                    or len(add_pa_msgs_found.removed_sb_entry)
+                    or len(add_pa_msgs_found.removed_pa_entry)):
                 raise FailedDefDelVerify(
                     f'verify_def_del {def_del_scenario=} found an '
                     'unexpected pair array activity '
@@ -10637,7 +10702,11 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.removed_sb_entry=}, '
                     f'{wait_0_pa_msgs_found.removed_pa_entry=}, '
                     f'{wait_1_pa_msgs_found.removed_sb_entry=}, '
-                    f'{wait_1_pa_msgs_found.removed_pa_entry=}')
+                    f'{wait_1_pa_msgs_found.removed_pa_entry=}, '
+                    f'{del_pa_msgs_found.removed_sb_entry=}, '
+                    f'{del_pa_msgs_found.removed_pa_entry=}, '
+                    f'{add_pa_msgs_found.removed_sb_entry=}, '
+                    f'{add_pa_msgs_found.removed_pa_entry=}')
             exp_pair_keys: list[tuple[str, str]] = []
             pair_key = st.SmartThread._get_pair_key(name0=sender_names[0],
                                                     name1=receiver_names[0])
@@ -10694,7 +10763,11 @@ class ConfigVerifier:
                     or wait_0_pa_msgs_found.entered_rpa
                     or wait_0_pa_msgs_found.updated_pa
                     or wait_1_pa_msgs_found.entered_rpa
-                    or wait_1_pa_msgs_found.updated_pa):
+                    or wait_1_pa_msgs_found.updated_pa
+                    or del_pa_msgs_found.entered_rpa
+                    or del_pa_msgs_found.updated_pa
+                    or add_pa_msgs_found.entered_rpa
+                    or add_pa_msgs_found.updated_pa):
                 raise FailedDefDelVerify(
                     f'verify_def_del {def_del_scenario=} found an '
                     'unexpected pair array activity '
@@ -10704,7 +10777,11 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.entered_rpa=}, '
                     f'{wait_0_pa_msgs_found.updated_pa=}, '
                     f'{wait_1_pa_msgs_found.entered_rpa=}, '
-                    f'{wait_1_pa_msgs_found.updated_pa}')
+                    f'{wait_1_pa_msgs_found.updated_pa=}, '
+                    f'{del_pa_msgs_found.entered_rpa=}, ' 
+                    f'{del_pa_msgs_found.updated_pa=}, ' 
+                    f'{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'{add_pa_msgs_found.updated_pa=}')
             if (len(recv_0_pa_msgs_found.removed_sb_entry)
                     or len(recv_0_pa_msgs_found.removed_pa_entry)
                     or (len(recv_1_pa_msgs_found.removed_sb_entry) == 0)
@@ -10712,7 +10789,11 @@ class ConfigVerifier:
                     or len(wait_0_pa_msgs_found.removed_sb_entry)
                     or len(wait_0_pa_msgs_found.removed_pa_entry)
                     or len(wait_1_pa_msgs_found.removed_sb_entry)
-                    or len(wait_1_pa_msgs_found.removed_pa_entry)):
+                    or len(wait_1_pa_msgs_found.removed_pa_entry)
+                    or len(del_pa_msgs_found.removed_sb_entry)
+                    or len(del_pa_msgs_found.removed_pa_entry)
+                    or len(add_pa_msgs_found.removed_sb_entry)
+                    or len(add_pa_msgs_found.removed_pa_entry)):
                 raise FailedDefDelVerify(
                     f'verify_def_del {def_del_scenario=} found an '
                     'unexpected pair array activity '
@@ -10723,7 +10804,11 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.removed_sb_entry=}, '
                     f'{wait_0_pa_msgs_found.removed_pa_entry=}, '
                     f'{wait_1_pa_msgs_found.removed_sb_entry=}, '
-                    f'{wait_1_pa_msgs_found.removed_pa_entry=}')
+                    f'{wait_1_pa_msgs_found.removed_pa_entry=}, '
+                    f'{del_pa_msgs_found.removed_sb_entry=}, '
+                    f'{del_pa_msgs_found.removed_pa_entry=}, '
+                    f'{add_pa_msgs_found.removed_sb_entry=}, '
+                    f'{add_pa_msgs_found.removed_pa_entry=}')
             exp_pair_keys: list[tuple[str, str]] = []
             pair_key = st.SmartThread._get_pair_key(name0=sender_names[0],
                                                     name1=receiver_names[0])
@@ -10780,7 +10865,11 @@ class ConfigVerifier:
                     or (not wait_0_pa_msgs_found.entered_rpa)
                     or (not wait_0_pa_msgs_found.updated_pa)
                     or wait_1_pa_msgs_found.entered_rpa
-                    or wait_1_pa_msgs_found.updated_pa):
+                    or wait_1_pa_msgs_found.updated_pa
+                    or del_pa_msgs_found.entered_rpa
+                    or del_pa_msgs_found.updated_pa
+                    or add_pa_msgs_found.entered_rpa
+                    or add_pa_msgs_found.updated_pa):
                 raise FailedDefDelVerify(
                     f'verify_def_del {def_del_scenario=} found an '
                     'unexpected pair array activity '
@@ -10790,7 +10879,11 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.entered_rpa=}, '
                     f'{wait_0_pa_msgs_found.updated_pa=}, '
                     f'{wait_1_pa_msgs_found.entered_rpa=}, '
-                    f'{wait_1_pa_msgs_found.updated_pa}')
+                    f'{wait_1_pa_msgs_found.updated_pa=}, '
+                    f'{del_pa_msgs_found.entered_rpa=}, ' 
+                    f'{del_pa_msgs_found.updated_pa=}, ' 
+                    f'{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'{add_pa_msgs_found.updated_pa=}')
             if (len(recv_0_pa_msgs_found.removed_sb_entry)
                     or len(recv_0_pa_msgs_found.removed_pa_entry)
                     or len(recv_1_pa_msgs_found.removed_sb_entry)
@@ -10798,7 +10891,11 @@ class ConfigVerifier:
                     or (len(wait_0_pa_msgs_found.removed_sb_entry) == 0)
                     or (len(wait_0_pa_msgs_found.removed_pa_entry) == 0)
                     or len(wait_1_pa_msgs_found.removed_sb_entry)
-                    or len(wait_1_pa_msgs_found.removed_pa_entry)):
+                    or len(wait_1_pa_msgs_found.removed_pa_entry)
+                    or len(del_pa_msgs_found.removed_sb_entry)
+                    or len(del_pa_msgs_found.removed_pa_entry)
+                    or len(add_pa_msgs_found.removed_sb_entry)
+                    or len(add_pa_msgs_found.removed_pa_entry)):
                 raise FailedDefDelVerify(
                     f'verify_def_del {def_del_scenario=} found an '
                     'unexpected pair array activity '
@@ -10809,7 +10906,11 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.removed_sb_entry=}, '
                     f'{wait_0_pa_msgs_found.removed_pa_entry=}, '
                     f'{wait_1_pa_msgs_found.removed_sb_entry=}, '
-                    f'{wait_1_pa_msgs_found.removed_pa_entry=}')
+                    f'{wait_1_pa_msgs_found.removed_pa_entry=}, '
+                    f'{del_pa_msgs_found.removed_sb_entry=}, '
+                    f'{del_pa_msgs_found.removed_pa_entry=}, '
+                    f'{add_pa_msgs_found.removed_sb_entry=}, '
+                    f'{add_pa_msgs_found.removed_pa_entry=}')
             exp_pair_keys: list[tuple[str, str]] = []
             pair_key = st.SmartThread._get_pair_key(name0=resumer_names[0],
                                                     name1=waiter_names[0])
@@ -10866,7 +10967,11 @@ class ConfigVerifier:
                     or wait_0_pa_msgs_found.entered_rpa
                     or wait_0_pa_msgs_found.updated_pa
                     or (not wait_1_pa_msgs_found.entered_rpa)
-                    or (not wait_1_pa_msgs_found.updated_pa)):
+                    or (not wait_1_pa_msgs_found.updated_pa)
+                    or del_pa_msgs_found.entered_rpa
+                    or del_pa_msgs_found.updated_pa
+                    or add_pa_msgs_found.entered_rpa
+                    or add_pa_msgs_found.updated_pa):
                 raise FailedDefDelVerify(
                     f'verify_def_del {def_del_scenario=} found an '
                     'unexpected pair array activity '
@@ -10876,7 +10981,11 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.entered_rpa=}, '
                     f'{wait_0_pa_msgs_found.updated_pa=}, '
                     f'{wait_1_pa_msgs_found.entered_rpa=}, '
-                    f'{wait_1_pa_msgs_found.updated_pa}')
+                    f'{wait_1_pa_msgs_found.updated_pa=}, '
+                    f'{del_pa_msgs_found.entered_rpa=}, ' 
+                    f'{del_pa_msgs_found.updated_pa=}, ' 
+                    f'{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'{add_pa_msgs_found.updated_pa=}')
             if (len(recv_0_pa_msgs_found.removed_sb_entry)
                     or len(recv_0_pa_msgs_found.removed_pa_entry)
                     or len(recv_1_pa_msgs_found.removed_sb_entry)
@@ -10884,7 +10993,11 @@ class ConfigVerifier:
                     or len(wait_0_pa_msgs_found.removed_sb_entry)
                     or len(wait_0_pa_msgs_found.removed_pa_entry)
                     or (len(wait_1_pa_msgs_found.removed_sb_entry) == 0)
-                    or (len(wait_1_pa_msgs_found.removed_pa_entry) == 0)):
+                    or (len(wait_1_pa_msgs_found.removed_pa_entry) == 0)
+                    or len(del_pa_msgs_found.removed_sb_entry)
+                    or len(del_pa_msgs_found.removed_pa_entry)
+                    or len(add_pa_msgs_found.removed_sb_entry)
+                    or len(add_pa_msgs_found.removed_pa_entry)):
                 raise FailedDefDelVerify(
                     f'verify_def_del {def_del_scenario=} found an '
                     'unexpected pair array activity '
@@ -10895,7 +11008,11 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.removed_sb_entry=}, '
                     f'{wait_0_pa_msgs_found.removed_pa_entry=}, '
                     f'{wait_1_pa_msgs_found.removed_sb_entry=}, '
-                    f'{wait_1_pa_msgs_found.removed_pa_entry=}')
+                    f'{wait_1_pa_msgs_found.removed_pa_entry=}, '
+                    f'{del_pa_msgs_found.removed_sb_entry=}, '
+                    f'{del_pa_msgs_found.removed_pa_entry=}, '
+                    f'{add_pa_msgs_found.removed_sb_entry=}, '
+                    f'{add_pa_msgs_found.removed_pa_entry=}')
             exp_pair_keys: list[tuple[str, str]] = []
             pair_key = st.SmartThread._get_pair_key(name0=resumer_names[0],
                                                     name1=waiter_names[0])
@@ -10952,7 +11069,11 @@ class ConfigVerifier:
                     or wait_0_pa_msgs_found.entered_rpa
                     or wait_0_pa_msgs_found.updated_pa
                     or wait_1_pa_msgs_found.entered_rpa
-                    or wait_1_pa_msgs_found.updated_pa):
+                    or wait_1_pa_msgs_found.updated_pa
+                    or del_pa_msgs_found.entered_rpa
+                    or del_pa_msgs_found.updated_pa
+                    or add_pa_msgs_found.entered_rpa
+                    or add_pa_msgs_found.updated_pa):
                 raise FailedDefDelVerify(
                     f'verify_def_del {def_del_scenario=} found an '
                     'unexpected pair array activity '
@@ -10962,7 +11083,11 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.entered_rpa=}, '
                     f'{wait_0_pa_msgs_found.updated_pa=}, '
                     f'{wait_1_pa_msgs_found.entered_rpa=}, '
-                    f'{wait_1_pa_msgs_found.updated_pa}')
+                    f'{wait_1_pa_msgs_found.updated_pa=}, '
+                    f'{del_pa_msgs_found.entered_rpa=}, ' 
+                    f'{del_pa_msgs_found.updated_pa=}, ' 
+                    f'{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'{add_pa_msgs_found.updated_pa=}')
             if ((len(recv_0_pa_msgs_found.removed_sb_entry) == 0)
                     or (len(recv_0_pa_msgs_found.removed_pa_entry) == 0)
                     or len(recv_1_pa_msgs_found.removed_sb_entry)
@@ -10970,7 +11095,11 @@ class ConfigVerifier:
                     or len(wait_0_pa_msgs_found.removed_sb_entry)
                     or len(wait_0_pa_msgs_found.removed_pa_entry)
                     or len(wait_1_pa_msgs_found.removed_sb_entry)
-                    or len(wait_1_pa_msgs_found.removed_pa_entry)):
+                    or len(wait_1_pa_msgs_found.removed_pa_entry)
+                    or len(del_pa_msgs_found.removed_sb_entry)
+                    or len(del_pa_msgs_found.removed_pa_entry)
+                    or len(add_pa_msgs_found.removed_sb_entry)
+                    or len(add_pa_msgs_found.removed_pa_entry)):
                 raise FailedDefDelVerify(
                     f'verify_def_del {def_del_scenario=} found an '
                     'unexpected pair array activity '
@@ -10981,7 +11110,11 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.removed_sb_entry=}, '
                     f'{wait_0_pa_msgs_found.removed_pa_entry=}, '
                     f'{wait_1_pa_msgs_found.removed_sb_entry=}, '
-                    f'{wait_1_pa_msgs_found.removed_pa_entry=}')
+                    f'{wait_1_pa_msgs_found.removed_pa_entry=}, '
+                    f'{del_pa_msgs_found.removed_sb_entry=}, '
+                    f'{del_pa_msgs_found.removed_pa_entry=}, '
+                    f'{add_pa_msgs_found.removed_sb_entry=}, '
+                    f'{add_pa_msgs_found.removed_pa_entry=}')
             exp_pair_keys: list[tuple[str, str]] = []
             pair_key = st.SmartThread._get_pair_key(name0=sender_names[0],
                                                     name1=receiver_names[0])
@@ -11038,7 +11171,11 @@ class ConfigVerifier:
                     or (not wait_0_pa_msgs_found.entered_rpa)
                     or (not wait_0_pa_msgs_found.updated_pa)
                     or wait_1_pa_msgs_found.entered_rpa
-                    or wait_1_pa_msgs_found.updated_pa):
+                    or wait_1_pa_msgs_found.updated_pa
+                    or del_pa_msgs_found.entered_rpa
+                    or del_pa_msgs_found.updated_pa
+                    or add_pa_msgs_found.entered_rpa
+                    or add_pa_msgs_found.updated_pa):
                 raise FailedDefDelVerify(
                     f'verify_def_del {def_del_scenario=} found an '
                     'unexpected pair array activity '
@@ -11048,7 +11185,11 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.entered_rpa=}, '
                     f'{wait_0_pa_msgs_found.updated_pa=}, '
                     f'{wait_1_pa_msgs_found.entered_rpa=}, '
-                    f'{wait_1_pa_msgs_found.updated_pa}')
+                    f'{wait_1_pa_msgs_found.updated_pa=}, '
+                    f'{del_pa_msgs_found.entered_rpa=}, ' 
+                    f'{del_pa_msgs_found.updated_pa=}, ' 
+                    f'{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'{add_pa_msgs_found.updated_pa=}')
             if (len(recv_0_pa_msgs_found.removed_sb_entry)
                     or len(recv_0_pa_msgs_found.removed_pa_entry)
                     or len(recv_1_pa_msgs_found.removed_sb_entry)
@@ -11056,7 +11197,11 @@ class ConfigVerifier:
                     or (len(wait_0_pa_msgs_found.removed_sb_entry) == 0)
                     or (len(wait_0_pa_msgs_found.removed_pa_entry) == 0)
                     or len(wait_1_pa_msgs_found.removed_sb_entry)
-                    or len(wait_1_pa_msgs_found.removed_pa_entry)):
+                    or len(wait_1_pa_msgs_found.removed_pa_entry)
+                    or len(del_pa_msgs_found.removed_sb_entry)
+                    or len(del_pa_msgs_found.removed_pa_entry)
+                    or len(add_pa_msgs_found.removed_sb_entry)
+                    or len(add_pa_msgs_found.removed_pa_entry)):
                 raise FailedDefDelVerify(
                     f'verify_def_del {def_del_scenario=} found an '
                     'unexpected pair array activity '
@@ -11067,7 +11212,11 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.removed_sb_entry=}, '
                     f'{wait_0_pa_msgs_found.removed_pa_entry=}, '
                     f'{wait_1_pa_msgs_found.removed_sb_entry=}, '
-                    f'{wait_1_pa_msgs_found.removed_pa_entry=}')
+                    f'{wait_1_pa_msgs_found.removed_pa_entry=}, '
+                    f'{del_pa_msgs_found.removed_sb_entry=}, '
+                    f'{del_pa_msgs_found.removed_pa_entry=}, '
+                    f'{add_pa_msgs_found.removed_sb_entry=}, '
+                    f'{add_pa_msgs_found.removed_pa_entry=}')
             exp_pair_keys: list[tuple[str, str]] = []
             pair_key = st.SmartThread._get_pair_key(name0=sender_names[0],
                                                     name1=receiver_names[0])
@@ -11099,6 +11248,407 @@ class ConfigVerifier:
                         f'that {pair_key=} from '
                         f'{wait_0_pa_msgs_found.removed_pa_entry=} is '
                         f'missing from {exp_pair_keys=}')
+
+        ################################################################
+        # verify for RecvDel
+        ################################################################
+        if def_del_scenario == DefDelScenario.RecvDel:
+            if not recv_0_log_msg:
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} failed to find the '
+                    'recv message:  '
+                    f'{recv_0_log_msg=}')
+            if recv_1_log_msg or wait_0_log_msg or wait_1_log_msg:
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} found an '
+                    'unexpected log msg: '
+                    f'{recv_1_log_msg=}, '
+                    f'{wait_0_log_msg=}, '
+                    f'{wait_1_log_msg=}')
+
+            if (recv_0_pa_msgs_found.entered_rpa
+                    or recv_0_pa_msgs_found.updated_pa
+                    or recv_1_pa_msgs_found.entered_rpa
+                    or recv_1_pa_msgs_found.updated_pa
+                    or (not wait_0_pa_msgs_found.entered_rpa)
+                    or (not wait_0_pa_msgs_found.updated_pa)
+                    or wait_1_pa_msgs_found.entered_rpa
+                    or wait_1_pa_msgs_found.updated_pa
+                    or (not del_pa_msgs_found.entered_rpa)
+                    or (not del_pa_msgs_found.updated_pa)
+                    or add_pa_msgs_found.entered_rpa
+                    or add_pa_msgs_found.updated_pa):
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} found an '
+                    'unexpected pair array activity '
+                    f'{recv_0_pa_msgs_found.entered_rpa=}, '
+                    f'{recv_0_pa_msgs_found.updated_pa=}, '
+                    f'{recv_1_pa_msgs_found.updated_pa=}, '
+                    f'{wait_0_pa_msgs_found.entered_rpa=}, '
+                    f'{wait_0_pa_msgs_found.updated_pa=}, '
+                    f'{wait_1_pa_msgs_found.entered_rpa=}, '
+                    f'{wait_1_pa_msgs_found.updated_pa=}, '
+                    f'{del_pa_msgs_found.entered_rpa=}, ' 
+                    f'{del_pa_msgs_found.updated_pa=}, ' 
+                    f'{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'{add_pa_msgs_found.updated_pa=}')
+            if (len(recv_0_pa_msgs_found.removed_sb_entry)
+                    or len(recv_0_pa_msgs_found.removed_pa_entry)
+                    or len(recv_1_pa_msgs_found.removed_sb_entry)
+                    or len(recv_1_pa_msgs_found.removed_pa_entry)
+                    or len(wait_0_pa_msgs_found.removed_sb_entry)
+                    or len(wait_0_pa_msgs_found.removed_pa_entry)
+                    or len(wait_1_pa_msgs_found.removed_sb_entry)
+                    or len(wait_1_pa_msgs_found.removed_pa_entry)
+                    or (len(del_pa_msgs_found.removed_sb_entry) == 0)
+                    or (len(del_pa_msgs_found.removed_pa_entry) == 0)
+                    or len(add_pa_msgs_found.removed_sb_entry)
+                    or len(add_pa_msgs_found.removed_pa_entry)):
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} found an '
+                    'unexpected pair array activity '
+                    f'{recv_0_pa_msgs_found.removed_sb_entry=}, '
+                    f'{recv_0_pa_msgs_found.removed_pa_entry=}, '
+                    f'{recv_1_pa_msgs_found.removed_sb_entry=}, '
+                    f'{recv_1_pa_msgs_found.removed_pa_entry=}, '
+                    f'{wait_0_pa_msgs_found.removed_sb_entry=}, '
+                    f'{wait_0_pa_msgs_found.removed_pa_entry=}, '
+                    f'{wait_1_pa_msgs_found.removed_sb_entry=}, '
+                    f'{wait_1_pa_msgs_found.removed_pa_entry=}, '
+                    f'{del_pa_msgs_found.removed_sb_entry=}, '
+                    f'{del_pa_msgs_found.removed_pa_entry=}, '
+                    f'{add_pa_msgs_found.removed_sb_entry=}, '
+                    f'{add_pa_msgs_found.removed_pa_entry=}')
+            exp_pair_keys: list[tuple[str, str]] = []
+            pair_key = st.SmartThread._get_pair_key(name0=sender_names[0],
+                                                    name1=receiver_names[0])
+
+            exp_pair_keys.append(pair_key)
+
+            for pair_key in exp_pair_keys:
+                if (pair_key not in del_pa_msgs_found.removed_sb_entry
+                        or pair_key
+                        not in del_pa_msgs_found.removed_pa_entry):
+                    raise FailedDefDelVerify(
+                        f'verify_def_del {def_del_scenario=} detected '
+                        f'that {pair_key=} from {exp_pair_keys=} is missing '
+                        f'from {del_pa_msgs_found.removed_sb_entry=} or '
+                        f'{del_pa_msgs_found.removed_pa_entry=}')
+            for pair_key in del_pa_msgs_found.removed_sb_entry:
+                if pair_key not in exp_pair_keys:
+                    raise FailedDefDelVerify(
+                        f'verify_def_del {def_del_scenario=} detected '
+                        f'that {pair_key=} from '
+                        f'{del_pa_msgs_found.removed_sb_entry=} is '
+                        f'missing from {exp_pair_keys=}')
+            for pair_key in del_pa_msgs_found.removed_pa_entry:
+                if pair_key not in exp_pair_keys:
+                    raise FailedDefDelVerify(
+                        f'verify_def_del {def_del_scenario=} detected '
+                        f'that {pair_key=} from '
+                        f'{del_pa_msgs_found.removed_pa_entry=} is '
+                        f'missing from {exp_pair_keys=}')
+
+        ################################################################
+        # verify for RecvAdd
+        ################################################################
+        if def_del_scenario == DefDelScenario.RecvAdd:
+            if not recv_0_log_msg:
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} failed to find the '
+                    'recv message:  '
+                    f'{recv_0_log_msg=}')
+            if recv_1_log_msg or wait_0_log_msg or wait_1_log_msg:
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} found an '
+                    'unexpected log msg: '
+                    f'{recv_1_log_msg=}, '
+                    f'{wait_0_log_msg=}, '
+                    f'{wait_1_log_msg=}')
+
+            if (recv_0_pa_msgs_found.entered_rpa
+                    or recv_0_pa_msgs_found.updated_pa
+                    or recv_1_pa_msgs_found.entered_rpa
+                    or recv_1_pa_msgs_found.updated_pa
+                    or (not wait_0_pa_msgs_found.entered_rpa)
+                    or (not wait_0_pa_msgs_found.updated_pa)
+                    or wait_1_pa_msgs_found.entered_rpa
+                    or wait_1_pa_msgs_found.updated_pa
+                    or not del_pa_msgs_found.entered_rpa
+                    or not del_pa_msgs_found.updated_pa
+                    or (not add_pa_msgs_found.entered_rpa)
+                    or (not add_pa_msgs_found.updated_pa)):
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} found an '
+                    'unexpected pair array activity '
+                    f'{recv_0_pa_msgs_found.entered_rpa=}, '
+                    f'{recv_0_pa_msgs_found.updated_pa=}, '
+                    f'{recv_1_pa_msgs_found.updated_pa=}, '
+                    f'{wait_0_pa_msgs_found.entered_rpa=}, '
+                    f'{wait_0_pa_msgs_found.updated_pa=}, '
+                    f'{wait_1_pa_msgs_found.entered_rpa=}, '
+                    f'{wait_1_pa_msgs_found.updated_pa=}, '
+                    f'{del_pa_msgs_found.entered_rpa=}, ' 
+                    f'{del_pa_msgs_found.updated_pa=}, ' 
+                    f'{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'{add_pa_msgs_found.updated_pa=}')
+            if (len(recv_0_pa_msgs_found.removed_sb_entry)
+                    or len(recv_0_pa_msgs_found.removed_pa_entry)
+                    or len(recv_1_pa_msgs_found.removed_sb_entry)
+                    or len(recv_1_pa_msgs_found.removed_pa_entry)
+                    or len(wait_0_pa_msgs_found.removed_sb_entry)
+                    or len(wait_0_pa_msgs_found.removed_pa_entry)
+                    or len(wait_1_pa_msgs_found.removed_sb_entry)
+                    or len(wait_1_pa_msgs_found.removed_pa_entry)
+                    or len(del_pa_msgs_found.removed_sb_entry)
+                    or len(del_pa_msgs_found.removed_pa_entry)
+                    or (len(add_pa_msgs_found.removed_sb_entry) == 0)
+                    or (len(add_pa_msgs_found.removed_pa_entry) == 0)):
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} found an '
+                    'unexpected pair array activity '
+                    f'{recv_0_pa_msgs_found.removed_sb_entry=}, '
+                    f'{recv_0_pa_msgs_found.removed_pa_entry=}, '
+                    f'{recv_1_pa_msgs_found.removed_sb_entry=}, '
+                    f'{recv_1_pa_msgs_found.removed_pa_entry=}, '
+                    f'{wait_0_pa_msgs_found.removed_sb_entry=}, '
+                    f'{wait_0_pa_msgs_found.removed_pa_entry=}, '
+                    f'{wait_1_pa_msgs_found.removed_sb_entry=}, '
+                    f'{wait_1_pa_msgs_found.removed_pa_entry=}, '
+                    f'{del_pa_msgs_found.removed_sb_entry=}, '
+                    f'{del_pa_msgs_found.removed_pa_entry=}, '
+                    f'{add_pa_msgs_found.removed_sb_entry=}, '
+                    f'{add_pa_msgs_found.removed_pa_entry=}')
+            exp_pair_keys: list[tuple[str, str]] = []
+            pair_key = st.SmartThread._get_pair_key(name0=sender_names[0],
+                                                    name1=receiver_names[0])
+
+            exp_pair_keys.append(pair_key)
+
+            for pair_key in exp_pair_keys:
+                if (pair_key not in add_pa_msgs_found.removed_sb_entry
+                        or pair_key
+                        not in add_pa_msgs_found.removed_pa_entry):
+                    raise FailedDefDelVerify(
+                        f'verify_def_del {def_del_scenario=} detected '
+                        f'that {pair_key=} from {exp_pair_keys=} is missing '
+                        f'from {add_pa_msgs_found.removed_sb_entry=} or '
+                        f'{add_pa_msgs_found.removed_pa_entry=}')
+            for pair_key in add_pa_msgs_found.removed_sb_entry:
+                if pair_key not in exp_pair_keys:
+                    raise FailedDefDelVerify(
+                        f'verify_def_del {def_del_scenario=} detected '
+                        f'that {pair_key=} from '
+                        f'{add_pa_msgs_found.removed_sb_entry=} is '
+                        f'missing from {exp_pair_keys=}')
+            for pair_key in add_pa_msgs_found.removed_pa_entry:
+                if pair_key not in exp_pair_keys:
+                    raise FailedDefDelVerify(
+                        f'verify_def_del {def_del_scenario=} detected '
+                        f'that {pair_key=} from '
+                        f'{add_pa_msgs_found.removed_pa_entry=} is '
+                        f'missing from {exp_pair_keys=}')
+
+        ################################################################
+        # verify for WaitDel
+        ################################################################
+        if def_del_scenario == DefDelScenario.WaitDel:
+            if not wait_0_log_msg:
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} failed to find the '
+                    'wait message:  '
+                    f'{wait_0_log_msg=}')
+            if recv_0_log_msg or recv_1_log_msg or wait_1_log_msg:
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} found an '
+                    'unexpected log msg: '
+                    f'{recv_0_log_msg=}, '
+                    f'{recv_1_log_msg=}, '
+                    f'{wait_1_log_msg=}')
+
+            if (recv_0_pa_msgs_found.entered_rpa
+                    or recv_0_pa_msgs_found.updated_pa
+                    or recv_1_pa_msgs_found.entered_rpa
+                    or recv_1_pa_msgs_found.updated_pa
+                    or (not wait_0_pa_msgs_found.entered_rpa)
+                    or (not wait_0_pa_msgs_found.updated_pa)
+                    or wait_1_pa_msgs_found.entered_rpa
+                    or wait_1_pa_msgs_found.updated_pa
+                    or (not del_pa_msgs_found.entered_rpa)
+                    or (not del_pa_msgs_found.updated_pa)
+                    or add_pa_msgs_found.entered_rpa
+                    or add_pa_msgs_found.updated_pa):
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} found an '
+                    'unexpected pair array activity '
+                    f'{recv_0_pa_msgs_found.entered_rpa=}, '
+                    f'{recv_0_pa_msgs_found.updated_pa=}, '
+                    f'{recv_1_pa_msgs_found.updated_pa=}, '
+                    f'{wait_0_pa_msgs_found.entered_rpa=}, '
+                    f'{wait_0_pa_msgs_found.updated_pa=}, '
+                    f'{wait_1_pa_msgs_found.entered_rpa=}, '
+                    f'{wait_1_pa_msgs_found.updated_pa=}, '
+                    f'{del_pa_msgs_found.entered_rpa=}, ' 
+                    f'{del_pa_msgs_found.updated_pa=}, ' 
+                    f'{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'{add_pa_msgs_found.updated_pa=}')
+            if (len(recv_0_pa_msgs_found.removed_sb_entry)
+                    or len(recv_0_pa_msgs_found.removed_pa_entry)
+                    or len(recv_1_pa_msgs_found.removed_sb_entry)
+                    or len(recv_1_pa_msgs_found.removed_pa_entry)
+                    or len(wait_0_pa_msgs_found.removed_sb_entry)
+                    or len(wait_0_pa_msgs_found.removed_pa_entry)
+                    or len(wait_1_pa_msgs_found.removed_sb_entry)
+                    or len(wait_1_pa_msgs_found.removed_pa_entry)
+                    or (len(del_pa_msgs_found.removed_sb_entry) == 0)
+                    or (len(del_pa_msgs_found.removed_pa_entry) == 0)
+                    or len(add_pa_msgs_found.removed_sb_entry)
+                    or len(add_pa_msgs_found.removed_pa_entry)):
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} found an '
+                    'unexpected pair array activity '
+                    f'{recv_0_pa_msgs_found.removed_sb_entry=}, '
+                    f'{recv_0_pa_msgs_found.removed_pa_entry=}, '
+                    f'{recv_1_pa_msgs_found.removed_sb_entry=}, '
+                    f'{recv_1_pa_msgs_found.removed_pa_entry=}, '
+                    f'{wait_0_pa_msgs_found.removed_sb_entry=}, '
+                    f'{wait_0_pa_msgs_found.removed_pa_entry=}, '
+                    f'{wait_1_pa_msgs_found.removed_sb_entry=}, '
+                    f'{wait_1_pa_msgs_found.removed_pa_entry=}, '
+                    f'{del_pa_msgs_found.removed_sb_entry=}, '
+                    f'{del_pa_msgs_found.removed_pa_entry=}, '
+                    f'{add_pa_msgs_found.removed_sb_entry=}, '
+                    f'{add_pa_msgs_found.removed_pa_entry=}')
+            exp_pair_keys: list[tuple[str, str]] = []
+            pair_key = st.SmartThread._get_pair_key(name0=resumer_names[0],
+                                                    name1=waiter_names[0])
+
+            exp_pair_keys.append(pair_key)
+
+            for pair_key in exp_pair_keys:
+                if (pair_key not in del_pa_msgs_found.removed_sb_entry
+                        or pair_key
+                        not in del_pa_msgs_found.removed_pa_entry):
+                    raise FailedDefDelVerify(
+                        f'verify_def_del {def_del_scenario=} detected '
+                        f'that {pair_key=} from {exp_pair_keys=} is missing '
+                        f'from {del_pa_msgs_found.removed_sb_entry=} or '
+                        f'{del_pa_msgs_found.removed_pa_entry=}')
+            for pair_key in del_pa_msgs_found.removed_sb_entry:
+                if pair_key not in exp_pair_keys:
+                    raise FailedDefDelVerify(
+                        f'verify_def_del {def_del_scenario=} detected '
+                        f'that {pair_key=} from '
+                        f'{del_pa_msgs_found.removed_sb_entry=} is '
+                        f'missing from {exp_pair_keys=}')
+            for pair_key in del_pa_msgs_found.removed_pa_entry:
+                if pair_key not in exp_pair_keys:
+                    raise FailedDefDelVerify(
+                        f'verify_def_del {def_del_scenario=} detected '
+                        f'that {pair_key=} from '
+                        f'{del_pa_msgs_found.removed_pa_entry=} is '
+                        f'missing from {exp_pair_keys=}')
+
+        ################################################################
+        # verify for WaitAdd
+        ################################################################
+        if def_del_scenario == DefDelScenario.WaitAdd:
+            if not wait_0_log_msg:
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} failed to find the '
+                    'recv message:  '
+                    f'{wait_0_log_msg=}')
+            if recv_0_log_msg or recv_1_log_msg or wait_1_log_msg:
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} found an '
+                    'unexpected log msg: '
+                    f'{recv_0_log_msg=}, '
+                    f'{recv_1_log_msg=}, '
+                    f'{wait_1_log_msg=}')
+
+            if (recv_0_pa_msgs_found.entered_rpa
+                    or recv_0_pa_msgs_found.updated_pa
+                    or recv_1_pa_msgs_found.entered_rpa
+                    or recv_1_pa_msgs_found.updated_pa
+                    or (not wait_0_pa_msgs_found.entered_rpa)
+                    or (not wait_0_pa_msgs_found.updated_pa)
+                    or wait_1_pa_msgs_found.entered_rpa
+                    or wait_1_pa_msgs_found.updated_pa
+                    or not del_pa_msgs_found.entered_rpa
+                    or not del_pa_msgs_found.updated_pa
+                    or (not add_pa_msgs_found.entered_rpa)
+                    or (not add_pa_msgs_found.updated_pa)):
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} found an '
+                    'unexpected pair array activity '
+                    f'{recv_0_pa_msgs_found.entered_rpa=}, '
+                    f'{recv_0_pa_msgs_found.updated_pa=}, '
+                    f'{recv_1_pa_msgs_found.updated_pa=}, '
+                    f'{wait_0_pa_msgs_found.entered_rpa=}, '
+                    f'{wait_0_pa_msgs_found.updated_pa=}, '
+                    f'{wait_1_pa_msgs_found.entered_rpa=}, '
+                    f'{wait_1_pa_msgs_found.updated_pa=}, '
+                    f'{del_pa_msgs_found.entered_rpa=}, ' 
+                    f'{del_pa_msgs_found.updated_pa=}, ' 
+                    f'{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'{add_pa_msgs_found.updated_pa=}')
+            if (len(recv_0_pa_msgs_found.removed_sb_entry)
+                    or len(recv_0_pa_msgs_found.removed_pa_entry)
+                    or len(recv_1_pa_msgs_found.removed_sb_entry)
+                    or len(recv_1_pa_msgs_found.removed_pa_entry)
+                    or len(wait_0_pa_msgs_found.removed_sb_entry)
+                    or len(wait_0_pa_msgs_found.removed_pa_entry)
+                    or len(wait_1_pa_msgs_found.removed_sb_entry)
+                    or len(wait_1_pa_msgs_found.removed_pa_entry)
+                    or len(del_pa_msgs_found.removed_sb_entry)
+                    or len(del_pa_msgs_found.removed_pa_entry)
+                    or (len(add_pa_msgs_found.removed_sb_entry) == 0)
+                    or (len(add_pa_msgs_found.removed_pa_entry) == 0)):
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} found an '
+                    'unexpected pair array activity '
+                    f'{recv_0_pa_msgs_found.removed_sb_entry=}, '
+                    f'{recv_0_pa_msgs_found.removed_pa_entry=}, '
+                    f'{recv_1_pa_msgs_found.removed_sb_entry=}, '
+                    f'{recv_1_pa_msgs_found.removed_pa_entry=}, '
+                    f'{wait_0_pa_msgs_found.removed_sb_entry=}, '
+                    f'{wait_0_pa_msgs_found.removed_pa_entry=}, '
+                    f'{wait_1_pa_msgs_found.removed_sb_entry=}, '
+                    f'{wait_1_pa_msgs_found.removed_pa_entry=}, '
+                    f'{del_pa_msgs_found.removed_sb_entry=}, '
+                    f'{del_pa_msgs_found.removed_pa_entry=}, '
+                    f'{add_pa_msgs_found.removed_sb_entry=}, '
+                    f'{add_pa_msgs_found.removed_pa_entry=}')
+            exp_pair_keys: list[tuple[str, str]] = []
+            pair_key = st.SmartThread._get_pair_key(name0=resumer_names[0],
+                                                    name1=waiter_names[0])
+
+            exp_pair_keys.append(pair_key)
+
+            for pair_key in exp_pair_keys:
+                if (pair_key not in add_pa_msgs_found.removed_sb_entry
+                        or pair_key
+                        not in add_pa_msgs_found.removed_pa_entry):
+                    raise FailedDefDelVerify(
+                        f'verify_def_del {def_del_scenario=} detected '
+                        f'that {pair_key=} from {exp_pair_keys=} is missing '
+                        f'from {add_pa_msgs_found.removed_sb_entry=} or '
+                        f'{add_pa_msgs_found.removed_pa_entry=}')
+            for pair_key in add_pa_msgs_found.removed_sb_entry:
+                if pair_key not in exp_pair_keys:
+                    raise FailedDefDelVerify(
+                        f'verify_def_del {def_del_scenario=} detected '
+                        f'that {pair_key=} from '
+                        f'{add_pa_msgs_found.removed_sb_entry=} is '
+                        f'missing from {exp_pair_keys=}')
+            for pair_key in add_pa_msgs_found.removed_pa_entry:
+                if pair_key not in exp_pair_keys:
+                    raise FailedDefDelVerify(
+                        f'verify_def_del {def_del_scenario=} detected '
+                        f'that {pair_key=} from '
+                        f'{add_pa_msgs_found.removed_pa_entry=} is '
+                        f'missing from {exp_pair_keys=}')
+
 
         # class DefDelScenario(Enum):
         #     NormalRecv = auto()
