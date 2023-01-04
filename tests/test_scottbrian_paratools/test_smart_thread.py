@@ -10530,28 +10530,9 @@ class ConfigVerifier:
             deleter_adder_names: names that do the add or delete
 
         """
-
-        class DefDelScenario(Enum):
-            NormalRecv = auto()
-            NormalWait = auto()
-            ResurrectionRecv = auto()
-            ResurrectionWait = auto()
-            Recv0Recv1 = auto()
-            Recv1Recv0 = auto()
-            Wait0Wait1 = auto()
-            Wait1Wait0 = auto()
-            RecvWait = auto()
-            WaitRecv = auto()
-            RecvDel = auto()
-            RecvAdd = auto()
-            WaitDel = auto()
-            WaitAdd = auto()
-
         ################################################################
         # start by gathering log messages, both expected and not
         ################################################################
-
-
         ################################################################
         # get first config_cmd recv_msg log msg
         ################################################################
@@ -10629,70 +10610,16 @@ class ConfigVerifier:
             end_idx=end_log_idx,
             reverse_search=False)
 
-        PaLogMsgsFound:
-        entered_refresh_pair_array: bool
-        removed_status_blocks_entry: dict[tuple[str, str], bool]
-        removed_pair_array_entry: dict[tuple[str, str], bool]
-        updated_pair_array: bool
         ################################################################
         # get first recv_msg pair array log msgs found
         ################################################################
         recv_0_pair_array_msgs_found = self.find_def_del_pair_array_msgs(
             cmd_runner=receiver_names[0],
             deleted_names=[sender_names[0], resumer_names[0]],
-                                     def_del_names: list[str],
-                                     start_log_idx: int,
-                                     end_log_idx: int
-        )
-        search_msg = (f'{receiver_names[0]} entered _refresh_pair_array')
+            def_del_names=receiver_names + waiter_names,
+            start_log_idx=start_log_idx,
+            end_log_idx=end_log_idx)
 
-        recv_0_erpa_log_msg, recv_0_erpa_log_pos = self.get_log_msg(
-            search_msg=search_msg,
-            skip_num=0,
-            start_idx=start_log_idx,
-            end_idx=end_log_idx,
-            reverse_search=False)
-
-        ################################################################
-        # get first recv_msg removed status_blocks entry log msg
-        ################################################################
-        search_msg = (f"{receiver_names[0]} removed status_blocks entry "
-                      f"for pair_key = \('{pair_name0}', '{pair_name1}'\), "
-                      f"name = {receiver_names[0]}")
-
-
-        recv_0_rsbe_log_msg, recv_0_rsbe_log_pos = self.get_log_msg(
-            search_msg=search_msg,
-            skip_num=0,
-            start_idx=start_log_idx,
-            end_idx=end_log_idx,
-            reverse_search=False)
-
-        ################################################################
-        # get first recv_msg removed pair_array entry log msg
-        ################################################################
-        search_msg = (f"{receiver_names[0]} removed _pair_array entry for "
-                      f"for pair_key = \('{pair_name0}', '{pair_name1}'\), ")
-
-        recv_0_rpae_log_msg, recv_0_rpae_log_pos = self.get_log_msg(
-            search_msg=search_msg,
-            skip_num=0,
-            start_idx=start_log_idx,
-            end_idx=end_log_idx,
-            reverse_search=False)
-
-        ################################################################
-        # get first recv_msg updated pair array log msg
-        ################################################################
-        search_msg = (f'{receiver_names[0]} updated _pair_array at UTC '
-                      f'{time_match}')
-
-        recv_0_upa_log_msg, recv_0_upa_log_pos = self.get_log_msg(
-            search_msg=search_msg,
-            skip_num=0,
-            start_idx=start_log_idx,
-            end_idx=end_log_idx,
-            reverse_search=False)
 
         ################################################################
         # get second recv_msg log msg
@@ -10708,6 +10635,15 @@ class ConfigVerifier:
             reverse_search=False)
 
         ################################################################
+        # get second recv_msg pair array log msgs found
+        ################################################################
+        recv_1_pair_array_msgs_found = self.find_def_del_pair_array_msgs(
+            cmd_runner=receiver_names[1],
+            deleted_names=[sender_names[0], resumer_names[0]],
+            def_del_names=receiver_names + waiter_names,
+            start_log_idx=start_log_idx,
+            end_log_idx=end_log_idx)
+        ################################################################
         # get first wait log msg
         ################################################################
         search_msg = (f'{waiter_names[0]} smart_wait resumed by '
@@ -10719,6 +10655,16 @@ class ConfigVerifier:
             start_idx=start_log_idx,
             end_idx=end_log_idx,
             reverse_search=False)
+
+        ################################################################
+        # get first wait pair array log msgs found
+        ################################################################
+        wait_0_pair_array_msgs_found = self.find_def_del_pair_array_msgs(
+            cmd_runner=waiter_names[0],
+            deleted_names=[sender_names[0], resumer_names[0]],
+            def_del_names=receiver_names + waiter_names,
+            start_log_idx=start_log_idx,
+            end_log_idx=end_log_idx)
 
         ################################################################
         # get second wait log msg
@@ -10733,21 +10679,66 @@ class ConfigVerifier:
             end_idx=end_log_idx,
             reverse_search=False)
 
-
-
+        ################################################################
+        # get second wait pair array log msgs found
+        ################################################################
+        wait_1_pair_array_msgs_found = self.find_def_del_pair_array_msgs(
+            cmd_runner=waiter_names[1],
+            deleted_names=[sender_names[0], resumer_names[0]],
+            def_del_names=receiver_names + waiter_names,
+            start_log_idx=start_log_idx,
+            end_log_idx=end_log_idx)
 
         ################################################################
-        # gather real variables
+        # verify real variables
         ################################################################
+        pair_key_exists: dict[tuple[str, str], bool] = {}
+        for deleted_name in sender_names + resumer_names:
+            for def_del_name in receiver_names + waiter_names:
+                pair_key = st.SmartThread._get_pair_key(name0=deleted_name,
+                                                        name1=def_del_name)
+                if pair_key in st.SmartThread._pair_array:
+                    pair_key_exists[pair_key] = True
+                    if pair_key not in self.expected_pairs:
+                        raise InvalidConfigurationDetected(
+                            f'verify_def_del found {pair_key=} is in real '
+                            'pair array but is not in mock pair array')
+                else:
+                    pair_key_exists[pair_key] = False
+                    if pair_key in self.expected_pairs:
+                        raise InvalidConfigurationDetected(
+                            f'verify_def_del found {pair_key=} is not in '
+                            'real pair array but is in mock pair array')
 
+        class DefDelScenario(Enum):
+            NormalRecv = auto()
+            NormalWait = auto()
+            ResurrectionRecv = auto()
+            ResurrectionWait = auto()
+            Recv0Recv1 = auto()
+            Recv1Recv0 = auto()
+            Wait0Wait1 = auto()
+            Wait1Wait0 = auto()
+            RecvWait = auto()
+            WaitRecv = auto()
+            RecvDel = auto()
+            RecvAdd = auto()
+            WaitDel = auto()
+            WaitAdd = auto()
+
+        PaLogMsgsFound:
+        entered_refresh_pair_array: bool
+        removed_status_blocks_entry: dict[tuple[str, str], bool]
+        removed_pair_array_entry: dict[tuple[str, str], bool]
+        updated_pair_array: bool
         ################################################################
-        # gather mock variables
+        # verify for NormalRecv
         ################################################################
-        # if def_del_scenario == DefDelScenario.NormalRecv:
-            # verify msg received log msg
-            # verify ops_count is zero
-            # verify msg_q is empty
-            # verify del_deferred bit is OFF
+        if def_del_scenario == DefDelScenario.NormalRecv:
+            if not recv_0_log_msg:
+                raise FailedDefDelVerify(
+                    'verify_def_del scenario NormalRecv failed to find the '
+                    'recv_0_log_msg')
 
     ####################################################################
     # find_pair_array_msgs
@@ -10793,48 +10784,50 @@ class ConfigVerifier:
         # find removed status_blocks entry log msgs
         ################################################################
         found_removed_status_block_msgs: dict[tuple[str, str], bool] = {}
-        for def_del_name in def_del_names:
-            pair_key = st.SmartThread._get_pair_key(name0=deleted_name,
-                                                    name1=def_del_name)
-            search_msg = (f"{cmd_runner} removed status_blocks entry "
-                          f"for pair_key = "
-                          f"\('{pair_key[0]}', '{pair_key[1]}'\), "
-                          f"name = {cmd_runner}")
+        for deleted_name in deleted_names:
+            for def_del_name in def_del_names:
+                pair_key = st.SmartThread._get_pair_key(name0=deleted_name,
+                                                        name1=def_del_name)
+                search_msg = (f"{cmd_runner} removed status_blocks entry "
+                              f"for pair_key = "
+                              f"\('{pair_key[0]}', '{pair_key[1]}'\), "
+                              f"name = {cmd_runner}")
 
-            log_msg, log_pos = self.get_log_msg(
-                search_msg=search_msg,
-                skip_num=0,
-                start_idx=start_log_idx,
-                end_idx=end_log_idx,
-                reverse_search=False)
+                log_msg, log_pos = self.get_log_msg(
+                    search_msg=search_msg,
+                    skip_num=0,
+                    start_idx=start_log_idx,
+                    end_idx=end_log_idx,
+                    reverse_search=False)
 
-            if log_msg:
-                found_removed_status_block_msgs[pair_key] = True
-            else:
-                found_removed_status_block_msgs[pair_key] = False
+                if log_msg:
+                    found_removed_status_block_msgs[pair_key] = True
+                else:
+                    found_removed_status_block_msgs[pair_key] = False
 
         ################################################################
         # find removed pair_array entry log msgs
         ################################################################
         found_removed_pa_entry_msgs: dict[tuple[str, str], bool] = {}
-        for def_del_name in def_del_names:
-            pair_key = st.SmartThread._get_pair_key(name0=deleted_name,
-                                                    name1=def_del_name)
-            search_msg = (f"{cmd_runner} removed _pair_array entry for "
-                          f"for pair_key = "
-                          f"\('{pair_key[0]}', '{pair_key[1]}'\)")
+        for deleted_name in deleted_names:
+            for def_del_name in def_del_names:
+                pair_key = st.SmartThread._get_pair_key(name0=deleted_name,
+                                                        name1=def_del_name)
+                search_msg = (f"{cmd_runner} removed _pair_array entry for "
+                              f"for pair_key = "
+                              f"\('{pair_key[0]}', '{pair_key[1]}'\)")
 
-            log_msg, log_pos = self.get_log_msg(
-                search_msg=search_msg,
-                skip_num=0,
-                start_idx=start_log_idx,
-                end_idx=end_log_idx,
-                reverse_search=False)
+                log_msg, log_pos = self.get_log_msg(
+                    search_msg=search_msg,
+                    skip_num=0,
+                    start_idx=start_log_idx,
+                    end_idx=end_log_idx,
+                    reverse_search=False)
 
-            if log_msg:
-                found_removed_pa_entry_msgs[pair_key] = True
-            else:
-                found_removed_pa_entry_msgs[pair_key] = False
+                if log_msg:
+                    found_removed_pa_entry_msgs[pair_key] = True
+                else:
+                    found_removed_pa_entry_msgs[pair_key] = False
 
         ################################################################
         # get updated pair array log msg
