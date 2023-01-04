@@ -3652,10 +3652,10 @@ LogSearchItems: TypeAlias = Union[
 
 @dataclass
 class PaLogMsgsFound:
-    entered_refresh_pair_array: bool
-    removed_status_blocks_entry: dict[tuple[str, str], bool]
-    removed_pair_array_entry: dict[tuple[str, str], bool]
-    updated_pair_array: bool
+    entered_rpa: bool
+    removed_sb_entry: dict[tuple[str, str], bool]
+    removed_pa_entry: dict[tuple[str, str], bool]
+    updated_pa: bool
 
 
 class ConfigVerifier:
@@ -7804,104 +7804,6 @@ class ConfigVerifier:
         self.log_test_msg(f'del_thread entered: {cmd_runner=}, '
                           f'{del_name=}, {process=}')
 
-        # updated_pair_array_msg_needed = False
-        # if process == 'join':
-        #     from_status = st.ThreadStatus.Alive
-        # else:
-        #     from_status = st.ThreadStatus.Registered
-        #
-        # self.expected_registered[del_name].is_alive = False
-        # self.expected_registered[del_name].status = st.ThreadStatus.Stopped
-        # self.add_log_msg(
-        #     f'{cmd_runner} set status for thread '
-        #     f'{del_name} '
-        #     f'from {from_status} to '
-        #     f'{st.ThreadStatus.Stopped}')
-        #
-        # self.handle_exp_status_log_msgs(log_idx=del_msg_idx)
-        #
-        # del self.expected_registered[del_name]
-        #
-        # self.add_log_msg(f'{cmd_runner} removed {del_name} from registry '
-        #                  f'for {process=}')
-
-        # self.update_pair_array_items[cmd_runner] = UpaItem(
-        #     upa_type='del',
-        #     upa_target=del_name,
-        #     upa_process=process)
-
-        # pair_keys_to_delete = []
-        # with self.ops_lock:
-        #     for pair_key in self.expected_pairs:
-        #         if del_name not in pair_key:
-        #             continue
-        #         if del_name == pair_key[0]:
-        #             other_name = pair_key[1]
-        #         else:
-        #             other_name = pair_key[0]
-        #
-        #         if del_name not in self.expected_pairs[pair_key].keys():
-        #             self.abort_all_f1_threads()
-        #             raise InvalidConfigurationDetected(
-        #                 f'The expected_pairs for pair_key {pair_key} '
-        #                 'contains an entry of '
-        #                 f'{self.expected_pairs[pair_key]}  which does not '
-        #                 f'include the {del_name=} being deleted')
-        #
-        #         if other_name not in self.expected_pairs[pair_key].keys():
-        #             pair_keys_to_delete.append(pair_key)
-        #         else:
-        #             nondef_log_msg = (
-        #                 f"{cmd_runner} removed status_blocks entry "
-        #                 f"for pair_key = {pair_key}, "
-        #                 f"name = {other_name}")
-        #
-        #             if self.expected_pairs[pair_key][
-        #                     other_name].pending_ops_count == 0:
-        #                 pair_keys_to_delete.append(pair_key)
-        #                 self.add_log_msg(re.escape(nondef_log_msg))
-        #             else:
-        #                 del_def_key = (pair_key, other_name)
-        #                 self.del_deferred_list.append(del_def_key)
-        #
-        #                 # best we can do is delete the del_name for now
-        #                 del self.expected_pairs[pair_key][del_name]
-        #
-        #         self.add_log_msg(re.escape(
-        #             f"{cmd_runner} removed status_blocks entry "
-        #             f"for pair_key = {pair_key}, "
-        #             f"name = {del_name}"))
-        #         updated_pair_array_msg_needed = True
-        #
-        #     for pair_key in pair_keys_to_delete:
-        #         self.log_test_msg(f'del_thread for {cmd_runner=}, '
-        #                           f'{del_name=}, {process=} deleted '
-        #                           f'{pair_key=}')
-        #         del self.expected_pairs[pair_key]
-        #         self.add_log_msg(re.escape(
-        #             f'{cmd_runner} removed _pair_array entry'
-        #             f' for pair_key = {pair_key}'))
-        #         updated_pair_array_msg_needed = True
-        #
-        #     # handle any deferred deletes
-        #     if self.handle_deferred_deletes(cmd_runner=cmd_runner):
-        #         updated_pair_array_msg_needed = True
-        #
-        #     if updated_pair_array_msg_needed:
-        #         self.add_log_msg(re.escape(
-        #             self.last_update_pair_array_log_msg))
-        #
-        #     split_msg = self.last_clean_reg_log_msg.split()
-        #     if (split_msg[0] != cmd_runner
-        #             or split_msg[9] != f"['{del_name}']"):
-        #         raise FailedToFindLogMsg(f'del_thread {cmd_runner=}, '
-        #                                  f'{del_name} did not match '
-        #                                  f'{self.last_clean_reg_log_msg=} ')
-        #     self.add_log_msg(re.escape(self.last_clean_reg_log_msg))
-        #
-        #     self.add_log_msg(f'{cmd_runner} did successful '
-        #                      f'{process} of {del_name}.')
-
         self.log_test_msg(f'del_thread exit: {cmd_runner=}, '
                           f'{del_name=}, {process=}')
 
@@ -9967,140 +9869,6 @@ class ConfigVerifier:
 
         self.log_test_msg(f'unregister_threads exiting: {cmd_runner=}')
 
-    # ####################################################################
-    # # update_pair_array
-    # ####################################################################
-    # def update_pair_array(self,
-    #                       cmd_runner: str,
-    #                       upa_item: UpaItem) -> None:
-    #     """Unregister the named threads.
-    #
-    #     Args:
-    #         cmd_runner: name of thread doing the update
-    #         upa_item: describes what the update is for
-    #
-    #     """
-    #     del_name = upa_item.upa_target
-    #     process = upa_item.upa_process
-    #     pair_keys_to_delete = []
-    #     with self.ops_lock:
-    #         for pair_key in self.expected_pairs:
-    #             if del_name not in pair_key:
-    #                 continue
-    #             if del_name == pair_key[0]:
-    #                 other_name = pair_key[1]
-    #             else:
-    #                 other_name = pair_key[0]
-    #
-    #             if del_name not in self.expected_pairs[pair_key].keys():
-    #                 self.abort_all_f1_threads()
-    #                 raise InvalidConfigurationDetected(
-    #                     f'The expected_pairs for pair_key {pair_key} '
-    #                     'contains an entry of '
-    #                     f'{self.expected_pairs[pair_key]}  which does not '
-    #                     f'include the {del_name=} being deleted')
-    #
-    #             if other_name not in self.expected_pairs[pair_key].keys():
-    #                 pair_keys_to_delete.append(pair_key)
-    #             else:
-    #                 nondef_log_msg = (
-    #                     f"{cmd_runner} removed status_blocks entry "
-    #                     f"for pair_key = {pair_key}, "
-    #                     f"name = {other_name}")
-    #
-    #                 if self.expected_pairs[pair_key][
-    #                         other_name].pending_ops_count == 0:
-    #                     pair_keys_to_delete.append(pair_key)
-    #                     self.add_log_msg(re.escape(nondef_log_msg))
-    #                 else:
-    #                     del_def_key = (pair_key, other_name)
-    #                     self.del_deferred_list.append(del_def_key)
-    #
-    #                     # best we can do is delete the del_name for now
-    #                     del self.expected_pairs[pair_key][del_name]
-    #
-    #             self.add_log_msg(re.escape(
-    #                 f"{cmd_runner} removed status_blocks entry "
-    #                 f"for pair_key = {pair_key}, "
-    #                 f"name = {del_name}"))
-    #             updated_pair_array_msg_needed = True
-    #
-    #         for pair_key in pair_keys_to_delete:
-    #             log_msg = (f'del_thread for {cmd_runner=}, '
-    #                        f'{del_name=}, {process=} deleted '
-    #                        f'{pair_key=}')
-    #             self.log_ver.add_msg(log_msg=re.escape(log_msg))
-    #             logger.debug(log_msg)
-    #             del self.expected_pairs[pair_key]
-    #             self.add_log_msg(re.escape(
-    #                 f'{cmd_runner} removed _pair_array entry'
-    #                 f' for pair_key = {pair_key}'))
-    #             updated_pair_array_msg_needed = True
-    #
-    #         # handle any deferred deletes
-    #         if self.handle_deferred_deletes(cmd_runner=cmd_runner):
-    #             updated_pair_array_msg_needed = True
-    #
-    #         if updated_pair_array_msg_needed:
-    #             self.add_log_msg(re.escape(
-    #                 self.last_update_pair_array_log_msg))
-    #
-    #         split_msg = self.last_clean_reg_log_msg.split()
-    #         if (split_msg[0] != cmd_runner
-    #                 or split_msg[9] != f"['{del_name}']"):
-    #             raise FailedToFindLogMsg(f'del_thread {cmd_runner=}, '
-    #                                      f'{del_name} did not match '
-    #                                      f'{self.last_clean_reg_log_msg=} ')
-    #         self.add_log_msg(re.escape(self.last_clean_reg_log_msg))
-    #
-    #         self.add_log_msg(f'{cmd_runner} did successful '
-    #                          f'{process} of {del_name}.')
-    #
-    #
-    #
-    #     updated_pair_array_msg_needed = False
-    #     pair_keys_to_delete = []
-    #     with self.ops_lock:
-    #         for pair_key in self.expected_pairs:
-    #             if (pair_key[0] not in self.expected_registered
-    #                     and pair_key[0] in self.expected_pairs[pair_key]):
-    #                 del self.expected_pairs[pair_key][pair_key[0]]
-    #                 updated_pair_array_msg_needed = True
-    #                 self.add_log_msg(re.escape(
-    #                     f"{cmd_runner} removed status_blocks entry "
-    #                     f"for pair_key = {pair_key}, "
-    #                     f"name = {pair_key[0]}"))
-    #             if (pair_key[1] not in self.expected_registered
-    #                     and pair_key[1] in self.expected_pairs[pair_key]):
-    #                 del self.expected_pairs[pair_key][pair_key[1]]
-    #                 updated_pair_array_msg_needed = True
-    #                 self.add_log_msg(re.escape(
-    #                     f"{cmd_runner} removed status_blocks entry "
-    #                     f"for pair_key = {pair_key}, "
-    #                     f"name = {pair_key[1]}"))
-    #             if len(self.expected_pairs[pair_key]) == 1:
-    #                 remaining_name = list(
-    #                     self.expected_pairs[pair_key].keys())[0]
-    #                 if self.expected_pairs[pair_key][
-    #                         remaining_name].pending_ops_count == 0:
-    #                     del self.expected_pairs[pair_key][remaining_name]
-    #                     updated_pair_array_msg_needed = True
-    #                     self.add_log_msg(re.escape(
-    #                         f"{cmd_runner} removed status_blocks entry "
-    #                         f"for pair_key = {pair_key}, "
-    #                         f"name = {remaining_name}"))
-    #             if not self.expected_pairs[pair_key]:
-    #                 pair_keys_to_delete.append(pair_key)
-    #
-    #         for pair_key in pair_keys_to_delete:
-    #             del self.expected_pairs[pair_key]
-    #             self.add_log_msg(re.escape(
-    #                 f'{cmd_runner} removed _pair_array entry'
-    #                 f' for pair_key = {pair_key}'))
-    #             updated_pair_array_msg_needed = True
-    #     # if updated_pair_array_msg_needed:
-    #     #     self.add_log_msg(re.escape(upa_msg))
-
     ####################################################################
     # update_pair_array
     ####################################################################
@@ -10257,10 +10025,6 @@ class ConfigVerifier:
             self.add_log_msg(re.escape(
                 f'{cmd_runner} removed _pair_array entry'
                 f' for pair_key = {pair_key}'))
-
-            # if updated_pair_array_msg_needed:
-            #     self.add_log_msg(re.escape(
-            #         self.last_update_pair_array_log_msg))
 
             # split_msg = self.last_clean_reg_log_msg.split()
             # if (split_msg[0] != cmd_runner
@@ -10613,7 +10377,7 @@ class ConfigVerifier:
         ################################################################
         # get first recv_msg pair array log msgs found
         ################################################################
-        recv_0_pair_array_msgs_found = self.find_def_del_pair_array_msgs(
+        recv_0_pa_msgs_found = self.find_def_del_pair_array_msgs(
             cmd_runner=receiver_names[0],
             deleted_names=[sender_names[0], resumer_names[0]],
             def_del_names=receiver_names + waiter_names,
@@ -10637,7 +10401,7 @@ class ConfigVerifier:
         ################################################################
         # get second recv_msg pair array log msgs found
         ################################################################
-        recv_1_pair_array_msgs_found = self.find_def_del_pair_array_msgs(
+        recv_1_pa_msgs_found = self.find_def_del_pair_array_msgs(
             cmd_runner=receiver_names[1],
             deleted_names=[sender_names[0], resumer_names[0]],
             def_del_names=receiver_names + waiter_names,
@@ -10659,7 +10423,7 @@ class ConfigVerifier:
         ################################################################
         # get first wait pair array log msgs found
         ################################################################
-        wait_0_pair_array_msgs_found = self.find_def_del_pair_array_msgs(
+        wait_0_pa_msgs_found = self.find_def_del_pair_array_msgs(
             cmd_runner=waiter_names[0],
             deleted_names=[sender_names[0], resumer_names[0]],
             def_del_names=receiver_names + waiter_names,
@@ -10682,7 +10446,7 @@ class ConfigVerifier:
         ################################################################
         # get second wait pair array log msgs found
         ################################################################
-        wait_1_pair_array_msgs_found = self.find_def_del_pair_array_msgs(
+        wait_1_pa_msgs_found = self.find_def_del_pair_array_msgs(
             cmd_runner=waiter_names[1],
             deleted_names=[sender_names[0], resumer_names[0]],
             def_del_names=receiver_names + waiter_names,
@@ -10710,36 +10474,194 @@ class ConfigVerifier:
                             f'verify_def_del found {pair_key=} is not in '
                             'real pair array but is in mock pair array')
 
-        class DefDelScenario(Enum):
-            NormalRecv = auto()
-            NormalWait = auto()
-            ResurrectionRecv = auto()
-            ResurrectionWait = auto()
-            Recv0Recv1 = auto()
-            Recv1Recv0 = auto()
-            Wait0Wait1 = auto()
-            Wait1Wait0 = auto()
-            RecvWait = auto()
-            WaitRecv = auto()
-            RecvDel = auto()
-            RecvAdd = auto()
-            WaitDel = auto()
-            WaitAdd = auto()
-
-        PaLogMsgsFound:
-        entered_refresh_pair_array: bool
-        removed_status_blocks_entry: dict[tuple[str, str], bool]
-        removed_pair_array_entry: dict[tuple[str, str], bool]
-        updated_pair_array: bool
         ################################################################
-        # verify for NormalRecv
+        # verify for NormalRecv and ResurrectionRecv
         ################################################################
-        if def_del_scenario == DefDelScenario.NormalRecv:
+        if (def_del_scenario == DefDelScenario.NormalRecv
+                or def_del_scenario == DefDelScenario.ResurrectionRecv):
             if not recv_0_log_msg:
                 raise FailedDefDelVerify(
-                    'verify_def_del scenario NormalRecv failed to find the '
+                    f'verify_def_del {def_del_scenario=} failed to find the '
                     'recv_0_log_msg')
+            if recv_1_log_msg or wait_0_log_msg or wait_1_log_msg:
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} found an '
+                    'unexpected log msg: '
+                    f'{recv_1_log_msg=}, '
+                    f'{wait_0_log_msg=}, '
+                    f'{wait_1_log_msg=}')
 
+            if (recv_0_pa_msgs_found.entered_rpa
+                    or recv_0_pa_msgs_found.updated_pa
+                    or recv_1_pa_msgs_found.entered_rpa
+                    or recv_1_pa_msgs_found.updated_pa
+                    or wait_0_pa_msgs_found.entered_rpa
+                    or wait_0_pa_msgs_found.updated_pa
+                    or wait_1_pa_msgs_found.entered_rpa
+                    or wait_1_pa_msgs_found.updated_pa):
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} found an '
+                    'unexpected pair array activity '
+                    f'{recv_0_pa_msgs_found.entered_rpa=}, '
+                    f'{recv_0_pa_msgs_found.updated_pa=}, '
+                    f'{recv_1_pa_msgs_found.updated_pa=}, '
+                    f'{wait_0_pa_msgs_found.entered_rpa=}, '
+                    f'{wait_0_pa_msgs_found.updated_pa=}, '
+                    f'{wait_1_pa_msgs_found.entered_rpa=}, '
+                    f'{wait_1_pa_msgs_found.updated_pa}')
+            if (len(recv_0_pa_msgs_found.removed_sb_entry)
+                    or len(recv_0_pa_msgs_found.removed_pa_entry)
+                    or len(recv_1_pa_msgs_found.removed_sb_entry)
+                    or len(recv_1_pa_msgs_found.removed_pa_entry)
+                    or len(wait_0_pa_msgs_found.removed_sb_entry)
+                    or len(wait_0_pa_msgs_found.removed_pa_entry)
+                    or len(wait_1_pa_msgs_found.removed_sb_entry)
+                    or len(wait_1_pa_msgs_found.removed_pa_entry)):
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} found an '
+                    'unexpected pair array activity '
+                    f'{recv_0_pa_msgs_found.removed_sb_entry=}, '
+                    f'{recv_0_pa_msgs_found.removed_pa_entry=}, '
+                    f'{recv_1_pa_msgs_found.removed_sb_entry=}, '
+                    f'{recv_1_pa_msgs_found.removed_pa_entry=}, '
+                    f'{wait_0_pa_msgs_found.removed_sb_entry=}, '
+                    f'{wait_0_pa_msgs_found.removed_pa_entry=}, '
+                    f'{wait_1_pa_msgs_found.removed_sb_entry=}, '
+                    f'{wait_1_pa_msgs_found.removed_pa_entry=}')
+
+        ################################################################
+        # verify for NormalWait and ResurrectionWait
+        ################################################################
+        if (def_del_scenario == DefDelScenario.NormalWait
+                or def_del_scenario == DefDelScenario.ResurrectionWait):
+            if not wait_0_log_msg:
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} failed to find the '
+                    'recv_0_log_msg')
+            if recv_0_log_msg or recv_1_log_msg or wait_1_log_msg:
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} found an '
+                    'unexpected log msg: '
+                    f'{recv_1_log_msg=}, '
+                    f'{wait_0_log_msg=}, '
+                    f'{wait_1_log_msg=}')
+
+            if (recv_0_pa_msgs_found.entered_rpa
+                    or recv_0_pa_msgs_found.updated_pa
+                    or recv_1_pa_msgs_found.entered_rpa
+                    or recv_1_pa_msgs_found.updated_pa
+                    or wait_0_pa_msgs_found.entered_rpa
+                    or wait_0_pa_msgs_found.updated_pa
+                    or wait_1_pa_msgs_found.entered_rpa
+                    or wait_1_pa_msgs_found.updated_pa):
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} found an '
+                    'unexpected pair array activity '
+                    f'{recv_0_pa_msgs_found.entered_rpa=}, '
+                    f'{recv_0_pa_msgs_found.updated_pa=}, '
+                    f'{recv_1_pa_msgs_found.updated_pa=}, '
+                    f'{wait_0_pa_msgs_found.entered_rpa=}, '
+                    f'{wait_0_pa_msgs_found.updated_pa=}, '
+                    f'{wait_1_pa_msgs_found.entered_rpa=}, '
+                    f'{wait_1_pa_msgs_found.updated_pa}')
+            if (len(recv_0_pa_msgs_found.removed_sb_entry)
+                    or len(recv_0_pa_msgs_found.removed_pa_entry)
+                    or len(recv_1_pa_msgs_found.removed_sb_entry)
+                    or len(recv_1_pa_msgs_found.removed_pa_entry)
+                    or len(wait_0_pa_msgs_found.removed_sb_entry)
+                    or len(wait_0_pa_msgs_found.removed_pa_entry)
+                    or len(wait_1_pa_msgs_found.removed_sb_entry)
+                    or len(wait_1_pa_msgs_found.removed_pa_entry)):
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} found an '
+                    'unexpected pair array activity '
+                    f'{recv_0_pa_msgs_found.removed_sb_entry=}, '
+                    f'{recv_0_pa_msgs_found.removed_pa_entry=}, '
+                    f'{recv_1_pa_msgs_found.removed_sb_entry=}, '
+                    f'{recv_1_pa_msgs_found.removed_pa_entry=}, '
+                    f'{wait_0_pa_msgs_found.removed_sb_entry=}, '
+                    f'{wait_0_pa_msgs_found.removed_pa_entry=}, '
+                    f'{wait_1_pa_msgs_found.removed_sb_entry=}, '
+                    f'{wait_1_pa_msgs_found.removed_pa_entry=}')
+
+        ################################################################
+        # verify for NormalWait and ResurrectionWait
+        ################################################################
+        if (def_del_scenario == DefDelScenario.Recv0Recv1):
+            if not (recv_0_log_msg and recv_1_log_msg):
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} failed to find the '
+                    'one or both recv messages:  '
+                    f'{recv_0_log_msg=}, '
+                    f'{recv_1_log_msg=}')
+            if wait_0_log_msg or wait_1_log_msg:
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} found an '
+                    'unexpected log msg: '
+                    f'{wait_0_log_msg=}, '
+                    f'{wait_1_log_msg=}')
+
+            if ((not recv_0_pa_msgs_found.entered_rpa)
+                    or (not recv_0_pa_msgs_found.updated_pa)
+                    or recv_1_pa_msgs_found.entered_rpa
+                    or recv_1_pa_msgs_found.updated_pa
+                    or wait_0_pa_msgs_found.entered_rpa
+                    or wait_0_pa_msgs_found.updated_pa
+                    or wait_1_pa_msgs_found.entered_rpa
+                    or wait_1_pa_msgs_found.updated_pa):
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} found an '
+                    'unexpected pair array activity '
+                    f'{recv_0_pa_msgs_found.entered_rpa=}, '
+                    f'{recv_0_pa_msgs_found.updated_pa=}, '
+                    f'{recv_1_pa_msgs_found.updated_pa=}, '
+                    f'{wait_0_pa_msgs_found.entered_rpa=}, '
+                    f'{wait_0_pa_msgs_found.updated_pa=}, '
+                    f'{wait_1_pa_msgs_found.entered_rpa=}, '
+                    f'{wait_1_pa_msgs_found.updated_pa}')
+            if ((len(recv_0_pa_msgs_found.removed_sb_entry) == 0)
+                    or (len(recv_0_pa_msgs_found.removed_pa_entry) == 0)
+                    or len(recv_1_pa_msgs_found.removed_sb_entry)
+                    or len(recv_1_pa_msgs_found.removed_pa_entry)
+                    or len(wait_0_pa_msgs_found.removed_sb_entry)
+                    or len(wait_0_pa_msgs_found.removed_pa_entry)
+                    or len(wait_1_pa_msgs_found.removed_sb_entry)
+                    or len(wait_1_pa_msgs_found.removed_pa_entry)):
+                raise FailedDefDelVerify(
+                    f'verify_def_del {def_del_scenario=} found an '
+                    'unexpected pair array activity '
+                    f'{recv_0_pa_msgs_found.removed_sb_entry=}, '
+                    f'{recv_0_pa_msgs_found.removed_pa_entry=}, '
+                    f'{recv_1_pa_msgs_found.removed_sb_entry=}, '
+                    f'{recv_1_pa_msgs_found.removed_pa_entry=}, '
+                    f'{wait_0_pa_msgs_found.removed_sb_entry=}, '
+                    f'{wait_0_pa_msgs_found.removed_pa_entry=}, '
+                    f'{wait_1_pa_msgs_found.removed_sb_entry=}, '
+                    f'{wait_1_pa_msgs_found.removed_pa_entry=}')
+            for key, item in recv_0_pa_msgs_found.removed_sb_entry.items():
+
+
+        # class DefDelScenario(Enum):
+        #     NormalRecv = auto()
+        #     NormalWait = auto()
+        #     ResurrectionRecv = auto()
+        #     ResurrectionWait = auto()
+        #     Recv0Recv1 = auto()
+        #     Recv1Recv0 = auto()
+        #     Wait0Wait1 = auto()
+        #     Wait1Wait0 = auto()
+        #     RecvWait = auto()
+        #     WaitRecv = auto()
+        #     RecvDel = auto()
+        #     RecvAdd = auto()
+        #     WaitDel = auto()
+        #     WaitAdd = auto()
+        #
+        # PaLogMsgsFound:
+        # entered_rpa: bool
+        # removed_sb_entry: dict[tuple[str, str], bool]
+        # removed_pa_entry: dict[tuple[str, str], bool]
+        # updated_pa: bool
     ####################################################################
     # find_pair_array_msgs
     ####################################################################
@@ -10776,9 +10698,9 @@ class ConfigVerifier:
             reverse_search=False)
 
         if log_msg:
-            erpa_log_msg_found = True
+            entered_rpa_log_msg_found = True
         else:
-            erpa_log_msg_found = False
+            entered_rpa_log_msg_found = False
 
         ################################################################
         # find removed status_blocks entry log msgs
@@ -10848,10 +10770,10 @@ class ConfigVerifier:
             upa_log_msg_found = False
 
         return PaLogMsgsFound(
-            entered_refresh_pair_array=erpa_log_msg_found,
-            removed_status_blocks_entry=found_removed_status_block_msgs,
-            removed_pair_array_entry=found_removed_pa_entry_msgs,
-            updated_pair_array=upa_log_msg_found)
+            entered_rpa=entered_rpa_log_msg_found,
+            removed_sb_entry=found_removed_status_block_msgs,
+            removed_pa_entry=found_removed_pa_entry_msgs,
+            updated_pa=upa_log_msg_found)
 
     ####################################################################
     # verify_in_registry
