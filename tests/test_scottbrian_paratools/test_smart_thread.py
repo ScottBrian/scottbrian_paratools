@@ -3650,6 +3650,14 @@ LogSearchItems: TypeAlias = Union[
     CmdWaitingLogSearchItem]
 
 
+@dataclass
+class PaLogMsgsFound:
+    entered_refresh_pair_array: bool
+    removed_status_blocks_entry: dict[tuple[str, str], bool]
+    removed_pair_array_entry: dict[tuple[str, str], bool]
+    updated_pair_array: bool
+
+
 class ConfigVerifier:
     """Class that tracks and verifies the SmartThread configuration."""
 
@@ -10542,6 +10550,8 @@ class ConfigVerifier:
         ################################################################
         # start by gathering log messages, both expected and not
         ################################################################
+
+
         ################################################################
         # get first config_cmd recv_msg log msg
         ################################################################
@@ -10583,9 +10593,9 @@ class ConfigVerifier:
                                      'messages - one and only one is '
                                      'expected.')
         if cc_recv_0_log_msg:
-            start_log_idx = cc_recv_0_log_pos
+            start_log_idx = cc_recv_0_log_pos + 1
         else:
-            start_log_idx = cc_wait_0_log_pos
+            start_log_idx = cc_wait_0_log_pos + 1
 
         ################################################################
         # get config_cmd log msg for VerifyDefDel
@@ -10616,8 +10626,114 @@ class ConfigVerifier:
             search_msg=search_msg,
             skip_num=0,
             start_idx=start_log_idx,
-            # end_idx=log_idx,
+            end_idx=end_log_idx,
             reverse_search=False)
+
+        PaLogMsgsFound:
+        entered_refresh_pair_array: bool
+        removed_status_blocks_entry: dict[tuple[str, str], bool]
+        removed_pair_array_entry: dict[tuple[str, str], bool]
+        updated_pair_array: bool
+        ################################################################
+        # get first recv_msg pair array log msgs found
+        ################################################################
+        recv_0_pair_array_msgs_found = self.find_def_del_pair_array_msgs(
+            cmd_runner=receiver_names[0],
+            deleted_names=[sender_names[0], resumer_names[0]],
+                                     def_del_names: list[str],
+                                     start_log_idx: int,
+                                     end_log_idx: int
+        )
+        search_msg = (f'{receiver_names[0]} entered _refresh_pair_array')
+
+        recv_0_erpa_log_msg, recv_0_erpa_log_pos = self.get_log_msg(
+            search_msg=search_msg,
+            skip_num=0,
+            start_idx=start_log_idx,
+            end_idx=end_log_idx,
+            reverse_search=False)
+
+        ################################################################
+        # get first recv_msg removed status_blocks entry log msg
+        ################################################################
+        search_msg = (f"{receiver_names[0]} removed status_blocks entry "
+                      f"for pair_key = \('{pair_name0}', '{pair_name1}'\), "
+                      f"name = {receiver_names[0]}")
+
+
+        recv_0_rsbe_log_msg, recv_0_rsbe_log_pos = self.get_log_msg(
+            search_msg=search_msg,
+            skip_num=0,
+            start_idx=start_log_idx,
+            end_idx=end_log_idx,
+            reverse_search=False)
+
+        ################################################################
+        # get first recv_msg removed pair_array entry log msg
+        ################################################################
+        search_msg = (f"{receiver_names[0]} removed _pair_array entry for "
+                      f"for pair_key = \('{pair_name0}', '{pair_name1}'\), ")
+
+        recv_0_rpae_log_msg, recv_0_rpae_log_pos = self.get_log_msg(
+            search_msg=search_msg,
+            skip_num=0,
+            start_idx=start_log_idx,
+            end_idx=end_log_idx,
+            reverse_search=False)
+
+        ################################################################
+        # get first recv_msg updated pair array log msg
+        ################################################################
+        search_msg = (f'{receiver_names[0]} updated _pair_array at UTC '
+                      f'{time_match}')
+
+        recv_0_upa_log_msg, recv_0_upa_log_pos = self.get_log_msg(
+            search_msg=search_msg,
+            skip_num=0,
+            start_idx=start_log_idx,
+            end_idx=end_log_idx,
+            reverse_search=False)
+
+        ################################################################
+        # get second recv_msg log msg
+        ################################################################
+        search_msg = (f'{receiver_names[1]} received msg from '
+                      f'{sender_names[0]}')
+
+        recv_1_log_msg, recv_1_log_pos = self.get_log_msg(
+            search_msg=search_msg,
+            skip_num=0,
+            start_idx=start_log_idx,
+            end_idx=end_log_idx,
+            reverse_search=False)
+
+        ################################################################
+        # get first wait log msg
+        ################################################################
+        search_msg = (f'{waiter_names[0]} smart_wait resumed by '
+                      f'{resumer_names[0]}')
+
+        wait_0_log_msg, wait_0_log_pos = self.get_log_msg(
+            search_msg=search_msg,
+            skip_num=0,
+            start_idx=start_log_idx,
+            end_idx=end_log_idx,
+            reverse_search=False)
+
+        ################################################################
+        # get second wait log msg
+        ################################################################
+        search_msg = (f'{waiter_names[1]} smart_wait resumed by '
+                      f'{resumer_names[0]}')
+
+        wait_1_log_msg, wait_1_log_pos = self.get_log_msg(
+            search_msg=search_msg,
+            skip_num=0,
+            start_idx=start_log_idx,
+            end_idx=end_log_idx,
+            reverse_search=False)
+
+
 
 
         ################################################################
@@ -10632,6 +10748,118 @@ class ConfigVerifier:
             # verify ops_count is zero
             # verify msg_q is empty
             # verify del_deferred bit is OFF
+
+    ####################################################################
+    # find_pair_array_msgs
+    ####################################################################
+    def find_def_del_pair_array_msgs(self,
+                                     cmd_runner: str,
+                                     deleted_names: list[str],
+                                     def_del_names: list[str],
+                                     start_log_idx: int,
+                                     end_log_idx: int
+                                    ) -> PaLogMsgsFound:
+        """Find pair array update log msgs for the given names.
+
+        Args:
+            cmd_runner: name of thread doing the pair array updates
+            deleted_names: names of threads that were previously deleted
+                that caused the def_del_names to be a deferred delete
+            def_del_names: names of deferred delete threads
+            start_log_idx: index of where to start the log msgs search
+            end_log_idx: index where to stop the log msgs search
+
+        Returns:
+            a set of bool indicators for which messages were found
+        """
+        ################################################################
+        # find entered refresh pair array log msg
+        ################################################################
+        search_msg = f'{cmd_runner} entered _refresh_pair_array'
+
+        log_msg, log_pos = self.get_log_msg(
+            search_msg=search_msg,
+            skip_num=0,
+            start_idx=start_log_idx,
+            end_idx=end_log_idx,
+            reverse_search=False)
+
+        if log_msg:
+            erpa_log_msg_found = True
+        else:
+            erpa_log_msg_found = False
+
+        ################################################################
+        # find removed status_blocks entry log msgs
+        ################################################################
+        found_removed_status_block_msgs: dict[tuple[str, str], bool] = {}
+        for def_del_name in def_del_names:
+            pair_key = st.SmartThread._get_pair_key(name0=deleted_name,
+                                                    name1=def_del_name)
+            search_msg = (f"{cmd_runner} removed status_blocks entry "
+                          f"for pair_key = "
+                          f"\('{pair_key[0]}', '{pair_key[1]}'\), "
+                          f"name = {cmd_runner}")
+
+            log_msg, log_pos = self.get_log_msg(
+                search_msg=search_msg,
+                skip_num=0,
+                start_idx=start_log_idx,
+                end_idx=end_log_idx,
+                reverse_search=False)
+
+            if log_msg:
+                found_removed_status_block_msgs[pair_key] = True
+            else:
+                found_removed_status_block_msgs[pair_key] = False
+
+        ################################################################
+        # find removed pair_array entry log msgs
+        ################################################################
+        found_removed_pa_entry_msgs: dict[tuple[str, str], bool] = {}
+        for def_del_name in def_del_names:
+            pair_key = st.SmartThread._get_pair_key(name0=deleted_name,
+                                                    name1=def_del_name)
+            search_msg = (f"{cmd_runner} removed _pair_array entry for "
+                          f"for pair_key = "
+                          f"\('{pair_key[0]}', '{pair_key[1]}'\)")
+
+            log_msg, log_pos = self.get_log_msg(
+                search_msg=search_msg,
+                skip_num=0,
+                start_idx=start_log_idx,
+                end_idx=end_log_idx,
+                reverse_search=False)
+
+            if log_msg:
+                found_removed_pa_entry_msgs[pair_key] = True
+            else:
+                found_removed_pa_entry_msgs[pair_key] = False
+
+        ################################################################
+        # get updated pair array log msg
+        ################################################################
+        search_msg = (f'{cmd_runner} updated _pair_array at UTC '
+                      f'{time_match}')
+
+        log_msg, log_pos = self.get_log_msg(
+            search_msg=search_msg,
+            skip_num=0,
+            start_idx=start_log_idx,
+            end_idx=end_log_idx,
+            reverse_search=False)
+
+        if log_msg:
+            upa_log_msg_found = True
+        else:
+            upa_log_msg_found = False
+
+        return PaLogMsgsFound(
+            entered_refresh_pair_array=erpa_log_msg_found,
+            removed_status_blocks_entry=found_removed_status_block_msgs,
+            removed_pair_array_entry=found_removed_pa_entry_msgs,
+            updated_pair_array=upa_log_msg_found)
+
     ####################################################################
     # verify_in_registry
     ####################################################################
