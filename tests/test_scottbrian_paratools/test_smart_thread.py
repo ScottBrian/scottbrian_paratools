@@ -4820,7 +4820,6 @@ class ConfigVerifier:
                              + num_waiters 
                              + num_resumers
                              + num_dels
-                             + num_adds
                              + num_deleter_adders
                              + num_lockers
                              + 1)  # plus 1 for the commander
@@ -4851,7 +4850,7 @@ class ConfigVerifier:
             name_collection=active_names,
             num_names_needed=num_senders,
             update_collection=True,
-            var_name_for_log='active_no_delay_sender_names')
+            var_name_for_log='sender_names')
 
         ################################################################
         # choose waiter_names
@@ -4860,7 +4859,7 @@ class ConfigVerifier:
             name_collection=active_names,
             num_names_needed=num_waiters,
             update_collection=True,
-            var_name_for_log='receiver_names')
+            var_name_for_log='waiter_names')
 
         ################################################################
         # choose resumer_names
@@ -4869,7 +4868,7 @@ class ConfigVerifier:
             name_collection=active_names,
             num_names_needed=num_resumers,
             update_collection=True,
-            var_name_for_log='receiver_names')
+            var_name_for_log='resumer_names')
 
         ################################################################
         # choose del_names
@@ -4883,8 +4882,9 @@ class ConfigVerifier:
         ################################################################
         # choose add_names
         ################################################################
+        unregistered_names = self.unregistered_names.copy()
         add_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=unregistered_names,
             num_names_needed=num_adds,
             update_collection=True,
             var_name_for_log='add_names')
@@ -5004,12 +5004,17 @@ class ConfigVerifier:
                 ########################################################
                 # resurrect the sender
                 ########################################################
-                f1_create_items: list[F1CreateItem] = [
-                    F1CreateItem(
-                        name=exit_names,
-                        auto_start=True,
-                        target_rtn=outer_f1,
-                        app_config=AppConfig.ScriptStyle)]
+                f1_create_items: list[F1CreateItem] = []
+                for idx, name in enumerate(exit_names):
+                    if idx % 2:
+                        app_config = AppConfig.ScriptStyle
+                    else:
+                        app_config = AppConfig.RemoteThreadApp
+
+                    f1_create_items.append(F1CreateItem(name=name,
+                                                        auto_start=True,
+                                                        target_rtn=outer_f1,
+                                                        app_config=app_config))
                 self.build_create_suite(
                     f1_create_items=f1_create_items,
                     validate_config=False)
@@ -5058,9 +5063,17 @@ class ConfigVerifier:
                 or def_del_scenario == DefDelScenario.WaitRecv
                 or def_del_scenario == DefDelScenario.WaitDel
                 or def_del_scenario == DefDelScenario.WaitAdd):
+
+            resumers_for_wait_0: DictAliveAndStatus = {
+                resumer_names[0]: AliveAndStatus(
+                    is_alive=False,
+                    status=st.ThreadStatus.Stopped)
+            }
+
             wait_serial_num_0 = self.add_cmd(
                 Wait(cmd_runners=waiters[0],
-                     resumers=resumer_names[0],
+                     resumers=resumers_for_wait_0,
+                     raise_not_alive=False,
                      log_msg=f'def_del_wait_test_0'))
             first_cmd_lock_pos = waiters[0]
             lock_positions.append(waiters[0])
@@ -5097,10 +5110,19 @@ class ConfigVerifier:
         elif (def_del_scenario == DefDelScenario.Wait0Wait1
                 or def_del_scenario == DefDelScenario.Wait1Wait0
                 or def_del_scenario == DefDelScenario.RecvWait):
+
+            resumers_for_wait_1: DictAliveAndStatus = {
+                resumer_names[1]: AliveAndStatus(
+                    is_alive=False,
+                    status=st.ThreadStatus.Stopped)
+            }
+
             wait_serial_num_1 = self.add_cmd(
                 Wait(cmd_runners=waiters[1],
-                     resumers=resumer_names[1],
+                     resumers=resumers_for_wait_1,
+                     raise_not_alive=False,
                      log_msg=f'def_del_wait_test_1'))
+
             second_cmd_lock_pos = waiters[1]
             lock_positions.append(waiters[1])
         elif (def_del_scenario == DefDelScenario.RecvDel
@@ -9274,7 +9296,8 @@ class ConfigVerifier:
             else:
                 self.all_threads[cmd_runner].smart_wait(
                     resumer=resumer,
-                    raise_not_alive=raise_not_alive)
+                    raise_not_alive=raise_not_alive,
+                    log_msg=log_msg)
 
                 enter_exit = ('entry', 'exit')
                 if log_msg:
@@ -9885,10 +9908,10 @@ class ConfigVerifier:
         """
         self.log_test_msg(f'update_pair_array_add entry: {cmd_runner=}, '
                           f'{upa_item=}')
-        self.log_test_msg(f'{self.expected_registered.keys()=}')
-        for pair_key in self.expected_pairs.keys():
-            self.log_test_msg(f'{pair_key} exists in pair_array '
-                              f'with {self.expected_pairs[pair_key]=}')
+        # self.log_test_msg(f'{self.expected_registered.keys()=}')
+        # for pair_key in self.expected_pairs.keys():
+        #     self.log_test_msg(f'{pair_key} exists in pair_array '
+        #                       f'with {self.expected_pairs[pair_key]=}')
 
         new_name = upa_item.upa_target
         if len(self.expected_registered.keys()) > 1:
@@ -10317,7 +10340,7 @@ class ConfigVerifier:
         ################################################################
         search_msg = ("config_cmd: Wait\(serial=[0-9]+, line=[0-9]+, "
                       f"cmd_runners='{waiter_names[0]}', "
-                      f"resumers='{resumer_names[0]}'\)")
+                      f"resumers=")
 
         cc_wait_0_log_msg, cc_wait_0_log_pos = self.get_log_msg(
             search_msg=search_msg,
@@ -10657,7 +10680,7 @@ class ConfigVerifier:
 
             if ((not recv_0_pa_msgs_found.entered_rpa)
                     or (not recv_0_pa_msgs_found.updated_pa)
-                    or recv_1_pa_msgs_found.entered_rpa
+                    or (not recv_1_pa_msgs_found.entered_rpa)
                     or recv_1_pa_msgs_found.updated_pa
                     or wait_0_pa_msgs_found.entered_rpa
                     or wait_0_pa_msgs_found.updated_pa
@@ -10670,16 +10693,17 @@ class ConfigVerifier:
                 raise FailedDefDelVerify(
                     f'verify_def_del {def_del_scenario=} found an '
                     'unexpected pair array activity '
-                    f'{recv_0_pa_msgs_found.entered_rpa=}, '
+                    f'\n{recv_0_pa_msgs_found.entered_rpa=}, '
                     f'{recv_0_pa_msgs_found.updated_pa=}, '
+                    f'\n{recv_1_pa_msgs_found.entered_rpa=}, '
                     f'{recv_1_pa_msgs_found.updated_pa=}, '
-                    f'{wait_0_pa_msgs_found.entered_rpa=}, '
+                    f'\n{wait_0_pa_msgs_found.entered_rpa=}, '
                     f'{wait_0_pa_msgs_found.updated_pa=}, '
-                    f'{wait_1_pa_msgs_found.entered_rpa=}, '
+                    f'\n{wait_1_pa_msgs_found.entered_rpa=}, '
                     f'{wait_1_pa_msgs_found.updated_pa=}, '
-                    f'{del_pa_msgs_found.entered_rpa=}, ' 
+                    f'\n{del_pa_msgs_found.entered_rpa=}, ' 
                     f'{del_pa_msgs_found.updated_pa=}, ' 
-                    f'{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'\n{add_pa_msgs_found.entered_rpa=}, ' 
                     f'{add_pa_msgs_found.updated_pa=}')
             if ((len(recv_0_pa_msgs_found.removed_sb_entry) == 0)
                     or (len(recv_0_pa_msgs_found.removed_pa_entry) == 0)
@@ -10696,17 +10720,17 @@ class ConfigVerifier:
                 raise FailedDefDelVerify(
                     f'verify_def_del {def_del_scenario=} found an '
                     'unexpected pair array activity '
-                    f'{recv_0_pa_msgs_found.removed_sb_entry=}, '
+                    f'\n{recv_0_pa_msgs_found.removed_sb_entry=}, '
                     f'{recv_0_pa_msgs_found.removed_pa_entry=}, '
-                    f'{recv_1_pa_msgs_found.removed_sb_entry=}, '
+                    f'\n{recv_1_pa_msgs_found.removed_sb_entry=}, '
                     f'{recv_1_pa_msgs_found.removed_pa_entry=}, '
-                    f'{wait_0_pa_msgs_found.removed_sb_entry=}, '
+                    f'\n{wait_0_pa_msgs_found.removed_sb_entry=}, '
                     f'{wait_0_pa_msgs_found.removed_pa_entry=}, '
-                    f'{wait_1_pa_msgs_found.removed_sb_entry=}, '
+                    f'\n{wait_1_pa_msgs_found.removed_sb_entry=}, '
                     f'{wait_1_pa_msgs_found.removed_pa_entry=}, '
-                    f'{del_pa_msgs_found.removed_sb_entry=}, '
+                    f'\n{del_pa_msgs_found.removed_sb_entry=}, '
                     f'{del_pa_msgs_found.removed_pa_entry=}, '
-                    f'{add_pa_msgs_found.removed_sb_entry=}, '
+                    f'\n{add_pa_msgs_found.removed_sb_entry=}, '
                     f'{add_pa_msgs_found.removed_pa_entry=}')
             exp_pair_keys: list[tuple[str, str]] = []
             pair_key = st.SmartThread._get_pair_key(name0=sender_names[0],
@@ -10757,7 +10781,7 @@ class ConfigVerifier:
                     f'{wait_0_log_msg=}, '
                     f'{wait_1_log_msg=}')
 
-            if (recv_0_pa_msgs_found.entered_rpa
+            if ((not recv_0_pa_msgs_found.entered_rpa)
                     or recv_0_pa_msgs_found.updated_pa
                     or (not recv_1_pa_msgs_found.entered_rpa)
                     or (not recv_1_pa_msgs_found.updated_pa)
@@ -10772,16 +10796,17 @@ class ConfigVerifier:
                 raise FailedDefDelVerify(
                     f'verify_def_del {def_del_scenario=} found an '
                     'unexpected pair array activity '
-                    f'{recv_0_pa_msgs_found.entered_rpa=}, '
+                    f'\n{recv_0_pa_msgs_found.entered_rpa=}, '
                     f'{recv_0_pa_msgs_found.updated_pa=}, '
+                    f'\n{recv_1_pa_msgs_found.entered_rpa=}, '
                     f'{recv_1_pa_msgs_found.updated_pa=}, '
-                    f'{wait_0_pa_msgs_found.entered_rpa=}, '
+                    f'\n{wait_0_pa_msgs_found.entered_rpa=}, '
                     f'{wait_0_pa_msgs_found.updated_pa=}, '
-                    f'{wait_1_pa_msgs_found.entered_rpa=}, '
+                    f'\n{wait_1_pa_msgs_found.entered_rpa=}, '
                     f'{wait_1_pa_msgs_found.updated_pa=}, '
-                    f'{del_pa_msgs_found.entered_rpa=}, ' 
+                    f'\n{del_pa_msgs_found.entered_rpa=}, ' 
                     f'{del_pa_msgs_found.updated_pa=}, ' 
-                    f'{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'\n{add_pa_msgs_found.entered_rpa=}, ' 
                     f'{add_pa_msgs_found.updated_pa=}')
             if (len(recv_0_pa_msgs_found.removed_sb_entry)
                     or len(recv_0_pa_msgs_found.removed_pa_entry)
@@ -10865,7 +10890,7 @@ class ConfigVerifier:
                     or recv_1_pa_msgs_found.updated_pa
                     or (not wait_0_pa_msgs_found.entered_rpa)
                     or (not wait_0_pa_msgs_found.updated_pa)
-                    or wait_1_pa_msgs_found.entered_rpa
+                    or (not wait_1_pa_msgs_found.entered_rpa)
                     or wait_1_pa_msgs_found.updated_pa
                     or del_pa_msgs_found.entered_rpa
                     or del_pa_msgs_found.updated_pa
@@ -10965,7 +10990,7 @@ class ConfigVerifier:
                     or recv_0_pa_msgs_found.updated_pa
                     or recv_1_pa_msgs_found.entered_rpa
                     or recv_1_pa_msgs_found.updated_pa
-                    or wait_0_pa_msgs_found.entered_rpa
+                    or (not wait_0_pa_msgs_found.entered_rpa)
                     or wait_0_pa_msgs_found.updated_pa
                     or (not wait_1_pa_msgs_found.entered_rpa)
                     or (not wait_1_pa_msgs_found.updated_pa)
@@ -11067,7 +11092,7 @@ class ConfigVerifier:
                     or (not recv_0_pa_msgs_found.updated_pa)
                     or recv_1_pa_msgs_found.entered_rpa
                     or recv_1_pa_msgs_found.updated_pa
-                    or wait_0_pa_msgs_found.entered_rpa
+                    or (not wait_0_pa_msgs_found.entered_rpa)
                     or wait_0_pa_msgs_found.updated_pa
                     or wait_1_pa_msgs_found.entered_rpa
                     or wait_1_pa_msgs_found.updated_pa
@@ -11165,7 +11190,7 @@ class ConfigVerifier:
                     f'{recv_1_log_msg=}, '
                     f'{wait_1_log_msg=}')
 
-            if (recv_0_pa_msgs_found.entered_rpa
+            if ((not recv_0_pa_msgs_found.entered_rpa)
                     or recv_0_pa_msgs_found.updated_pa
                     or recv_1_pa_msgs_found.entered_rpa
                     or recv_1_pa_msgs_found.updated_pa
@@ -11267,12 +11292,12 @@ class ConfigVerifier:
                     f'{wait_0_log_msg=}, '
                     f'{wait_1_log_msg=}')
 
-            if (recv_0_pa_msgs_found.entered_rpa
+            if ((not recv_0_pa_msgs_found.entered_rpa)
                     or recv_0_pa_msgs_found.updated_pa
                     or recv_1_pa_msgs_found.entered_rpa
                     or recv_1_pa_msgs_found.updated_pa
-                    or (not wait_0_pa_msgs_found.entered_rpa)
-                    or (not wait_0_pa_msgs_found.updated_pa)
+                    or wait_0_pa_msgs_found.entered_rpa
+                    or wait_0_pa_msgs_found.updated_pa
                     or wait_1_pa_msgs_found.entered_rpa
                     or wait_1_pa_msgs_found.updated_pa
                     or (not del_pa_msgs_found.entered_rpa)
@@ -11367,12 +11392,12 @@ class ConfigVerifier:
                     f'{wait_0_log_msg=}, '
                     f'{wait_1_log_msg=}')
 
-            if (recv_0_pa_msgs_found.entered_rpa
+            if ((not recv_0_pa_msgs_found.entered_rpa)
                     or recv_0_pa_msgs_found.updated_pa
                     or recv_1_pa_msgs_found.entered_rpa
                     or recv_1_pa_msgs_found.updated_pa
-                    or (not wait_0_pa_msgs_found.entered_rpa)
-                    or (not wait_0_pa_msgs_found.updated_pa)
+                    or wait_0_pa_msgs_found.entered_rpa
+                    or wait_0_pa_msgs_found.updated_pa
                     or wait_1_pa_msgs_found.entered_rpa
                     or wait_1_pa_msgs_found.updated_pa
                     or not del_pa_msgs_found.entered_rpa
@@ -11472,7 +11497,7 @@ class ConfigVerifier:
                     or recv_1_pa_msgs_found.entered_rpa
                     or recv_1_pa_msgs_found.updated_pa
                     or (not wait_0_pa_msgs_found.entered_rpa)
-                    or (not wait_0_pa_msgs_found.updated_pa)
+                    or wait_0_pa_msgs_found.updated_pa
                     or wait_1_pa_msgs_found.entered_rpa
                     or wait_1_pa_msgs_found.updated_pa
                     or (not del_pa_msgs_found.entered_rpa)
@@ -11572,7 +11597,7 @@ class ConfigVerifier:
                     or recv_1_pa_msgs_found.entered_rpa
                     or recv_1_pa_msgs_found.updated_pa
                     or (not wait_0_pa_msgs_found.entered_rpa)
-                    or (not wait_0_pa_msgs_found.updated_pa)
+                    or wait_0_pa_msgs_found.updated_pa
                     or wait_1_pa_msgs_found.entered_rpa
                     or wait_1_pa_msgs_found.updated_pa
                     or not del_pa_msgs_found.entered_rpa
