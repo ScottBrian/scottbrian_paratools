@@ -102,7 +102,7 @@ commander_config_arg_list = [AppConfig.ScriptStyle,
                              AppConfig.CurrentThreadApp,
                              AppConfig.RemoteThreadApp]
 
-commander_config_arg_list = [AppConfig.RemoteThreadApp]
+# commander_config_arg_list = [AppConfig.RemoteThreadApp]
 
 
 ########################################################################
@@ -4876,7 +4876,7 @@ class ConfigVerifier:
         ################################################################
         del_names = self.choose_names(
             name_collection=active_names,
-            num_names_needed=num_deletes,
+            num_names_needed=num_dels,
             update_collection=True,
             var_name_for_log='del_names')
 
@@ -4915,58 +4915,42 @@ class ConfigVerifier:
             sender_msgs[name] = (f'recv test: {name} sending msg '
                                  f'at {self.get_ptime()}')
 
-        # class DefDelScenario(Enum):
-        #     NormalRecv = auto()
-        #     NormalWait = auto()
-        #     ResurrectionRecv = auto()
-        #     ResurrectionWait = auto()
-        #     Recv0Recv1 = auto()
-        #     Recv1Recv0 = auto()
-        #     Wait0Wait1 = auto()
-        #     Wait1Wait0 = auto()
-        #     RecvWait = auto()
-        #     WaitRecv = auto()
-        #     RecvDel = auto()
-        #     RecvAdd = auto()
-        #     WaitDel = auto()
-        #     WaitAdd = auto()
-
         receivers: list[str] = []
-        if (def_del_scenario == DefDelCmd.NormalRecv
-                or def_del_scenario == DefDelCmd.ResurrectionRecv
-                or def_del_scenario == DefDelCmd.Recv0Recv1
-                or def_del_scenario == DefDelCmd.Recv1Recv0
-                or def_del_scenario == DefDelCmd.RecvWait
-                or def_del_scenario == DefDelCmd.WaitRecv
-                or def_del_scenario == DefDelCmd.RecvDel
-                or def_del_scenario == DefDelCmd.RecvAdd):
+        if (def_del_scenario == DefDelScenario.NormalRecv
+                or def_del_scenario == DefDelScenario.ResurrectionRecv
+                or def_del_scenario == DefDelScenario.Recv0Recv1
+                or def_del_scenario == DefDelScenario.Recv1Recv0
+                or def_del_scenario == DefDelScenario.RecvWait
+                or def_del_scenario == DefDelScenario.WaitRecv
+                or def_del_scenario == DefDelScenario.RecvDel
+                or def_del_scenario == DefDelScenario.RecvAdd):
             receivers.append(receiver_names[0])
-        if (def_del_scenario == DefDelCmd.Recv0Recv1
-                or def_del_scenario == DefDelCmd.Recv1Recv0):
+        if (def_del_scenario == DefDelScenario.Recv0Recv1
+                or def_del_scenario == DefDelScenario.Recv1Recv0):
             receivers.append(receiver_names[1])
 
         waiters: list[str] = []
-        if (def_del_scenario == DefDelCmd.NormalWait
-                or def_del_scenario == DefDelCmd.ResurrectionWait
-                or def_del_scenario == DefDelCmd.Wait0Wait1
-                or def_del_scenario == DefDelCmd.Wait1Wait0
-                or def_del_scenario == DefDelCmd.RecvWait
-                or def_del_scenario == DefDelCmd.WaitRecv
-                or def_del_scenario == DefDelCmd.WaitDel
-                or def_del_scenario == DefDelCmd.WaitAdd):
+        if (def_del_scenario == DefDelScenario.NormalWait
+                or def_del_scenario == DefDelScenario.ResurrectionWait
+                or def_del_scenario == DefDelScenario.Wait0Wait1
+                or def_del_scenario == DefDelScenario.Wait1Wait0
+                or def_del_scenario == DefDelScenario.RecvWait
+                or def_del_scenario == DefDelScenario.WaitRecv
+                or def_del_scenario == DefDelScenario.WaitDel
+                or def_del_scenario == DefDelScenario.WaitAdd):
             waiters.append(waiter_names[0])
-        if (def_del_scenario == DefDelCmd.Wait0Wait1
-                or def_del_scenario == DefDelCmd.Wait1Wait0):
+        if (def_del_scenario == DefDelScenario.Wait0Wait1
+                or def_del_scenario == DefDelScenario.Wait1Wait0):
             waiters.append(waiter_names[1])
 
         exiters: list[str] = []
-        if (def_del_scenario == DefDelCmd.RecvDel
-                or def_del_scenario == DefDelCmd.WaitDel):
+        if (def_del_scenario == DefDelScenario.RecvDel
+                or def_del_scenario == DefDelScenario.WaitDel):
             exiters.append(del_names[0])
 
         adders: list[str] = []
-        if (def_del_scenario == DefDelCmd.RecvAdd
-                or def_del_scenario == DefDelCmd.WaitAdd):
+        if (def_del_scenario == DefDelScenario.RecvAdd
+                or def_del_scenario == DefDelScenario.WaitAdd):
             adders.append(del_names[0])
 
         exit_names: list[str] = []
@@ -5049,14 +5033,14 @@ class ConfigVerifier:
         ################################################################
         # do the first recv or wait
         ################################################################
-        if (def_del_scenario == DefDelCmd.NormalRecv
-                or def_del_scenario == DefDelCmd.ResurrectionRecv
-                or def_del_scenario == DefDelCmd.Recv0Recv1
-                or def_del_scenario == DefDelCmd.Recv1Recv0
-                or def_del_scenario == DefDelCmd.RecvWait
-                # or def_del_scenario == DefDelCmd.WaitRecv
-                or def_del_scenario == DefDelCmd.RecvDel
-                or def_del_scenario == DefDelCmd.RecvAdd):
+        if (def_del_scenario == DefDelScenario.NormalRecv
+                or def_del_scenario == DefDelScenario.ResurrectionRecv
+                or def_del_scenario == DefDelScenario.Recv0Recv1
+                or def_del_scenario == DefDelScenario.Recv1Recv0
+                or def_del_scenario == DefDelScenario.RecvWait
+                # or def_del_scenario == DefDelScenario.WaitRecv
+                or def_del_scenario == DefDelScenario.RecvDel
+                or def_del_scenario == DefDelScenario.RecvAdd):
             recv_msg_serial_num_0 = self.add_cmd(
                 RecvMsg(cmd_runners=receivers[0],
                         senders=sender_names[0],
@@ -5066,14 +5050,14 @@ class ConfigVerifier:
             first_cmd_lock_pos = receivers[0]
             lock_positions.append(receivers[0])
 
-        elif (def_del_scenario == DefDelCmd.NormalWait
-                or def_del_scenario == DefDelCmd.ResurrectionWait
-                or def_del_scenario == DefDelCmd.Wait0Wait1
-                or def_del_scenario == DefDelCmd.Wait1Wait0
-                # or def_del_scenario == DefDelCmd.RecvWait
-                or def_del_scenario == DefDelCmd.WaitRecv
-                or def_del_scenario == DefDelCmd.WaitDel
-                or def_del_scenario == DefDelCmd.WaitAdd):
+        elif (def_del_scenario == DefDelScenario.NormalWait
+                or def_del_scenario == DefDelScenario.ResurrectionWait
+                or def_del_scenario == DefDelScenario.Wait0Wait1
+                or def_del_scenario == DefDelScenario.Wait1Wait0
+                # or def_del_scenario == DefDelScenario.RecvWait
+                or def_del_scenario == DefDelScenario.WaitRecv
+                or def_del_scenario == DefDelScenario.WaitDel
+                or def_del_scenario == DefDelScenario.WaitAdd):
             wait_serial_num_0 = self.add_cmd(
                 Wait(cmd_runners=waiters[0],
                      resumers=resumer_names[0],
@@ -5083,7 +5067,7 @@ class ConfigVerifier:
 
         self.add_cmd(
             LockVerify(cmd_runners=self.commander_name,
-                       exp_positions=lock_positions))
+                       exp_positions=lock_positions.copy()))
         ################################################################
         # get lock to keep second recv_msg/wait/del/add behind first
         ################################################################
@@ -5093,15 +5077,15 @@ class ConfigVerifier:
 
         self.add_cmd(
             LockVerify(cmd_runners=self.commander_name,
-                       exp_positions=lock_positions))
+                       exp_positions=lock_positions.copy()))
 
         ################################################################
         # do second recv_msg/wait/del/add behind first
         ################################################################
         second_cmd_lock_pos: str = ''
-        if (def_del_scenario == DefDelCmd.Recv0Recv1
-                or def_del_scenario == DefDelCmd.Recv1Recv0
-                or def_del_scenario == DefDelCmd.WaitRecv):
+        if (def_del_scenario == DefDelScenario.Recv0Recv1
+                or def_del_scenario == DefDelScenario.Recv1Recv0
+                or def_del_scenario == DefDelScenario.WaitRecv):
             recv_msg_serial_num_1 = self.add_cmd(
                 RecvMsg(cmd_runners=receivers[1],
                         senders=sender_names[0],
@@ -5110,17 +5094,17 @@ class ConfigVerifier:
                         log_msg=f'def_del_recv_test_1'))
             second_cmd_lock_pos = receivers[1]
             lock_positions.append(receivers[1])
-        elif (def_del_scenario == DefDelCmd.Wait0Wait1
-                or def_del_scenario == DefDelCmd.Wait1Wait0
-                or def_del_scenario == DefDelCmd.RecvWait):
+        elif (def_del_scenario == DefDelScenario.Wait0Wait1
+                or def_del_scenario == DefDelScenario.Wait1Wait0
+                or def_del_scenario == DefDelScenario.RecvWait):
             wait_serial_num_1 = self.add_cmd(
                 Wait(cmd_runners=waiters[1],
                      resumers=resumer_names[1],
                      log_msg=f'def_del_wait_test_1'))
             second_cmd_lock_pos = waiters[1]
             lock_positions.append(waiters[1])
-        elif (def_del_scenario == DefDelCmd.RecvDel
-              or def_del_scenario == DefDelCmd.WaitDel):
+        elif (def_del_scenario == DefDelScenario.RecvDel
+              or def_del_scenario == DefDelScenario.WaitDel):
             self.build_exit_suite(
                 cmd_runner=deleter_adder_names[0],
                 names=del_names[0],
@@ -5131,8 +5115,8 @@ class ConfigVerifier:
                 validate_config=False)
             second_cmd_lock_pos = deleter_adder_names[0]
             lock_positions.append(deleter_adder_names[0])
-        elif (def_del_scenario == DefDelCmd.RecvAdd
-              or def_del_scenario == DefDelCmd.WaitAdd):
+        elif (def_del_scenario == DefDelScenario.RecvAdd
+              or def_del_scenario == DefDelScenario.WaitAdd):
             f1_create_items: list[F1CreateItem] = [
                 F1CreateItem(
                     name=add_names[0],
@@ -5148,9 +5132,9 @@ class ConfigVerifier:
 
         self.add_cmd(
             LockVerify(cmd_runners=self.commander_name,
-                       exp_positions=lock_positions))
+                       exp_positions=lock_positions.copy()))
         ################################################################
-        # get lock to keep freeze first and second recv_msg/wait just
+        # get lock to freeze first and second recv_msg/wait just
         # before the refresh so we can swap lock positions
         ################################################################
         obtain_lock_serial_num_2 = self.add_cmd(
@@ -5158,7 +5142,7 @@ class ConfigVerifier:
         lock_positions.append(locker_names[2])
         self.add_cmd(
             LockVerify(cmd_runners=self.commander_name,
-                       exp_positions=lock_positions))
+                       exp_positions=lock_positions.copy()))
 
         ################################################################
         # release first lock to allow first recv_msg/wait to go
@@ -5168,9 +5152,16 @@ class ConfigVerifier:
         lock_positions.remove(locker_names[0])
 
         # releasing the first lock will allow the first recv/wait to go
-        # and then get the lock exclusive behind the last lock waiter
         lock_positions.remove(first_cmd_lock_pos)
-        lock_positions.append(first_cmd_lock_pos)
+
+        # the first recv/wait will now get behind the last lock
+        # waiter, but only for those cases that involve the deferred
+        # delete
+        if (def_del_scenario != DefDelScenario.NormalRecv
+                and def_del_scenario != DefDelScenario.NormalWait
+                and def_del_scenario != DefDelScenario.ResurrectionRecv
+                and def_del_scenario != DefDelScenario.ResurrectionWait):
+            lock_positions.append(first_cmd_lock_pos)
 
         self.add_cmd(
             ConfirmResponse(
@@ -5181,7 +5172,7 @@ class ConfigVerifier:
 
         self.add_cmd(
             LockVerify(cmd_runners=self.commander_name,
-                       exp_positions=lock_positions))
+                       exp_positions=lock_positions.copy()))
         ################################################################
         # release second lock to allow second recv_msg/wait to go
         ################################################################
@@ -5204,15 +5195,15 @@ class ConfigVerifier:
 
         self.add_cmd(
             LockVerify(cmd_runners=self.commander_name,
-                       exp_positions=lock_positions))
+                       exp_positions=lock_positions.copy()))
         ################################################################
         # At this point we will have the first cmd behind the third
         # lock. If there is a second cmd, it will be behind the first
         # cmd. We now need to swap the lock positions for some
         # scenarios.
         ################################################################
-        if (def_del_scenario == DefDelCmd.Recv1Recv0
-                or def_del_scenario == DefDelCmd.Wait1Wait0):
+        if (def_del_scenario == DefDelScenario.Recv1Recv0
+                or def_del_scenario == DefDelScenario.Wait1Wait0):
             lock_pos_1 = lock_positions[1]
             lock_positions[1] = lock_positions[2]
             lock_positions[2] = lock_pos_1
@@ -5226,7 +5217,7 @@ class ConfigVerifier:
                          new_positions=lock_positions))
             self.add_cmd(
                 LockVerify(cmd_runners=self.commander_name,
-                           exp_positions=lock_positions))
+                           exp_positions=lock_positions.copy()))
 
         ################################################################
         # release third lock to allow both recv_msg/wait to refresh
@@ -9649,19 +9640,29 @@ class ConfigVerifier:
             cmd_runner: name of thread that will get the lock
             exp_positions: the expected positions on the lock queue
         """
-        assert len(exp_positions) == len(
-            st.SmartThread._registry_lock.owner_wait_q)
-        with self.ops_lock:
-            for idx, expected_name in enumerate(exp_positions):
-                if (st.SmartThread._registry_lock.owner_wait_q[idx].thread.name
-                        != expected_name):
-                    existing_name = (
-                        st.SmartThread._registry_lock.owner_wait_q[
-                            idx].thread.name)
-                    raise FailedLockVerify(f'lock_verify found that lock '
-                                           f'position {idx} contains '
-                                           f'{existing_name=} which does not '
-                                           f'match the {expected_name=}')
+        start_time = time.time()
+        timeout_value = 30
+        lock_verified = False
+        while not lock_verified:
+            lock_verified = True  # assume lock will verify
+            with self.ops_lock:
+                if (len(exp_positions) != len(
+                        st.SmartThread._registry_lock.owner_wait_q)):
+                    lock_verified = False
+                else:
+                    for idx, expected_name in enumerate(exp_positions):
+                        if (st.SmartThread._registry_lock.owner_wait_q[
+                                idx].thread.name != expected_name):
+                            lock_verified = False
+                            break
+                if not lock_verified:
+                    time.sleep(0.2)
+                    if (time.time() - start_time) > timeout_value:
+                        raise FailedLockVerify(
+                            f'lock_verify timed out after {timeout_value} '
+                            f'seconds waiting for the {exp_positions=} to '
+                            'match \n'
+                            f'{st.SmartThread._registry_lock.owner_wait_q=} ')
 
     ####################################################################
     # log_name_groups
@@ -11649,28 +11650,6 @@ class ConfigVerifier:
                         f'{add_pa_msgs_found.removed_pa_entry=} is '
                         f'missing from {exp_pair_keys=}')
 
-
-        # class DefDelScenario(Enum):
-        #     NormalRecv = auto()
-        #     NormalWait = auto()
-        #     ResurrectionRecv = auto()
-        #     ResurrectionWait = auto()
-        #     Recv0Recv1 = auto()
-        #     Recv1Recv0 = auto()
-        #     Wait0Wait1 = auto()
-        #     Wait1Wait0 = auto()
-        #     RecvWait = auto()
-        #     WaitRecv = auto()
-        #     RecvDel = auto()
-        #     RecvAdd = auto()
-        #     WaitDel = auto()
-        #     WaitAdd = auto()
-        #
-        # PaLogMsgsFound:
-        # entered_rpa: bool
-        # removed_sb_entry: list[tuple[str, str]]
-        # removed_pa_entry: list[tuple[str, str]]
-        # updated_pa: bool
     ####################################################################
     # find_pair_array_msgs
     ####################################################################
