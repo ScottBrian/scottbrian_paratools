@@ -785,7 +785,8 @@ class LockVerify(ConfigCmd):
             cmd_runner: name of thread running the command
         """
         self.config_ver.lock_verify(cmd_runner=cmd_runner,
-                                    exp_positions=self.exp_positions)
+                                    exp_positions=self.exp_positions,
+                                    line_num=self.line_num)
 
 
 ########################################################################
@@ -1379,7 +1380,8 @@ class VerifyDefDel(ConfigCmd):
                  resumer_names: list[str],
                  del_names: list[str],
                  add_names: list[str],
-                 deleter_adder_names: list[str]
+                 deleter_names: list[str],
+                 adder_names: list[str]
                  ) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
@@ -1391,7 +1393,8 @@ class VerifyDefDel(ConfigCmd):
         self.resumer_names = resumer_names
         self.del_names = del_names
         self.add_names = add_names
-        self.deleter_adder_names = deleter_adder_names
+        self.deleter_names = deleter_names
+        self.adder_names = adder_names
 
         self.arg_list += ['def_del_scenario']
 
@@ -1410,7 +1413,8 @@ class VerifyDefDel(ConfigCmd):
             resumer_names=self.resumer_names,
             del_names=self.del_names,
             add_names=self.add_names,
-            deleter_adder_names=self.deleter_adder_names
+            deleter_names=self.deleter_names,
+            adder_names=self.adder_names
         )
 
 
@@ -4811,7 +4815,8 @@ class ConfigVerifier:
         num_dels = 1
         num_adds = 1
 
-        num_deleter_adders = 1
+        num_deleters = 1
+        num_adders = 1
 
         num_lockers = 3
         
@@ -4820,7 +4825,8 @@ class ConfigVerifier:
                              + num_waiters 
                              + num_resumers
                              + num_dels
-                             + num_deleter_adders
+                             + num_deleters
+                             + num_adders
                              + num_lockers
                              + 1)  # plus 1 for the commander
         self.build_config(
@@ -4890,13 +4896,22 @@ class ConfigVerifier:
             var_name_for_log='add_names')
 
         ################################################################
-        # choose deleter_adder_names
+        # choose deleter_names
         ################################################################
-        deleter_adder_names = self.choose_names(
+        deleter_names = self.choose_names(
             name_collection=active_names,
-            num_names_needed=num_deleter_adders,
+            num_names_needed=num_deleters,
             update_collection=True,
-            var_name_for_log='deleter_adder_names')
+            var_name_for_log='deleter_names')
+
+        ################################################################
+        # choose adder_names
+        ################################################################
+        adder_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_adders,
+            update_collection=True,
+            var_name_for_log='adder_names')
 
         ################################################################
         # choose locker_names
@@ -5046,7 +5061,9 @@ class ConfigVerifier:
                 # or def_del_scenario == DefDelScenario.WaitRecv
                 or def_del_scenario == DefDelScenario.RecvDel
                 or def_del_scenario == DefDelScenario.RecvAdd):
-            recv_msg_serial_num_0 = self.add_cmd(
+            cmd_0_name = 'RecvMsg'
+            cmd_0_confirmer = receivers[0]
+            cmd_0_serial_num = self.add_cmd(
                 RecvMsg(cmd_runners=receivers[0],
                         senders=sender_names[0],
                         exp_msgs=sender_msgs,
@@ -5070,7 +5087,9 @@ class ConfigVerifier:
                     status=st.ThreadStatus.Stopped)
             }
 
-            wait_serial_num_0 = self.add_cmd(
+            cmd_0_name = 'Wait'
+            cmd_0_confirmer = waiters[0]
+            cmd_0_serial_num = self.add_cmd(
                 Wait(cmd_runners=waiters[0],
                      resumers=resumers_for_wait_0,
                      raise_not_alive=False,
@@ -5096,6 +5115,9 @@ class ConfigVerifier:
         # do second recv_msg/wait/del/add behind first
         ################################################################
         second_cmd_lock_pos: str = ''
+        cmd_1_name = ''
+        cmd_1_confirmer = ''
+        cmd_1_serial_num = 0
         if (def_del_scenario == DefDelScenario.Recv0Recv1
                 or def_del_scenario == DefDelScenario.Recv1Recv0
                 or def_del_scenario == DefDelScenario.WaitRecv):
@@ -5103,7 +5125,9 @@ class ConfigVerifier:
                 recv_name = receivers[0]
             else:
                 recv_name = receivers[1]
-            recv_msg_serial_num_1 = self.add_cmd(
+            cmd_1_name = 'RecvMsg'
+            cmd_1_confirmer = recv_name
+            cmd_1_serial_num = self.add_cmd(
                 RecvMsg(cmd_runners=recv_name,
                         senders=sender_names[0],
                         exp_msgs=sender_msgs,
@@ -5126,7 +5150,9 @@ class ConfigVerifier:
                     status=st.ThreadStatus.Stopped)
             }
 
-            wait_serial_num_1 = self.add_cmd(
+            cmd_1_name = 'Wait'
+            cmd_1_confirmer = wait_name
+            cmd_1_serial_num = self.add_cmd(
                 Wait(cmd_runners=wait_name,
                      resumers=resumers_for_wait_1,
                      raise_not_alive=False,
@@ -5137,15 +5163,15 @@ class ConfigVerifier:
         elif (def_del_scenario == DefDelScenario.RecvDel
               or def_del_scenario == DefDelScenario.WaitDel):
             self.build_exit_suite(
-                cmd_runner=deleter_adder_names[0],
+                cmd_runner=deleter_names[0],
                 names=[del_names[0]],
                 validate_config=False)
             self.build_join_suite(
-                cmd_runners=deleter_adder_names[0],
+                cmd_runners=deleter_names[0],
                 join_target_names=[del_names[0]],
                 validate_config=False)
-            second_cmd_lock_pos = deleter_adder_names[0]
-            lock_positions.append(deleter_adder_names[0])
+            second_cmd_lock_pos = deleter_names[0]
+            lock_positions.append(deleter_names[0])
         elif (def_del_scenario == DefDelScenario.RecvAdd
               or def_del_scenario == DefDelScenario.WaitAdd):
             f1_create_items: list[F1CreateItem] = [
@@ -5155,11 +5181,11 @@ class ConfigVerifier:
                     target_rtn=outer_f1,
                     app_config=AppConfig.ScriptStyle)]
             self.build_create_suite(
-                cmd_runner=deleter_adder_names[0],
+                cmd_runner=adder_names[0],
                 f1_create_items=f1_create_items,
                 validate_config=False)
-            second_cmd_lock_pos = deleter_adder_names[0]
-            lock_positions.append(deleter_adder_names[0])
+            second_cmd_lock_pos = adder_names[0]
+            lock_positions.append(adder_names[0])
 
         self.add_cmd(
             LockVerify(cmd_runners=self.commander_name,
@@ -5215,12 +5241,9 @@ class ConfigVerifier:
         # go and then get the lock exclusive behind the last lock waiter
         if second_cmd_lock_pos:
             lock_positions.remove(second_cmd_lock_pos)
-            # only another recv or wait will get behind the 3rd lock
-            # a delete or add will simply complete
+            # recv, wait, or add will get behind the 3rd lock, not del
             if (def_del_scenario != DefDelScenario.RecvDel
-                    and def_del_scenario != DefDelScenario.WaitDel
-                    and def_del_scenario != DefDelScenario.RecvAdd
-                    and def_del_scenario != DefDelScenario.WaitAdd):
+                    and def_del_scenario != DefDelScenario.WaitDel):
                 lock_positions.append(second_cmd_lock_pos)
 
         self.add_cmd(
@@ -5268,6 +5291,25 @@ class ConfigVerifier:
                 confirm_serial_num=release_lock_serial_num_2,
                 confirmers=locker_names[2]))
 
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd=cmd_0_name,
+                confirm_serial_num=cmd_0_serial_num,
+                confirmers=cmd_0_confirmer))
+
+        if cmd_1_name:
+            self.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=[self.commander_name],
+                    confirm_cmd=cmd_1_name,
+                    confirm_serial_num=cmd_1_serial_num,
+                    confirmers=cmd_1_confirmer))
+
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=[]))
+
         ################################################################
         # check results
         ################################################################
@@ -5281,7 +5323,8 @@ class ConfigVerifier:
                 resumer_names=resumer_names,
                 del_names=del_names,
                 add_names=add_names,
-                deleter_adder_names=deleter_adder_names))
+                deleter_names=deleter_names,
+                adder_names=adder_names))
 
     ####################################################################
     # build_recv_msg_timeout_suite
@@ -9671,12 +9714,14 @@ class ConfigVerifier:
     ####################################################################
     def lock_verify(self,
                     cmd_runner: str,
-                    exp_positions: list[str]) -> None:
+                    exp_positions: list[str],
+                    line_num: int) -> None:
         """Increment the pending operations count.
 
         Args:
             cmd_runner: name of thread that will get the lock
             exp_positions: the expected positions on the lock queue
+            line_num: the line number where the cmd was issued
         """
         start_time = time.time()
         timeout_value = 30
@@ -9697,9 +9742,9 @@ class ConfigVerifier:
                     time.sleep(0.2)
                     if (time.time() - start_time) > timeout_value:
                         raise FailedLockVerify(
-                            f'lock_verify timed out after {timeout_value} '
-                            f'seconds waiting for the {exp_positions=} to '
-                            'match \n'
+                            f'lock_verify from {line_num=} timed out after'
+                            f' {timeout_value} seconds waiting for the '
+                            f'{exp_positions=} to match \n'
                             f'{st.SmartThread._registry_lock.owner_wait_q=} ')
 
     ####################################################################
@@ -10317,7 +10362,8 @@ class ConfigVerifier:
                        resumer_names: list[str],
                        del_names: list[str],
                        add_names: list[str],
-                       deleter_adder_names: list[str]
+                       deleter_names: list[str],
+                       adder_names: list[str]
                        ) -> None:
         """Verify that the given counts are correct.
 
@@ -10330,7 +10376,8 @@ class ConfigVerifier:
             resumer_names: names that do smart_resume
             del_names: names deleted during recv or wait
             add_names: names added during recv or wait
-            deleter_adder_names: names that do the add or delete
+            deleter_names: names that do the delete
+            adder_names: names that do the add
 
         """
         ################################################################
@@ -10495,7 +10542,7 @@ class ConfigVerifier:
         # get second wait pair array log msgs found
         ################################################################
         del_pa_msgs_found = self.find_def_del_pair_array_msgs(
-            cmd_runner=deleter_adder_names[0],
+            cmd_runner=deleter_names[0],
             deleted_names=[sender_names[0], resumer_names[0]],
             def_del_names=receiver_names + waiter_names,
             start_log_idx=start_log_idx,
@@ -10505,7 +10552,7 @@ class ConfigVerifier:
         # get second wait pair array log msgs found
         ################################################################
         add_pa_msgs_found = self.find_def_del_pair_array_msgs(
-            cmd_runner=deleter_adder_names[0],
+            cmd_runner=adder_names[0],
             deleted_names=[sender_names[0], resumer_names[0]],
             def_del_names=receiver_names + waiter_names,
             start_log_idx=start_log_idx,
@@ -11407,7 +11454,7 @@ class ConfigVerifier:
                     f'{wait_0_log_msg=}, '
                     f'{wait_1_log_msg=}')
 
-            if ((not recv_0_pa_msgs_found.entered_rpa)
+            if (not recv_0_pa_msgs_found.entered_rpa
                     or recv_0_pa_msgs_found.updated_pa
                     or recv_1_pa_msgs_found.entered_rpa
                     or recv_1_pa_msgs_found.updated_pa
@@ -11415,23 +11462,24 @@ class ConfigVerifier:
                     or wait_0_pa_msgs_found.updated_pa
                     or wait_1_pa_msgs_found.entered_rpa
                     or wait_1_pa_msgs_found.updated_pa
-                    or not del_pa_msgs_found.entered_rpa
-                    or not del_pa_msgs_found.updated_pa
-                    or (not add_pa_msgs_found.entered_rpa)
-                    or (not add_pa_msgs_found.updated_pa)):
+                    or del_pa_msgs_found.entered_rpa
+                    or del_pa_msgs_found.updated_pa
+                    or not add_pa_msgs_found.entered_rpa
+                    or not add_pa_msgs_found.updated_pa):
                 raise FailedDefDelVerify(
                     f'verify_def_del {def_del_scenario=} found an '
                     'unexpected pair array activity '
-                    f'{recv_0_pa_msgs_found.entered_rpa=}, '
+                    f'\n{recv_0_pa_msgs_found.entered_rpa=}, '
                     f'{recv_0_pa_msgs_found.updated_pa=}, '
+                    f'\n{recv_1_pa_msgs_found.entered_rpa=}, '
                     f'{recv_1_pa_msgs_found.updated_pa=}, '
-                    f'{wait_0_pa_msgs_found.entered_rpa=}, '
+                    f'\n{wait_0_pa_msgs_found.entered_rpa=}, '
                     f'{wait_0_pa_msgs_found.updated_pa=}, '
-                    f'{wait_1_pa_msgs_found.entered_rpa=}, '
+                    f'\n{wait_1_pa_msgs_found.entered_rpa=}, '
                     f'{wait_1_pa_msgs_found.updated_pa=}, '
-                    f'{del_pa_msgs_found.entered_rpa=}, ' 
+                    f'\n{del_pa_msgs_found.entered_rpa=}, ' 
                     f'{del_pa_msgs_found.updated_pa=}, ' 
-                    f'{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'\n{add_pa_msgs_found.entered_rpa=}, ' 
                     f'{add_pa_msgs_found.updated_pa=}')
             if (len(recv_0_pa_msgs_found.removed_sb_entry)
                     or len(recv_0_pa_msgs_found.removed_pa_entry)
@@ -11611,27 +11659,28 @@ class ConfigVerifier:
                     or recv_0_pa_msgs_found.updated_pa
                     or recv_1_pa_msgs_found.entered_rpa
                     or recv_1_pa_msgs_found.updated_pa
-                    or (not wait_0_pa_msgs_found.entered_rpa)
+                    or not wait_0_pa_msgs_found.entered_rpa
                     or wait_0_pa_msgs_found.updated_pa
                     or wait_1_pa_msgs_found.entered_rpa
                     or wait_1_pa_msgs_found.updated_pa
-                    or not del_pa_msgs_found.entered_rpa
-                    or not del_pa_msgs_found.updated_pa
-                    or (not add_pa_msgs_found.entered_rpa)
-                    or (not add_pa_msgs_found.updated_pa)):
+                    or del_pa_msgs_found.entered_rpa
+                    or del_pa_msgs_found.updated_pa
+                    or not add_pa_msgs_found.entered_rpa
+                    or not add_pa_msgs_found.updated_pa):
                 raise FailedDefDelVerify(
                     f'verify_def_del {def_del_scenario=} found an '
                     'unexpected pair array activity '
-                    f'{recv_0_pa_msgs_found.entered_rpa=}, '
+                    f'\n{recv_0_pa_msgs_found.entered_rpa=}, '
                     f'{recv_0_pa_msgs_found.updated_pa=}, '
+                    f'\n{recv_1_pa_msgs_found.entered_rpa=}, '
                     f'{recv_1_pa_msgs_found.updated_pa=}, '
-                    f'{wait_0_pa_msgs_found.entered_rpa=}, '
+                    f'\n{wait_0_pa_msgs_found.entered_rpa=}, '
                     f'{wait_0_pa_msgs_found.updated_pa=}, '
-                    f'{wait_1_pa_msgs_found.entered_rpa=}, '
+                    f'\n{wait_1_pa_msgs_found.entered_rpa=}, '
                     f'{wait_1_pa_msgs_found.updated_pa=}, '
-                    f'{del_pa_msgs_found.entered_rpa=}, ' 
+                    f'\n{del_pa_msgs_found.entered_rpa=}, ' 
                     f'{del_pa_msgs_found.updated_pa=}, ' 
-                    f'{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'\n{add_pa_msgs_found.entered_rpa=}, ' 
                     f'{add_pa_msgs_found.updated_pa=}')
             if (len(recv_0_pa_msgs_found.removed_sb_entry)
                     or len(recv_0_pa_msgs_found.removed_pa_entry)
