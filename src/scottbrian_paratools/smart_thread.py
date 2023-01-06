@@ -1693,7 +1693,7 @@ class SmartThread:
     # sync
     ####################################################################
     def smart_sync(self, *,
-                   targets: Union[str, set[str]],
+                   targets: Union[str, set[str], list[str]],
                    log_msg: Optional[str] = None,
                    timeout: OptIntFloat = None):
         """Sync up with the remote threads.
@@ -1747,11 +1747,6 @@ class SmartThread:
         # get SetupBlock with targets in a set and a timer object
         sb = self._common_setup(targets=targets, timeout=timeout)
 
-        # caller_info = ''
-        # if log_msg and self.debug_logging_enabled:
-        #     caller_info = get_formatted_call_sequence(latest=1, depth=1)
-        #     self.logger.debug(f'sync() entered by {self.name} to sync with '
-        #                       f'{targets} {caller_info} {log_msg}')
         if log_msg and self.debug_logging_enabled:
             timeout_msg = f' with {timeout=}' if timeout else ''
             exit_log_msg = self._issue_entry_log_msg(
@@ -2067,7 +2062,7 @@ class SmartThread:
     # _common_setup
     ####################################################################
     def _common_setup(self, *,
-                      targets: Union[str, set[str]],
+                      targets: Union[str, set[str], list[str]],
                       timeout: OptIntFloat = None
                       ) -> SetupBlock:
         """Do common setup for each request.
@@ -2085,6 +2080,8 @@ class SmartThread:
         self.verify_thread_is_current()
         if isinstance(targets, str):
             targets = {targets}
+        elif isinstance(targets, list):
+            targets = set(targets)
 
         return SetupBlock(targets=targets, timer=timer)
 

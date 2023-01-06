@@ -280,6 +280,12 @@ num_actor_3_arg_list = [1, 2, 3]
 
 
 ########################################################################
+# Test settings for test_sync_scenarios
+########################################################################
+num_syncers_arg_list = [1, 2, 3]
+
+
+########################################################################
 # SmartThread test exceptions
 ########################################################################
 class ErrorTstSmartThread(Exception):
@@ -1211,6 +1217,83 @@ class StopThread(ConfigCmd):
         """
         self.config_ver.stop_thread(cmd_runner=cmd_runner,
                                     stop_names=self.stop_names)
+
+
+########################################################################
+# Sync
+########################################################################
+class Sync(ConfigCmd):
+    def __init__(self,
+                 cmd_runners: StrOrList,
+                 target_names: StrOrList) -> None:
+        super().__init__(cmd_runners=cmd_runners)
+        self.specified_args = locals()  # used for __repr__
+
+        if isinstance(target_names, str):
+            target_names = [target_names]
+        self.target_names = target_names
+
+        self.arg_list += ['target_names']
+
+    def run_process(self, cmd_runner: str) -> None:
+        """Run the command.
+
+        Args:
+            cmd_runner: name of thread running the command
+        """
+        self.config_ver.handle_sync(cmd_runner=cmd_runner,
+                                    target_names=self.target_names)
+
+
+########################################################################
+# SyncTimeoutFalse
+########################################################################
+class SyncTimeoutFalse(Sync):
+    def __init__(self,
+                 cmd_runners: StrOrList,
+                 target_names: StrOrList,
+                 timeout: IntOrFloat) -> None:
+        super().__init__(cmd_runners=cmd_runners,
+                         target_names=target_names)
+        self.specified_args = locals()  # used for __repr__
+
+        self.timeout = timeout
+
+        self.arg_list += ['timeout']
+
+    def run_process(self, cmd_runner: str) -> None:
+        """Run the command.
+
+        Args:
+            cmd_runner: name of thread running the command
+        """
+        self.config_ver.handle_sync_tof(cmd_runner=cmd_runner,
+                                        target_names=self.target_names,
+                                        timeout=self.timeout)
+
+
+########################################################################
+# SyncTimeoutFalse
+########################################################################
+class SyncTimeoutTrue(SyncTimeoutFalse):
+    def __init__(self,
+                 cmd_runners: StrOrList,
+                 target_names: StrOrList,
+                 timeout: IntOrFloat) -> None:
+        super().__init__(cmd_runners=cmd_runners,
+                         target_names=target_names,
+                         timeout=timeout)
+        self.specified_args = locals()  # used for __repr__
+
+    def run_process(self, cmd_runner: str) -> None:
+        """Run the command.
+
+        Args:
+            cmd_runner: name of thread running the command
+        """
+        self.config_ver.handle_sync_tot(cmd_runner=cmd_runner,
+                                        target_names=self.target_names,
+                                        timeout=self.timeout)
 
 
 ########################################################################
@@ -2576,6 +2659,22 @@ def num_stopped_delay_arg(request: Any) -> int:
 ########################################################################
 @pytest.fixture(params=num_waiters_arg_list)  # type: ignore
 def num_waiters_arg(request: Any) -> int:
+    """Number stopped threads quickly joined, created, and started.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
+########################################################################
+# num_syncers_arg
+########################################################################
+@pytest.fixture(params=num_syncers_arg_list)  # type: ignore
+def num_syncers_arg(request: Any) -> int:
     """Number stopped threads quickly joined, created, and started.
 
     Args:
@@ -7494,6 +7593,13 @@ class ConfigVerifier:
             Resume(cmd_runners='charlie',
                    targets='beta',
                    stopped_names=[]))
+
+        ################################################################
+        # sync
+        ################################################################
+        self.add_cmd(
+            Sync(cmd_runners='beta',
+                 targets=['beta', 'charlie']))
 
         ################################################################
         # stop all threads
@@ -13004,6 +13110,59 @@ class TestSmartThreadScenarios:
             commander_config=commander_config
         )
 
+    ####################################################################
+    # test_sync_scenarios
+    ####################################################################
+    def test_sync_scenarios(
+            self,
+            num_syncers_arg: int,
+            num_waiters_arg: int,
+            num_resumers_arg: int,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test wait scenarios.
+
+        Args:
+            num_waiters_arg: number of threads that will do the wait
+            num_actors_arg: number of actor threads
+            actor_1_arg: type of actor that will do the first resume
+            actor_2_arg: type of actor that will do the second resume
+            actor_3_arg: type of actor that will do the third resume
+            caplog: pytest fixture to capture log output
+
+        """
+        total_arg_counts = (
+                num_waiters_arg
+                + num_actors_arg)
+
+        command_config_num = total_arg_counts % 4
+        if command_config_num == 0:
+            commander_config = AppConfig.ScriptStyle
+        elif command_config_num == 1:
+            commander_config = AppConfig.CurrentThreadApp
+        elif command_config_num == 2:
+            commander_config = AppConfig.RemoteThreadApp
+        else:
+            commander_config = AppConfig.RemoteSmartThreadApp
+
+        # args_for_scenario_builder: dict[str, Any] = {
+        #     'num_waiters': num_waiters_arg,
+        #     'actor_list': [(actor_1_arg, num_actor_1_arg),
+        #                    (actor_2_arg, num_actor_2_arg),
+        #                    (actor_3_arg, num_actor_3_arg)]
+        # }
+        args_for_scenario_builder: dict[str, Any] = {
+            'num_waiters': num_waiters_arg,
+            'num_actors': num_actors_arg,
+            'actor_list': [actor_1_arg, actor_2_arg, actor_3_arg,]
+        }
+
+        self.scenario_driver(
+            scenario_builder=ConfigVerifier.build_wait_scenario_suite,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog,
+            commander_config=commander_config
+        )
     ####################################################################
     # test_smart_thread_msg_timeout_scenarios
     ####################################################################
