@@ -1225,15 +1225,17 @@ class StopThread(ConfigCmd):
 class Sync(ConfigCmd):
     def __init__(self,
                  cmd_runners: StrOrList,
-                 target_names: StrOrList) -> None:
+                 targets: DictAliveAndStatus,
+                 raise_not_alive: bool = True) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
-        if isinstance(target_names, str):
-            target_names = [target_names]
-        self.target_names = target_names
+        self.targets = targets
 
-        self.arg_list += ['target_names']
+        self.raise_not_alive = raise_not_alive
+
+        self.arg_list += ['targets',
+                          'raise_not_alive']
 
     def run_process(self, cmd_runner: str) -> None:
         """Run the command.
@@ -1242,7 +1244,8 @@ class Sync(ConfigCmd):
             cmd_runner: name of thread running the command
         """
         self.config_ver.handle_sync(cmd_runner=cmd_runner,
-                                    target_names=self.target_names)
+                                    targets=self.targets,
+                                    raise_not_alive=self.raise_not_alive)
 
 
 ########################################################################
@@ -1251,10 +1254,12 @@ class Sync(ConfigCmd):
 class SyncTimeoutFalse(Sync):
     def __init__(self,
                  cmd_runners: StrOrList,
-                 target_names: StrOrList,
-                 timeout: IntOrFloat) -> None:
+                 targets: DictAliveAndStatus,
+                 timeout: IntOrFloat,
+                 raise_not_alive: bool = True) -> None:
         super().__init__(cmd_runners=cmd_runners,
-                         target_names=target_names)
+                         targets=targets,
+                         raise_not_alive=raise_not_alive)
         self.specified_args = locals()  # used for __repr__
 
         self.timeout = timeout
@@ -1268,7 +1273,7 @@ class SyncTimeoutFalse(Sync):
             cmd_runner: name of thread running the command
         """
         self.config_ver.handle_sync_tof(cmd_runner=cmd_runner,
-                                        target_names=self.target_names,
+                                        targets=self.targets,
                                         timeout=self.timeout)
 
 
@@ -1278,11 +1283,13 @@ class SyncTimeoutFalse(Sync):
 class SyncTimeoutTrue(SyncTimeoutFalse):
     def __init__(self,
                  cmd_runners: StrOrList,
-                 target_names: StrOrList,
-                 timeout: IntOrFloat) -> None:
+                 targets: DictAliveAndStatus,
+                 timeout: IntOrFloat,
+                 raise_not_alive: bool = True) -> None:
         super().__init__(cmd_runners=cmd_runners,
-                         target_names=target_names,
-                         timeout=timeout)
+                         targets=targets,
+                         timeout=timeout,
+                         raise_not_alive=raise_not_alive)
         self.specified_args = locals()  # used for __repr__
 
     def run_process(self, cmd_runner: str) -> None:
@@ -1292,7 +1299,7 @@ class SyncTimeoutTrue(SyncTimeoutFalse):
             cmd_runner: name of thread running the command
         """
         self.config_ver.handle_sync_tot(cmd_runner=cmd_runner,
-                                        target_names=self.target_names,
+                                        targets=self.targets,
                                         timeout=self.timeout)
 
 
@@ -9042,9 +9049,13 @@ class ConfigVerifier:
                 self.all_threads[cmd_runner].smart_resume(
                     targets=targets,
                     raise_not_alive=raise_not_alive)
-            error_msg = (f'while processing a smart_resume(), {cmd_runner} '
-                         f'detected that the following threads are '
-                         f'stopped: {sorted(stopped_names)}')
+            error_msg = (
+                f'{cmd_runner} raising '
+                'SmartThreadRemoteThreadNotAlive. '
+                'while processing a smart_resume(), '
+                f'{cmd_runner} detected that the following '
+                'threads are stopped and were thus not '
+                f'resumed: {sorted(stopped_names)}.')
             self.add_log_msg(new_log_msg=re.escape(error_msg),
                              log_level=logging.ERROR)
         else:
@@ -9089,9 +9100,13 @@ class ConfigVerifier:
                     targets=targets,
                     timeout=timeout,
                     raise_not_alive=raise_not_alive)
-            error_msg = (f'while processing a smart_resume(), {cmd_runner} '
-                         f'detected that the following threads are '
-                         f'stopped: {sorted(stopped_names)}')
+            error_msg = (
+                f'{cmd_runner} raising '
+                'SmartThreadRemoteThreadNotAlive. '
+                'while processing a smart_resume(), '
+                f'{cmd_runner} detected that the following '
+                'threads are stopped and were thus not '
+                f'resumed: {sorted(stopped_names)}.')
             self.add_log_msg(new_log_msg=re.escape(error_msg),
                              log_level=logging.ERROR)
         else:
@@ -9140,9 +9155,13 @@ class ConfigVerifier:
                     targets=targets,
                     timeout=timeout,
                     raise_not_alive=raise_not_alive)
-            error_msg = (f'while processing a smart_resume(), {cmd_runner} '
-                         f'detected that the following threads are '
-                         f'stopped: {sorted(stopped_names)}')
+            error_msg = (
+                f'{cmd_runner} raising '
+                'SmartThreadRemoteThreadNotAlive. '
+                'while processing a smart_resume(), '
+                f'{cmd_runner} detected that the following '
+                'threads are stopped and were thus not '
+                f'resumed: {sorted(stopped_names)}.')
             self.add_log_msg(new_log_msg=re.escape(error_msg),
                              log_level=logging.ERROR)
         else:
@@ -9391,6 +9410,119 @@ class ConfigVerifier:
                 self.stopped_event_items[cmd_runner].client_event.set()
 
     ####################################################################
+    # handle_stopped_log_msg
+    ####################################################################
+    def handle_sync(self,
+                    cmd_runner: str,
+                    targets: DictAliveAndStatus,
+                    raise_not_alive: bool,
+
+                    log_msg: Optional[str] = None) -> None:
+        """Set the status for a thread that was started.
+
+        Args:
+            cmd_runner: the names of the thread that did the stop
+            targets: name of remotes to sync with
+            raise_not_alive: specifies whether to raise not alive error
+            log_msg: log msg to be specified with the sync request
+        """
+        self.log_test_msg(f'{cmd_runner=} handle_sync entry for '
+                          f'{targets=}, {raise_not_alive=}')
+
+        self.log_ver.add_call_seq(
+            name='handle_sync',
+            seq='test_smart_thread.py::ConfigVerifier.handle_sync')
+
+        all_targets: set[str] = set()
+        non_stopped_targets: set[str] = set()
+        stopped_targets: set[str] = set()
+        for target in targets.keys():
+            all_targets |= target
+            if targets[target].status == st.ThreadStatus.Stopped:
+                stopped_targets |= {target}
+            else:
+                non_stopped_targets |= {target}
+
+        enter_exit = ('entry', 'exit')
+        if raise_not_alive and stopped_targets:
+            with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
+                self.all_threads[cmd_runner].smart_sync(
+                    targets=all_targets,
+                    raise_not_alive=raise_not_alive,
+                    log_msg=log_msg)
+
+                enter_exit = ('entry',)
+                timeout = None
+                timeout_msg = f' with {timeout=}' if timeout else ''
+                if log_msg:
+                    log_msg_2 = (
+                        f'{self.log_ver.get_call_seq("handle_sync")} ')
+                    log_msg_3 = re.escape(f'{log_msg}')
+                    for enter_exit in enter_exit:
+                        log_msg_1 = re.escape(
+                            f'smart_sync() {enter_exit}: '
+                            f'{cmd_runner} to sync with {all_targets}'
+                            f'{timeout_msg}.')
+
+                        self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
+
+                error_msg = (
+                    f'{cmd_runner} raising '
+                    'SmartThreadRemoteThreadNotAlive. '
+                    'while processing a smart_resume(), '
+                    f'{cmd_runner} detected that the following '
+                    'threads are stopped and were thus not '
+                    f'resumed: {sorted(stopped_targets)}.')
+                self.add_log_msg(new_log_msg=re.escape(error_msg),
+                                 log_level=logging.ERROR)
+
+                self.add_log_msg(
+                    new_log_msg=re.escape(
+                        f'{cmd_runner} raising '
+                        'SmartThreadRemoteThreadNotAlive. '
+                        f'{cmd_runner} smart_wait is not resumed and '
+                        f'detected thread {resumer=} has ended.'),
+                    log_level=logging.ERROR)
+
+            else:
+                self.all_threads[cmd_runner].smart_wait(
+                    resumer=resumer,
+                    raise_not_alive=raise_not_alive,
+                    log_msg=log_msg)
+
+                enter_exit = ('entry', 'exit')
+                if log_msg:
+                    log_msg_2 = (
+                        f'{self.log_ver.get_call_seq("handle_sync")} ')
+                    log_msg_3 = re.escape(f'{log_msg}')
+                    for enter_exit in enter_exit:
+                        log_msg_1 = re.escape(
+                            f'smart_wait() {enter_exit}: '
+                            f'{cmd_runner} to wait for {resumer}. ')
+
+                        self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
+
+                self.monitor_event.set()
+                self.add_log_msg(
+                    new_log_msg=(f'{cmd_runner} smart_wait resumed by '
+                                 f'{resumer}'),
+                    log_level=logging.INFO)
+
+        if non_stopped_targets:
+            with self.ops_lock:
+                self.cmd_waiting_event_items[cmd_runner] = threading.Event()
+            self.log_test_msg(
+                f'{cmd_runner=} handle_sync waiting for monitor')
+            self.monitor_event.set()
+            self.cmd_waiting_event_items[cmd_runner].wait()
+            with self.ops_lock:
+                # del self.recv_msg_event_items[cmd_runner]
+                del self.cmd_waiting_event_items[cmd_runner]
+
+        self.log_test_msg(f'{cmd_runner=} handle_sync exit for '
+                          f'{targets=}, {raise_not_alive=}')
+
+    ####################################################################
     # handle_wait
     ####################################################################
     def handle_wait(self,
@@ -9416,16 +9548,10 @@ class ConfigVerifier:
             seq='test_smart_thread.py::ConfigVerifier.handle_wait')
 
         non_stopped_resumers = set(resumers)
-        for resumer in resumers.keys():
-            if (raise_not_alive
-                    and (resumers[resumer].status == st.ThreadStatus.Stopped)):
-                non_stopped_resumers -= {resumer}
-        # if non_stopped_resumers:
-        #     self.recv_msg_event_items[cmd_runner] = MonitorEventItem(
-        #         client_event=threading.Event(),
-        #         deferred_post_needed=False,
-        #         targets=list(non_stopped_resumers)
-        #     )
+        if raise_not_alive:
+            for resumer in resumers.keys():
+                if resumers[resumer].status == st.ThreadStatus.Stopped:
+                    non_stopped_resumers -= {resumer}
 
         enter_exit = ('entry', 'exit')
         for resumer in resumers.keys():
@@ -9454,7 +9580,7 @@ class ConfigVerifier:
                         f'{cmd_runner} raising '
                         'SmartThreadRemoteThreadNotAlive. '
                         f'{cmd_runner} smart_wait is not resumed and '
-                        f'detected thread {resumer=} has ended'),
+                        f'detected thread {resumer=} has ended.'),
                     log_level=logging.ERROR)
 
             else:
@@ -9522,16 +9648,10 @@ class ConfigVerifier:
             seq='test_smart_thread.py::ConfigVerifier.handle_wait_tof')
 
         non_stopped_resumers = set(resumers)
-        for resumer in resumers.keys():
-            if (raise_not_alive
-                    and (resumers[resumer].status == st.ThreadStatus.Stopped)):
-                non_stopped_resumers -= {resumer}
-        # if non_stopped_resumers:
-        #     self.recv_msg_event_items[cmd_runner] = MonitorEventItem(
-        #         client_event=threading.Event(),
-        #         deferred_post_needed=False,
-        #         targets=list(non_stopped_resumers)
-        #     )
+        if raise_not_alive:
+            for resumer in resumers.keys():
+                if resumers[resumer].status == st.ThreadStatus.Stopped:
+                    non_stopped_resumers -= {resumer}
 
         for resumer in resumers.keys():
             if (raise_not_alive
@@ -9562,7 +9682,7 @@ class ConfigVerifier:
                         f'{cmd_runner} raising '
                         'SmartThreadRemoteThreadNotAlive. '
                         f'{cmd_runner} smart_wait is not resumed and '
-                        f'detected thread {resumer=} has ended'),
+                        f'detected thread {resumer=} has ended.'),
                     log_level=logging.ERROR)
             else:
                 self.all_threads[cmd_runner].smart_wait(
@@ -9661,7 +9781,7 @@ class ConfigVerifier:
                         f'{cmd_runner} raising '
                         'SmartThreadRemoteThreadNotAlive. '
                         f'{cmd_runner} smart_wait is not resumed and '
-                        f'detected thread {resumer=} has ended'),
+                        f'detected thread {resumer=} has ended.'),
                     log_level=logging.ERROR)
             else:
                 with pytest.raises(st.SmartThreadSmartWaitTimedOut):
