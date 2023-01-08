@@ -127,19 +127,9 @@ class SmartThreadWaitDeadlockDetected(SmartThreadError):
 #     pass
 
 
-class SmartThreadRecvMsgTimedOut(SmartThreadError):
-    """SmartThread exception for timeout waiting for message."""
+class SmartThreadRequestTimedOut(SmartThreadError):
+    """SmartThread exception for request timeout."""
     pass
-
-
-class SmartThreadSendMsgTimedOut(SmartThreadError):
-    """SmartThread exception for timeout waiting for queue space."""
-    pass
-
-
-# class SmartThreadSendMsgFailed(SmartThreadError):
-#     """SmartThread exception failure to send message."""
-#     pass
 
 
 class SmartThreadMutuallyExclusiveTargetThreadSpecified(SmartThreadError):
@@ -173,21 +163,6 @@ class SmartThreadMutuallyExclusiveTargetThreadSpecified(SmartThreadError):
 #     remote.remote_array msg_q.
 #     """
 #     pass
-
-
-class SmartThreadJoinTimedOut(SmartThreadError):
-    """SmartThread exception join timed out."""
-    pass
-
-
-class SmartThreadResumeTimedOut(SmartThreadError):
-    """SmartThread exception resume timed out."""
-    pass
-
-
-class SmartThreadWaitTimedOut(SmartThreadError):
-    """SmartThread exception wait timed out."""
-    pass
 
 
 # class SmartThreadSyncTimedOut(SmartThreadError):
@@ -807,9 +782,9 @@ class SmartThread:
 
             if sb.timer.is_expired():
                 self.logger.error(
-                    f'{self.name} raising SmartThreadJoinTimedOut waiting '
+                    f'{self.name} raising SmartThreadRequestTimedOut waiting '
                     f'for {work_targets}')
-                raise SmartThreadJoinTimedOut(
+                raise SmartThreadRequestTimedOut(
                     f'{self.name} timed out waiting for {work_targets}.')
 
             time.sleep(0.2)
@@ -832,7 +807,7 @@ class SmartThread:
             timeout: timeout to use instead of default timeout
 
         Raises:
-            SmartThreadJoinTimedOut: join timed out waiting for targets.
+            SmartThreadRequestTimedOut: join timed out waiting for targets.
 
         Notes:
             1) A ``resume()`` request can be done on an event that is not yet
@@ -932,9 +907,9 @@ class SmartThread:
 
             if sb.timer.is_expired():
                 self.logger.error(
-                    f'{self.name} raising SmartThreadJoinTimedOut waiting '
+                    f'{self.name} raising SmartThreadRequestTimedOut waiting '
                     f'for {sorted(work_targets)}')
-                raise SmartThreadJoinTimedOut(
+                raise SmartThreadRequestTimedOut(
                     f'{self.name} timed out waiting for {work_targets}.')
 
             time.sleep(0.2)
@@ -1137,7 +1112,7 @@ class SmartThread:
         Raises:
             SmartThreadRemoteThreadNotAlive: send_msg detected remote
                 thread is not alive.
-            SmartThreadSendMsgTimedOut: send_msg method unable to send
+            SmartThreadRequestTimedOut: send_msg method unable to send
                 the message within the allotted time, most likely
                 because the remote receive queue is full of the
                 maximum number of messages.
@@ -1251,8 +1226,8 @@ class SmartThread:
                                   f'{unreg_timeout_msg}'
                                   f'{fullq_timeout_msg}')
 
-                self.logger.error('Raise SmartThreadSendMsgTimedOut')
-                raise SmartThreadSendMsgTimedOut(
+                self.logger.error('Raise SmartThreadRequestTimedOut')
+                raise SmartThreadRequestTimedOut(
                     f'{self.name} send_msg method unable to send '
                     'the message within the allotted time. ')
 
@@ -1280,7 +1255,7 @@ class SmartThread:
             message unless timeout occurs
 
         Raises:
-            SmartThreadRecvMsgTimedOut: recv_msg processing timed out
+            SmartThreadRequestTimedOut: recv_msg processing timed out
                 waiting for a message to arrive.
             SmartThreadRemoteThreadNotAlive: send_msg detected remote
                 thread is not alive.
@@ -1366,9 +1341,9 @@ class SmartThread:
 
             if sb.timer.is_expired():
                 self.logger.error(
-                    f'{self.name} raising SmartThreadRecvMsgTimedOut '
+                    f'{self.name} raising SmartThreadRequestTimedOut '
                     f'waiting for {remote}')
-                raise SmartThreadRecvMsgTimedOut(
+                raise SmartThreadRequestTimedOut(
                     f'recv_msg {self.name} timed out waiting for message '
                     f'from {remote}.')
 
@@ -1511,7 +1486,7 @@ class SmartThread:
         Raises:
             SmartThreadRemoteThreadNotAlive: resume() detected remote
                 thread is not alive.
-            SmartThreadResumeTimedOut: timed out waiting for targets.
+            SmartThreadRequestTimedOut: timed out waiting for targets.
 
         Notes:
             1) A ``resume()`` request can be done on an event that is not yet
@@ -1690,43 +1665,50 @@ class SmartThread:
 
             # if no progress was made
             if len(work_targets) == num_start_loop_work_targets:
-
                 # make the timeout work_targets visible to test cases
                 self.resume_timeout_names = work_targets
+                remotes_stopped: set[str] = set()
 
-                # If an error should be raised for stopped threads
-                if raise_not_alive:
-                    resume_remotes_stopped: set[str] = set()
-                    for remote in work_targets:
-                        with sel.SELockShare(SmartThread._registry_lock):
+                if raise_not_alive or sb.timer.is_expired():
+                    if self.sync_request:
+                        req_name = 'smart_sync'
+                    else:
+                        req_name = 'smart_resume'
+                    with sel.SELockShare(SmartThread._registry_lock):
+                        for remote in work_targets:
                             if (self._get_status(remote)
                                     == ThreadStatus.Stopped):
-                                resume_remotes_stopped |= {remote}
-                    if resume_remotes_stopped:
-                        if self.sync_request:
-                            resume_or_sync = 'smart_sync'
-                        else:
-                            resume_or_sync = 'smart_resume'
-                        error_msg = (
-                            f'{self.name} raising '
-                            'SmartThreadRemoteThreadNotAlive. '
-                            f'while processing a {resume_or_sync}(), '
-                            f'{self.name} detected that the following '
-                            'threads are stopped and were thus not '
-                            f'resumed: {sorted(resume_remotes_stopped)}.')
-                        self.logger.error(error_msg)
-                        raise SmartThreadRemoteThreadNotAlive(error_msg)
+                                remotes_stopped |= {remote}
 
-                if sb.timer.is_expired():
-                    if self.sync_request:
-                        resume_or_sync = 'smart_sync'
-                    else:
-                        resume_or_sync = 'smart_resume'
-                    error_msg = (f'{self.name} timed out on a '
-                                 f'{resume_or_sync}() request while '
-                                 f'processing threads {sorted(work_targets)}')
+                # If an error should be raised for stopped threads
+                if raise_not_alive and remotes_stopped:
+                    error_msg = (
+                        f'{self.name} raising '
+                        'SmartThreadRemoteThreadNotAlive. '
+                        f'While processing a {req_name}(), '
+                        f'{self.name} detected that the following '
+                        f'threads are stopped: {sorted(remotes_stopped)}.')
                     self.logger.error(error_msg)
-                    raise SmartThreadResumeTimedOut(error_msg)
+                    raise SmartThreadRemoteThreadNotAlive(error_msg)
+
+                # Note that the timer will never be expired if timeout
+                # was not specified either explicitly on the smart_wait
+                # call or via a default timeout established when this
+                # SmartThread was instantiated.
+                if sb.timer.is_expired():
+                    if remotes_stopped:
+                        stopped_msg = (f' Stopped threads: '
+                                       f'{sorted(remotes_stopped)}.')
+                    else:
+                        stopped_msg = ''
+                    error_msg = (f'{self.name} raising '
+                                 'SmartThreadRequestTimedOut. '
+                                 f'{self.name} timed out on a '
+                                 f'{req_name}() request while processing '
+                                 f'threads {sorted(work_targets)}.'
+                                 f'{stopped_msg}')
+                    self.logger.error(error_msg)
+                    raise SmartThreadRequestTimedOut(error_msg)
 
             time.sleep(0.2)
 
@@ -1739,6 +1721,7 @@ class SmartThread:
     ####################################################################
     def smart_sync(self, *,
                    targets: Union[str, set[str], list[str]],
+                   raise_not_alive: bool = True,
                    log_msg: Optional[str] = None,
                    timeout: OptIntFloat = None):
         """Sync up with the remote threads.
@@ -1751,6 +1734,8 @@ class SmartThread:
 
         Args:
             targets: remote threads we will sync with
+            raise_not_alive: specifies whther to raise a not alive error
+                when any of the targets are stopped
             log_msg: log msg for the log
             timeout: number of seconds to allow for sync to happen
 
@@ -2089,86 +2074,54 @@ class SmartThread:
                                     'waiting on the other to resume their '
                                     'wait_event.')
 
-                # Note that the timer will never be expired if timeout
-                # was not specified either explicitly on the smart_wait
-                # call or via a default timeout established when this
-                # SmartThread was instantiated.
-                if sb.timer.is_expired():
-                    if self.sync_request:
-                        wait_or_sync = 'smart_sync'
-                    else:
-                        wait_or_sync = 'smart_wait'
-
-                    remote_is_alive: bool = False
-                    remote_status: ThreadStatus = ThreadStatus.Unregistered
-                    if remote in SmartThread._registry:
-                        remote_is_alive = SmartThread._registry[
-                            remote].thread.is_alive()
-                        remote_status = self._get_status(remote)
-
-                    error_msg = (
-                        f'{self.name} raising SmartThreadSmartWaitTimedOut '
-                        f'waiting for a {wait_or_sync} resume from {remote} '
-                        f'with {remote_is_alive=}, {remote_status=}')
-
-                    local_sb.wait_wait = False
-                    local_sb.deadlock = False
-                    local_sb.wait_timeout_specified = False
-
-                    self.logger.error(error_msg)
-                    raise SmartThreadSmartWaitTimedOut(error_msg)
-
             # if no progress was made
             if len(work_targets) == num_start_loop_work_targets:
 
                 # make the timeout work_targets visible to test cases
                 self.wait_timeout_names = work_targets
+                remotes_stopped: set[str] = set()
 
-                # If an error should be raised for stopped threads
-                if raise_not_alive:
-                    wait_remotes_stopped: set[str] = set()
+                if raise_not_alive or sb.timer.is_expired():
+                    local_sb.wait_wait = False
+                    local_sb.deadlock = False
+                    local_sb.wait_timeout_specified = False
+                    if self.sync_request:
+                        req_name = 'smart_sync'
+                    else:
+                        req_name = 'smart_wait'
                     with sel.SELockShare(SmartThread._registry_lock):
                         for remote in work_targets:
                             if (self._get_status(remote)
                                     == ThreadStatus.Stopped):
-                                wait_remotes_stopped |= {remote}
-                    if wait_remotes_stopped:
-                        local_sb.wait_wait = False
-                        local_sb.deadlock = False
-                        local_sb.wait_timeout_specified = False
-                        if self.sync_request:
-                            wait_or_sync = 'smart_sync'
-                        else:
-                            wait_or_sync = 'smart_wait'
-                        error_msg = (
-                            f'{self.name} raising '
-                            'SmartThreadRemoteThreadNotAlive. '
-                            f'While processing a {wait_or_sync}(), '
-                            f'{self.name} detected that the following '
-                            'threads are stopped and have not performed '
-                            'the required resume, thus preventing the '
-                            'completion of the smart_wait():'
-                            f' {sorted(wait_remotes_stopped)}.')
-                        self.logger.error(error_msg)
-                        raise SmartThreadRemoteThreadNotAlive(error_msg)
+                                remotes_stopped |= {remote}
+                # If an error should be raised for stopped threads
+                if raise_not_alive and remotes_stopped:
+                    error_msg = (
+                        f'{self.name} raising '
+                        'SmartThreadRemoteThreadNotAlive. '
+                        f'While processing a {req_name}(), '
+                        f'{self.name} detected that the following '
+                        f'threads are stopped: {sorted(remotes_stopped)}.')
+                    self.logger.error(error_msg)
+                    raise SmartThreadRemoteThreadNotAlive(error_msg)
 
                 # Note that the timer will never be expired if timeout
                 # was not specified either explicitly on the smart_wait
                 # call or via a default timeout established when this
                 # SmartThread was instantiated.
                 if sb.timer.is_expired():
-                    local_sb.wait_wait = False
-                    local_sb.deadlock = False
-                    local_sb.wait_timeout_specified = False
-                    if self.sync_request:
-                        wait_or_sync = 'smart_sync'
+                    if remotes_stopped:
+                        stopped_msg = f' Stopped threads: {remotes_stopped}.'
                     else:
-                        wait_or_sync = 'smart_wait'
-                    error_msg = (f'{self.name} timed out on a '
-                                 f'{wait_or_sync}() request while processing '
-                                 f'threads {sorted(work_targets)}')
+                        stopped_msg = ''
+                    error_msg = (f'{self.name} raising '
+                                 'SmartThreadRequestTimedOut. '
+                                 f'{self.name} timed out on a '
+                                 f'{req_name}() request while processing '
+                                 f'threads {sorted(work_targets)}.'
+                                 f'{stopped_msg}')
                     self.logger.error(error_msg)
-                    raise SmartThreadWaitTimedOut(error_msg)
+                    raise SmartThreadRequestTimedOut(error_msg)
 
             time.sleep(0.2)
 

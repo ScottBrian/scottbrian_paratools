@@ -1717,12 +1717,14 @@ class Wait(ConfigCmd):
     def __init__(self,
                  cmd_runners: StrOrList,
                  resumers: DictAliveAndStatus,
-                 raise_not_alive: bool,
+                 wait_for: st.WaitFor = st.WaitFor.AllSpecified,
+                 raise_not_alive: bool = True,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
         self.resumers = resumers
+        self.wait_for = wait_for
         self.log_msg = log_msg
         self.raise_not_alive = raise_not_alive
 
@@ -1738,6 +1740,7 @@ class Wait(ConfigCmd):
         self.config_ver.handle_wait(
             cmd_runner=cmd_runner,
             resumers=self.resumers,
+            wait_for=self.wait_for,
             raise_not_alive=self.raise_not_alive,
             log_msg=self.log_msg
         )
@@ -1750,11 +1753,13 @@ class WaitTimeoutFalse(Wait):
     def __init__(self,
                  cmd_runners: StrOrList,
                  resumers: DictAliveAndStatus,
-                 raise_not_alive: bool,
                  timeout: IntOrFloat,
+                 wait_for: st.WaitFor = st.WaitFor.AllSpecified,
+                 raise_not_alive: bool = True,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners,
                          resumers=resumers,
+                         wait_for=wait_for,
                          raise_not_alive=raise_not_alive,
                          log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
@@ -1772,6 +1777,7 @@ class WaitTimeoutFalse(Wait):
         self.config_ver.handle_wait_tof(
             cmd_runner=cmd_runner,
             resumers=self.resumers,
+            wait_for=self.wait_for,
             raise_not_alive=self.raise_not_alive,
             timeout=self.timeout,
             log_msg=self.log_msg)
@@ -1784,12 +1790,14 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
     def __init__(self,
                  cmd_runners: StrOrList,
                  resumers: DictAliveAndStatus,
-                 raise_not_alive: bool,
                  timeout: IntOrFloat,
+                 wait_for: st.WaitFor = st.WaitFor.AllSpecified,
+                 raise_not_alive: bool = True,
                  log_msg: Optional[str] = None
                  ) -> None:
         super().__init__(cmd_runners=cmd_runners,
                          resumers=resumers,
+                         wait_for=wait_for,
                          raise_not_alive=raise_not_alive,
                          timeout=timeout,
                          log_msg=log_msg)
@@ -1804,6 +1812,7 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
         self.config_ver.handle_wait_tot(
             cmd_runner=cmd_runner,
             resumers=self.resumers,
+            wait_for=self.wait_for,
             raise_not_alive=self.raise_not_alive,
             timeout=self.timeout,
             log_msg=self.log_msg)
@@ -9416,9 +9425,8 @@ class ConfigVerifier:
                     cmd_runner: str,
                     targets: DictAliveAndStatus,
                     raise_not_alive: bool,
-
                     log_msg: Optional[str] = None) -> None:
-        """Set the status for a thread that was started.
+        """Issue smart_sync.
 
         Args:
             cmd_runner: the names of the thread that did the stop
@@ -9528,6 +9536,7 @@ class ConfigVerifier:
     def handle_wait(self,
                     cmd_runner: str,
                     resumers: DictAliveAndStatus,
+                    wait_for: st.WaitFor,
                     raise_not_alive: bool,
                     log_msg: Optional[str] = None) -> None:
         """Wait for a resume.
@@ -9535,6 +9544,7 @@ class ConfigVerifier:
         Args:
             cmd_runner: thread doing the wait
             resumers: threads doing the resume
+            wait_for: specifies how many resumers to wait for
             raise_not_alive: specifies whether to raise error for a
                 stopped resumer
             log_msg: optional log message to specify on the smart_wait
@@ -9559,7 +9569,8 @@ class ConfigVerifier:
                     and (resumers[resumer].status == st.ThreadStatus.Stopped)):
                 with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                     self.all_threads[cmd_runner].smart_wait(
-                        resumer=resumer,
+                        remotes=resumer,
+                        wait_for=wait_for,
                         raise_not_alive=raise_not_alive,
                         log_msg=log_msg)
 
@@ -9585,7 +9596,8 @@ class ConfigVerifier:
 
             else:
                 self.all_threads[cmd_runner].smart_wait(
-                    resumer=resumer,
+                    remotes=resumer,
+                    wait_for=wait_for,
                     raise_not_alive=raise_not_alive,
                     log_msg=log_msg)
 
@@ -9627,6 +9639,7 @@ class ConfigVerifier:
     def handle_wait_tof(self,
                         cmd_runner: str,
                         resumers: DictAliveAndStatus,
+                        wait_for: st.WaitFor,
                         raise_not_alive: bool,
                         timeout: IntOrFloat,
                         log_msg: Optional[str] = None) -> None:
@@ -9635,6 +9648,7 @@ class ConfigVerifier:
         Args:
             cmd_runner: thread doing the wait
             resumers: threads doing the resume
+            wait_for: specifies how many resumers to wait for
             raise_not_alive: specifies whether to raise error for a
                 stopped resumer
             timeout: timeout value to specify on the smart_wait
@@ -9658,7 +9672,8 @@ class ConfigVerifier:
                     and (resumers[resumer].status == st.ThreadStatus.Stopped)):
                 with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                     self.all_threads[cmd_runner].smart_wait(
-                        resumer=resumer,
+                        remotes=resumer,
+                        wait_for=wait_for,
                         raise_not_alive=raise_not_alive,
                         timeout=timeout,
                         log_msg=log_msg
@@ -9686,7 +9701,8 @@ class ConfigVerifier:
                     log_level=logging.ERROR)
             else:
                 self.all_threads[cmd_runner].smart_wait(
-                    resumer=resumer,
+                    remotes=resumer,
+                    wait_for=wait_for,
                     raise_not_alive=raise_not_alive,
                     timeout=timeout,
                     log_msg=log_msg
@@ -9729,7 +9745,10 @@ class ConfigVerifier:
     ####################################################################
     def handle_wait_tot(self,
                         cmd_runner: str,
-                        resumers: DictAliveAndStatus,
+                        resumers: list[str],
+                        stopped_remotes: set[str],
+                        timeout_remotes: set[str],
+                        wait_for: st.WaitFor,
                         raise_not_alive: bool,
                         timeout: IntOrFloat,
                         log_msg: Optional[str] = None
@@ -9739,6 +9758,9 @@ class ConfigVerifier:
         Args:
             cmd_runner: thread doing the wait
             resumers: threads doing the resume
+            stopped_remotes: names of threads that are stopped
+            timeout_remotes: names of remotes that will cause timeout
+            wait_for: specifies how many resumers to wait for
             raise_not_alive: specifies whether to raise error for a
                 stopped resumer
             timeout: timeout value to specify on the smart_wait
@@ -9752,67 +9774,73 @@ class ConfigVerifier:
             name='handle_wait',
             seq='test_smart_thread.py::ConfigVerifier.handle_wait')
 
-        for resumer in resumers.keys():
-            if (raise_not_alive
-                    and (resumers[resumer].status == st.ThreadStatus.Stopped)):
-                with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
-                    self.all_threads[cmd_runner].smart_wait(
-                        resumer=resumer,
-                        raise_not_alive=raise_not_alive,
-                        timeout=timeout,
-                        log_msg=log_msg
-                    )
+        if raise_not_alive and stopped_remotes:
+            with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
+                self.all_threads[cmd_runner].smart_wait(
+                    remotes=resumers,
+                    wait_for=wait_for,
+                    raise_not_alive=raise_not_alive,
+                    timeout=timeout,
+                    log_msg=log_msg
+                )
 
-                enter_exit = ('entry', )
-                if log_msg:
-                    log_msg_2 = (
-                        f'{self.log_ver.get_call_seq("handle_wait_tot")} ')
-                    log_msg_3 = re.escape(f'{log_msg}')
-                    for enter_exit in enter_exit:
-                        log_msg_1 = re.escape(
-                            f'smart_wait() {enter_exit}: '
-                            f'{cmd_runner} to wait for {resumer} with '
-                            f'{timeout=}. ')
+            enter_exit = ('entry', )
+            if log_msg:
+                log_msg_2 = (
+                    f'{self.log_ver.get_call_seq("handle_wait_tot")} ')
+                log_msg_3 = re.escape(f'{log_msg}')
+                for enter_exit in enter_exit:
+                    log_msg_1 = re.escape(
+                        f'smart_wait() {enter_exit}: '
+                        f'{cmd_runner} to wait for {resumer} with '
+                        f'{timeout=}. ')
 
-                        self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
+                    self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
-                self.add_log_msg(
-                    new_log_msg=re.escape(
-                        f'{cmd_runner} raising '
-                        'SmartThreadRemoteThreadNotAlive. '
-                        f'{cmd_runner} smart_wait is not resumed and '
-                        f'detected thread {resumer=} has ended.'),
-                    log_level=logging.ERROR)
+            self.add_log_msg(
+                new_log_msg=re.escape(
+                    f'{cmd_runner} raising '
+                    'SmartThreadRemoteThreadNotAlive. '
+                    f'While processing a smart_wait(), '
+                    f'{cmd_runner} detected that the following '
+                    f'threads are stopped: {sorted(stopped_remotes)}.'),
+                log_level=logging.ERROR)
+        else:
+            with pytest.raises(st.SmartThreadRequestTimedOut):
+                self.all_threads[cmd_runner].smart_wait(
+                    remotes=resumers,
+                    wait_for=wait_for,
+                    raise_not_alive=raise_not_alive,
+                    timeout=timeout,
+                    log_msg=log_msg
+                )
+
+            enter_exit = ('entry', )
+            if log_msg:
+                log_msg_2 = (
+                    f'{self.log_ver.get_call_seq("handle_wait_tot")} ')
+                log_msg_3 = re.escape(f'{log_msg}')
+                for enter_exit in enter_exit:
+                    log_msg_1 = re.escape(
+                        f'smart_wait() {enter_exit}: '
+                        f'{cmd_runner} to wait for {resumer} with '
+                        f'{timeout=}. ')
+
+                    self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
+
+            if stopped_remotes:
+                stopped_msg = (f' Stopped threads: '
+                               f'{sorted(stopped_remotes)}.')
             else:
-                with pytest.raises(st.SmartThreadSmartWaitTimedOut):
-                    self.all_threads[cmd_runner].smart_wait(
-                        resumer=resumer,
-                        raise_not_alive=raise_not_alive,
-                        timeout=timeout,
-                        log_msg=log_msg
-                    )
-
-                resumer_is_alive = resumers[resumer].is_alive
-                resumer_status = resumers[resumer].status
-
-                enter_exit = ('entry', )
-                if log_msg:
-                    log_msg_2 = (
-                        f'{self.log_ver.get_call_seq("handle_wait_tot")} ')
-                    log_msg_3 = re.escape(f'{log_msg}')
-                    for enter_exit in enter_exit:
-                        log_msg_1 = re.escape(
-                            f'smart_wait() {enter_exit}: '
-                            f'{cmd_runner} to wait for {resumer} with '
-                            f'{timeout=}. ')
-
-                        self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
-
-                self.add_log_msg(re.escape(
-                    f'{cmd_runner} raising SmartThreadSmartWaitTimedOut '
-                    f'waiting for a smart_wait resume from {resumer} with '
-                    f'{resumer_is_alive=}, {resumer_status=}'),
-                    log_level=logging.ERROR)
+                stopped_msg = ''
+            self.add_log_msg(re.escape(
+                 f'{cmd_runner} raising '
+                 'SmartThreadRequestTimedOut. '
+                 f'{cmd_runner} timed out on a '
+                 f'smart_wait() request while processing '
+                 f'threads {sorted(timeout_remotes)}.'
+                 f'{stopped_msg}'),
+                log_level=logging.ERROR)
 
         self.log_test_msg(f'{cmd_runner=} handle_wait_tot exit for '
                           f'{resumers=}, {raise_not_alive=}, {timeout=}')
