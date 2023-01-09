@@ -1530,10 +1530,12 @@ class SmartThread:
             sb = self._common_setup(targets=targets, timeout=timeout)
 
         if log_msg and self.debug_logging_enabled:
-            code_msg = f' with code: {code}.' if code else ''
+            code_msg = f' with code: {code}' if code else ''
+            comma_msg = ',' if code and timeout else ''
+            timeout_msg = f' with {timeout=}' if timeout else ''
             exit_log_msg = self._issue_entry_log_msg(
                 prefix=f'{self.name} to resume targets '
-                       f'{sb.targets}{code_msg}.',
+                       f'{sb.targets}{code_msg}{comma_msg}{timeout_msg}.',
                 log_msg=log_msg)
         else:
             exit_log_msg = None
@@ -1792,9 +1794,10 @@ class SmartThread:
         # a sync_request passes the targets and timeout via
         # self.setup_block to resume and wait
 
-        self.smart_resume(targets='')
+        self.smart_resume(targets='',
+                          raise_not_alive=raise_not_alive)
 
-        self.smart_wait()
+        self.smart_wait(raise_not_alive=raise_not_alive)
 
         self.sync_request = False
         if exit_log_msg:

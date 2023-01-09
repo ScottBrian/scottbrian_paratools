@@ -9421,16 +9421,20 @@ class ConfigVerifier:
     ####################################################################
     # handle_stopped_log_msg
     ####################################################################
-    def handle_sync(self,
-                    cmd_runner: str,
-                    targets: DictAliveAndStatus,
-                    raise_not_alive: bool,
-                    log_msg: Optional[str] = None) -> None:
+    def handle_sync_tof(self,
+                        cmd_runner: str,
+                        targets: list[str],
+                        stopped_remotes: set[str],
+                        timeout: IntOrFloat,
+                        raise_not_alive: bool,
+                        log_msg: Optional[str] = None) -> None:
         """Issue smart_sync.
 
         Args:
             cmd_runner: the names of the thread that did the stop
             targets: name of remotes to sync with
+            stopped_remotes: remotes that will cause a not alive error
+            timeout: value to use for timeout
             raise_not_alive: specifies whether to raise not alive error
             log_msg: log msg to be specified with the sync request
         """
@@ -9438,96 +9442,157 @@ class ConfigVerifier:
                           f'{targets=}, {raise_not_alive=}')
 
         self.log_ver.add_call_seq(
-            name='handle_sync',
-            seq='test_smart_thread.py::ConfigVerifier.handle_sync')
-
-        all_targets: set[str] = set()
-        non_stopped_targets: set[str] = set()
-        stopped_targets: set[str] = set()
-        for target in targets.keys():
-            all_targets |= target
-            if targets[target].status == st.ThreadStatus.Stopped:
-                stopped_targets |= {target}
-            else:
-                non_stopped_targets |= {target}
+            name='handle_sync_tof',
+            seq='test_smart_thread.py::ConfigVerifier.handle_sync_tof')
 
         enter_exit = ('entry', 'exit')
-        if raise_not_alive and stopped_targets:
+        if raise_not_alive and stopped_remotes:
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 self.all_threads[cmd_runner].smart_sync(
-                    targets=all_targets,
+                    targets=targets,
                     raise_not_alive=raise_not_alive,
                     log_msg=log_msg)
 
-                enter_exit = ('entry',)
-                timeout = None
-                timeout_msg = f' with {timeout=}' if timeout else ''
-                if log_msg:
-                    log_msg_2 = (
-                        f'{self.log_ver.get_call_seq("handle_sync")} ')
-                    log_msg_3 = re.escape(f'{log_msg}')
-                    for enter_exit in enter_exit:
-                        log_msg_1 = re.escape(
-                            f'smart_sync() {enter_exit}: '
-                            f'{cmd_runner} to sync with {all_targets}'
-                            f'{timeout_msg}.')
+            enter_exit = ('entry', )
+            error_msg = (
+                f'{cmd_runner} raising '
+                'SmartThreadRemoteThreadNotAlive. '
+                f'While processing a smart_sync(), '
+                f'{cmd_runner} detected that the following '
+                f'threads are stopped: {sorted(stopped_remotes)}.')
+            self.add_log_msg(new_log_msg=re.escape(error_msg),
+                             log_level=logging.ERROR)
 
-                        self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
+        else:
+            self.all_threads[cmd_runner].smart_sync(
+                targets=targets,
+                timeout=timeout,
+                raise_not_alive=raise_not_alive,
+                log_msg=log_msg)
 
-                error_msg = (
-                    f'{cmd_runner} raising '
-                    'SmartThreadRemoteThreadNotAlive. '
-                    'while processing a smart_resume(), '
-                    f'{cmd_runner} detected that the following '
-                    'threads are stopped and were thus not '
-                    f'resumed: {sorted(stopped_targets)}.')
-                self.add_log_msg(new_log_msg=re.escape(error_msg),
-                                 log_level=logging.ERROR)
-
+            self.monitor_event.set()
+            for target in targets:
                 self.add_log_msg(
-                    new_log_msg=re.escape(
-                        f'{cmd_runner} raising '
-                        'SmartThreadRemoteThreadNotAlive. '
-                        f'{cmd_runner} smart_wait is not resumed and '
-                        f'detected thread {resumer=} has ended.'),
-                    log_level=logging.ERROR)
-
-            else:
-                self.all_threads[cmd_runner].smart_wait(
-                    resumer=resumer,
-                    raise_not_alive=raise_not_alive,
-                    log_msg=log_msg)
-
-                enter_exit = ('entry', 'exit')
-                if log_msg:
-                    log_msg_2 = (
-                        f'{self.log_ver.get_call_seq("handle_sync")} ')
-                    log_msg_3 = re.escape(f'{log_msg}')
-                    for enter_exit in enter_exit:
-                        log_msg_1 = re.escape(
-                            f'smart_wait() {enter_exit}: '
-                            f'{cmd_runner} to wait for {resumer}. ')
-
-                        self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
-
-                self.monitor_event.set()
-                self.add_log_msg(
-                    new_log_msg=(f'{cmd_runner} smart_wait resumed by '
-                                 f'{resumer}'),
+                    new_log_msg=(f'{cmd_runner} smart_sync resumed by '
+                                 f'{target}'),
                     log_level=logging.INFO)
 
-        if non_stopped_targets:
+        if log_msg:
+            timeout_msg = f' with {timeout=}' if timeout else ''
+            log_msg_2 = (
+                f'{self.log_ver.get_call_seq("handle_sync_tof")} ')
+            log_msg_3 = re.escape(f'{log_msg}')
+            for enter_exit in enter_exit:
+                log_msg_1 = re.escape(
+                    f'smart_sync() {enter_exit}: '
+                    f'{cmd_runner} to sync with {targets}'
+                    f'{timeout_msg}.')
+
+                self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
+
+        if not (raise_not_alive and stopped_remotes):
             with self.ops_lock:
                 self.cmd_waiting_event_items[cmd_runner] = threading.Event()
             self.log_test_msg(
-                f'{cmd_runner=} handle_sync waiting for monitor')
+                f'{cmd_runner=} handle_sync_tof waiting for monitor')
             self.monitor_event.set()
             self.cmd_waiting_event_items[cmd_runner].wait()
             with self.ops_lock:
-                # del self.recv_msg_event_items[cmd_runner]
                 del self.cmd_waiting_event_items[cmd_runner]
 
-        self.log_test_msg(f'{cmd_runner=} handle_sync exit for '
+        self.log_test_msg(f'{cmd_runner=} handle_sync_tof exit for '
+                          f'{targets=}, {raise_not_alive=}')
+
+    ####################################################################
+    # handle_stopped_log_msg
+    ####################################################################
+    def handle_sync_tot(self,
+                        cmd_runner: str,
+                        targets: list[str],
+                        stopped_remotes: set[str],
+                        timeout_remotes: set[str],
+                        timeout: IntOrFloat,
+                        raise_not_alive: bool,
+                        log_msg: Optional[str] = None) -> None:
+        """Issue smart_sync.
+
+        Args:
+            cmd_runner: the names of the thread that did the stop
+            targets: name of remotes to sync with
+            stopped_remotes: remotes that will cause a not alive error
+            timeout_remotes: remote that will cause a timeout
+            timeout: value to use for timeout
+            raise_not_alive: specifies whether to raise not alive error
+            log_msg: log msg to be specified with the sync request
+        """
+        self.log_test_msg(f'{cmd_runner=} handle_sync_tot entry for '
+                          f'{targets=}, {raise_not_alive=}')
+
+        self.log_ver.add_call_seq(
+            name='handle_sync_tot',
+            seq='test_smart_thread.py::ConfigVerifier.handle_sync_tot')
+
+        enter_exit = ('entry', 'exit')
+        if raise_not_alive and stopped_remotes:
+            with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
+                self.all_threads[cmd_runner].smart_sync(
+                    targets=targets,
+                    raise_not_alive=raise_not_alive,
+                    timeout=timeout,
+                    log_msg=log_msg)
+
+            error_msg = (
+                f'{cmd_runner} raising '
+                'SmartThreadRemoteThreadNotAlive. '
+                f'While processing a smart_sync(), '
+                f'{cmd_runner} detected that the following '
+                f'threads are stopped: {sorted(stopped_remotes)}.')
+            self.add_log_msg(new_log_msg=re.escape(error_msg),
+                             log_level=logging.ERROR)
+
+        else:
+            with pytest.raises(st.SmartThreadRequestTimedOut):
+                self.all_threads[cmd_runner].smart_sync(
+                    targets=targets,
+                    timeout=timeout,
+                    raise_not_alive=raise_not_alive,
+                    log_msg=log_msg)
+
+            if stopped_remotes:
+                stopped_msg = (f' Stopped threads: '
+                               f'{sorted(stopped_remotes)}.')
+            else:
+                stopped_msg = ''
+            self.add_log_msg(re.escape(
+                f'{cmd_runner} raising '
+                'SmartThreadRequestTimedOut. '
+                f'{cmd_runner} timed out on a '
+                f'smart_sync() request while processing '
+                f'threads {sorted(timeout_remotes)}.'
+                f'{stopped_msg}'),
+                log_level=logging.ERROR)
+
+            # self.monitor_event.set()
+            # self.add_log_msg(
+            #     new_log_msg=(f'{cmd_runner} smart_wait resumed by '
+            #                  f'{resumer}'),
+            #     log_level=logging.INFO)
+
+        enter_exit = ('entry',)
+        if log_msg:
+            timeout_msg = f' with {timeout=}' if timeout else ''
+            log_msg_2 = (
+                f'{self.log_ver.get_call_seq("handle_sync_tot")} ')
+            log_msg_3 = re.escape(f'{log_msg}')
+            for enter_exit in enter_exit:
+                log_msg_1 = re.escape(
+                    f'smart_sync() {enter_exit}: '
+                    f'{cmd_runner} to sync with {targets}'
+                    f'{timeout_msg}.')
+
+                self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
+
+        self.log_test_msg(f'{cmd_runner=} handle_sync_tot exit for '
                           f'{targets=}, {raise_not_alive=}')
 
     ####################################################################
@@ -9627,7 +9692,6 @@ class ConfigVerifier:
             self.monitor_event.set()
             self.cmd_waiting_event_items[cmd_runner].wait()
             with self.ops_lock:
-                # del self.recv_msg_event_items[cmd_runner]
                 del self.cmd_waiting_event_items[cmd_runner]
 
         self.log_test_msg(f'{cmd_runner=} handle_wait exit for '
