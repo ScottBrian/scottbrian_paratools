@@ -75,6 +75,8 @@ from scottbrian_locking import se_lock as sel
 
 IntFloat: TypeAlias = Union[int, float]
 OptIntFloat: TypeAlias = Optional[IntFloat]
+StrListStrSetStr: TypeAlias = Union[str, list[str], set[str]]
+OptStrListStrSetStr: TypeAlias = Optional[StrListStrSetStr]
 
 
 ########################################################################
@@ -1809,7 +1811,7 @@ class SmartThread:
     # wait
     ####################################################################
     def smart_wait(self, *,
-                   remotes: Optional[str, list[str], set[str]] = None,
+                   remotes: OptStrListStrSetStr = None,
                    wait_for: WaitFor = WaitFor.AllSpecified,
                    log_msg: Optional[str] = None,
                    timeout: OptIntFloat = None,

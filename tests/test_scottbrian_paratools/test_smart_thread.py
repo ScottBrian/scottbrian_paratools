@@ -1231,16 +1231,42 @@ class StopThread(ConfigCmd):
 class Sync(ConfigCmd):
     def __init__(self,
                  cmd_runners: StrOrList,
-                 targets: DictAliveAndStatus,
-                 raise_not_alive: bool = True) -> None:
+                 targets: StrOrList,
+                 timeout: IntOrFloat = 0,
+                 timeout_remotes: Optional[set[str]] = None,
+                 stopped_remotes: Optional[set[str]] = None,
+                 where_error: WhereError = WhereError.NoError,
+                 raise_not_alive: bool = True,
+                 log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
+        if isinstance(targets, str):
+            targets = [targets]
         self.targets = targets
+
+        self.timeout = timeout
+
+        if timeout_remotes:
+            self.timeout_remotes = timeout_remotes
+        else:
+            self.timeout_remotes = set()
+
+        if stopped_remotes:
+            self.stopped_remotes = stopped_remotes
+        else:
+            self.stopped_remotes = set()
+
+        self.where_error = where_error
 
         self.raise_not_alive = raise_not_alive
 
+        self.log_msg = log_msg
+
         self.arg_list += ['targets',
+                          'timeout',
+                          'stopped_remotes',
+                          'timeout_remotes',
                           'raise_not_alive']
 
     def run_process(self, cmd_runner: str) -> None:
@@ -1251,7 +1277,13 @@ class Sync(ConfigCmd):
         """
         self.config_ver.handle_sync(cmd_runner=cmd_runner,
                                     targets=self.targets,
-                                    raise_not_alive=self.raise_not_alive)
+                                    timeout=self.timeout,
+                                    timeout_remotes=self.timeout_remotes,
+                                    stopped_remotes=self.stopped_remotes,
+                                    timeout_type=TimeoutType.TimeoutNone,
+                                    where_error=self.where_error,
+                                    raise_not_alive=self.raise_not_alive,
+                                    log_msg=self.log_msg)
 
 
 ########################################################################
@@ -1260,15 +1292,22 @@ class Sync(ConfigCmd):
 class SyncTimeoutFalse(Sync):
     def __init__(self,
                  cmd_runners: StrOrList,
-                 targets: DictAliveAndStatus,
+                 targets: StrOrList,
                  timeout: IntOrFloat,
-                 raise_not_alive: bool = True) -> None:
+                 stopped_remotes: Optional[set[str]] = None,
+                 timeout_remotes: Optional[set[str]] = None,
+                 where_error: WhereError = WhereError.NoError,
+                 raise_not_alive: bool = True,
+                 log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners,
                          targets=targets,
-                         raise_not_alive=raise_not_alive)
+                         timeout=timeout,
+                         timeout_remotes=timeout_remotes,
+                         stopped_remotes=stopped_remotes,
+                         where_error=where_error,
+                         raise_not_alive=raise_not_alive,
+                         log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
-
-        self.timeout = timeout
 
         self.arg_list += ['timeout']
 
@@ -1278,9 +1317,15 @@ class SyncTimeoutFalse(Sync):
         Args:
             cmd_runner: name of thread running the command
         """
-        self.config_ver.handle_sync_tof(cmd_runner=cmd_runner,
-                                        targets=self.targets,
-                                        timeout=self.timeout)
+        self.config_ver.handle_sync(cmd_runner=cmd_runner,
+                                    targets=self.targets,
+                                    timeout=self.timeout,
+                                    timeout_remotes=self.timeout_remotes,
+                                    stopped_remotes=self.stopped_remotes,
+                                    timeout_type=TimeoutType.TimeoutFalse,
+                                    where_error=self.where_error,
+                                    raise_not_alive=self.raise_not_alive,
+                                    log_msg=self.log_msg)
 
 
 ########################################################################
@@ -1289,12 +1334,18 @@ class SyncTimeoutFalse(Sync):
 class SyncTimeoutTrue(SyncTimeoutFalse):
     def __init__(self,
                  cmd_runners: StrOrList,
-                 targets: DictAliveAndStatus,
+                 targets: StrOrList,
                  timeout: IntOrFloat,
+                 timeout_remotes: set[str],
+                 stopped_remotes: Optional[set[str]] = None,
+                 where_error: WhereError = WhereError.NoError,
                  raise_not_alive: bool = True) -> None:
         super().__init__(cmd_runners=cmd_runners,
                          targets=targets,
                          timeout=timeout,
+                         timeout_remotes=timeout_remotes,
+                         stopped_remotes=stopped_remotes,
+                         where_error=where_error,
                          raise_not_alive=raise_not_alive)
         self.specified_args = locals()  # used for __repr__
 
@@ -1304,9 +1355,15 @@ class SyncTimeoutTrue(SyncTimeoutFalse):
         Args:
             cmd_runner: name of thread running the command
         """
-        self.config_ver.handle_sync_tot(cmd_runner=cmd_runner,
-                                        targets=self.targets,
-                                        timeout=self.timeout)
+        self.config_ver.handle_sync(cmd_runner=cmd_runner,
+                                    targets=self.targets,
+                                    timeout=self.timeout,
+                                    timeout_remotes=self.timeout_remotes,
+                                    stopped_remotes=self.stopped_remotes,
+                                    timeout_type=TimeoutType.TimeoutTrue,
+                                    where_error=self.where_error,
+                                    raise_not_alive=self.raise_not_alive,
+                                    log_msg=self.log_msg)
 
 
 ########################################################################
@@ -3623,6 +3680,7 @@ class CmdWaitingLogSearchItem(LogSearchItem):
                                    '|handle_recv'
                                    '|handle_recv_tof'
                                    '|handle_recv_tot'
+                                   '|handle_sync'
                                    '|handle_wait'
                                    '|handle_wait_tof'
                                    '|unregister_threads)')
@@ -7621,7 +7679,10 @@ class ConfigVerifier:
         ################################################################
         self.add_cmd(
             Sync(cmd_runners='beta',
-                 targets=['beta', 'charlie']))
+                 targets=['charlie']))
+        self.add_cmd(
+            Sync(cmd_runners='charlie',
+                 targets=['beta']))
 
         ################################################################
         # stop all threads
@@ -9430,9 +9491,9 @@ class ConfigVerifier:
     def handle_sync(self,
                     cmd_runner: str,
                     targets: list[str],
-                    stopped_remotes: set[str],
-                    timeout_remotes: set[str],
                     timeout: IntOrFloat,
+                    timeout_remotes: set[str],
+                    stopped_remotes: set[str],
                     timeout_type: TimeoutType,
                     where_error: WhereError,
                     raise_not_alive: bool,
@@ -9442,9 +9503,9 @@ class ConfigVerifier:
         Args:
             cmd_runner: the names of the thread that did the stop
             targets: name of remotes to sync with
-            stopped_remotes: remotes that will cause a not alive error
             timeout: value to use for timeout
             timeout_remotes: names of threads that cause timeout
+            stopped_remotes: remotes that will cause a not alive error
             timeout_type: specifies whether timeout is None, False, or
                 True
             where_error: specifies whether an error occurs in resume or
@@ -9560,7 +9621,7 @@ class ConfigVerifier:
             with self.ops_lock:
                 self.cmd_waiting_event_items[cmd_runner] = threading.Event()
             self.log_test_msg(
-                f'{cmd_runner=} handle_sync_tof waiting for monitor')
+                f'{cmd_runner=} handle_sync waiting for monitor')
             self.monitor_event.set()
             self.cmd_waiting_event_items[cmd_runner].wait()
             with self.ops_lock:
