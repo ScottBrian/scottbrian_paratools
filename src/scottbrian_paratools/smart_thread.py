@@ -1924,7 +1924,8 @@ class SmartThread:
         if log_msg and self.debug_logging_enabled:
             timeout_msg = f' with {timeout=}' if timeout else ''
             exit_log_msg = self._issue_entry_log_msg(
-                prefix=f'{self.name} to wait for {sb.targets}{timeout_msg}.',
+                prefix=f'{self.name} to wait for {sorted(sb.targets)}'
+                       f'{timeout_msg}.',
                 log_msg=log_msg)
         else:
             exit_log_msg = None
