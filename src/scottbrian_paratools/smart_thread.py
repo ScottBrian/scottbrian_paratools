@@ -244,19 +244,13 @@ PairStatus = Enum('PairStatus',
 ########################################################################
 # WaitFor Class
 # Used on the smart_wait to specify whether to wait for:
-#     AllSpecified: every remote specified in the remotes argument must
+#     All: every remote specified in the remotes argument must
 #         do a resume to complete the wait
-#     AllCurrentConfig: every remote in the current configuration must
-#         do a resume to complete the wait
-#     AnySpecified: any remote that does a resume will complete the wait
-#     AnyCurrentConfig: any remote in the current configuration that
-#         does a resume will complete the wait
+#     Any: any remote that does a resume will complete the wait
 ########################################################################
 class WaitFor(Enum):
-    AllSpecified = auto()
-    AllCurrentConfig = auto()
-    AnySpecified = auto()
-    AnyCurrentConfig = auto()
+    All = auto()
+    Any = auto()
 
 
 ########################################################################
@@ -1811,8 +1805,8 @@ class SmartThread:
     # wait
     ####################################################################
     def smart_wait(self, *,
-                   remotes: OptStrListStrSetStr = None,
-                   wait_for: WaitFor = WaitFor.AllSpecified,
+                   remotes: StrListStrSetStr = None,
+                   wait_for: WaitFor = WaitFor.All,
                    log_msg: Optional[str] = None,
                    timeout: OptIntFloat = None,
                    raise_not_alive: bool = True) -> None:
@@ -1895,26 +1889,12 @@ class SmartThread:
             threshold_completion_num = 0
         else:
             self.req_name = 'smart_wait'
-            if (remotes
-                    and (wait_for == WaitFor.AllSpecified
-                         or wait_for == WaitFor.AnySpecified)):
-                remotes_to_use = remotes
-            elif (not remotes
-                  and (wait_for == WaitFor.AllCurrentConfig
-                       or wait_for == WaitFor.AnyCurrentConfig)):
-                remotes_to_use = set(SmartThread._registry.keys())
-            else:
-                raise SmartThreadInvalidInput(
-                    f'A smart_wait() request detected invalid input: '
-                    f'the specification of {remotes=} with a specification '
-                    f'of {wait_for=} in not valid.')
-            sb = self._common_setup(targets=remotes_to_use, timeout=timeout)
+            sb = self._common_setup(targets=remotes, timeout=timeout)
 
-            if (wait_for == WaitFor.AllSpecified
-                    or wait_for == WaitFor.AllCurrentConfig):
+            if wait_for == WaitFor.All:
                 threshold_completion_num = 0
             else:
-                threshold_completion_num = len(remotes_to_use) - 1
+                threshold_completion_num = len(sb.targets) - 1
 
         if sb.timer.remaining_time():
             timeout_specified = True
