@@ -30,7 +30,7 @@ The ThreadPair class is used as a base class for SmartEvent and ThreadComm.
 >>> ml_msg = ShareMsg(name='alpha')
 >>> f1_thread = threading.Thread(target=f1)
 >>> print('alpha about to start the beta thread')
->>> f1_thread.start()  # start f1 beta
+>>> f1_thread.smart_start()  # start f1 beta
 >>> ml_msg.pair_with(remote_name='beta')
 >>> time.sleep(2)  # give beta time to give message
 >>> print(f'message from f1 beta is {ml_msg.get_msg()}')
@@ -450,10 +450,10 @@ class ThreadPair:
 
         >>> a_smart_event = ThreadPair(name='alpha')
         >>> f1_thread = threading.Thread(target=f1)
-        >>> f1_thread.start()
+        >>> f1_thread.smart_start()
         >>> a_smart_event.pair_with(remote_name='beta')
         >>> a_smart_event.resume()
-        >>> f1_thread.join()
+        >>> f1_thread.smart_join()
 
         """
         start_time = time.time()  # start the timeout clock

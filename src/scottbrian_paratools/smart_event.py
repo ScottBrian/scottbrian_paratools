@@ -54,7 +54,7 @@ request which now places both threads in a deadlock. When this happens, a
 >>> smart_event = SmartEvent(name='alpha')
 >>> f1_thread = threading.Thread(target=f1)
 >>> print('alpha about to start the beta thread')
->>> f1_thread.start()  # give beta a task to do
+>>> f1_thread.smart_start()  # give beta a task to do
 >>> smart_event.pair_with(remote_name='beta')
 >>> time.sleep(2)  # simulate doing some work
 >>> print('alpha about to wait for beta to complete its work')
@@ -513,11 +513,11 @@ class SmartEvent(ThreadPair):
 
         >>> a_smart_event = SmartEvent(name='alpha')
         >>> f1_thread = threading.Thread(target=f1)
-        >>> f1_thread.start()
+        >>> f1_thread.smart_start()
         >>> a_smart_event.pair_with(remote_name='beta')
         >>> print('mainline about to resume f1 with a code of 42')
         >>> a_smart_event.resume(code=42)
-        >>> f1_thread.join()
+        >>> f1_thread.smart_join()
         f1 beta entered
         f1 about to wait
         mainline about to resume f1 with a code of 42
@@ -592,10 +592,10 @@ class SmartEvent(ThreadPair):
 
         >>> a_smart_event = SmartEvent(name='alpha')
         >>> f1_thread = threading.Thread(target=f1)
-        >>> f1_thread.start()
+        >>> f1_thread.smart_start()
         >>> a_smart_event.pair_with(remote_name='beta')
         >>> a_smart_event.resume()
-        >>> f1_thread.join()
+        >>> f1_thread.smart_join()
 
         """
         caller_info = ''
@@ -671,10 +671,10 @@ class SmartEvent(ThreadPair):
 
         >>> a_smart_event = SmartEvent(name='alpha')
         >>> f1_thread = threading.Thread(target=f1)
-        >>> f1_thread.start()
+        >>> f1_thread.smart_start()
         >>> a_smart_event.pair_with(remote_name='beta')
         >>> a_smart_event.resume()
-        >>> f1_thread.join()
+        >>> f1_thread.smart_join()
 
         """
         start_time = time.time()  # start the clock
@@ -790,7 +790,8 @@ class SmartEvent(ThreadPair):
               seconds.
 
         Raises:
-            SmartEventConflictDeadlockDetected: A ``sync()`` request was made by one
+            SmartEventConflictDeadlockDetected: A ``sync()`` request was
+            made by one
                                         thread and a ``wait()`` request was
                                         made by the other thread.
 
@@ -799,7 +800,8 @@ class SmartEvent(ThreadPair):
                specified, and the other thread makes a ``wait()`` request to
                an event that was not **pre-resumed**, also without **timeout**
                specified, then both threads will recognize and raise a
-               **SmartEventConflictDeadlockDetected** error. This is needed since
+               **SmartEventConflictDeadlockDetected** error. This is needed
+               since
                neither the ``sync()`` request nor the ``wait()`` request has
                any chance of completing. The ``sync()`` request is waiting for
                a matching ``sync()`` request and the ``wait()`` request is
@@ -819,10 +821,10 @@ class SmartEvent(ThreadPair):
 
         >>> smart_event = SmartEvent(name='alpha')
         >>> f1_thread = threading.Thread(target=f1, args=(smart_event,))
-        >>> f1_thread.start()
+        >>> f1_thread.smart_start()
         >>> smart_event.pair_with(remote_name='beta')
         >>> smart_event.sync()
-        >>> f1_thread.join()
+        >>> f1_thread.smart_join()
 
         """
         self.verify_current_remote()
@@ -932,9 +934,11 @@ class SmartEvent(ThreadPair):
               seconds.
 
         Raises:
-            SmartEventWaitDeadlockDetected: Both threads are deadlocked, each waiting
+            SmartEventWaitDeadlockDetected: Both threads are deadlocked,
+            each waiting
                                     on the other to ``resume()`` their event.
-            SmartEventConflictDeadlockDetected: A ``sync()`` request was made by
+            SmartEventConflictDeadlockDetected: A ``sync()`` request was
+            made by
                                         the current thread but the
                                         but the remote thread
                                         detected deadlock instead
@@ -947,7 +951,8 @@ class SmartEvent(ThreadPair):
                specified, and the other thread makes a ``wait()`` request to
                an event that was not **pre-resumed**, also without **timeout**
                specified, then both threads will recognize and raise a
-               **SmartEventConflictDeadlockDetected** error. This is needed since
+               **SmartEventConflictDeadlockDetected** error. This is needed
+               since
                neither the ``sync()`` request nor the ``wait()`` request has
                any chance of completing. The ``sync()`` request is waiting for
                a matching ``sync()`` request and the ``wait()`` request is
@@ -957,7 +962,8 @@ class SmartEvent(ThreadPair):
                specified, and the other thread makes a ``wait()`` request to
                an event that was not **pre-resumed**, also without **timeout**
                specified, then both threads will recognize and raise a
-               **SmartEventWaitDeadlockDetected** error. This is needed since neither
+               **SmartEventWaitDeadlockDetected** error. This is needed
+               since neither
                ``wait()`` request has any chance of completing as each
                ``wait()`` request is waiting for a matching ``resume()``
                request.
@@ -978,10 +984,10 @@ class SmartEvent(ThreadPair):
 
         >>> a_smart_event = SmartEvent(name='alpha')
         >>> f1_thread = threading.Thread(target=f1)
-        >>> f1_thread.start()
+        >>> f1_thread.smart_start()
         >>> a_smart_event.pair_with(remote_name='beta')
         >>> a_smart_event.wait()
-        >>> f1_thread.join()
+        >>> f1_thread.smart_join()
 
         """
         self.verify_current_remote()
@@ -1132,10 +1138,10 @@ class SmartEvent(ThreadPair):
 
         >>> a_smart_event = SmartEvent(name='alpha')
         >>> f1_thread = threading.Thread(target=f1)
-        >>> f1_thread.start()
+        >>> f1_thread.smart_start()
         >>> a_smart_event.pause_until(WUCond.RemoteWaiting)
         >>> a_smart_event.resume()
-        >>> f1_thread.join()
+        >>> f1_thread.smart_join()
 
         """
         if timeout and (timeout > 0):

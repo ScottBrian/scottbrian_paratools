@@ -45,6 +45,70 @@ each reached a processing sync-point. The first thread to do a
 >>> f1_thread = threading.Thread(target=f1, args=(smart_event,)
 >>> smart_event.register_thread(beta=f1_thread)
 >>> print('alpha about to start the beta thread')
+>>> f1_thread.smart_start()  # give beta a task to do
+>>> smart_event.pause_until(WUCond.ThreadsReady)  # ensure thread is alive
+>>> time.sleep(2)  # simulate doing some work
+>>> print('alpha about to wait for beta to complete')
+>>> smart_event.wait()  # wait for beta to complete its task
+>>> print('alpha back from wait')
+alpha about to start the beta thread
+f1 beta entered - will do some work
+alpha about to wait for beta to complete
+f1 beta done - about to resume alpha
+alpha back from wait
+
+
+You can use the ThreadComm class to set up a two way communication link
+between two threads. This allows one thread to send and receive messages
+with another thread. The messages can be anything, such as strings, numbers,
+lists, or any other type of object. Yu can send messages via the send_msg
+method and receive messages via the recv_msg method. You can also send a
+message and wait for a reply with the send_rcv_msg.
+
+>>> from scottbrian_utils.smart_event import SmartEvent
+>>> import threading
+>>> import time
+>>> def f1(s_event: SmartEvent) -> None:
+...     print('f1 beta entered - will do some work')
+...     time.sleep(3)  # simulate an i/o task being done
+...     print('f1 beta done - about to resume alpha')
+...     s_event.resume()
+>>> smart_event = SmartEvent(alpha=threading.current_thread())
+>>> f1_thread = threading.Thread(target=f1, args=(smart_event,)
+>>> smart_event.register_thread(beta=f1_thread)
+>>> print('alpha about to start the beta thread')
+>>> f1_thread.smart_start()  # give beta a task to do
+>>> smart_event.pause_until(WUCond.ThreadsReady)  # ensure thread is alive
+>>> time.sleep(2)  # simulate doing some work
+>>> print('alpha about to wait for beta to complete')
+>>> smart_event.wait()  # wait for beta to complete its task
+>>> print('alpha back from wait')
+alpha about to start the beta thread
+f1 beta entered - will do some work
+alpha about to wait for beta to complete
+f1 beta done - about to resume alpha
+alpha back from wait
+
+
+You can use the ThreadComm class to set up a two way communication link
+between two threads. This allows one thread to send and receive messages
+with another thread. The messages can be anything, such as strings, numbers,
+lists, or any other type of object. Yu can send messages via the send_msg
+method and receive messages via the recv_msg method. You can also send a
+message and wait for a reply with the send_rcv_msg.
+
+>>> from scottbrian_utils.smart_event import SmartEvent
+>>> import threading
+>>> import time
+>>> def f1(s_event: SmartEvent) -> None:
+...     print('f1 beta entered - will do some work')
+...     time.sleep(3)  # simulate an i/o task being done
+...     print('f1 beta done - about to resume alpha')
+...     s_event.resume()
+>>> smart_event = SmartEvent(alpha=threading.current_thread())
+>>> f1_thread = threading.Thread(target=f1, args=(smart_event,)
+>>> smart_event.register_thread(beta=f1_thread)
+>>> print('alpha about to start the beta thread')
 >>> f1_thread.start()  # give beta a task to do
 >>> smart_event.pause_until(WUCond.ThreadsReady)  # ensure thread is alive
 >>> time.sleep(2)  # simulate doing some work
@@ -66,6 +130,72 @@ method and receive messages via the recv_msg method. You can also send a
 message and wait for a reply with the send_rcv_msg.
 
 :Example: use ThreadComm to pass a value to a thread and get a response
+
+>>> from scottbrian_utils.thread_comm import ThreadComm
+>>> import threading
+>>> import time
+>>> thread_comm = ThreadComm()
+>>> def f1(in_thread_comm):
+...     time.sleep(3)
+...     while True:
+...         msg = in_thread_comm.recv_msg()
+...         if msg == 42:
+...             print(f'f1 received message {msg}')
+...             in_thread_comm.send_msg(17)
+...         elif msg == 'exit':
+...             print(f'received message {msg}')
+...             break
+>>> f1_thread = threading.Thread(target=f1, args=(thread_comm,)
+>>> f1_thread.smart_start()
+>>> print(f'mainline about to send {42}')
+mainline about to send 42
+
+>>> msg = thread_comm.send_recv(42)
+f1 received message 42
+
+>>> print(f'mainline sent {42} and received {msg}')
+mainline sent 42 and received 17
+
+>>> time.sleep(3)
+>>> thread_comm.send('exit')
+received message exit
+
+
+The SELock is a shared/exclusive lock that you can use to safely read
+and write shared resources in a multi-threaded application.
+
+>>> from scottbrian_utils.thread_comm import ThreadComm
+>>> import threading
+>>> import time
+>>> thread_comm = ThreadComm()
+>>> def f1(in_thread_comm):
+...     time.sleep(3)
+...     while True:
+...         msg = in_thread_comm.recv_msg()
+...         if msg == 42:
+...             print(f'f1 received message {msg}')
+...             in_thread_comm.send_msg(17)
+...         elif msg == 'exit':
+...             print(f'received message {msg}')
+...             break
+>>> f1_thread = threading.Thread(target=f1, args=(thread_comm,)
+>>> f1_thread.smart_start()
+>>> print(f'mainline about to send {42}')
+mainline about to send 42
+
+>>> msg = thread_comm.send_recv(42)
+f1 received message 42
+
+>>> print(f'mainline sent {42} and received {msg}')
+mainline sent 42 and received 17
+
+>>> time.sleep(3)
+>>> thread_comm.send('exit')
+received message exit
+
+
+The SELock is a shared/exclusive lock that you can use to safely read
+and write shared resources in a multi-threaded application.
 
 >>> from scottbrian_utils.thread_comm import ThreadComm
 >>> import threading

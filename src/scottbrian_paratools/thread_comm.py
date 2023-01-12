@@ -28,7 +28,7 @@ message and wait for a reply with the send_rcv_msg.
 ...             print(f'received message {msg}')
 ...             break
 >>> f1_thread = threading.Thread(target=f1)
->>> f1_thread.start()
+>>> f1_thread.smart_start()
 >>> thread_comm.pair_with(remote_name='beta')
 >>> print(f'mainline about to send {42}')
 mainline about to send 42
@@ -259,12 +259,12 @@ class ThreadComm:
         ...         thread_comm.send('hi')
         >>> a_thread_comm = ThreadComm()
         >>> thread = threading.Thread(target=f1, args=(a_thread_comm,))
-        >>> thread.start()
+        >>> thread.smart_start()
         >>> a_thread_comm.send('hello thread')
         >>> print(a_thread_comm.recv())
         hi
 
-        >>> thread.join()
+        >>> thread.smart_join()
 
         """
         try:
@@ -341,12 +341,12 @@ class ThreadComm:
         ...         thread_comm.send('hi')
         >>> a_thread_comm = ThreadComm()
         >>> thread = threading.Thread(target=f1, args=(a_thread_comm,))
-        >>> thread.start()
+        >>> thread.smart_start()
         >>> a_thread_comm.send('hello thread')
         >>> print(a_thread_comm.recv())
         hi
 
-        >>> thread.join()
+        >>> thread.smart_join()
 
         """
         self.send(msg, timeout=timeout)
@@ -381,7 +381,7 @@ class ThreadComm:
         >>> print(thread_comm.msg_waiting())
         False
 
-        >>> thread_comm_app.start()
+        >>> thread_comm_app.smart_start()
         >>> event.wait()
         >>> print(thread_comm.msg_waiting())
         True

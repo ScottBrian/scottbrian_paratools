@@ -99,7 +99,8 @@ class WhereError(Enum):
 commander_config_arg_list = [AppConfig.ScriptStyle,
                              AppConfig.CurrentThreadApp,
                              AppConfig.RemoteThreadApp,
-                             AppConfig.RemoteThreadApp2]
+                             AppConfig.RemoteSmartThreadApp,
+                             AppConfig.RemoteSmartThreadApp2]
 
 # commander_config_arg_list = [AppConfig.RemoteThreadApp]
 
@@ -4028,6 +4029,7 @@ class ConfigVerifier:
         caller_info = get_caller_info(frame)
         cmd.line_num = caller_info.line_num
         cmd.config_ver = self
+        del frame
 
         return self.cmd_serial_num
 
@@ -4107,7 +4109,8 @@ class ConfigVerifier:
                 f'{cmd_runner} set status for thread {new_name} '
                 'from ThreadStatus.Initializing to ThreadStatus.Registered')
             if (self.expected_registered[new_name].is_auto_started
-                    or class_name == 'OuterSmartThreadApp'):
+                    or class_name == 'OuterSmartThreadApp'
+                    or class_name == 'OuterSmartThreadApp2'):
                 self.add_log_msg(
                     f'{cmd_runner} set status for thread {new_name} '
                     'from ThreadStatus.Registered to ThreadStatus.Starting')
@@ -4127,15 +4130,6 @@ class ConfigVerifier:
         # handle any deferred deletes
         # self.handle_deferred_deletes(cmd_runner=cmd_runner)
         self.add_log_msg(re.escape(reg_update_msg))
-
-
-        # else:
-        #     if self.expected_registered[new_name].is_alive:
-        #         self.add_log_msg(
-        #             f'{cmd_runner} set status for thread {new_name} '
-        #             f'from ThreadStatus.Registered to ThreadStatus.Alive')
-        # if update_pair_array_msg_needed:
-        #     self.add_thread_cmd_runner_for_upa_msg = cmd_runner
 
     ####################################################################
     # build_config
@@ -8796,7 +8790,7 @@ class ConfigVerifier:
         self.monitor_event.set()
 
         start_time = time.time()
-        self.all_threads[cmd_runner].join(
+        self.all_threads[cmd_runner].smart_join(
             targets=set(join_names),
             log_msg=log_msg)
         elapsed_time: float = time.time() - start_time
@@ -8855,7 +8849,7 @@ class ConfigVerifier:
         # )
         self.monitor_event.set()
         start_time = time.time()
-        self.all_threads[cmd_runner].join(
+        self.all_threads[cmd_runner].smart_join(
             targets=set(join_names),
             timeout=timeout,
             log_msg=log_msg)
@@ -8923,7 +8917,7 @@ class ConfigVerifier:
         self.monitor_event.set()
         start_time = time.time()
         with pytest.raises(st.SmartThreadJoinTimedOut):
-            self.all_threads[cmd_runner].join(
+            self.all_threads[cmd_runner].smart_join(
                 targets=set(join_names),
                 timeout=timeout,
                 log_msg=log_msg)
@@ -10677,7 +10671,7 @@ class ConfigVerifier:
         # )
         for start_name in start_names:
             self.monitor_event.set()
-            self.all_threads[start_name].start()
+            self.all_threads[start_name].smart_start()
             # self.expected_registered[start_name].is_alive = True
             # self.expected_registered[
             #     start_name].status = st.ThreadStatus.Alive
@@ -13321,7 +13315,7 @@ class OuterF1ThreadApp(threading.Thread):
             auto_start=False,
             max_msgs=max_msgs)
         if auto_start:
-            self.smart_thread.start()
+            self.smart_thread.smart_start()
 
     def run(self) -> None:
         """Run the test."""
@@ -14049,7 +14043,7 @@ class TestSmartThreadScenarios:
                 max_msgs=10)
             config_ver.cmd_thread_alive = False
             config_ver.cmd_thread_auto_start = False
-            outer_thread_app.start()
+            outer_thread_app.smart_start()
             threading.Thread.join(outer_thread_app)
         elif commander_config == AppConfig.RemoteSmartThreadApp2:
             outer_thread_app = OuterSmartThreadApp2(
@@ -14058,7 +14052,7 @@ class TestSmartThreadScenarios:
                 max_msgs=10)
             config_ver.cmd_thread_alive = False
             config_ver.cmd_thread_auto_start = False
-            outer_thread_app.start()
+            outer_thread_app.smart_start()
             threading.Thread.join(outer_thread_app)
 
         ################################################################
