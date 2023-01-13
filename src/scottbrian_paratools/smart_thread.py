@@ -297,7 +297,6 @@ class SmartThread:
         wait_timeout_specified: bool = False
         deadlock: bool = False
         conflict: bool = False
-        sync_resume_done: bool = False
 
     @dataclass
     class ConnectionPair:
@@ -1862,6 +1861,7 @@ class SmartThread:
         mainline alpha exiting
 
         """
+        assert targets
         # get SetupBlock with targets in a set and a timer object
         self.setup_block = self._common_setup(targets=targets,
                                               timeout=timeout)
@@ -1873,7 +1873,7 @@ class SmartThread:
         self.req_name = 'smart_sync'
 
         if log_msg and self.debug_logging_enabled:
-            timeout_msg = f' with {timeout=}' if timeout else ''
+            timeout_msg = f' with {timeout=}' if timeout_specified else ''
             exit_log_msg = self._issue_entry_log_msg(
                 prefix=f'{self.name} to sync with '
                        f'{self.setup_block.targets}{timeout_msg}.',
@@ -1900,6 +1900,9 @@ class SmartThread:
                         # lock needed to coordinate conflict/deadlock
                         with SmartThread._pair_array[pair_key].status_lock:
                             if not local_sb.sync_wait:
+                                if (self._get_status(remote)
+                                        == ThreadStatus.Stopped):
+                                    continue
                                 if remote in SmartThread._pair_array[
                                         pair_key].status_blocks:
                                     remote_sb = SmartThread._pair_array[
@@ -1938,7 +1941,6 @@ class SmartThread:
                                         f'{self.name} smart_sync resumed by '
                                         f'{remote}')
                                     work_targets.remove(remote)
-                                    local_sb.sync_resume_done = False
                                     # exit, we are done with this remote
                                     break
 
@@ -2037,7 +2039,6 @@ class SmartThread:
             if len(work_targets) == num_start_loop_work_targets:
                 # make the timeout work_targets visible to test cases
                 self.sync_timeout_names = work_targets
-
                 if raise_not_alive or self.setup_block.timer.is_expired():
                     remotes_stopped: set[str] = set()
                     with sel.SELockShare(SmartThread._registry_lock):
@@ -2045,7 +2046,6 @@ class SmartThread:
                             if (self._get_status(remote)
                                     == ThreadStatus.Stopped):
                                 remotes_stopped |= {remote}
-
                     # If an error should be raised for stopped threads
                     if raise_not_alive and remotes_stopped:
                         error_msg = (
