@@ -3466,56 +3466,6 @@ class CleanRegLogSearchItem(LogSearchItem):
 
 
 ########################################################################
-# JoinUnregLogSearchItem
-########################################################################
-class JoinUnregLogSearchItem(LogSearchItem):
-    """Input to search log msgs."""
-
-    def __init__(self,
-                 config_ver: "ConfigVerifier",
-                 found_log_msg: str = '',
-                 found_log_idx: int = 0,
-                 ) -> None:
-        """Initialize the LogItem.
-
-        Args:
-            config_ver: configuration verifier
-        """
-        super().__init__(
-            search_str='[a-z]+ did successful (unregister|join) of [a-z]+\.',
-            config_ver=config_ver,
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx
-        )
-
-    def get_found_log_item(self,
-                           found_log_msg: str,
-                           found_log_idx: int) -> "JoinUnregLogSearchItem":
-        """Return a found log item.
-
-        Args:
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-
-        Returns:
-            JoinUnregLogSearchItem containing found message and index
-        """
-        return JoinUnregLogSearchItem(
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx,
-            config_ver=self.config_ver)
-
-    def run_process(self):
-        split_msg = self.found_log_msg.split()
-        self.config_ver.handle_join_unreg_update(
-            cmd_runner=split_msg[0],
-            target_name=split_msg[5].removesuffix('.'),
-            process=split_msg[3],
-            found_log_msg_idx=self.found_log_idx
-        )
-
-
-########################################################################
 # RecvMsgLogSearchItem
 ########################################################################
 class RecvMsgLogSearchItem(LogSearchItem):
@@ -3713,7 +3663,7 @@ class StoppedLogSearchItem(LogSearchItem):
 
 
 ########################################################################
-# RecvWaitingLogSearchItem
+# CmdWaitingLogSearchItem
 ########################################################################
 class CmdWaitingLogSearchItem(LogSearchItem):
     """Input to search log msgs."""
@@ -3778,18 +3728,64 @@ class CmdWaitingLogSearchItem(LogSearchItem):
             cmd_runner=cmd_runner)
 
 
+########################################################################
+# SyncResumedLogSearchItem
+########################################################################
+class SyncResumedLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+        """
+        super().__init__(
+            search_str=f'[a-z]+ smart_sync resumed by [a-z]+',
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int
+                           ) -> "SyncResumedLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            SyncResumedLogSearchItem containing found message and index
+        """
+        return SyncResumedLogSearchItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+    def run_process(self):
+        self.config_ver.add_log_msg(self.found_log_msg,
+                                    log_level=logging.INFO)
+
+
 LogSearchItems: TypeAlias = Union[
     EnterRpaLogSearchItem,
     UpdatePaLogSearchItem,
     RegUpdateLogSearchItem,
     RegRemoveLogSearchItem,
     CleanRegLogSearchItem,
-    JoinUnregLogSearchItem,
     RecvMsgLogSearchItem,
     WaitResumedLogSearchItem,
     StartedLogSearchItem,
     StoppedLogSearchItem,
-    CmdWaitingLogSearchItem]
+    CmdWaitingLogSearchItem,
+    SyncResumedLogSearchItem]
 
 
 @dataclass
@@ -3891,12 +3887,12 @@ class ConfigVerifier:
             RegUpdateLogSearchItem(config_ver=self),
             RegRemoveLogSearchItem(config_ver=self),
             CleanRegLogSearchItem(config_ver=self),
-            JoinUnregLogSearchItem(config_ver=self),
             RecvMsgLogSearchItem(config_ver=self),
             WaitResumedLogSearchItem(config_ver=self),
             StartedLogSearchItem(config_ver=self),
             StoppedLogSearchItem(config_ver=self),
-            CmdWaitingLogSearchItem(config_ver=self)
+            CmdWaitingLogSearchItem(config_ver=self),
+            SyncResumedLogSearchItem(config_ver=self)
         )
         self.last_update_pair_array_log_msg: str = ''
         self.add_thread_cmd_runner_for_upa_msg: str = ''
@@ -7825,8 +7821,8 @@ class ConfigVerifier:
             ############################################################
             # do sync for newly started syncers
             ############################################################
-            if (timeout_syncer_names
-                    or (stopped_syncer_names and not raise_not_alive)):
+            if ((not (stopped_syncer_names and raise_not_alive))
+                    and (timeout_syncer_names or stopped_syncer_names)):
                 started_cmd_runners = (list(timeout_syncer_names)
                                        + list(stopped_syncer_names))
                 sync_serial_num2 = self.add_cmd(
@@ -8697,39 +8693,6 @@ class ConfigVerifier:
                           f'{len(join_names)=}, {time_per_target=}')
 
     ####################################################################
-    # handle_join_unreg_update
-    ####################################################################
-    def handle_join_unreg_update(self,
-                                 cmd_runner: str,
-                                 target_name: str,
-                                 process: str,
-                                 found_log_msg_idx: int) -> None:
-        """Handle join or unregister log message.
-
-        Args:
-            cmd_runner: name of thread that did the pair array update
-            target_name: thread that we joined or unregistered
-            process: either join or unreg
-            found_log_msg_idx: index of the join unreg message in the
-                log
-        """
-        # self.del_thread(
-        #     cmd_runner=cmd_runner,
-        #     del_name=target_name,
-        #     process=process,
-        #     del_msg_idx=found_log_msg_idx)
-
-        # if process == 'join':
-        #     self.join_event_items[cmd_runner].targets.remove(target_name)
-        #     if not self.join_event_items[cmd_runner].targets:
-        #         self.join_event_items[cmd_runner].client_event.set()
-        # else:
-        #     self.unreg_event_items[cmd_runner].targets.remove(target_name)
-        #     if not self.unreg_event_items[cmd_runner].targets:
-        #         self.unreg_event_items[cmd_runner].client_event.set()
-        pass
-
-    ####################################################################
     # handle_pair_array_update
     ####################################################################
     def handle_pair_array_update(self,
@@ -9574,7 +9537,7 @@ class ConfigVerifier:
                 self.stopped_event_items[cmd_runner].client_event.set()
 
     ####################################################################
-    # handle_stopped_log_msg
+    # handle_sync
     ####################################################################
     def handle_sync(self,
                     cmd_runner: str,
@@ -9691,10 +9654,10 @@ class ConfigVerifier:
                 self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
         for target in exp_completed_syncs:
-            self.add_log_msg(
-                new_log_msg=(f'{cmd_runner} smart_sync resumed by '
-                             f'{target}'),
-                log_level=logging.INFO)
+            # self.add_log_msg(
+            #     new_log_msg=(f'{cmd_runner} smart_sync resumed by '
+            #                  f'{target}'),
+            #     log_level=logging.INFO)
             self.monitor_event.set()
 
         if exp_completed_syncs:
@@ -13676,6 +13639,74 @@ class TestSmartThreadScenarios:
             caplog_to_use=caplog,
             commander_config=commander_config
         )
+
+    ####################################################################
+    # test_deadlock_conflict_scenarios
+    ####################################################################
+    def test_deadlock_conflict_scenarios(
+            self,
+            timeout_type_arg: TimeoutType,
+            num_syncers_arg: int,
+            num_stopped_syncers_arg: int,
+            num_timeout_syncers_arg: int,
+            raise_not_alive_arg: bool,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test smart_sync scenarios.
+
+        Args:
+            timeout_type_arg: timeout for None, False, or True
+            num_syncers_arg: number of threads that will successfully
+                sync
+            num_stopped_syncers_arg: number of threads that will
+                cause a not alive error
+            num_timeout_syncers_arg: number of threads that will
+                cause a timeout error
+            raise_not_alive_arg: specifies whether to raise not alive
+                for stopped syncers
+            caplog: pytest fixture to capture log output
+
+        """
+        total_arg_counts = (
+                num_syncers_arg
+                + num_stopped_syncers_arg
+                + num_timeout_syncers_arg)
+
+        if total_arg_counts < 2:  # we need at least two to sync
+            return
+
+        if (timeout_type_arg == TimeoutType.TimeoutTrue
+                and ((num_stopped_syncers_arg
+                     + num_timeout_syncers_arg) == 0)):
+            return
+
+        command_config_num = total_arg_counts % 5
+        if command_config_num == 0:
+            commander_config = AppConfig.ScriptStyle
+        elif command_config_num == 1:
+            commander_config = AppConfig.CurrentThreadApp
+        elif command_config_num == 2:
+            commander_config = AppConfig.RemoteThreadApp
+        elif command_config_num == 3:
+            commander_config = AppConfig.RemoteSmartThreadApp
+        else:
+            commander_config = AppConfig.RemoteSmartThreadApp2
+
+        args_for_scenario_builder: dict[str, Any] = {
+            'timeout_type': timeout_type_arg,
+            'num_syncers': num_syncers_arg,
+            'num_stopped_syncers': num_stopped_syncers_arg,
+            'num_timeout_syncers': num_timeout_syncers_arg,
+            'raise_not_alive': raise_not_alive_arg
+        }
+
+        self.scenario_driver(
+            scenario_builder=ConfigVerifier.build_sync_scenario_suite,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog,
+            commander_config=commander_config
+        )
+
     ####################################################################
     # test_smart_thread_msg_timeout_scenarios
     ####################################################################
