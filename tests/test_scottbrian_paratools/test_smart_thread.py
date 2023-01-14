@@ -10739,7 +10739,7 @@ class ConfigVerifier:
             if pair_key not in self.expected_pairs:
                 self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
-                    f'ConfigVerifier found pair_key {pair_key}'
+                    f'ConfigVerifier found pair_key {pair_key} '
                     f'in SmartThread._pair_array that is '
                     f'not found in expected_pairs: ')
             for name in st.SmartThread._pair_array[
