@@ -2068,7 +2068,7 @@ class SmartThread:
                         self._sync_error_cleanup(remotes=work_targets)
                     if remotes_stopped:
                         stopped_msg = (' Stopped threads: '
-                                       f'{remotes_stopped}.')
+                                       f'{sorted(remotes_stopped)}.')
                     else:
                         stopped_msg = ''
                     error_msg = (f'{self.name} raising '
@@ -2080,6 +2080,8 @@ class SmartThread:
                                  f'{stopped_msg}')
                     self.logger.error(error_msg)
                     raise SmartThreadRequestTimedOut(error_msg)
+
+            time.sleep(0.2)
 
         # if caller specified a log message to issue
         if exit_log_msg:

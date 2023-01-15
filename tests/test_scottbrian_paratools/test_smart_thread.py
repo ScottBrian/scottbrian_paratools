@@ -89,6 +89,30 @@ class DefDelScenario(Enum):
 
 
 ########################################################################
+# ConflictDeadlockScenario
+########################################################################
+class ConflictDeadlockScenario(Enum):
+    NormalSync = auto()
+    NormalResumeWait = auto()
+    ResumeSyncSyncWait = auto()
+    SyncConflict = auto()
+    WaitDeadlock = auto()
+
+
+########################################################################
+# Test settings for conflict_deadlock_scenarios
+########################################################################
+conflict_deadlock_arg_list = [
+    ConflictDeadlockScenario.NormalSync,
+    ConflictDeadlockScenario.NormalResumeWait,
+    ConflictDeadlockScenario.ResumeSyncSyncWait,
+    ConflictDeadlockScenario.SyncConflict,
+    ConflictDeadlockScenario.WaitDeadlock,
+]
+num_cd_actors_arg_list = [3, 4, 5, 6, 7, 8 , 9]
+
+
+########################################################################
 # Test settings
 ########################################################################
 commander_config_arg_list = [AppConfig.ScriptStyle,
@@ -115,7 +139,7 @@ class TimeoutType(Enum):
 timeout_type_arg_list = [TimeoutType.TimeoutNone,
                          TimeoutType.TimeoutFalse,
                          TimeoutType.TimeoutTrue]
-# timeout_type_arg_list = [TimeoutType.TimeoutFalse]
+# timeout_type_arg_list = [TimeoutType.TimeoutTrue]
 
 ########################################################################
 # Test settings for test_def_del_scenarios
@@ -2078,6 +2102,54 @@ def def_del_scenario_arg(request: Any) -> DefDelScenario:
 
 
 ###############################################################################
+# conflict_deadlock_1_arg
+###############################################################################
+@pytest.fixture(params=conflict_deadlock_arg_list)  # type: ignore
+def conflict_deadlock_1_arg(request: Any) -> ConflictDeadlockScenario:
+    """Type of deferred delete to do.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(ConflictDeadlockScenario, request.param)
+
+
+###############################################################################
+# conflict_deadlock_2_arg
+###############################################################################
+@pytest.fixture(params=conflict_deadlock_arg_list)  # type: ignore
+def conflict_deadlock_2_arg(request: Any) -> ConflictDeadlockScenario:
+    """Type of deferred delete to do.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(ConflictDeadlockScenario, request.param)
+
+
+###############################################################################
+# conflict_deadlock_3_arg
+###############################################################################
+@pytest.fixture(params=conflict_deadlock_arg_list)  # type: ignore
+def conflict_deadlock_3_arg(request: Any) -> ConflictDeadlockScenario:
+    """Type of deferred delete to do.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(ConflictDeadlockScenario, request.param)
+
+
+###############################################################################
 # random_seed_arg
 ###############################################################################
 random_seed_arg_list = [1, 2, 3]
@@ -2836,6 +2908,21 @@ def num_actors_arg(request: Any) -> int:
     """
     return cast(int, request.param)
 
+
+########################################################################
+# num_cd_actors_arg
+########################################################################
+@pytest.fixture(params=num_cd_actors_arg_list)  # type: ignore
+def num_cd_actors_arg(request: Any) -> int:
+    """Number stopped threads quickly joined, created, and started.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
 
 ########################################################################
 # actor_1_arg
@@ -4116,6 +4203,129 @@ class ConfigVerifier:
         self.add_log_msg(re.escape(reg_update_msg))
 
     ####################################################################
+    # build_cd_normal_sync_suite
+    ####################################################################
+    def build_cd_normal_sync_suite(
+            self,
+            actor_names: list[str]) -> None:
+        """Adds cmds to the cmd queue.
+
+        Args:
+            actor_names: names of threads that will do the sync
+
+        """
+        pass
+
+    ####################################################################
+    # build_cd_normal_resume_wait_suite
+    ####################################################################
+    def build_cd_normal_resume_wait_suite(
+            self,
+            actor_names: list[str]) -> None:
+        """Adds cmds to the cmd queue.
+
+        Args:
+            actor_names: names of threads that will do the sync
+
+        """
+        pass
+
+    ####################################################################
+    # build_cd_resume_sync_sync_wait_suite
+    ####################################################################
+    def build_cd_resume_sync_sync_wait_suite(
+            self,
+            actor_names: list[str]) -> None:
+        """Adds cmds to the cmd queue.
+
+        Args:
+            actor_names: names of threads that will do the sync
+
+        """
+        pass
+
+    ####################################################################
+    # build_cd_sync_conflict_suite
+    ####################################################################
+    def build_cd_sync_conflict_suite(
+            self,
+            actor_names: list[str]) -> None:
+        """Adds cmds to the cmd queue.
+
+        Args:
+            actor_names: names of threads that will do the sync
+
+        """
+        pass
+
+    ####################################################################
+    # build_cd_wait_deadlock_suite
+    ####################################################################
+    def build_cd_wait_deadlock_suite(
+            self,
+            actor_names: list[str]) -> None:
+        """Adds cmds to the cmd queue.
+
+        Args:
+            actor_names: names of threads that will do the sync
+
+        """
+        pass
+
+    ####################################################################
+    # build_conf_dead_scenario_suite
+    ####################################################################
+    def build_conf_dead_scenario_suite(
+            self,
+            scenario_list: list[ConflictDeadlockScenario],
+            num_cd_actors: int) -> None:
+        """Build ConfigCmd items for sync scenarios.
+
+        Args:
+            scenario_list: scenario 1, 2, and 3
+            num_cd_actors: number of syncers, resumers, and waiters
+
+        """
+        actions: dict[ConflictDeadlockScenario, Callable[..., None]] = {
+            ConflictDeadlockScenario.NormalSync:
+                self.build_cd_normal_sync_suite,
+            ConflictDeadlockScenario.NormalResumeWait:
+                self.build_cd_normal_resume_wait_suite,
+            ConflictDeadlockScenario.ResumeSyncSyncWait:
+                self.build_cd_resume_sync_sync_wait_suite,
+            ConflictDeadlockScenario.SyncConflict:
+                self.build_cd_sync_conflict_suite,
+            ConflictDeadlockScenario.WaitDeadlock:
+                self.build_cd_wait_deadlock_suite,
+        }
+        # Make sure we have enough threads. Note that we subtract 1 from
+        # the count of unregistered names to ensure we have one thread
+        # for the commander
+        assert num_cd_actors <= len(self.unregistered_names) - 1
+
+        self.build_config(
+            cmd_runner=self.commander_name,
+            num_active=num_cd_actors + 1)
+
+        self.log_name_groups()
+        # active_names = self.active_names.copy()
+        # remove commander for now, but if we add it later we need to
+        # be careful not to exit the commander
+        active_names = self.active_names - {self.commander_name}
+
+        ################################################################
+        # choose actor_names
+        ################################################################
+        actor_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_cd_actors,
+            update_collection=True,
+            var_name_for_log='actor_names')
+
+        for scenario in scenario_list:
+            actions[scenario](actor_names=actor_names)
+
+    ####################################################################
     # build_config
     ####################################################################
     def build_config(self,
@@ -4924,6 +5134,8 @@ class ConfigVerifier:
         num_waiters = 2
         num_resumers = 1
 
+        num_syncers = 2
+
         num_dels = 1
         num_adds = 1
 
@@ -4936,6 +5148,7 @@ class ConfigVerifier:
                              + num_senders 
                              + num_waiters 
                              + num_resumers
+                             + num_syncers
                              + num_dels
                              + num_deleters
                              + num_adders
@@ -4987,6 +5200,15 @@ class ConfigVerifier:
             num_names_needed=num_resumers,
             update_collection=True,
             var_name_for_log='resumer_names')
+
+        ################################################################
+        # choose resumer_names
+        ################################################################
+        syncer_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_syncers,
+            update_collection=True,
+            var_name_for_log='syncer_names')
 
         ################################################################
         # choose del_names
@@ -7661,7 +7883,7 @@ class ConfigVerifier:
         return self.build_start_suite(start_names=names)
 
     ####################################################################
-    # build_msg_timeout_suite
+    # build_sync_scenario_suite
     ####################################################################
     def build_sync_scenario_suite(self,
                                   timeout_type: TimeoutType,
@@ -7691,9 +7913,9 @@ class ConfigVerifier:
                 + num_stopped_syncers
                 + num_timeout_syncers) <= len(self.unregistered_names) - 1
 
-        timeout_time = ((num_syncers * 0.32)
-                        + (num_stopped_syncers * 0.32)
-                        + (num_timeout_syncers * 0.32))
+        timeout_time = ((num_syncers * 0.64)
+                        + (num_stopped_syncers * 0.64)
+                        + (num_timeout_syncers * 0.64))
 
         pause_time = timeout_time
         if timeout_type == TimeoutType.TimeoutFalse:
@@ -9627,12 +9849,13 @@ class ConfigVerifier:
                                f'{sorted(stopped_remotes)}.')
             else:
                 stopped_msg = ''
+            process_threads: set[str] = timeout_remotes | stopped_remotes
             self.add_log_msg(re.escape(
                 f'{cmd_runner} raising '
                 'SmartThreadRequestTimedOut. '
                 f'{cmd_runner} timed out on a '
                 f'smart_sync() request while processing '
-                f'threads {sorted(timeout_remotes)}.'
+                f'threads {sorted(process_threads)}.'
                 f'{stopped_msg}'),
                 log_level=logging.ERROR)
 
@@ -13643,44 +13866,25 @@ class TestSmartThreadScenarios:
     ####################################################################
     # test_deadlock_conflict_scenarios
     ####################################################################
-    def test_deadlock_conflict_scenarios(
+    def test_conflict_deadlock_scenarios(
             self,
-            timeout_type_arg: TimeoutType,
-            num_syncers_arg: int,
-            num_stopped_syncers_arg: int,
-            num_timeout_syncers_arg: int,
-            raise_not_alive_arg: bool,
+            conflict_deadlock_1_arg: ConflictDeadlockScenario,
+            conflict_deadlock_2_arg: ConflictDeadlockScenario,
+            conflict_deadlock_3_arg: ConflictDeadlockScenario,
+            num_cd_actors_arg: int,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
         """Test smart_sync scenarios.
 
         Args:
-            timeout_type_arg: timeout for None, False, or True
-            num_syncers_arg: number of threads that will successfully
-                sync
-            num_stopped_syncers_arg: number of threads that will
-                cause a not alive error
-            num_timeout_syncers_arg: number of threads that will
-                cause a timeout error
-            raise_not_alive_arg: specifies whether to raise not alive
-                for stopped syncers
+            conflict_deadlock_1_arg: first scenario
+            conflict_deadlock_2_arg: second scenario
+            conflict_deadlock_3_arg: third scenario
+            num_cd_actors_arg: number syncers, resumers, and waiters
             caplog: pytest fixture to capture log output
 
         """
-        total_arg_counts = (
-                num_syncers_arg
-                + num_stopped_syncers_arg
-                + num_timeout_syncers_arg)
-
-        if total_arg_counts < 2:  # we need at least two to sync
-            return
-
-        if (timeout_type_arg == TimeoutType.TimeoutTrue
-                and ((num_stopped_syncers_arg
-                     + num_timeout_syncers_arg) == 0)):
-            return
-
-        command_config_num = total_arg_counts % 5
+        command_config_num = num_cd_actors_arg % 5
         if command_config_num == 0:
             commander_config = AppConfig.ScriptStyle
         elif command_config_num == 1:
@@ -13693,15 +13897,14 @@ class TestSmartThreadScenarios:
             commander_config = AppConfig.RemoteSmartThreadApp2
 
         args_for_scenario_builder: dict[str, Any] = {
-            'timeout_type': timeout_type_arg,
-            'num_syncers': num_syncers_arg,
-            'num_stopped_syncers': num_stopped_syncers_arg,
-            'num_timeout_syncers': num_timeout_syncers_arg,
-            'raise_not_alive': raise_not_alive_arg
+            'scenario_list': [conflict_deadlock_1_arg,
+                              conflict_deadlock_2_arg,
+                              conflict_deadlock_3_arg],
+            'num_cd_actors': num_cd_actors_arg
         }
 
         self.scenario_driver(
-            scenario_builder=ConfigVerifier.build_sync_scenario_suite,
+            scenario_builder=ConfigVerifier.build_conf_dead_scenario_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
             commander_config=commander_config
