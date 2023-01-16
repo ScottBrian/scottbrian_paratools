@@ -966,6 +966,7 @@ class Resume(ConfigCmd):
                  targets: StrOrList,
                  stopped_names: StrOrList,
                  raise_not_alive: bool = True,
+                 code: Optional[Any] = None,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
@@ -979,6 +980,8 @@ class Resume(ConfigCmd):
         self.stopped_names = stopped_names
 
         self.raise_not_alive = raise_not_alive
+
+        self.code = code
 
         self.log_msg = log_msg
 
@@ -999,6 +1002,7 @@ class Resume(ConfigCmd):
             timeout_names=set(),
             timeout_type=TimeoutType.TimeoutNone,
             raise_not_alive=self.raise_not_alive,
+            code=self.code,
             log_msg=self.log_msg)
 
 
@@ -1012,11 +1016,13 @@ class ResumeTimeoutFalse(Resume):
                  stopped_names: StrOrList,
                  timeout: IntOrFloat,
                  raise_not_alive: bool = True,
+                 code: Optional[Any] = None,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners,
                          targets=targets,
                          stopped_names=stopped_names,
                          raise_not_alive=raise_not_alive,
+                         code=code,
                          log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
 
@@ -1038,6 +1044,7 @@ class ResumeTimeoutFalse(Resume):
             timeout_names=set(),
             timeout_type=TimeoutType.TimeoutFalse,
             raise_not_alive=self.raise_not_alive,
+            code=self.code,
             log_msg=self.log_msg)
 
 
@@ -1052,12 +1059,14 @@ class ResumeTimeoutTrue(ResumeTimeoutFalse):
                  timeout: IntOrFloat,
                  timeout_names: StrOrList,
                  raise_not_alive: bool = True,
+                 code: Optional[Any] = None,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners,
                          targets=targets,
                          stopped_names=stopped_names,
                          timeout=timeout,
                          raise_not_alive=raise_not_alive,
+                         code=code,
                          log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
 
@@ -1081,6 +1090,7 @@ class ResumeTimeoutTrue(ResumeTimeoutFalse):
             timeout_names=set(self.timeout_names),
             timeout_type=TimeoutType.TimeoutTrue,
             raise_not_alive=self.raise_not_alive,
+            code=self.code,
             log_msg=self.log_msg)
 
 
@@ -1266,6 +1276,7 @@ class Sync(ConfigCmd):
                  timeout: IntOrFloat = 0,
                  timeout_remotes: Optional[set[str]] = None,
                  stopped_remotes: Optional[set[str]] = None,
+                 deadlock_wait_remotes: Optional[set[str]] = None,
                  raise_not_alive: bool = True,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners)
@@ -1287,6 +1298,11 @@ class Sync(ConfigCmd):
         else:
             self.stopped_remotes = set()
 
+        if deadlock_wait_remotes:
+            self.deadlock_wait_remotes = deadlock_wait_remotes
+        else:
+            self.deadlock_wait_remotes = set()
+
         self.raise_not_alive = raise_not_alive
 
         self.log_msg = log_msg
@@ -1304,14 +1320,16 @@ class Sync(ConfigCmd):
             cmd_runner: name of thread running the command
         """
         targets = self.targets - {cmd_runner}
-        self.config_ver.handle_sync(cmd_runner=cmd_runner,
-                                    targets=targets,
-                                    timeout=self.timeout,
-                                    timeout_remotes=self.timeout_remotes,
-                                    stopped_remotes=self.stopped_remotes,
-                                    timeout_type=TimeoutType.TimeoutNone,
-                                    raise_not_alive=self.raise_not_alive,
-                                    log_msg=self.log_msg)
+        self.config_ver.handle_sync(
+            cmd_runner=cmd_runner,
+            targets=targets,
+            timeout=self.timeout,
+            timeout_remotes=self.timeout_remotes,
+            stopped_remotes=self.stopped_remotes,
+            deadlock_wait_remotes=self.deadlock_wait_remotes,
+            timeout_type=TimeoutType.TimeoutNone,
+            raise_not_alive=self.raise_not_alive,
+            log_msg=self.log_msg)
 
 
 ########################################################################
@@ -1324,6 +1342,7 @@ class SyncTimeoutFalse(Sync):
                  timeout: IntOrFloat,
                  stopped_remotes: Optional[set[str]] = None,
                  timeout_remotes: Optional[set[str]] = None,
+                 deadlock_wait_remotes: Optional[set[str]] = None,
                  raise_not_alive: bool = True,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners,
@@ -1331,6 +1350,7 @@ class SyncTimeoutFalse(Sync):
                          timeout=timeout,
                          timeout_remotes=timeout_remotes,
                          stopped_remotes=stopped_remotes,
+                         deadlock_wait_remotes=deadlock_wait_remotes,
                          raise_not_alive=raise_not_alive,
                          log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
@@ -1344,14 +1364,16 @@ class SyncTimeoutFalse(Sync):
             cmd_runner: name of thread running the command
         """
         targets = self.targets - {cmd_runner}
-        self.config_ver.handle_sync(cmd_runner=cmd_runner,
-                                    targets=targets,
-                                    timeout=self.timeout,
-                                    timeout_remotes=self.timeout_remotes,
-                                    stopped_remotes=self.stopped_remotes,
-                                    timeout_type=TimeoutType.TimeoutFalse,
-                                    raise_not_alive=self.raise_not_alive,
-                                    log_msg=self.log_msg)
+        self.config_ver.handle_sync(
+            cmd_runner=cmd_runner,
+            targets=targets,
+            timeout=self.timeout,
+            timeout_remotes=self.timeout_remotes,
+            stopped_remotes=self.stopped_remotes,
+            deadlock_wait_remotes=self.deadlock_wait_remotes,
+            timeout_type=TimeoutType.TimeoutFalse,
+            raise_not_alive=self.raise_not_alive,
+            log_msg=self.log_msg)
 
 
 ########################################################################
@@ -1364,12 +1386,14 @@ class SyncTimeoutTrue(SyncTimeoutFalse):
                  timeout: IntOrFloat,
                  timeout_remotes: set[str],
                  stopped_remotes: Optional[set[str]] = None,
+                 deadlock_wait_remotes: Optional[set[str]] = None,
                  raise_not_alive: bool = True) -> None:
         super().__init__(cmd_runners=cmd_runners,
                          targets=targets,
                          timeout=timeout,
                          timeout_remotes=timeout_remotes,
                          stopped_remotes=stopped_remotes,
+                         deadlock_wait_remotes=deadlock_wait_remotes,
                          raise_not_alive=raise_not_alive)
         self.specified_args = locals()  # used for __repr__
 
@@ -1380,14 +1404,16 @@ class SyncTimeoutTrue(SyncTimeoutFalse):
             cmd_runner: name of thread running the command
         """
         targets = self.targets - {cmd_runner}
-        self.config_ver.handle_sync(cmd_runner=cmd_runner,
-                                    targets=targets,
-                                    timeout=self.timeout,
-                                    timeout_remotes=self.timeout_remotes,
-                                    stopped_remotes=self.stopped_remotes,
-                                    timeout_type=TimeoutType.TimeoutTrue,
-                                    raise_not_alive=self.raise_not_alive,
-                                    log_msg=self.log_msg)
+        self.config_ver.handle_sync(
+            cmd_runner=cmd_runner,
+            targets=targets,
+            timeout=self.timeout,
+            timeout_remotes=self.timeout_remotes,
+            stopped_remotes=self.stopped_remotes,
+            deadlock_wait_remotes=self.deadlock_wait_remotes,
+            timeout_type=TimeoutType.TimeoutTrue,
+            raise_not_alive=self.raise_not_alive,
+            log_msg=self.log_msg)
 
 
 ########################################################################
@@ -3788,14 +3814,11 @@ class CmdWaitingLogSearchItem(LogSearchItem):
                                    '|handle_recv'
                                    '|handle_recv_tof'
                                    '|handle_recv_tot'
+                                   '|handle_resume'
                                    '|handle_sync'
                                    '|handle_wait'
                                    '|unregister_threads)')
         super().__init__(
-            # search_str=(f'cmd_runner=[a-z]+ {list_of_waiting_methods} '
-            #             'waiting for monitor'),
-            # search_str=(f"cmd_runner='[a-z]+' create_commander_thread "
-            #             "waiting for monitor"),
             search_str=(f"cmd_runner='[a-z]+' {list_of_waiting_methods} "
                         "waiting for monitor"),
             config_ver=config_ver,
@@ -4307,18 +4330,18 @@ class ConfigVerifier:
         sync_serial_num = self.add_cmd(
             Sync(cmd_runners=actor_names,
                  targets=set(actor_names),
-                 log_msg=log_msg='cd resume sync sync wait test'))
+                 log_msg='cd resume sync sync wait test'))
         self.add_cmd(
             ConfirmResponse(cmd_runners=[self.commander_name],
                             confirm_cmd='Sync',
                             confirm_serial_num=sync_serial_num,
-                            confirmers=list(actor_names)))
+                            confirmers=actor_names))
         wait_serial_num = self.add_cmd(
             Wait(cmd_runners=waiters,
                  resumers=resumers,
                  stopped_remotes=set(),
                  wait_for=st.WaitFor.All,
-                 log_msg=log_msg='cd resume sync sync wait test'))
+                 log_msg='cd resume sync sync wait test'))
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
@@ -4338,7 +4361,33 @@ class ConfigVerifier:
             actor_names: names of threads that will do the sync
 
         """
-        pass
+        mid_point = len(actor_names) // 2
+        syncers = actor_names[0:mid_point]
+        waiters = actor_names[mid_point:]
+
+        sync_serial_num = self.add_cmd(
+            Sync(cmd_runners=syncers,
+                 targets=set(actor_names),
+                 deadlock_wait_remotes=set(waiters),
+                 log_msg='cd resume sync conflict test'))
+        self.add_cmd(
+            ConfirmResponse(cmd_runners=[self.commander_name],
+                            confirm_cmd='Sync',
+                            confirm_serial_num=sync_serial_num,
+                            confirmers=syncers))
+        wait_serial_num = self.add_cmd(
+            Wait(cmd_runners=waiters,
+                 resumers=syncers,
+                 stopped_remotes=set(),
+                 deadlock_sync_remotes=set(syncers),
+                 wait_for=st.WaitFor.All,
+                 log_msg='cd resume sync conflict test'))
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd='Wait',
+                confirm_serial_num=wait_serial_num,
+                confirmers=waiters))
 
     ####################################################################
     # build_cd_wait_deadlock_suite
@@ -4352,7 +4401,36 @@ class ConfigVerifier:
             actor_names: names of threads that will do the sync
 
         """
-        pass
+        mid_point = len(actor_names) // 2
+        waiters1 = actor_names[0:mid_point]
+        waiters2 = actor_names[mid_point:]
+
+        wait_serial_num_1 = self.add_cmd(
+            Wait(cmd_runners=waiters1,
+                 resumers=waiters2,
+                 stopped_remotes=set(),
+                 deadlock_wait_remotes=set(waiters2),
+                 wait_for=st.WaitFor.All,
+                 log_msg='cd wait deadlock test'))
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd='Wait',
+                confirm_serial_num=wait_serial_num_1,
+                confirmers=waiters1))
+        wait_serial_num_2 = self.add_cmd(
+            Wait(cmd_runners=waiters2,
+                 resumers=waiters1,
+                 stopped_remotes=set(),
+                 deadlock_wait_remotes=set(waiters1),
+                 wait_for=st.WaitFor.All,
+                 log_msg='cd wait deadlock test'))
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd='Wait',
+                confirm_serial_num=wait_serial_num_2,
+                confirmers=waiters2))
 
     ####################################################################
     # build_conf_dead_scenario_suite
@@ -9461,6 +9539,7 @@ class ConfigVerifier:
                       timeout_names: set[str],
                       timeout_type: TimeoutType,
                       raise_not_alive: bool,
+                      code: Optional[Any] = None,
                       log_msg: Optional[str] = None) -> None:
         """Resume a waiter.
 
@@ -9475,6 +9554,7 @@ class ConfigVerifier:
             timeout_type: None, False, or True
             raise_not_alive: specifies that smart_resume should raise an
                 error if any targets are not alive
+            code: code to provide to waiter
             log_msg: log msg for smart_resume
         """
         self.log_test_msg(f'handle_resume entry: {cmd_runner=}, {targets=}')
@@ -9501,10 +9581,10 @@ class ConfigVerifier:
             error_msg = (
                 f'{cmd_runner} raising '
                 'SmartThreadRemoteThreadNotAlive. '
-                'while processing a smart_resume(), '
+                f'While processing a smart_resume(), '
                 f'{cmd_runner} detected that the following '
-                'threads are stopped and were thus not '
-                f'resumed: {sorted(stopped_names)}.')
+                f'threads are stopped: '
+                f'{sorted(stopped_names)}.')
             self.add_log_msg(new_log_msg=re.escape(error_msg),
                              log_level=logging.ERROR)
 
@@ -9531,150 +9611,160 @@ class ConfigVerifier:
                     timeout=timeout,
                     raise_not_alive=raise_not_alive,
                     log_msg=log_msg)
-            error_msg = (f'{cmd_runner} timed out on a resume() request '
-                         f'while processing threads '
-                         f'{sorted(timeout_names)}')
+
+            if stopped_names:
+                stopped_msg = (f' Stopped threads: '
+                               f'{sorted(stopped_names)}.')
+            else:
+                stopped_msg = ''
+            error_msg = (f'{cmd_runner} raising '
+                         'SmartThreadRequestTimedOut. '
+                         f'{cmd_runner} timed out on a '
+                         f'smart_resume() request while '
+                         'processing threads '
+                         f'{sorted(timeout_names)}.'
+                         f'{stopped_msg}')
             self.add_log_msg(new_log_msg=re.escape(error_msg),
                              log_level=logging.ERROR)
 
-        if timeout > 0 and timeout_type != TimeoutType.TimeoutNone:
-            timeout_specified = True
-        else:
-            timeout_specified = False
         if log_msg:
             code_msg = f' with code: {code}' if code else ''
             comma_msg = ',' if code and timeout else ''
             timeout_msg = f' with {timeout=}' if timeout else ''
-            exit_log_msg = self._issue_entry_log_msg(
-                prefix=f'{self.name} to resume targets '
-                       f'{sb.targets}{code_msg}{comma_msg}{timeout_msg}.',
-                log_msg=log_msg)
-            timeout_msg = f' with {timeout=}' if timeout_specified else ''
             log_msg_2 = (
-                f'{self.log_ver.get_call_seq("handle_sync")} ')
+                f'{self.log_ver.get_call_seq("handle_resume")} ')
             log_msg_3 = re.escape(f'{log_msg}')
             for enter_exit in enter_exit:
                 log_msg_1 = re.escape(
                     f'smart_resume() {enter_exit}: '
-                    f'{cmd_runner} to sync with {targets}'
-                    f'{timeout_msg}. ')
+                    f'{cmd_runner} to resume targets {sorted(targets)}'
+                    f'{code_msg}{comma_msg}{timeout_msg}.')
 
                 self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
+        with self.ops_lock:
+            self.cmd_waiting_event_items[cmd_runner] = threading.Event()
+        self.log_test_msg(
+            f'{cmd_runner=} handle_resume waiting for monitor')
+        self.monitor_event.set()
+        self.cmd_waiting_event_items[cmd_runner].wait()
+        with self.ops_lock:
+            del self.cmd_waiting_event_items[cmd_runner]
+
         self.log_test_msg(f'handle_resume exit: {cmd_runner=}, {targets=}')
 
-    ####################################################################
-    # handle_resume_tof
-    ####################################################################
-    def handle_resume_tof(self,
-                          cmd_runner: str,
-                          targets: set[str],
-                          stopped_names: list[str],
-                          timeout: IntOrFloat,
-                          raise_not_alive: bool):
-        """Resume a waiter with timeout specified, no timeout happens.
-
-        Args:
-            cmd_runner: thread doing the wait
-            targets: names of threads to be resumed
-            stopped_names: threads that are stopped and will result in
-                a not alive error being raised if raise_not_alive is
-                True
-            timeout: timeout value for smart_resume
-            raise_not_alive: specifies that smart_resume should raise an
-                error if the target ios not alive
-        """
-        self.log_test_msg(f'handle_resume_tof entry: {cmd_runner=}, '
-                          f'{targets=}, {timeout=}')
-
-        self.log_ver.add_call_seq(
-            name='handle_resume',
-            seq='test_smart_thread.py::ConfigVerifier.handle_resume')
-
-        if raise_not_alive and stopped_names:
-            with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
-                self.all_threads[cmd_runner].smart_resume(
-                    targets=targets,
-                    timeout=timeout,
-                    raise_not_alive=raise_not_alive)
-            error_msg = (
-                f'{cmd_runner} raising '
-                'SmartThreadRemoteThreadNotAlive. '
-                'while processing a smart_resume(), '
-                f'{cmd_runner} detected that the following '
-                'threads are stopped and were thus not '
-                f'resumed: {sorted(stopped_names)}.')
-            self.add_log_msg(new_log_msg=re.escape(error_msg),
-                             log_level=logging.ERROR)
-        else:
-            self.inc_ops_count(targets.copy(), cmd_runner)
-            self.all_threads[cmd_runner].smart_resume(
-                targets=targets,
-                timeout=timeout,
-                raise_not_alive=raise_not_alive)
-
-        self.log_test_msg(f'handle_resume_tof exit: {cmd_runner=}, '
-                          f'{targets=}, {timeout=}')
-
-    ####################################################################
-    # handle_resume_tot
-    ####################################################################
-    def handle_resume_tot(self,
-                          cmd_runner: str,
-                          targets: set[str],
-                          stopped_names: list[str],
-                          timeout: IntOrFloat,
-                          timeout_names: list[str],
-                          raise_not_alive: bool):
-        """Resume a waiter with timeout specified, timeout happens.
-
-        Args:
-            cmd_runner: thread doing the wait
-            targets: names of threads to be resumed
-            stopped_names: threads that are stopped and will result in
-                a not alive error being raised if raise_not_alive is
-                True
-            timeout: timeout value for smart_resume
-            timeout_names: names of threads that are expected to timeout
-            raise_not_alive: specifies that smart_resume should raise an
-                error if the target ios not alive
-        """
-        self.log_test_msg(f'handle_resume_tot entry: {cmd_runner=}, '
-                          f'{targets=}, {timeout=}, {timeout_names=}')
-
-        self.log_ver.add_call_seq(
-            name='handle_resume',
-            seq='test_smart_thread.py::ConfigVerifier.handle_resume')
-
-        if raise_not_alive and stopped_names:
-            with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
-                self.all_threads[cmd_runner].smart_resume(
-                    targets=targets,
-                    timeout=timeout,
-                    raise_not_alive=raise_not_alive)
-            error_msg = (
-                f'{cmd_runner} raising '
-                'SmartThreadRemoteThreadNotAlive. '
-                'while processing a smart_resume(), '
-                f'{cmd_runner} detected that the following '
-                'threads are stopped and were thus not '
-                f'resumed: {sorted(stopped_names)}.')
-            self.add_log_msg(new_log_msg=re.escape(error_msg),
-                             log_level=logging.ERROR)
-        else:
-            with pytest.raises(st.SmartThreadResumeTimedOut):
-                self.all_threads[cmd_runner].smart_resume(
-                    targets=targets,
-                    timeout=timeout,
-                    raise_not_alive=raise_not_alive)
-            error_msg = (f'{cmd_runner} timed out on a resume() request '
-                         f'while processing threads '
-                         f'{sorted(timeout_names)}')
-            self.add_log_msg(new_log_msg=re.escape(error_msg),
-                             log_level=logging.ERROR)
-
-        self.log_test_msg(f'handle_resume_tot exit: {cmd_runner=}, '
-                          f'{targets=}, {timeout=}, {timeout_names=}')
+    # ####################################################################
+    # # handle_resume_tof
+    # ####################################################################
+    # def handle_resume_tof(self,
+    #                       cmd_runner: str,
+    #                       targets: set[str],
+    #                       stopped_names: list[str],
+    #                       timeout: IntOrFloat,
+    #                       raise_not_alive: bool):
+    #     """Resume a waiter with timeout specified, no timeout happens.
+    #
+    #     Args:
+    #         cmd_runner: thread doing the wait
+    #         targets: names of threads to be resumed
+    #         stopped_names: threads that are stopped and will result in
+    #             a not alive error being raised if raise_not_alive is
+    #             True
+    #         timeout: timeout value for smart_resume
+    #         raise_not_alive: specifies that smart_resume should raise an
+    #             error if the target ios not alive
+    #     """
+    #     self.log_test_msg(f'handle_resume_tof entry: {cmd_runner=}, '
+    #                       f'{targets=}, {timeout=}')
+    #
+    #     self.log_ver.add_call_seq(
+    #         name='handle_resume',
+    #         seq='test_smart_thread.py::ConfigVerifier.handle_resume')
+    #
+    #     if raise_not_alive and stopped_names:
+    #         with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
+    #             self.all_threads[cmd_runner].smart_resume(
+    #                 targets=targets,
+    #                 timeout=timeout,
+    #                 raise_not_alive=raise_not_alive)
+    #         error_msg = (
+    #             f'{cmd_runner} raising '
+    #             'SmartThreadRemoteThreadNotAlive. '
+    #             'while processing a smart_resume(), '
+    #             f'{cmd_runner} detected that the following '
+    #             'threads are stopped and were thus not '
+    #             f'resumed: {sorted(stopped_names)}.')
+    #         self.add_log_msg(new_log_msg=re.escape(error_msg),
+    #                          log_level=logging.ERROR)
+    #     else:
+    #         self.inc_ops_count(targets.copy(), cmd_runner)
+    #         self.all_threads[cmd_runner].smart_resume(
+    #             targets=targets,
+    #             timeout=timeout,
+    #             raise_not_alive=raise_not_alive)
+    #
+    #     self.log_test_msg(f'handle_resume_tof exit: {cmd_runner=}, '
+    #                       f'{targets=}, {timeout=}')
+    #
+    # ####################################################################
+    # # handle_resume_tot
+    # ####################################################################
+    # def handle_resume_tot(self,
+    #                       cmd_runner: str,
+    #                       targets: set[str],
+    #                       stopped_names: list[str],
+    #                       timeout: IntOrFloat,
+    #                       timeout_names: list[str],
+    #                       raise_not_alive: bool):
+    #     """Resume a waiter with timeout specified, timeout happens.
+    #
+    #     Args:
+    #         cmd_runner: thread doing the wait
+    #         targets: names of threads to be resumed
+    #         stopped_names: threads that are stopped and will result in
+    #             a not alive error being raised if raise_not_alive is
+    #             True
+    #         timeout: timeout value for smart_resume
+    #         timeout_names: names of threads that are expected to timeout
+    #         raise_not_alive: specifies that smart_resume should raise an
+    #             error if the target ios not alive
+    #     """
+    #     self.log_test_msg(f'handle_resume_tot entry: {cmd_runner=}, '
+    #                       f'{targets=}, {timeout=}, {timeout_names=}')
+    #
+    #     self.log_ver.add_call_seq(
+    #         name='handle_resume',
+    #         seq='test_smart_thread.py::ConfigVerifier.handle_resume')
+    #
+    #     if raise_not_alive and stopped_names:
+    #         with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
+    #             self.all_threads[cmd_runner].smart_resume(
+    #                 targets=targets,
+    #                 timeout=timeout,
+    #                 raise_not_alive=raise_not_alive)
+    #         error_msg = (
+    #             f'{cmd_runner} raising '
+    #             'SmartThreadRemoteThreadNotAlive. '
+    #             'while processing a smart_resume(), '
+    #             f'{cmd_runner} detected that the following '
+    #             'threads are stopped and were thus not '
+    #             f'resumed: {sorted(stopped_names)}.')
+    #         self.add_log_msg(new_log_msg=re.escape(error_msg),
+    #                          log_level=logging.ERROR)
+    #     else:
+    #         with pytest.raises(st.SmartThreadResumeTimedOut):
+    #             self.all_threads[cmd_runner].smart_resume(
+    #                 targets=targets,
+    #                 timeout=timeout,
+    #                 raise_not_alive=raise_not_alive)
+    #         error_msg = (f'{cmd_runner} timed out on a resume() request '
+    #                      f'while processing threads '
+    #                      f'{sorted(timeout_names)}')
+    #         self.add_log_msg(new_log_msg=re.escape(error_msg),
+    #                          log_level=logging.ERROR)
+    #
+    #     self.log_test_msg(f'handle_resume_tot exit: {cmd_runner=}, '
+    #                       f'{targets=}, {timeout=}, {timeout_names=}')
 
     ####################################################################
     # handle_send_msg
@@ -9915,6 +10005,7 @@ class ConfigVerifier:
                     timeout: IntOrFloat,
                     timeout_remotes: set[str],
                     stopped_remotes: set[str],
+                    deadlock_wait_remotes: set[str],
                     timeout_type: TimeoutType,
                     raise_not_alive: bool,
                     log_msg: Optional[str] = None) -> None:
@@ -9926,6 +10017,8 @@ class ConfigVerifier:
             timeout: value to use for timeout
             timeout_remotes: names of threads that cause timeout
             stopped_remotes: remotes that will cause a not alive error
+            deadlock_wait_remotes: remotes that are doing a wait instead
+                of a sync which will cause a deadlock
             timeout_type: specifies whether timeout is None, False, or
                 True
             raise_not_alive: specifies whether to raise not alive error
@@ -9998,6 +10091,10 @@ class ConfigVerifier:
             else:
                 stopped_msg = ''
             process_threads: set[str] = timeout_remotes | stopped_remotes
+            error_msg = (
+                f'{self.name} raising '
+                f'SmartThreadRequestTimedOut {targets_msg}'
+                f'{pending_msg}{stopped_msg}{conflict_msg}')
             self.add_log_msg(re.escape(
                 f'{cmd_runner} raising '
                 'SmartThreadRequestTimedOut. '
@@ -10038,6 +10135,28 @@ class ConfigVerifier:
 
         self.log_test_msg(f'{cmd_runner=} handle_sync exit for '
                           f'{targets=}, {raise_not_alive=}')
+
+    ####################################################################
+    # get_timeout_msg
+    ####################################################################
+    def get_timeout_msg(self,
+                        cmd_runner: str,
+                        smart_request: str,
+                        targets: list[str],
+                        pending_remotes: list[str],
+                        stopped_remotes: set[str],
+                        conflict_remotes: set[str]) -> None:
+        """Build the timeout message.
+
+        Args:
+            cmd_runner: thread doing the request
+            smart_request: name of smart_request
+            targets: target of the smart request
+            pending_remotes: names of threads pending completion
+            stopped_remotes: names of threads that are stopped
+            conflict_remotes: names of deadlock threads
+
+        """
 
     ####################################################################
     # handle_wait
