@@ -2455,10 +2455,6 @@ class SmartThread:
 
             time.sleep(0.2)
 
-        if do_refresh:
-            with sel.SELockExcl(SmartThread._registry_lock):
-                self._refresh_pair_array()
-
         if exit_log_msg:
             self.logger.debug(exit_log_msg)
 

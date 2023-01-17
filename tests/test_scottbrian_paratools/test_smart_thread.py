@@ -10098,6 +10098,7 @@ class ConfigVerifier:
                 log_level=logging.ERROR)
 
         elif conflict_remotes:
+            enter_exit = ('entry',)
             with pytest.raises(st.SmartThreadConflictDeadlockDetected):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_sync(
@@ -10297,7 +10298,11 @@ class ConfigVerifier:
             name='handle_wait',
             seq='test_smart_thread.py::ConfigVerifier.handle_wait')
 
-        exp_completed_resumers: set[str] = set(resumers) - stopped_remotes
+        exp_completed_resumers: set[str] = (set(resumers)
+                                            - timeout_remotes
+                                            - conflict_remotes
+                                            - deadlock_remotes
+                                            - stopped_remotes)
         enter_exit = ('entry', 'exit')
         if raise_not_alive and stopped_remotes:
             enter_exit = ('entry',)
@@ -10328,6 +10333,7 @@ class ConfigVerifier:
                 log_level=logging.ERROR)
 
         elif conflict_remotes:
+            enter_exit = ('entry',)
             with pytest.raises(st.SmartThreadConflictDeadlockDetected):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_wait(
@@ -10355,6 +10361,7 @@ class ConfigVerifier:
                     deadlock_remotes=deadlock_remotes)),
                 log_level=logging.ERROR)
         elif deadlock_remotes:
+            enter_exit = ('entry',)
             with pytest.raises(st.SmartThreadWaitDeadlockDetected):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_wait(
@@ -10397,7 +10404,6 @@ class ConfigVerifier:
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutTrue:
-            exp_completed_resumers -= timeout_remotes
             enter_exit = ('entry',)
             with pytest.raises(st.SmartThreadRequestTimedOut):
                 self.all_threads[cmd_runner].smart_wait(
