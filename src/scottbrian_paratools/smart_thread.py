@@ -1997,7 +1997,7 @@ class SmartThread:
                                             local_sb.conflict = True
 
                                 if local_sb.conflict:
-                                    conflict_remotes |= remote
+                                    conflict_remotes |= {remote}
 
             if do_refresh:
                 with sel.SELockExcl(SmartThread._registry_lock):
@@ -2022,11 +2022,11 @@ class SmartThread:
                                    f'request with remotes '
                                    f'{sorted(self.setup_block.targets)}.')
 
-                    pending_msg = (f' \nRemotes that are pending: '
+                    pending_msg = (f' Remotes that are pending: '
                                    f'{sorted(work_targets)}.')
 
                     if remotes_stopped:
-                        stopped_msg = (' \nRemotes that are stopped: '
+                        stopped_msg = (' Remotes that are stopped: '
                                        f'{sorted(remotes_stopped)}.')
                     else:
                         stopped_msg = ''
@@ -2036,16 +2036,18 @@ class SmartThread:
                             remote_request = 'smart_wait'
                         else:
                             remote_request = 'smart_sync'
-                        conflict_msg = (f' \nRemotes doing a {remote_request} '
-                                        'request that are deadlocked '
+                        conflict_msg = (f' Remotes doing a {remote_request} '
+                                        'request that are deadlocked: '
                                         f'{sorted(conflict_remotes)}.')
                     else:
                         conflict_msg = ''
 
                     if deadlock_remotes:
-                        deadlock_msg = (f' \nRemotes doing a smart_wait '
+                        deadlock_msg = (f' Remotes doing a smart_wait '
                                         'request that are deadlocked: '
                                         f'{sorted(deadlock_remotes)}.')
+                    else:
+                        deadlock_msg = ''
 
                     msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
                                  f'{conflict_msg}{deadlock_msg}')
@@ -2337,9 +2339,6 @@ class SmartThread:
                                                 or remote_sb.conflict)):
                                         remote_sb.conflict = True
                                         local_sb.conflict = True
-                                        self.logger.debug(
-                                            f'{self.name} detected conflict '
-                                            f'with {remote}')
                                     elif (remote_sb.wait_wait
                                             # I think this is a bug to check
                                             # our wait_event, so I comment
@@ -2353,23 +2352,20 @@ class SmartThread:
                                                 or remote_sb.conflict)):
                                         remote_sb.deadlock = True
                                         local_sb.deadlock = True
-                                        self.logger.debug(
-                                            f'{self.name} detected deadlock '
-                                            f'with {remote}')
 
                             if local_sb.conflict:
                                 local_sb.sync_wait = False
                                 local_sb.wait_wait = False
                                 local_sb.conflict = False
                                 local_sb.wait_timeout_specified = False
-                                conflict_remotes |= remote
+                                conflict_remotes |= {remote}
 
                             if local_sb.deadlock:
                                 local_sb.sync_wait = False
                                 local_sb.wait_wait = False
                                 local_sb.deadlock = False
                                 local_sb.wait_timeout_specified = False
-                                deadlock_remotes |= remote
+                                deadlock_remotes |= {remote}
 
             if do_refresh:
                 with sel.SELockExcl(SmartThread._registry_lock):
@@ -2394,11 +2390,11 @@ class SmartThread:
                                    f'request with remotes '
                                    f'{sorted(self.setup_block.targets)}.')
 
-                    pending_msg = (f' \nRemotes that are pending: '
+                    pending_msg = (f' Remotes that are pending: '
                                    f'{sorted(work_targets)}.')
 
                     if remotes_stopped:
-                        stopped_msg = (' \nRemotes that are stopped: '
+                        stopped_msg = (' Remotes that are stopped: '
                                        f'{sorted(remotes_stopped)}.')
                     else:
                         stopped_msg = ''
@@ -2408,16 +2404,18 @@ class SmartThread:
                             remote_request = 'smart_wait'
                         else:
                             remote_request = 'smart_sync'
-                        conflict_msg = (f' \nRemotes doing a {remote_request} '
-                                        'request that are deadlocked '
+                        conflict_msg = (f' Remotes doing a {remote_request} '
+                                        'request that are deadlocked: '
                                         f'{sorted(conflict_remotes)}.')
                     else:
                         conflict_msg = ''
 
                     if deadlock_remotes:
-                        deadlock_msg = (f' \nRemotes doing a smart_wait '
+                        deadlock_msg = (f' Remotes doing a smart_wait '
                                         'request that are deadlocked: '
                                         f'{sorted(deadlock_remotes)}.')
+                    else:
+                        deadlock_msg = ''
 
                     msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
                                  f'{conflict_msg}{deadlock_msg}')

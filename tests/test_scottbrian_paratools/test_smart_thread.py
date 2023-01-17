@@ -4399,11 +4399,7 @@ class ConfigVerifier:
                  targets=set(actor_names),
                  conflict_remotes=set(waiters),
                  log_msg='cd resume sync conflict test'))
-        self.add_cmd(
-            ConfirmResponse(cmd_runners=[self.commander_name],
-                            confirm_cmd='Sync',
-                            confirm_serial_num=sync_serial_num,
-                            confirmers=syncers))
+
         wait_serial_num = self.add_cmd(
             Wait(cmd_runners=waiters,
                  resumers=syncers,
@@ -4411,6 +4407,12 @@ class ConfigVerifier:
                  conflict_remotes=set(syncers),
                  wait_for=st.WaitFor.All,
                  log_msg='cd resume sync conflict test'))
+
+        self.add_cmd(
+            ConfirmResponse(cmd_runners=[self.commander_name],
+                            confirm_cmd='Sync',
+                            confirm_serial_num=sync_serial_num,
+                            confirmers=syncers))
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
@@ -4441,12 +4443,7 @@ class ConfigVerifier:
                  deadlock_remotes=set(waiters2),
                  wait_for=st.WaitFor.All,
                  log_msg='cd wait deadlock test'))
-        self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=[self.commander_name],
-                confirm_cmd='Wait',
-                confirm_serial_num=wait_serial_num_1,
-                confirmers=waiters1))
+
         wait_serial_num_2 = self.add_cmd(
             Wait(cmd_runners=waiters2,
                  resumers=waiters1,
@@ -4454,6 +4451,14 @@ class ConfigVerifier:
                  deadlock_remotes=set(waiters1),
                  wait_for=st.WaitFor.All,
                  log_msg='cd wait deadlock test'))
+
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd='Wait',
+                confirm_serial_num=wait_serial_num_1,
+                confirmers=waiters1))
+
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
@@ -10192,10 +10197,10 @@ class ConfigVerifier:
                       smart_request: str,
                       targets: set[str],
                       error_str: str,
-                      timeout_remotes: Optional[set[str]] = None,
-                      stopped_remotes: Optional[set[str]] = None,
-                      conflict_remotes: Optional[set[str]] = None,
-                      deadlock_remotes: Optional[set[str]] = None
+                      timeout_remotes: Optional[set[str]] = set(),
+                      stopped_remotes: Optional[set[str]] = set(),
+                      conflict_remotes: Optional[set[str]] = set(),
+                      deadlock_remotes: Optional[set[str]] = set()
                       ) -> str:
         """Build the timeout message.
 
@@ -10218,14 +10223,14 @@ class ConfigVerifier:
                        f'{sorted(targets)}.')
 
         pending_remotes = (timeout_remotes
-                           + stopped_remotes
-                           + conflict_remotes
-                           + deadlock_remotes)
-        pending_msg = (f' \nRemotes that are pending: '
+                           | stopped_remotes
+                           | conflict_remotes
+                           | deadlock_remotes)
+        pending_msg = (f' Remotes that are pending: '
                        f'{sorted(pending_remotes)}.')
 
         if stopped_remotes:
-            stopped_msg = (' \nRemotes that are stopped: '
+            stopped_msg = (' Remotes that are stopped: '
                            f'{sorted(stopped_remotes)}.')
         else:
             stopped_msg = ''
@@ -10235,21 +10240,21 @@ class ConfigVerifier:
                 remote_request = 'smart_wait'
             else:
                 remote_request = 'smart_sync'
-            conflict_msg = (f' \nRemotes doing a {remote_request} '
+            conflict_msg = (f' Remotes doing a {remote_request} '
                             'request that are deadlocked: '
                             f'{sorted(conflict_remotes)}.')
         else:
             conflict_msg = ''
 
         if deadlock_remotes:
-            deadlock_msg = (f' \nRemotes doing a smart_wait '
+            deadlock_msg = (f' Remotes doing a smart_wait '
                             'request that are deadlocked: '
                             f'{sorted(deadlock_remotes)}.')
         else:
             deadlock_msg = ''
 
         return (
-            f'{cmd_runner} raising {error_str}. {targets_msg}'
+            f'{cmd_runner} raising {error_str} {targets_msg}'
             f'{pending_msg}{stopped_msg}{conflict_msg}{deadlock_msg}')
 
     ####################################################################
@@ -13586,6 +13591,7 @@ class OuterSmartThreadApp(st.SmartThread, threading.Thread):
             target_thread=self,
             new_status=st.ThreadStatus.Alive)
         self.config_ver.main_driver()
+
 
 ########################################################################
 # OuterSmartThreadApp2 class
