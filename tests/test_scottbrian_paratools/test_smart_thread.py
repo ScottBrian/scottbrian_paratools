@@ -109,7 +109,29 @@ conflict_deadlock_arg_list = [
     ConflictDeadlockScenario.SyncConflict,
     ConflictDeadlockScenario.WaitDeadlock,
 ]
-num_cd_actors_arg_list = [3, 4, 5, 6, 7, 8 , 9]
+# conflict_deadlock_arg_list = [ConflictDeadlockScenario.WaitDeadlock]
+
+conflict_deadlock_arg_list2 = [
+    ConflictDeadlockScenario.NormalSync,
+    ConflictDeadlockScenario.NormalResumeWait,
+    ConflictDeadlockScenario.ResumeSyncSyncWait,
+    ConflictDeadlockScenario.SyncConflict,
+    ConflictDeadlockScenario.WaitDeadlock,
+]
+# conflict_deadlock_arg_list2 = [ConflictDeadlockScenario.NormalResumeWait]
+
+conflict_deadlock_arg_list3 = [
+    ConflictDeadlockScenario.NormalSync,
+    ConflictDeadlockScenario.NormalResumeWait,
+    ConflictDeadlockScenario.ResumeSyncSyncWait,
+    ConflictDeadlockScenario.SyncConflict,
+    ConflictDeadlockScenario.WaitDeadlock,
+]
+# conflict_deadlock_arg_list3 = [ConflictDeadlockScenario.SyncConflict]
+
+num_cd_actors_arg_list = [3, 4, 5, 6, 7, 8, 9]
+
+# num_cd_actors_arg_list = [6]
 
 
 ########################################################################
@@ -2077,6 +2099,40 @@ class WaitForSendTimeouts(ConfigCmd):
             fullq_names=self.fullq_names)
 
 
+########################################################################
+# WaitForSyncTimeouts
+########################################################################
+class WaitForSyncTimeouts(ConfigCmd):
+    def __init__(self,
+                 cmd_runners: StrOrList,
+                 syncer_names: StrOrList,
+                 timeout_names: StrOrList,
+                 ) -> None:
+        super().__init__(cmd_runners=cmd_runners)
+        self.specified_args = locals()  # used for __repr__
+
+        if isinstance(syncer_names, str):
+            syncer_names = [syncer_names]
+        self.syncer_names = syncer_names
+
+        if isinstance(timeout_names, str):
+            timeout_names = [timeout_names]
+        self.timeout_names = timeout_names
+
+        self.arg_list += ['timeout_names',
+                          'syncer_names']
+
+    def run_process(self, cmd_runner: str) -> None:
+        """Run the command.
+
+        Args:
+            cmd_runner: name of thread running the command
+        """
+        self.config_ver.wait_for_sync_timeouts(
+            cmd_runner=cmd_runner,
+            syncer_names=self.syncer_names,
+            timeout_names=self.timeout_names)
+
 # ###############################################################################
 # # Cmd Constants
 # ###############################################################################
@@ -2190,7 +2246,7 @@ def conflict_deadlock_1_arg(request: Any) -> ConflictDeadlockScenario:
 ###############################################################################
 # conflict_deadlock_2_arg
 ###############################################################################
-@pytest.fixture(params=conflict_deadlock_arg_list)  # type: ignore
+@pytest.fixture(params=conflict_deadlock_arg_list2)  # type: ignore
 def conflict_deadlock_2_arg(request: Any) -> ConflictDeadlockScenario:
     """Type of deferred delete to do.
 
@@ -2206,7 +2262,7 @@ def conflict_deadlock_2_arg(request: Any) -> ConflictDeadlockScenario:
 ###############################################################################
 # conflict_deadlock_3_arg
 ###############################################################################
-@pytest.fixture(params=conflict_deadlock_arg_list)  # type: ignore
+@pytest.fixture(params=conflict_deadlock_arg_list3)  # type: ignore
 def conflict_deadlock_3_arg(request: Any) -> ConflictDeadlockScenario:
     """Type of deferred delete to do.
 
@@ -3928,6 +3984,52 @@ class SyncResumedLogSearchItem(LogSearchItem):
                                     log_level=logging.INFO)
 
 
+########################################################################
+# TestDebugLogSearchItem
+########################################################################
+class TestDebugLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+        """
+        super().__init__(
+            search_str=f'TestDebug [a-z]+ ',
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int
+                           ) -> "TestDebugLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            SyncResumedLogSearchItem containing found message and index
+        """
+        return TestDebugLogSearchItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+    def run_process(self):
+        self.config_ver.add_log_msg(self.found_log_msg,
+                                    log_level=logging.DEBUG)
+
+
 LogSearchItems: TypeAlias = Union[
     EnterRpaLogSearchItem,
     UpdatePaLogSearchItem,
@@ -3939,7 +4041,8 @@ LogSearchItems: TypeAlias = Union[
     StartedLogSearchItem,
     StoppedLogSearchItem,
     CmdWaitingLogSearchItem,
-    SyncResumedLogSearchItem]
+    SyncResumedLogSearchItem,
+    TestDebugLogSearchItem]
 
 
 @dataclass
@@ -4046,7 +4149,8 @@ class ConfigVerifier:
             StartedLogSearchItem(config_ver=self),
             StoppedLogSearchItem(config_ver=self),
             CmdWaitingLogSearchItem(config_ver=self),
-            SyncResumedLogSearchItem(config_ver=self)
+            SyncResumedLogSearchItem(config_ver=self),
+            TestDebugLogSearchItem(config_ver=self)
         )
         self.last_update_pair_array_log_msg: str = ''
         self.add_thread_cmd_runner_for_upa_msg: str = ''
@@ -4400,6 +4504,12 @@ class ConfigVerifier:
                  conflict_remotes=set(waiters),
                  log_msg='cd resume sync conflict test'))
 
+        self.add_cmd(
+            WaitForSyncTimeouts(
+                cmd_runners=self.commander_name,
+                syncer_names=syncers,
+                timeout_names=waiters))
+
         wait_serial_num = self.add_cmd(
             Wait(cmd_runners=waiters,
                  resumers=syncers,
@@ -4413,6 +4523,7 @@ class ConfigVerifier:
                             confirm_cmd='Sync',
                             confirm_serial_num=sync_serial_num,
                             confirmers=syncers))
+
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
@@ -10086,15 +10197,16 @@ class ConfigVerifier:
                         raise_not_alive=raise_not_alive,
                         log_msg=log_msg)
 
-            self.add_log_msg(re.escape(
+            pending_remotes = self.all_threads[cmd_runner].sync_timeout_names
+            self.add_log_msg(
                 self.get_error_msg(
                     cmd_runner=cmd_runner,
                     smart_request='smart_sync',
                     targets=targets,
                     error_str='SmartThreadRemoteThreadNotAlive',
-                    timeout_remotes=timeout_remotes,
+                    pending_remotes=pending_remotes,
                     stopped_remotes=stopped_remotes,
-                    conflict_remotes=conflict_remotes)),
+                    conflict_remotes=conflict_remotes),
                 log_level=logging.ERROR)
 
         elif conflict_remotes:
@@ -10112,15 +10224,16 @@ class ConfigVerifier:
                         raise_not_alive=raise_not_alive,
                         log_msg=log_msg)
 
-            self.add_log_msg(re.escape(
+            pending_remotes = self.all_threads[cmd_runner].sync_timeout_names
+            self.add_log_msg(
                 self.get_error_msg(
                     cmd_runner=cmd_runner,
                     smart_request='smart_sync',
                     targets=targets,
                     error_str='SmartThreadConflictDeadlockDetected',
-                    timeout_remotes=timeout_remotes,
+                    pending_remotes=pending_remotes,
                     stopped_remotes=stopped_remotes,
-                    conflict_remotes=conflict_remotes)),
+                    conflict_remotes=conflict_remotes),
                 log_level=logging.ERROR)
 
         elif timeout_type == TimeoutType.TimeoutNone:
@@ -10147,15 +10260,15 @@ class ConfigVerifier:
                     raise_not_alive=raise_not_alive,
                     log_msg=log_msg)
 
-            self.add_log_msg(re.escape(
+            self.add_log_msg(
                 self.get_error_msg(
                     cmd_runner=cmd_runner,
                     smart_request='smart_sync',
                     targets=targets,
                     error_str='SmartThreadRequestTimedOut',
-                    timeout_remotes=timeout_remotes,
+                    pending_remotes=timeout_remotes,
                     stopped_remotes=stopped_remotes,
-                    conflict_remotes=conflict_remotes)),
+                    conflict_remotes=conflict_remotes),
                 log_level=logging.ERROR)
 
         if timeout > 0 and timeout_type != TimeoutType.TimeoutNone:
@@ -10198,7 +10311,7 @@ class ConfigVerifier:
                       smart_request: str,
                       targets: set[str],
                       error_str: str,
-                      timeout_remotes: Optional[set[str]] = set(),
+                      pending_remotes: Optional[set[str]] = set(),
                       stopped_remotes: Optional[set[str]] = set(),
                       conflict_remotes: Optional[set[str]] = set(),
                       deadlock_remotes: Optional[set[str]] = set()
@@ -10210,7 +10323,7 @@ class ConfigVerifier:
             smart_request: name of smart_request
             targets: target of the smart request
             error_str: smart_thread error as string
-            timeout_remotes: names of threads timed out
+            pending_remotes: names of threads timed out
             stopped_remotes: names of threads that are stopped
             conflict_remotes: names of sync/wait deadlock threads
             deadlock_remotes: names of wait/wait deadlock threads
@@ -10219,20 +10332,19 @@ class ConfigVerifier:
             error msg string for log and raise
 
         """
-        targets_msg = (f'while processing a {smart_request} '
-                       f'request with remotes '
-                       f'{sorted(targets)}.')
+        targets_msg = re.escape(
+            f'while processing a {smart_request} '
+            f'request with remotes '
+            f'{sorted(targets)}.')
 
-        pending_remotes = (timeout_remotes
-                           | stopped_remotes
-                           | conflict_remotes
-                           | deadlock_remotes)
-        pending_msg = (f' Remotes that are pending: '
-                       f'{sorted(pending_remotes)}.')
+        pending_msg = re.escape(
+            f' Remotes that are pending: '
+            f'{sorted(pending_remotes)}.')
 
         if stopped_remotes:
-            stopped_msg = (' Remotes that are stopped: '
-                           f'{sorted(stopped_remotes)}.')
+            stopped_msg = re.escape(
+                ' Remotes that are stopped: '
+                f'{sorted(stopped_remotes)}.')
         else:
             stopped_msg = ''
 
@@ -10241,16 +10353,24 @@ class ConfigVerifier:
                 remote_request = 'smart_wait'
             else:
                 remote_request = 'smart_sync'
+            cr_search = "\[(,| "
+            for name in conflict_remotes:
+                cr_search += "|'" + name + "'"
+            cr_search += ")+\]"
             conflict_msg = (f' Remotes doing a {remote_request} '
                             'request that are deadlocked: '
-                            f'{sorted(conflict_remotes)}.')
+                            f'{cr_search}.')
         else:
             conflict_msg = ''
 
         if deadlock_remotes:
+            dr_search = "\[(,| "
+            for name in deadlock_remotes:
+                dr_search += "|'" + name + "'"
+            dr_search += ")+\]"
             deadlock_msg = (f' Remotes doing a smart_wait '
                             'request that are deadlocked: '
-                            f'{sorted(deadlock_remotes)}.')
+                            f'{dr_search}.')
         else:
             deadlock_msg = ''
 
@@ -10321,15 +10441,16 @@ class ConfigVerifier:
                         raise_not_alive=raise_not_alive,
                         log_msg=log_msg)
 
-            self.add_log_msg(re.escape(
+            pending_remotes = self.all_threads[cmd_runner].wait_timeout_names
+            self.add_log_msg(
                 self.get_error_msg(
                     cmd_runner=cmd_runner,
                     smart_request='smart_wait',
                     targets=set(resumers),
                     error_str='SmartThreadRemoteThreadNotAlive',
-                    timeout_remotes=timeout_remotes,
+                    pending_remotes=pending_remotes,
                     stopped_remotes=stopped_remotes,
-                    conflict_remotes=conflict_remotes)),
+                    conflict_remotes=conflict_remotes),
                 log_level=logging.ERROR)
 
         elif conflict_remotes:
@@ -10349,16 +10470,17 @@ class ConfigVerifier:
                         raise_not_alive=raise_not_alive,
                         log_msg=log_msg)
 
-            self.add_log_msg(re.escape(
+            pending_remotes = self.all_threads[cmd_runner].wait_timeout_names
+            self.add_log_msg(
                 self.get_error_msg(
                     cmd_runner=cmd_runner,
                     smart_request='smart_wait',
                     targets=set(resumers),
                     error_str='SmartThreadConflictDeadlockDetected',
-                    timeout_remotes=timeout_remotes,
+                    pending_remotes=pending_remotes,
                     stopped_remotes=stopped_remotes,
                     conflict_remotes=conflict_remotes,
-                    deadlock_remotes=deadlock_remotes)),
+                    deadlock_remotes=deadlock_remotes),
                 log_level=logging.ERROR)
         elif deadlock_remotes:
             enter_exit = ('entry',)
@@ -10377,16 +10499,17 @@ class ConfigVerifier:
                         raise_not_alive=raise_not_alive,
                         log_msg=log_msg)
 
-            self.add_log_msg(re.escape(
+            pending_remotes = self.all_threads[cmd_runner].wait_timeout_names
+            self.add_log_msg(
                 self.get_error_msg(
                     cmd_runner=cmd_runner,
                     smart_request='smart_wait',
                     targets=set(resumers),
                     error_str='SmartThreadWaitDeadlockDetected',
-                    timeout_remotes=timeout_remotes,
+                    pending_remotes=pending_remotes,
                     stopped_remotes=stopped_remotes,
                     conflict_remotes=conflict_remotes,
-                    deadlock_remotes=deadlock_remotes)),
+                    deadlock_remotes=deadlock_remotes),
                 log_level=logging.ERROR)
         elif timeout_type == TimeoutType.TimeoutNone:
             self.all_threads[cmd_runner].smart_wait(
@@ -10413,15 +10536,15 @@ class ConfigVerifier:
                     raise_not_alive=raise_not_alive,
                     log_msg=log_msg)
 
-            self.add_log_msg(re.escape(
+            self.add_log_msg(
                 self.get_error_msg(
                     cmd_runner=cmd_runner,
                     smart_request='smart_wait',
                     targets=set(resumers),
                     error_str='SmartThreadRequestTimedOut',
-                    timeout_remotes=timeout_remotes,
+                    pending_remotes=timeout_remotes,
                     stopped_remotes=stopped_remotes,
-                    conflict_remotes=conflict_remotes)),
+                    conflict_remotes=conflict_remotes),
                 log_level=logging.ERROR)
 
         if log_msg:
@@ -13430,7 +13553,7 @@ class ConfigVerifier:
             assert time.time() < start_time + 30  # allow 30 seconds
 
     ####################################################################
-    # wait_for_msg_timeouts
+    # wait_for_resume_timeouts
     ####################################################################
     def wait_for_resume_timeouts(self,
                                  cmd_runner: str,
@@ -13464,7 +13587,40 @@ class ConfigVerifier:
                                   f'with {work_resumers=}, '
                                   f'{timeouts=}, {sorted(test_timeouts)=}')
 
+    ####################################################################
+    # wait_for_sync_timeouts
+    ####################################################################
+    def wait_for_sync_timeouts(self,
+                                 cmd_runner: str,
+                                 syncer_names: list[str],
+                                 timeout_names: list[str]) -> None:
+        """Verify that the resumers have detected the timeout threads.
 
+        Args:
+            cmd_runner: thread doing the check
+            syncer_names: names doing the sync
+            timeout_names: names of the threads to check for timeout
+
+        """
+        timeouts: set[str] = set()
+        if timeout_names:
+            timeouts = set(sorted(timeout_names))
+
+        work_syncers = syncer_names.copy()
+        start_time = time.time()
+        while work_syncers:
+            for syncer in work_syncers:
+                test_timeouts = set(sorted(self.all_threads[
+                                syncer].sync_timeout_names))
+                if timeouts == test_timeouts:
+                    work_syncers.remove(syncer)
+                    break
+
+            time.sleep(0.1)
+            if start_time + 30 < time.time():
+                raise CmdTimedOut('wait_for_sync_timeouts timed out '
+                                  f'with {work_syncers=}, '
+                                  f'{timeouts=}, {test_timeouts=}')
 ########################################################################
 # expand_cmds
 ########################################################################
