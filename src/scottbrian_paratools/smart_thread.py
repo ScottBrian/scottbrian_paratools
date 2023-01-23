@@ -188,15 +188,47 @@ class SmartThreadInvalidInput(SmartThreadError):
 
 
 ########################################################################
-# SetupBlock
-# contains the targets and timer returned from _common_setup
+# ReqType
+# contains the type of request
+########################################################################
+class ReqType(Enum):
+    Resume = auto()
+    Sync = auto()
+    Wait = auto()
+
+
+########################################################################
+# RequestBlock
+# contains the remotes and timer returned from _common_setup
+########################################################################
+
+PairKey: TypeAlias = tuple[str, str]
+PairKeyRemote: TypeAlias = tuple[PairKey, str]
+@dataclass
+class RequestBlock:
+    """Setup block."""
+    request_name: str
+    remotes: set[str]
+    pk_remotes: list[PairKeyRemote]
+    timer: Timer
+    raise_not_alive: bool
+    do_refresh: bool
+    stopped_remotes: set[str]
+    conflict_remotes: set[str]
+    deadlock_remotes: set[str]
+
+
+
+########################################################################
+# ErrorRemotes
+# contains the remotes that were found to be stopped or in deadlock
 ########################################################################
 @dataclass
-class SetupBlock:
-    """Setup block."""
-    targets: set[str]
-    timer: Timer
-
+class ErrorRemotes:
+    """Error remotes."""
+    stopped_remotes: set[str]
+    conflict_remotes: set[str]
+    deadlock_remotes: set[str]
 
 ########################################################################
 # ThreadCreate Flags Class
@@ -306,7 +338,7 @@ class SmartThread:
         status_blocks: dict[str, "SmartThread.ConnectionStatusBlock"]
 
     _pair_array: ClassVar[
-        dict[tuple[str, str], "SmartThread.ConnectionPair"]] = {}
+        dict[PairKey, "SmartThread.ConnectionPair"]] = {}
     _pair_array_last_update: datetime = datetime(
         2000, 1, 1, 12, 0, 1)
 
@@ -442,10 +474,16 @@ class SmartThread:
 
         self.default_timeout = default_timeout
 
-        self.setup_block: SetupBlock = SetupBlock(
-            targets=set(),
-            timer=Timer(timeout=0,
-                        default_timeout=0))
+        self.setup_block: RequestBlock = RequestBlock(
+            request_name='init',
+            remotes=set(),
+            pk_remotes=[],
+            timer=Timer(),
+            raise_not_alive=False,
+            do_refresh=False,
+            stopped_remotes=set(),
+            conflict_remotes=set(),
+            deadlock_remotes=set())
 
         self.sync_request = False
 
@@ -458,9 +496,7 @@ class SmartThread:
         self.remotes_unregistered: set[str] = set()
         self.remotes_full_send_q: set[str] = set()
 
-        self.resume_timeout_names: set[str] = set()
-        self.sync_timeout_names: set[str] = set()
-        self.wait_timeout_names: set[str] = set()
+        self.request_timeout_names: set[str] = set()
 
         # register this new SmartThread so others can find us
         self._register()
@@ -735,21 +771,21 @@ class SmartThread:
         >>> beta_smart_thread.unregister()
 
         """
-        # get SetupBlock with targets in a set and a timer object
-        sb = self._common_setup(targets=targets, timeout=None)
+        # get RequestBlock with targets in a set and a timer object
+        sb = self._common_setup(remotes=targets, timeout=None)
 
         if log_msg and self.debug_logging_enabled:
             exit_log_msg = self._issue_entry_log_msg(
                 prefix=f'{threading.current_thread().name} to unregister '
-                       f'{sb.targets}.',
+                       f'{sb.remotes}.',
                 log_msg=log_msg)
         else:
             exit_log_msg = None
 
-        work_targets = sb.targets.copy()
+        work_remotes = sb.remotes.copy()
 
-        while work_targets:
-            for remote in work_targets:
+        while work_remotes:
+            for remote in work_remotes:
                 with sel.SELockExcl(SmartThread._registry_lock):
                     if remote not in SmartThread._registry:
                         raise SmartThreadInvalidUnregister(
@@ -778,15 +814,15 @@ class SmartThread:
                         f'{remote}.')
 
                     # restart while loop with one less remote
-                    work_targets.remove(remote)
+                    work_remotes.remove(remote)
                     break
 
             if sb.timer.is_expired():
                 self.logger.error(
                     f'{self.name} raising SmartThreadRequestTimedOut waiting '
-                    f'for {work_targets}')
+                    f'for {work_remotes}')
                 raise SmartThreadRequestTimedOut(
-                    f'{self.name} timed out waiting for {work_targets}.')
+                    f'{self.name} timed out waiting for {work_remotes}.')
 
             time.sleep(0.2)
 
@@ -840,8 +876,8 @@ class SmartThread:
         >>> beta_smart_thread.smart_join()
 
         """
-        # get SetupBlock with targets in a set and a timer object
-        sb = self._common_setup(targets=targets, timeout=timeout)
+        # get RequestBlock with targets in a set and a timer object
+        sb = self._common_setup(remotes=targets, timeout=timeout)
 
         # if caller specified a log message to issue
         # log_msg_part2 = ''
@@ -854,15 +890,15 @@ class SmartThread:
         #         f'join() entered: {log_msg_part2}')
         if log_msg and self.debug_logging_enabled:
             exit_log_msg = self._issue_entry_log_msg(
-                prefix=f'{self.name} to join {sorted(sb.targets)}.',
+                prefix=f'{self.name} to join {sorted(sb.remotes)}.',
                 log_msg=log_msg)
         else:
             exit_log_msg = None
 
-        work_targets = sb.targets.copy()
+        work_remotes = sb.remotes.copy()
 
-        while work_targets:
-            for remote in work_targets:
+        while work_remotes:
+            for remote in work_remotes:
                 with sel.SELockExcl(SmartThread._registry_lock):
                     if remote in SmartThread._registry:
                         # Note that if the remote thread was never
@@ -903,15 +939,15 @@ class SmartThread:
                                 f'{remote}.')
 
                             # restart while loop with one less remote
-                            work_targets.remove(remote)
+                            work_remotes.remove(remote)
                             break
 
             if sb.timer.is_expired():
                 self.logger.error(
                     f'{self.name} raising SmartThreadRequestTimedOut waiting '
-                    f'for {sorted(work_targets)}')
+                    f'for {sorted(work_remotes)}')
                 raise SmartThreadRequestTimedOut(
-                    f'{self.name} timed out waiting for {work_targets}.')
+                    f'{self.name} timed out waiting for {work_remotes}.')
 
             time.sleep(0.2)
 
@@ -923,7 +959,7 @@ class SmartThread:
     ####################################################################
     @staticmethod
     def _get_pair_key(name0: str,
-                      name1: str) -> tuple[str, str]:
+                      name1: str) -> PairKey:
         """Return a key to use for the connection pair array.
 
         Args:
@@ -1144,8 +1180,8 @@ class SmartThread:
         mainline alpha exiting
 
         """
-        # get SetupBlock with targets in a set and a timer object
-        sb = self._common_setup(targets=targets, timeout=timeout)
+        # get RequestBlock with targets in a set and a timer object
+        sb = self._common_setup(remotes=targets, timeout=timeout)
 
         if log_msg and self.debug_logging_enabled:
             exit_log_msg = self._issue_entry_log_msg(
@@ -1154,12 +1190,12 @@ class SmartThread:
         else:
             exit_log_msg = None
 
-        work_targets = sb.targets.copy()
+        work_remotes = sb.remotes.copy()
         self.remotes_unregistered = set()
         self.remotes_full_send_q = set()
 
-        while work_targets:
-            for remote in work_targets:
+        while work_remotes:
+            for remote in work_remotes:
                 pair_key = self._get_pair_key(self.name, remote)
                 with sel.SELockShare(SmartThread._registry_lock):
                     # If the remote is not yet ready, continue with
@@ -1192,7 +1228,7 @@ class SmartThread:
                         self.logger.info(
                             f'{self.name} sent message to {remote}')
                         # start while loop again with one less remote
-                        work_targets.remove(remote)
+                        work_remotes.remove(remote)
                         # we need to remove the remote from the unreg
                         # or fullq sets since the send now succeeded
                         if remote in self.remotes_unregistered:
@@ -1209,9 +1245,9 @@ class SmartThread:
                         self.remotes_full_send_q |= {remote}
 
             # we might have timed out, maybe trying to get the lock,
-            # but if work_targets is now empty then skip the timeout
+            # but if work_remotes is now empty then skip the timeout
             # error since the messages were sent
-            if work_targets and sb.timer.is_expired():
+            if work_remotes and sb.timer.is_expired():
                 unreg_timeout_msg = ''
                 if self.remotes_unregistered:
                     unreg_timeout_msg = (
@@ -1223,7 +1259,7 @@ class SmartThread:
                         'Remotes with full send queue: '
                         f'{sorted(self.remotes_full_send_q)}.')
                 self.logger.debug(f'{self.name} timeout of a send_msg(). '
-                                  f'Targets: {sorted(sb.targets)}. '
+                                  f'Targets: {sorted(sb.remotes)}. '
                                   f'{unreg_timeout_msg}'
                                   f'{fullq_timeout_msg}')
 
@@ -1265,7 +1301,7 @@ class SmartThread:
         # call _common_setup to get timer and verify current thread, but
         # we will use remote directly since _common_setup
         # inconveniently returns remote in a list
-        sb = self._common_setup(targets=remote, timeout=timeout)
+        sb = self._common_setup(remotes=remote, timeout=timeout)
         if log_msg and self.debug_logging_enabled:
             exit_log_msg = self._issue_entry_log_msg(
                 prefix=f'{self.name} <- {remote}.',
@@ -1524,13 +1560,13 @@ class SmartThread:
         >>> beta_smart_thread.smart_join()
 
         """
-        # get SetupBlock with targets in a set and a timer object
+        # get RequestBlock with targets in a set and a timer object
         if self.sync_request:
             self.req_name = 'smart_sync'
             sb = self.setup_block
         else:
             self.req_name = 'smart_resume'
-            sb = self._common_setup(targets=targets, timeout=timeout)
+            sb = self._common_setup(remotes=targets, timeout=timeout)
 
         if log_msg and self.debug_logging_enabled:
             code_msg = f' with code: {code}' if code else ''
@@ -1538,7 +1574,7 @@ class SmartThread:
             timeout_msg = f' with {timeout=}' if timeout else ''
             exit_log_msg = self._issue_entry_log_msg(
                 prefix=f'{self.name} to resume targets '
-                       f'{sorted(sb.targets)}'
+                       f'{sorted(sb.remotes)}'
                        f'{code_msg}{comma_msg}{timeout_msg}.',
                 log_msg=log_msg)
         else:
@@ -1592,13 +1628,13 @@ class SmartThread:
         #                                           wait
         ###############################################################
 
-        self.resume_timeout_names = set()
+        self.request_timeout_names = set()
 
-        work_targets = sb.targets.copy()
+        work_remotes = sb.remotes.copy()
 
-        while work_targets:
-            num_start_loop_work_targets = len(work_targets)
-            for remote in work_targets:
+        while work_remotes:
+            num_start_loop_work_remotes = len(work_remotes)
+            for remote in work_remotes:
                 pair_key = self._get_pair_key(self.name, remote)
                 with sel.SELockShare(SmartThread._registry_lock):
                     # If the remote is not yet ready, continue with
@@ -1641,7 +1677,7 @@ class SmartThread:
                                 # the while loop again with one
                                 # less remote
                                 remote_sb.sync_event.set()
-                                work_targets.remove(remote)
+                                work_remotes.remove(remote)
                                 break
                         else:
                             # for a wait request we check to see
@@ -1666,18 +1702,18 @@ class SmartThread:
                                 # the while loop again with one
                                 # less remote
                                 remote_sb.wait_event.set()
-                                work_targets.remove(remote)
+                                work_remotes.remove(remote)
                                 break
 
             # if no progress was made
-            if len(work_targets) == num_start_loop_work_targets:
-                # make the timeout work_targets visible to test cases
-                self.resume_timeout_names = work_targets
+            if len(work_remotes) == num_start_loop_work_remotes:
+                # make the timeout work_remotes visible to test cases
+                self.request_timeout_names = work_remotes
 
                 if raise_not_alive or sb.timer.is_expired():
                     remotes_stopped: set[str] = set()
                     with sel.SELockShare(SmartThread._registry_lock):
-                        for remote in work_targets:
+                        for remote in work_remotes:
                             if (self._get_status(remote)
                                     == ThreadStatus.Stopped):
                                 remotes_stopped |= {remote}
@@ -1708,7 +1744,7 @@ class SmartThread:
                                      f'{self.name} timed out on a '
                                      f'{self.req_name}() request while '
                                      'processing threads '
-                                     f'{sorted(work_targets)}.'
+                                     f'{sorted(work_remotes)}.'
                                      f'{stopped_msg}')
                         self.logger.error(error_msg)
                         raise SmartThreadRequestTimedOut(error_msg)
@@ -1777,7 +1813,7 @@ class SmartThread:
     #     mainline alpha exiting
     #
     #     """
-    #     # get SetupBlock with targets in a set and a timer object
+    #     # get RequestBlock with targets in a set and a timer object
     #     self.setup_block = self._common_setup(targets=targets,
     #                                           timeout=timeout)
     #
@@ -1805,7 +1841,301 @@ class SmartThread:
     #         self.logger.debug(exit_log_msg)
 
     ####################################################################
-    # resume
+    # smart_sync
+    ####################################################################
+    # def smart_sync(self, *,
+    #                targets: Union[str, set[str], list[str]],
+    #                raise_not_alive: bool = True,
+    #                log_msg: Optional[str] = None,
+    #                timeout: OptIntFloat = None):
+    #     """Sync up with the remote threads.
+    #
+    #     Each of the targets does a resume request to pre-resume the
+    #     remote sync events, and then waits for each remote to resume
+    #     their sync events. This ensures that each thread in the target
+    #     set has reached the sync point before any thread moves forward
+    #     from there.
+    #
+    #     Args:
+    #      targets: remote threads we will sync with
+    #      raise_not_alive: specifies whther to raise a not alive error
+    #          when any of the targets are stopped
+    #      log_msg: log msg for the log
+    #      timeout: number of seconds to allow for sync to happen
+    #
+    #     Notes:
+    #      1) If one thread makes a ``sync()`` request without
+    #         **timeout** specified, and the other thread makes a
+    #         ``wait()`` request to an event that was not
+    #         **pre-resumed**, also without **timeout** specified,
+    #         then both threads will recognize and raise a
+    #         **SmartThreadConflictDeadlockDetected** error. This is
+    #         needed since neither the ``sync()`` request nor the
+    #         ``wait()`` request has any chance of completing. The
+    #         ``sync()`` request is waiting for a matching ``sync()``
+    #         request and the ``wait()`` request is waiting for a
+    #         matching ``resume()`` request.
+    #
+    #     :Example: sync two threads
+    #
+    #     >>> import scottbrian_paratools.smart_event as st
+    #     >>> def f1() -> None:
+    #     ...     print('f2 beta entered')
+    #     ...     beta_smart_thread = SmartThread(name='beta')
+    #     ...     beta_smart_thread.sync(targets='alpha')
+    #     ...     print('f2 beta exiting')
+    #
+    #     >>> print('mainline alpha entered')
+    #     >>> alpha_smart_thread  = SmartThread(name='alpha')
+    #     >>> beta_thread = threading.Thread(target=f1)
+    #     >>> beta_thread.smart_start()
+    #     >>> alpha_smart_thread.sync(targets='beta')
+    #     >>> alpha_smart_thread.smart_join(targets='beta')
+    #     >>> print('mainline alpha exiting')
+    #     mainline alpha entered
+    #     f2 beta entered
+    #     f2 beta exiting
+    #     mainline alpha exiting
+    #
+    #     """
+    #     if not targets:
+    #         raise SmartThreadInvalidInput(f'{self.name} smart_sync request '
+    #                                       'with no targets specified.')
+    #     # get RequestBlock with targets in a set and a timer object
+    #     self.setup_block = self._common_setup(targets=targets,
+    #                                           timeout=timeout,
+    #                                           raise_not_alive=raise_not_alive)
+    #     if self.setup_block.timer.remaining_time():
+    #         timeout_specified = True
+    #     else:
+    #         timeout_specified = False
+    #
+    #     self.req_name = 'smart_sync'
+    #
+    #     if log_msg and self.debug_logging_enabled:
+    #         timeout_msg = f' with {timeout=}' if timeout_specified else ''
+    #         exit_log_msg = self._issue_entry_log_msg(
+    #             prefix=f'{self.name} to sync with '
+    #                    f'{self.setup_block.targets}{timeout_msg}.',
+    #             log_msg=log_msg)
+    #     else:
+    #         exit_log_msg = None
+    #
+    #     self.request_timeout_names = set()
+    #
+    #     do_refresh = False
+    #
+    #     remotes_stopped: set[str] = set()
+    #     conflict_remotes: set[str] = set()
+    #     deadlock_remotes: set[str] = set()
+    #
+    #     work_targets: set[str] = self.setup_block.targets.copy()
+    #     threshold_completion_num = 0
+    #     while len(work_targets) > threshold_completion_num:
+    #         num_start_loop_work_targets = len(work_targets)
+    #         for remote in work_targets:
+    #             pair_key = self._get_pair_key(self.name, remote)
+    #             with sel.SELockShare(SmartThread._registry_lock):
+    #                 if pair_key in SmartThread._pair_array:
+    #                     # having a pair_key in the array implies our entry
+    #                     # exists - set local_sb for easy references
+    #                     local_sb = SmartThread._pair_array[
+    #                         pair_key].status_blocks[self.name]
+    #
+    #                     # lock needed to coordinate conflict/deadlock
+    #                     with SmartThread._pair_array[pair_key].status_lock:
+    #                         if not local_sb.sync_wait:
+    #                             if (self._get_status(remote)
+    #                                     == ThreadStatus.Stopped):
+    #                                 remotes_stopped |= {remote}
+    #                                 continue
+    #                             if remote in SmartThread._pair_array[
+    #                                     pair_key].status_blocks:
+    #                                 remote_sb = SmartThread._pair_array[
+    #                                     pair_key].status_blocks[remote]
+    #                                 # for a sync request we check to see
+    #                                 # whether a previous sync is still
+    #                                 # in progress as indicated by the
+    #                                 # sync event being set. We also need
+    #                                 # to make sure there is not a
+    #                                 # pending conflict that the remote
+    #                                 # thread needs to clear. Note that
+    #                                 # we only worry about the conflict
+    #                                 # for sync - a wait conflict does
+    #                                 # not impede us here since we are
+    #                                 # using a different event block
+    #                                 if not (remote_sb.sync_event.is_set()
+    #                                         or (remote_sb.conflict
+    #                                             and remote_sb.sync_wait)):
+    #                                     # sync resume remote thread
+    #                                     remote_sb.sync_event.set()
+    #                                     local_sb.sync_wait = True
+    #
+    #                         if local_sb.sync_wait:
+    #                             if local_sb.sync_event.is_set():
+    #                                 local_sb.sync_wait = False
+    #                                 local_sb.wait_timeout_specified = False
+    #
+    #                                 # be ready for next sync wait
+    #                                 local_sb.sync_event.clear()
+    #                                 if (local_sb.del_deferred and
+    #                                         not local_sb.wait_event.is_set()):
+    #                                     do_refresh = True
+    #                                 self.logger.info(
+    #                                     f'{self.name} smart_sync resumed by '
+    #                                     f'{remote}')
+    #                                 work_targets.remove(remote)
+    #                                 # exit, we are done with this remote
+    #                                 break
+    #
+    #                             local_sb.wait_timeout_specified = timeout_specified
+    #                             # Check for error conditions first before
+    #                             # checking whether the remote is alive. If the
+    #                             # remote detects a deadlock or conflict issue,
+    #                             # it will set the current sides bit and then
+    #                             # raise an error and will likely be gone when we
+    #                             # check. We want to raise the same error on
+    #                             # this side.
+    #                             #
+    #                             # self.deadlock is set only by the remote. So,
+    #                             # if self.deadlock is True, then remote has
+    #                             # already detected the deadlock, set our flag,
+    #                             # raised the deadlock on its side, and is now
+    #                             # possibly ended or recovered and in a new wait.
+    #                             # If self.deadlock is False, and remote is
+    #                             # waiting and is not resumed then it will not be
+    #                             # getting resumed by us since we are also
+    #                             # waiting. So, we set self.remote.deadlock to
+    #                             # tell it, and then we raise the error on our
+    #                             # side. But, we don't do this if the
+    #                             # self.remote.deadlock is already on as that
+    #                             # suggests that we already told remote and
+    #                             # raised the error, which implies that we are in
+    #                             # a new wait and the remote has not yet woken up
+    #                             # to deal with the earlier deadlock. We can
+    #                             # simply ignore it for now.
+    #                             if remote in SmartThread._pair_array[
+    #                                     pair_key].status_blocks:
+    #                                 remote_sb = SmartThread._pair_array[
+    #                                     pair_key].status_blocks[remote]
+    #                                 if not (local_sb.wait_timeout_specified
+    #                                         or remote_sb.wait_timeout_specified
+    #                                         or local_sb.deadlock
+    #                                         or local_sb.conflict):
+    #
+    #                                     if (remote_sb.wait_wait
+    #                                             and not
+    #                                             (remote_sb.wait_event.is_set()
+    #                                                 or remote_sb.deadlock
+    #                                                 or remote_sb.conflict)):
+    #                                         remote_sb.conflict = True
+    #                                         local_sb.conflict = True
+    #                                         self.logger.debug(
+    #                                             f'TestDebug {self.name} sync '
+    #                                             f'set remote and local '
+    #                                             f'conflict flags {remote=}')
+    #
+    #                             if local_sb.conflict:
+    #                                 conflict_remotes |= {remote}
+    #                                 self.logger.debug(
+    #                                     f'TestDebug {self.name} sync set '
+    #                                     f'{conflict_remotes=}')
+    #
+    #         if do_refresh:
+    #             with sel.SELockExcl(SmartThread._registry_lock):
+    #                 self._refresh_pair_array()
+    #             do_refresh = False
+    #
+    #         # if no progress was made
+    #         if len(work_targets) == num_start_loop_work_targets:
+    #             # make the timeout work_targets visible to test cases
+    #             self.request_timeout_names = work_targets
+    #
+    #             if ((raise_not_alive and remotes_stopped)
+    #                     or conflict_remotes
+    #                     or deadlock_remotes
+    #                     or self.setup_block.timer.is_expired()):
+    #
+    #                 # cleanup before doing the error
+    #                 with sel.SELockShare(SmartThread._registry_lock):
+    #                     self._sync_wait_error_cleanup(remotes=work_targets,
+    #                                                   backout_request='sync')
+    #
+    #                 targets_msg = (f'while processing a {self.req_name} '
+    #                                f'request with remotes '
+    #                                f'{sorted(self.setup_block.targets)}.')
+    #
+    #                 pending_msg = (f' Remotes that are pending: '
+    #                                f'{sorted(work_targets)}.')
+    #
+    #                 if remotes_stopped:
+    #                     stopped_msg = (' Remotes that are stopped: '
+    #                                    f'{sorted(remotes_stopped)}.')
+    #                 else:
+    #                     stopped_msg = ''
+    #
+    #                 if conflict_remotes:
+    #                     if self.req_name == 'smart_sync':
+    #                         remote_request = 'smart_wait'
+    #                     else:
+    #                         remote_request = 'smart_sync'
+    #                     conflict_msg = (f' Remotes doing a {remote_request} '
+    #                                     'request that are deadlocked: '
+    #                                     f'{sorted(conflict_remotes)}.')
+    #                 else:
+    #                     conflict_msg = ''
+    #
+    #                 if deadlock_remotes:
+    #                     deadlock_msg = (f' Remotes doing a smart_wait '
+    #                                     'request that are deadlocked: '
+    #                                     f'{sorted(deadlock_remotes)}.')
+    #                 else:
+    #                     deadlock_msg = ''
+    #
+    #                 msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
+    #                              f'{conflict_msg}{deadlock_msg}')
+    #
+    #                 # If an error should be raised for stopped threads
+    #                 if raise_not_alive and remotes_stopped:
+    #                     error_msg = (
+    #                         f'{self.name} raising '
+    #                         f'SmartThreadRemoteThreadNotAlive {msg_suite}')
+    #                     self.logger.error(error_msg)
+    #                     raise SmartThreadRemoteThreadNotAlive(error_msg)
+    #
+    #                 if conflict_remotes:
+    #                     error_msg = (
+    #                         f'{self.name} raising '
+    #                         f'SmartThreadConflictDeadlockDetected {msg_suite}')
+    #                     self.logger.error(error_msg)
+    #                     raise SmartThreadConflictDeadlockDetected(error_msg)
+    #
+    #                 if deadlock_remotes:
+    #                     error_msg = (
+    #                         f'{self.name} raising '
+    #                         f'SmartThreadWaitDeadlockDetected {msg_suite}')
+    #                     self.logger.error(error_msg)
+    #                     raise SmartThreadWaitDeadlockDetected(error_msg)
+    #
+    #                 # Note that the timer will never be expired if timeout
+    #                 # was not specified either explicitly on the smart_wait
+    #                 # call or via a default timeout established when this
+    #                 # SmartThread was instantiated.
+    #                 if self.setup_block.timer.is_expired():
+    #                     error_msg = (
+    #                         f'{self.name} raising '
+    #                         f'SmartThreadRequestTimedOut {msg_suite}')
+    #                     self.logger.error(error_msg)
+    #                     raise SmartThreadRequestTimedOut(error_msg)
+    #
+    #         time.sleep(0.2)
+    #
+    #     # if caller specified a log message to issue
+    #     if exit_log_msg:
+    #         self.logger.debug(exit_log_msg)
+
+    ####################################################################
+    # smart_sync
     ####################################################################
     def smart_sync(self, *,
                    targets: Union[str, set[str], list[str]],
@@ -1865,26 +2195,30 @@ class SmartThread:
         if not targets:
             raise SmartThreadInvalidInput(f'{self.name} smart_sync request '
                                           'with no targets specified.')
-        # get SetupBlock with targets in a set and a timer object
-        self.setup_block = self._common_setup(targets=targets,
-                                              timeout=timeout)
-        if self.setup_block.timer.remaining_time():
+        # get RequestBlock with targets in a set and a timer object
+        request_block = self._request_setup(
+            request_name='smart_sync',
+            remotes=targets,
+            raise_not_alive=raise_not_alive,
+            timeout=timeout)
+
+        if setup_block.timer.remaining_time():
             timeout_specified = True
         else:
             timeout_specified = False
 
-        self.req_name = 'smart_sync'
-
-        if log_msg and self.debug_logging_enabled:
-            timeout_msg = f' with {timeout=}' if timeout_specified else ''
+        if self.debug_logging_enabled:
             exit_log_msg = self._issue_entry_log_msg(
-                prefix=f'{self.name} to sync with '
-                       f'{self.setup_block.targets}{timeout_msg}.',
+                request_block=request_block,
                 log_msg=log_msg)
         else:
             exit_log_msg = None
 
-        self.sync_timeout_names = set()
+        self._request_loop(req_name='smart_sync',
+                           setup_block=setup_block,
+                           threshold_completion_num=0)
+
+        self.request_timeout_names = set()
 
         do_refresh = False
 
@@ -1892,11 +2226,11 @@ class SmartThread:
         conflict_remotes: set[str] = set()
         deadlock_remotes: set[str] = set()
 
-        work_targets: set[str] = self.setup_block.targets.copy()
+        work_remotes: set[str] = self.setup_block.remotes.copy()
         threshold_completion_num = 0
-        while len(work_targets) > threshold_completion_num:
-            num_start_loop_work_targets = len(work_targets)
-            for remote in work_targets:
+        while len(work_remotes) > threshold_completion_num:
+            num_start_loop_work_remotes = len(work_remotes)
+            for remote in work_remotes:
                 pair_key = self._get_pair_key(self.name, remote)
                 with sel.SELockShare(SmartThread._registry_lock):
                     if pair_key in SmartThread._pair_array:
@@ -1947,7 +2281,7 @@ class SmartThread:
                                     self.logger.info(
                                         f'{self.name} smart_sync resumed by '
                                         f'{remote}')
-                                    work_targets.remove(remote)
+                                    work_remotes.remove(remote)
                                     # exit, we are done with this remote
                                     break
 
@@ -2010,9 +2344,9 @@ class SmartThread:
                 do_refresh = False
 
             # if no progress was made
-            if len(work_targets) == num_start_loop_work_targets:
-                # make the timeout work_targets visible to test cases
-                self.sync_timeout_names = work_targets
+            if len(work_remotes) == num_start_loop_work_remotes:
+                # make the timeout work_remotes visible to test cases
+                self.request_timeout_names = work_remotes
 
                 if ((raise_not_alive and remotes_stopped)
                         or conflict_remotes
@@ -2021,15 +2355,15 @@ class SmartThread:
 
                     # cleanup before doing the error
                     with sel.SELockShare(SmartThread._registry_lock):
-                        self._sync_wait_error_cleanup(remotes=work_targets,
+                        self._sync_wait_error_cleanup(remotes=work_remotes,
                                                       backout_request='sync')
 
                     targets_msg = (f'while processing a {self.req_name} '
                                    f'request with remotes '
-                                   f'{sorted(self.setup_block.targets)}.')
+                                   f'{sorted(self.setup_block.remotes)}.')
 
                     pending_msg = (f' Remotes that are pending: '
-                                   f'{sorted(work_targets)}.')
+                                   f'{sorted(work_remotes)}.')
 
                     if remotes_stopped:
                         stopped_msg = (' Remotes that are stopped: '
@@ -2096,6 +2430,7 @@ class SmartThread:
         # if caller specified a log message to issue
         if exit_log_msg:
             self.logger.debug(exit_log_msg)
+
 
     ####################################################################
     # _sync_wait_error_cleanup
@@ -2232,12 +2567,12 @@ class SmartThread:
         """
 
         self.req_name = 'smart_wait'
-        self.setup_block = self._common_setup(targets=remotes, timeout=timeout)
+        self.setup_block = self._common_setup(remotes=remotes, timeout=timeout)
 
         if wait_for == WaitFor.All:
             threshold_completion_num = 0
         else:
-            threshold_completion_num = len(self.setup_block.targets) - 1
+            threshold_completion_num = len(self.setup_block.remotes) - 1
 
         if self.setup_block.timer.remaining_time():
             timeout_specified = True
@@ -2248,24 +2583,24 @@ class SmartThread:
             timeout_msg = f' with {timeout=}' if timeout else ''
             exit_log_msg = self._issue_entry_log_msg(
                 prefix=f'{self.name} to wait for '
-                       f'{sorted(self.setup_block.targets)}'
+                       f'{sorted(self.setup_block.remotes)}'
                        f'{timeout_msg}.',
                 log_msg=log_msg)
         else:
             exit_log_msg = None
 
         do_refresh = False
-        self.wait_timeout_names = set()
+        self.request_timeout_names = set()
 
         remotes_stopped: set[str] = set()
         conflict_remotes: set[str] = set()
         deadlock_remotes: set[str] = set()
 
-        work_targets = self.setup_block.targets.copy()
+        work_remotes = self.setup_block.remotes.copy()
 
-        while len(work_targets) > threshold_completion_num:
-            num_start_loop_work_targets = len(work_targets)
-            for remote in work_targets:
+        while len(work_remotes) > threshold_completion_num:
+            num_start_loop_work_remotes = len(work_remotes)
+            for remote in work_remotes:
                 pair_key = self._get_pair_key(self.name, remote)
 
                 with sel.SELockShare(SmartThread._registry_lock):
@@ -2305,7 +2640,7 @@ class SmartThread:
                                 self.logger.info(
                                     f'{self.name} smart_wait resumed by '
                                     f'{remote}')
-                                work_targets.remove(remote)
+                                work_remotes.remove(remote)
                                 # exit, we are done with this remote
                                 break
 
@@ -2400,9 +2735,9 @@ class SmartThread:
                 do_refresh = False
 
             # if no progress was made
-            if len(work_targets) == num_start_loop_work_targets:
-                # make the timeout work_targets visible to test cases
-                self.wait_timeout_names = work_targets
+            if len(work_remotes) == num_start_loop_work_remotes:
+                # make the timeout work_remotes visible to test cases
+                self.request_timeout_names = work_remotes
 
                 if ((raise_not_alive and remotes_stopped)
                         or conflict_remotes
@@ -2411,15 +2746,15 @@ class SmartThread:
 
                     # cleanup before doing the error
                     with sel.SELockShare(SmartThread._registry_lock):
-                        self._sync_wait_error_cleanup(remotes=work_targets,
+                        self._sync_wait_error_cleanup(remotes=work_remotes,
                                                       backout_request='wait')
 
                     targets_msg = (f'while processing a {self.req_name} '
                                    f'request with remotes '
-                                   f'{sorted(self.setup_block.targets)}.')
+                                   f'{sorted(self.setup_block.remotes)}.')
 
                     pending_msg = (f' Remotes that are pending: '
-                                   f'{sorted(work_targets)}.')
+                                   f'{sorted(work_remotes)}.')
 
                     if remotes_stopped:
                         stopped_msg = (' Remotes that are stopped: '
@@ -2487,65 +2822,374 @@ class SmartThread:
             self.logger.debug(exit_log_msg)
 
     ####################################################################
-    # _common_setup
+    # resume
     ####################################################################
-    def _common_setup(self, *,
-                      targets: Union[str, set[str], list[str]],
-                      timeout: OptIntFloat = None
-                      ) -> SetupBlock:
+    def _request_loop(self, *,
+                      req_name: str,
+                      setup_block: RequestBlock,
+                      threshold_completion_num: int
+                      ) -> None:
+        """Main loop for each request.
+
+        Each of the requests calls tghis method to perform the loop of
+        the targets.
+
+        Args:
+            req_name: specifies the request
+            setup_block: contains targets, timeout, and raise_not_alive
+            threshold_conpletion_num: specifies loop ending
+        """
+        if setup_block.timer.remaining_time():
+            timeout_specified = True
+        else:
+            timeout_specified = False
+
+        self.request_timeout_names = set()
+
+        self.do_refresh = False
+
+        remotes_stopped: set[str] = set()
+        conflict_remotes: set[str] = set()
+        deadlock_remotes: set[str] = set()
+
+        work_remotes: set[str] = setup_block.remotes.copy()
+
+        while len(work_remotes) > threshold_completion_num:
+            num_start_loop_work_remotes = len(work_remotes)
+            for remote in work_remotes:
+                pair_key = self._get_pair_key(self.name, remote)
+                with sel.SELockShare(SmartThread._registry_lock):
+                    if pair_key in SmartThread._pair_array:
+                        # having a pair_key in the array implies our entry
+                        # exists - set local_sb for easy references
+                        local_sb = SmartThread._pair_array[
+                            pair_key].status_blocks[self.name]
+
+                        # lock needed to coordinate conflict/deadlock
+                        with SmartThread._pair_array[pair_key].status_lock:
+
+            if self.do_refresh:
+                with sel.SELockExcl(SmartThread._registry_lock):
+                    self._refresh_pair_array()
+                self.do_refresh = False
+
+            # if no progress was made
+            if len(work_remotes) == num_start_loop_work_remotes:
+                # make the timeout work_remotes visible to test cases
+                self.request_timeout_names = work_remotes
+
+                if ((setup_block.raise_not_alive and remotes_stopped)
+                        or conflict_remotes
+                        or deadlock_remotes
+                        or setup_block.timer.is_expired()):
+
+                    # cleanup before doing the error
+                    with sel.SELockShare(SmartThread._registry_lock):
+                        self._sync_wait_error_cleanup(remotes=work_remotes,
+                                                      backout_request='sync')
+
+                    targets_msg = (f'while processing a {req_name} '
+                                   f'request with remotes '
+                                   f'{sorted(setup_block.remotes)}.')
+
+                    pending_msg = (f' Remotes that are pending: '
+                                   f'{sorted(work_remotes)}.')
+
+                    if remotes_stopped:
+                        stopped_msg = (' Remotes that are stopped: '
+                                       f'{sorted(remotes_stopped)}.')
+                    else:
+                        stopped_msg = ''
+
+                    if conflict_remotes:
+                        if req_name == 'smart_sync':
+                            remote_request = 'smart_wait'
+                        else:
+                            remote_request = 'smart_sync'
+                        conflict_msg = (f' Remotes doing a {remote_request} '
+                                        'request that are deadlocked: '
+                                        f'{sorted(conflict_remotes)}.')
+                    else:
+                        conflict_msg = ''
+
+                    if deadlock_remotes:
+                        deadlock_msg = (f' Remotes doing a smart_wait '
+                                        'request that are deadlocked: '
+                                        f'{sorted(deadlock_remotes)}.')
+                    else:
+                        deadlock_msg = ''
+
+                    msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
+                                 f'{conflict_msg}{deadlock_msg}')
+
+                    # If an error should be raised for stopped threads
+                    if setup_block.raise_not_alive and remotes_stopped:
+                        error_msg = (
+                            f'{self.name} raising '
+                            f'SmartThreadRemoteThreadNotAlive {msg_suite}')
+                        self.logger.error(error_msg)
+                        raise SmartThreadRemoteThreadNotAlive(error_msg)
+
+                    if conflict_remotes:
+                        error_msg = (
+                            f'{self.name} raising '
+                            f'SmartThreadConflictDeadlockDetected {msg_suite}')
+                        self.logger.error(error_msg)
+                        raise SmartThreadConflictDeadlockDetected(error_msg)
+
+                    if deadlock_remotes:
+                        error_msg = (
+                            f'{self.name} raising '
+                            f'SmartThreadWaitDeadlockDetected {msg_suite}')
+                        self.logger.error(error_msg)
+                        raise SmartThreadWaitDeadlockDetected(error_msg)
+
+                    # Note that the timer will never be expired if timeout
+                    # was not specified either explicitly on the smart_wait
+                    # call or via a default timeout established when this
+                    # SmartThread was instantiated.
+                    if setup_block.timer.is_expired():
+                        error_msg = (
+                            f'{self.name} raising '
+                            f'SmartThreadRequestTimedOut {msg_suite}')
+                        self.logger.error(error_msg)
+                        raise SmartThreadRequestTimedOut(error_msg)
+
+            time.sleep(0.2)
+
+    ####################################################################
+    # _process_sync
+    ####################################################################
+    def _process_sync(self, *,
+                      pair_key: PairKey,
+                      local_sb: ConnectionStatusBlock,
+                      remote: str,
+                      work_remotes: set[str],
+                      error_remotes: ErrorRemotes
+                      ) -> ErrorRemotes:
         """Do common setup for each request.
 
         Args:
-            targets: remote threads for the request
+            pair_key: the pair_key
+            local_sb: connection block for this thread
+            remote: name of remote thread
+            work_remotes: work remotes
+            error_remotes: contains stopped, conflict, and deadlock
+                remotes
+
+        Returns:
+            A RequestBlock is returned that contains the timer and the set
+            of threads to be processed
+
+        """
+        if not local_sb.sync_wait:
+            if (self._get_status(remote)
+                    == ThreadStatus.Stopped):
+                error_remotes.remotes_stopped |= {remote}
+                return error_remotes, False
+
+            if remote in SmartThread._pair_array[
+                pair_key].status_blocks:
+                remote_sb = SmartThread._pair_array[
+                    pair_key].status_blocks[remote]
+                # for a sync request we check to see
+                # whether a previous sync is still
+                # in progress as indicated by the
+                # sync event being set. We also need
+                # to make sure there is not a
+                # pending conflict that the remote
+                # thread needs to clear. Note that
+                # we only worry about the conflict
+                # for sync - a wait conflict does
+                # not impede us here since we are
+                # using a different event block
+                if not (remote_sb.sync_event.is_set()
+                        or (remote_sb.conflict
+                            and remote_sb.sync_wait)):
+                    # sync resume remote thread
+                    remote_sb.sync_event.set()
+                    local_sb.sync_wait = True
+
+        if local_sb.sync_wait:
+            if local_sb.sync_event.is_set():
+                local_sb.sync_wait = False
+                local_sb.wait_timeout_specified = False
+
+                # be ready for next sync wait
+                local_sb.sync_event.clear()
+                if (local_sb.del_deferred and
+                        not local_sb.wait_event.is_set()):
+                    self.do_refresh = True
+                self.logger.info(
+                    f'{self.name} smart_sync resumed by '
+                    f'{remote}')
+                work_remotes.remove(remote)
+                # exit, we are done with this remote
+                return error_remotes, True
+
+            local_sb.wait_timeout_specified = timeout_specified
+            # Check for error conditions first before
+            # checking whether the remote is alive. If the
+            # remote detects a deadlock or conflict issue,
+            # it will set the current sides bit and then
+            # raise an error and will likely be gone when we
+            # check. We want to raise the same error on
+            # this side.
+            #
+            # self.deadlock is set only by the remote. So,
+            # if self.deadlock is True, then remote has
+            # already detected the deadlock, set our flag,
+            # raised the deadlock on its side, and is now
+            # possibly ended or recovered and in a new wait.
+            # If self.deadlock is False, and remote is
+            # waiting and is not resumed then it will not be
+            # getting resumed by us since we are also
+            # waiting. So, we set self.remote.deadlock to
+            # tell it, and then we raise the error on our
+            # side. But, we don't do this if the
+            # self.remote.deadlock is already on as that
+            # suggests that we already told remote and
+            # raised the error, which implies that we are in
+            # a new wait and the remote has not yet woken up
+            # to deal with the earlier deadlock. We can
+            # simply ignore it for now.
+            if remote in SmartThread._pair_array[
+                pair_key].status_blocks:
+                remote_sb = SmartThread._pair_array[
+                    pair_key].status_blocks[remote]
+                if not (local_sb.wait_timeout_specified
+                        or remote_sb.wait_timeout_specified
+                        or local_sb.deadlock
+                        or local_sb.conflict):
+
+                    if (remote_sb.wait_wait
+                            and not
+                            (remote_sb.wait_event.is_set()
+                             or remote_sb.deadlock
+                             or remote_sb.conflict)):
+                        remote_sb.conflict = True
+                        local_sb.conflict = True
+                        self.logger.debug(
+                            f'TestDebug {self.name} sync '
+                            f'set remote and local '
+                            f'conflict flags {remote=}')
+
+            if local_sb.conflict:
+                error_remotes.conflict_remotes |= {remote}
+                self.logger.debug(
+                    f'TestDebug {self.name} sync set '
+                    f'{error_remotes.conflict_remotes=}')
+
+        return error_remotes, False
+
+    ####################################################################
+    # _common_setup
+    ####################################################################
+    def _common_setup(self, *,
+                      remotes: Union[str, set[str], list[str]],
+                      raise_not_alive: bool,
+                      timeout: OptIntFloat = None
+                      ) -> RequestBlock:
+        """Do common setup for each request.
+
+        Args:
+            remotes: remote threads for the request
             timeout: number of seconds to allow for request completion
 
         Returns:
-            A SetupBlock is returned that contains the timer and the set
+            A RequestBlock is returned that contains the timer and the set
             of threads to be processed
 
         """
         timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
         self.verify_thread_is_current()
-        if isinstance(targets, str):
-            targets = {targets}
-        elif isinstance(targets, list):
-            targets = set(targets)
+        if isinstance(remotes, str):
+            remotes = {remotes}
+        elif isinstance(remotes, list):
+            remotes = set(remotes)
 
-        return SetupBlock(targets=targets, timer=timer)
+        return RequestBlock(remotes=remotes,
+                            timer=timer,
+                            raise_not_alive=raise_not_alive)
+
+    ####################################################################
+    # _common_setup
+    ####################################################################
+    def _request_setup(self, *,
+                       request_name: str,
+                       remotes: Union[str, set[str], list[str]],
+                       raise_not_alive: bool,
+                       timeout: OptIntFloat = None
+                       ) -> RequestBlock:
+        """Do common setup for each request.
+
+        Args:
+            request_name: name of smart request
+            remotes: remote threads for the request
+            raise_not_alive: specifies whether to raise an error when
+                a thread is stopped
+            timeout: number of seconds to allow for request completion
+
+        Returns:
+            A RequestBlock is returned that contains the timer and the
+            set of threads to be processed
+
+        """
+        timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
+        self.verify_thread_is_current()
+        if isinstance(remotes, str):
+            remotes = {remotes}
+        elif isinstance(remotes, list):
+            remotes = set(remotes)
+
+        pk_remotes: list[PairKeyRemote] = []
+        for remote in remotes:
+            pair_key = self._get_pair_key(self.name, remote)
+            pk_remotes.append((pair_key, remote))
+
+        return RequestBlock(request_name=request_name,
+                            remotes=remotes,
+                            pk_remotes=pk_remotes,
+                            timer=timer,
+                            raise_not_alive=raise_not_alive,
+                            do_refresh=False,
+                            stopped_remotes=set(),
+                            conflict_remotes=set(),
+                            deadlock_remotes=set())
 
     ####################################################################
     # issue_entry_log_msg
     ####################################################################
     def _issue_entry_log_msg(
             self,
-            log_msg: str,
-            prefix: Optional[str] = '',
+            request_block: RequestBlock,
+            log_msg: Optional[str] = None,
             ) -> str:
         """Issue an entry log message.
 
         Args:
+            request_block: contains the request specifications
             log_msg: log message to issue
-            prefix: beginning of log message specific to service
 
         Returns:
             the log message to use for the exit call
         """
-        try:
-            # sys._getframe is faster than inspect.currentframe
-            frame = sys._getframe(1)
-            caller_name = frame.f_code.co_name
-        except Exception:  # possibly _getframe missing
-            caller_name = 'unknown'
-        finally:
-            del frame  # important to prevent storage leak
+        log_msg_body = (
+            f'targets: {request_block.remotes} '
+            f'timeout value: {request_block.timer_value} '
+            f'{get_formatted_call_sequence(latest=2, depth=1)}')
 
-        log_msg_part2 = (
-            f'{get_formatted_call_sequence(latest=2, depth=1)} '
-            f'{log_msg}')
-        entry_log_msg = f'{caller_name}() entry: {prefix} {log_msg_part2}'
-        exit_msg = f'{caller_name}() exit: {prefix} {log_msg_part2}'
-        self.logger.debug(entry_log_msg)
-        return exit_msg
+        if log_msg:
+            log_msg_body += f' {log_msg}'
+
+        entry_log_msg = (
+            f'{request_block.request_name} entry: {log_msg_body}')
+
+        exit_log_msg = (
+            f'{request_block.request_name} exit: {log_msg_body}')
+
+        self.logger.debug(entry_log_msg, stacklevel=2)
+        return exit_log_msg
 
     ####################################################################
     # verify_thread_is_current

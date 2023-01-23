@@ -10275,6 +10275,11 @@ class ConfigVerifier:
             timeout_specified = True
         else:
             timeout_specified = False
+        log_msg_1 = re.escape(f'targets: {sorted(targets)} ')
+        if timeout > 0 and timeout_type != TimeoutType.TimeoutNone:
+            log_msg_2 = re.escape(
+                f'timeout value: {request_block.timer_value} ')
+        log_msg_2 = f'{get_formatted_call_sequence(latest=2, depth=1)}')
         if log_msg:
             timeout_msg = f' with {timeout=}' if timeout_specified else ''
             log_msg_2 = (
