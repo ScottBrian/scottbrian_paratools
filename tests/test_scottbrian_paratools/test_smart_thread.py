@@ -10271,27 +10271,20 @@ class ConfigVerifier:
                     conflict_remotes=conflict_remotes),
                 log_level=logging.ERROR)
 
+        log_msg_body = re.escape(f'targets: {sorted(targets)} ')
         if timeout > 0 and timeout_type != TimeoutType.TimeoutNone:
-            timeout_specified = True
+            log_msg_body += f'timeout value: {timeout} '
         else:
-            timeout_specified = False
-        log_msg_1 = re.escape(f'targets: {sorted(targets)} ')
-        if timeout > 0 and timeout_type != TimeoutType.TimeoutNone:
-            log_msg_2 = re.escape(
-                f'timeout value: {request_block.timer_value} ')
-        log_msg_2 = f'{get_formatted_call_sequence(latest=2, depth=1)}')
-        if log_msg:
-            timeout_msg = f' with {timeout=}' if timeout_specified else ''
-            log_msg_2 = (
-                f'{self.log_ver.get_call_seq("handle_sync")} ')
-            log_msg_3 = re.escape(f'{log_msg}')
-            for enter_exit in enter_exit:
-                log_msg_1 = re.escape(
-                    f'smart_sync() {enter_exit}: '
-                    f'{cmd_runner} to sync with {targets}'
-                    f'{timeout_msg}. ')
+            log_msg_body += f'timeout value: None '
 
-                self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
+        # do not use re.escape for call sequence - it has regex
+        log_msg_body += f'{get_formatted_call_sequence(latest=2, depth=1)}'
+
+        if log_msg:
+            log_msg_body += re.escape(log_msg)
+
+        for enter_exit in enter_exit:
+            self.add_log_msg(f'smart_sync() {enter_exit}: {log_msg_body}')
 
         self.monitor_event.set()
 

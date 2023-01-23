@@ -3175,8 +3175,8 @@ class SmartThread:
             the log message to use for the exit call
         """
         log_msg_body = (
-            f'targets: {request_block.remotes} '
-            f'timeout value: {request_block.timer_value} '
+            f'targets: {sorted(request_block.remotes)} '
+            f'timeout value: {request_block.timer_value()} '
             f'{get_formatted_call_sequence(latest=2, depth=1)}')
 
         if log_msg:
