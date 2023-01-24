@@ -9705,7 +9705,7 @@ class ConfigVerifier:
         self.log_test_msg(f'handle_resume entry: {cmd_runner=}, {targets=}')
 
         self.log_ver.add_call_seq(
-            name='handle_resume',
+            name='smart_resume',
             seq='test_smart_thread.py::ConfigVerifier.handle_resume')
 
         enter_exit = ('entry', 'exit')
@@ -9772,20 +9772,13 @@ class ConfigVerifier:
             self.add_log_msg(new_log_msg=re.escape(error_msg),
                              log_level=logging.ERROR)
 
-        if log_msg:
-            code_msg = f' with code: {code}' if code else ''
-            comma_msg = ',' if code and timeout else ''
-            timeout_msg = f' with {timeout=}' if timeout else ''
-            log_msg_2 = (
-                f'{self.log_ver.get_call_seq("handle_resume")} ')
-            log_msg_3 = re.escape(f'{log_msg}')
-            for enter_exit in enter_exit:
-                log_msg_1 = re.escape(
-                    f'smart_resume() {enter_exit}: '
-                    f'{cmd_runner} to resume targets {sorted(targets)}'
-                    f'{code_msg}{comma_msg}{timeout_msg}. ')
-
-                self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
+        self.add_request_log_msg(cmd_runner=cmd_runner,
+                                 smart_request='smart_resume',
+                                 targets=targets,
+                                 timeout=timeout,
+                                 timeout_type=timeout_type,
+                                 enter_exit=enter_exit,
+                                 log_msg=log_msg)
 
         with self.ops_lock:
             self.cmd_waiting_event_items[cmd_runner] = threading.Event()
@@ -10173,7 +10166,7 @@ class ConfigVerifier:
                           f'{targets=}, {timeout_type=}, {raise_not_alive=}')
 
         self.log_ver.add_call_seq(
-            name='handle_sync',
+            name='smart_sync',
             seq='test_smart_thread.py::ConfigVerifier.handle_sync')
 
         assert targets
@@ -10271,20 +10264,13 @@ class ConfigVerifier:
                     conflict_remotes=conflict_remotes),
                 log_level=logging.ERROR)
 
-        log_msg_body = re.escape(f'targets: {sorted(targets)} ')
-        if timeout > 0 and timeout_type != TimeoutType.TimeoutNone:
-            log_msg_body += f'timeout value: {timeout} '
-        else:
-            log_msg_body += f'timeout value: None '
-
-        # do not use re.escape for call sequence - it has regex
-        log_msg_body += f'{get_formatted_call_sequence(latest=2, depth=1)}'
-
-        if log_msg:
-            log_msg_body += re.escape(log_msg)
-
-        for enter_exit in enter_exit:
-            self.add_log_msg(f'smart_sync() {enter_exit}: {log_msg_body}')
+        self.add_request_log_msg(cmd_runner=cmd_runner,
+                                 smart_request='smart_sync',
+                                 targets=targets,
+                                 timeout=timeout,
+                                 timeout_type=timeout_type,
+                                 enter_exit=enter_exit,
+                                 log_msg=log_msg)
 
         self.monitor_event.set()
 
@@ -10302,10 +10288,49 @@ class ConfigVerifier:
                           f'{targets=}, {raise_not_alive=}')
 
     ####################################################################
+    # get_request_log_msg
+    ####################################################################
+    def add_request_log_msg(self,
+                            cmd_runner: str,
+                            smart_request: str,
+                            targets: set[str],
+                            timeout: IntOrFloat,
+                            timeout_type: TimeoutType,
+                            enter_exit: tuple[str],
+                            log_msg: Optional[str] = None) -> None:
+        """Build and add the request log message.
+
+        Args:
+            cmd_runner: thread doing the request
+            smart_request: name of smart_request
+            targets: target of the smart request
+            timeout: timeout value
+            timeout_type: None, False, True
+            enter_exit: enter and exit or just enter
+            log_msg: log message to append
+
+        """
+        log_msg_body = re.escape(f'requestor: {cmd_runner} '
+                                 f'targets: {sorted(targets)} ')
+        if timeout > 0 and timeout_type != TimeoutType.TimeoutNone:
+            log_msg_body += f'timeout value: {timeout} '
+        else:
+            log_msg_body += f'timeout value: None '
+
+        # do not use re.escape for call sequence - it has regex
+        log_msg_body += f'{self.log_ver.get_call_seq(smart_request)}'
+
+        if log_msg:
+            log_msg_body += re.escape(log_msg)
+
+        for enter_exit in enter_exit:
+            self.add_log_msg(f'{smart_request} {enter_exit}: {log_msg_body}')
+
+    ####################################################################
     # get_timeout_msg
     ####################################################################
-    def get_error_msg(self,
-                      cmd_runner: str,
+    @staticmethod
+    def get_error_msg(cmd_runner: str,
                       smart_request: str,
                       targets: set[str],
                       error_str: str,
@@ -10413,7 +10438,7 @@ class ConfigVerifier:
                           f'{raise_not_alive=}')
 
         self.log_ver.add_call_seq(
-            name='handle_wait',
+            name='smart_wait',
             seq='test_smart_thread.py::ConfigVerifier.handle_wait')
 
         exp_completed_resumers: set[str] = (set(resumers)
@@ -10545,18 +10570,13 @@ class ConfigVerifier:
                     conflict_remotes=conflict_remotes),
                 log_level=logging.ERROR)
 
-        if log_msg:
-            timeout_msg = f' with {timeout=}' if timeout else ''
-            log_msg_2 = (
-                f'{self.log_ver.get_call_seq("handle_wait")} ')
-            log_msg_3 = re.escape(f'{log_msg}')
-            for enter_exit in enter_exit:
-                log_msg_1 = re.escape(
-                    f'smart_wait() {enter_exit}: '
-                    f'{cmd_runner} to wait for '
-                    f'{sorted(set(resumers))}{timeout_msg}. ')
-
-                self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
+        self.add_request_log_msg(cmd_runner=cmd_runner,
+                                 smart_request='smart_wait',
+                                 targets=set(resumers),
+                                 timeout=timeout,
+                                 timeout_type=timeout_type,
+                                 enter_exit=enter_exit,
+                                 log_msg=log_msg)
 
         for resumer in exp_completed_resumers:
             self.monitor_event.set()
