@@ -4026,7 +4026,7 @@ class TestDebugLogSearchItem(LogSearchItem):
             config_ver=self.config_ver)
 
     def run_process(self):
-        self.config_ver.add_log_msg(self.found_log_msg,
+        self.config_ver.add_log_msg(re.escape(self.found_log_msg),
                                     log_level=logging.DEBUG)
 
 
@@ -9294,7 +9294,7 @@ class ConfigVerifier:
                           f'{senders=}, {del_deferred=}')
 
         self.log_ver.add_call_seq(
-            name='handle_recv_msg',
+            name='recv_msg',
             seq='test_smart_thread.py::ConfigVerifier.handle_recv_msg')
 
         # self.recv_msg_event_items[cmd_runner] = MonitorEventItem(
@@ -9317,16 +9317,24 @@ class ConfigVerifier:
                 log_msg=log_msg)
             elapsed_time += (time.time() - start_time)
 
-            if log_msg:
-                log_msg_2 = (
-                    f'{self.log_ver.get_call_seq("handle_recv_msg")} ')
-                log_msg_3 = re.escape(f'{log_msg}')
-                for enter_exit in ('entry', 'exit'):
-                    log_msg_1 = re.escape(
-                        f'recv_msg() {enter_exit}: '
-                        f'{cmd_runner} <- {from_name}. ')
+            # if log_msg:
+            #     log_msg_2 = (
+            #         f'{self.log_ver.get_call_seq("handle_recv_msg")} ')
+            #     log_msg_3 = re.escape(f'{log_msg}')
+            #     for enter_exit in ('entry', 'exit'):
+            #         log_msg_1 = re.escape(
+            #             f'recv_msg() {enter_exit}: '
+            #             f'{cmd_runner} <- {from_name}. ')
+            #
+            #         self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
-                    self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
+            self.add_request_log_msg(cmd_runner=cmd_runner,
+                                     smart_request='recv_msg',
+                                     targets={from_name},
+                                     timeout=0,
+                                     timeout_type=TimeoutType.TimeoutNone,
+                                     enter_exit=('entry', 'exit'),
+                                     log_msg=log_msg)
 
             assert recvd_msg == exp_msgs[from_name]
 
@@ -9379,7 +9387,7 @@ class ConfigVerifier:
                           f'{senders=}, {del_deferred=}')
 
         self.log_ver.add_call_seq(
-            name='handle_recv_msg_tof',
+            name='recv_msg',
             seq='test_smart_thread.py::ConfigVerifier.handle_recv_msg_tof')
 
         # self.recv_msg_event_items[cmd_runner] = MonitorEventItem(
@@ -9403,16 +9411,23 @@ class ConfigVerifier:
                 log_msg=log_msg)
             elapsed_time += (time.time() - start_time)
 
-            if log_msg:
-                log_msg_2 = (
-                    f'{self.log_ver.get_call_seq("handle_recv_msg_tof")} ')
-                log_msg_3 = re.escape(f'{log_msg}')
-                for enter_exit in ('entry', 'exit'):
-                    log_msg_1 = re.escape(
-                        f'recv_msg() {enter_exit}: '
-                        f'{cmd_runner} <- {from_name}. ')
-
-                    self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
+            # if log_msg:
+            #     log_msg_2 = (
+            #         f'{self.log_ver.get_call_seq("handle_recv_msg_tof")} ')
+            #     log_msg_3 = re.escape(f'{log_msg}')
+            #     for enter_exit in ('entry', 'exit'):
+            #         log_msg_1 = re.escape(
+            #             f'recv_msg() {enter_exit}: '
+            #             f'{cmd_runner} <- {from_name}. ')
+            #
+            #         self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
+            self.add_request_log_msg(cmd_runner=cmd_runner,
+                                     smart_request='recv_msg',
+                                     targets={from_name},
+                                     timeout=0,
+                                     timeout_type=TimeoutType.TimeoutFalse,
+                                     enter_exit=('entry', 'exit'),
+                                     log_msg=log_msg)
 
             assert recvd_msg == exp_msgs[from_name]
 
@@ -9468,7 +9483,7 @@ class ConfigVerifier:
                           f'{senders=} and {del_deferred=}')
 
         self.log_ver.add_call_seq(
-            name='handle_recv_msg_tot',
+            name='recv_msg',
             seq='test_smart_thread.py::ConfigVerifier.handle_recv_msg_tot')
 
         non_timeout_senders = list(set(senders) - set(timeout_names))
@@ -9517,16 +9532,23 @@ class ConfigVerifier:
                     log_msg=recv_log_msg)
                 self.dec_recv_timeout()
 
-            if log_msg:
-                log_msg_2 = (
-                    f'{self.log_ver.get_call_seq("handle_recv_msg_tot")} ')
-                log_msg_3 = re.escape(f'{log_msg}')
-                for enter_exit in enter_exit_list:
-                    log_msg_1 = re.escape(
-                        f'recv_msg() {enter_exit}: '
-                        f'{cmd_runner} <- {from_name}. ')
-
-                    self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
+            # if log_msg:
+            #     log_msg_2 = (
+            #         f'{self.log_ver.get_call_seq("handle_recv_msg_tot")} ')
+            #     log_msg_3 = re.escape(f'{log_msg}')
+            #     for enter_exit in enter_exit_list:
+            #         log_msg_1 = re.escape(
+            #             f'recv_msg() {enter_exit}: '
+            #             f'{cmd_runner} <- {from_name}. ')
+            #
+            #         self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
+            self.add_request_log_msg(cmd_runner=cmd_runner,
+                                     smart_request='recv_msg',
+                                     targets={from_name},
+                                     timeout=0,
+                                     timeout_type=TimeoutType.TimeoutTrue,
+                                     enter_exit=enter_exit_list,
+                                     log_msg=log_msg)
 
             if 'exit' in enter_exit_list:
                 assert recvd_msg == exp_msgs[from_name]
@@ -10296,7 +10318,7 @@ class ConfigVerifier:
                             targets: set[str],
                             timeout: IntOrFloat,
                             timeout_type: TimeoutType,
-                            enter_exit: tuple[str],
+                            enter_exit: tuple[str, ...],
                             log_msg: Optional[str] = None) -> None:
         """Build and add the request log message.
 
@@ -10321,7 +10343,7 @@ class ConfigVerifier:
         log_msg_body += f'{self.log_ver.get_call_seq(smart_request)}'
 
         if log_msg:
-            log_msg_body += re.escape(log_msg)
+            log_msg_body += f' {re.escape(log_msg)}'
 
         for enter_exit in enter_exit:
             self.add_log_msg(f'{smart_request} {enter_exit}: {log_msg_body}')
@@ -11090,7 +11112,7 @@ class ConfigVerifier:
         logger.debug(log_msg)
 
     ####################################################################
-    # log_name_groups
+    # log_test_msg
     ####################################################################
     def log_test_msg(self,
                      log_msg: str) -> None:

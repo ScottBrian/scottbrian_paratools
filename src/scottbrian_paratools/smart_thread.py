@@ -219,6 +219,7 @@ class RequestBlock:
     raise_not_alive: bool
     do_refresh: bool
     exit_log_msg: Optional[str]
+    ret_msg: Any
     stopped_remotes: set[str]
     conflict_remotes: set[str]
     deadlock_remotes: set[str]
@@ -780,13 +781,13 @@ class SmartThread:
         # get RequestBlock with targets in a set and a timer object
         sb = self._common_setup(remotes=targets, timeout=None)
 
-        if log_msg and self.debug_logging_enabled:
-            exit_log_msg = self._issue_entry_log_msg(
-                prefix=f'{threading.current_thread().name} to unregister '
-                       f'{sb.remotes}.',
-                log_msg=log_msg)
-        else:
-            exit_log_msg = None
+        # if log_msg and self.debug_logging_enabled:
+        #     exit_log_msg = self._issue_entry_log_msg(
+        #         prefix=f'{threading.current_thread().name} to unregister '
+        #                f'{sb.remotes}.',
+        #         log_msg=log_msg)
+        # else:
+        #     exit_log_msg = None
 
         work_remotes = sb.remotes.copy()
 
@@ -832,8 +833,8 @@ class SmartThread:
 
             time.sleep(0.2)
 
-        if exit_log_msg:
-            self.logger.debug(exit_log_msg)
+        # if exit_log_msg:
+        #     self.logger.debug(exit_log_msg)
 
     ####################################################################
     # join
@@ -894,12 +895,12 @@ class SmartThread:
         #         f'{log_msg}')
         #     self.logger.debug(
         #         f'join() entered: {log_msg_part2}')
-        if log_msg and self.debug_logging_enabled:
-            exit_log_msg = self._issue_entry_log_msg(
-                prefix=f'{self.name} to join {sorted(sb.remotes)}.',
-                log_msg=log_msg)
-        else:
-            exit_log_msg = None
+        # if log_msg and self.debug_logging_enabled:
+        #     exit_log_msg = self._issue_entry_log_msg(
+        #         prefix=f'{self.name} to join {sorted(sb.remotes)}.',
+        #         log_msg=log_msg)
+        # else:
+        #     exit_log_msg = None
 
         work_remotes = sb.remotes.copy()
 
@@ -957,8 +958,8 @@ class SmartThread:
 
             time.sleep(0.2)
 
-        if exit_log_msg:
-            self.logger.debug(exit_log_msg)
+        # if exit_log_msg:
+        #     self.logger.debug(exit_log_msg)
 
     ####################################################################
     # _get_pair_key
@@ -1189,12 +1190,12 @@ class SmartThread:
         # get RequestBlock with targets in a set and a timer object
         sb = self._common_setup(remotes=targets, timeout=timeout)
 
-        if log_msg and self.debug_logging_enabled:
-            exit_log_msg = self._issue_entry_log_msg(
-                prefix=f'{self.name} -> {targets}.',
-                log_msg=log_msg)
-        else:
-            exit_log_msg = None
+        # if log_msg and self.debug_logging_enabled:
+        #     exit_log_msg = self._issue_entry_log_msg(
+        #         prefix=f'{self.name} -> {targets}.',
+        #         log_msg=log_msg)
+        # else:
+        #     exit_log_msg = None
 
         work_remotes = sb.remotes.copy()
         self.remotes_unregistered = set()
@@ -1277,8 +1278,145 @@ class SmartThread:
             time.sleep(0.1)
 
         # if caller specified a log message to issue
-        if exit_log_msg:
-            self.logger.debug(exit_log_msg)
+        # if exit_log_msg:
+        #     self.logger.debug(exit_log_msg)
+
+    # ####################################################################
+    # # recv_msg
+    # ####################################################################
+    # def recv_msg(self,
+    #              remote: str,
+    #              log_msg: Optional[str] = None,
+    #              timeout: OptIntFloat = None,
+    #              raise_not_alive: bool = True) -> Any:
+    #     """Receive a msg.
+    #
+    #     Args:
+    #         remote: thread we expect to send us a message
+    #         log_msg: log message to issue
+    #         timeout: number of seconds to wait for message
+    #         raise_not_alive: If True, raise an error the remote thread
+    #             has ended. If False, continue to wait for the remote
+    #             thread to become alive if not already alive. In either
+    #             case, a timeout will be recognized if specified and the
+    #             time expires before a thread is recognized as having
+    #             ended.
+    #
+    #     Returns:
+    #         message unless timeout occurs
+    #
+    #     """
+    #     # get RequestBlock with targets in a set and a timer object
+    #     request_block = self._request_setup(
+    #         request_name='recv_msg',
+    #         remotes=remote,
+    #         process_rtn=self._process_recv_msg,
+    #         cleanup_rtn=None,
+    #         completion_count=0,
+    #         raise_not_alive=raise_not_alive,
+    #         timeout=timeout,
+    #         log_msg=log_msg)
+    #
+    #     self._request_loop(request_block=request_block)
+    #
+    #     self.logger.debug(request_block.exit_log_msg)
+    #     # call _common_setup to get timer and verify current thread, but
+    #     # we will use remote directly since _common_setup
+    #     # inconveniently returns remote in a list
+    #     sb = self._common_setup(remotes=remote, timeout=timeout)
+    #     # if log_msg and self.debug_logging_enabled:
+    #     #     exit_log_msg = self._issue_entry_log_msg(
+    #     #         prefix=f'{self.name} <- {remote}.',
+    #     #         log_msg=log_msg)
+    #     # else:
+    #     #     exit_log_msg = None
+    #     pair_key = self._get_pair_key(self.name, remote)
+    #     do_refresh = False
+    #     while True:
+    #         with sel.SELockShare(SmartThread._registry_lock):
+    #             # We don't check to ensure remote is alive since it may
+    #             # have sent us a message and then became not alive. So,
+    #             # we try to get the message first, and if it's not there
+    #             # we will check to see whether the remote is alive.
+    #
+    #             # We do, however, need to check to make sure we have a
+    #             # an entry in the connection_pair array. If the remote
+    #             # has not yet started, there will not yet be an entry.
+    #             # In that case, we need to give more timee to allow the
+    #             # remote to get started.
+    #             if pair_key in SmartThread._pair_array:
+    #                 try:
+    #                     # recv message from remote
+    #                     ret_msg = SmartThread._pair_array[
+    #                         pair_key].status_blocks[
+    #                         self.name].msg_q.get(timeout=0.01)
+    #                     self.logger.info(
+    #                         f'{self.name} received msg from {remote}')
+    #                     # if we had wanted to delete an entry in the
+    #                     # pair array for this thread because the other
+    #                     # thread exited, but we could not because this
+    #                     # thread had a pending msg to recv, then we
+    #                     # deferred the delete. If the msg_q for this
+    #                     # thread is now empty as a result of this recv,
+    #                     # we can go ahead and delete the pair, so
+    #                     # set the flag to do a refresh (we can't do the
+    #                     # refresh here because we need to hold the lock
+    #                     # exclusive - see code below where we do the
+    #                     # refresh)
+    #                     if (SmartThread._pair_array[
+    #                             pair_key].status_blocks[
+    #                             self.name].del_deferred
+    #                             and SmartThread._pair_array[
+    #                             pair_key].status_blocks[
+    #                             self.name].msg_q.empty()):
+    #                         do_refresh = True
+    #                     break
+    #                 except queue.Empty:
+    #                     # The msg queue was just now empty. The fact
+    #                     # that the pair_key was valid implies the remote
+    #                     # was registered at one time. If the remote is
+    #                     # no longer in the status_blocks dict, then it
+    #                     # became not alive and was removed from the
+    #                     # registry. (No need to check the msg queue
+    #                     # again - we are locked, meaning the remote was
+    #                     # already gone - it could not have just now
+    #                     # send us the msg and then get removed from the
+    #                     # status_blocks without having obtained the lock
+    #                     # exclusive.
+    #                     # @sbt WAIT - this can't really happen. If the
+    #                     # pair_key is valid, then the remote must be
+    #                     # there unless it left us a msg and exiting,
+    #                     # in which case we should have just read that
+    #                     # msg. If the remote left without leaving us a
+    #                     # msg, then the pair_key would not be valid.
+    #                     # so, I don't think we can ever see this case
+    #                     # where the remote is gone on a queue.empty
+    #                     # condition.
+    #                     if remote not in SmartThread._pair_array[
+    #                             pair_key].status_blocks:
+    #                         raise SmartThreadRemoteThreadNotAlive(
+    #                             f'{self.name} send_msg detected {remote} '
+    #                             'thread is not alive.')
+    #
+    #         if sb.timer.is_expired():
+    #             self.logger.error(
+    #                 f'{self.name} raising SmartThreadRequestTimedOut '
+    #                 f'waiting for {remote}')
+    #             raise SmartThreadRequestTimedOut(
+    #                 f'recv_msg {self.name} timed out waiting for message '
+    #                 f'from {remote}.')
+    #
+    #         time.sleep(0.1)
+    #
+    #     if do_refresh:
+    #         with sel.SELockExcl(SmartThread._registry_lock):
+    #             self._refresh_pair_array()
+    #
+    #     # if caller specified a log message to issue
+    #     # if exit_log_msg:
+    #     #     self.logger.debug(exit_log_msg)
+    #
+    #     return ret_msg
 
     ####################################################################
     # recv_msg
@@ -1286,121 +1424,105 @@ class SmartThread:
     def recv_msg(self,
                  remote: str,
                  log_msg: Optional[str] = None,
-                 timeout: OptIntFloat = None) -> Any:
+                 timeout: OptIntFloat = None,
+                 raise_not_alive: bool = True) -> Any:
         """Receive a msg.
 
         Args:
             remote: thread we expect to send us a message
             log_msg: log message to issue
             timeout: number of seconds to wait for message
+            raise_not_alive: If True, raise an error the remote thread
+                has ended. If False, continue to wait for the remote
+                thread to become alive if not already alive. In either
+                case, a timeout will be recognized if specified and the
+                time expires before a thread is recognized as having
+                ended.
 
         Returns:
             message unless timeout occurs
 
-        Raises:
-            SmartThreadRequestTimedOut: recv_msg processing timed out
-                waiting for a message to arrive.
-            SmartThreadRemoteThreadNotAlive: send_msg detected remote
-                thread is not alive.
+        """
+        # get RequestBlock with targets in a set and a timer object
+        request_block = self._request_setup(
+            request_name='recv_msg',
+            remotes=remote,
+            process_rtn=self._process_recv_msg,
+            cleanup_rtn=None,
+            completion_count=0,
+            raise_not_alive=raise_not_alive,
+            timeout=timeout,
+            log_msg=log_msg)
+
+        self._request_loop(request_block=request_block)
+
+        self.logger.debug(request_block.exit_log_msg)
+
+        return request_block.ret_msg
+
+    ####################################################################
+    # _process_resume
+    ####################################################################
+    def _process_recv_msg(self,
+                          request_block: RequestBlock,
+                          pk_remote: PairKeyRemote,
+                          local_sb: ConnectionStatusBlock,
+                          ) -> bool:
+        """Process the recv_msg request.
+
+        Args:
+            request_block: contains request related data
+            pk_remote: the pair_key and remote name
+            local_sb: connection block for this thread
+
+        Returns:
+            True when request completed, False otherwise
 
         """
-        # call _common_setup to get timer and verify current thread, but
-        # we will use remote directly since _common_setup
-        # inconveniently returns remote in a list
-        sb = self._common_setup(remotes=remote, timeout=timeout)
-        if log_msg and self.debug_logging_enabled:
-            exit_log_msg = self._issue_entry_log_msg(
-                prefix=f'{self.name} <- {remote}.',
-                log_msg=log_msg)
-        else:
-            exit_log_msg = None
-        pair_key = self._get_pair_key(self.name, remote)
-        do_refresh = False
-        while True:
-            with sel.SELockShare(SmartThread._registry_lock):
-                # We don't check to ensure remote is alive since it may
-                # have sent us a message and then became not alive. So,
-                # we try to get the message first, and if it's not there
-                # we will check to see whether the remote is alive.
+        try:
+            # recv message from remote
+            request_block.ret_msg = local_sb.msg_q.get(timeout=0.01)
+            self.logger.info(
+                f'{self.name} received msg from {pk_remote[1]}')
+            # if we had wanted to delete an entry in the
+            # pair array for this thread because the other
+            # thread exited, but we could not because this
+            # thread had a pending msg to recv, then we
+            # deferred the delete. If the msg_q for this
+            # thread is now empty as a result of this recv,
+            # we can go ahead and delete the pair, so
+            # set the flag to do a refresh (we can't do the
+            # refresh here because we need to hold the lock
+            # exclusive
+            if local_sb.del_deferred and local_sb.msg_q.empty():
+                request_block.do_refresh = True
+            return True
 
-                # We do, however, need to check to make sure we have a
-                # an entry in the connection_pair array. If the remote
-                # has not yet started, there will not yet be an entry.
-                # In that case, we need to give more timee to allow the
-                # remote to get started.
-                if pair_key in SmartThread._pair_array:
-                    try:
-                        # recv message from remote
-                        ret_msg = SmartThread._pair_array[
-                            pair_key].status_blocks[
-                            self.name].msg_q.get(timeout=0.01)
-                        self.logger.info(
-                            f'{self.name} received msg from {remote}')
-                        # if we had wanted to delete an entry in the
-                        # pair array for this thread because the other
-                        # thread exited, but we could not because this
-                        # thread had a pending msg to recv, then we
-                        # deferred the delete. If the msg_q for this
-                        # thread is now empty as a result of this recv,
-                        # we can go ahead and delete the pair, so
-                        # set the flag to do a refresh (we can't do the
-                        # refresh here because we need to hold the lock
-                        # exclusive - see code below where we do the
-                        # refresh)
-                        if (SmartThread._pair_array[
-                                pair_key].status_blocks[
-                                self.name].del_deferred
-                                and SmartThread._pair_array[
-                                pair_key].status_blocks[
-                                self.name].msg_q.empty()):
-                            do_refresh = True
-                        break
-                    except queue.Empty:
-                        # The msg queue was just now empty. The fact
-                        # that the pair_key was valid implies the remote
-                        # was registered at one time. If the remote is
-                        # no longer in the status_blocks dict, then it
-                        # became not alive and was removed from the
-                        # registry. (No need to check the msg queue
-                        # again - we are locked, meaning the remote was
-                        # already gone - it could not have just now
-                        # send us the msg and then get removed from the
-                        # status_blocks without having obtained the lock
-                        # exclusive.
-                        # @sbt WAIT - this can't really happen. If the
-                        # pair_key is valid, then the remote must be
-                        # there unless it left us a msg and exiting,
-                        # in which case we should have just read that
-                        # msg. If the remote left without leaving us a
-                        # msg, then the pair_key would not be valid.
-                        # so, I don't think we can ever see this case
-                        # where the remote is gone on a queue.empty
-                        # condition.
-                        if remote not in SmartThread._pair_array[
-                                pair_key].status_blocks:
-                            raise SmartThreadRemoteThreadNotAlive(
-                                f'{self.name} send_msg detected {remote} '
-                                'thread is not alive.')
+        except queue.Empty:
+            # The msg queue was just now empty. The fact
+            # that the pair_key was valid implies the remote
+            # was registered at one time. If the remote is
+            # no longer in the status_blocks dict, then it
+            # became not alive and was removed from the
+            # registry. (No need to check the msg queue
+            # again - we are locked, meaning the remote was
+            # already gone - it could not have just now
+            # send us the msg and then get removed from the
+            # status_blocks without having obtained the lock
+            # exclusive.
+            # @sbt WAIT - this can't really happen. If the
+            # pair_key is valid, then the remote must be
+            # there unless it left us a msg and exiting,
+            # in which case we should have just read that
+            # msg. If the remote left without leaving us a
+            # msg, then the pair_key would not be valid.
+            # so, I don't think we can ever see this case
+            # where the remote is gone on a queue.empty
+            # condition.
+            if self._get_status(pk_remote[1]) == ThreadStatus.Stopped:
+                request_block.stopped_remotes |= pk_remote[1]
 
-            if sb.timer.is_expired():
-                self.logger.error(
-                    f'{self.name} raising SmartThreadRequestTimedOut '
-                    f'waiting for {remote}')
-                raise SmartThreadRequestTimedOut(
-                    f'recv_msg {self.name} timed out waiting for message '
-                    f'from {remote}.')
-
-            time.sleep(0.1)
-
-        if do_refresh:
-            with sel.SELockExcl(SmartThread._registry_lock):
-                self._refresh_pair_array()
-
-        # if caller specified a log message to issue
-        if exit_log_msg:
-            self.logger.debug(exit_log_msg)
-
-        return ret_msg
+        return False
 
     ###########################################################################
     # send_recv
@@ -1668,33 +1790,32 @@ class SmartThread:
         # will hopefully will be soon.
         # This also means we have an entry for the remote in
         # the status_blocks in the connection array
-        with SmartThread._pair_array[pk_remote[0]].status_lock:
-            remote_sb = SmartThread._pair_array[
-                pk_remote[0]].status_blocks[pk_remote[1]]
+        remote_sb = SmartThread._pair_array[
+            pk_remote[0]].status_blocks[pk_remote[1]]
 
-            # for a wait request we check to see
-            # whether a previous wait is still
-            # in progress as indicated by the
-            # wait event being set. We also need
-            # to make sure there is not a
-            # pending conflict that the remote
-            # thread needs to clear. Note that
-            # we only worry about the conflict
-            # for wait - a sync conflict does
-            # not impede us here since we are
-            # using a different event block
-            if not (remote_sb.wait_event.is_set()
-                    or (remote_sb.conflict
-                        and remote_sb.wait_wait)):
+        # for a wait request we check to see
+        # whether a previous wait is still
+        # in progress as indicated by the
+        # wait event being set. We also need
+        # to make sure there is not a
+        # pending conflict that the remote
+        # thread needs to clear. Note that
+        # we only worry about the conflict
+        # for wait - a sync conflict does
+        # not impede us here since we are
+        # using a different event block
+        if not (remote_sb.wait_event.is_set()
+                or (remote_sb.conflict
+                    and remote_sb.wait_wait)):
 
-                # # set the code, if one
-                # if code:
-                #     remote_sb.code = code
-                # wake remote thread and start
-                # the while loop again with one
-                # less remote
-                remote_sb.wait_event.set()
-                return True
+            # # set the code, if one
+            # if code:
+            #     remote_sb.code = code
+            # wake remote thread and start
+            # the while loop again with one
+            # less remote
+            remote_sb.wait_event.set()
+            return True
 
         return False
 
@@ -2271,6 +2392,7 @@ class SmartThread:
                     f'{request_block.conflict_remotes=}')
 
         return False
+
     ####################################################################
     # _sync_wait_error_cleanup
     ####################################################################
@@ -2928,6 +3050,16 @@ class SmartThread:
         Args:
             request_block: contains targets, timeout, raise_not_alive
 
+        Raises:
+            SmartThreadRequestTimedOut: request processing timed out
+                waiting for the remote.
+            SmartThreadRemoteThreadNotAlive: request detected remote
+                thread is not alive.
+            SmartThreadConflictDeadlockDetected: a deadlock was detected
+                between a smart_sync request and a smart_wait request.
+            SmartThreadWaitDeadlockDetected: a deadlock was detected
+                between two smart_wait requests.
+
         """
         self.request_timeout_names = set()
 
@@ -3083,6 +3215,7 @@ class SmartThread:
             raise_not_alive=False,
             do_refresh=False,
             exit_log_msg=None,
+            ret_msg=None,
             stopped_remotes=set(),
             conflict_remotes=set(),
             deadlock_remotes=set())
@@ -3149,6 +3282,7 @@ class SmartThread:
             raise_not_alive=raise_not_alive,
             do_refresh=False,
             exit_log_msg=None,
+            ret_msg=None,
             stopped_remotes=set(),
             conflict_remotes=set(),
             deadlock_remotes=set())
@@ -3180,8 +3314,8 @@ class SmartThread:
         log_msg_body = (
             f'requestor: {self.name} '
             f'targets: {sorted(request_block.remotes)} '
-            f'timeout value: {request_block.timer_value()} '
-            f'{get_formatted_call_sequence(latest=2, depth=1)}')
+            f'timeout value: {request_block.timer.timeout_value()} '
+            f'{get_formatted_call_sequence(latest=3, depth=1)}')
 
         if log_msg:
             log_msg_body += f' {log_msg}'
@@ -3192,7 +3326,7 @@ class SmartThread:
         exit_log_msg = (
             f'{request_block.request_name} exit: {log_msg_body}')
 
-        self.logger.debug(entry_log_msg, stacklevel=2)
+        self.logger.debug(entry_log_msg, stacklevel=3)
         return exit_log_msg
 
     ####################################################################
