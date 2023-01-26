@@ -8056,7 +8056,8 @@ class ConfigVerifier:
         send_msg_serial_num = self.add_cmd(
             SendMsg(cmd_runners=['delta', 'echo'],
                     receivers=['alpha', 'beta', 'charlie'],
-                    msgs_to_send=msgs_to_send))
+                    msgs_to_send=msgs_to_send,
+                    log_msg='SendCmd test log message 1'))
 
         ################################################################
         # confirm the send_msg
@@ -8073,7 +8074,7 @@ class ConfigVerifier:
             RecvMsg(cmd_runners=['alpha', 'beta', 'charlie'],
                     senders=['delta', 'echo'],
                     exp_msgs=msgs_to_send,
-                    log_msg='RecvMsg log message'))
+                    log_msg='RecvMsg test log message 2'))
 
         ################################################################
         # confirm the recv_msg
@@ -8092,24 +8093,28 @@ class ConfigVerifier:
                  resumers='charlie',
                  stopped_remotes=set(),
                  wait_for=st.WaitFor.All,
-                 raise_not_alive=True))
+                 raise_not_alive=True,
+                 log_msg='Wait test log message 3'))
         ################################################################
         # resume
         ################################################################
         self.add_cmd(
             Resume(cmd_runners='charlie',
                    targets='beta',
-                   stopped_names=[]))
+                   stopped_names=[],
+                   log_msg='Resume test log message 4'))
 
         ################################################################
         # sync
         ################################################################
         self.add_cmd(
             Sync(cmd_runners='beta',
-                 targets='charlie'))
+                 targets='charlie',
+                 log_msg='Sync test log message 5'))
         self.add_cmd(
             Sync(cmd_runners='charlie',
-                 targets='beta'))
+                 targets='beta',
+                 log_msg='Sync test log message 6'))
 
         ################################################################
         # stop all threads
@@ -8125,7 +8130,8 @@ class ConfigVerifier:
             cmd_runners='alpha'))
         self.add_cmd(Join(
             cmd_runners='alpha',
-            join_names=['beta', 'charlie', 'delta', 'echo']))
+            join_names=['beta', 'charlie', 'delta', 'echo'],
+            log_msg='Join test log message 7'))
 
         self.add_cmd(ValidateConfig(
             cmd_runners='alpha'))
