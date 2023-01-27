@@ -684,6 +684,8 @@ class Join(ConfigCmd):
         """
         self.config_ver.handle_join(cmd_runner=cmd_runner,
                                     join_names=self.join_names,
+                                    timeout_type=TimeoutType.TimeoutNone,
+                                    timeout=0,
                                     log_msg=self.log_msg)
 
 
@@ -710,10 +712,11 @@ class JoinTimeoutFalse(Join):
         Args:
             cmd_runner: name of thread running the command
         """
-        self.config_ver.handle_join_tof(cmd_runner=cmd_runner,
-                                        join_names=self.join_names,
-                                        timeout=self.timeout,
-                                        log_msg=self.log_msg)
+        self.config_ver.handle_join(cmd_runner=cmd_runner,
+                                    join_names=self.join_names,
+                                    timeout_type=TimeoutType.TimeoutFalse,
+                                    timeout=self.timeout,
+                                    log_msg=self.log_msg)
 
 
 ########################################################################
@@ -744,16 +747,18 @@ class JoinTimeoutTrue(JoinTimeoutFalse):
             cmd_runner: name of thread running the command
         """
         if self.timeout_names:
-            self.config_ver.handle_join_tot(cmd_runner=cmd_runner,
-                                            join_names=self.join_names,
-                                            timeout=self.timeout,
-                                            timeout_names=self.timeout_names,
-                                            log_msg=self.log_msg)
+            self.config_ver.handle_join(cmd_runner=cmd_runner,
+                                        join_names=self.join_names,
+                                        timeout_type=TimeoutType.TimeoutTrue,
+                                        timeout=self.timeout,
+                                        timeout_names=set(self.timeout_names),
+                                        log_msg=self.log_msg)
         else:
-            self.config_ver.handle_join_tof(cmd_runner=cmd_runner,
-                                            join_names=self.join_names,
-                                            timeout=self.timeout,
-                                            log_msg=self.log_msg)
+            self.config_ver.handle_join(cmd_runner=cmd_runner,
+                                        join_names=self.join_names,
+                                        timeout_type=TimeoutType.TimeoutFalse,
+                                        timeout=self.timeout,
+                                        log_msg=self.log_msg)
 
 
 ########################################################################
@@ -1124,6 +1129,8 @@ class SendMsg(ConfigCmd):
                  cmd_runners: StrOrList,
                  receivers: StrOrList,
                  msgs_to_send: dict[str, Any],
+                 raise_not_alive: bool = True,
+                 stopped_remotes: Optional[StrOrSet] = None,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
@@ -1132,6 +1139,12 @@ class SendMsg(ConfigCmd):
             receivers = [receivers]
         self.receivers = receivers
         self.msgs_to_send = msgs_to_send
+        self.raise_not_alive = raise_not_alive
+
+        if stopped_remotes and isinstance(stopped_remotes, str):
+            stopped_remotes = {stopped_remotes}
+        self.stopped_remotes = stopped_remotes
+
         self.log_msg = log_msg
 
         self.arg_list += ['receivers']
@@ -1146,6 +1159,12 @@ class SendMsg(ConfigCmd):
             cmd_runner=cmd_runner,
             receivers=self.receivers,
             msg_to_send=self.msgs_to_send[cmd_runner],
+            timeout_type=TimeoutType.TimeoutNone,
+            timeout=0,
+            raise_not_alive=self.raise_not_alive,
+            unreg_timeout_names=None,
+            fullq_timeout_names=None,
+            stopped_remotes=self.stopped_remotes,
             log_msg=self.log_msg)
 
 
@@ -1158,6 +1177,8 @@ class SendMsgTimeoutFalse(SendMsg):
                  receivers: StrOrList,
                  msgs_to_send: dict[str, Any],
                  timeout: IntOrFloat,
+                 raise_not_alive: bool = True,
+                 stopped_remotes: Optional[StrOrSet] = None,
                  # unreg_timeout_names: StrOrList,
                  # fullq_timeout_names: StrOrList,
                  log_msg: Optional[str] = None) -> None:
@@ -1165,6 +1186,8 @@ class SendMsgTimeoutFalse(SendMsg):
             cmd_runners=cmd_runners,
             receivers=receivers,
             msgs_to_send=msgs_to_send,
+            raise_not_alive=raise_not_alive,
+            stopped_remotes=stopped_remotes,
             log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
 
@@ -1178,11 +1201,16 @@ class SendMsgTimeoutFalse(SendMsg):
         Args:
             cmd_runner: name of thread running the command
         """
-        self.config_ver.handle_send_msg_tof(
+        self.config_ver.handle_send_msg(
             cmd_runner=cmd_runner,
             receivers=self.receivers,
             msg_to_send=self.msgs_to_send[cmd_runner],
+            timeout_type=TimeoutType.TimeoutFalse,
             timeout=self.timeout,
+            raise_not_alive=self.raise_not_alive,
+            unreg_timeout_names=None,
+            fullq_timeout_names=None,
+            stopped_remotes=self.stopped_remotes,
             log_msg=self.log_msg)
 
 
@@ -1197,12 +1225,16 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
                  timeout: IntOrFloat,
                  unreg_timeout_names: StrOrList,
                  fullq_timeout_names: StrOrList,
+                 raise_not_alive: bool = True,
+                 stopped_remotes: Optional[StrOrSet] = None,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(
             cmd_runners=cmd_runners,
             receivers=receivers,
             msgs_to_send=msgs_to_send,
             timeout=timeout,
+            raise_not_alive=raise_not_alive,
+            stopped_remotes=stopped_remotes,
             # unreg_timeout_names=unreg_timeout_names,
             # fullq_timeout_names=fullq_timeout_names,
             log_msg=log_msg)
@@ -1225,13 +1257,16 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
         Args:
             cmd_runner: name of thread running the command
         """
-        self.config_ver.handle_send_msg_tot(
+        self.config_ver.handle_send_msg(
             cmd_runner=cmd_runner,
             receivers=self.receivers,
             msg_to_send=self.msgs_to_send[cmd_runner],
+            timeout_type=TimeoutType.TimeoutTrue,
             timeout=self.timeout,
-            unreg_timeout_names=self.unreg_timeout_names,
-            fullq_timeout_names=self.fullq_timeout_names,
+            raise_not_alive=self.raise_not_alive,
+            unreg_timeout_names=set(self.unreg_timeout_names),
+            fullq_timeout_names=set(self.fullq_timeout_names),
+            stopped_remotes=self.stopped_remotes,
             log_msg=self.log_msg)
 
 
@@ -1409,14 +1444,16 @@ class SyncTimeoutTrue(SyncTimeoutFalse):
                  timeout_remotes: set[str],
                  stopped_remotes: Optional[set[str]] = None,
                  conflict_remotes: Optional[set[str]] = None,
-                 raise_not_alive: bool = True) -> None:
+                 raise_not_alive: bool = True,
+                 log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners,
                          targets=targets,
                          timeout=timeout,
                          timeout_remotes=timeout_remotes,
                          stopped_remotes=stopped_remotes,
                          conflict_remotes=conflict_remotes,
-                         raise_not_alive=raise_not_alive)
+                         raise_not_alive=raise_not_alive,
+                         log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
 
     def run_process(self, cmd_runner: str) -> None:
@@ -1444,13 +1481,16 @@ class SyncTimeoutTrue(SyncTimeoutFalse):
 class Unregister(ConfigCmd):
     def __init__(self,
                  cmd_runners: StrOrList,
-                 unregister_targets: StrOrList) -> None:
+                 unregister_targets: StrOrList,
+                 log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
         if isinstance(unregister_targets, str):
             unregister_targets = [unregister_targets]
         self.unregister_targets = unregister_targets
+
+        self.log_msg = log_msg
 
         self.arg_list += ['unregister_targets']
 
@@ -1462,7 +1502,8 @@ class Unregister(ConfigCmd):
         """
         self.config_ver.unregister_threads(
             cmd_runner=cmd_runner,
-            unregister_targets=self.unregister_targets)
+            unregister_targets=self.unregister_targets,
+            log_msg=self.log_msg)
 
 
 ########################################################################
@@ -8005,34 +8046,46 @@ class ConfigVerifier:
                                           auto_start=False,
                                           target_rtn=outer_f1,
                                           app_config
-                                          =AppConfig.RemoteThreadApp)]))
+                                          =AppConfig.RemoteThreadApp),
+                             F1CreateItem(name='fox',
+                                          auto_start=False,
+                                          target_rtn=outer_f1,
+                                          app_config
+                                          =AppConfig.ScriptStyle),
+                             F1CreateItem(name='george',
+                                          auto_start=False,
+                                          target_rtn=outer_f1,
+                                          app_config
+                                          =AppConfig.RemoteThreadApp)
+                             ]))
         self.add_cmd(VerifyInRegistry(
             cmd_runners='alpha',
             exp_in_registry_names=['alpha', 'beta', 'charlie', 'delta',
-                                   'echo']))
+                                   'echo', 'fox', 'george']))
         self.add_cmd(VerifyAlive(
             cmd_runners='alpha',
             exp_alive_names=['alpha', 'beta', 'charlie']))
         self.add_cmd(VerifyAliveNot(
             cmd_runners='alpha',
-            exp_not_alive_names=['delta', 'echo']))
+            exp_not_alive_names=['delta', 'echo', 'fox', 'george']))
         self.add_cmd(VerifyActive(
             cmd_runners='alpha',
             exp_active_names=['alpha', 'beta', 'charlie']))
         self.add_cmd(VerifyRegistered(
             cmd_runners='alpha',
-            exp_registered_names=['delta', 'echo']))
+            exp_registered_names=['delta', 'echo', 'fox', 'george']))
         self.add_cmd(VerifyStatus(
             cmd_runners='alpha',
             check_status_names=['alpha', 'beta', 'charlie'],
             expected_status=st.ThreadStatus.Alive))
         self.add_cmd(VerifyStatus(
             cmd_runners='alpha',
-            check_status_names=['delta', 'echo'],
+            check_status_names=['delta', 'echo', 'fox', 'george'],
             expected_status=st.ThreadStatus.Registered))
         self.add_cmd(VerifyPaired(
             cmd_runners='alpha',
-            exp_paired_names=['alpha', 'beta', 'charlie', 'delta', 'echo']))
+            exp_paired_names=['alpha', 'beta', 'charlie', 'delta', 'echo',
+                              'fox', 'george']))
         self.add_cmd(StartThread(
             cmd_runners='alpha',
             start_names=['delta', 'echo']))
@@ -8125,14 +8178,23 @@ class ConfigVerifier:
                                             'delta', 'echo']))
         self.add_cmd(VerifyAliveNot(
             cmd_runners='alpha',
-            exp_not_alive_names=['beta', 'charlie', 'delta', 'echo']))
+            exp_not_alive_names=['beta', 'charlie', 'delta', 'echo',
+                                 'fox', 'george']))
         self.add_cmd(ValidateConfig(
             cmd_runners='alpha'))
         self.add_cmd(Join(
             cmd_runners='alpha',
             join_names=['beta', 'charlie', 'delta', 'echo'],
             log_msg='Join test log message 7'))
-
+        self.add_cmd(ValidateConfig(
+            cmd_runners='alpha'))
+        self.add_cmd(Unregister(
+            cmd_runners='alpha',
+            unregister_targets=['fox', 'george'],
+            log_msg='Unregister test log message 8'))
+        self.add_cmd(VerifyAliveNot(
+            cmd_runners='alpha',
+            exp_not_alive_names=['fox', 'george']))
         self.add_cmd(ValidateConfig(
             cmd_runners='alpha'))
 
@@ -9037,7 +9099,11 @@ class ConfigVerifier:
     def handle_join(self,
                     cmd_runner: str,
                     join_names: list[str],
-                    log_msg: str) -> None:
+                    log_msg: str,
+                    timeout_type: TimeoutType = TimeoutType.TimeoutNone,
+                    timeout: Optional[IntOrFloat] = None,
+                    timeout_names: Optional[set[str]] = None
+                    ) -> None:
 
         """Handle the join execution and log msgs.
 
@@ -9045,38 +9111,58 @@ class ConfigVerifier:
             cmd_runner: name of thread doing the cmd
             join_names: target threads that we will join
             log_msg: log message to issue on the join (name be None)
+            timeout_type: None, False, or True
+            timeout: value for timeout on join request
+            timeout_names: threads that are expected to timeout
 
         """
+        self.log_test_msg(f'handle_join entry: {cmd_runner=}, {join_names=}')
         self.log_ver.add_call_seq(
-            name='handle_join',
+            name='smart_join',
             seq='test_smart_thread.py::ConfigVerifier.handle_join')
 
-        # self.join_event_items[cmd_runner] = MonitorEventItem(
-        #     client_event=threading.Event(),
-        #     targets=join_names.copy()
-        # )
-
-        self.monitor_event.set()
-
         start_time = time.time()
-        self.all_threads[cmd_runner].smart_join(
-            targets=set(join_names),
-            log_msg=log_msg)
+        enter_exit = ('entry', 'exit')
+        if timeout_type == TimeoutType.TimeoutNone:
+            self.all_threads[cmd_runner].smart_join(
+                targets=set(join_names),
+                log_msg=log_msg)
+
+        elif timeout_type == TimeoutType.TimeoutFalse:
+            self.all_threads[cmd_runner].smart_join(
+                targets=set(join_names),
+                timeout=timeout,
+                log_msg=log_msg)
+
+        elif timeout_type == TimeoutType.TimeoutTrue:
+            enter_exit = ('entry', )
+            with pytest.raises(st.SmartThreadRequestTimedOut):
+                self.all_threads[cmd_runner].smart_join(
+                    targets=set(join_names),
+                    timeout=timeout,
+                    log_msg=log_msg)
+
+            self.add_log_msg(
+                self.get_error_msg(
+                    cmd_runner=cmd_runner,
+                    smart_request='smart_join',
+                    targets=set(join_names),
+                    pending_remotes=timeout_names,
+                    error_str='SmartThreadRequestTimedOut'),
+                log_level=logging.ERROR)
+
+        self.add_request_log_msg(cmd_runner=cmd_runner,
+                                 smart_request='smart_join',
+                                 targets=set(join_names),
+                                 timeout=timeout,
+                                 timeout_type=timeout_type,
+                                 enter_exit=enter_exit,
+                                 log_msg=log_msg)
+
         elapsed_time: float = time.time() - start_time
         time_per_target: float = elapsed_time/len(join_names)
 
         self.monitor_event.set()
-
-        if log_msg:
-            log_msg_2 = (
-                f'{self.log_ver.get_call_seq("handle_join")} ')
-            log_msg_3 = re.escape(f'{log_msg}')
-            for enter_exit in ('entry', 'exit'):
-                log_msg_1 = re.escape(
-                    f'join() {enter_exit}: {cmd_runner} to join '
-                    f'{sorted(set(join_names))}. ')
-
-                self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
 
         with self.ops_lock:
             self.cmd_waiting_event_items[cmd_runner] = threading.Event()
@@ -9788,7 +9874,7 @@ class ConfigVerifier:
             self.add_log_msg(
                 self.get_error_msg(
                     cmd_runner=cmd_runner,
-                    smart_request='send_msg',
+                    smart_request='smart_resume',
                     targets=targets,
                     error_str='SmartThreadRequestTimedOut',
                     stopped_remotes=set(stopped_remotes)),
@@ -9824,6 +9910,8 @@ class ConfigVerifier:
                         timeout_type: TimeoutType = TimeoutType.TimeoutNone,
                         timeout: IntOrFloat = 0,
                         raise_not_alive: bool = True,
+                        unreg_timeout_names: Optional[set[str]] = None,
+                        fullq_timeout_names: Optional[set[str]] = None,
                         stopped_remotes: Optional[set[str]] = None) -> None:
 
         """Handle the send_cmd execution and log msgs.
@@ -9842,9 +9930,24 @@ class ConfigVerifier:
         """
         self.log_test_msg(f'handle_send entry: {cmd_runner=}, {receivers=} ')
         self.log_ver.add_call_seq(
-            name='handle_send_msg',
+            name='send_msg',
             seq='test_smart_thread.py::ConfigVerifier.handle_send_msg')
         ops_count_names = receivers.copy()
+
+        if unreg_timeout_names:
+            ops_count_names = list(
+                set(ops_count_names)
+                - set(unreg_timeout_names))
+        if fullq_timeout_names:
+            ops_count_names = list(
+                set(ops_count_names)
+                - set(fullq_timeout_names))
+
+        if stopped_remotes:
+            ops_count_names = list(
+                set(ops_count_names)
+                - stopped_remotes)
+
         self.inc_ops_count(ops_count_names, cmd_runner)
 
         elapsed_time: float = 0
@@ -9877,21 +9980,47 @@ class ConfigVerifier:
                     stopped_remotes=stopped_remotes),
                 log_level=logging.ERROR)
 
-        self.all_threads[cmd_runner].send_msg(
-            targets=set(receivers),
-            msg=msg_to_send,
-            log_msg=log_msg)
-        elapsed_time += (time.time() - start_time)
+        elif timeout_type == TimeoutType.TimeoutNone:
+            self.all_threads[cmd_runner].send_msg(
+                targets=set(receivers),
+                msg=msg_to_send,
+                raise_not_alive=raise_not_alive,
+                log_msg=log_msg)
+            elapsed_time += (time.time() - start_time)
+        elif timeout_type == TimeoutType.TimeoutFalse:
+            self.all_threads[cmd_runner].send_msg(
+                targets=set(receivers),
+                msg=msg_to_send,
+                timeout=timeout,
+                raise_not_alive=raise_not_alive,
+                log_msg=log_msg)
+            elapsed_time += (time.time() - start_time)
+        elif timeout_type == TimeoutType.TimeoutTrue:
+            enter_exit = ('entry', )
+            with pytest.raises(st.SmartThreadRequestTimedOut):
+                self.all_threads[cmd_runner].send_msg(
+                    targets=set(receivers),
+                    msg=msg_to_send,
+                    timeout=timeout,
+                    raise_not_alive=raise_not_alive,
+                    log_msg=log_msg)
+            elapsed_time += (time.time() - start_time)
+            self.add_log_msg(
+                self.get_error_msg(
+                    cmd_runner=cmd_runner,
+                    smart_request='send_msg',
+                    targets=set(receivers),
+                    error_str='SmartThreadRequestTimedOut',
+                    stopped_remotes=set(stopped_remotes)),
+                log_level=logging.ERROR)
 
-        if log_msg:
-            log_msg_2 = f'{self.log_ver.get_call_seq("handle_send_msg")} '
-            log_msg_3 = re.escape(f'{log_msg}')
-            for enter_exit in ('entry', 'exit'):
-                log_msg_1 = re.escape(
-                    f'send_msg() {enter_exit}: {cmd_runner} -> '
-                    f'{set(receivers)}. ')
-                self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
-
+        self.add_request_log_msg(cmd_runner=cmd_runner,
+                                 smart_request='send_msg',
+                                 targets=set(receivers),
+                                 timeout=timeout,
+                                 timeout_type=timeout_type,
+                                 enter_exit=enter_exit,
+                                 log_msg=log_msg)
         for name in ops_count_names:
             log_msg = f'{cmd_runner} sent message to {name}'
             self.log_ver.add_msg(
@@ -11185,12 +11314,15 @@ class ConfigVerifier:
     ####################################################################
     def unregister_threads(self,
                            cmd_runner: str,
-                           unregister_targets: list[str]) -> None:
+                           unregister_targets: list[str],
+                           log_msg: Optional[str] = None) -> None:
         """Unregister the named threads.
 
         Args:
             cmd_runner: name of thread doing the unregister
             unregister_targets: names of threads to be unregistered
+            log_msg: log msg for the unregister request
+
         """
         # self.unreg_event_items[cmd_runner] = MonitorEventItem(
         #     client_event=threading.Event(),
@@ -11198,7 +11330,8 @@ class ConfigVerifier:
         # )
         self.monitor_event.set()
         self.all_threads[cmd_runner].unregister(
-            targets=set(unregister_targets))
+            targets=set(unregister_targets),
+            log_msg=log_msg)
         self.monitor_event.set()
 
         with self.ops_lock:
@@ -11206,6 +11339,14 @@ class ConfigVerifier:
 
         self.log_test_msg(f'{cmd_runner=} unregister_threads waiting for '
                           f'monitor')
+
+        self.add_request_log_msg(cmd_runner=cmd_runner,
+                                 smart_request='unregister',
+                                 targets=set(unregister_targets),
+                                 timeout=0,
+                                 timeout_type=TimeoutType.TimeoutNone,
+                                 enter_exit=('entry', 'exit'),
+                                 log_msg=log_msg)
 
         self.cmd_waiting_event_items[cmd_runner].wait()
         with self.ops_lock:
