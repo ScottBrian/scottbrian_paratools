@@ -1500,7 +1500,7 @@ class Unregister(ConfigCmd):
         Args:
             cmd_runner: name of thread running the command
         """
-        self.config_ver.unregister_threads(
+        self.config_ver.handle_unregister(
             cmd_runner=cmd_runner,
             unregister_targets=self.unregister_targets,
             log_msg=self.log_msg)
@@ -3943,7 +3943,7 @@ class CmdWaitingLogSearchItem(LogSearchItem):
                                    '|handle_resume'
                                    '|handle_sync'
                                    '|handle_wait'
-                                   '|unregister_threads)')
+                                   '|handle_unregister)')
         super().__init__(
             search_str=(f"cmd_runner='[a-z]+' {list_of_waiting_methods} "
                         "waiting for monitor"),
@@ -8192,9 +8192,9 @@ class ConfigVerifier:
             cmd_runners='alpha',
             unregister_targets=['fox', 'george'],
             log_msg='Unregister test log message 8'))
-        self.add_cmd(VerifyAliveNot(
+        self.add_cmd(VerifyInRegistryNot(
             cmd_runners='alpha',
-            exp_not_alive_names=['fox', 'george']))
+            exp_not_in_registry_names=['fox', 'george']))
         self.add_cmd(ValidateConfig(
             cmd_runners='alpha'))
 
@@ -9136,11 +9136,19 @@ class ConfigVerifier:
 
         elif timeout_type == TimeoutType.TimeoutTrue:
             enter_exit = ('entry', )
-            with pytest.raises(st.SmartThreadRequestTimedOut):
+            error_msg = self.get_error_ms2(
+                    cmd_runner=cmd_runner,
+                    smart_request='smart_join',
+                    targets=set(join_names),
+                    pending_remotes=timeout_names,
+                    error_str='SmartThreadRequestTimedOut')
+            with pytest.raises(st.SmartThreadRequestTimedOut) as exc:
                 self.all_threads[cmd_runner].smart_join(
                     targets=set(join_names),
                     timeout=timeout,
                     log_msg=log_msg)
+
+            assert str(exc.value) == error_msg
 
             self.add_log_msg(
                 self.get_error_msg(
@@ -10476,6 +10484,132 @@ class ConfigVerifier:
             f'{pending_msg}{stopped_msg}{conflict_msg}{deadlock_msg}')
 
     ####################################################################
+    # get_timeout_msg
+    ####################################################################
+    def get_error_ms2(self,
+                      cmd_runner: str,
+                      smart_request: str,
+                      targets: set[str],
+                      error_str: str,
+                      pending_remotes: Optional[set[str]] = None,
+                      stopped_remotes: Optional[set[str]] = None,
+                      conflict_remotes: Optional[set[str]] = None,
+                      deadlock_remotes: Optional[set[str]] = None
+                      ) -> str:
+        """Build the timeout message.
+
+        Args:
+            cmd_runner: thread doing the request
+            smart_request: name of smart_request
+            targets: target of the smart request
+            error_str: smart_thread error as string
+            pending_remotes: names of threads that are pending
+            stopped_remotes: names of threads that are stopped
+            conflict_remotes: names of sync/wait deadlock threads
+            deadlock_remotes: names of wait/wait deadlock threads
+
+        Returns:
+            error msg string for log and raise
+
+        """
+        targets_msg = (
+            f'while processing a {smart_request} '
+            f'request with remotes '
+            f'{sorted(targets)}.')
+
+        if not pending_remotes:
+            pending_remotes = self.all_threads[
+                cmd_runner].request_timeout_names
+        pending_msg = (
+            f' Remotes that are pending: '
+            f'{sorted(pending_remotes)}.')
+
+        if stopped_remotes:
+            stopped_msg = (
+                ' Remotes that are stopped: '
+                f'{sorted(stopped_remotes)}.')
+        else:
+            stopped_msg = ''
+
+        if conflict_remotes:
+            if smart_request == 'smart_sync':
+                remote_request = 'smart_wait'
+            else:
+                remote_request = 'smart_sync'
+            cr_search = "\[(,| "
+            for name in conflict_remotes:
+                cr_search += "|'" + name + "'"
+            cr_search += ")+\]"
+            conflict_msg = (f' Remotes doing a {remote_request} '
+                            'request that are deadlocked: '
+                            f'{cr_search}.')
+        else:
+            conflict_msg = ''
+
+        if deadlock_remotes:
+            dr_search = "\[(,| "
+            for name in deadlock_remotes:
+                dr_search += "|'" + name + "'"
+            dr_search += ")+\]"
+            deadlock_msg = (f' Remotes doing a smart_wait '
+                            'request that are deadlocked: '
+                            f'{dr_search}.')
+        else:
+            deadlock_msg = ''
+
+        return (
+            f'{cmd_runner} raising {error_str} {targets_msg}'
+            f'{pending_msg}{stopped_msg}{conflict_msg}{deadlock_msg}')
+
+    ####################################################################
+    # handle_unregister
+    ####################################################################
+    def handle_unregister(self,
+                          cmd_runner: str,
+                          unregister_targets: list[str],
+                          log_msg: Optional[str] = None) -> None:
+        """Unregister the named threads.
+
+        Args:
+            cmd_runner: name of thread doing the unregister
+            unregister_targets: names of threads to be unregistered
+            log_msg: log msg for the unregister request
+
+        """
+        self.log_test_msg(f'handle_unregister entry for {cmd_runner=}, '
+                          f'{unregister_targets=}')
+
+        self.log_ver.add_call_seq(
+            name='unregister',
+            seq='test_smart_thread.py::ConfigVerifier.handle_unregister')
+
+        self.all_threads[cmd_runner].unregister(
+            targets=set(unregister_targets),
+            log_msg=log_msg)
+
+        self.monitor_event.set()
+
+        with self.ops_lock:
+            self.cmd_waiting_event_items[cmd_runner] = threading.Event()
+
+        self.log_test_msg(f'{cmd_runner=} handle_unregister waiting for '
+                          f'monitor')
+
+        self.add_request_log_msg(cmd_runner=cmd_runner,
+                                 smart_request='unregister',
+                                 targets=set(unregister_targets),
+                                 timeout=0,
+                                 timeout_type=TimeoutType.TimeoutNone,
+                                 enter_exit=('entry', 'exit'),
+                                 log_msg=log_msg)
+
+        self.cmd_waiting_event_items[cmd_runner].wait()
+        with self.ops_lock:
+            del self.cmd_waiting_event_items[cmd_runner]
+
+        self.log_test_msg(f'handle_unregister exiting: {cmd_runner=}')
+
+    ####################################################################
     # handle_wait
     ####################################################################
     def handle_wait(self,
@@ -11307,52 +11441,6 @@ class ConfigVerifier:
 
         self.log_test_msg(f'{cmd_runner=} stop_thread exiting for '
                           f'{stop_names=}')
-
-
-    ####################################################################
-    # unregister_threads
-    ####################################################################
-    def unregister_threads(self,
-                           cmd_runner: str,
-                           unregister_targets: list[str],
-                           log_msg: Optional[str] = None) -> None:
-        """Unregister the named threads.
-
-        Args:
-            cmd_runner: name of thread doing the unregister
-            unregister_targets: names of threads to be unregistered
-            log_msg: log msg for the unregister request
-
-        """
-        # self.unreg_event_items[cmd_runner] = MonitorEventItem(
-        #     client_event=threading.Event(),
-        #     targets=unregister_targets.copy()
-        # )
-        self.monitor_event.set()
-        self.all_threads[cmd_runner].unregister(
-            targets=set(unregister_targets),
-            log_msg=log_msg)
-        self.monitor_event.set()
-
-        with self.ops_lock:
-            self.cmd_waiting_event_items[cmd_runner] = threading.Event()
-
-        self.log_test_msg(f'{cmd_runner=} unregister_threads waiting for '
-                          f'monitor')
-
-        self.add_request_log_msg(cmd_runner=cmd_runner,
-                                 smart_request='unregister',
-                                 targets=set(unregister_targets),
-                                 timeout=0,
-                                 timeout_type=TimeoutType.TimeoutNone,
-                                 enter_exit=('entry', 'exit'),
-                                 log_msg=log_msg)
-
-        self.cmd_waiting_event_items[cmd_runner].wait()
-        with self.ops_lock:
-            del self.cmd_waiting_event_items[cmd_runner]
-
-        self.log_test_msg(f'unregister_threads exiting: {cmd_runner=}')
 
     ####################################################################
     # update_pair_array

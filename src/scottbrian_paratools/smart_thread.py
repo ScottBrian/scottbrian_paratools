@@ -49,6 +49,7 @@ The smart_thread module contains:
 ########################################################################
 # Standard Library
 ########################################################################
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from enum import auto, Enum, Flag
@@ -151,6 +152,15 @@ class ReqType(Enum):
     Sync = auto()
     Wait = auto()
 
+########################################################################
+# RegLockRequired
+# contains the type of registry lock needed for request loop
+########################################################################
+class RegLockRequired(Enum):
+    NoLock = auto()
+    Share = auto()
+    Excl = auto()
+
 
 ########################################################################
 # RequestBlock
@@ -167,6 +177,8 @@ class RequestBlock:
                            PairKeyRemote,
                            "SmartThread.ConnectionStatusBlock"], bool]
     cleanup_rtn: Callable[[list[PairKeyRemote], str], None]
+    req_lock_mode: sel.SELockObtainMode
+    get_block_lock: bool
     remotes: set[str]
     completion_count: int
     pk_remotes: list[PairKeyRemote]
@@ -668,11 +680,13 @@ class SmartThread:
     ####################################################################
     def unregister(self, *,
                    targets: Union[str, set[str]],
+                   timeout: OptIntFloat = None,
                    log_msg: Optional[str] = None) -> None:
         """Unregister threads that were never started.
 
         Args:
             targets: thread names that are to be unregistered
+            timeout: timeout to use instead of default timeout
             log_msg: log message to issue
 
 
@@ -698,76 +712,143 @@ class SmartThread:
 
         """
         # get RequestBlock with targets in a set and a timer object
-        sb = self._common_setup(remotes=targets, timeout=None)
+        request_block = self._request_setup(
+            request_name='unregister',
+            remotes=targets,
+            process_rtn=self._process_unregister,
+            cleanup_rtn=None,
+            req_lock_mode=sel.SELockObtainMode.Exclusive,
+            get_block_lock=False,
+            completion_count=0,
+            raise_not_alive=False,
+            timeout=timeout,
+            log_msg=log_msg)
 
-        # if log_msg and self.debug_logging_enabled:
-        #     exit_log_msg = self._issue_entry_log_msg(
-        #         prefix=f'{threading.current_thread().name} to unregister '
-        #                f'{sb.remotes}.',
-        #         log_msg=log_msg)
-        # else:
-        #     exit_log_msg = None
+        self._request_loop(request_block=request_block)
 
-        work_remotes = sb.remotes.copy()
-
-        while work_remotes:
-            for remote in work_remotes:
-                with sel.SELockExcl(SmartThread._registry_lock):
-                    if remote not in SmartThread._registry:
-                        raise SmartThreadInvalidUnregister(
-                            f'{self.name} attempted to unregister '
-                            f'remote thread {remote} which was not '
-                            f'found in the registry.')
-                    if SmartThread._registry[
-                            remote].status != ThreadStatus.Registered:
-                        raise SmartThreadInvalidUnregister(
-                            f'{self.name} attempted to unregister '
-                            f'remote thread {remote} which had the '
-                            'incorrect status of '
-                            f'{SmartThread._registry[remote].status} '
-                            f'instead of the required status of '
-                            f'{ThreadStatus.Registered}')
-
-                    # indicate remove from registry
-                    self._set_status(
-                        target_thread=SmartThread._registry[remote],
-                        new_status=ThreadStatus.Stopped)
-                    # remove this thread from the registry
-                    self._clean_up_registry(process='unregister')
-
-                    self.logger.debug(
-                        f'{self.name} did successful unregister of '
-                        f'{remote}.')
-
-                    # restart while loop with one less remote
-                    work_remotes.remove(remote)
-                    break
-
-            if sb.timer.is_expired():
-                self.logger.error(
-                    f'{self.name} raising SmartThreadRequestTimedOut waiting '
-                    f'for {work_remotes}')
-                raise SmartThreadRequestTimedOut(
-                    f'{self.name} timed out waiting for {work_remotes}.')
-
-            time.sleep(0.2)
+        self.logger.debug(request_block.exit_log_msg)
+        # # get RequestBlock with targets in a set and a timer object
+        # sb = self._common_setup(remotes=targets, timeout=None)
+        #
+        # # if log_msg and self.debug_logging_enabled:
+        # #     exit_log_msg = self._issue_entry_log_msg(
+        # #         prefix=f'{threading.current_thread().name} to unregister '
+        # #                f'{sb.remotes}.',
+        # #         log_msg=log_msg)
+        # # else:
+        # #     exit_log_msg = None
+        #
+        # work_remotes = sb.remotes.copy()
+        #
+        # while work_remotes:
+        #     for remote in work_remotes:
+        #         with sel.SELockExcl(SmartThread._registry_lock):
+        #             if remote not in SmartThread._registry:
+        #                 raise SmartThreadInvalidUnregister(
+        #                     f'{self.name} attempted to unregister '
+        #                     f'remote thread {remote} which was not '
+        #                     f'found in the registry.')
+        #             if SmartThread._registry[
+        #                     remote].status != ThreadStatus.Registered:
+        #                 raise SmartThreadInvalidUnregister(
+        #                     f'{self.name} attempted to unregister '
+        #                     f'remote thread {remote} which had the '
+        #                     'incorrect status of '
+        #                     f'{SmartThread._registry[remote].status} '
+        #                     f'instead of the required status of '
+        #                     f'{ThreadStatus.Registered}')
+        #
+        #             # indicate remove from registry
+        #             self._set_status(
+        #                 target_thread=SmartThread._registry[remote],
+        #                 new_status=ThreadStatus.Stopped)
+        #             # remove this thread from the registry
+        #             self._clean_up_registry(process='unregister')
+        #
+        #             self.logger.debug(
+        #                 f'{self.name} did successful unregister of '
+        #                 f'{remote}.')
+        #
+        #             # restart while loop with one less remote
+        #             work_remotes.remove(remote)
+        #             break
+        #
+        #     if sb.timer.is_expired():
+        #         self.logger.error(
+        #             f'{self.name} raising SmartThreadRequestTimedOut waiting '
+        #             f'for {work_remotes}')
+        #         raise SmartThreadRequestTimedOut(
+        #             f'{self.name} timed out waiting for {work_remotes}.')
+        #
+        #     time.sleep(0.2)
 
         # if exit_log_msg:
         #     self.logger.debug(exit_log_msg)
+
+    ####################################################################
+    # _process_unregister
+    ####################################################################
+    def _process_unregister(self,
+                           request_block: RequestBlock,
+                           pk_remote: PairKeyRemote,
+                           local_sb: ConnectionStatusBlock,
+                           ) -> bool:
+        """Process the smart_join request.
+
+        Args:
+            request_block: contains request related data
+            pk_remote: the pair_key and remote name
+            local_sb: connection block for this thread
+
+        Returns:
+            True when request completed, False otherwise
+
+        """
+        # if pk_remote[1] not in SmartThread._registry:
+        #     raise SmartThreadInvalidUnregister(
+        #         f'{self.name} attempted to unregister '
+        #         f'remote thread {pk_remote[1]} which was not '
+        #         f'found in the registry.')
+        # if SmartThread._registry[
+        #     pk_remote[1]].status != ThreadStatus.Registered:
+        #     raise SmartThreadInvalidUnregister(
+        #         f'{self.name} attempted to unregister '
+        #         f'remote thread {remote} which had the '
+        #         'incorrect status of '
+        #         f'{SmartThread._registry[remote].status} '
+        #         f'instead of the required status of '
+        #         f'{ThreadStatus.Registered}')
+        if (pk_remote[1] in SmartThread._registry
+                and SmartThread._registry[
+                    pk_remote[1]].status == ThreadStatus.Registered):
+            self._set_status(
+                target_thread=SmartThread._registry[pk_remote[1]],
+                new_status=ThreadStatus.Stopped)
+            # remove this thread from the registry
+            self._clean_up_registry(process='unregister')
+
+            self.logger.debug(
+                f'{self.name} did successful unregister of '
+                f'{pk_remote[1]}.')
+
+            # restart while loop with one less remote
+            return True
+
+        return False
 
     ####################################################################
     # join
     ####################################################################
     def smart_join(self, *,
                    targets: Union[str, set[str]],
-                   log_msg: Optional[str] = None,
-                   timeout: OptIntFloat = None) -> None:
+                   timeout: OptIntFloat = None,
+                   log_msg: Optional[str] = None) -> None:
         """Join with remote targets.
 
         Args:
             targets: thread names that are to be joined
-            log_msg: log message to issue
             timeout: timeout to use instead of default timeout
+            log_msg: log message to issue
 
         Raises:
             SmartThreadRequestTimedOut: join timed out waiting for targets.
@@ -803,82 +884,81 @@ class SmartThread:
 
         """
         # get RequestBlock with targets in a set and a timer object
-        sb = self._common_setup(remotes=targets, timeout=timeout)
+        request_block = self._request_setup(
+            request_name='smart_join',
+            remotes=targets,
+            process_rtn=self._process_smart_join,
+            cleanup_rtn=None,
+            req_lock_mode=sel.SELockObtainMode.Exclusive,
+            get_block_lock=False,
+            completion_count=0,
+            raise_not_alive=False,
+            timeout=timeout,
+            log_msg=log_msg)
 
-        # if caller specified a log message to issue
-        # log_msg_part2 = ''
-        # if log_msg and self.debug_logging_enabled:
-        #     log_msg_part2 = (
-        #         f'{self.name} to join {sorted(sb.targets)}. '
-        #         f'{get_formatted_call_sequence(latest=1, depth=1)} '
-        #         f'{log_msg}')
-        #     self.logger.debug(
-        #         f'join() entered: {log_msg_part2}')
-        # if log_msg and self.debug_logging_enabled:
-        #     exit_log_msg = self._issue_entry_log_msg(
-        #         prefix=f'{self.name} to join {sorted(sb.remotes)}.',
-        #         log_msg=log_msg)
-        # else:
-        #     exit_log_msg = None
+        self._request_loop(request_block=request_block)
 
-        work_remotes = sb.remotes.copy()
+        self.logger.debug(request_block.exit_log_msg)
 
-        while work_remotes:
-            for remote in work_remotes:
-                with sel.SELockExcl(SmartThread._registry_lock):
-                    if remote in SmartThread._registry:
-                        # Note that if the remote thread was never
-                        # started, the following join will raise an
-                        # error. If the thread is eventually started,
-                        # we currently have no way to detect that and
-                        # react. We can only hope that a failed join
-                        # here will help give us a clue that something
-                        # went wrong.
-                        # Note also that we timeout each join after a
-                        # short 0.2 seconds so that we release and
-                        # re-obtain the registry lock in between
-                        # attempts. This is done to ensure we don't
-                        # deadlock with any of the other services
-                        # (e.g., recv_msg)
-                        try:
-                            SmartThread._registry[remote].thread.join(
-                              timeout=0.2)
-                        except RuntimeError:
-                            # We know the thread is registered, so
-                            # we will skip it for now and come back to it
-                            # later. If it never starts and exits then
-                            # we will timeout (if timeout was specified)
-                            continue
-                        # we need to check to make sure the thread is
-                        # not alive in case we timed out
-                        if not SmartThread._registry[remote].thread.is_alive():
-                            # indicate remove from registry
-                            self._set_status(
-                                target_thread=SmartThread._registry[remote],
-                                new_status=ThreadStatus.Stopped)
-                            # remove this thread from the registry
-                            self._clean_up_registry(
-                                process='join')
+    ####################################################################
+    # _process_smart_join
+    ####################################################################
+    def _process_smart_join(self,
+                            request_block: RequestBlock,
+                            pk_remote: PairKeyRemote,
+                            local_sb: ConnectionStatusBlock,
+                            ) -> bool:
+        """Process the smart_join request.
 
-                            self.logger.debug(
-                                f'{self.name} did successful join of '
-                                f'{remote}.')
+        Args:
+            request_block: contains request related data
+            pk_remote: the pair_key and remote name
+            local_sb: connection block for this thread
 
-                            # restart while loop with one less remote
-                            work_remotes.remove(remote)
-                            break
+        Returns:
+            True when request completed, False otherwise
 
-            if sb.timer.is_expired():
-                self.logger.error(
-                    f'{self.name} raising SmartThreadRequestTimedOut waiting '
-                    f'for {sorted(work_remotes)}')
-                raise SmartThreadRequestTimedOut(
-                    f'{self.name} timed out waiting for {work_remotes}.')
+        """
+        if pk_remote[1] in SmartThread._registry:
+            # Note that if the remote thread was never
+            # started, the following join will raise an
+            # error. If the thread is eventually started,
+            # we currently have no way to detect that and
+            # react. We can only hope that a failed join
+            # here will help give us a clue that something
+            # went wrong.
+            # Note also that we timeout each join after a
+            # short 0.2 seconds so that we release and
+            # re-obtain the registry lock in between
+            # attempts. This is done to ensure we don't
+            # deadlock with any of the other services
+            # (e.g., recv_msg)
+            try:
+                SmartThread._registry[pk_remote[1]].thread.join(timeout=0.2)
+            except RuntimeError:
+                # We know the thread is registered, so
+                # we will skip it for now and come back to it
+                # later. If it never starts and exits then
+                # we will timeout (if timeout was specified)
+                return False
 
-            time.sleep(0.2)
+            # we need to check to make sure the thread is
+            # not alive in case we timed out
+            if not SmartThread._registry[pk_remote[1]].thread.is_alive():
+                # indicate remove from registry
+                self._set_status(
+                    target_thread=SmartThread._registry[pk_remote[1]],
+                    new_status=ThreadStatus.Stopped)
+                # remove this thread from the registry
+                self._clean_up_registry(
+                    process='join')
 
-        # if exit_log_msg:
-        #     self.logger.debug(exit_log_msg)
+                self.logger.debug(
+                    f'{self.name} did successful join of '
+                    f'{pk_remote[1]}.')
+
+                # restart while loop with one less remote
+                return True
 
     ####################################################################
     # _get_pair_key
@@ -1110,6 +1190,8 @@ class SmartThread:
             remotes=targets,
             process_rtn=self._process_send_msg,
             cleanup_rtn=None,
+            req_lock_mode=sel.SELockObtainMode.Share,
+            get_block_lock=False,
             completion_count=0,
             raise_not_alive=raise_not_alive,
             timeout=timeout,
@@ -1221,6 +1303,8 @@ class SmartThread:
             remotes=remote,
             process_rtn=self._process_recv_msg,
             cleanup_rtn=None,
+            req_lock_mode=sel.SELockObtainMode.Share,
+            get_block_lock=False,
             completion_count=0,
             raise_not_alive=raise_not_alive,
             timeout=timeout,
@@ -1514,6 +1598,8 @@ class SmartThread:
             remotes=targets,
             process_rtn=self._process_resume,
             cleanup_rtn=None,
+            req_lock_mode=sel.SELockObtainMode.Share,
+            get_block_lock=True,
             completion_count=0,
             raise_not_alive=raise_not_alive,
             timeout=timeout,
@@ -1658,6 +1744,8 @@ class SmartThread:
             remotes=targets,
             process_rtn=self._process_sync,
             cleanup_rtn=self._sync_wait_error_cleanup,
+            req_lock_mode=sel.SELockObtainMode.Share,
+            get_block_lock=True,
             completion_count=0,
             raise_not_alive=raise_not_alive,
             timeout=timeout,
@@ -1924,6 +2012,8 @@ class SmartThread:
             remotes=remotes,
             process_rtn=self._process_wait,
             cleanup_rtn=self._sync_wait_error_cleanup,
+            req_lock_mode=sel.SELockObtainMode.Share,
+            get_block_lock=True,
             completion_count=0,
             raise_not_alive=raise_not_alive,
             timeout=timeout,
@@ -2069,7 +2159,7 @@ class SmartThread:
                       ) -> None:
         """Main loop for each request.
 
-        Each of the requests calls tghis method to perform the loop of
+        Each of the requests calls this method to perform the loop of
         the targets.
 
         Args:
@@ -2093,7 +2183,9 @@ class SmartThread:
         while len(work_remotes) > request_block.completion_count:
             num_start_loop_work_remotes = len(work_remotes)
             for pk_remote in work_remotes:
-                with sel.SELockShare(SmartThread._registry_lock):
+                with sel.SELockObtain(
+                        SmartThread._registry_lock,
+                        request_block.req_lock_mode):
                     if pk_remote[0] in SmartThread._pair_array:
                         # having a pair_key in the array implies our entry
                         # exists - set local_sb for easy references
@@ -2101,7 +2193,10 @@ class SmartThread:
                             pk_remote[0]].status_blocks[self.name]
 
                         # lock needed to coordinate conflict/deadlock
-                        with SmartThread._pair_array[pk_remote[0]].status_lock:
+                        with self._connection_block_lock(
+                                lock=SmartThread._pair_array[
+                                    pk_remote[0]].status_lock,
+                                obtain_tf=request_block.get_block_lock):
                             if request_block.process_rtn(request_block,
                                                          pk_remote,
                                                          local_sb):
@@ -2266,6 +2361,8 @@ class SmartThread:
                             "SmartThread.ConnectionStatusBlock"], bool],
                        cleanup_rtn: Optional[Callable[[list[PairKeyRemote],
                                                        str], None]],
+                       req_lock_mode: sel.SELockObtainMode,
+                       get_block_lock: bool,
                        remotes: Union[str, set[str], list[str]],
                        completion_count: int,
                        raise_not_alive: bool,
@@ -2277,10 +2374,12 @@ class SmartThread:
 
         Args:
             request_name: name of smart request
-            remotes: remote threads for the request
             process_rtn: method to process the request for each
                 iteration of the request loop
             cleanup_rtn: method to back out a failed request
+            req_lock_mode: Share, Excl
+            get_block_lock: True or False
+            remotes: remote threads for the request
             raise_not_alive: specifies whether to raise an error when
                 a thread is stopped
             timeout: number of seconds to allow for request completion
@@ -2312,6 +2411,8 @@ class SmartThread:
             request_name=request_name,
             process_rtn=process_rtn,
             cleanup_rtn=cleanup_rtn,
+            req_lock_mode=req_lock_mode,
+            get_block_lock=get_block_lock,
             remotes=remotes,
             completion_count=completion_count,
             pk_remotes=pk_remotes,
@@ -2390,3 +2491,23 @@ class SmartThread:
                          f'Call sequence: {get_formatted_call_sequence(1,2)}')
             self.logger.error(error_msg)
             raise SmartThreadDetectedOpFromForeignThread(error_msg)
+
+    ####################################################################
+    # verify_thread_is_current
+    ####################################################################
+    @contextmanager
+    def _connection_block_lock(*args, **kwds) -> None:
+        """Obtain the connection_block lock.
+
+        Args:
+            lock: the lock to obtain
+            obtain_tf: specifies whether to obtain the lock
+
+        """
+        if kwds['obtain_tf']:
+            kwds['lock'].acquire()
+        try:
+            yield
+        finally:
+            if kwds['obtain_tf']:
+                kwds['lock'].release()
