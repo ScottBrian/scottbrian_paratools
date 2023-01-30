@@ -49,6 +49,7 @@ The smart_thread module contains:
 ########################################################################
 # Standard Library
 ########################################################################
+from collections.abc import Iterable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -152,15 +153,6 @@ class ReqType(Enum):
     Sync = auto()
     Wait = auto()
 
-########################################################################
-# RegLockRequired
-# contains the type of registry lock needed for request loop
-########################################################################
-class RegLockRequired(Enum):
-    NoLock = auto()
-    Share = auto()
-    Excl = auto()
-
 
 ########################################################################
 # RequestBlock
@@ -207,18 +199,18 @@ class ThreadCreate(Flag):
 
 
 ########################################################################
-# ThreadStatus Flags Class
+# ThreadState Flags Class
 # These flags are used to indicate the life cycle of a SmartThread.
 # Initializing is set in the __init__ method. The __init__ method calls
-# _register and upon return the status of Registered is set. When
-# the start method is called, the status is set to Starting, and after
-# the start is done and the thread is alive, the status is set to Alive.
+# _register and upon return the state of Registered is set. When
+# the start method is called, the state is set to Starting, and after
+# the start is done and the thread is alive, the state is set to Alive.
 # When the join method is called and the thread becomes not alive,
-# the status is set to Stopped which then allows the _clean_up_registry
+# the state is set to Stopped which then allows the _clean_up_registry
 # method to remove the SmartThread.
 ########################################################################
-class ThreadStatus(Flag):
-    """Thread status flags."""
+class ThreadState(Flag):
+    """Thread state flags."""
     Unregistered = auto()
     Initializing = auto()
     Registered = auto()
@@ -418,10 +410,10 @@ class SmartThread:
             self.thread = threading.current_thread()
             self.thread.name = name
 
-        self.status: ThreadStatus = ThreadStatus.Unregistered
-        self._set_status(
+        self.st_state: ThreadState = ThreadState.Unregistered
+        self._set_state(
             target_thread=self,
-            new_status=ThreadStatus.Initializing)
+            new_status=ThreadState.Initializing)
 
         self.auto_start = auto_start
 
@@ -481,7 +473,7 @@ class SmartThread:
     # _get_status
     ####################################################################
     @staticmethod
-    def _get_status(name: str) -> ThreadStatus:
+    def _get_status(name: str) -> ThreadState:
         """Get the status of a thread.
 
         Args:
@@ -491,18 +483,18 @@ class SmartThread:
             The thread status
         """
         if name not in SmartThread._registry:
-            return ThreadStatus.Unregistered
+            return ThreadState.Unregistered
         if (not SmartThread._registry[name].thread.is_alive() and
-                SmartThread._registry[name].status == ThreadStatus.Alive):
-            return ThreadStatus.Stopped
-        return SmartThread._registry[name].status
+                SmartThread._registry[name].st_state == ThreadState.Alive):
+            return ThreadState.Stopped
+        return SmartThread._registry[name].st_state
 
     ####################################################################
     # _set_status
     ####################################################################
     def _set_status(self,
                     target_thread: "SmartThread",
-                    new_status: ThreadStatus) -> bool:
+                    new_status: ThreadState) -> bool:
         """Set the status for a thread.
 
         Args:
@@ -512,14 +504,14 @@ class SmartThread:
         Returns:
             True if status was changed, False otherwise
         """
-        saved_status = target_thread.status
+        saved_status = target_thread.st_state
         if saved_status == new_status:
             return False
-        target_thread.status = new_status
+        target_thread.st_state = new_status
 
         self.logger.debug(
             f'{threading.current_thread().name} set '
-            f'status for thread {target_thread.name} from {saved_status} to '
+            f'state for thread {target_thread.name} from {saved_status} to '
             f'{new_status}', stacklevel=2)
         return True
 
@@ -562,12 +554,12 @@ class SmartThread:
             if self.name not in SmartThread._registry:
                 SmartThread._registry[self.name] = self
                 if self.thread.is_alive():
-                    new_status = ThreadStatus.Alive
+                    new_state = ThreadState.Alive
                 else:
-                    new_status = ThreadStatus.Registered
-                self._set_status(
+                    new_state = ThreadState.Registered
+                self._set_state(
                     target_thread=self,
-                    new_status=new_status)
+                    new_state=new_state)
                 SmartThread._registry_last_update = datetime.utcnow()
                 print_time = (SmartThread._registry_last_update
                               .strftime("%H:%M:%S.%f"))
@@ -590,8 +582,6 @@ class SmartThread:
 
         Args:
             process: process being done for cleanup
-        Returns:
-            dictionary of log status items
 
         Raises:
             SmartThreadErrorInRegistry: Registry item with key {key} has
@@ -604,14 +594,12 @@ class SmartThread:
         # Remove any old entries
         keys_to_del = []
         for key, item in SmartThread._registry.items():
-            is_alive: bool = item.thread.is_alive()
-            status: ThreadStatus = item.status
             self.logger.debug(
                 f'key = {key}, item = {item}, '
-                f'item.thread.is_alive() = {is_alive}, '
-                f'status: {status}')
+                f'{item.thread.is_alive()=}, '
+                f'{item.st_state=}')
             if ((not item.thread.is_alive())
-                    and (item.status & ThreadStatus.Stopped)):
+                    and (item.st_state & ThreadState.Stopped)):
                 keys_to_del.append(key)
 
             if key != item.name:
@@ -644,9 +632,17 @@ class SmartThread:
     ####################################################################
     # start
     ####################################################################
-    def smart_start(self) -> None:
+    def smart_start(self,
+                    targets: Iterable,
+                    allowable_states: Optional[list[ThreadState]],
+                    timeout: OptIntFloat = None,
+                    log_msg: Optional[str] = None) -> None:
         """Start the thread.
 
+        Args:
+            targets: names of smart threads to be started
+            timeout: timeout to wait for thread to become registered
+            log_msg: log message to issue for request
         :Example: instantiate a SmartThread and start the thread
 
         >>> import scottbrian_utils.smart_thread as st
@@ -657,23 +653,39 @@ class SmartThread:
         f1 beta entered
 
         """
+        # get RequestBlock with targets in a set and a timer object
+        request_block = self._request_setup(
+            request_name='smart_start',
+            remotes=targets,
+            process_rtn=self._process_start,
+            cleanup_rtn=None,
+            req_lock_mode=sel.SELockObtainMode.Exclusive,
+            get_block_lock=False,
+            completion_count=0,
+            raise_not_alive=False,
+            timeout=timeout,
+            log_msg=log_msg)
+
+        self._request_loop(request_block=request_block)
+
+        self.logger.debug(request_block.exit_log_msg)
         with sel.SELockExcl(SmartThread._registry_lock):
             if not self.thread.is_alive():
-                self._set_status(
+                self._set_state(
                     target_thread=self,
-                    new_status=ThreadStatus.Starting)
+                    new_state=ThreadState.Starting)
                 # self.thread.start()
                 threading.Thread.start(self.thread)
 
             if self.thread.is_alive():
-                self._set_status(
+                self._set_state(
                     target_thread=self,
-                    new_status=ThreadStatus.Alive)
+                    new_state=ThreadState.Alive)
 
         self.logger.debug(
             f'{threading.current_thread().name} started thread {self.name}, '
             f'thread.is_alive(): {self.thread.is_alive()}, '
-            f'status: {self.status}')
+            f'state: {self.st_state}')
 
     ####################################################################
     # unregister
@@ -727,63 +739,6 @@ class SmartThread:
         self._request_loop(request_block=request_block)
 
         self.logger.debug(request_block.exit_log_msg)
-        # # get RequestBlock with targets in a set and a timer object
-        # sb = self._common_setup(remotes=targets, timeout=None)
-        #
-        # # if log_msg and self.debug_logging_enabled:
-        # #     exit_log_msg = self._issue_entry_log_msg(
-        # #         prefix=f'{threading.current_thread().name} to unregister '
-        # #                f'{sb.remotes}.',
-        # #         log_msg=log_msg)
-        # # else:
-        # #     exit_log_msg = None
-        #
-        # work_remotes = sb.remotes.copy()
-        #
-        # while work_remotes:
-        #     for remote in work_remotes:
-        #         with sel.SELockExcl(SmartThread._registry_lock):
-        #             if remote not in SmartThread._registry:
-        #                 raise SmartThreadInvalidUnregister(
-        #                     f'{self.name} attempted to unregister '
-        #                     f'remote thread {remote} which was not '
-        #                     f'found in the registry.')
-        #             if SmartThread._registry[
-        #                     remote].status != ThreadStatus.Registered:
-        #                 raise SmartThreadInvalidUnregister(
-        #                     f'{self.name} attempted to unregister '
-        #                     f'remote thread {remote} which had the '
-        #                     'incorrect status of '
-        #                     f'{SmartThread._registry[remote].status} '
-        #                     f'instead of the required status of '
-        #                     f'{ThreadStatus.Registered}')
-        #
-        #             # indicate remove from registry
-        #             self._set_status(
-        #                 target_thread=SmartThread._registry[remote],
-        #                 new_status=ThreadStatus.Stopped)
-        #             # remove this thread from the registry
-        #             self._clean_up_registry(process='unregister')
-        #
-        #             self.logger.debug(
-        #                 f'{self.name} did successful unregister of '
-        #                 f'{remote}.')
-        #
-        #             # restart while loop with one less remote
-        #             work_remotes.remove(remote)
-        #             break
-        #
-        #     if sb.timer.is_expired():
-        #         self.logger.error(
-        #             f'{self.name} raising SmartThreadRequestTimedOut waiting '
-        #             f'for {work_remotes}')
-        #         raise SmartThreadRequestTimedOut(
-        #             f'{self.name} timed out waiting for {work_remotes}.')
-        #
-        #     time.sleep(0.2)
-
-        # if exit_log_msg:
-        #     self.logger.debug(exit_log_msg)
 
     ####################################################################
     # _process_unregister
@@ -810,20 +765,20 @@ class SmartThread:
         #         f'remote thread {pk_remote[1]} which was not '
         #         f'found in the registry.')
         # if SmartThread._registry[
-        #     pk_remote[1]].status != ThreadStatus.Registered:
+        #     pk_remote[1]].status != ThreadState.Registered:
         #     raise SmartThreadInvalidUnregister(
         #         f'{self.name} attempted to unregister '
         #         f'remote thread {remote} which had the '
         #         'incorrect status of '
         #         f'{SmartThread._registry[remote].status} '
         #         f'instead of the required status of '
-        #         f'{ThreadStatus.Registered}')
+        #         f'{ThreadState.Registered}')
         if (pk_remote[1] in SmartThread._registry
                 and SmartThread._registry[
-                    pk_remote[1]].status == ThreadStatus.Registered):
-            self._set_status(
+                    pk_remote[1]].st_state == ThreadState.Registered):
+            self._set_state(
                 target_thread=SmartThread._registry[pk_remote[1]],
-                new_status=ThreadStatus.Stopped)
+                new_state=ThreadState.Stopped)
             # remove this thread from the registry
             self._clean_up_registry(process='unregister')
 
@@ -946,9 +901,9 @@ class SmartThread:
             # not alive in case we timed out
             if not SmartThread._registry[pk_remote[1]].thread.is_alive():
                 # indicate remove from registry
-                self._set_status(
+                self._set_state(
                     target_thread=SmartThread._registry[pk_remote[1]],
-                    new_status=ThreadStatus.Stopped)
+                    new_state=ThreadState.Stopped)
                 # remove this thread from the registry
                 self._clean_up_registry(
                     process='join')
@@ -996,8 +951,8 @@ class SmartThread:
                alive.
             3) After a thread is registered and is alive, if it fails
                and become not alive, it will remain in the registry
-               until its status is changed to Stopped to indicate it was
-               once alive. Its status is set to Stopped when a join is
+               until its state is changed to Stopped to indicate it was
+               once alive. Its state is set to Stopped when a join is
                done. This will allow a request to know whether to wait
                for the thread to become alive, or to raise an error for
                an attempted request on a thread that is no longer alive.
@@ -1236,7 +1191,7 @@ class SmartThread:
             self.remotes_unregistered |= {pk_remote[1]}
             return False
 
-        if self._get_status(pk_remote[1]) == ThreadStatus.Stopped:
+        if self._get_state(pk_remote[1]) == ThreadState.Stopped:
             request_block.stopped_remotes |= pk_remote[1]
             self.remotes_unregistered |= {pk_remote[1]}
             return False
@@ -1375,7 +1330,7 @@ class SmartThread:
             # so, I don't think we can ever see this case
             # where the remote is gone on a queue.empty
             # condition.
-            if self._get_status(pk_remote[1]) == ThreadStatus.Stopped:
+            if self._get_state(pk_remote[1]) == ThreadState.Stopped:
                 request_block.stopped_remotes |= pk_remote[1]
 
         return False
@@ -1640,7 +1595,7 @@ class SmartThread:
         if pk_remote[1] not in SmartThread._registry:
             return False
 
-        if self._get_status(pk_remote[1]) == ThreadStatus.Stopped:
+        if self._get_state(pk_remote[1]) == ThreadState.Stopped:
             request_block.stopped_remotes |= pk_remote[1]
             return False
 
@@ -1775,7 +1730,7 @@ class SmartThread:
 
         """
         if not local_sb.sync_wait:
-            if self._get_status(pk_remote[1]) == ThreadStatus.Stopped:
+            if self._get_state(pk_remote[1]) == ThreadState.Stopped:
                 request_block.stopped_remotes |= {pk_remote[1]}
                 return False
 
@@ -2363,7 +2318,7 @@ class SmartThread:
                                                        str], None]],
                        req_lock_mode: sel.SELockObtainMode,
                        get_block_lock: bool,
-                       remotes: Union[str, set[str], list[str]],
+                       remotes: Iterable,
                        completion_count: int,
                        raise_not_alive: bool,
                        timeout: OptIntFloat = None,
@@ -2399,7 +2354,7 @@ class SmartThread:
         self.verify_thread_is_current()
         if isinstance(remotes, str):
             remotes = {remotes}
-        elif isinstance(remotes, list):
+        else:
             remotes = set(remotes)
 
         pk_remotes: list[PairKeyRemote] = []
