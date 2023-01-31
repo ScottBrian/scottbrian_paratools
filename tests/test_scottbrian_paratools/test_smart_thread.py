@@ -1860,7 +1860,7 @@ class VerifyStatus(ConfigCmd):
     def __init__(self,
                  cmd_runners: StrOrList,
                  check_status_names: StrOrList,
-                 expected_status: st.ThreadStatus
+                 expected_status: st.ThreadState
                  ) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
@@ -3388,7 +3388,7 @@ class ThreadTracker:
     is_alive: bool
     exiting: bool
     is_auto_started: bool
-    status: st.ThreadStatus
+    status: st.ThreadState
     found_del_pairs: dict[tuple[str, str, str], int]
     num_refresh: int = 0
     stopped_by: str = ''
@@ -3408,7 +3408,7 @@ class MonitorAddItem:
     cmd_runner: str
     thread_alive: bool
     auto_start: bool
-    expected_status: st.ThreadStatus
+    expected_status: st.ThreadState
 
 
 @dataclass
@@ -4341,7 +4341,7 @@ class ConfigVerifier:
                    new_name: str,
                    thread_alive: bool,
                    auto_start: bool,
-                   expected_status: st.ThreadStatus,
+                   expected_status: st.ThreadState,
                    reg_update_msg: str,
                    reg_idx: int,
                    ) -> None:
@@ -4964,7 +4964,7 @@ class ConfigVerifier:
                 self.add_cmd(VerifyStatus(
                     cmd_runners=cmd_runner,
                     check_status_names=names,
-                    expected_status=st.ThreadStatus.Alive))
+                    expected_status=st.ThreadState.Alive))
 
         if active_names and validate_config:
             self.add_cmd(VerifyAlive(cmd_runners=cmd_runner,
@@ -4972,7 +4972,7 @@ class ConfigVerifier:
             self.add_cmd(VerifyStatus(
                 cmd_runners=cmd_runner,
                 check_status_names=active_names,
-                expected_status=st.ThreadStatus.Alive))
+                expected_status=st.ThreadState.Alive))
 
         if validate_config:
             self.add_cmd(ValidateConfig(cmd_runners=cmd_runner))
@@ -8077,11 +8077,11 @@ class ConfigVerifier:
         self.add_cmd(VerifyStatus(
             cmd_runners='alpha',
             check_status_names=['alpha', 'beta', 'charlie'],
-            expected_status=st.ThreadStatus.Alive))
+            expected_status=st.ThreadState.Alive))
         self.add_cmd(VerifyStatus(
             cmd_runners='alpha',
             check_status_names=['delta', 'echo', 'fox', 'george'],
-            expected_status=st.ThreadStatus.Registered))
+            expected_status=st.ThreadState.Registered))
         self.add_cmd(VerifyPaired(
             cmd_runners='alpha',
             exp_paired_names=['alpha', 'beta', 'charlie', 'delta', 'echo',
@@ -8098,7 +8098,7 @@ class ConfigVerifier:
         self.add_cmd(VerifyStatus(
             cmd_runners='alpha',
             check_status_names=['alpha', 'beta', 'charlie', 'delta', 'echo'],
-            expected_status=st.ThreadStatus.Alive))
+            expected_status=st.ThreadState.Alive))
         self.add_cmd(ValidateConfig(
             cmd_runners='alpha'))
         ################################################################
@@ -8554,9 +8554,9 @@ class ConfigVerifier:
         self.all_threads[name] = self.commander_thread
 
         if auto_start:
-            exp_status = st.ThreadStatus.Alive
+            exp_status = st.ThreadState.Alive
         else:
-            exp_status = st.ThreadStatus.Registered
+            exp_status = st.ThreadState.Registered
         with self.ops_lock:
             self.monitor_add_items[cmd_runner] = MonitorAddItem(
                 cmd_runner=cmd_runner,
@@ -8575,7 +8575,7 @@ class ConfigVerifier:
             del self.monitor_add_items[cmd_runner]
             del self.cmd_waiting_event_items[cmd_runner]
             self.expected_registered[name].is_alive = True
-            self.expected_registered[name].status = st.ThreadStatus.Alive
+            self.expected_registered[name].status = st.ThreadState.Alive
 
         self.log_test_msg(f'create_commander_thread exit: {cmd_runner=}')
 
@@ -8620,9 +8620,9 @@ class ConfigVerifier:
         self.all_threads[name] = f1_thread
 
         if auto_start:
-            exp_status = st.ThreadStatus.Alive
+            exp_status = st.ThreadState.Alive
         else:
-            exp_status = st.ThreadStatus.Registered
+            exp_status = st.ThreadState.Registered
 
         with self.ops_lock:
             self.monitor_add_items[cmd_runner] = MonitorAddItem(
@@ -8631,7 +8631,7 @@ class ConfigVerifier:
                 thread_alive=False,
                 auto_start=auto_start,
                 # expected_status=exp_status,
-                expected_status=st.ThreadStatus.Registered)
+                expected_status=st.ThreadState.Registered)
 
             self.cmd_waiting_event_items[cmd_runner] = threading.Event()
 
@@ -9715,17 +9715,17 @@ class ConfigVerifier:
 
         with self.ops_lock:
             if process == 'join':
-                from_status = st.ThreadStatus.Alive
+                from_status = st.ThreadState.Alive
             else:
-                from_status = st.ThreadStatus.Registered
+                from_status = st.ThreadState.Registered
 
             self.expected_registered[del_name].is_alive = False
-            self.expected_registered[del_name].status = st.ThreadStatus.Stopped
+            self.expected_registered[del_name].status = st.ThreadState.Stopped
             self.add_log_msg(
                 f'{cmd_runner} set status for thread '
                 f'{del_name} '
                 f'from {from_status} to '
-                f'{st.ThreadStatus.Stopped}')
+                f'{st.ThreadState.Stopped}')
 
             self.handle_exp_status_log_msgs(log_idx=reg_rem_log_idx)
 
@@ -10189,7 +10189,7 @@ class ConfigVerifier:
         self.log_test_msg(f'handle_started_log_msg entry: {cmd_runner=}, '
                           f'{started_name=}')
         self.expected_registered[started_name].is_alive = True
-        self.expected_registered[started_name].status = st.ThreadStatus.Alive
+        self.expected_registered[started_name].status = st.ThreadState.Alive
         # self.started_event_items['alpha'].targets.remove(cmd_runner)
         # if not self.started_event_items['alpha'].targets:
         #     self.started_event_items['alpha'].client_event.set()
@@ -10830,13 +10830,13 @@ class ConfigVerifier:
     #     non_stopped_resumers = set(resumers)
     #     if error_stopped_target:
     #         for resumer in resumers.keys():
-    #             if resumers[resumer].status == st.ThreadStatus.Stopped:
+    #             if resumers[resumer].status == st.ThreadState.Stopped:
     #                 non_stopped_resumers -= {resumer}
     #
     #     enter_exit = ('entry', 'exit')
     #     for resumer in resumers.keys():
     #         if (error_stopped_target
-    #                 and (resumers[resumer].status == st.ThreadStatus.Stopped)):
+    #                 and (resumers[resumer].status == st.ThreadState.Stopped)):
     #             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
     #                 self.all_threads[cmd_runner].smart_wait(
     #                     remotes=resumer,
@@ -10933,12 +10933,12 @@ class ConfigVerifier:
     #     non_stopped_resumers = set(resumers)
     #     if error_stopped_target:
     #         for resumer in resumers.keys():
-    #             if resumers[resumer].status == st.ThreadStatus.Stopped:
+    #             if resumers[resumer].status == st.ThreadState.Stopped:
     #                 non_stopped_resumers -= {resumer}
     #
     #     for resumer in resumers.keys():
     #         if (error_stopped_target
-    #                 and (resumers[resumer].status == st.ThreadStatus.Stopped)):
+    #                 and (resumers[resumer].status == st.ThreadState.Stopped)):
     #             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
     #                 self.all_threads[cmd_runner].smart_wait(
     #                     remotes=resumer,
@@ -11366,7 +11366,7 @@ class ConfigVerifier:
             self.all_threads[start_name].smart_start()
             # self.expected_registered[start_name].is_alive = True
             # self.expected_registered[
-            #     start_name].status = st.ThreadStatus.Alive
+            #     start_name].status = st.ThreadState.Alive
             self.monitor_event.set()
 
             self.add_log_msg(
@@ -11673,11 +11673,11 @@ class ConfigVerifier:
                     f'which does not match the expected_registered '
                     f'is_alive of {self.expected_registered[name].is_alive}')
             if (self.expected_registered[name].status
-                    != thread.status):
+                    != thread.st_state):
                 self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f'SmartThread registry has entry for name {name} '
-                    f'that has status of {thread.status} '
+                    f'that has status of {thread.st_state} '
                     f'which does not match the expected_registered '
                     f'status of {self.expected_registered[name].status}')
 
@@ -11788,13 +11788,13 @@ class ConfigVerifier:
         stopped_found_real = 0
         for name, thread in st.SmartThread._registry.items():
             if thread.thread.is_alive():
-                if thread.status == st.ThreadStatus.Alive:
+                if thread.st_state == st.ThreadState.Alive:
                     active_found_real += 1
             else:
-                if thread.status == st.ThreadStatus.Registered:
+                if thread.st_state == st.ThreadState.Registered:
                     registered_found_real += 1
-                elif (thread.status == st.ThreadStatus.Alive
-                        or thread.status == st.ThreadStatus.Stopped):
+                elif (thread.st_state == st.ThreadState.Alive
+                        or thread.st_state == st.ThreadState.Stopped):
                     stopped_found_real += 1
 
         registered_found_mock = 0
@@ -11802,13 +11802,13 @@ class ConfigVerifier:
         stopped_found_mock = 0
         for name, thread_tracker in self.expected_registered.items():
             if thread_tracker.is_alive:
-                if thread_tracker.status == st.ThreadStatus.Alive:
+                if thread_tracker.status == st.ThreadState.Alive:
                     active_found_mock += 1
             else:
-                if thread_tracker.status == st.ThreadStatus.Registered:
+                if thread_tracker.status == st.ThreadState.Registered:
                     registered_found_mock += 1
-                elif (thread_tracker.status == st.ThreadStatus.Alive
-                        or thread_tracker.status == st.ThreadStatus.Stopped):
+                elif (thread_tracker.status == st.ThreadState.Alive
+                        or thread_tracker.status == st.ThreadState.Stopped):
                     stopped_found_mock += 1
 
         if num_registered is not None:
@@ -13416,7 +13416,7 @@ class ConfigVerifier:
         self.verify_status(
             cmd_runner=cmd_runner,
             check_status_names=exp_active_names,
-            expected_status=st.ThreadStatus.Alive)
+            expected_status=st.ThreadState.Alive)
         if len(exp_active_names) > 1:
             self.verify_paired(
                 cmd_runner=cmd_runner,
@@ -13496,7 +13496,7 @@ class ConfigVerifier:
         self.verify_status(
             cmd_runner=cmd_runner,
             check_status_names=exp_registered_names,
-            expected_status=st.ThreadStatus.Registered)
+            expected_status=st.ThreadState.Registered)
         if len(exp_registered_names) > 1:
             self.verify_paired(cmd_runner=cmd_runner,
                                exp_paired_names=exp_registered_names)
@@ -13643,7 +13643,7 @@ class ConfigVerifier:
     def verify_status(self,
                       cmd_runner: str,
                       check_status_names: list[str],
-                      expected_status: st.ThreadStatus) -> None:
+                      expected_status: st.ThreadState) -> None:
         """Verify that the given names have the given status.
 
         Args:
@@ -13893,7 +13893,7 @@ class OuterThreadApp(threading.Thread):
         """Run the test."""
         self.smart_thread._set_status(
             target_thread=self.smart_thread,
-            new_status=st.ThreadStatus.Alive)
+            new_status=st.ThreadState.Alive)
         name = self.smart_thread.name
         self.config_ver.add_log_msg(
             f'{name} set status for thread {name} from '
@@ -13937,7 +13937,7 @@ class OuterSmartThreadApp(st.SmartThread, threading.Thread):
         """Run the test."""
         self._set_status(
             target_thread=self,
-            new_status=st.ThreadStatus.Alive)
+            new_status=st.ThreadState.Alive)
         self.config_ver.main_driver()
 
 
@@ -13975,7 +13975,7 @@ class OuterSmartThreadApp2(threading.Thread, st.SmartThread):
         """Run the test."""
         self._set_status(
             target_thread=self,
-            new_status=st.ThreadStatus.Alive)
+            new_status=st.ThreadState.Alive)
         self.config_ver.main_driver()
 
 

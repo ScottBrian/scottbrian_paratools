@@ -177,6 +177,7 @@ class RequestBlock:
     get_block_lock: bool
     remotes: set[str]
     error_stopped_target: bool
+    error_not_registered_target: bool
     completion_count: int
     pk_remotes: list[PairKeyRemote]
     timer: Timer
@@ -185,6 +186,7 @@ class RequestBlock:
     msg_to_send: Any
     ret_msg: Any
     stopped_remotes: set[str]
+    not_registered_remotes: set[str]
     conflict_remotes: set[str]
     deadlock_remotes: set[str]
     full_send_q_remotes: set[str]
@@ -410,7 +412,7 @@ class SmartThread:
         self.st_state: ThreadState = ThreadState.Unregistered
         self._set_state(
             target_thread=self,
-            new_status=ThreadState.Initializing)
+            new_state=ThreadState.Initializing)
 
         self.auto_start = auto_start
 
@@ -467,10 +469,10 @@ class SmartThread:
         return f'{classname}({parms})'
 
     ####################################################################
-    # _get_status
+    # _get_state
     ####################################################################
     @staticmethod
-    def _get_status(name: str) -> ThreadState:
+    def _get_state(name: str) -> ThreadState:
         """Get the status of a thread.
 
         Args:
@@ -489,27 +491,27 @@ class SmartThread:
     ####################################################################
     # _set_status
     ####################################################################
-    def _set_status(self,
-                    target_thread: "SmartThread",
-                    new_status: ThreadState) -> bool:
-        """Set the status for a thread.
+    def _set_state(self,
+                   target_thread: "SmartThread",
+                   new_state: ThreadState) -> bool:
+        """Set the state for a thread.
 
         Args:
             target_thread: thread to set status for
-            new_status: the new status to be set
+            new_state: the new status to be set
 
         Returns:
             True if status was changed, False otherwise
         """
         saved_status = target_thread.st_state
-        if saved_status == new_status:
+        if saved_status == new_state:
             return False
-        target_thread.st_state = new_status
+        target_thread.st_state = new_state
 
         self.logger.debug(
             f'{threading.current_thread().name} set '
             f'state for thread {target_thread.name} from {saved_status} to '
-            f'{new_status}', stacklevel=2)
+            f'{new_state}', stacklevel=2)
         return True
 
     ####################################################################
@@ -689,6 +691,14 @@ class SmartThread:
             True when request completed, False otherwise
 
         """
+        if pk_remote[1] not in SmartThread._registry:
+            self.remotes_unregistered |= {pk_remote[1]}
+            return False
+
+        if self._get_state(pk_remote[1]) == ThreadState.Stopped:
+            request_block.stopped_remotes |= pk_remote[1]
+            return False
+
         if not self.thread.is_alive():
             self._set_state(
                 target_thread=self,
@@ -747,6 +757,7 @@ class SmartThread:
             request_name='unregister',
             remotes=targets,
             error_stopped_target=False,
+            error_not_registered_target=True,
             process_rtn=self._process_unregister,
             cleanup_rtn=None,
             req_lock_mode=sel.SELockObtainMode.Exclusive,
@@ -792,23 +803,22 @@ class SmartThread:
         #         f'{SmartThread._registry[remote].status} '
         #         f'instead of the required status of '
         #         f'{ThreadState.Registered}')
-        if (pk_remote[1] in SmartThread._registry
-                and SmartThread._registry[
-                    pk_remote[1]].st_state == ThreadState.Registered):
-            self._set_state(
-                target_thread=SmartThread._registry[pk_remote[1]],
-                new_state=ThreadState.Stopped)
-            # remove this thread from the registry
-            self._clean_up_registry(process='unregister')
+        if self._get_state(pk_remote[1]) != ThreadState.Registered:
+            request_block.not_registered_remotes |= pk_remote[1]
+            return False
 
-            self.logger.debug(
-                f'{self.name} did successful unregister of '
-                f'{pk_remote[1]}.')
+        # remove this thread from the registry
+        self._set_state(
+            target_thread=SmartThread._registry[pk_remote[1]],
+            new_state=ThreadState.Stopped)
+        self._clean_up_registry(process='unregister')
 
-            # restart while loop with one less remote
-            return True
+        self.logger.debug(
+            f'{self.name} did successful unregister of '
+            f'{pk_remote[1]}.')
 
-        return False
+        # restart while loop with one less remote
+        return True
 
     ####################################################################
     # join
@@ -1113,8 +1123,8 @@ class SmartThread:
     ####################################################################
     def send_msg(self,
                  targets: Union[str, set[str]],
-                 error_stopped_target: bool = True,
                  msg: Any,
+                 error_stopped_target: bool = True,
                  log_msg: Optional[str] = None,
                  timeout: OptIntFloat = None) -> None:
         """Send a msg.
@@ -2155,6 +2165,8 @@ class SmartThread:
 
                 if ((request_block.error_stopped_target
                      and request_block.stopped_remotes)
+                        or (request_block.error_not_registered_target
+                            and request_block.not_registered_remotes)
                         or request_block.conflict_remotes
                         or request_block.deadlock_remotes
                         or request_block.timer.is_expired()):
@@ -2180,6 +2192,13 @@ class SmartThread:
                             f'{sorted(request_block.stopped_remotes)}.')
                     else:
                         stopped_msg = ''
+
+                    if request_block.not_registered_remotes:
+                        not_registered_msg = (
+                            ' Remotes that are not registered: '
+                            f'{sorted(request_block.not_registered_remotes)}.')
+                    else:
+                        not_registered_msg = ''
 
                     if request_block.conflict_remotes:
                         if request_block.request_name == 'smart_sync':
@@ -2209,8 +2228,8 @@ class SmartThread:
                         full_send_q_msg = ''
 
                     msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
-                                 f'{conflict_msg}{deadlock_msg}'
-                                 f'{full_send_q_msg}')
+                                 f'{not_registered_msg}{conflict_msg}'
+                                 f'{deadlock_msg}{full_send_q_msg}')
 
                     # If an error should be raised for stopped threads
                     if (request_block.error_stopped_target
@@ -2263,9 +2282,10 @@ class SmartThread:
                        get_block_lock: bool,
                        remotes: Iterable,
                        error_stopped_target: bool,
-                       completion_count: int,
+                       error_not_registered_target: bool = False,
+                       completion_count: int = 0,
                        timeout: OptIntFloat = None,
-                       log_msg: str,
+                       log_msg: Optional[str] = None,
                        msg_to_send: Any = None,
                        ) -> RequestBlock:
         """Do common setup for each request.
@@ -2280,6 +2300,9 @@ class SmartThread:
             remotes: remote threads for the request
             error_stopped_target: request will raise an error if any
                 one of the targets is in a stopped state.
+            error_not_registered_target: request will raise an error if
+                any one of the targets is in any state other than
+                registered.
             timeout: number of seconds to allow for request completion
             log_msg: caller log message to issue
             msg_to_send: send_msg message to send
@@ -2321,6 +2344,7 @@ class SmartThread:
             msg_to_send=msg_to_send,
             ret_msg=None,
             stopped_remotes=set(),
+            not_registered_remotes=set(),
             conflict_remotes=set(),
             deadlock_remotes=set(),
             full_send_q_remotes=set())
