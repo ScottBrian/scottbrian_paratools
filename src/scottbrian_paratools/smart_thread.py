@@ -73,10 +73,14 @@ from scottbrian_utils.timer import Timer
 from scottbrian_locking import se_lock as sel
 
 
+########################################################################
+# TypeAlias
+########################################################################
 IntFloat: TypeAlias = Union[int, float]
 OptIntFloat: TypeAlias = Optional[IntFloat]
 StrListStrSetStr: TypeAlias = Union[str, list[str], set[str]]
 OptStrListStrSetStr: TypeAlias = Optional[StrListStrSetStr]
+AllowStates: TypeAlias = Union["ThreadState", Iterable["ThreadState"]]
 
 
 ########################################################################
@@ -156,7 +160,7 @@ class ReqType(Enum):
 
 ########################################################################
 # RequestBlock
-# contains the remotes and timer returned from _common_setup
+# contains the remotes and timer returned from _request_setup
 ########################################################################
 
 PairKey: TypeAlias = tuple[str, str]
@@ -172,10 +176,10 @@ class RequestBlock:
     req_lock_mode: sel.SELockObtainMode
     get_block_lock: bool
     remotes: set[str]
+    error_stopped_target: bool
     completion_count: int
     pk_remotes: list[PairKeyRemote]
     timer: Timer
-    raise_not_alive: bool
     do_refresh: bool
     exit_log_msg: Optional[str]
     msg_to_send: Any
@@ -217,6 +221,7 @@ class ThreadState(Flag):
     Starting = auto()
     Alive = auto()
     Stopped = auto()
+
 
 
 ########################################################################
@@ -393,14 +398,6 @@ class SmartThread:
                                            args=args,
                                            kwargs=kwargs,
                                            name=name)
-            # if args or kwargs:
-            #     self.thread = threading.Thread(target=target,
-            #                                    args=args,
-            #                                    kwargs=kwargs,
-            #                                    name=name)
-            # else:
-            #     self.thread = threading.Thread(target=target,
-            #                                    name=name)
         elif thread:  # caller provided the thread to use
             self.thread_create = ThreadCreate.Thread
             self.thread = thread
@@ -634,15 +631,18 @@ class SmartThread:
     ####################################################################
     def smart_start(self,
                     targets: Iterable,
-                    allowable_states: Optional[list[ThreadState]],
+                    error_stopped_target: bool = True,
                     timeout: OptIntFloat = None,
                     log_msg: Optional[str] = None) -> None:
         """Start the thread.
 
         Args:
             targets: names of smart threads to be started
+            error_stopped_target: request will raise an error if any
+                one of the targets is in a stopped state.
             timeout: timeout to wait for thread to become registered
             log_msg: log message to issue for request
+
         :Example: instantiate a SmartThread and start the thread
 
         >>> import scottbrian_utils.smart_thread as st
@@ -657,30 +657,49 @@ class SmartThread:
         request_block = self._request_setup(
             request_name='smart_start',
             remotes=targets,
+            error_stopped_target=error_stopped_target,
             process_rtn=self._process_start,
             cleanup_rtn=None,
             req_lock_mode=sel.SELockObtainMode.Exclusive,
             get_block_lock=False,
             completion_count=0,
-            raise_not_alive=False,
             timeout=timeout,
             log_msg=log_msg)
 
         self._request_loop(request_block=request_block)
 
         self.logger.debug(request_block.exit_log_msg)
-        with sel.SELockExcl(SmartThread._registry_lock):
-            if not self.thread.is_alive():
-                self._set_state(
-                    target_thread=self,
-                    new_state=ThreadState.Starting)
-                # self.thread.start()
-                threading.Thread.start(self.thread)
 
-            if self.thread.is_alive():
-                self._set_state(
-                    target_thread=self,
-                    new_state=ThreadState.Alive)
+    ####################################################################
+    # _process_start
+    ####################################################################
+    def _process_start(self,
+                       request_block: RequestBlock,
+                       pk_remote: PairKeyRemote,
+                       local_sb: ConnectionStatusBlock,
+                       ) -> bool:
+        """Process the smart_join request.
+
+        Args:
+            request_block: contains request related data
+            pk_remote: the pair_key and remote name
+            local_sb: connection block for this thread
+
+        Returns:
+            True when request completed, False otherwise
+
+        """
+        if not self.thread.is_alive():
+            self._set_state(
+                target_thread=self,
+                new_state=ThreadState.Starting)
+            # self.thread.start()
+            threading.Thread.start(self.thread)
+
+        if self.thread.is_alive():
+            self._set_state(
+                target_thread=self,
+                new_state=ThreadState.Alive)
 
         self.logger.debug(
             f'{threading.current_thread().name} started thread {self.name}, '
@@ -727,12 +746,12 @@ class SmartThread:
         request_block = self._request_setup(
             request_name='unregister',
             remotes=targets,
+            error_stopped_target=False,
             process_rtn=self._process_unregister,
             cleanup_rtn=None,
             req_lock_mode=sel.SELockObtainMode.Exclusive,
             get_block_lock=False,
             completion_count=0,
-            raise_not_alive=False,
             timeout=timeout,
             log_msg=log_msg)
 
@@ -842,12 +861,12 @@ class SmartThread:
         request_block = self._request_setup(
             request_name='smart_join',
             remotes=targets,
+            error_stopped_target=False,
             process_rtn=self._process_smart_join,
             cleanup_rtn=None,
             req_lock_mode=sel.SELockObtainMode.Exclusive,
             get_block_lock=False,
             completion_count=0,
-            raise_not_alive=False,
             timeout=timeout,
             log_msg=log_msg)
 
@@ -1094,24 +1113,20 @@ class SmartThread:
     ####################################################################
     def send_msg(self,
                  targets: Union[str, set[str]],
+                 error_stopped_target: bool = True,
                  msg: Any,
                  log_msg: Optional[str] = None,
-                 timeout: OptIntFloat = None,
-                 raise_not_alive: bool = True) -> None:
+                 timeout: OptIntFloat = None) -> None:
         """Send a msg.
 
         Args:
             msg: the msg to be sent
             targets: names to send the message to
+            error_stopped_target: request will raise an error if any
+                one of the targets is in a stopped state.
             log_msg: log message to issue
             timeout: number of seconds to wait for full queue to get
                        free slot
-            raise_not_alive: If True, raise an error the remote thread
-                has ended. If False, continue to wait for the remote
-                thread to become alive if not already alive. In either
-                case, a timeout will be recognized if specified and the
-                time expires before a thread is recognized as having
-                ended.
 
         :Example: instantiate a SmartThread and send a message
 
@@ -1143,12 +1158,12 @@ class SmartThread:
         request_block = self._request_setup(
             request_name='send_msg',
             remotes=targets,
+            error_stopped_target=error_stopped_target,
             process_rtn=self._process_send_msg,
             cleanup_rtn=None,
             req_lock_mode=sel.SELockObtainMode.Share,
             get_block_lock=False,
             completion_count=0,
-            raise_not_alive=raise_not_alive,
             timeout=timeout,
             msg_to_send=msg,
             log_msg=log_msg)
@@ -1232,21 +1247,17 @@ class SmartThread:
     ####################################################################
     def recv_msg(self,
                  remote: str,
+                 error_stopped_target: bool = True,
                  log_msg: Optional[str] = None,
-                 timeout: OptIntFloat = None,
-                 raise_not_alive: bool = True) -> Any:
+                 timeout: OptIntFloat = None) -> Any:
         """Receive a msg.
 
         Args:
             remote: thread we expect to send us a message
+            error_stopped_target: request will raise an error if any
+                one of the targets is in a stopped state.
             log_msg: log message to issue
             timeout: number of seconds to wait for message
-            raise_not_alive: If True, raise an error the remote thread
-                has ended. If False, continue to wait for the remote
-                thread to become alive if not already alive. In either
-                case, a timeout will be recognized if specified and the
-                time expires before a thread is recognized as having
-                ended.
 
         Returns:
             message unless timeout occurs
@@ -1256,12 +1267,12 @@ class SmartThread:
         request_block = self._request_setup(
             request_name='recv_msg',
             remotes=remote,
+            error_stopped_target=error_stopped_target,
             process_rtn=self._process_recv_msg,
             cleanup_rtn=None,
             req_lock_mode=sel.SELockObtainMode.Share,
             get_block_lock=False,
             completion_count=0,
-            raise_not_alive=raise_not_alive,
             timeout=timeout,
             log_msg=log_msg)
 
@@ -1304,32 +1315,16 @@ class SmartThread:
             # we can go ahead and delete the pair, so
             # set the flag to do a refresh (we can't do the
             # refresh here because we need to hold the lock
-            # exclusive
+            # exclusive)
             if local_sb.del_deferred and local_sb.msg_q.empty():
                 request_block.do_refresh = True
             return True
 
         except queue.Empty:
-            # The msg queue was just now empty. The fact
-            # that the pair_key was valid implies the remote
-            # was registered at one time. If the remote is
-            # no longer in the status_blocks dict, then it
-            # became not alive and was removed from the
-            # registry. (No need to check the msg queue
-            # again - we are locked, meaning the remote was
-            # already gone - it could not have just now
-            # send us the msg and then get removed from the
-            # status_blocks without having obtained the lock
-            # exclusive.
-            # @sbt WAIT - this can't really happen. If the
-            # pair_key is valid, then the remote must be
-            # there unless it left us a msg and exiting,
-            # in which case we should have just read that
-            # msg. If the remote left without leaving us a
-            # msg, then the pair_key would not be valid.
-            # so, I don't think we can ever see this case
-            # where the remote is gone on a queue.empty
-            # condition.
+            # The msg queue was just now empty which rules out that case
+            # that the pair_key is valid only because of a deferred
+            # delete. So, we know the remote is in the registry and in
+            # the status block.
             if self._get_state(pk_remote[1]) == ThreadState.Stopped:
                 request_block.stopped_remotes |= pk_remote[1]
 
@@ -1441,23 +1436,19 @@ class SmartThread:
     ####################################################################
     def smart_resume(self, *,
                      targets: Union[str, set[str]],
+                     error_stopped_target: bool = True,
                      log_msg: Optional[str] = None,
                      timeout: OptIntFloat = None,
-                     code: Optional[Any] = None,
-                     raise_not_alive: bool = True) -> None:
+                     code: Optional[Any] = None) -> None:
         """Resume a waiting or soon to be waiting thread.
 
         Args:
             targets: names of threads that are to be resumed
+            error_stopped_target: request will raise an error if any
+                one of the targets is in a stopped state.
             log_msg: log msg to log
             timeout: number of seconds to allow for ``resume()`` to complete
             code: code that waiter can retrieve with ``get_code()``
-            raise_not_alive: If True, raise an error if any of the
-                target threads have ended. If False, continue to wait
-                for the target thread to become alive if not already
-                alive. In either case, a timeout will be recognized if
-                specified and the time expires before a thread is
-                recognized as having ended.
 
         Raises:
             SmartThreadRemoteThreadNotAlive: resume() detected remote
@@ -1478,7 +1469,7 @@ class SmartThread:
             3) If one thread makes a ``resume()`` request and the other thread
                becomes not alive, the ``resume()`` request raises a
                **SmartThreadRemoteThreadNotAlive** error, but only when
-               raise_not_alive is True.
+               error_stopped_target is True.
             4) The reason for allowing multiple targets is in support of
                a sync request among many threads. When one can also
                resume many non-sync waiters at once, it does not seem to
@@ -1551,12 +1542,12 @@ class SmartThread:
         request_block = self._request_setup(
             request_name='smart_resume',
             remotes=targets,
+            error_stopped_target=error_stopped_target,
             process_rtn=self._process_resume,
             cleanup_rtn=None,
             req_lock_mode=sel.SELockObtainMode.Share,
             get_block_lock=True,
             completion_count=0,
-            raise_not_alive=raise_not_alive,
             timeout=timeout,
             log_msg=log_msg)
 
@@ -1637,7 +1628,7 @@ class SmartThread:
     ####################################################################
     def smart_sync(self, *,
                    targets: Union[str, set[str], list[str]],
-                   raise_not_alive: bool = True,
+                   error_stopped_target: bool = True,
                    log_msg: Optional[str] = None,
                    timeout: OptIntFloat = None):
         """Sync up with the remote threads.
@@ -1650,8 +1641,8 @@ class SmartThread:
 
         Args:
          targets: remote threads we will sync with
-         raise_not_alive: specifies whther to raise a not alive error
-             when any of the targets are stopped
+         error_stopped_target: request will raise an error if any
+                one of the targets is in a stopped state.
          log_msg: log msg for the log
          timeout: number of seconds to allow for sync to happen
 
@@ -1697,12 +1688,12 @@ class SmartThread:
         request_block = self._request_setup(
             request_name='smart_sync',
             remotes=targets,
+            error_stopped_target=error_stopped_target,
             process_rtn=self._process_sync,
             cleanup_rtn=self._sync_wait_error_cleanup,
             req_lock_mode=sel.SELockObtainMode.Share,
             get_block_lock=True,
             completion_count=0,
-            raise_not_alive=raise_not_alive,
             timeout=timeout,
             log_msg=log_msg)
 
@@ -1884,26 +1875,21 @@ class SmartThread:
     ####################################################################
     def smart_wait(self, *,
                    remotes: StrListStrSetStr = None,
+                   error_stopped_target: bool = True,
                    wait_for: WaitFor = WaitFor.All,
                    log_msg: Optional[str] = None,
-                   timeout: OptIntFloat = None,
-                   raise_not_alive: bool = True) -> None:
+                   timeout: OptIntFloat = None) -> None:
         """Wait on event.
 
         Args:
             remotes: names of threads that we expect to resume us
+            error_stopped_target: request will raise an error if any
+                one of the targets is in a stopped state.
             wait_for: specifies whether to wait for only one remote or
                 for all remotes
             log_msg: log msg to log
             timeout: number of seconds to allow for wait to be
                 resumed
-            raise_not_alive: If True, raise an error if the resume_name
-                thread has ended. If False, continue to wait for a
-                resume with the expectation that the resume_name will
-                be restarted with a new thread. In either case, a
-                timeout will be recognized if specified and the time
-                expires before a thread is recognized as having ended.
-
 
         Raises:
             SmartThreadWaitDeadlockDetected: Two threads are
@@ -1965,12 +1951,12 @@ class SmartThread:
         request_block = self._request_setup(
             request_name='smart_wait',
             remotes=remotes,
+            error_stopped_target=error_stopped_target,
             process_rtn=self._process_wait,
             cleanup_rtn=self._sync_wait_error_cleanup,
             req_lock_mode=sel.SELockObtainMode.Share,
             get_block_lock=True,
             completion_count=0,
-            raise_not_alive=raise_not_alive,
             timeout=timeout,
             log_msg=log_msg)
 
@@ -2118,7 +2104,7 @@ class SmartThread:
         the targets.
 
         Args:
-            request_block: contains targets, timeout, raise_not_alive
+            request_block: contains targets, timeout, etc
 
         Raises:
             SmartThreadRequestTimedOut: request processing timed out
@@ -2167,7 +2153,7 @@ class SmartThread:
                 # make the timeout work_remotes visible to test cases
                 self.request_timeout_names = work_remotes
 
-                if ((request_block.raise_not_alive
+                if ((request_block.error_stopped_target
                      and request_block.stopped_remotes)
                         or request_block.conflict_remotes
                         or request_block.deadlock_remotes
@@ -2227,7 +2213,7 @@ class SmartThread:
                                  f'{full_send_q_msg}')
 
                     # If an error should be raised for stopped threads
-                    if (request_block.raise_not_alive
+                    if (request_block.error_stopped_target
                             and request_block.stopped_remotes):
                         error_msg = (
                             f'{self.name} raising '
@@ -2263,50 +2249,7 @@ class SmartThread:
             time.sleep(0.2)
 
     ####################################################################
-    # _common_setup
-    ####################################################################
-    def _common_setup(self, *,
-                      remotes: Union[str, set[str], list[str]],
-                      timeout: OptIntFloat = None
-                      ) -> RequestBlock:
-        """Do common setup for each request.
-
-        Args:
-            remotes: remote threads for the request
-            timeout: number of seconds to allow for request completion
-
-        Returns:
-            A RequestBlock is returned that contains the timer and the set
-            of threads to be processed
-
-        """
-        timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
-        self.verify_thread_is_current()
-        if isinstance(remotes, str):
-            remotes = {remotes}
-        elif isinstance(remotes, list):
-            remotes = set(remotes)
-
-        return RequestBlock(
-            request_name='not_there_yet',
-            process_rtn=None,
-            cleanup_rtn=None,
-            remotes=remotes,
-            completion_count=0,
-            pk_remotes=None,
-            timer=timer,
-            raise_not_alive=False,
-            do_refresh=False,
-            exit_log_msg=None,
-            msg_to_send=None,
-            ret_msg=None,
-            stopped_remotes=set(),
-            conflict_remotes=set(),
-            deadlock_remotes=set(),
-            full_send_q_remotes=set())
-
-    ####################################################################
-    # _common_setup
+    # _request_setup
     ####################################################################
     def _request_setup(self, *,
                        request_name: str,
@@ -2319,8 +2262,8 @@ class SmartThread:
                        req_lock_mode: sel.SELockObtainMode,
                        get_block_lock: bool,
                        remotes: Iterable,
+                       error_stopped_target: bool,
                        completion_count: int,
-                       raise_not_alive: bool,
                        timeout: OptIntFloat = None,
                        log_msg: str,
                        msg_to_send: Any = None,
@@ -2335,8 +2278,8 @@ class SmartThread:
             req_lock_mode: Share, Excl
             get_block_lock: True or False
             remotes: remote threads for the request
-            raise_not_alive: specifies whether to raise an error when
-                a thread is stopped
+            error_stopped_target: request will raise an error if any
+                one of the targets is in a stopped state.
             timeout: number of seconds to allow for request completion
             log_msg: caller log message to issue
             msg_to_send: send_msg message to send
@@ -2369,10 +2312,10 @@ class SmartThread:
             req_lock_mode=req_lock_mode,
             get_block_lock=get_block_lock,
             remotes=remotes,
+            error_stopped_target=error_stopped_target,
             completion_count=completion_count,
             pk_remotes=pk_remotes,
             timer=timer,
-            raise_not_alive=raise_not_alive,
             do_refresh=False,
             exit_log_msg=None,
             msg_to_send=msg_to_send,
