@@ -432,7 +432,7 @@ class SmartThread:
 
         self.auto_started = False
         if self.auto_start and not self.thread.is_alive():
-            self.smart_start()
+            self.smart_start(self.name)
             self.auto_started = True
 
     ####################################################################
@@ -691,6 +691,7 @@ class SmartThread:
             True when request completed, False otherwise
 
         """
+        self.logger.debug(f'process_start entered')
         if pk_remote[1] not in SmartThread._registry:
             self.remotes_unregistered |= {pk_remote[1]}
             return False
@@ -699,22 +700,27 @@ class SmartThread:
             request_block.stopped_remotes |= pk_remote[1]
             return False
 
-        if not self.thread.is_alive():
+        if not SmartThread._registry[pk_remote[1]].thread.is_alive():
             self._set_state(
-                target_thread=self,
+                target_thread=SmartThread._registry[pk_remote[1]],
                 new_state=ThreadState.Starting)
             # self.thread.start()
-            threading.Thread.start(self.thread)
+            threading.Thread.start(
+                SmartThread._registry[pk_remote[1]].thread)
 
-        if self.thread.is_alive():
+        if SmartThread._registry[pk_remote[1]].thread.is_alive():
             self._set_state(
-                target_thread=self,
+                target_thread=SmartThread._registry[pk_remote[1]],
                 new_state=ThreadState.Alive)
 
         self.logger.debug(
-            f'{threading.current_thread().name} started thread {self.name}, '
-            f'thread.is_alive(): {self.thread.is_alive()}, '
-            f'state: {self.st_state}')
+            f'{threading.current_thread().name} started thread '
+            f'{SmartThread._registry[pk_remote[1]].name}, '
+            'thread.is_alive(): '
+            f'{SmartThread._registry[pk_remote[1]].thread.is_alive()}, '
+            f'state: {SmartThread._registry[pk_remote[1]].st_state}')
+
+        return True
 
     ####################################################################
     # unregister
@@ -2316,16 +2322,22 @@ class SmartThread:
         if not remotes:
             raise SmartThreadInvalidInput(f'{self.name} {request_name} '
                                           'request with no targets specified.')
+
         timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
-        self.verify_thread_is_current()
+        if request_name != 'smart_start':
+            self.verify_thread_is_current()
         if isinstance(remotes, str):
             remotes = {remotes}
         else:
             remotes = set(remotes)
 
+        if threading.current_thread().name in remotes:
+            raise SmartThreadInvalidInput(f'{self.name} {request_name} is '
+                                          f'also a target: {remotes=}')
         pk_remotes: list[PairKeyRemote] = []
         for remote in remotes:
-            pair_key = self._get_pair_key(self.name, remote)
+            pair_key = self._get_pair_key(threading.current_thread().name,
+                                          remote)
             pk_remotes.append((pair_key, remote))
 
         request_block = RequestBlock(
@@ -2336,6 +2348,7 @@ class SmartThread:
             get_block_lock=get_block_lock,
             remotes=remotes,
             error_stopped_target=error_stopped_target,
+            error_not_registered_target=error_not_registered_target,
             completion_count=completion_count,
             pk_remotes=pk_remotes,
             timer=timer,
@@ -2374,7 +2387,7 @@ class SmartThread:
             the log message to use for the exit call
         """
         log_msg_body = (
-            f'requestor: {self.name} '
+            f'requestor: {threading.current_thread().name} '
             f'targets: {sorted(request_block.remotes)} '
             f'timeout value: {request_block.timer.timeout_value()} '
             f'{get_formatted_call_sequence(latest=3, depth=1)}')
