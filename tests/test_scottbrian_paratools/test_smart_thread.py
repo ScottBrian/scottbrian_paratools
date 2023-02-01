@@ -13962,9 +13962,9 @@ class OuterSmartThreadApp(st.SmartThread, threading.Thread):
 
     def run(self) -> None:
         """Run the test."""
-        self._set_status(
+        self._set_state(
             target_thread=self,
-            new_status=st.ThreadState.Alive)
+            new_state=st.ThreadState.Alive)
         self.config_ver.main_driver()
 
 
@@ -14000,9 +14000,9 @@ class OuterSmartThreadApp2(threading.Thread, st.SmartThread):
 
     def run(self) -> None:
         """Run the test."""
-        self._set_status(
+        self._set_state(
             target_thread=self,
-            new_status=st.ThreadState.Alive)
+            new_state=st.ThreadState.Alive)
         self.config_ver.main_driver()
 
 
