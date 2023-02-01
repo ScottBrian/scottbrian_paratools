@@ -1292,7 +1292,7 @@ class StartThread(ConfigCmd):
         Args:
             cmd_runner: name of thread running the command
         """
-        self.config_ver.start_thread(
+        self.config_ver.handle_start(
             cmd_runner=cmd_runner,
             start_names=self.start_names)
 
@@ -4405,7 +4405,15 @@ class ConfigVerifier:
                 self.add_log_msg(re.escape(
                     f'{cmd_runner} started thread {new_name}, '
                     'thread.is_alive(): True, '
-                    'status: ThreadState.Alive'))
+                    'state: ThreadState.Alive'))
+
+                self.add_log_msg(
+                    f"smart_start entry: requestor: {cmd_runner} targets: "
+                    f"\['{new_name}'\] timeout value:")
+
+                self.add_log_msg(
+                    f"smart_start exit: requestor: {cmd_runner} targets: "
+                    f"\['{new_name}'\] timeout value:")
 
         # self.add_log_msg(f'{cmd_runner} entered _refresh_pair_array')
 
@@ -11348,9 +11356,9 @@ class ConfigVerifier:
             self.expected_num_recv_timouts = num_timeouts
 
     ####################################################################
-    # start_thread
+    # handle_start
     ####################################################################
-    def start_thread(self,
+    def handle_start(self,
                      cmd_runner: str,
                      start_names: list[str]) -> None:
         """Start the named thread.
@@ -11359,8 +11367,12 @@ class ConfigVerifier:
             cmd_runner: thread doing the starts
             start_names: names of the threads to start
         """
-        self.log_test_msg(f'{cmd_runner=} start_thread entry '
+        self.log_test_msg(f'{cmd_runner=} handle_start entry '
                           f'for {start_names=}')
+
+        self.log_ver.add_call_seq(
+            name='smart_start',
+            seq='test_smart_thread.py::ConfigVerifier.handle_start')
 
         # self.started_event_items[cmd_runner] = MonitorEventItem(
         #     client_event=threading.Event(),
@@ -11375,6 +11387,14 @@ class ConfigVerifier:
             #     start_name].st_state = st.ThreadState.Alive
             self.monitor_event.set()
 
+            self.add_request_log_msg(cmd_runner=cmd_runner,
+                                     smart_request='smart_start',
+                                     targets={start_name},
+                                     timeout=0,
+                                     timeout_type=TimeoutType.TimeoutNone,
+                                     enter_exit=('entry', 'exit'),
+                                     log_msg=None)
+
             self.add_log_msg(
                 f'{cmd_runner} set state for thread {start_name} '
                 'from ThreadState.Registered to ThreadState.Starting')
@@ -11383,19 +11403,20 @@ class ConfigVerifier:
                 f'from ThreadState.Starting to ThreadState.Alive')
             self.add_log_msg(re.escape(
                 f'{cmd_runner} started thread {start_name}, '
-                'thread.is_alive(): True, status: ThreadState.Alive'))
+                'thread.is_alive(): True, state: ThreadState.Alive'))
 
         self.monitor_event.set()
-        # start_log_msg = f'{cmd_runner=} start_thread waiting for monitor'
+        # start_log_msg = f'{cmd_runner=} handle_start waiting for
+        # monitor'
         # self.log_ver.add_msg(log_msg=re.escape(start_log_msg))
         # logger.debug(start_log_msg)
 
         # waiting forever here means alpha is not the cmd_runner for the
-        # start_thread as hard coded in handle_started_log_msg.
+        # handle_start as hard coded in handle_started_log_msg.
         # need to fix that.
         # self.started_event_items[cmd_runner].client_event.wait()
 
-        self.log_test_msg(f'{cmd_runner=} start_thread exiting '
+        self.log_test_msg(f'{cmd_runner=} handle_start exiting '
                           f'for {start_names=}')
 
     ####################################################################
@@ -13897,9 +13918,9 @@ class OuterThreadApp(threading.Thread):
 
     def run(self) -> None:
         """Run the test."""
-        self.smart_thread._set_status(
+        self.smart_thread._set_state(
             target_thread=self.smart_thread,
-            new_status=st.ThreadState.Alive)
+            new_state=st.ThreadState.Alive)
         name = self.smart_thread.name
         self.config_ver.add_log_msg(
             f'{name} set state for thread {name} from '

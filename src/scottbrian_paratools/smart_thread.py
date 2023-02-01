@@ -691,7 +691,6 @@ class SmartThread:
             True when request completed, False otherwise
 
         """
-        self.logger.debug(f'process_start entered')
         if pk_remote[1] not in SmartThread._registry:
             self.remotes_unregistered |= {pk_remote[1]}
             return False
