@@ -9411,12 +9411,6 @@ class ConfigVerifier:
             name='recv_msg',
             seq='test_smart_thread.py::ConfigVerifier.handle_recv_msg')
 
-        # self.recv_msg_event_items[cmd_runner] = MonitorEventItem(
-        #     client_event=threading.Event(),
-        #     deferred_post_needed=False,
-        #     targets=senders.copy()
-        # )
-
         if del_deferred:
             with self.ops_lock:
                 for del_sender in del_deferred:
@@ -9426,21 +9420,13 @@ class ConfigVerifier:
         elapsed_time: float = 0
         for from_name in senders:
             start_time = time.time()
+
             recvd_msg = self.all_threads[cmd_runner].recv_msg(
                 remote=from_name,
                 log_msg=log_msg)
-            elapsed_time += (time.time() - start_time)
+            assert recvd_msg == exp_msgs[from_name]
 
-            # if log_msg:
-            #     log_msg_2 = (
-            #         f'{self.log_ver.get_call_seq("handle_recv_msg")} ')
-            #     log_msg_3 = re.escape(f'{log_msg}')
-            #     for enter_exit in ('entry', 'exit'):
-            #         log_msg_1 = re.escape(
-            #             f'recv_msg() {enter_exit}: '
-            #             f'{cmd_runner} <- {from_name}. ')
-            #
-            #         self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
+            elapsed_time += (time.time() - start_time)
 
             self.add_request_log_msg(cmd_runner=cmd_runner,
                                      smart_request='recv_msg',
@@ -9449,8 +9435,6 @@ class ConfigVerifier:
                                      timeout_type=TimeoutType.TimeoutNone,
                                      enter_exit=('entry', 'exit'),
                                      log_msg=log_msg)
-
-            assert recvd_msg == exp_msgs[from_name]
 
             recv_log_msg = f"{cmd_runner} received msg from {from_name}"
             self.log_ver.add_msg(
