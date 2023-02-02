@@ -2390,9 +2390,6 @@ class SmartThread:
 
         timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
 
-        # if request_name != 'smart_start':
-        #     self.verify_thread_is_current()
-
         if isinstance(remotes, str):
             remotes = {remotes}
         else:

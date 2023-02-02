@@ -4118,7 +4118,7 @@ class ConfigVerifier:
 
         self.monitor_thread = threading.Thread(target=self.monitor)
         self.monitor_exit = False
-        # self.monitor_add_items: list[MonitorAddItem] = []
+        self.monitor_bail = False
         self.monitor_add_items: dict[str, MonitorAddItem] = {}
 
         self.cmd_suite: deque[ConfigCmd] = deque()
@@ -4240,6 +4240,9 @@ class ConfigVerifier:
         while not self.monitor_exit:
             self.monitor_event.wait()
             self.monitor_event.clear()
+
+            if self.monitor_bail:
+                break
 
             while self.get_log_msgs():
                 while self.log_found_items:
@@ -13902,14 +13905,32 @@ class OuterThreadApp(threading.Thread):
 
     def run(self) -> None:
         """Run the test."""
-        self.smart_thread._set_state(
-            target_thread=self.smart_thread,
-            new_state=st.ThreadState.Alive)
         name = self.smart_thread.name
+
+        self.smart_thread.smart_start(name)
+
+        self.config_ver.log_ver.add_call_seq(
+            name='smart_start',
+            seq='test_smart_thread.py::OuterThreadApp.run')
+
+        self.config_ver.add_request_log_msg(
+            cmd_runner=name,
+            smart_request='smart_start',
+            targets={name},
+            timeout=0,
+            timeout_type=TimeoutType.TimeoutNone,
+            enter_exit=('entry', 'exit'),
+            log_msg=None)
+
         self.config_ver.add_log_msg(
             f'{name} set state for thread {name} from '
             'ThreadState.Registered to ThreadState.Alive'
         )
+        self.config_ver.add_log_msg(re.escape(
+            f'{name} started thread {name}, '
+            'thread.is_alive(): True, state: ThreadState.Alive'))
+
+        self.config_ver.monitor_event.set()
 
         self.config_ver.main_driver()
 
@@ -13946,9 +13967,35 @@ class OuterSmartThreadApp(st.SmartThread, threading.Thread):
 
     def run(self) -> None:
         """Run the test."""
-        self._set_state(
-            target_thread=self,
-            new_state=st.ThreadState.Alive)
+        # self._set_state(
+        #     target_thread=self,
+        #     new_state=st.ThreadState.Alive)
+        name = self.name
+
+        self.smart_start(name)
+
+        self.config_ver.log_ver.add_call_seq(
+            name='smart_start',
+            seq='test_smart_thread.py::OuterSmartThreadApp.run')
+
+        self.config_ver.add_request_log_msg(
+            cmd_runner=name,
+            smart_request='smart_start',
+            targets={name},
+            timeout=0,
+            timeout_type=TimeoutType.TimeoutNone,
+            enter_exit=('entry', 'exit'),
+            log_msg=None)
+
+        # self.config_ver.add_log_msg(
+        #     f'{name} set state for thread {name} from '
+        #     'ThreadState.Registered to ThreadState.Alive'
+        # )
+        self.config_ver.add_log_msg(re.escape(
+            f'{name} started thread {name}, '
+            'thread.is_alive(): True, state: ThreadState.Alive'))
+
+        self.config_ver.monitor_event.set()
         self.config_ver.main_driver()
 
 
@@ -13984,9 +14031,37 @@ class OuterSmartThreadApp2(threading.Thread, st.SmartThread):
 
     def run(self) -> None:
         """Run the test."""
-        self._set_state(
-            target_thread=self,
-            new_state=st.ThreadState.Alive)
+        # self._set_state(
+        #     target_thread=self,
+        #     new_state=st.ThreadState.Alive)
+        # self.config_ver.main_driver()
+
+        name = self.name
+
+        self.smart_start(name)
+
+        self.config_ver.log_ver.add_call_seq(
+            name='smart_start',
+            seq='test_smart_thread.py::OuterSmartThreadApp2.run')
+
+        self.config_ver.add_request_log_msg(
+            cmd_runner=name,
+            smart_request='smart_start',
+            targets={name},
+            timeout=0,
+            timeout_type=TimeoutType.TimeoutNone,
+            enter_exit=('entry', 'exit'),
+            log_msg=None)
+
+        # self.config_ver.add_log_msg(
+        #     f'{name} set state for thread {name} from '
+        #     'ThreadState.Registered to ThreadState.Alive'
+        # )
+        self.config_ver.add_log_msg(re.escape(
+            f'{name} started thread {name}, '
+            'thread.is_alive(): True, state: ThreadState.Alive'))
+
+        self.config_ver.monitor_event.set()
         self.config_ver.main_driver()
 
 
@@ -14797,6 +14872,10 @@ class TestSmartThreadScenarios:
             config_ver.cmd_thread_auto_start = False
             outer_thread_app.start()
             outer_thread_app.join()
+            config_ver.monitor_bail = True
+            config_ver.monitor_exit = True
+            config_ver.monitor_event.set()
+            config_ver.monitor_thread.join()
         elif commander_config == AppConfig.RemoteSmartThreadApp:
             outer_thread_app = OuterSmartThreadApp(
                 config_ver=config_ver,
