@@ -316,7 +316,8 @@ class SmartThread:
                  thread: Optional[threading.Thread] = None,
                  auto_start: Optional[bool] = True,
                  default_timeout: OptIntFloat = None,
-                 max_msgs: Optional[int] = 0
+                 max_msgs: int = 0,
+                 log_level: int = logging.DEBUG
                  ) -> None:
         """Initialize an instance of the SmartThread class.
 
@@ -350,6 +351,7 @@ class SmartThread:
             max_msgs: specifies the maximum number of messages that can
                 occupy the message queue. Zero (the default) specifies
                 no limit.
+            log_level: specifies the logging level for SmartThread
 
         Raises:
             SmartThreadIncorrectNameSpecified: Attempted SmartThread
@@ -384,6 +386,9 @@ class SmartThread:
         self.specified_args = locals()  # used for __repr__, see below
 
         self.logger = logging.getLogger(__name__)
+
+        self.logger.setLevel(log_level)
+        # logging.getLogger().setLevel(log_level)
 
         # Set a flag to use to make it easier to determine whether debug
         # logging is enabled
@@ -436,7 +441,8 @@ class SmartThread:
         self.remotes_unregistered: set[str] = set()
         self.remotes_full_send_q: set[str] = set()
 
-        self.request_timeout_names: list[str] = []
+        self.work_remotes: set[str] = set()
+        self.work_pk_remotes: list[PairKeyRemote] = []
 
         # register this new SmartThread so others can find us
         self._register()
@@ -1211,7 +1217,7 @@ class SmartThread:
             return False
 
         if self._get_state(pk_remote.remote) == ThreadState.Stopped:
-            request_block.stopped_remotes |= pk_remote.remote
+            request_block.stopped_remotes |= {pk_remote.remote}
             self.remotes_unregistered |= {pk_remote.remote}
             return False
 
@@ -1230,7 +1236,6 @@ class SmartThread:
 
             # we need to remove the remote from the unreg
             # or fullq sets since the send now succeeded
-            request_block.stopped_remotes -= {pk_remote.remote}
             self.remotes_unregistered -= {pk_remote.remote}
             request_block.full_send_q_remotes -= {pk_remote.remote}
             self.remotes_full_send_q -= {pk_remote.remote}
@@ -1329,7 +1334,7 @@ class SmartThread:
             # delete. So, we know the remote is in the registry and in
             # the status block.
             if self._get_state(pk_remote.remote) == ThreadState.Stopped:
-                request_block.stopped_remotes |= pk_remote.remote
+                request_block.stopped_remotes |= {pk_remote.remote}
 
         return False
 
@@ -1589,7 +1594,7 @@ class SmartThread:
             return False
 
         if self._get_state(pk_remote.remote) == ThreadState.Stopped:
-            request_block.stopped_remotes |= pk_remote.remote
+            request_block.stopped_remotes |= {pk_remote.remote}
             return False
 
         # If here, remote is in registry and is alive or
@@ -2117,23 +2122,18 @@ class SmartThread:
                 between two smart_wait requests.
 
         """
-        self.request_timeout_names = []
+        self.work_remotes: set[str] = request_block.remotes.copy()
 
-        work_remotes: list[str] = request_block.remotes.copy()
-
-        while len(work_remotes) > request_block.completion_count:
-            num_start_loop_work_remotes = len(work_remotes)
-            for remote in work_remotes.copy():
+        while len(self.work_remotes) > request_block.completion_count:
+            num_start_loop_work_remotes = len(self.work_remotes)
+            for remote in self.work_remotes.copy():
                 with sel.SELockExcl(SmartThread._registry_lock):
                     if request_block.process_rtn(request_block,
                                                  remote):
-                        work_remotes.remove(remote)
+                        self.work_remotes -= {remote}
 
             # if no progress was made
-            if len(work_remotes) == num_start_loop_work_remotes:
-                # make the timeout work_remotes visible to test cases
-                self.request_timeout_names = work_remotes
-
+            if len(self.work_remotes) == num_start_loop_work_remotes:
                 if ((request_block.error_stopped_target
                      and request_block.stopped_remotes)
                         or (request_block.error_not_registered_target
@@ -2141,7 +2141,8 @@ class SmartThread:
                         or request_block.timer.is_expired()):
 
                     self._handle_loop_errors(request_block=request_block,
-                                             pending_remotes=work_remotes)
+                                             pending_remotes=list(
+                                                 self.work_remotes))
 
             time.sleep(0.2)
 
@@ -2170,13 +2171,12 @@ class SmartThread:
                 between two smart_wait requests.
 
         """
-        self.request_timeout_names = []
+        self.work_pk_remotes: list[PairKeyRemote] = (
+            request_block.pk_remotes.copy())
 
-        work_remotes: list[PairKeyRemote] = request_block.pk_remotes.copy()
-
-        while len(work_remotes) > request_block.completion_count:
-            num_start_loop_work_remotes = len(work_remotes)
-            for pk_remote in work_remotes.copy():
+        while len(self.work_pk_remotes) > request_block.completion_count:
+            num_start_loop_work_remotes = len(self.work_pk_remotes)
+            for pk_remote in self.work_pk_remotes.copy():
                 with sel.SELockShare(SmartThread._registry_lock):
                     if pk_remote.pair_key in SmartThread._pair_array:
                         # having a pair_key in the array implies our entry
@@ -2192,7 +2192,9 @@ class SmartThread:
                             if request_block.process_rtn(request_block,
                                                          pk_remote,
                                                          local_sb):
-                                work_remotes.remove(pk_remote)
+                                self.work_pk_remotes.remove(pk_remote)
+                                request_block.stopped_remotes -= {
+                                    pk_remote.remote}
 
             if request_block.do_refresh:
                 with sel.SELockExcl(SmartThread._registry_lock):
@@ -2200,13 +2202,7 @@ class SmartThread:
                 request_block.do_refresh = False
 
             # if no progress was made
-            if len(work_remotes) == num_start_loop_work_remotes:
-
-                pending_remotes = [remote for pk, remote in work_remotes]
-                # make the timeout work_remotes visible to test cases
-
-                self.request_timeout_names = pending_remotes
-
+            if len(self.work_pk_remotes) == num_start_loop_work_remotes:
                 if ((request_block.error_stopped_target
                      and request_block.stopped_remotes)
                         or (request_block.error_not_registered_target
@@ -2219,9 +2215,11 @@ class SmartThread:
                     if request_block.cleanup_rtn:
                         with sel.SELockShare(SmartThread._registry_lock):
                             request_block.cleanup_rtn(
-                                work_remotes,
+                                self.work_pk_remotes,
                                 request_block.request_name)
 
+                    pending_remotes = [remote for pk, remote in
+                                       self.work_pk_remotes]
                     self._handle_loop_errors(request_block=request_block,
                                              pending_remotes=pending_remotes)
 
@@ -2384,11 +2382,11 @@ class SmartThread:
             set of threads to be processed
 
         """
+        timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
+
         if not remotes:
             raise SmartThreadInvalidInput(f'{self.name} {request_name} '
                                           'request with no targets specified.')
-
-        timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
 
         if isinstance(remotes, str):
             remotes = {remotes}
@@ -2399,15 +2397,15 @@ class SmartThread:
                 and threading.current_thread().name in remotes):
             raise SmartThreadInvalidInput(f'{self.name} {request_name} is '
                                           f'also a target: {remotes=}')
+
         pk_remotes: list[PairKeyRemote] = []
 
         if request_name in ('send_msg', 'recv_msg', 'smart_resume',
                             'smart_sync', 'smart_wait'):
             self.verify_thread_is_current()
-            for remote in remotes:
-                pair_key = self._get_pair_key(threading.current_thread().name,
-                                              remote)
-                pk_remotes.append(PairKeyRemote(pair_key, remote))
+            pk_remotes = [PairKeyRemote(
+                self._get_pair_key(threading.current_thread().name,
+                                   remote), remote) for remote in remotes]
 
         request_block = RequestBlock(
             request_name=request_name,
@@ -2502,15 +2500,24 @@ class SmartThread:
     def _connection_block_lock(*args, **kwds) -> None:
         """Obtain the connection_block lock.
 
+        This method is called from _request_loop to obtain the
+        connection_block lock for those requests that need it
+        (smart_resume, smart_wait, and smart_sync) and to not obtain
+        it for those requests that do not need it (send_msg, recv_msg).
+        This allows the code in _request_loop to use the with statement
+        for the lock obtain with having to code around it.
+
         Args:
             lock: the lock to obtain
             obtain_tf: specifies whether to obtain the lock
 
         """
+        # is request needs the lock
         if kwds['obtain_tf']:
             kwds['lock'].acquire()
         try:
             yield
         finally:
+            # release the lock if it was obtained
             if kwds['obtain_tf']:
                 kwds['lock'].release()

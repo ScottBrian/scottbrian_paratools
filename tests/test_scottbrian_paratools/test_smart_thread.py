@@ -46,6 +46,17 @@ StrOrSet: TypeAlias = Union[str, set[str]]
 
 
 ########################################################################
+# Log level arg list
+########################################################################
+log_level_arg_list = [logging.DEBUG,
+                      logging.INFO,
+                      logging.WARNING,
+                      logging.ERROR,
+                      logging.CRITICAL,
+                      logging.NOTSET]
+
+
+########################################################################
 # CommanderConfig
 ########################################################################
 class AppConfig(Enum):
@@ -161,7 +172,7 @@ class TimeoutType(Enum):
 timeout_type_arg_list = [TimeoutType.TimeoutNone,
                          TimeoutType.TimeoutFalse,
                          TimeoutType.TimeoutTrue]
-# timeout_type_arg_list = [TimeoutType.TimeoutTrue]
+timeout_type_arg_list = [TimeoutType.TimeoutTrue]
 
 ########################################################################
 # Test settings for test_def_del_scenarios
@@ -2253,7 +2264,23 @@ class WaitForSyncTimeouts(ConfigCmd):
 
 
 ###############################################################################
-# num_registered_1_arg
+# log_level_arg
+###############################################################################
+@pytest.fixture(params=log_level_arg_list)  # type: ignore
+def log_level_arg(request: Any) -> int:
+    """Type of deferred delete to do.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
+###############################################################################
+# def_del_scenario_arg
 ###############################################################################
 @pytest.fixture(params=def_del_scenario_arg_list)  # type: ignore
 def def_del_scenario_arg(request: Any) -> DefDelScenario:
@@ -4103,13 +4130,15 @@ class ConfigVerifier:
                  caplog_to_use: pytest.CaptureFixture[str],
                  msgs: Msgs,
                  # commander_thread: Optional[threading.Thread] = None,
-                 max_msgs: Optional[int] = 10) -> None:
+                 max_msgs: Optional[int] = 10,
+                 log_level: int = logging.DEBUG) -> None:
         """Initialize the ConfigVerifier.
 
         Args:
             log_ver: the log verifier to track and verify log msgs
         """
         self.specified_args = locals()  # used for __repr__, see below
+        self.log_level = log_level
         self.commander_name = commander_name
         self.commander_thread_config_built = False
         self.cmd_thread_alive = False
@@ -7183,12 +7212,13 @@ class ConfigVerifier:
                                   + stopped_delay_targets)
 
         timeout_names = unreg_delay_names + stopped_delay_targets
-        stopped_names = stopped_no_delay_targets + stopped_delay_targets
 
         if len(all_targets) % 2:
             error_stopped_target = True
+            stopped_names = stopped_no_delay_targets + stopped_delay_targets
         else:
             error_stopped_target = False
+            stopped_names = stopped_delay_targets
 
         ################################################################
         # issue smart_wait for active_target_names
@@ -7394,6 +7424,9 @@ class ConfigVerifier:
                      wait_for=st.WaitFor.All,
                      error_stopped_target=True))
 
+        ################################################################
+        # build unreg_delay_names smart_wait
+        ################################################################
         if unreg_delay_names:
             self.build_start_suite(start_names=unreg_delay_names)
             wait_unreg_delay_serial_num = self.add_cmd(
@@ -7402,6 +7435,7 @@ class ConfigVerifier:
                      stopped_remotes=set(),
                      wait_for=st.WaitFor.All,
                      error_stopped_target=True))
+
         ####################################################
         # confirm the active target waits
         ####################################################
@@ -7412,6 +7446,7 @@ class ConfigVerifier:
                     confirm_cmd='Wait',
                     confirm_serial_num=wait_active_target_serial_num,
                     confirmers=active_target_names))
+
         ####################################################
         # confirm the registered target waits
         ####################################################
@@ -8024,13 +8059,19 @@ class ConfigVerifier:
     # build_simple_scenario
     ####################################################################
 
-    def build_simple_scenario(self) -> None:
-        """Add config cmds to the scenario queue."""
+    def build_simple_scenario(self,
+                              log_level: int) -> None:
+        """Add config cmds to the scenario queue.
 
+        Args:
+            log_level: specifies whether logging is active
+
+        """
         self.add_cmd(CreateCommanderAutoStart(
             cmd_runners='alpha',
             commander_name='alpha'))
 
+        # if log_active:
         self.add_cmd(ValidateConfig(
             cmd_runners='alpha'))
         self.add_cmd(CreateF1AutoStart(
@@ -8561,7 +8602,8 @@ class ConfigVerifier:
         self.log_test_msg(f'create_commander_thread entry: {cmd_runner=}')
         if not self.commander_thread:
             self.commander_thread = st.SmartThread(
-                name=name, auto_start=auto_start, max_msgs=self.max_msgs)
+                name=name, auto_start=auto_start, max_msgs=self.max_msgs,
+                log_level=self.log_level)
         self.all_threads[name] = self.commander_thread
 
         if auto_start:
@@ -9153,7 +9195,7 @@ class ConfigVerifier:
 
         elif timeout_type == TimeoutType.TimeoutTrue:
             enter_exit = ('entry', )
-            error_msg = self.get_error_ms2(
+            error_msg = self.get_error_msg(
                     cmd_runner=cmd_runner,
                     smart_request='smart_join',
                     targets=set(join_names),
@@ -9377,10 +9419,10 @@ class ConfigVerifier:
                                                upa_item=upa_item)
                 elif upa_item.upa_type == 'recv_msg':
                     self.update_pair_array_def_del(cmd_runner=cmd_runner,
-                                                    upa_item=upa_item)
+                                                   upa_item=upa_item)
                 elif upa_item.upa_type == 'wait':
                     self.update_pair_array_def_del(cmd_runner=cmd_runner,
-                                                    upa_item=upa_item)
+                                                   upa_item=upa_item)
         # handle any deferred deletes
         # self.handle_deferred_deletes(cmd_runner=cmd_runner):
 
@@ -9833,6 +9875,8 @@ class ConfigVerifier:
 
         enter_exit = ('entry', 'exit')
         if error_stopped_target and stopped_remotes:
+            inc_ops_names: set[str] = targets - set(stopped_remotes)
+            self.inc_ops_count(inc_ops_names, cmd_runner)
             enter_exit = ('entry', )
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
@@ -9872,6 +9916,8 @@ class ConfigVerifier:
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutTrue:
+            inc_ops_names: set[str] = targets - set(timeout_names)
+            self.inc_ops_count(inc_ops_names, cmd_runner)
             enter_exit = ('entry', )
             with pytest.raises(st.SmartThreadRequestTimedOut):
                 self.all_threads[cmd_runner].smart_resume(
@@ -10441,92 +10487,19 @@ class ConfigVerifier:
             f'{sorted(targets)}.')
 
         if not pending_remotes:
-            pending_remotes = self.all_threads[
-                cmd_runner].request_timeout_names
+            if smart_request in ('smart_join', 'smart_start', 'unregister'):
+                pending_remotes = self.all_threads[
+                    cmd_runner].work_remotes
+            else:
+                pending_remotes = [
+                    remote for pk, remote in self.all_threads[
+                        cmd_runner].work_pk_remotes]
         pending_msg = re.escape(
             f' Remotes that are pending: '
             f'{sorted(pending_remotes)}.')
 
         if stopped_remotes:
             stopped_msg = re.escape(
-                ' Remotes that are stopped: '
-                f'{sorted(stopped_remotes)}.')
-        else:
-            stopped_msg = ''
-
-        if conflict_remotes:
-            if smart_request == 'smart_sync':
-                remote_request = 'smart_wait'
-            else:
-                remote_request = 'smart_sync'
-            cr_search = "\[(,| "
-            for name in conflict_remotes:
-                cr_search += "|'" + name + "'"
-            cr_search += ")+\]"
-            conflict_msg = (f' Remotes doing a {remote_request} '
-                            'request that are deadlocked: '
-                            f'{cr_search}.')
-        else:
-            conflict_msg = ''
-
-        if deadlock_remotes:
-            dr_search = "\[(,| "
-            for name in deadlock_remotes:
-                dr_search += "|'" + name + "'"
-            dr_search += ")+\]"
-            deadlock_msg = (f' Remotes doing a smart_wait '
-                            'request that are deadlocked: '
-                            f'{dr_search}.')
-        else:
-            deadlock_msg = ''
-
-        return (
-            f'{cmd_runner} raising {error_str} {targets_msg}'
-            f'{pending_msg}{stopped_msg}{conflict_msg}{deadlock_msg}')
-
-    ####################################################################
-    # get_timeout_msg
-    ####################################################################
-    def get_error_ms2(self,
-                      cmd_runner: str,
-                      smart_request: str,
-                      targets: set[str],
-                      error_str: str,
-                      pending_remotes: Optional[set[str]] = None,
-                      stopped_remotes: Optional[set[str]] = None,
-                      conflict_remotes: Optional[set[str]] = None,
-                      deadlock_remotes: Optional[set[str]] = None
-                      ) -> str:
-        """Build the timeout message.
-
-        Args:
-            cmd_runner: thread doing the request
-            smart_request: name of smart_request
-            targets: target of the smart request
-            error_str: smart_thread error as string
-            pending_remotes: names of threads that are pending
-            stopped_remotes: names of threads that are stopped
-            conflict_remotes: names of sync/wait deadlock threads
-            deadlock_remotes: names of wait/wait deadlock threads
-
-        Returns:
-            error msg string for log and raise
-
-        """
-        targets_msg = (
-            f'while processing a {smart_request} '
-            f'request with remotes '
-            f'{sorted(targets)}.')
-
-        if not pending_remotes:
-            pending_remotes = self.all_threads[
-                cmd_runner].request_timeout_names
-        pending_msg = (
-            f' Remotes that are pending: '
-            f'{sorted(pending_remotes)}.')
-
-        if stopped_remotes:
-            stopped_msg = (
                 ' Remotes that are stopped: '
                 f'{sorted(stopped_remotes)}.')
         else:
@@ -11510,6 +11483,11 @@ class ConfigVerifier:
                         "_refresh_pair_array with "
                         f"pair_key = {pair_key}"))
 
+                    self.log_test_msg(f'{cmd_runner} created expected_pairs '
+                                      f'for {pair_key=}, {new_name=} with '
+                                      f'{name_poc=}, and {other_name} with '
+                                      f'{other_poc=}')
+
                     for pair_name in pair_key:
                         self.add_log_msg(re.escape(
                             f"{cmd_runner} added status_blocks entry "
@@ -11547,6 +11525,11 @@ class ConfigVerifier:
                         f"{cmd_runner} added status_blocks entry "
                         f"for pair_key = {pair_key}, "
                         f"name = {new_name}"))
+
+                    self.log_test_msg(f'{cmd_runner} '
+                                      'resurrected expected_pairs '
+                                      f'for {pair_key=}, {new_name=} with '
+                                      f'{name_poc=}')
 
     ####################################################################
     # update_pair_array
@@ -11590,6 +11573,20 @@ class ConfigVerifier:
                         f"{cmd_runner} removed status_blocks entry "
                         f"for pair_key = {pair_key}, "
                         f"name = {other_name}"))
+                    # we are assuming that the remote will be started
+                    # while send_msg or resume is running and that the
+                    # msg will be delivered or the resume will be done
+                    # (otherwise we should not have called
+                    # inc_ops_count)
+                    if pend_ops_cnt := self.expected_pairs[pair_key][
+                            del_name].pending_ops_count > 0:
+                        if pair_key not in self.pending_ops_counts:
+                            self.pending_ops_counts[pair_key] = {}
+                        self.pending_ops_counts[pair_key][
+                            del_name] = pend_ops_cnt
+                        self.log_test_msg(
+                            f'update_pair_array_del for {pair_key=}, '
+                            f'{del_name=} set pending {pend_ops_cnt=}')
                 else:
                     # remember for next update by recv_msg or wait
                     del_def_key = (pair_key, other_name)
@@ -11749,23 +11746,23 @@ class ConfigVerifier:
                         'pending_ops_count of zero, but the '
                         'SmartThread._pair_array entry show the msg_q '
                         'is not empty')
-                if (self.expected_pairs[pair_key][
-                    name].pending_ops_count != 0
-                        and st.SmartThread._pair_array[
-                            pair_key].status_blocks[name].msg_q.empty()
-                        and not st.SmartThread._pair_array[
-                            pair_key].status_blocks[name].wait_event.is_set()
-                        and not st.SmartThread._pair_array[
-                            pair_key].status_blocks[name].sync_event.is_set()):
-                    ops_count = self.expected_pairs[pair_key][
-                        name].pending_ops_count
-                    self.abort_all_f1_threads()
-                    raise InvalidConfigurationDetected(
-                        f'ConfigVerifier found that for the '
-                        f'expected_pairs entry for pair_key {pair_key}, '
-                        f'the entry for {name} has has a pending_ops_count '
-                        f'of {ops_count}, but the SmartThread._pair_array'
-                        f' entry for {name} has a an empty msg_q')
+                # if (self.expected_pairs[pair_key][
+                #     name].pending_ops_count != 0
+                #         and st.SmartThread._pair_array[
+                #             pair_key].status_blocks[name].msg_q.empty()
+                #         and not st.SmartThread._pair_array[
+                #             pair_key].status_blocks[name].wait_event.is_set()
+                #         and not st.SmartThread._pair_array[
+                #             pair_key].status_blocks[name].sync_event.is_set()):
+                #     ops_count = self.expected_pairs[pair_key][
+                #         name].pending_ops_count
+                #     self.abort_all_f1_threads()
+                #     raise InvalidConfigurationDetected(
+                #         f'ConfigVerifier found that for the '
+                #         f'expected_pairs entry for pair_key {pair_key}, '
+                #         f'the entry for {name} has has a pending_ops_count '
+                #         f'of {ops_count}, but the SmartThread._pair_array'
+                #         f' entry for {name} has a an empty msg_q')
         # verify expected_pairs matches pair_array
         for pair_key in self.expected_pairs:
             if pair_key not in st.SmartThread._pair_array:
@@ -13775,8 +13772,9 @@ class ConfigVerifier:
         start_time = time.time()
         while work_resumers:
             for resumer in work_resumers:
-                test_timeouts = set(sorted(self.all_threads[
-                                resumer].resume_timeout_names))
+                test_timeouts = set(sorted(
+                    [remote for pk, remote in self.all_threads[
+                        resumer].work_pk_remotes]))
                 if timeouts == test_timeouts:
                     work_resumers.remove(resumer)
                     break
@@ -13808,10 +13806,12 @@ class ConfigVerifier:
 
         work_syncers = syncer_names.copy()
         start_time = time.time()
+        test_timeouts: set[str] = set()
         while work_syncers:
             for syncer in work_syncers:
-                test_timeouts = set(sorted(self.all_threads[
-                                syncer].sync_timeout_names))
+                test_timeouts = set(sorted(
+                    [remote for pk, remote in self.all_threads[
+                        syncer].work_pk_remotes]))
                 if timeouts == test_timeouts:
                     work_syncers.remove(syncer)
                     break
@@ -13821,6 +13821,8 @@ class ConfigVerifier:
                 raise CmdTimedOut('wait_for_sync_timeouts timed out '
                                   f'with {work_syncers=}, '
                                   f'{timeouts=}, {test_timeouts=}')
+
+
 ########################################################################
 # expand_cmds
 ########################################################################
@@ -14193,16 +14195,20 @@ class TestSmartThreadScenarios:
     def test_smart_thread_simple_scenarios(
             self,
             caplog: pytest.CaptureFixture[str],
-            commander_config_arg: AppConfig
+            commander_config_arg: AppConfig,
+            log_level_arg: int
     ) -> None:
         """Test meta configuration scenarios.
 
         Args:
             caplog: pytest fixture to capture log output
             commander_config_arg: specifies the config for the commander
+            log_level_arg: specifies the log level
 
         """
-        args_for_scenario_builder: dict[str, Any] = {}
+        args_for_scenario_builder: dict[str, Any] = {
+            'log_level': log_level_arg
+        }
 
         self.scenario_driver(
             scenario_builder=ConfigVerifier.build_simple_scenario,
@@ -14829,7 +14835,8 @@ class TestSmartThreadScenarios:
                                     log_ver=log_ver,
                                     caplog_to_use=caplog_to_use,
                                     msgs=msgs,
-                                    max_msgs=10)
+                                    max_msgs=10,
+                                    log_level=logging.DEBUG)
 
         scenario_builder(config_ver,
                          **scenario_builder_args)

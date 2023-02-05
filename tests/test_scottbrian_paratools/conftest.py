@@ -25,6 +25,10 @@ from scottbrian_paratools.smart_thread import SmartThread
 ###############################################################################
 # logging
 ###############################################################################
+# logging.basicConfig(filename='ThreadComm.log',
+#                     filemode='w',
+#                     level=logging.DEBUG)
+
 logging.basicConfig(filename='ThreadComm.log',
                     filemode='w',
                     level=logging.DEBUG,
@@ -35,7 +39,6 @@ logging.basicConfig(filename='ThreadComm.log',
                            '%(funcName)s:'
                            '%(lineno)d '
                            '%(message)s')
-
 # logging.basicConfig(filename='ThreadComm.log',
 #                     filemode='w',
 #                     level=logging.DEBUG,
