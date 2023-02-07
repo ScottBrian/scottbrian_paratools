@@ -385,8 +385,8 @@ class SmartThread:
         """
         self.specified_args = locals()  # used for __repr__, see below
 
-        self.logger = logging.getLogger(__name__)
-
+        # self.logger = logging.getLogger(__name__)
+        self.logger = logging.getLogger(__name__ + name)
         self.logger.setLevel(log_level)
         # logging.getLogger().setLevel(log_level)
 
@@ -447,6 +447,7 @@ class SmartThread:
         # register this new SmartThread so others can find us
         self._register()
 
+        self.start_issued = False
         self.auto_started = False
         if self.auto_start and not self.thread.is_alive():
             self.smart_start(self.name)
@@ -713,7 +714,9 @@ class SmartThread:
             request_block.stopped_remotes |= {remote}
             return False
 
-        if not SmartThread._registry[remote].thread.is_alive():
+        if (not SmartThread._registry[remote].thread.is_alive()
+                and not SmartThread._registry[remote].start_issued):
+            SmartThread._registry[remote].start_issued = True
             self._set_state(
                 target_thread=SmartThread._registry[remote],
                 new_state=ThreadState.Starting)
@@ -725,14 +728,16 @@ class SmartThread:
                 target_thread=SmartThread._registry[remote],
                 new_state=ThreadState.Alive)
 
-        self.logger.debug(
-            f'{threading.current_thread().name} started thread '
-            f'{SmartThread._registry[remote].name}, '
-            'thread.is_alive(): '
-            f'{SmartThread._registry[remote].thread.is_alive()}, '
-            f'state: {SmartThread._registry[remote].st_state}')
+            self.logger.debug(
+                f'{threading.current_thread().name} started thread '
+                f'{SmartThread._registry[remote].name}, '
+                'thread.is_alive(): '
+                f'{SmartThread._registry[remote].thread.is_alive()}, '
+                f'state: {SmartThread._registry[remote].st_state}')
 
-        return True
+            return True
+
+        return False
 
     ####################################################################
     # unregister
