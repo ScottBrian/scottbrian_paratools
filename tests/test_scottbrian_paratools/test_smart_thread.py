@@ -14777,6 +14777,7 @@ class TestSmartThreadScenarios:
         """Test smart_thread logging.
 
         Args:
+            log_level_arg: logging level to set
             caplog: pytest fixture to capture log output
 
         """
@@ -14784,36 +14785,79 @@ class TestSmartThreadScenarios:
         ################################################################
         # f1
         ################################################################
+        def add_log_msgs(log_msgs: StrOrList,
+                        log_name: str,
+                        log_level: int) -> None:
+            """Add log message to log ver if log level is active.
+
+            Args:
+                log_msgs: messages to add
+                log_name: name of log it is accociated with
+                log_level: log level of the msg
+            """
+            if isinstance(log_msgs, str):
+                log_msgs = [log_msgs]
+
+            if log_level_arg <= log_level:
+                for log_msg in log_msgs:
+                    log_ver.add_msg(log_level=log_level,
+                                    log_msg=log_msg,
+                                    log_name=log_name)
+        ################################################################
+        # f1
+        ################################################################
         def f1(f1_name: str):
-            # log_msg_f1 = f'f1 entered for {f1_name}'
-            # log_ver.add_msg(log_level=logging.DEBUG,
-            #                 log_msg=log_msg_f1)
-            # logger.debug(log_msg_f1)
+            log_msg_f1 = f'f1 entered for {f1_name}'
+            add_log_msgs(log_msgs=log_msg_f1,
+                         log_level=logging.DEBUG,
+                         log_name=test_log_name)
+            logger.debug(log_msg_f1)
 
             time.sleep(1)
 
             f1_st.recv_msg(remote='alpha')
 
+            f1_st.smart_wait(remotes='alpha')
+
+            f1_st.smart_sync(targets='alpha')
+
             ############################################################
             # exit
             ############################################################
-            # log_msg_f1 = f'f1 exiting for {f1_name}'
-            # log_ver.add_msg(log_level=logging.DEBUG,
-            #                 log_msg=log_msg_f1)
-            # logger.debug(log_msg_f1)
+            log_msg_f1 = f'f1 exiting for {f1_name}'
+            add_log_msgs(log_msgs=log_msg_f1,
+                         log_level=logging.DEBUG,
+                         log_name=test_log_name)
+            logger.debug(log_msg_f1)
 
         ################################################################
         # Set up log verification and start tests
         ################################################################
+        my_root = logging.Logger.manager.loggerDict[
+            'scottbrian_paratools'].parent
+        my_root.setLevel(log_level_arg)
+
         commander_name = 'alpha'
         f1_name = 'beta'
         log_ver = LogVer(log_name=__name__)
         log_ver.add_call_seq(name=commander_name,
                              seq=get_formatted_call_sequence())
 
-        # log_msg = 'mainline entered'
-        # log_ver.add_msg(log_msg=log_msg)
-        # logger.warning(log_msg)
+        test_log_name = __name__
+        smart_thread_log_name = 'scottbrian_paratools.smart_thread'
+        beta_log_name = 'scottbrian_paratools.smart_thread'
+
+        log_msg = f'{my_root.name=}, {my_root.level=}'
+        add_log_msgs(log_msgs=log_msg,
+                     log_level=max(log_level_arg, logging.DEBUG),
+                     log_name=test_log_name)
+        logger.log(level=max(log_level_arg, logging.DEBUG), msg=log_msg)
+
+        log_msg = 'mainline entered'
+        add_log_msgs(log_msgs=log_msg,
+                     log_level=logging.WARN,
+                     log_name=test_log_name)
+        logger.warning(log_msg)
 
         # root = RootLogger(WARNING)
 
@@ -14887,23 +14931,11 @@ class TestSmartThreadScenarios:
         # basic strategy is to not specify the level with 4 or 5 - just
         # let the application set the level
 
-        my_root = logging.Logger.manager.loggerDict[
-            'scottbrian_paratools'].parent
-        my_root.setLevel(log_level_arg)
 
-        if log_level_arg > 0:
-            log_msg = f'{my_root.name=}, {my_root.level=}'
-            log_ver.add_msg(log_msg=log_msg, log_level=log_level_arg)
-            logger.log(level=log_level_arg, msg=log_msg)
-        else:
-            log_msg = f'{my_root.name=}, {my_root.level=}'
-            log_ver.add_msg(log_msg=log_msg, log_level=logging.DEBUG)
-            logger.log(level=logging.DEBUG, msg=log_msg)
         ################################################################
         # start commander
         ################################################################
-        commander_log_name = 'scottbrian_paratools.smart_thread'
-        beta_log_name = 'scottbrian_paratools.smart_thread'
+
         commander_log_level = log_level_arg
         f1_log_level = log_level_arg
         commander_thread = st.SmartThread(
@@ -14918,267 +14950,163 @@ class TestSmartThreadScenarios:
 
         commander_thread.send_msg(targets='beta', msg='alpha sends to beta')
 
+        commander_thread.smart_resume(targets='beta')
+
+        commander_thread.smart_sync(targets='beta')
+
         commander_thread.smart_join(targets='beta')
 
-        ################################################################
-        # commander DEBUG log messages
-        ################################################################
-        if commander_log_level <= logging.DEBUG:
-            log_ver.add_msg(
-                log_name=commander_log_name,
-                log_level=logging.DEBUG,
-                log_msg=('alpha set state for thread alpha from '
-                         'ThreadState.Unregistered to '
-                         'ThreadState.Initializing'))
 
-            log_ver.add_msg(
-                log_name=commander_log_name,
-                log_level=logging.DEBUG,
-                log_msg=('alpha obtained _registry_lock, class name = '
-                         'SmartThread'))
-
-            log_ver.add_msg(
-                log_name=commander_log_name,
-                log_level=logging.DEBUG,
-                log_msg=('alpha set state for thread alpha from '
-                         'ThreadState.Initializing to ThreadState.Alive'))
-
-            log_ver.add_msg(
-                log_name=commander_log_name,
-                log_level=logging.DEBUG,
-                log_msg='alpha added alpha to SmartThread registry at UTC')
-
-            log_ver.add_msg(
-                log_name=commander_log_name,
-                log_level=logging.DEBUG,
-                log_msg='alpha entered _refresh_pair_array')
-
-            log_ver.add_msg(
-                log_name=commander_log_name,
-                log_level=logging.DEBUG,
-                log_msg=("send_msg entry: requestor: alpha targets: "
-                         "\['beta'\] timeout value: None "
-                         "test_smart_thread.py::TestSmartThreadScenarios."
-                         "test_smart_thread_log_msg:"))
-
-            log_ver.add_msg(
-                log_name=commander_log_name,
-                log_level=logging.DEBUG,
-                log_msg=("send_msg exit: requestor: alpha targets: "
-                         "\['beta'\] timeout value: None "
-                         "test_smart_thread.py::TestSmartThreadScenarios."
-                         "test_smart_thread_log_msg:"))
-
-            log_ver.add_msg(
-                log_name=commander_log_name,
-                log_level=logging.DEBUG,
-                log_msg=("smart_join entry: requestor: alpha targets: "
-                         "\['beta'\] timeout value: None "
-                         "test_smart_thread.py::TestSmartThreadScenarios."
-                         "test_smart_thread_log_msg:"))
-
-            log_ver.add_msg(
-                log_name=commander_log_name,
-                log_level=logging.DEBUG,
-                log_msg=('alpha set state for thread beta from '
-                         'ThreadState.Alive to '
-                         'ThreadState.Stopped'))
-
-            log_ver.add_msg(
-                log_name=commander_log_name,
-                log_level=logging.DEBUG,
-                log_msg=("key = alpha, item = SmartThread\(name='alpha'\), "
-                         "item.thread.is_alive\(\)=True, "
-                         "item.st_state=<ThreadState.Alive: 16>"))
-
-            log_ver.add_msg(
-                log_name=commander_log_name,
-                log_level=logging.DEBUG,
-                log_msg=("key = beta, item = SmartThread\(name='beta', "
-                         "target=f1, args=\('beta',\)\), item.thread."
-                         "is_alive\(\)=False, "
-                         "item.st_state=<ThreadState.Stopped: 32>"))
-
-            log_ver.add_msg(
-                log_name=commander_log_name,
-                log_level=logging.DEBUG,
-                log_msg=("alpha removed beta from registry for "
-                         "process='join'"))
-
-            log_ver.add_msg(
-                log_name=commander_log_name,
-                log_level=logging.DEBUG,
-                log_msg='alpha entered _refresh_pair_array')
-
-            log_ver.add_msg(
-                log_name=commander_log_name,
-                log_level=logging.DEBUG,
-                log_msg=("alpha removed status_blocks entry for pair_key = "
-                         "\('alpha', 'beta'\), name = beta"))
-
-            log_ver.add_msg(
-                log_name=commander_log_name,
-                log_level=logging.DEBUG,
-                log_msg=("alpha removed status_blocks entry for pair_key = "
-                         "\('alpha', 'beta'\), name = alpha"))
-
-            log_ver.add_msg(
-                log_name=commander_log_name,
-                log_level=logging.DEBUG,
-                log_msg=("alpha removed _pair_array entry for pair_key = "
-                         "\('alpha', 'beta'\)"))
-
-            log_ver.add_msg(
-                log_name=commander_log_name,
-                log_level=logging.DEBUG,
-                log_msg='alpha updated _pair_array at UTC')
-
-            log_ver.add_msg(
-                log_name=commander_log_name,
-                log_level=logging.DEBUG,
-                log_msg="alpha did cleanup of registry at UTC")
-
-            log_ver.add_msg(
-                log_name=commander_log_name,
-                log_level=logging.DEBUG,
-                log_msg='alpha did successful join of beta.')
-
-            log_ver.add_msg(
-                log_name=commander_log_name,
-                log_level=logging.DEBUG,
-                log_msg=("smart_join exit: requestor: alpha targets: "
-                         "\['beta'\] timeout value: None "
-                         "test_smart_thread.py::TestSmartThreadScenarios."
-                         "test_smart_thread_log_msg:"))
 
         ################################################################
-        # commander INFO log messages
+        # commander log messages
         ################################################################
-        if commander_log_level <= logging.INFO:
-            log_ver.add_msg(
-                log_name=commander_log_name,
-                log_level=logging.INFO,
-                log_msg='alpha sent message to beta')
-        ################################################################
-        # f1 beta DEBUG log messages
-        ################################################################
-        if f1_log_level <= logging.DEBUG:
-            log_ver.add_msg(
-                log_name=beta_log_name,
-                log_level=logging.DEBUG,
-                log_msg=('alpha set state for thread beta from '
-                         'ThreadState.Unregistered to '
-                         'ThreadState.Initializing'))
+        commander_debug_log_msgs = [
+            ('alpha set state for thread alpha from '
+             'ThreadState.Unregistered to ThreadState.Initializing'),
+            'alpha obtained _registry_lock, class name = SmartThread',
+            ('alpha set state for thread alpha from '
+             'ThreadState.Initializing to ThreadState.Alive'),
+            'alpha added alpha to SmartThread registry at UTC',
+            'alpha entered _refresh_pair_array',
+            (f"send_msg entry: requestor: alpha targets: "
+             "\['beta'\] timeout value: None "
+             "test_smart_thread.py::TestSmartThreadScenarios."
+             "test_smart_thread_log_msg:"),
+            (f"send_msg exit: requestor: alpha targets: "
+             "\['beta'\] timeout value: None "
+             "test_smart_thread.py::TestSmartThreadScenarios."
+             "test_smart_thread_log_msg:"),
+            (f"smart_join entry: requestor: alpha targets: "
+             "\['beta'\] timeout value: None "
+             "test_smart_thread.py::TestSmartThreadScenarios."
+             "test_smart_thread_log_msg:"),
+            (f"smart_join exit: requestor: alpha targets: "
+             "\['beta'\] timeout value: None "
+             "test_smart_thread.py::TestSmartThreadScenarios."
+             "test_smart_thread_log_msg:"),
+            ('alpha set state for thread beta from '
+             'ThreadState.Alive to '
+             'ThreadState.Stopped'),
+            ("key = alpha, item = SmartThread\(name='alpha'\), "
+             "item.thread.is_alive\(\)=True, "
+             "item.st_state=<ThreadState.Alive: 16>"),
+            ("key = beta, item = SmartThread\(name='beta', "
+             "target=f1, args=\('beta',\)\), item.thread."
+             "is_alive\(\)=False, "
+             "item.st_state=<ThreadState.Stopped: 32>"),
+            ("alpha removed beta from registry for "
+             "process='join'"),
+            'alpha entered _refresh_pair_array',
+            ("alpha removed status_blocks entry for pair_key = "
+             "\('alpha', 'beta'\), name = beta"),
+            ("alpha removed status_blocks entry for pair_key = "
+             "\('alpha', 'beta'\), name = alpha"),
+            ("alpha removed _pair_array entry for pair_key = "
+             "\('alpha', 'beta'\)"),
+            'alpha updated _pair_array at UTC',
+            "alpha did cleanup of registry at UTC",
+            'alpha did successful join of beta.',
+            ("smart_resume entry: requestor: alpha targets: \['beta'\] "
+             "timeout value: None "
+             "test_smart_thread.py::TestSmartThreadScenarios"
+             ".test_smart_thread_log_msg:"),
+            ("smart_resume exit: requestor: alpha targets: \['beta'\] "
+             "timeout value: None "
+             "test_smart_thread.py::TestSmartThreadScenarios"
+             ".test_smart_thread_log_msg:"),
+            ("smart_sync entry: requestor: alpha targets: \['beta'\] timeout "
+             "value: None test_smart_thread.py::TestSmartThreadScenarios."
+             "test_smart_thread_log_msg:"),
+            ("smart_sync exit: requestor: alpha targets: \['beta'\] timeout "
+             "value: None test_smart_thread.py::TestSmartThreadScenarios."
+             "test_smart_thread_log_msg:")
+        ]
 
-            log_ver.add_msg(
-                log_name=beta_log_name,
-                log_level=logging.DEBUG,
-                log_msg=('alpha obtained _registry_lock, class name = '
-                         'SmartThread'))
+        commander_info_log_msgs = [
+            'alpha sent message to beta',
+            'alpha smart_sync resumed by beta'
+        ]
 
-            log_ver.add_msg(
-                log_name=beta_log_name,
-                log_level=logging.DEBUG,
-                log_msg=("key = alpha, item = SmartThread\(name='alpha'\), "
-                         "item.thread.is_alive\(\)=True, "
-                         "item.st_state=<ThreadState.Alive: 16>"))
+        add_log_msgs(
+            log_msgs=commander_debug_log_msgs,
+            log_level=logging.DEBUG,
+            log_name=smart_thread_log_name)
 
-            log_ver.add_msg(
-                log_name=beta_log_name,
-                log_level=logging.DEBUG,
-                log_msg=('alpha set state for thread beta from '
-                         'ThreadState.Initializing to '
-                         'ThreadState.Registered'))
-
-            log_ver.add_msg(
-                log_name=beta_log_name,
-                log_level=logging.DEBUG,
-                log_msg='alpha added beta to SmartThread registry at UTC')
-
-            log_ver.add_msg(
-                log_name=beta_log_name,
-                log_level=logging.DEBUG,
-                log_msg='alpha entered _refresh_pair_array')
-
-            log_ver.add_msg(
-                log_name=beta_log_name,
-                log_level=logging.DEBUG,
-                log_msg=("alpha created _refresh_pair_array with pair_key "
-                         "= \('alpha', 'beta'\)"))
-
-            log_ver.add_msg(
-                log_name=beta_log_name,
-                log_level=logging.DEBUG,
-                log_msg=("alpha added status_blocks entry for pair_key "
-                         "= \('alpha', 'beta'\), name = alpha"))
-
-            log_ver.add_msg(
-                log_name=beta_log_name,
-                log_level=logging.DEBUG,
-                log_msg=("alpha added status_blocks entry for pair_key "
-                         "= \('alpha', 'beta'\), name = beta"))
-
-            log_ver.add_msg(
-                log_name=beta_log_name,
-                log_level=logging.DEBUG,
-                log_msg='alpha updated _pair_array at UTC')
-
-            log_ver.add_msg(
-                log_name=beta_log_name,
-                log_level=logging.DEBUG,
-                log_msg=("smart_start entry: requestor: alpha targets: "
-                         "\['beta'\] timeout value: None "
-                         "smart_thread.py::SmartThread.__init__:"))
-
-            log_ver.add_msg(
-                log_name=beta_log_name,
-                log_level=logging.DEBUG,
-                log_msg=('alpha set state for thread beta from '
-                         'ThreadState.Registered to '
-                         'ThreadState.Starting'))
-
-            log_ver.add_msg(
-                log_name=beta_log_name,
-                log_level=logging.DEBUG,
-                log_msg=('alpha set state for thread beta from '
-                         'ThreadState.Starting to '
-                         'ThreadState.Alive'))
-
-            log_ver.add_msg(
-                log_name=beta_log_name,
-                log_level=logging.DEBUG,
-                log_msg=('alpha started thread beta, thread.is_alive\(\): '
-                         'True, state: ThreadState.Alive'))
-
-            log_ver.add_msg(
-                log_name=beta_log_name,
-                log_level=logging.DEBUG,
-                log_msg=("smart_start exit: requestor: alpha targets: "
-                         "\['beta'\] timeout value: None "
-                         "smart_thread.py::SmartThread.__init__:"))
-
-            log_ver.add_msg(
-                log_name=beta_log_name,
-                log_level=logging.DEBUG,
-                log_msg=("recv_msg entry: requestor: beta targets: "
-                         "\['alpha'\] timeout value: None "
-                         "test_smart_thread.py::f1:"))
-
-            log_ver.add_msg(
-                log_name=beta_log_name,
-                log_level=logging.DEBUG,
-                log_msg=("recv_msg exit: requestor: beta targets: "
-                         "\['alpha'\] timeout value: None "
-                         "test_smart_thread.py::f1:"))
+        add_log_msgs(
+            log_msgs=commander_info_log_msgs,
+            log_level=logging.INFO,
+            log_name=smart_thread_log_name)
 
         ################################################################
-        # f1 beta INFO log messages
+        # f1 beta log messages
         ################################################################
-        if f1_log_level <= logging.INFO:
-            log_ver.add_msg(
-                log_name=beta_log_name,
-                log_level=logging.INFO,
-                log_msg='beta received msg from alpha')
+        f1_beta_debug_log_msgs = [
+            ('alpha set state for thread beta from '
+             'ThreadState.Unregistered to '
+             'ThreadState.Initializing'),
+            ('alpha obtained _registry_lock, class name = '
+             'SmartThread'),
+            ("key = alpha, item = SmartThread\(name='alpha'\), "
+             "item.thread.is_alive\(\)=True, "
+             "item.st_state=<ThreadState.Alive: 16>"),
+            ('alpha set state for thread beta from '
+             'ThreadState.Initializing to '
+             'ThreadState.Registered'),
+            'alpha added beta to SmartThread registry at UTC',
+            'alpha entered _refresh_pair_array',
+            ("alpha created _refresh_pair_array with pair_key "
+             "= \('alpha', 'beta'\)"),
+            ("alpha added status_blocks entry for pair_key "
+             "= \('alpha', 'beta'\), name = alpha"),
+            ("alpha added status_blocks entry for pair_key "
+             "= \('alpha', 'beta'\), name = beta"),
+            'alpha updated _pair_array at UTC',
+            ("smart_start entry: requestor: alpha targets: "
+             "\['beta'\] timeout value: None "
+             "smart_thread.py::SmartThread.__init__:"),
+            ('alpha set state for thread beta from '
+             'ThreadState.Registered to '
+             'ThreadState.Starting'),
+            ('alpha set state for thread beta from '
+             'ThreadState.Starting to '
+             'ThreadState.Alive'),
+            ('alpha started thread beta, thread.is_alive\(\): '
+             'True, state: ThreadState.Alive'),
+            ("smart_start exit: requestor: alpha targets: "
+             "\['beta'\] timeout value: None "
+             "smart_thread.py::SmartThread.__init__:"),
+            ("recv_msg entry: requestor: beta targets: "
+             "\['alpha'\] timeout value: None "
+             "test_smart_thread.py::f1:"),
+            ("recv_msg exit: requestor: beta targets: "
+             "\['alpha'\] timeout value: None "
+             "test_smart_thread.py::f1:"),
+            ("smart_wait entry: requestor: beta targets: \['alpha'\] "
+             "timeout value: None test_smart_thread.py::f1:"),
+            ("smart_wait exit: requestor: beta targets: \['alpha'\] "
+             "timeout value: None test_smart_thread.py::f1:"),
+            ("smart_sync entry: requestor: beta targets: \['alpha'\] timeout "
+             "value: None test_smart_thread.py::f1:"),
+            ("smart_sync exit: requestor: beta targets: \['alpha'\] timeout "
+             "value: None test_smart_thread.py::f1:"),
+        ]
+
+        f1_beta_info_log_msgs = [
+            'beta received msg from alpha',
+            'beta smart_wait resumed by alpha',
+            'beta smart_sync resumed by alpha'
+        ]
+
+        add_log_msgs(
+            log_msgs=f1_beta_debug_log_msgs,
+            log_level=logging.DEBUG,
+            log_name=smart_thread_log_name)
+
+        add_log_msgs(
+            log_msgs=f1_beta_info_log_msgs,
+            log_level=logging.INFO,
+            log_name=smart_thread_log_name)
 
         ################################################################
         # check log results
@@ -15187,7 +15115,7 @@ class TestSmartThreadScenarios:
         log_ver.print_match_results(match_results)
         log_ver.verify_log_results(match_results)
 
-        # logger.debug('mainline exiting')
+        logger.warning('mainline exiting')
 
     ####################################################################
     # scenario_driver
