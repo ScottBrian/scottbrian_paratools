@@ -14780,14 +14780,28 @@ class TestSmartThreadScenarios:
             log_level_arg: logging level to set
             caplog: pytest fixture to capture log output
 
-        """
+        Notes:
+            1) pytest.ini log_cli_level sets the root level - it
+               overrides the level set by basicConfig in conftest
+            2) if pytest.ini log_cli_level is not set, conftest sets the
+               level
+            3) if conftest is not specified, the level defaults to
+               WARNING
+            4) logging.getLogger('scottbrian_paratools').setLevel(
+               logging.DEBUG) overrides the root setting, whether
+               default, set by conftest, or set by pytest.ini
+            5) logging.getLogger('scottbrian_paratools.smart_thread')
+               .setLevel(logging.INFO) overrides all of the above.
+            6) Basic strategy is to not specify the level with 4 or 5 -
+               just let the application set the level using basicConfig
 
+        """
         ################################################################
-        # f1
+        # add_log_msgs
         ################################################################
         def add_log_msgs(log_msgs: StrOrList,
-                        log_name: str,
-                        log_level: int) -> None:
+                         log_name: str,
+                         log_level: int) -> None:
             """Add log message to log ver if log level is active.
 
             Args:
@@ -14807,6 +14821,11 @@ class TestSmartThreadScenarios:
         # f1
         ################################################################
         def f1(f1_name: str):
+            """F1 routine.
+
+            Args:
+                f1_name: name of f1
+            """
             log_msg_f1 = f'f1 entered for {f1_name}'
             add_log_msgs(log_msgs=log_msg_f1,
                          log_level=logging.DEBUG,
@@ -14832,6 +14851,11 @@ class TestSmartThreadScenarios:
 
         ################################################################
         # Set up log verification and start tests
+        # The following code gets the root logger from the
+        # logging Manager dictionary using the parent of smart_thread.
+        # This is not the way it would normally be done but it suits
+        # our purpose to test that the log messages are being issued or
+        # suppressed correctly based on logging levels.
         ################################################################
         my_root = logging.Logger.manager.loggerDict[
             'scottbrian_paratools'].parent
@@ -14845,7 +14869,6 @@ class TestSmartThreadScenarios:
 
         test_log_name = __name__
         smart_thread_log_name = 'scottbrian_paratools.smart_thread'
-        beta_log_name = 'scottbrian_paratools.smart_thread'
 
         log_msg = f'{my_root.name=}, {my_root.level=}'
         add_log_msgs(log_msgs=log_msg,
@@ -14859,85 +14882,9 @@ class TestSmartThreadScenarios:
                      log_name=test_log_name)
         logger.warning(log_msg)
 
-        # root = RootLogger(WARNING)
-
-        # logger.warning(f'{id(logging.root)=}')
-
-
-
-        # # Logger.root = root
-        # logger.warning(f'{id(logging.Logger.root)=}')
-        # # Logger.manager = Manager(Logger.root)
-        # logger.warning(f'{id(logging.Logger.manager)=}')
-        # logger.warning(f'{id(logging.Logger.manager.loggerDict)=}')
-        # logger.warning(f'{logging.Logger.manager.loggerDict=}')
-        # logger.warning(f"{logging.Logger.manager.loggerDict['scottbrian_paratools.smart_thread'].name=}")
-        # logger.warning(
-        #     f"{logging.Logger.manager.loggerDict['scottbrian_paratools.smart_thread'].level=}")
-        # logger.warning(
-        #     f"{logging.Logger.manager.loggerDict['scottbrian_paratools.smart_thread'].parent=}")
-        # logger.warning(
-        #     f"{logging.Logger.manager.loggerDict['scottbrian_paratools.smart_thread'].handlers=}")
-        #
-        # logger.warning(
-        #     f"{logging.Logger.manager.loggerDict['scottbrian_paratools'].name=}")
-        # logger.warning(
-        #     f"{logging.Logger.manager.loggerDict['scottbrian_paratools'].level=}")
-        # logger.warning(
-        #     f"{logging.Logger.manager.loggerDict['scottbrian_paratools'].parent=}")
-        # logger.warning(
-        #     f"{logging.Logger.manager.loggerDict['scottbrian_paratools'].handlers=}")
-        #
-        # logger.warning(
-        #     f"{logging.Logger.manager.loggerDict['scottbrian_paratools'].parent.name=}")
-        # logger.warning(
-        #     f"{logging.Logger.manager.loggerDict['scottbrian_paratools'].parent.level=}")
-        # logger.warning(
-        #     f"{logging.Logger.manager.loggerDict['scottbrian_paratools'].parent.parent=}")
-        # logger.warning(
-        #     f"{logging.Logger.manager.loggerDict['scottbrian_paratools'].parent.handlers=}")
-        #
-        # my_root = logging.Logger.manager.loggerDict['scottbrian_paratools'].parent
-        #
-        # logging.getLogger('scottbrian_paratools')
-        #
-        # logger.warning(f'{my_root.name=}, {my_root.level=}')
-        # for key, item in logging.Logger.manager.loggerDict.items():
-        #     if isinstance(item, logging.Logger):
-        #         logger.warning(f'{item.name=}, {item.level=}')
-        #
-        #
-        # my_root.setLevel(logging.WARN)
-        # # logging.getLogger('scottbrian_paratools').setLevel(logging.DEBUG)
-        # # logging.getLogger('scottbrian_paratools.smart_thread').setLevel(logging.INFO)
-        #
-        # logger.warning(f'{my_root.name=}, {my_root.level=}')
-        # for key, item in logging.Logger.manager.loggerDict.items():
-        #     if isinstance(item, logging.Logger):
-        #         logger.warning(f'{item.name=}, {item.level=}')
-
-        msgs = Msgs()
-
-        # 1) pytest.ini log_cli_level sets the root level - it overrides
-        # the level set by basicConfig in conftest
-        # 2) if pytest.ini log_cli_level is not set, conftest sets the
-        # level
-        # 3) if conftest is not specified, the level defaults to WARNING
-        # 4) logging.getLogger('scottbrian_paratools').setLevel(logging.DEBUG)
-        # overrides the root setting, whether default, set by conftest, or
-        # set by pytest.ini
-        # 5) logging.getLogger('scottbrian_paratools.smart_thread').setLevel(logging.INFO)
-        # overrides all of the above -
-        # basic strategy is to not specify the level with 4 or 5 - just
-        # let the application set the level
-
-
         ################################################################
         # start commander
         ################################################################
-
-        commander_log_level = log_level_arg
-        f1_log_level = log_level_arg
         commander_thread = st.SmartThread(
             name=commander_name,
             max_msgs=10)
@@ -14956,7 +14903,13 @@ class TestSmartThreadScenarios:
 
         commander_thread.smart_join(targets='beta')
 
+        f1_st = st.SmartThread(
+            name=f1_name,
+            target=f1,
+            args=(f1_name,),
+            auto_start=False)
 
+        commander_thread.unregister(targets='beta')
 
         ################################################################
         # commander log messages
@@ -15020,7 +14973,51 @@ class TestSmartThreadScenarios:
              "test_smart_thread_log_msg:"),
             ("smart_sync exit: requestor: alpha targets: \['beta'\] timeout "
              "value: None test_smart_thread.py::TestSmartThreadScenarios."
-             "test_smart_thread_log_msg:")
+             "test_smart_thread_log_msg:"),
+            ('alpha set state for thread beta from ThreadState.Unregistered '
+             'to ThreadState.Initializing'),
+            'alpha obtained _registry_lock, class name = SmartThread',
+            ("key = alpha, item = SmartThread\(name='alpha'\), "
+             "item.thread.is_alive\(\)=True, "
+             "item.st_state=<ThreadState.Alive: 16>"),
+            ('alpha set state for thread beta from ThreadState.Initializing '
+             'to ThreadState.Registered'),
+            'alpha added beta to SmartThread registry at UTC',
+            'alpha entered _refresh_pair_array',
+            ("alpha created _refresh_pair_array with pair_key = "
+             "\('alpha', 'beta'\)"),
+            ("alpha added status_blocks entry for pair_key = "
+             "\('alpha', 'beta'\), name = alpha"),
+            ("alpha added status_blocks entry for pair_key = "
+             "\('alpha', 'beta'\), name = beta"),
+            'alpha updated _pair_array at UTC',
+            ("unregister entry: requestor: alpha targets: \['beta'\] "
+             "timeout value: None "
+             "test_smart_thread.py::TestSmartThreadScenarios."
+             "test_smart_thread_log_msg:"),
+            ("unregister exit: requestor: alpha targets: \['beta'\] "
+             "timeout value: None "
+             "test_smart_thread.py::TestSmartThreadScenarios."
+             "test_smart_thread_log_msg:"),
+            ('alpha set state for thread beta from ThreadState.Registered to '
+             'ThreadState.Stopped'),
+            ("key = alpha, item = SmartThread\(name='alpha'\), "
+             "item.thread.is_alive\(\)=True, "
+             "item.st_state=<ThreadState.Alive: 16>"),
+            ("key = beta, item = SmartThread\(name='beta', target=f1, "
+             "args=\('beta',\)\), item.thread.is_alive\(\)=False, "
+             "item.st_state=<ThreadState.Stopped: 32>"),
+            "alpha removed beta from registry for process='unregister'",
+            'alpha entered _refresh_pair_array',
+            ("alpha removed status_blocks entry for pair_key = "
+             "\('alpha', 'beta'\), name = beta"),
+            ("alpha removed status_blocks entry for pair_key = "
+             "\('alpha', 'beta'\), name = alpha"),
+            ("alpha removed _pair_array entry for pair_key = "
+             "\('alpha', 'beta'\)"),
+            'alpha updated _pair_array at UTC',
+            "alpha did cleanup of registry at UTC",
+            'alpha did successful unregister of beta.',
         ]
 
         commander_info_log_msgs = [
