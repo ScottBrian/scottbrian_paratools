@@ -73,6 +73,11 @@ from scottbrian_utils.diag_msg import get_formatted_call_sequence
 from scottbrian_utils.timer import Timer
 from scottbrian_locking import se_lock as sel
 
+########################################################################
+# Establish logger for SmartThread
+########################################################################
+logger = logging.getLogger(__name__)
+
 
 ########################################################################
 # TypeAlias
@@ -316,8 +321,7 @@ class SmartThread:
                  thread: Optional[threading.Thread] = None,
                  auto_start: Optional[bool] = True,
                  default_timeout: OptIntFloat = None,
-                 max_msgs: int = 0,
-                 log_level: int = logging.DEBUG
+                 max_msgs: int = 0
                  ) -> None:
         """Initialize an instance of the SmartThread class.
 
@@ -351,7 +355,6 @@ class SmartThread:
             max_msgs: specifies the maximum number of messages that can
                 occupy the message queue. Zero (the default) specifies
                 no limit.
-            log_level: specifies the logging level for SmartThread
 
         Raises:
             SmartThreadIncorrectNameSpecified: Attempted SmartThread
@@ -385,14 +388,7 @@ class SmartThread:
         """
         self.specified_args = locals()  # used for __repr__, see below
 
-        # self.logger = logging.getLogger(__name__)
-        self.logger = logging.getLogger(__name__ + name)
-        self.logger.setLevel(log_level)
-        # logging.getLogger().setLevel(log_level)
-
-        # Set a flag to use to make it easier to determine whether debug
-        # logging is enabled
-        self.debug_logging_enabled = self.logger.isEnabledFor(logging.DEBUG)
+        self.debug_logging_enabled = logger.isEnabledFor(logging.DEBUG)
 
         if not isinstance(name, str):
             raise SmartThreadIncorrectNameSpecified(
@@ -526,7 +522,7 @@ class SmartThread:
             return False
         target_thread.st_state = new_state
 
-        self.logger.debug(
+        logger.debug(
             f'{threading.current_thread().name} set '
             f'state for thread {target_thread.name} from {saved_status} to '
             f'{new_state}', stacklevel=2)
@@ -560,9 +556,9 @@ class SmartThread:
                 'The name for SmartThread must be of type str.')
 
         with sel.SELockExcl(SmartThread._registry_lock):
-            self.logger.debug(f'{threading.current_thread().name} obtained '
-                              '_registry_lock, class name = '
-                              f'{self.__class__.__name__}')
+            logger.debug(f'{threading.current_thread().name} obtained '
+                         '_registry_lock, class name = '
+                         f'{self.__class__.__name__}')
 
             # Remove any old entries
             self._clean_up_registry(process='register')
@@ -580,7 +576,7 @@ class SmartThread:
                 SmartThread._registry_last_update = datetime.utcnow()
                 print_time = (SmartThread._registry_last_update
                               .strftime("%H:%M:%S.%f"))
-                self.logger.debug(
+                logger.debug(
                     f'{threading.current_thread().name} added {self.name} '
                     f'to SmartThread registry at UTC {print_time}')
                 self._refresh_pair_array()
@@ -611,7 +607,7 @@ class SmartThread:
         # Remove any old entries
         keys_to_del = []
         for key, item in SmartThread._registry.items():
-            self.logger.debug(
+            logger.debug(
                 f'key = {key}, item = {item}, '
                 f'{item.thread.is_alive()=}, '
                 f'{item.st_state=}')
@@ -628,8 +624,8 @@ class SmartThread:
         for key in keys_to_del:
             del SmartThread._registry[key]
             changed = True
-            self.logger.debug(f'{threading.current_thread().name} removed '
-                              f'{key} from registry for {process=}')
+            logger.debug(f'{threading.current_thread().name} removed '
+                         f'{key} from registry for {process=}')
 
         # update time only when we made a change, otherwise we can
         # get into an update loop where each remote sees that
@@ -642,7 +638,7 @@ class SmartThread:
             SmartThread._registry_last_update = datetime.utcnow()
             print_time = (SmartThread._registry_last_update
                           .strftime("%H:%M:%S.%f"))
-            self.logger.debug(f'{threading.current_thread().name} did cleanup '
+            logger.debug(f'{threading.current_thread().name} did cleanup '
                               f'of registry at UTC {print_time}, deleted '
                               f'{keys_to_del}')
 
@@ -687,7 +683,7 @@ class SmartThread:
 
         self._config_cmd_loop(request_block=request_block)
 
-        self.logger.debug(request_block.exit_log_msg)
+        logger.debug(request_block.exit_log_msg)
 
     ####################################################################
     # _process_start
@@ -728,7 +724,7 @@ class SmartThread:
                 target_thread=SmartThread._registry[remote],
                 new_state=ThreadState.Alive)
 
-            self.logger.debug(
+            logger.debug(
                 f'{threading.current_thread().name} started thread '
                 f'{SmartThread._registry[remote].name}, '
                 'thread.is_alive(): '
@@ -790,7 +786,7 @@ class SmartThread:
 
         self._config_cmd_loop(request_block=request_block)
 
-        self.logger.debug(request_block.exit_log_msg)
+        logger.debug(request_block.exit_log_msg)
 
     ####################################################################
     # _process_unregister
@@ -819,7 +815,7 @@ class SmartThread:
             new_state=ThreadState.Stopped)
         self._clean_up_registry(process='unregister')
 
-        self.logger.debug(
+        logger.debug(
             f'{self.name} did successful unregister of '
             f'{remote}.')
 
@@ -887,7 +883,7 @@ class SmartThread:
 
         self._config_cmd_loop(request_block=request_block)
 
-        self.logger.debug(request_block.exit_log_msg)
+        logger.debug(request_block.exit_log_msg)
 
     ####################################################################
     # _process_smart_join
@@ -940,7 +936,7 @@ class SmartThread:
                 self._clean_up_registry(
                     process='join')
 
-                self.logger.debug(
+                logger.debug(
                     f'{self.name} did successful join of '
                     f'{remote}.')
 
@@ -1007,8 +1003,7 @@ class SmartThread:
 
         """
         current_thread_name = threading.current_thread().name
-        self.logger.debug(
-            f'{current_thread_name} entered _refresh_pair_array')
+        logger.debug(f'{current_thread_name} entered _refresh_pair_array')
         changed = False
         # scan registry and adjust status
 
@@ -1027,9 +1022,8 @@ class SmartThread:
                         status_lock=threading.Lock(),
                         status_blocks={}
                     ))
-                self.logger.debug(
-                    f'{current_thread_name} created '
-                    '_refresh_pair_array with '
+                logger.debug(
+                    f'{current_thread_name} created _refresh_pair_array with '
                     f'pair_key = {pair_key}')
                 changed = True
 
@@ -1051,10 +1045,9 @@ class SmartThread:
                                 wait_event=threading.Event(),
                                 sync_event=threading.Event(),
                                 msg_q=queue.Queue(maxsize=self.max_msgs))
-                    self.logger.debug(
+                    logger.debug(
                         f'{current_thread_name} added status_blocks entry '
-                        f'for pair_key = {pair_key}, '
-                        f'name = {name}')
+                        f'for pair_key = {pair_key}, name = {name}')
                     changed = True
 
         # find removable entries in connection pair array
@@ -1067,7 +1060,7 @@ class SmartThread:
                             pair_key].status_blocks):
                     _ = SmartThread._pair_array[
                             pair_key].status_blocks.pop(thread_name, None)
-                    self.logger.debug(
+                    logger.debug(
                         f'{current_thread_name} removed status_blocks entry'
                         f' for pair_key = {pair_key}, name = {thread_name}')
                     changed = True
@@ -1095,7 +1088,7 @@ class SmartThread:
                             thread_name].sync_event.is_set()):
                     _ = SmartThread._pair_array[
                         pair_key].status_blocks.pop(thread_name, None)
-                    self.logger.debug(
+                    logger.debug(
                         f'{current_thread_name} removed status_blocks entry'
                         f' for pair_key = {pair_key}, name = '
                         f'{thread_name}')
@@ -1111,7 +1104,7 @@ class SmartThread:
 
         for pair_key in connection_array_del_list:
             del SmartThread._pair_array[pair_key]
-            self.logger.debug(
+            logger.debug(
                 f'{current_thread_name} removed _pair_array entry'
                 f' for pair_key = {pair_key}')
             changed = True
@@ -1120,7 +1113,7 @@ class SmartThread:
             SmartThread._pair_array_last_update = datetime.utcnow()
             print_time = (SmartThread._pair_array_last_update
                           .strftime("%H:%M:%S.%f"))
-            self.logger.debug(
+            logger.debug(
                 f'{current_thread_name} updated _pair_array'
                 f' at UTC {print_time}')
 
@@ -1187,7 +1180,7 @@ class SmartThread:
         self.remotes_full_send_q = set()
         self._request_loop(request_block=request_block)
 
-        self.logger.debug(request_block.exit_log_msg)
+        logger.debug(request_block.exit_log_msg)
 
     ####################################################################
     # _process_send_msg
@@ -1236,7 +1229,7 @@ class SmartThread:
                 pk_remote.pair_key].status_blocks[
                 pk_remote.remote].msg_q.put(request_block.msg_to_send,
                                         timeout=0.01)
-            self.logger.info(
+            logger.info(
                 f'{self.name} sent message to {pk_remote.remote}')
 
             # we need to remove the remote from the unreg
@@ -1291,7 +1284,7 @@ class SmartThread:
 
         self._request_loop(request_block=request_block)
 
-        self.logger.debug(request_block.exit_log_msg)
+        logger.debug(request_block.exit_log_msg)
 
         return request_block.ret_msg
 
@@ -1317,7 +1310,7 @@ class SmartThread:
         try:
             # recv message from remote
             request_block.ret_msg = local_sb.msg_q.get(timeout=0.01)
-            self.logger.info(
+            logger.info(
                 f'{self.name} received msg from {pk_remote.remote}')
             # if we had wanted to delete an entry in the
             # pair array for this thread because the other
@@ -1565,7 +1558,7 @@ class SmartThread:
 
         self._request_loop(request_block=request_block)
 
-        self.logger.debug(request_block.exit_log_msg)
+        logger.debug(request_block.exit_log_msg)
 
     ####################################################################
     # _process_resume
@@ -1710,7 +1703,7 @@ class SmartThread:
 
         self._request_loop(request_block=request_block)
 
-        self.logger.debug(request_block.exit_log_msg)
+        logger.debug(request_block.exit_log_msg)
 
     ####################################################################
     # _process_sync
@@ -1768,7 +1761,7 @@ class SmartThread:
                 if (local_sb.del_deferred and
                         not local_sb.wait_event.is_set()):
                     request_block.do_refresh = True
-                self.logger.info(
+                logger.info(
                     f'{self.name} smart_sync resumed by '
                     f'{pk_remote.remote}')
 
@@ -1818,14 +1811,14 @@ class SmartThread:
                              or remote_sb.conflict)):
                         remote_sb.conflict = True
                         local_sb.conflict = True
-                        self.logger.debug(
+                        logger.debug(
                             f'TestDebug {self.name} sync '
                             f'set remote and local '
                             f'conflict flags {pk_remote=}')
 
             if local_sb.conflict:
                 request_block.conflict_remotes |= {pk_remote.remote}
-                self.logger.debug(
+                logger.debug(
                     f'TestDebug {self.name} sync set '
                     f'{request_block.conflict_remotes=}')
 
@@ -1975,7 +1968,7 @@ class SmartThread:
 
         self._request_loop(request_block=request_block)
 
-        self.logger.debug(request_block.exit_log_msg)
+        logger.debug(request_block.exit_log_msg)
 
     ####################################################################
     # _process_wait
@@ -2012,7 +2005,7 @@ class SmartThread:
             if (local_sb.del_deferred and
                     not local_sb.sync_event.is_set()):
                 request_block.do_refresh = True
-            self.logger.info(
+            logger.info(
                 f'{self.name} smart_wait resumed by '
                 f'{pk_remote.remote}')
             return True
@@ -2060,7 +2053,7 @@ class SmartThread:
                          or remote_sb.conflict)):
                     remote_sb.conflict = True
                     local_sb.conflict = True
-                    self.logger.debug(
+                    logger.debug(
                         f'TestDebug {self.name} wait '
                         f'set remote and local '
                         f'conflict flags {pk_remote.remote=}')
@@ -2077,7 +2070,7 @@ class SmartThread:
                        or remote_sb.conflict)):
                     remote_sb.deadlock = True
                     local_sb.deadlock = True
-                    self.logger.debug(
+                    logger.debug(
                         f'TestDebug {self.name} wait '
                         f'set remote and local '
                         f'deadlock flags {pk_remote.remote=}')
@@ -2088,7 +2081,7 @@ class SmartThread:
             local_sb.conflict = False
             local_sb.wait_timeout_specified = False
             request_block.conflict_remotes |= {pk_remote.remote}
-            self.logger.debug(
+            logger.debug(
                 f'TestDebug {self.name} wait set {pk_remote.remote=}'
                 f'{request_block.conflict_remotes=}')
 
@@ -2098,7 +2091,7 @@ class SmartThread:
             local_sb.deadlock = False
             local_sb.wait_timeout_specified = False
             request_block.deadlock_remotes |= {pk_remote.remote}
-            self.logger.debug(
+            logger.debug(
                 f'TestDebug {self.name} wait set {pk_remote.remote=}'
                 f'{request_block.deadlock_remotes=}')
 
@@ -2315,21 +2308,21 @@ class SmartThread:
             error_msg = (
                 f'{self.name} raising '
                 f'SmartThreadRemoteThreadNotAlive {msg_suite}')
-            self.logger.error(error_msg)
+            logger.error(error_msg)
             raise SmartThreadRemoteThreadNotAlive(error_msg)
 
         if request_block.conflict_remotes:
             error_msg = (
                 f'{self.name} raising '
                 f'SmartThreadConflictDeadlockDetected {msg_suite}')
-            self.logger.error(error_msg)
+            logger.error(error_msg)
             raise SmartThreadConflictDeadlockDetected(error_msg)
 
         if request_block.deadlock_remotes:
             error_msg = (
                 f'{self.name} raising '
                 f'SmartThreadWaitDeadlockDetected {msg_suite}')
-            self.logger.error(error_msg)
+            logger.error(error_msg)
             raise SmartThreadWaitDeadlockDetected(error_msg)
 
         # Note that the timer will never be expired if timeout
@@ -2340,7 +2333,7 @@ class SmartThread:
             error_msg = (
                 f'{self.name} raising '
                 f'SmartThreadRequestTimedOut {msg_suite}')
-            self.logger.error(error_msg)
+            logger.error(error_msg)
             raise SmartThreadRequestTimedOut(error_msg)
 
     ####################################################################
@@ -2472,7 +2465,7 @@ class SmartThread:
         exit_log_msg = (
             f'{request_block.request_name} exit: {log_msg_body}')
 
-        self.logger.debug(entry_log_msg, stacklevel=3)
+        logger.debug(entry_log_msg, stacklevel=3)
         return exit_log_msg
 
     ####################################################################
@@ -2495,7 +2488,7 @@ class SmartThread:
                          f'thread that was originally assigned during '
                          f'instantiation of SmartThread. '
                          f'Call sequence: {get_formatted_call_sequence(1,2)}')
-            self.logger.error(error_msg)
+            logger.error(error_msg)
             raise SmartThreadDetectedOpFromForeignThread(error_msg)
 
     ####################################################################

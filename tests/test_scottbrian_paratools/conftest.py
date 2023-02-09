@@ -25,31 +25,17 @@ from scottbrian_paratools.smart_thread import SmartThread
 ###############################################################################
 # logging
 ###############################################################################
-# logging.basicConfig(filename='ThreadComm.log',
-#                     filemode='w',
-#                     level=logging.DEBUG)
-
 logging.basicConfig(filename='ThreadComm.log',
                     filemode='w',
                     level=logging.DEBUG,
                     format='%(asctime)s '
                            '%(msecs)03d '
                            '[%(levelname)8s] '
+                           '%(threadName)s '
                            '%(filename)s:'
                            '%(funcName)s:'
-                           '%(lineno)d '
+                           '%(lineno)d '            
                            '%(message)s')
-# logging.basicConfig(filename='ThreadComm.log',
-#                     filemode='w',
-#                     level=logging.DEBUG,
-#                     format='%(created)s '
-#                            '%(threadName)s '
-#                            '%(filename)s:'
-#                            '%(funcName)s:'
-#                            '%(lineno)d '
-#                            '%(message)s')
-
-logger = logging.getLogger(__name__)
 
 
 ###############################################################################
@@ -109,7 +95,7 @@ def thread_exc(monkeypatch: Any) -> "ExcHook":
                 self.exc_err_msg1 = ''
                 raise Exception(f'{exc_msg}')
 
-    logger.debug(f'hook before: {threading.excepthook}')
+    # logger.debug(f'hook before: {threading.excepthook}')
     exc_hook = ExcHook()
 
     def mock_threading_excepthook(args):
@@ -126,7 +112,7 @@ def thread_exc(monkeypatch: Any) -> "ExcHook":
         raise Exception(f'SmartEvent thread test error: {exc_err_msg}')
 
     monkeypatch.setattr(threading, "excepthook", mock_threading_excepthook)
-    logger.debug(f'hook after: {threading.excepthook}')
+    # logger.debug(f'hook after: {threading.excepthook}')
     new_hook = threading.excepthook
 
     yield exc_hook
