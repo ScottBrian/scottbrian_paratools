@@ -8249,6 +8249,67 @@ class ConfigVerifier:
             cmd_runners='alpha'))
 
     ####################################################################
+    # build_smart_start_suite
+    ####################################################################
+    def build_smart_start_suite(self,
+                                timeout_type: TimeoutType,
+                                num_auto_start: int,
+                                num_no_auto_start: int) -> None:
+        """Return a list of ConfigCmd items for unregister.
+
+        Args:
+            timeout_type: timeout for None, False, or True
+            num_auto_start: number of threads to auto start
+            num_no_auto_start: number of threads to manually start
+
+        """
+        # Make sure we have enough threads. Note that we subtract 1 from
+        # the count of unregistered names to ensure we have one thread
+        # for the commander
+        assert (num_auto_start
+                + num_no_auto_start) <= len(self.unregistered_names) - 1
+
+        timeout_time = ((num_auto_start * 0.64)
+                        + (num_no_auto_start * 0.64))
+
+        pause_time = timeout_time
+        if timeout_type == TimeoutType.TimeoutFalse:
+            timeout_time *= 2  # prevent timeout
+            timeout_time = max(timeout_time, 2)
+        elif timeout_type == TimeoutType.TimeoutTrue:
+            timeout_time *= 0.5  # force timeout
+
+        self.build_config(
+            cmd_runner=self.commander_name,
+            num_registered=num_timeout_syncers,
+            num_active=num_syncers + 1,
+            num_stopped=num_stopped_syncers)
+
+        self.log_name_groups()
+        # active_names = self.active_names.copy()
+        # remove commander for now, but if we add it later we need to
+        # be careful not to exit the commander
+        active_names = self.active_names - {self.commander_name}
+
+        ################################################################
+        # choose syncer_names
+        ################################################################
+        syncer_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_syncers,
+            update_collection=True,
+            var_name_for_log='syncer_names')
+
+        ################################################################
+        # choose timeout_syncer_names
+        ################################################################
+        timeout_syncer_names = self.choose_names(
+            name_collection=self.registered_names,
+            num_names_needed=num_timeout_syncers,
+            update_collection=False,
+            var_name_for_log='timeout_syncer_names')
+
+    ####################################################################
     # build_start_suite
     ####################################################################
     def build_start_suite(self,
@@ -14764,6 +14825,59 @@ class TestSmartThreadScenarios:
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
             commander_config=commander_config
+        )
+
+    ####################################################################
+    # test_smart_start_scenarios
+    ####################################################################
+    def test_smart_start_scenarios(
+            self,
+            timeout_type_arg: TimeoutType,
+            num_auto_start_arg: int,
+            num_no_auto_start_arg: int,
+            num_timeout_arg: int
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test smart_sync scenarios.
+
+        Args:
+            timeout_type_arg: timeout for None, False, or True
+            num_auto_start_arg: number of threads to auto start
+            num_no_auto_start_arg: number of thread to manually start
+            num_timeout_arg: number threads to not create for timeout
+            caplog: pytest fixture to capture log output
+
+        """
+        total_num_starts = num_auto_start_arg + num_no_auto_start_arg
+
+        if total_num_starts == 0:
+            return
+
+        if (timeout_type_arg == TimeoutType.TimeoutTrue
+                and num_timeout_arg == 0:
+            return
+
+        commander_configs: tuple[AppConfig, ...] = (
+            AppConfig.ScriptStyle,
+            AppConfig.CurrentThreadApp,
+            AppConfig.RemoteThreadApp,
+            AppConfig.RemoteSmartThreadApp,
+            AppConfig.RemoteSmartThreadApp2
+        )
+
+        args_for_scenario_builder: dict[str, Any] = {
+            'timeout_type': timeout_type_arg,
+            'num_auto_start': num_auto_start_arg,
+            'num_no_auto_start': num_no_auto_start_arg,
+            'num_timeout': num_timeout_arg
+        }
+
+        self.scenario_driver(
+            scenario_builder=ConfigVerifier.build_smart_start_suite,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog,
+            commander_config=commander_configs[
+                total_num_starts % len(commander_configs)]
         )
 
     ####################################################################
