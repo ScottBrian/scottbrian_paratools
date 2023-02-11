@@ -126,6 +126,10 @@ class SmartThreadRemoteThreadNotAlive(SmartThreadError):
     """SmartThread exception for remote thread not alive."""
 
 
+class SmartThreadRemoteThreadNotRegistered(SmartThreadError):
+    """SmartThread exception for remote thread not registered."""
+
+
 class SmartThreadConflictDeadlockDetected(SmartThreadError):
     """SmartThread exception for conflicting requests."""
     pass
@@ -647,16 +651,11 @@ class SmartThread:
     ####################################################################
     def smart_start(self,
                     targets: Iterable,
-                    error_stopped_target: bool = True,
-                    timeout: OptIntFloat = None,
                     log_msg: Optional[str] = None) -> None:
         """Start the thread.
 
         Args:
             targets: names of smart threads to be started
-            error_stopped_target: request will raise an error if any
-                one of the targets is in a stopped state.
-            timeout: timeout to wait for thread to become registered
             log_msg: log message to issue for request
 
         :Example: instantiate a SmartThread and start the thread
@@ -673,12 +672,13 @@ class SmartThread:
         request_block = self._request_setup(
             request_name='smart_start',
             remotes=targets,
-            error_stopped_target=error_stopped_target,
+            error_stopped_target=True,
+            error_not_registered_target=True,
             process_rtn=self._process_start,
             cleanup_rtn=None,
             get_block_lock=False,
             completion_count=0,
-            timeout=timeout,
+            timeout=0,
             log_msg=log_msg)
 
         self._config_cmd_loop(request_block=request_block)
@@ -702,22 +702,30 @@ class SmartThread:
             True when request completed, False otherwise
 
         """
-        if remote not in SmartThread._registry:
-            self.remotes_unregistered |= {remote}
+        if self._get_state(remote) != ThreadState.Registered:
+            request_block.not_registered_remotes |= {remote}
             return False
 
-        if self._get_state(remote) == ThreadState.Stopped:
-            request_block.stopped_remotes |= {remote}
-            return False
+        request_block.not_registered_remotes -= {remote}
 
-        if (not SmartThread._registry[remote].thread.is_alive()
-                and not SmartThread._registry[remote].start_issued):
-            SmartThread._registry[remote].start_issued = True
+        # if self._get_state(remote) == ThreadState.Stopped:
+        #     request_block.stopped_remotes |= {remote}
+        #     return False
+        #
+        # if (not SmartThread._registry[remote].thread.is_alive()
+        #         and not SmartThread._registry[remote].start_issued):
+        #     SmartThread._registry[remote].start_issued = True
+        #     self._set_state(
+        #         target_thread=SmartThread._registry[remote],
+        #         new_state=ThreadState.Starting)
+        #     # self.thread.start()
+        #     threading.Thread.start(SmartThread._registry[remote].thread)
+
+        if not SmartThread._registry[remote].thread.is_alive():
             self._set_state(
                 target_thread=SmartThread._registry[remote],
                 new_state=ThreadState.Starting)
-            # self.thread.start()
-            threading.Thread.start(SmartThread._registry[remote].thread)
+            SmartThread._registry[remote].thread.start()
 
         if SmartThread._registry[remote].thread.is_alive():
             self._set_state(
@@ -2310,6 +2318,15 @@ class SmartThread:
                 f'SmartThreadRemoteThreadNotAlive {msg_suite}')
             logger.error(error_msg)
             raise SmartThreadRemoteThreadNotAlive(error_msg)
+
+        # If an error should be raised for unregistered threads
+        if (request_block.error_not_registered_target
+                and request_block.not_registered_remotes):
+            error_msg = (
+                f'{self.name} raising '
+                f'SmartThreadRemoteThreadNotRegistered {msg_suite}')
+            logger.error(error_msg)
+            raise SmartThreadRemoteThreadNotRegistered(error_msg)
 
         if request_block.conflict_remotes:
             error_msg = (

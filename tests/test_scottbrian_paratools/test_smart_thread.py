@@ -5,6 +5,7 @@
 ########################################################################
 from abc import ABC, abstractmethod
 from collections import deque, defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum, auto
@@ -194,6 +195,17 @@ def_del_scenario_arg_list = [
     DefDelScenario.WaitAdd
 ]
 # def_del_scenario_arg_list = [DefDelScenario.Recv0Recv1]
+
+
+########################################################################
+# Test settings for test_smart_start_scenarios
+########################################################################
+num_auto_start_arg_list = [0, 1, 2]
+num_manual_start_arg_list = [0, 1, 2]
+num_unreg_arg_list = [0, 1, 2]
+num_alive_arg_list = [0, 1, 2]
+num_stopped_arg_list = [0, 1, 2]
+
 
 ########################################################################
 # Test settings for test_config_build_scenarios
@@ -1287,7 +1299,9 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
 class StartThread(ConfigCmd):
     def __init__(self,
                  cmd_runners: StrOrList,
-                 start_names: StrOrList) -> None:
+                 start_names: StrOrList,
+                 unreg_remotes: Iterable,
+                 log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
@@ -1295,7 +1309,14 @@ class StartThread(ConfigCmd):
             start_names = [start_names]
         self.start_names = start_names
 
-        self.arg_list += ['start_names']
+        if isinstance(unreg_remotes, str):
+            unreg_remotes = {unreg_remotes}
+        self.unreg_remotes = set(unreg_remotes)
+
+        self.log_msg = log_msg
+
+        self.arg_list += ['start_names',
+                          'unreg_remotes']
 
     def run_process(self, cmd_runner: str) -> None:
         """Run the command.
@@ -1305,7 +1326,9 @@ class StartThread(ConfigCmd):
         """
         self.config_ver.handle_start(
             cmd_runner=cmd_runner,
-            start_names=self.start_names)
+            start_names=self.start_names,
+            unreg_remotes=self.unreg_remotes,
+            log_msg=self.log_msg)
 
 
 ########################################################################
@@ -2261,6 +2284,86 @@ class WaitForSyncTimeouts(ConfigCmd):
 #         The params values are returned one at a time
 #     """
 #     return request.param
+
+
+###############################################################################
+# num_auto_start_arg
+###############################################################################
+@pytest.fixture(params=num_auto_start_arg_list)  # type: ignore
+def num_auto_start_arg(request: Any) -> int:
+    """Number of threads to auto start.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
+###############################################################################
+# num_manual_start_arg
+###############################################################################
+@pytest.fixture(params=num_manual_start_arg_list)  # type: ignore
+def num_manual_start_arg(request: Any) -> int:
+    """Number of threads to manually start.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
+###############################################################################
+# num_unreg_arg
+###############################################################################
+@pytest.fixture(params=num_unreg_arg_list)  # type: ignore
+def num_unreg_arg(request: Any) -> int:
+    """Number of threads to be unregistered for smart_start test.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
+###############################################################################
+# num_alive_arg
+###############################################################################
+@pytest.fixture(params=num_alive_arg_list)  # type: ignore
+def num_alive_arg(request: Any) -> int:
+    """Number of threads to be alive for smart_start test.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
+###############################################################################
+# num_stopped_arg
+###############################################################################
+@pytest.fixture(params=num_stopped_arg_list)  # type: ignore
+def num_stopped_arg(request: Any) -> int:
+    """Number of threads to be stopped for smart_start test.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
 
 
 ###############################################################################
@@ -8252,38 +8355,38 @@ class ConfigVerifier:
     # build_smart_start_suite
     ####################################################################
     def build_smart_start_suite(self,
-                                timeout_type: TimeoutType,
                                 num_auto_start: int,
-                                num_no_auto_start: int) -> None:
+                                num_manual_start: int,
+                                num_unreg: int,
+                                num_alive: int,
+                                num_stopped: int
+                                ) -> None:
         """Return a list of ConfigCmd items for unregister.
 
         Args:
-            timeout_type: timeout for None, False, or True
             num_auto_start: number of threads to auto start
-            num_no_auto_start: number of threads to manually start
+            num_manual_start: number of threads to manually start
+            num_unreg: number of thread that are unregistered
+            num_alive: number of threads that are alive
+            num_stopped: number of threads that are stopped
 
         """
         # Make sure we have enough threads. Note that we subtract 1 from
         # the count of unregistered names to ensure we have one thread
         # for the commander
-        assert (num_auto_start
-                + num_no_auto_start) <= len(self.unregistered_names) - 1
-
-        timeout_time = ((num_auto_start * 0.64)
-                        + (num_no_auto_start * 0.64))
-
-        pause_time = timeout_time
-        if timeout_type == TimeoutType.TimeoutFalse:
-            timeout_time *= 2  # prevent timeout
-            timeout_time = max(timeout_time, 2)
-        elif timeout_type == TimeoutType.TimeoutTrue:
-            timeout_time *= 0.5  # force timeout
+        num_alt_cmd_runners = 1
+        assert (num_alt_cmd_runners
+                + num_auto_start
+                + num_manual_start
+                + num_unreg
+                + num_alive
+                + num_stopped) <= len(self.unregistered_names) - 1
 
         self.build_config(
             cmd_runner=self.commander_name,
-            num_registered=num_timeout_syncers,
-            num_active=num_syncers + 1,
-            num_stopped=num_stopped_syncers)
+            num_registered=num_manual_start,
+            num_active=num_alt_cmd_runners + num_auto_start + num_alive + 1,
+            num_stopped=num_stopped)
 
         self.log_name_groups()
         # active_names = self.active_names.copy()
@@ -8292,22 +8395,81 @@ class ConfigVerifier:
         active_names = self.active_names - {self.commander_name}
 
         ################################################################
-        # choose syncer_names
+        # choose alt_cmd_runner
         ################################################################
-        syncer_names = self.choose_names(
+        alt_cmd_runners = self.choose_names(
             name_collection=active_names,
-            num_names_needed=num_syncers,
+            num_names_needed=num_alt_cmd_runners,
             update_collection=True,
-            var_name_for_log='syncer_names')
+            var_name_for_log='alt_cmd_runner')
 
         ################################################################
-        # choose timeout_syncer_names
+        # choose manual_start_names
         ################################################################
-        timeout_syncer_names = self.choose_names(
+        manual_start_names = self.choose_names(
             name_collection=self.registered_names,
-            num_names_needed=num_timeout_syncers,
+            num_names_needed=num_manual_start,
             update_collection=False,
-            var_name_for_log='timeout_syncer_names')
+            var_name_for_log='manual_start_names')
+
+        ################################################################
+        # choose unreg_names
+        ################################################################
+        unreg_names = self.choose_names(
+            name_collection=self.unregistered_names,
+            num_names_needed=num_unreg,
+            update_collection=False,
+            var_name_for_log='unreg_names')
+
+        ################################################################
+        # choose alive_names
+        ################################################################
+        alive_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=num_alive,
+            update_collection=True,
+            var_name_for_log='alive_names')
+
+        ################################################################
+        # choose stopped_names
+        ################################################################
+        stopped_names = self.choose_names(
+            name_collection=self.stopped_names,
+            num_names_needed=num_stopped,
+            update_collection=False,
+            var_name_for_log='stopped_names')
+
+        targets = (manual_start_names
+                   + unreg_names
+                   + alive_names
+                   + stopped_names)
+
+        unreg_remotes = (unreg_names
+                         + alive_names
+                         + stopped_names)
+
+        if len(targets) % 2:
+            smart_start_serial_num = self.add_cmd(
+                StartThread(
+                    cmd_runners=alt_cmd_runners[0],
+                    start_names=targets,
+                    unreg_remotes=unreg_remotes,
+                    log_msg='smart_start test 1'))
+            ################################################################
+            # confirm the recv_msg
+            ################################################################
+            self.add_cmd(
+                ConfirmResponse(cmd_runners='alpha',
+                                confirm_cmd='StartThread',
+                                confirm_serial_num=smart_start_serial_num,
+                                confirmers=[alt_cmd_runners[0]]))
+        else:
+            self.add_cmd(
+                StartThread(
+                    cmd_runners=self.commander_name,
+                    start_names=targets,
+                    unreg_remotes=unreg_remotes,
+                    log_msg='smart_start test 2'))
 
     ####################################################################
     # build_start_suite
@@ -10147,137 +10309,148 @@ class ConfigVerifier:
                           f'{mean_elapsed_time=}')
 
     ####################################################################
-    # handle_send_msg_tof
+    # handle_start
     ####################################################################
-    def handle_send_msg_tof(
-            self,
-            cmd_runner: str,
-            receivers: list[str],
-            msg_to_send: Any,
-            timeout: IntOrFloat,
-            log_msg: str) -> None:
-
-        """Handle the send_cmd execution and log msgs.
+    def handle_start(self,
+                     cmd_runner: str,
+                     start_names: list[str],
+                     unreg_remotes: Optional[set[str]] = None,
+                     log_msg: Optional[str] = None) -> None:
+        """Start the named thread.
 
         Args:
-            cmd_runner: name of thread doing the cmd
-            receivers: names of threads to receive the message
-            msg_to_send: message to send to the receivers
-            timeout: number of seconds to specify on send_msg timeout
-            log_msg: log message for send_msg to issue
-
+            cmd_runner: thread doing the starts
+            start_names: names of the threads to start
+            unreg_remotes: names of threads that are not in the
+                registered state
+            log_msg: message for log
         """
+        self.log_test_msg(f'{cmd_runner=} handle_start entry '
+                          f'for {start_names=}')
+
         self.log_ver.add_call_seq(
-            name='handle_send_msg_tof',
-            seq='test_smart_thread.py::ConfigVerifier.handle_send_msg_tof')
-        ops_count_names = receivers.copy()
-        self.inc_ops_count(ops_count_names, cmd_runner)
+            name='smart_start',
+            seq='test_smart_thread.py::ConfigVerifier.handle_start')
 
-        self.all_threads[cmd_runner].send_msg(
-            targets=set(receivers),
-            msg=msg_to_send,
-            log_msg=log_msg,
-            timeout=timeout)
+        exp_started_names = set(start_names)
+        enter_exit = ('entry', 'exit')
+        if unreg_remotes:
+            exp_started_names -= unreg_remotes
+            enter_exit = ('entry',)
+            with pytest.raises(st.SmartThreadRemoteThreadNotRegistered):
+                self.all_threads[cmd_runner].smart_start(
+                    targets=set(start_names),
+                    log_msg=log_msg)
 
-        if log_msg:
-            log_msg_2 = f'{self.log_ver.get_call_seq("handle_send_msg_tof")} '
-            log_msg_3 = re.escape(f'{log_msg}')
-            for enter_exit in ('entry', 'exit'):
-                log_msg_1 = re.escape(
-                    f'send_msg() {enter_exit}: {cmd_runner} -> '
-                    f'{set(receivers)}. ')
-                self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
-
-        for name in ops_count_names:
-            log_msg = f'{cmd_runner} sent message to {name}'
-            self.log_ver.add_msg(
-                log_name='scottbrian_paratools.smart_thread',
-                log_level=logging.INFO,
+            self.add_log_msg(
+                self.get_error_msg(
+                    cmd_runner=cmd_runner,
+                    smart_request='smart_start',
+                    targets=set(start_names),
+                    error_str='SmartThreadRemoteThreadNotRegistered',
+                    unreg_remotes=unreg_remotes),
+                log_level=logging.ERROR)
+        else:
+            self.all_threads[cmd_runner].smart_start(
+                targets=set(start_names),
                 log_msg=log_msg)
 
-    ####################################################################
-    # handle_send_msg_tot
-    ####################################################################
-    def handle_send_msg_tot(
-            self,
-            cmd_runner: str,
-            receivers: list[str],
-            msg_to_send: Any,
-            timeout: IntOrFloat,
-            unreg_timeout_names: list[str],
-            fullq_timeout_names: list[str],
-            log_msg: str) -> None:
+        for start_name in exp_started_names:
+            self.add_log_msg(
+                f'{cmd_runner} set state for thread {start_name} '
+                'from ThreadState.Registered to ThreadState.Starting')
+            self.add_log_msg(
+                f'{cmd_runner} set state for thread {start_name} '
+                f'from ThreadState.Starting to ThreadState.Alive')
+            self.add_log_msg(re.escape(
+                f'{cmd_runner} started thread {start_name}, '
+                'thread.is_alive(): True, state: ThreadState.Alive'))
 
-        """Handle the send_cmd execution and log msgs.
+        self.add_request_log_msg(cmd_runner=cmd_runner,
+                                 smart_request='smart_start',
+                                 targets=set(start_names),
+                                 timeout=0,
+                                 timeout_type=TimeoutType.TimeoutNone,
+                                 enter_exit=enter_exit,
+                                 log_msg=None)
 
-        Args:
-            cmd_runner: name of thread doing the cmd
-            receivers: names of threads to receive the message
-            msg_to_send: message to send to the receivers
-            timeout: number of seconds to specify on send_msg timeout
-            unreg_timeout_names: names that are unregistered
-            fullq_timeout_names: names with a full msgq
-            log_msg: log message for send_msg to issue
+        self.monitor_event.set()
+        # start_log_msg = f'{cmd_runner=} handle_start waiting for
+        # monitor'
+        # self.log_ver.add_msg(log_msg=re.escape(start_log_msg))
+        # logger.debug(start_log_msg)
 
-        """
-        self.log_ver.add_call_seq(
-            name='handle_send_msg_tot',
-            seq='test_smart_thread.py::ConfigVerifier.handle_send_msg_tot')
-        ops_count_names = receivers.copy()
-        if unreg_timeout_names:
-            ops_count_names = list(
-                set(ops_count_names)
-                - set(unreg_timeout_names))
-        if fullq_timeout_names:
-            ops_count_names = list(
-                set(ops_count_names)
-                - set(fullq_timeout_names))
+        # waiting forever here means alpha is not the cmd_runner for the
+        # handle_start as hard coded in handle_started_log_msg.
+        # need to fix that.
+        # self.started_event_items[cmd_runner].client_event.wait()
 
-        self.inc_ops_count(ops_count_names, cmd_runner)
+        self.log_test_msg(f'{cmd_runner=} handle_start exiting '
+                          f'for {start_names=}')
 
-        with pytest.raises(st.SmartThreadSendMsgTimedOut):
-            self.all_threads[cmd_runner].send_msg(
-                targets=set(receivers),
-                msg=msg_to_send,
-                log_msg=log_msg,
-                timeout=timeout)
-
-        unreg_timeout_msg = ''
-        if unreg_timeout_names:
-            unreg_timeout_msg = (
-                'Remotes unregistered: '
-                f'{sorted(set(unreg_timeout_names))}. ')
-
-        fullq_timeout_msg = ''
-        if fullq_timeout_names:
-            fullq_timeout_msg = (
-                'Remotes with full send queue: '
-                f'{sorted(set(fullq_timeout_names))}.')
-
-        self.add_log_msg(re.escape(
-            f'{cmd_runner} timeout of a send_msg(). '
-            f'Targets: {sorted(set(receivers))}. '
-            f'{unreg_timeout_msg}'
-            f'{fullq_timeout_msg}'))
-
-        self.add_log_msg(
-            'Raise SmartThreadSendMsgTimedOut',
-            log_level=logging.ERROR)
-
-        if log_msg:
-            log_msg_2 = f'{self.log_ver.get_call_seq("handle_send_msg_tot")} '
-            log_msg_3 = re.escape(f'{log_msg}')
-            log_msg_1 = re.escape(
-                f'send_msg() entry: {cmd_runner} -> '
-                f'{set(receivers)}. ')
-            self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
-
-        for name in ops_count_names:
-            log_msg = f'{cmd_runner} sent message to {name}'
-            self.log_ver.add_msg(
-                log_name='scottbrian_paratools.smart_thread',
-                log_level=logging.INFO,
-                log_msg=log_msg)
+    # ####################################################################
+    # # handle_start
+    # ####################################################################
+    # def handle_start(self,
+    #                  cmd_runner: str,
+    #                  start_names: list[str]) -> None:
+    #     """Start the named thread.
+    #
+    #     Args:
+    #         cmd_runner: thread doing the starts
+    #         start_names: names of the threads to start
+    #     """
+    #     self.log_test_msg(f'{cmd_runner=} handle_start entry '
+    #                       f'for {start_names=}')
+    #
+    #     self.log_ver.add_call_seq(
+    #         name='smart_start',
+    #         seq='test_smart_thread.py::ConfigVerifier.handle_start')
+    #
+    #     # self.started_event_items[cmd_runner] = MonitorEventItem(
+    #     #     client_event=threading.Event(),
+    #     #     deferred_post_needed=False,
+    #     #     targets=start_names.copy()
+    #     # )
+    #     for start_name in start_names:
+    #         self.monitor_event.set()
+    #         self.all_threads[start_name].smart_start(start_name)
+    #         # self.expected_registered[start_name].is_alive = True
+    #         # self.expected_registered[
+    #         #     start_name].st_state = st.ThreadState.Alive
+    #         self.monitor_event.set()
+    #
+    #         self.add_request_log_msg(cmd_runner=cmd_runner,
+    #                                  smart_request='smart_start',
+    #                                  targets={start_name},
+    #                                  timeout=0,
+    #                                  timeout_type=TimeoutType.TimeoutNone,
+    #                                  enter_exit=('entry', 'exit'),
+    #                                  log_msg=None)
+    #
+    #         self.add_log_msg(
+    #             f'{cmd_runner} set state for thread {start_name} '
+    #             'from ThreadState.Registered to ThreadState.Starting')
+    #         self.add_log_msg(
+    #             f'{cmd_runner} set state for thread {start_name} '
+    #             f'from ThreadState.Starting to ThreadState.Alive')
+    #         self.add_log_msg(re.escape(
+    #             f'{cmd_runner} started thread {start_name}, '
+    #             'thread.is_alive(): True, state: ThreadState.Alive'))
+    #
+    #     self.monitor_event.set()
+    #     # start_log_msg = f'{cmd_runner=} handle_start waiting for
+    #     # monitor'
+    #     # self.log_ver.add_msg(log_msg=re.escape(start_log_msg))
+    #     # logger.debug(start_log_msg)
+    #
+    #     # waiting forever here means alpha is not the cmd_runner for the
+    #     # handle_start as hard coded in handle_started_log_msg.
+    #     # need to fix that.
+    #     # self.started_event_items[cmd_runner].client_event.wait()
+    #
+    #     self.log_test_msg(f'{cmd_runner=} handle_start exiting '
+    #                       f'for {start_names=}')
 
     ####################################################################
     # handle_started_log_msg
@@ -10520,8 +10693,10 @@ class ConfigVerifier:
                       error_str: str,
                       pending_remotes: Optional[set[str]] = None,
                       stopped_remotes: Optional[set[str]] = None,
+                      unreg_remotes: Optional[set[str]] = None,
                       conflict_remotes: Optional[set[str]] = None,
-                      deadlock_remotes: Optional[set[str]] = None
+                      deadlock_remotes: Optional[set[str]] = None,
+                      full_send_q_remotes: Optional[set[str]] = None
                       ) -> str:
         """Build the timeout message.
 
@@ -10532,8 +10707,10 @@ class ConfigVerifier:
             error_str: smart_thread error as string
             pending_remotes: names of threads that are pending
             stopped_remotes: names of threads that are stopped
+            unreg_remotes: names of threads that are not registered
             conflict_remotes: names of sync/wait deadlock threads
             deadlock_remotes: names of wait/wait deadlock threads
+            full_send_q_remotes: names threads whose send_q is full
 
         Returns:
             error msg string for log and raise
@@ -10563,6 +10740,13 @@ class ConfigVerifier:
         else:
             stopped_msg = ''
 
+        if unreg_remotes:
+            unreg_msg = re.escape(
+                ' Remotes that are not registered: '
+                f'{sorted(unreg_remotes)}.')
+        else:
+            unreg_msg = ''
+
         if conflict_remotes:
             if smart_request == 'smart_sync':
                 remote_request = 'smart_wait'
@@ -10589,9 +10773,17 @@ class ConfigVerifier:
         else:
             deadlock_msg = ''
 
+        if full_send_q_remotes:
+            full_send_q_msg = (
+                f' Remotes who have a full send_q: '
+                f'{sorted(full_send_q_remotes)}.')
+        else:
+            full_send_q_msg = ''
+
         return (
             f'{cmd_runner} raising {error_str} {targets_msg}'
-            f'{pending_msg}{stopped_msg}{conflict_msg}{deadlock_msg}')
+            f'{pending_msg}{stopped_msg}{unreg_msg}{conflict_msg}'
+            f'{deadlock_msg}{full_send_q_msg}')
 
     ####################################################################
     # handle_unregister
@@ -11372,70 +11564,6 @@ class ConfigVerifier:
     def set_recv_timeout(self, num_timeouts: int):
         with self.ops_lock:
             self.expected_num_recv_timouts = num_timeouts
-
-    ####################################################################
-    # handle_start
-    ####################################################################
-    def handle_start(self,
-                     cmd_runner: str,
-                     start_names: list[str]) -> None:
-        """Start the named thread.
-
-        Args:
-            cmd_runner: thread doing the starts
-            start_names: names of the threads to start
-        """
-        self.log_test_msg(f'{cmd_runner=} handle_start entry '
-                          f'for {start_names=}')
-
-        self.log_ver.add_call_seq(
-            name='smart_start',
-            seq='test_smart_thread.py::ConfigVerifier.handle_start')
-
-        # self.started_event_items[cmd_runner] = MonitorEventItem(
-        #     client_event=threading.Event(),
-        #     deferred_post_needed=False,
-        #     targets=start_names.copy()
-        # )
-        for start_name in start_names:
-            self.monitor_event.set()
-            self.all_threads[start_name].smart_start(start_name)
-            # self.expected_registered[start_name].is_alive = True
-            # self.expected_registered[
-            #     start_name].st_state = st.ThreadState.Alive
-            self.monitor_event.set()
-
-            self.add_request_log_msg(cmd_runner=cmd_runner,
-                                     smart_request='smart_start',
-                                     targets={start_name},
-                                     timeout=0,
-                                     timeout_type=TimeoutType.TimeoutNone,
-                                     enter_exit=('entry', 'exit'),
-                                     log_msg=None)
-
-            self.add_log_msg(
-                f'{cmd_runner} set state for thread {start_name} '
-                'from ThreadState.Registered to ThreadState.Starting')
-            self.add_log_msg(
-                f'{cmd_runner} set state for thread {start_name} '
-                f'from ThreadState.Starting to ThreadState.Alive')
-            self.add_log_msg(re.escape(
-                f'{cmd_runner} started thread {start_name}, '
-                'thread.is_alive(): True, state: ThreadState.Alive'))
-
-        self.monitor_event.set()
-        # start_log_msg = f'{cmd_runner=} handle_start waiting for
-        # monitor'
-        # self.log_ver.add_msg(log_msg=re.escape(start_log_msg))
-        # logger.debug(start_log_msg)
-
-        # waiting forever here means alpha is not the cmd_runner for the
-        # handle_start as hard coded in handle_started_log_msg.
-        # need to fix that.
-        # self.started_event_items[cmd_runner].client_event.wait()
-
-        self.log_test_msg(f'{cmd_runner=} handle_start exiting '
-                          f'for {start_names=}')
 
     ####################################################################
     # stop_thread
@@ -14832,29 +14960,31 @@ class TestSmartThreadScenarios:
     ####################################################################
     def test_smart_start_scenarios(
             self,
-            timeout_type_arg: TimeoutType,
             num_auto_start_arg: int,
-            num_no_auto_start_arg: int,
-            num_timeout_arg: int
+            num_manual_start_arg: int,
+            num_unreg_arg: int,
+            num_alive_arg: int,
+            num_stopped_arg: int,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
         """Test smart_sync scenarios.
 
         Args:
-            timeout_type_arg: timeout for None, False, or True
             num_auto_start_arg: number of threads to auto start
-            num_no_auto_start_arg: number of thread to manually start
-            num_timeout_arg: number threads to not create for timeout
+            num_manual_start_arg: number of thread to manually start
+            num_unreg_arg: number threads to not create for timeout
+            num_alive_arg: number threads alive already
+            num_stopped_arg: number threads stopped
             caplog: pytest fixture to capture log output
 
         """
-        total_num_starts = num_auto_start_arg + num_no_auto_start_arg
+        total_num_targets = (num_auto_start_arg
+                             + num_manual_start_arg
+                             + num_unreg_arg
+                             + num_alive_arg
+                             + num_stopped_arg)
 
-        if total_num_starts == 0:
-            return
-
-        if (timeout_type_arg == TimeoutType.TimeoutTrue
-                and num_timeout_arg == 0:
+        if total_num_targets == 0:
             return
 
         commander_configs: tuple[AppConfig, ...] = (
@@ -14866,10 +14996,11 @@ class TestSmartThreadScenarios:
         )
 
         args_for_scenario_builder: dict[str, Any] = {
-            'timeout_type': timeout_type_arg,
             'num_auto_start': num_auto_start_arg,
-            'num_no_auto_start': num_no_auto_start_arg,
-            'num_timeout': num_timeout_arg
+            'num_manual_start': num_manual_start_arg,
+            'num_unreg': num_unreg_arg,
+            'num_alive': num_alive_arg,
+            'num_stopped': num_stopped_arg
         }
 
         self.scenario_driver(
@@ -14877,7 +15008,7 @@ class TestSmartThreadScenarios:
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
             commander_config=commander_configs[
-                total_num_starts % len(commander_configs)]
+                total_num_targets % len(commander_configs)]
         )
 
     ####################################################################
@@ -15294,8 +15425,7 @@ class TestSmartThreadScenarios:
                                     log_ver=log_ver,
                                     caplog_to_use=caplog_to_use,
                                     msgs=msgs,
-                                    max_msgs=10,
-                                    log_level=logging.DEBUG)
+                                    max_msgs=10)
 
         scenario_builder(config_ver,
                          **scenario_builder_args)
