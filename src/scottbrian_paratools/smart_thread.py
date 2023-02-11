@@ -425,6 +425,8 @@ class SmartThread:
             self.thread = threading.current_thread()
             self.thread.name = name
 
+        self.cmd_lock = threading.Lock()
+
         self.st_state: ThreadState = ThreadState.Unregistered
         self._set_state(
             target_thread=self,
@@ -2128,29 +2130,29 @@ class SmartThread:
                 between two smart_wait requests.
 
         """
-        self.work_remotes: set[str] = request_block.remotes.copy()
+        with self.cmd_lock:
+            self.work_remotes: set[str] = request_block.remotes.copy()
 
-        while len(self.work_remotes) > request_block.completion_count:
-            num_start_loop_work_remotes = len(self.work_remotes)
-            for remote in self.work_remotes.copy():
-                with sel.SELockExcl(SmartThread._registry_lock):
-                    if request_block.process_rtn(request_block,
-                                                 remote):
-                        self.work_remotes -= {remote}
+            while len(self.work_remotes) > request_block.completion_count:
+                num_start_loop_work_remotes = len(self.work_remotes)
+                for remote in self.work_remotes.copy():
+                    with sel.SELockExcl(SmartThread._registry_lock):
+                        if request_block.process_rtn(request_block,
+                                                     remote):
+                            self.work_remotes -= {remote}
 
-            # if no progress was made
-            if len(self.work_remotes) == num_start_loop_work_remotes:
-                if ((request_block.error_stopped_target
-                     and request_block.stopped_remotes)
-                        or (request_block.error_not_registered_target
-                            and request_block.not_registered_remotes)
-                        or request_block.timer.is_expired()):
+                # if no progress was made
+                if len(self.work_remotes) == num_start_loop_work_remotes:
+                    if ((request_block.error_stopped_target
+                         and request_block.stopped_remotes)
+                            or (request_block.error_not_registered_target
+                                and request_block.not_registered_remotes)
+                            or request_block.timer.is_expired()):
+                        self._handle_loop_errors(request_block=request_block,
+                                                 pending_remotes=list(
+                                                     self.work_remotes))
 
-                    self._handle_loop_errors(request_block=request_block,
-                                             pending_remotes=list(
-                                                 self.work_remotes))
-
-            time.sleep(0.2)
+                time.sleep(0.2)
 
     ####################################################################
     # _request_loop

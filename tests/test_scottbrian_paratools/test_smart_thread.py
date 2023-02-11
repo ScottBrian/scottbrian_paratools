@@ -4071,6 +4071,7 @@ class CmdWaitingLogSearchItem(LogSearchItem):
                                    '|handle_recv_tof'
                                    '|handle_recv_tot'
                                    '|handle_resume'
+                                   '|handle_start'
                                    '|handle_sync'
                                    '|handle_wait'
                                    '|handle_unregister)')
@@ -8471,6 +8472,10 @@ class ConfigVerifier:
                     unreg_remotes=unreg_remotes,
                     log_msg='smart_start test 2'))
 
+        if manual_start_names:
+            self.registered_names -= set(manual_start_names)
+            self.active_names |= set(manual_start_names)
+
     ####################################################################
     # build_start_suite
     ####################################################################
@@ -10375,6 +10380,15 @@ class ConfigVerifier:
                                  log_msg=None)
 
         self.monitor_event.set()
+        if exp_started_names:
+            with self.ops_lock:
+                self.cmd_waiting_event_items[cmd_runner] = threading.Event()
+            self.log_test_msg(
+                f'{cmd_runner=} handle_start waiting for monitor')
+            self.monitor_event.set()
+            self.cmd_waiting_event_items[cmd_runner].wait()
+            with self.ops_lock:
+                del self.cmd_waiting_event_items[cmd_runner]
         # start_log_msg = f'{cmd_runner=} handle_start waiting for
         # monitor'
         # self.log_ver.add_msg(log_msg=re.escape(start_log_msg))
@@ -14158,32 +14172,32 @@ class OuterSmartThreadApp(st.SmartThread, threading.Thread):
         # self._set_state(
         #     target_thread=self,
         #     new_state=st.ThreadState.Alive)
-        name = self.name
-
-        self.smart_start(name)
-
-        self.config_ver.log_ver.add_call_seq(
-            name='smart_start',
-            seq='test_smart_thread.py::OuterSmartThreadApp.run')
-
-        self.config_ver.add_request_log_msg(
-            cmd_runner=name,
-            smart_request='smart_start',
-            targets={name},
-            timeout=0,
-            timeout_type=TimeoutType.TimeoutNone,
-            enter_exit=('entry', 'exit'),
-            log_msg=None)
+        # name = self.name
+        #
+        # self.smart_start(name)
+        #
+        # self.config_ver.log_ver.add_call_seq(
+        #     name='smart_start',
+        #     seq='test_smart_thread.py::OuterSmartThreadApp.run')
+        #
+        # self.config_ver.add_request_log_msg(
+        #     cmd_runner=name,
+        #     smart_request='smart_start',
+        #     targets={name},
+        #     timeout=0,
+        #     timeout_type=TimeoutType.TimeoutNone,
+        #     enter_exit=('entry', 'exit'),
+        #     log_msg=None)
 
         # self.config_ver.add_log_msg(
         #     f'{name} set state for thread {name} from '
         #     'ThreadState.Registered to ThreadState.Alive'
         # )
-        self.config_ver.add_log_msg(re.escape(
-            f'{name} started thread {name}, '
-            'thread.is_alive(): True, state: ThreadState.Alive'))
+        # self.config_ver.add_log_msg(re.escape(
+        #     f'{name} started thread {name}, '
+        #     'thread.is_alive(): True, state: ThreadState.Alive'))
 
-        self.config_ver.monitor_event.set()
+        # self.config_ver.monitor_event.set()
         self.config_ver.main_driver()
 
 
@@ -14224,32 +14238,32 @@ class OuterSmartThreadApp2(threading.Thread, st.SmartThread):
         #     new_state=st.ThreadState.Alive)
         # self.config_ver.main_driver()
 
-        name = self.name
-
-        self.smart_start(name)
-
-        self.config_ver.log_ver.add_call_seq(
-            name='smart_start',
-            seq='test_smart_thread.py::OuterSmartThreadApp2.run')
-
-        self.config_ver.add_request_log_msg(
-            cmd_runner=name,
-            smart_request='smart_start',
-            targets={name},
-            timeout=0,
-            timeout_type=TimeoutType.TimeoutNone,
-            enter_exit=('entry', 'exit'),
-            log_msg=None)
+        # name = self.name
+        #
+        # self.smart_start(name)
+        #
+        # self.config_ver.log_ver.add_call_seq(
+        #     name='smart_start',
+        #     seq='test_smart_thread.py::OuterSmartThreadApp2.run')
+        #
+        # self.config_ver.add_request_log_msg(
+        #     cmd_runner=name,
+        #     smart_request='smart_start',
+        #     targets={name},
+        #     timeout=0,
+        #     timeout_type=TimeoutType.TimeoutNone,
+        #     enter_exit=('entry', 'exit'),
+        #     log_msg=None)
 
         # self.config_ver.add_log_msg(
         #     f'{name} set state for thread {name} from '
         #     'ThreadState.Registered to ThreadState.Alive'
         # )
-        self.config_ver.add_log_msg(re.escape(
-            f'{name} started thread {name}, '
-            'thread.is_alive(): True, state: ThreadState.Alive'))
-
-        self.config_ver.monitor_event.set()
+        # self.config_ver.add_log_msg(re.escape(
+        #     f'{name} started thread {name}, '
+        #     'thread.is_alive(): True, state: ThreadState.Alive'))
+        #
+        # self.config_ver.monitor_event.set()
         self.config_ver.main_driver()
 
 
@@ -15406,18 +15420,6 @@ class TestSmartThreadScenarios:
         log_ver.add_call_seq(name=commander_name,
                              seq=get_formatted_call_sequence())
 
-        log_msg = 'mainline entered'
-        log_ver.add_msg(log_msg=log_msg)
-        logger.debug(log_msg)
-
-        log_msg = f'scenario builder: {scenario_builder}'
-        log_ver.add_msg(log_msg=log_msg)
-        logger.debug(log_msg)
-
-        log_msg = f'scenario args: {scenario_builder_args}'
-        log_ver.add_msg(log_msg=re.escape(log_msg))
-        logger.debug(log_msg)
-
         random.seed(42)
         msgs = Msgs()
 
@@ -15426,6 +15428,11 @@ class TestSmartThreadScenarios:
                                     caplog_to_use=caplog_to_use,
                                     msgs=msgs,
                                     max_msgs=10)
+
+        config_ver.log_test_msg('mainline entered')
+        config_ver.log_test_msg(f'scenario builder: {scenario_builder}')
+        config_ver.log_test_msg(f'scenario args: {scenario_builder_args}')
+        config_ver.log_test_msg(f'{commander_config=}')
 
         scenario_builder(config_ver,
                          **scenario_builder_args)
