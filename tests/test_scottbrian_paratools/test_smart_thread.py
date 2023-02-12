@@ -4065,7 +4065,6 @@ class CmdWaitingLogSearchItem(LogSearchItem):
         list_of_waiting_methods = ('(create_commander_thread'
                                    '|create_f1_thread'
                                    '|handle_join'
-                                   '|handle_join_tof'
                                    '|handle_join_tot'
                                    '|handle_recv'
                                    '|handle_recv_tof'
@@ -4290,7 +4289,6 @@ class ConfigVerifier:
         #     tuple[str, str, str, str], int] = defaultdict(int)
 
         self.del_deferred_list: list[tuple(tuple[str, str], str)] = []
-        self.deferred_dels: dict[tuple[str, str], int] = defaultdict(int)
 
         # self.found_utc_log_msgs: dict[tuple[str, str], int]= defaultdict(int)
         self.found_update_pair_array_log_msgs: dict[str, int] = defaultdict(
@@ -9456,151 +9454,10 @@ class ConfigVerifier:
 
         self.monitor_event.set()
 
-        with self.ops_lock:
-            self.cmd_waiting_event_items[cmd_runner] = threading.Event()
-
-        self.log_test_msg(f'{cmd_runner=} handle_join waiting for monitor')
-        self.monitor_event.set()
-        self.cmd_waiting_event_items[cmd_runner].wait()
-        with self.ops_lock:
-            del self.cmd_waiting_event_items[cmd_runner]
+        self.wait_for_monitor(cmd_runner=cmd_runner,
+                              rtn_name='handle_join')
 
         self.log_test_msg(f'handle_join exiting with {elapsed_time=}, '
-                          f'{len(join_names)=}, {time_per_target=}')
-
-    ####################################################################
-    # handle_join_tof
-    ####################################################################
-    def handle_join_tof(self,
-                        cmd_runner: str,
-                        join_names: list[str],
-                        timeout: IntOrFloat,
-                        log_msg: str) -> None:
-
-        """Handle the join execution and log msgs.
-
-        Args:
-            cmd_runner: name of thread doing the cmd
-            join_names: target threads that we will join
-            timeout: timeout value to specify on join
-            log_msg: log message to issue on the join (name be None)
-
-        """
-        self.log_ver.add_call_seq(
-            name='handle_join_tof',
-            seq='test_smart_thread.py::ConfigVerifier.handle_join_tof')
-
-        # self.join_event_items[cmd_runner] = MonitorEventItem(
-        #     client_event=threading.Event(),
-        #     targets=join_names.copy()
-        # )
-        self.monitor_event.set()
-        start_time = time.time()
-        self.all_threads[cmd_runner].smart_join(
-            targets=set(join_names),
-            timeout=timeout,
-            log_msg=log_msg)
-        elapsed_time: float = time.time() - start_time
-        time_per_target: float = elapsed_time / len(join_names)
-        self.monitor_event.set()
-        if log_msg:
-            log_msg_2 = (
-                f'{self.log_ver.get_call_seq("handle_join_tof")} ')
-            log_msg_3 = re.escape(f'{log_msg}')
-            for enter_exit in ('entry', 'exit'):
-                log_msg_1 = re.escape(
-                    f'join() {enter_exit}: {cmd_runner} to join '
-                    f'{sorted(set(join_names))}. ')
-
-                self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
-
-        with self.ops_lock:
-            self.cmd_waiting_event_items[cmd_runner] = threading.Event()
-
-        self.log_test_msg(f'{cmd_runner=} handle_join_tof waiting for monitor')
-        self.monitor_event.set()
-        self.cmd_waiting_event_items[cmd_runner].wait()
-        with self.ops_lock:
-            del self.cmd_waiting_event_items[cmd_runner]
-
-        self.log_test_msg(f'handle_join_tof exiting with {elapsed_time=}, '
-                          f'{len(join_names)=}, {time_per_target=}')
-
-    ####################################################################
-    # handle_join_tot
-    ####################################################################
-    def handle_join_tot(self,
-                        cmd_runner: str,
-                        join_names: list[str],
-                        timeout: IntOrFloat,
-                        timeout_names: list[str],
-                        log_msg: str) -> None:
-
-        """Handle the join execution and log msgs.
-
-        Args:
-            cmd_runner: name of thread doing the cmd
-            join_names: target threads that we will join
-            timeout: timeout value to specify on join
-            timeout_names: targets that are expected to timeout
-            log_msg: log message to issue on the join (name be None)
-
-        """
-        self.log_ver.add_call_seq(
-            name='handle_join_tot',
-            seq='test_smart_thread.py::ConfigVerifier.handle_join_tot')
-
-        if timeout_names:
-            target_names = list(set(join_names) - set(timeout_names))
-        else:
-            target_names = join_names.copy()
-
-        # wait for monitor if we have names that will be deleted
-        # if target_names:
-        #     self.join_event_items[cmd_runner] = MonitorEventItem(
-        #         client_event=threading.Event(),
-        #         targets=target_names
-        #     )
-        self.monitor_event.set()
-        start_time = time.time()
-        with pytest.raises(st.SmartThreadJoinTimedOut):
-            self.all_threads[cmd_runner].smart_join(
-                targets=set(join_names),
-                timeout=timeout,
-                log_msg=log_msg)
-        elapsed_time: float = time.time() - start_time
-        time_per_target: float = elapsed_time / len(join_names)
-        self.monitor_event.set()
-        timeout_log_msg = (
-            f'{cmd_runner} raising SmartThreadJoinTimedOut '
-            f'waiting for {sorted(set(timeout_names))}')
-        self.log_ver.add_msg(
-            log_name='scottbrian_paratools.smart_thread',
-            log_level=logging.ERROR,
-            log_msg=re.escape(timeout_log_msg))
-
-        if log_msg:
-            log_msg_2 = (
-                f'{self.log_ver.get_call_seq("handle_join_tot")} ')
-            log_msg_3 = re.escape(f'{log_msg}')
-            log_msg_1 = re.escape(
-                f'join() entry: {cmd_runner} to join '
-                f'{sorted(set(join_names))}. ')
-
-            self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
-
-        if target_names:
-            with self.ops_lock:
-                self.cmd_waiting_event_items[cmd_runner] = threading.Event()
-
-            self.log_test_msg(
-                f'{cmd_runner=} handle_join_tot waiting for monitor')
-            self.monitor_event.set()
-            self.cmd_waiting_event_items[cmd_runner].wait()
-            with self.ops_lock:
-                del self.cmd_waiting_event_items[cmd_runner]
-
-        self.log_test_msg(f'handle_join_tot exiting with {elapsed_time=}, '
                           f'{len(join_names)=}, {time_per_target=}')
 
     ####################################################################
@@ -9659,8 +9516,12 @@ class ConfigVerifier:
     def handle_recv_msg(self,
                         cmd_runner: str,
                         senders: list[str],
-                        exp_msgs: Any,
-                        del_deferred: Union[list[str], None],
+                        exp_msgs: dict[str, Any],
+                        error_stopped_target: bool,
+                        stopped_remotes: set[str],
+                        timeout_type: TimeoutType,
+                        timeout: IntOrFloat,
+                        timeout_names: set[str],
                         log_msg: str) -> None:
 
         """Handle the send_recv_cmd execution and log msgs.
@@ -9669,64 +9530,181 @@ class ConfigVerifier:
             cmd_runner: name of thread doing the cmd
             senders: names of the senders
             exp_msgs: expected messages by sender name
-            del_deferred: names of senders who might exit and cause the
-                receiver to be marked as delete deferred
+            error_stopped_target: specifies whether to raise an error if
+                the remote sender is stopped and a message was not
+                received
+            stopped_remotes: names of remotes that are stopped.
+            timeout_type: None, False, or True
+            timeout: value to use for timeout
+            timeout_names: names of remotes that fail to send a message
+                within the timeout time.
             log_msg: log message to isee on recv_msg
 
         """
-        self.log_test_msg(f'handle_recv entry: {cmd_runner=}, '
-                          f'{senders=}, {del_deferred=}')
+        self.log_test_msg(f'handle_recv_msg entry: {cmd_runner=}, '
+                          f'{senders=}, {error_stopped_target=} '
+                          f'{stopped_remotes=}, {timeout_type=}, '
+                          f'{timeout=}, {timeout_names=}')
 
         self.log_ver.add_call_seq(
             name='recv_msg',
             seq='test_smart_thread.py::ConfigVerifier.handle_recv_msg')
 
-        if del_deferred:
-            with self.ops_lock:
-                for del_sender in del_deferred:
-                    self.deferred_dels[(cmd_runner, del_sender)] += 1
-
         self.monitor_event.set()
-        elapsed_time: float = 0
-        for from_name in senders:
-            start_time = time.time()
+        timeout_true_value = timeout
+        for remote in senders:
+            if remote in stopped_remotes:
+                stopped_remote = {remote}
+            else:
+                stopped_remote = set()
+            if remote in timeout_names:
+                timeout_name = {remote}
+            else:
+                timeout_name = set()
 
-            recvd_msg = self.all_threads[cmd_runner].recv_msg(
-                remote=from_name,
+            self.handle_recv_msg2(
+                cmd_runner=cmd_runner,
+                remote=remote,
+                exp_msgs=exp_msgs,
+                error_stopped_target=error_stopped_target,
+                stopped_remotes=stopped_remote,
+                timeout_type=timeout_type,
+                timeout=timeout_true_value,
+                timeout_names=timeout_name,
                 log_msg=log_msg)
-            assert recvd_msg == exp_msgs[from_name]
 
-            elapsed_time += (time.time() - start_time)
+            if timeout_type == TimeoutType.TimeoutTrue:
+                timeout_true_value = 0.2
 
-            self.add_request_log_msg(cmd_runner=cmd_runner,
-                                     smart_request='recv_msg',
-                                     targets={from_name},
-                                     timeout=0,
-                                     timeout_type=TimeoutType.TimeoutNone,
-                                     enter_exit=('entry', 'exit'),
-                                     log_msg=log_msg)
+        self.wait_for_monitor(cmd_runner=cmd_runner,
+                              rtn_name='handle_recv')
 
-            recv_log_msg = f"{cmd_runner} received msg from {from_name}"
-            self.log_ver.add_msg(
-                log_name='scottbrian_paratools.smart_thread',
-                log_level=logging.INFO,
-                log_msg=recv_log_msg)
-        self.monitor_event.set()
+        self.log_test_msg(f'handle_recv_msg exit: {cmd_runner=}, '
+                          f'{senders=}, {error_stopped_target=} '
+                          f'{stopped_remotes=}, {timeout_type=}, '
+                          f'{timeout=}, {timeout_names=}')
 
-        with self.ops_lock:
-            self.cmd_waiting_event_items[cmd_runner] = threading.Event()
+    ####################################################################
+    # handle_recv_msg
+    ####################################################################
+    def handle_recv_msg2(self,
+                         cmd_runner: str,
+                         remote: str,
+                         exp_msgs: dict[str, Any],
+                         error_stopped_target: bool,
+                         stopped_remotes: set[str],
+                         timeout_type: TimeoutType,
+                         timeout: IntOrFloat,
+                         timeout_names: set[str],
+                         log_msg: str) -> None:
 
-        self.log_test_msg(f'{cmd_runner=} handle_recv waiting for monitor')
-        self.monitor_event.set()
-        self.cmd_waiting_event_items[cmd_runner].wait()
-        with self.ops_lock:
-            # del self.recv_msg_event_items[cmd_runner]
-            del self.cmd_waiting_event_items[cmd_runner]
+        """Handle the send_recv_cmd execution and log msgs.
 
-        mean_elapsed_time = elapsed_time / len(senders)
-        self.log_test_msg(f'handle_recv exiting {cmd_runner=}, '
-                          f'{elapsed_time=}, {len(senders)=} '
-                          f'{mean_elapsed_time=}')
+        Args:
+            cmd_runner: name of thread doing the cmd
+            remote: names of the sender
+            exp_msg: expected message from sender
+            error_stopped_target: specifies whether to raise an error if
+                the remote sender is stopped and a message was not
+                received
+            stopped_remotes: name of remote that is stopped. Will be
+                None or the same name as remote
+            timeout_type: None, False, or True
+            timeout: value to use for timeout
+            timeout_names: name of remote that fails to send a message
+                within the timeout time. Will be None or the same name
+                as the remote
+            log_msg: log message to isee on recv_msg
+
+            """
+        self.log_test_msg(f'handle_recv_msg2 entry: {cmd_runner=}, '
+                          f'{remote=}, {error_stopped_target=} '
+                          f'{stopped_remotes=}')
+
+        self.log_ver.add_call_seq(
+            name='recv_msg',
+            seq='test_smart_thread.py::ConfigVerifier.handle_recv_msg2')
+
+        enter_exit = ('entry', 'exit')
+        if error_stopped_target and stopped_remotes:
+            enter_exit = ('entry', )
+            with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
+                if timeout_type == TimeoutType.TimeoutNone:
+                    recvd_msg = self.all_threads[cmd_runner].recv_msg(
+                        remote=remote,
+                        error_stopped_target=error_stopped_target,
+                        log_msg=log_msg)
+                else:
+                    recvd_msg = self.all_threads[cmd_runner].recv_msg(
+                        remote=remote,
+                        timeout=timeout,
+                        error_stopped_target=error_stopped_target,
+                        log_msg=log_msg)
+
+            self.add_log_msg(
+                self.get_error_msg(
+                    cmd_runner=cmd_runner,
+                    smart_request='recv_msg',
+                    targets={remote},
+                    error_str='SmartThreadRemoteThreadNotAlive',
+                    stopped_remotes=stopped_remotes),
+                log_level=logging.ERROR)
+
+        elif timeout_type == TimeoutType.TimeoutNone:
+            recvd_msg = self.all_threads[cmd_runner].recv_msg(
+                remote=remote,
+                error_stopped_target=error_stopped_target,
+                log_msg=log_msg)
+            assert recvd_msg == exp_msgs[remote]
+            self.add_log_msg(
+                new_log_msg=f"{cmd_runner} received msg from {remote}",
+                log_level=logging.INFO)
+
+        elif timeout_type == TimeoutType.TimeoutFalse:
+            recvd_msg = self.all_threads[cmd_runner].recv_msg(
+                remote=remote,
+                timeout=timeout,
+                error_stopped_target=error_stopped_target,
+                log_msg=log_msg)
+            assert recvd_msg == exp_msgs[remote]
+            self.add_log_msg(
+                new_log_msg=f"{cmd_runner} received msg from {remote}",
+                log_level=logging.INFO)
+
+        elif timeout_type == TimeoutType.TimeoutTrue:
+            enter_exit = ('entry', )
+            with pytest.raises(st.SmartThreadRequestTimedOut):
+                recvd_msg = self.all_threads[cmd_runner].recv_msg(
+                    remote=remote,
+                    timeout=timeout,
+                    error_stopped_target=error_stopped_target,
+                    log_msg=log_msg)
+
+            self.dec_recv_timeout()
+
+            self.add_log_msg(
+                self.get_error_msg(
+                    cmd_runner=cmd_runner,
+                    smart_request='recv_msg',
+                    targets={remote},
+                    error_str='SmartThreadRequestTimedOut',
+                    stopped_remotes=stopped_remotes),
+                log_level=logging.ERROR)
+
+        self.add_request_log_msg(cmd_runner=cmd_runner,
+                                 smart_request='smart_resume',
+                                 targets={remote},
+                                 timeout=timeout,
+                                 timeout_type=timeout_type,
+                                 enter_exit=enter_exit,
+                                 log_msg=log_msg)
+
+        self.wait_for_monitor(cmd_runner=cmd_runner,
+                              rtn_name='handle_recv')
+
+        self.log_test_msg(f'handle_recv_msg2 exit: {cmd_runner=}, '
+                          f'{remote=}, {error_stopped_target=} '
+                          f'{stopped_remotes=}')
 
     ####################################################################
     # handle_recv_msg_tof
@@ -9763,11 +9741,6 @@ class ConfigVerifier:
         #     deferred_post_needed=False,
         #     targets=senders.copy()
         # )
-
-        if del_deferred:
-            with self.ops_lock:
-                for del_sender in del_deferred:
-                    self.deferred_dels[(cmd_runner, del_sender)] += 1
 
         self.monitor_event.set()
         elapsed_time: float = 0
@@ -9863,10 +9836,6 @@ class ConfigVerifier:
         #         targets=non_timeout_senders.copy()
         #     )
 
-        if del_deferred:
-            with self.ops_lock:
-                for del_sender in del_deferred:
-                    self.deferred_dels[(cmd_runner, del_sender)] += 1
         self.monitor_event.set()
         timeout_true_value = timeout
         # elapsed_time: float = 0
@@ -10168,14 +10137,8 @@ class ConfigVerifier:
                                  enter_exit=enter_exit,
                                  log_msg=log_msg)
 
-        with self.ops_lock:
-            self.cmd_waiting_event_items[cmd_runner] = threading.Event()
-        self.log_test_msg(
-            f'{cmd_runner=} handle_resume waiting for monitor')
-        self.monitor_event.set()
-        self.cmd_waiting_event_items[cmd_runner].wait()
-        with self.ops_lock:
-            del self.cmd_waiting_event_items[cmd_runner]
+        self.wait_for_monitor(cmd_runner=cmd_runner,
+                              rtn_name='handle_resume')
 
         self.log_test_msg(f'handle_resume exit: {cmd_runner=}, {targets=}')
 
@@ -10381,90 +10344,33 @@ class ConfigVerifier:
 
         self.monitor_event.set()
         if exp_started_names:
-            with self.ops_lock:
-                self.cmd_waiting_event_items[cmd_runner] = threading.Event()
-            self.log_test_msg(
-                f'{cmd_runner=} handle_start waiting for monitor')
-            self.monitor_event.set()
-            self.cmd_waiting_event_items[cmd_runner].wait()
-            with self.ops_lock:
-                del self.cmd_waiting_event_items[cmd_runner]
-        # start_log_msg = f'{cmd_runner=} handle_start waiting for
-        # monitor'
-        # self.log_ver.add_msg(log_msg=re.escape(start_log_msg))
-        # logger.debug(start_log_msg)
-
-        # waiting forever here means alpha is not the cmd_runner for the
-        # handle_start as hard coded in handle_started_log_msg.
-        # need to fix that.
-        # self.started_event_items[cmd_runner].client_event.wait()
+            self.wait_for_monitor(cmd_runner=cmd_runner,
+                                  rtn_name='handle_start')
 
         self.log_test_msg(f'{cmd_runner=} handle_start exiting '
                           f'for {start_names=}')
 
-    # ####################################################################
-    # # handle_start
-    # ####################################################################
-    # def handle_start(self,
-    #                  cmd_runner: str,
-    #                  start_names: list[str]) -> None:
-    #     """Start the named thread.
-    #
-    #     Args:
-    #         cmd_runner: thread doing the starts
-    #         start_names: names of the threads to start
-    #     """
-    #     self.log_test_msg(f'{cmd_runner=} handle_start entry '
-    #                       f'for {start_names=}')
-    #
-    #     self.log_ver.add_call_seq(
-    #         name='smart_start',
-    #         seq='test_smart_thread.py::ConfigVerifier.handle_start')
-    #
-    #     # self.started_event_items[cmd_runner] = MonitorEventItem(
-    #     #     client_event=threading.Event(),
-    #     #     deferred_post_needed=False,
-    #     #     targets=start_names.copy()
-    #     # )
-    #     for start_name in start_names:
-    #         self.monitor_event.set()
-    #         self.all_threads[start_name].smart_start(start_name)
-    #         # self.expected_registered[start_name].is_alive = True
-    #         # self.expected_registered[
-    #         #     start_name].st_state = st.ThreadState.Alive
-    #         self.monitor_event.set()
-    #
-    #         self.add_request_log_msg(cmd_runner=cmd_runner,
-    #                                  smart_request='smart_start',
-    #                                  targets={start_name},
-    #                                  timeout=0,
-    #                                  timeout_type=TimeoutType.TimeoutNone,
-    #                                  enter_exit=('entry', 'exit'),
-    #                                  log_msg=None)
-    #
-    #         self.add_log_msg(
-    #             f'{cmd_runner} set state for thread {start_name} '
-    #             'from ThreadState.Registered to ThreadState.Starting')
-    #         self.add_log_msg(
-    #             f'{cmd_runner} set state for thread {start_name} '
-    #             f'from ThreadState.Starting to ThreadState.Alive')
-    #         self.add_log_msg(re.escape(
-    #             f'{cmd_runner} started thread {start_name}, '
-    #             'thread.is_alive(): True, state: ThreadState.Alive'))
-    #
-    #     self.monitor_event.set()
-    #     # start_log_msg = f'{cmd_runner=} handle_start waiting for
-    #     # monitor'
-    #     # self.log_ver.add_msg(log_msg=re.escape(start_log_msg))
-    #     # logger.debug(start_log_msg)
-    #
-    #     # waiting forever here means alpha is not the cmd_runner for the
-    #     # handle_start as hard coded in handle_started_log_msg.
-    #     # need to fix that.
-    #     # self.started_event_items[cmd_runner].client_event.wait()
-    #
-    #     self.log_test_msg(f'{cmd_runner=} handle_start exiting '
-    #                       f'for {start_names=}')
+    ####################################################################
+    # wait_for_monitor
+    ####################################################################
+    def wait_for_monitor(self,
+                         cmd_runner: str,
+                         rtn_name: str) -> None:
+        """Start the named thread.
+
+        Args:
+            cmd_runner: thread doing the starts
+            rtn_name: name of rtn that will wait
+
+        """
+        with self.ops_lock:
+            self.cmd_waiting_event_items[cmd_runner] = threading.Event()
+        self.log_test_msg(
+            f'{cmd_runner=} {rtn_name} waiting for monitor')
+        self.monitor_event.set()
+        self.cmd_waiting_event_items[cmd_runner].wait()
+        with self.ops_lock:
+            del self.cmd_waiting_event_items[cmd_runner]
 
     ####################################################################
     # handle_started_log_msg
@@ -10646,14 +10552,8 @@ class ConfigVerifier:
         self.monitor_event.set()
 
         if exp_completed_syncs:
-            with self.ops_lock:
-                self.cmd_waiting_event_items[cmd_runner] = threading.Event()
-            self.log_test_msg(
-                f'{cmd_runner=} handle_sync waiting for monitor')
-            self.monitor_event.set()
-            self.cmd_waiting_event_items[cmd_runner].wait()
-            with self.ops_lock:
-                del self.cmd_waiting_event_items[cmd_runner]
+            self.wait_for_monitor(cmd_runner=cmd_runner,
+                                  rtn_name='handle_sync')
 
         self.log_test_msg(f'{cmd_runner=} handle_sync exit for '
                           f'{targets=}, {error_stopped_target=}')
@@ -11025,346 +10925,12 @@ class ConfigVerifier:
                 log_level=logging.INFO)
 
         if exp_completed_resumers:
-            with self.ops_lock:
-                self.cmd_waiting_event_items[cmd_runner] = threading.Event()
-            self.log_test_msg(
-                f'{cmd_runner=} handle_wait waiting for monitor')
-            self.monitor_event.set()
-            self.cmd_waiting_event_items[cmd_runner].wait()
-            with self.ops_lock:
-                del self.cmd_waiting_event_items[cmd_runner]
+            self.wait_for_monitor(cmd_runner=cmd_runner,
+                                  rtn_name='handle_wait')
 
         self.log_test_msg(f'handle_wait exit for {cmd_runner=}, '
                           f'{resumers=}, {stopped_remotes=}, '
                           f'{error_stopped_target=}')
-
-    # ####################################################################
-    # # handle_wait
-    # ####################################################################
-    # def handle_wait(self,
-    #                 cmd_runner: str,
-    #                 resumers: DictAliveAndStatus,
-    #                 wait_for: st.WaitFor,
-    #                 error_stopped_target: bool,
-    #                 log_msg: Optional[str] = None) -> None:
-    #     """Wait for a resume.
-    #
-    #     Args:
-    #         cmd_runner: thread doing the wait
-    #         resumers: threads doing the resume
-    #         wait_for: specifies how many resumers to wait for
-    #         error_stopped_target: specifies whether to raise error for a
-    #             stopped resumer
-    #         log_msg: optional log message to specify on the smart_wait
-    #
-    #     """
-    #     self.log_test_msg(f'{cmd_runner=} handle_wait entry for '
-    #                       f'{resumers=}, {error_stopped_target=}')
-    #
-    #     self.log_ver.add_call_seq(
-    #         name='handle_wait',
-    #         seq='test_smart_thread.py::ConfigVerifier.handle_wait')
-    #
-    #     non_stopped_resumers = set(resumers)
-    #     if error_stopped_target:
-    #         for resumer in resumers.keys():
-    #             if resumers[resumer].st_state == st.ThreadState.Stopped:
-    #                 non_stopped_resumers -= {resumer}
-    #
-    #     enter_exit = ('entry', 'exit')
-    #     for resumer in resumers.keys():
-    #         if (error_stopped_target
-    #                 and (resumers[resumer].st_state == st.ThreadState.Stopped)):
-    #             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
-    #                 self.all_threads[cmd_runner].smart_wait(
-    #                     remotes=resumer,
-    #                     wait_for=wait_for,
-    #                     error_stopped_target=error_stopped_target,
-    #                     log_msg=log_msg)
-    #
-    #             enter_exit = ('entry', )
-    #             if log_msg:
-    #                 log_msg_2 = (
-    #                     f'{self.log_ver.get_call_seq("handle_wait")} ')
-    #                 log_msg_3 = re.escape(f'{log_msg}')
-    #                 for enter_exit in enter_exit:
-    #                     log_msg_1 = re.escape(
-    #                         f'smart_wait() {enter_exit}: '
-    #                         f'{cmd_runner} to wait for {resumer}. ')
-    #
-    #                     self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
-    #
-    #             self.add_log_msg(
-    #                 new_log_msg=re.escape(
-    #                     f'{cmd_runner} raising '
-    #                     'SmartThreadRemoteThreadNotAlive. '
-    #                     f'{cmd_runner} smart_wait is not resumed and '
-    #                     f'detected thread {resumer=} has ended.'),
-    #                 log_level=logging.ERROR)
-    #
-    #         else:
-    #             self.all_threads[cmd_runner].smart_wait(
-    #                 remotes=resumer,
-    #                 wait_for=wait_for,
-    #                 error_stopped_target=error_stopped_target,
-    #                 log_msg=log_msg)
-    #
-    #             enter_exit = ('entry', 'exit')
-    #             if log_msg:
-    #                 log_msg_2 = (
-    #                     f'{self.log_ver.get_call_seq("handle_wait")} ')
-    #                 log_msg_3 = re.escape(f'{log_msg}')
-    #                 for enter_exit in enter_exit:
-    #                     log_msg_1 = re.escape(
-    #                         f'smart_wait() {enter_exit}: '
-    #                         f'{cmd_runner} to wait for {resumer}. ')
-    #
-    #                     self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
-    #
-    #             self.monitor_event.set()
-    #             self.add_log_msg(
-    #                 new_log_msg=(f'{cmd_runner} smart_wait resumed by '
-    #                              f'{resumer}'),
-    #                 log_level=logging.INFO)
-    #
-    #     if non_stopped_resumers:
-    #         with self.ops_lock:
-    #             self.cmd_waiting_event_items[cmd_runner] = threading.Event()
-    #         self.log_test_msg(
-    #             f'{cmd_runner=} handle_wait waiting for monitor')
-    #         self.monitor_event.set()
-    #         self.cmd_waiting_event_items[cmd_runner].wait()
-    #         with self.ops_lock:
-    #             del self.cmd_waiting_event_items[cmd_runner]
-    #
-    #     self.log_test_msg(f'{cmd_runner=} handle_wait exit for '
-    #                       f'{resumers=}, {error_stopped_target=}')
-    #
-    # ####################################################################
-    # # handle_wait_tof
-    # ####################################################################
-    # def handle_wait_tof(self,
-    #                     cmd_runner: str,
-    #                     resumers: DictAliveAndStatus,
-    #                     wait_for: st.WaitFor,
-    #                     error_stopped_target: bool,
-    #                     timeout: IntOrFloat,
-    #                     log_msg: Optional[str] = None) -> None:
-    #     """Wait for a resume, timeout specified, timeout not expected.
-    #
-    #     Args:
-    #         cmd_runner: thread doing the wait
-    #         resumers: threads doing the resume
-    #         wait_for: specifies how many resumers to wait for
-    #         error_stopped_target: specifies whether to raise error for a
-    #             stopped resumer
-    #         timeout: timeout value to specify on the smart_wait
-    #         log_msg: optional log message to specify on the smart_wait
-    #     """
-    #     self.log_test_msg(f'{cmd_runner=} handle_wait_tof entry for '
-    #                       f'{resumers=}, {error_stopped_target=}, {timeout=}')
-    #
-    #     self.log_ver.add_call_seq(
-    #         name='handle_wait_tof',
-    #         seq='test_smart_thread.py::ConfigVerifier.handle_wait_tof')
-    #
-    #     non_stopped_resumers = set(resumers)
-    #     if error_stopped_target:
-    #         for resumer in resumers.keys():
-    #             if resumers[resumer].st_state == st.ThreadState.Stopped:
-    #                 non_stopped_resumers -= {resumer}
-    #
-    #     for resumer in resumers.keys():
-    #         if (error_stopped_target
-    #                 and (resumers[resumer].st_state == st.ThreadState.Stopped)):
-    #             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
-    #                 self.all_threads[cmd_runner].smart_wait(
-    #                     remotes=resumer,
-    #                     wait_for=wait_for,
-    #                     error_stopped_target=error_stopped_target,
-    #                     timeout=timeout,
-    #                     log_msg=log_msg
-    #                 )
-    #
-    #             enter_exit = ('entry',)
-    #             if log_msg:
-    #                 log_msg_2 = (
-    #                     f'{self.log_ver.get_call_seq("handle_wait_tof")} ')
-    #                 log_msg_3 = re.escape(f'{log_msg}')
-    #                 for enter_exit in enter_exit:
-    #                     log_msg_1 = re.escape(
-    #                         f'smart_wait() {enter_exit}: '
-    #                         f'{cmd_runner} to wait for {resumer} with '
-    #                         f'{timeout=}. ')
-    #
-    #                     self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
-    #
-    #             self.add_log_msg(
-    #                 new_log_msg=re.escape(
-    #                     f'{cmd_runner} raising '
-    #                     'SmartThreadRemoteThreadNotAlive. '
-    #                     f'{cmd_runner} smart_wait is not resumed and '
-    #                     f'detected thread {resumer=} has ended.'),
-    #                 log_level=logging.ERROR)
-    #         else:
-    #             self.all_threads[cmd_runner].smart_wait(
-    #                 remotes=resumer,
-    #                 wait_for=wait_for,
-    #                 error_stopped_target=error_stopped_target,
-    #                 timeout=timeout,
-    #                 log_msg=log_msg
-    #             )
-    #             enter_exit = ('entry', 'exit')
-    #             if log_msg:
-    #                 log_msg_2 = (
-    #                     f'{self.log_ver.get_call_seq("handle_wait_tof")} ')
-    #                 log_msg_3 = re.escape(f'{log_msg}')
-    #                 for enter_exit in enter_exit:
-    #                     log_msg_1 = re.escape(
-    #                         f'smart_wait() {enter_exit}: '
-    #                         f'{cmd_runner} to wait for {resumer} with '
-    #                         f'{timeout=}. ')
-    #
-    #                     self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
-    #
-    #             self.monitor_event.set()
-    #             self.add_log_msg(
-    #                 new_log_msg=(f'{cmd_runner} smart_wait resumed by '
-    #                              f'{resumer}'),
-    #                 log_level=logging.INFO)
-    #
-    #     if non_stopped_resumers:
-    #         with self.ops_lock:
-    #             self.cmd_waiting_event_items[cmd_runner] = threading.Event()
-    #         self.log_test_msg(
-    #             f'{cmd_runner=} handle_wait_tof waiting for monitor')
-    #         self.monitor_event.set()
-    #         self.cmd_waiting_event_items[cmd_runner].wait()
-    #         with self.ops_lock:
-    #             # del self.recv_msg_event_items[cmd_runner]
-    #             del self.cmd_waiting_event_items[cmd_runner]
-    #
-    #     self.log_test_msg(f'{cmd_runner=} handle_wait_tof exit for '
-    #                       f'{resumers=}, {error_stopped_target=}, {timeout=}')
-    #
-    # ####################################################################
-    # # handle_wait_tot
-    # ####################################################################
-    # def handle_wait_tot(self,
-    #                     cmd_runner: str,
-    #                     resumers: list[str],
-    #                     stopped_remotes: set[str],
-    #                     timeout_remotes: set[str],
-    #                     wait_for: st.WaitFor,
-    #                     error_stopped_target: bool,
-    #                     timeout: IntOrFloat,
-    #                     log_msg: Optional[str] = None
-    #                     ) -> None:
-    #     """Wait for a resume, timeout specified, timeout expected.
-    #
-    #     Args:
-    #         cmd_runner: thread doing the wait
-    #         resumers: threads doing the resume
-    #         stopped_remotes: names of threads that are stopped
-    #         timeout_remotes: names of remotes that will cause timeout
-    #         wait_for: specifies how many resumers to wait for
-    #         error_stopped_target: specifies whether to raise error for a
-    #             stopped resumer
-    #         timeout: timeout value to specify on the smart_wait
-    #         log_msg: optional log message to specify on the smart_wait
-    #
-    #     """
-    #     self.log_test_msg(f'{cmd_runner=} handle_wait_tot entry for '
-    #                       f'{resumers=}, {error_stopped_target=}, {timeout=}')
-    #
-    #     self.log_ver.add_call_seq(
-    #         name='handle_wait',
-    #         seq='test_smart_thread.py::ConfigVerifier.handle_wait')
-    #
-    #     if error_stopped_target and stopped_remotes:
-    #         with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
-    #             self.all_threads[cmd_runner].smart_wait(
-    #                 remotes=resumers,
-    #                 wait_for=wait_for,
-    #                 error_stopped_target=error_stopped_target,
-    #                 timeout=timeout,
-    #                 log_msg=log_msg
-    #             )
-    #
-    #         enter_exit = ('entry', )
-    #         if log_msg:
-    #             log_msg_2 = (
-    #                 f'{self.log_ver.get_call_seq("handle_wait_tot")} ')
-    #             log_msg_3 = re.escape(f'{log_msg}')
-    #             for enter_exit in enter_exit:
-    #                 log_msg_1 = re.escape(
-    #                     f'smart_wait() {enter_exit}: '
-    #                     f'{cmd_runner} to wait for {resumer} with '
-    #                     f'{timeout=}. ')
-    #
-    #                 self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
-    #
-    #         self.add_log_msg(
-    #             new_log_msg=re.escape(
-    #                 f'{cmd_runner} raising '
-    #                 'SmartThreadRemoteThreadNotAlive. '
-    #                 f'While processing a smart_wait(), '
-    #                 f'{cmd_runner} detected that the following '
-    #                 f'threads are stopped: {sorted(stopped_remotes)}.'),
-    #             log_level=logging.ERROR)
-    #     else:
-    #         with pytest.raises(st.SmartThreadRequestTimedOut):
-    #             self.all_threads[cmd_runner].smart_wait(
-    #                 remotes=resumers,
-    #                 wait_for=wait_for,
-    #                 error_stopped_target=error_stopped_target,
-    #                 timeout=timeout,
-    #                 log_msg=log_msg
-    #             )
-    #
-    #         enter_exit = ('entry', )
-    #         if log_msg:
-    #             log_msg_2 = (
-    #                 f'{self.log_ver.get_call_seq("handle_wait_tot")} ')
-    #             log_msg_3 = re.escape(f'{log_msg}')
-    #             for enter_exit in enter_exit:
-    #                 log_msg_1 = re.escape(
-    #                     f'smart_wait() {enter_exit}: '
-    #                     f'{cmd_runner} to wait for {resumer} with '
-    #                     f'{timeout=}. ')
-    #
-    #                 self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
-    #
-    #         if stopped_remotes:
-    #             stopped_msg = (f' Stopped threads: '
-    #                            f'{sorted(stopped_remotes)}.')
-    #         else:
-    #             stopped_msg = ''
-    #         self.add_log_msg(re.escape(
-    #              f'{cmd_runner} raising '
-    #              'SmartThreadRequestTimedOut. '
-    #              f'{cmd_runner} timed out on a '
-    #              f'smart_wait() request while processing '
-    #              f'threads {sorted(timeout_remotes)}.'
-    #              f'{stopped_msg}'),
-    #             log_level=logging.ERROR)
-    #
-    #     self.log_test_msg(f'{cmd_runner=} handle_wait_tot exit for '
-    #                       f'{resumers=}, {error_stopped_target=}, {timeout=}')
-
-    # ####################################################################
-    # # handle_wait_waiting_log_msg
-    # ####################################################################
-    # def handle_wait_waiting_log_msg(self,
-    #                                 cmd_runner: str) -> None:
-    #
-    #     """Handle the send_cmd execution and log msgs.
-    #
-    #     Args:
-    #         cmd_runner: name of thread doing the cmd
-    #
-    #     """
-    #     self.recv_msg_event_items[cmd_runner].client_event.set()
 
     ####################################################################
     # inc_ops_count
@@ -11626,8 +11192,12 @@ class ConfigVerifier:
         self.monitor_event.set()
         self.stopped_event_items[cmd_runner].client_event.wait()
 
+        # self.wait_for_monitor(cmd_runner=cmd_runner,
+        #                       rtn_name='handle_recv')
+
         self.log_test_msg(f'{cmd_runner=} stop_thread exiting for '
                           f'{stop_names=}')
+
 
     ####################################################################
     # update_pair_array
@@ -14992,8 +14562,7 @@ class TestSmartThreadScenarios:
             caplog: pytest fixture to capture log output
 
         """
-        total_num_targets = (num_auto_start_arg
-                             + num_manual_start_arg
+        total_num_targets = (num_manual_start_arg
                              + num_unreg_arg
                              + num_alive_arg
                              + num_stopped_arg)
