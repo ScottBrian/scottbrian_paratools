@@ -613,10 +613,15 @@ class SmartThread:
         # Remove any old entries
         keys_to_del = []
         for key, item in SmartThread._registry.items():
+            # note that for display purposes _get_state will return
+            # stopped instead of alive when the thread is not alive and
+            # state is alive. The decision to delete this item, however,
+            # is done only when the st_state is stopped as that
+            # indicates that a smart_join has been officially done
+            is_alive = item.thread.is_alive()
+            state = self._get_state(name=key)
             logger.debug(
-                f'key = {key}, item = {item}, '
-                f'{item.thread.is_alive()=}, '
-                f'{item.st_state=}')
+                f'name={key}, smart_thread={item}, {is_alive=}, {state=}')
             if ((not item.thread.is_alive())
                     and (item.st_state & ThreadState.Stopped)):
                 keys_to_del.append(key)
@@ -953,6 +958,7 @@ class SmartThread:
                 # restart while loop with one less remote
                 return True
 
+        return False
     ####################################################################
     # _get_pair_key
     ####################################################################

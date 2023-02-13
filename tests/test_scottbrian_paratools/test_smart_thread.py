@@ -155,7 +155,7 @@ commander_config_arg_list = [AppConfig.ScriptStyle,
                              AppConfig.RemoteSmartThreadApp,
                              AppConfig.RemoteSmartThreadApp2]
 
-commander_config_arg_list = [AppConfig.ScriptStyle]
+# commander_config_arg_list = [AppConfig.ScriptStyle]
 
 
 ########################################################################
@@ -173,7 +173,7 @@ class TimeoutType(Enum):
 timeout_type_arg_list = [TimeoutType.TimeoutNone,
                          TimeoutType.TimeoutFalse,
                          TimeoutType.TimeoutTrue]
-timeout_type_arg_list = [TimeoutType.TimeoutTrue]
+# timeout_type_arg_list = [TimeoutType.TimeoutTrue]
 
 ########################################################################
 # Test settings for test_def_del_scenarios
@@ -403,6 +403,13 @@ class FailedLockVerify(ErrorTstSmartThread):
 class FailedDefDelVerify(ErrorTstSmartThread):
     """An expected condition was incorrect."""
     pass
+
+
+########################################################################
+# get_set
+########################################################################
+def get_set(item: Optional[Iterable] = None):
+    return set({item} if isinstance(item, str) else item or '')
 
 
 ########################################################################
@@ -896,24 +903,25 @@ class Pause(ConfigCmd):
 class RecvMsg(ConfigCmd):
     def __init__(self,
                  cmd_runners: StrOrList,
-                 senders: StrOrList,
+                 senders: Iterable,
                  exp_msgs: dict[str, Any],
-                 del_deferred: Optional[StrOrList] = None,
+                 error_stopped_target: bool = False,
+                 stopped_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
-        if isinstance(senders, str):
-            senders = [senders]
-        self.senders = senders
+        self.senders = get_set(senders)
         self.exp_msgs = exp_msgs
 
-        if isinstance(del_deferred, str):
-            del_deferred = [del_deferred]
-        self.del_deferred = del_deferred
         self.log_msg = log_msg
 
-        self.arg_list += ['senders']
+        self.error_stopped_target = error_stopped_target
+        self.stopped_remotes = get_set(stopped_remotes)
+
+        self.arg_list += ['senders',
+                          'error_stopped_target',
+                          'stopped_remotes']
 
     def run_process(self, cmd_runner: str) -> None:
         """Run the command.
@@ -921,11 +929,16 @@ class RecvMsg(ConfigCmd):
         Args:
             cmd_runner: name of thread running the command
         """
-        self.config_ver.handle_recv_msg(cmd_runner=cmd_runner,
-                                        senders=self.senders,
-                                        exp_msgs=self.exp_msgs,
-                                        del_deferred=self.del_deferred,
-                                        log_msg=self.log_msg)
+        self.config_ver.handle_recv_msg(
+            cmd_runner=cmd_runner,
+            senders=self.senders,
+            exp_msgs=self.exp_msgs,
+            error_stopped_target=self.error_stopped_target,
+            stopped_remotes=self.stopped_remotes,
+            timeout_type=TimeoutType.TimeoutNone,
+            timeout=0,
+            timeout_names=set(),
+            log_msg=self.log_msg)
 
 
 ########################################################################
@@ -937,12 +950,14 @@ class RecvMsgTimeoutFalse(RecvMsg):
                  senders: StrOrList,
                  exp_msgs: dict[str, Any],
                  timeout: IntOrFloat,
-                 del_deferred: Optional[StrOrList] = None,
+                 error_stopped_target: bool = False,
+                 stopped_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners,
                          senders=senders,
                          exp_msgs=exp_msgs,
-                         del_deferred=del_deferred,
+                         error_stopped_target=error_stopped_target,
+                         stopped_remotes=stopped_remotes,
                          log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
 
@@ -956,12 +971,15 @@ class RecvMsgTimeoutFalse(RecvMsg):
         Args:
             cmd_runner: name of thread running the command
         """
-        self.config_ver.handle_recv_msg_tof(
+        self.config_ver.handle_recv_msg(
             cmd_runner=cmd_runner,
             senders=self.senders,
             exp_msgs=self.exp_msgs,
+            error_stopped_target=self.error_stopped_target,
+            stopped_remotes=self.stopped_remotes,
+            timeout_type=TimeoutType.TimeoutFalse,
             timeout=self.timeout,
-            del_deferred=self.del_deferred,
+            timeout_names=set(),
             log_msg=self.log_msg)
 
 
@@ -974,20 +992,20 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
                  senders: StrOrList,
                  exp_msgs: dict[str, Any],
                  timeout: IntOrFloat,
-                 timeout_names: StrOrList,
-                 del_deferred: Optional[StrOrList] = None,
+                 timeout_names: Iterable,
+                 error_stopped_target: bool = False,
+                 stopped_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners,
                          senders=senders,
                          exp_msgs=exp_msgs,
                          timeout=timeout,
-                         del_deferred=del_deferred,
+                         error_stopped_target=error_stopped_target,
+                         stopped_remotes=stopped_remotes,
                          log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
 
-        if isinstance(timeout_names, str):
-            timeout_names = [timeout_names]
-        self.timeout_names = timeout_names
+        self.timeout_names = get_set(timeout_names)
 
         self.arg_list += ['timeout_names']
 
@@ -997,13 +1015,15 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
         Args:
             cmd_runner: name of thread running the command
         """
-        self.config_ver.handle_recv_msg_tot(
+        self.config_ver.handle_recv_msg(
             cmd_runner=cmd_runner,
             senders=self.senders,
             exp_msgs=self.exp_msgs,
+            error_stopped_target=self.error_stopped_target,
+            stopped_remotes=self.stopped_remotes,
+            timeout_type=TimeoutType.TimeoutTrue,
             timeout=self.timeout,
             timeout_names=self.timeout_names,
-            del_deferred=self.del_deferred,
             log_msg=self.log_msg)
 
 
@@ -1300,7 +1320,7 @@ class StartThread(ConfigCmd):
     def __init__(self,
                  cmd_runners: StrOrList,
                  start_names: StrOrList,
-                 unreg_remotes: Iterable,
+                 unreg_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
@@ -1309,9 +1329,7 @@ class StartThread(ConfigCmd):
             start_names = [start_names]
         self.start_names = start_names
 
-        if isinstance(unreg_remotes, str):
-            unreg_remotes = {unreg_remotes}
-        self.unreg_remotes = set(unreg_remotes)
+        self.unreg_remotes = get_set(unreg_remotes)
 
         self.log_msg = log_msg
 
@@ -5887,7 +5905,6 @@ class ConfigVerifier:
                 RecvMsg(cmd_runners=receivers[0],
                         senders=sender_names[0],
                         exp_msgs=sender_msgs,
-                        # del_deferred=sender_names[0],
                         log_msg=f'def_del_recv_test_0'))
             first_cmd_lock_pos = receivers[0]
             lock_positions.append(receivers[0])
@@ -5948,7 +5965,6 @@ class ConfigVerifier:
                 RecvMsg(cmd_runners=recv_name,
                         senders=sender_names[0],
                         exp_msgs=sender_msgs,
-                        # del_deferred=sender_names[0],
                         log_msg=f'def_del_recv_test_1'))
             second_cmd_lock_pos = recv_name
             lock_positions.append(recv_name)
@@ -6338,7 +6354,6 @@ class ConfigVerifier:
                 RecvMsg(cmd_runners=receiver_names,
                         senders=all_sender_names,
                         exp_msgs=sender_msgs,
-                        del_deferred=send_exit_sender_names,
                         log_msg=log_msg))
         elif timeout_type == TimeoutType.TimeoutFalse:
             confirm_cmd_to_use = 'RecvMsgTimeoutFalse'
@@ -6348,7 +6363,6 @@ class ConfigVerifier:
                     senders=all_sender_names,
                     exp_msgs=sender_msgs,
                     timeout=2,
-                    del_deferred=send_exit_sender_names,
                     log_msg=log_msg))
 
         else:  # TimeoutType.TimeoutTrue
@@ -6360,7 +6374,6 @@ class ConfigVerifier:
                     exp_msgs=sender_msgs,
                     timeout=2,
                     timeout_names=all_timeout_names,
-                    del_deferred=send_exit_sender_names,
                     log_msg=log_msg))
 
         ################################################################
@@ -8095,8 +8108,7 @@ class ConfigVerifier:
                     recv_msg_serial_num = self.add_cmd(
                         RecvMsg(cmd_runners=sender_names[1],
                                 senders=exit_name,
-                                exp_msgs=sender_1_msg_1,
-                                del_deferred=exit_name))
+                                exp_msgs=sender_1_msg_1))
 
                     ####################################################
                     # confirm the recv_msg
@@ -8112,8 +8124,7 @@ class ConfigVerifier:
                     recv_msg_serial_num = self.add_cmd(
                         RecvMsg(cmd_runners=sender_names[2],
                                 senders=exit_name,
-                                exp_msgs=sender_2_msg_1,
-                                del_deferred=exit_name))
+                                exp_msgs=sender_2_msg_1))
 
                     ####################################################
                     # confirm the recv_msg
@@ -8127,8 +8138,7 @@ class ConfigVerifier:
                     recv_msg_serial_num = self.add_cmd(
                         RecvMsg(cmd_runners=sender_names[2],
                                 senders=exit_name,
-                                exp_msgs=sender_2_msg_2,
-                                del_deferred=exit_name))
+                                exp_msgs=sender_2_msg_2))
 
                     ####################################################
                     # confirm the recv_msg
@@ -9325,7 +9335,7 @@ class ConfigVerifier:
             # zero
             stopped_log_idx = self.recently_stopped[a_name]
 
-            search_msg = f'key = {a_name}, item = '
+            search_msg = f'key={a_name}, smart_thread='
 
             log_msg, log_pos = self.get_log_msg(search_msg=search_msg,
                                                 skip_num=0,
@@ -9350,6 +9360,7 @@ class ConfigVerifier:
                 self.log_ver.add_msg(log_msg=re.escape(log_msg))
                 logger.debug(log_msg)
             else:
+                # f'name={key}, smart_thread={item}, {is_alive=}, {state=}')
                 split_msg = log_msg.split()
                 # is_alive = eval(split_msg[-3].removesuffix(','))
                 part_split = split_msg[-3].removesuffix(',')
@@ -9515,7 +9526,7 @@ class ConfigVerifier:
     ####################################################################
     def handle_recv_msg(self,
                         cmd_runner: str,
-                        senders: list[str],
+                        senders: set[str],
                         exp_msgs: dict[str, Any],
                         error_stopped_target: bool,
                         stopped_remotes: set[str],
@@ -9546,21 +9557,26 @@ class ConfigVerifier:
                           f'{stopped_remotes=}, {timeout_type=}, '
                           f'{timeout=}, {timeout_names=}')
 
-        self.log_ver.add_call_seq(
-            name='recv_msg',
-            seq='test_smart_thread.py::ConfigVerifier.handle_recv_msg')
+        # self.log_ver.add_call_seq(
+        #     name='recv_msg',
+        #     seq='test_smart_thread.py::ConfigVerifier.handle_recv_msg')
 
         self.monitor_event.set()
         timeout_true_value = timeout
+        timeout_type_to_use = timeout_type
+        timeout_name = set()
         for remote in senders:
             if remote in stopped_remotes:
                 stopped_remote = {remote}
             else:
                 stopped_remote = set()
-            if remote in timeout_names:
-                timeout_name = {remote}
-            else:
-                timeout_name = set()
+            if timeout_type == TimeoutType.TimeoutTrue:
+                if remote in timeout_names:
+                    timeout_name = {remote}
+                    timeout_type_to_use = TimeoutType.TimeoutTrue
+                else:
+                    timeout_name = set()
+                    timeout_type_to_use = TimeoutType.TimeoutFalse
 
             self.handle_recv_msg2(
                 cmd_runner=cmd_runner,
@@ -9568,7 +9584,7 @@ class ConfigVerifier:
                 exp_msgs=exp_msgs,
                 error_stopped_target=error_stopped_target,
                 stopped_remotes=stopped_remote,
-                timeout_type=timeout_type,
+                timeout_type=timeout_type_to_use,
                 timeout=timeout_true_value,
                 timeout_names=timeout_name,
                 log_msg=log_msg)
@@ -9603,7 +9619,7 @@ class ConfigVerifier:
         Args:
             cmd_runner: name of thread doing the cmd
             remote: names of the sender
-            exp_msg: expected message from sender
+            exp_msgs: expected messages from senders
             error_stopped_target: specifies whether to raise an error if
                 the remote sender is stopped and a message was not
                 received
@@ -9692,15 +9708,15 @@ class ConfigVerifier:
                 log_level=logging.ERROR)
 
         self.add_request_log_msg(cmd_runner=cmd_runner,
-                                 smart_request='smart_resume',
+                                 smart_request='recv_msg',
                                  targets={remote},
                                  timeout=timeout,
                                  timeout_type=timeout_type,
                                  enter_exit=enter_exit,
                                  log_msg=log_msg)
 
-        self.wait_for_monitor(cmd_runner=cmd_runner,
-                              rtn_name='handle_recv')
+        # self.wait_for_monitor(cmd_runner=cmd_runner,
+        #                       rtn_name='handle_recv')
 
         self.log_test_msg(f'handle_recv_msg2 exit: {cmd_runner=}, '
                           f'{remote=}, {error_stopped_target=} '
@@ -14769,13 +14785,13 @@ class TestSmartThreadScenarios:
             ('alpha set state for thread beta from '
              'ThreadState.Alive to '
              'ThreadState.Stopped'),
-            ("key = alpha, item = SmartThread\(name='alpha'\), "
-             "item.thread.is_alive\(\)=True, "
-             "item.st_state=<ThreadState.Alive: 16>"),
-            ("key = beta, item = SmartThread\(name='beta', "
-             "target=f1, args=\('beta',\)\), item.thread."
+            ("name=alpha, smart_thread=SmartThread\(name='alpha'\), "
+             "s_alive\(\)=True, "
+             "state=<ThreadState.Alive: 16>"),
+            ("name=beta, smart_thread=SmartThread\(name='beta', "
+             "target=f1, args=\('beta',\)\), "
              "is_alive\(\)=False, "
-             "item.st_state=<ThreadState.Stopped: 32>"),
+             "state=<ThreadState.Stopped: 32>"),
             ("alpha removed beta from registry for "
              "process='join'"),
             'alpha entered _refresh_pair_array',
@@ -14805,9 +14821,9 @@ class TestSmartThreadScenarios:
             ('alpha set state for thread beta from ThreadState.Unregistered '
              'to ThreadState.Initializing'),
             'alpha obtained _registry_lock, class name = SmartThread',
-            ("key = alpha, item = SmartThread\(name='alpha'\), "
-             "item.thread.is_alive\(\)=True, "
-             "item.st_state=<ThreadState.Alive: 16>"),
+            ("name=alpha, smart_thread=SmartThread\(name='alpha'\), "
+             "is_alive\(\)=True, "
+             "state=<ThreadState.Alive: 16>"),
             ('alpha set state for thread beta from ThreadState.Initializing '
              'to ThreadState.Registered'),
             'alpha added beta to SmartThread registry at UTC',
@@ -14829,12 +14845,12 @@ class TestSmartThreadScenarios:
              "test_smart_thread_log_msg:"),
             ('alpha set state for thread beta from ThreadState.Registered to '
              'ThreadState.Stopped'),
-            ("key = alpha, item = SmartThread\(name='alpha'\), "
-             "item.thread.is_alive\(\)=True, "
-             "item.st_state=<ThreadState.Alive: 16>"),
-            ("key = beta, item = SmartThread\(name='beta', target=f1, "
-             "args=\('beta',\)\), item.thread.is_alive\(\)=False, "
-             "item.st_state=<ThreadState.Stopped: 32>"),
+            ("name=alpha, smart_thread=SmartThread\(name='alpha'\), "
+             "is_alive\(\)=True, "
+             "state=<ThreadState.Alive: 16>"),
+            ("name=beta, smart_thread=SmartThread\(name='beta', target=f1, "
+             "args=\('beta',\)\), is_alive\(\)=False, "
+             "state=<ThreadState.Stopped: 32>"),
             "alpha removed beta from registry for process='unregister'",
             'alpha entered _refresh_pair_array',
             ("alpha removed status_blocks entry for pair_key = "
@@ -14872,9 +14888,9 @@ class TestSmartThreadScenarios:
              'ThreadState.Initializing'),
             ('alpha obtained _registry_lock, class name = '
              'SmartThread'),
-            ("key = alpha, item = SmartThread\(name='alpha'\), "
-             "item.thread.is_alive\(\)=True, "
-             "item.st_state=<ThreadState.Alive: 16>"),
+            ("name=alpha, smart_thread=SmartThread\(name='alpha'\), "
+             "is_alive\(\)=True, "
+             "state=<ThreadState.Alive: 16>"),
             ('alpha set state for thread beta from '
              'ThreadState.Initializing to '
              'ThreadState.Registered'),
