@@ -173,7 +173,7 @@ class TimeoutType(Enum):
 timeout_type_arg_list = [TimeoutType.TimeoutNone,
                          TimeoutType.TimeoutFalse,
                          TimeoutType.TimeoutTrue]
-# timeout_type_arg_list = [TimeoutType.TimeoutTrue]
+# timeout_type_arg_list = [TimeoutType.TimeoutFalse]
 
 ########################################################################
 # Test settings for test_def_del_scenarios
@@ -231,25 +231,45 @@ num_stopped_2_arg_list = [0, 1, 2]
 ########################################################################
 # Test settings for test_recv_timeout_scenarios
 ########################################################################
-num_receivers_arg_list = [1, 2, 3]
+########################################################################
+# DefDelScenario
+########################################################################
+class RecvMsgScenario(Enum):
+    ActiveNoDelaySender = auto()
+    ActiveDelaySender = auto()
+    SendExitSender = auto()
+    NoSendExitSender = auto()
+    UnregSender = auto()
+    RegSender = auto()
+
+recv_msg_scenario_arg_list = [
+    RecvMsgScenario.ActiveNoDelaySender,
+    RecvMsgScenario.ActiveDelaySender,
+    RecvMsgScenario.SendExitSender,
+    RecvMsgScenario.NoSendExitSender,
+    RecvMsgScenario.UnregSender,
+    RecvMsgScenario.RegSender
+]
+
+num_receivers_arg_list = [1]
 # num_receivers_arg_list = [2]
 
-num_active_no_delay_senders_arg_list = [0, 1, 2]
+num_active_no_delay_senders_arg_list = [0, 1]
 # num_active_no_delay_senders_arg_list = [1]  # .001
 
-num_active_delay_senders_arg_list = [0, 1, 2]
+num_active_delay_senders_arg_list = [0, 1]
 # num_active_delay_senders_arg_list = [1]  # .65  0.0005
 
-num_send_exit_senders_arg_list = [0, 1, 2]
+num_send_exit_senders_arg_list = [0, 1]
 # num_send_exit_senders_arg_list = [2]  # .65  0.0007
 
-num_nosend_exit_senders_arg_list = [0, 1, 2]
+num_nosend_exit_senders_arg_list = [0, 1]
 # num_nosend_exit_senders_arg_list = [2]  # 1.05  0.50
 
-num_unreg_senders_arg_list = [0, 1, 2]
+num_unreg_senders_arg_list = [0, 1]
 # num_unreg_senders_arg_list = [2]  # .75 0.15
 
-num_reg_senders_arg_list = [0, 1, 2]
+num_reg_senders_arg_list = [0, 1]
 # num_reg_senders_arg_list = [2]  # .75 .06
 
 ########################################################################
@@ -2414,6 +2434,22 @@ def def_del_scenario_arg(request: Any) -> DefDelScenario:
         The params values are returned one at a time
     """
     return cast(DefDelScenario, request.param)
+
+
+###############################################################################
+# recv_msg_scenario_arg
+###############################################################################
+@pytest.fixture(params=recv_msg_scenario_arg_list)  # type: ignore
+def recv_msg_scenario_arg(request: Any) -> RecvMsgScenario:
+    """Type of deferred delete to do.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(RecvMsgScenario, request.param)
 
 
 ###############################################################################
@@ -6226,12 +6262,12 @@ class ConfigVerifier:
                 + num_nosend_exit_senders
                 + 1)
 
-        timeout_time = ((num_active_no_delay_senders * 0.01)
-                        + (num_active_delay_senders * 0.01)
-                        + (num_send_exit_senders * 0.01)
+        timeout_time = ((num_active_no_delay_senders * 0.1)
+                        + (num_active_delay_senders * 0.1)
+                        + (num_send_exit_senders * 0.1)
                         + (num_nosend_exit_senders * 0.5)
-                        + (num_unreg_senders * 0.2)
-                        + (num_reg_senders * 0.1))
+                        + (num_unreg_senders * 0.5)
+                        + (num_reg_senders * 0.2))
 
         if timeout_type == TimeoutType.TimeoutNone:
             pause_time = 0.5
@@ -9335,7 +9371,7 @@ class ConfigVerifier:
             # zero
             stopped_log_idx = self.recently_stopped[a_name]
 
-            search_msg = f'key={a_name}, smart_thread='
+            search_msg = f'name={a_name}, smart_thread='
 
             log_msg, log_pos = self.get_log_msg(search_msg=search_msg,
                                                 skip_num=0,
@@ -14143,13 +14179,7 @@ class TestSmartThreadScenarios:
     def test_recv_msg_timeout_scenarios(
             self,
             timeout_type_arg: TimeoutType,
-            num_receivers_arg: int,
-            num_active_no_delay_senders_arg: int,
-            num_active_delay_senders_arg: int,
-            num_send_exit_senders_arg: int,
-            num_nosend_exit_senders_arg: int,
-            num_unreg_senders_arg: int,
-            num_reg_senders_arg: int,
+            recv_msg_scenario_arg: RecvMsgScenario,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
         """Test meta configuration scenarios.
@@ -14158,62 +14188,57 @@ class TestSmartThreadScenarios:
             timeout_type_arg: specifies whether the recv_msg should
                 be coded with timeout and whether the recv_msg should
                 succeed or fail with a timeout
-            num_receivers_arg: number of threads that will do the
-                recv_msg
-            num_active_no_delay_senders_arg: number of threads that are
-                active and will do the send_msg immediately
-            num_active_delay_senders_arg: number of threads that are
-                active and will do the send_msg after a delay
-            num_send_exit_senders_arg: number of threads that are active
-                and will do the send_msg and then exit
-            num_nosend_exit_senders_arg: number of threads that are
-                active and will not do the send_msg and then exit
-            num_unreg_senders_arg: number of threads that are
-                unregistered and will be created and started and then
-                do the send_msg
-            num_reg_senders_arg: number of threads that are registered
-                and will be started and then do the send_msg
+            recv_msg_scenario_arg: specifies which scenario to run
             caplog: pytest fixture to capture log output
 
         """
-        total_arg_counts = (
-                num_active_no_delay_senders_arg
-                + num_active_delay_senders_arg
-                + num_send_exit_senders_arg
-                + num_nosend_exit_senders_arg
-                + num_unreg_senders_arg
-                + num_reg_senders_arg)
-        if timeout_type_arg == TimeoutType.TimeoutNone:
-            if total_arg_counts == 0:
-                return
-        else:
-            if (num_active_delay_senders_arg
-                    + num_nosend_exit_senders_arg
-                    + num_unreg_senders_arg
-                    + num_reg_senders_arg) == 0:
+        if timeout_type_arg != TimeoutType.TimeoutNone:
+            if not (recv_msg_scenario_arg == RecvMsgScenario.ActiveDelaySender
+                    or recv_msg_scenario_arg == RecvMsgScenario.NoSendExitSender
+                    or recv_msg_scenario_arg == RecvMsgScenario.UnregSender
+                    or recv_msg_scenario_arg == RecvMsgScenario.RegSender):
                 return
 
-        command_config_num = total_arg_counts % 5
-        if command_config_num == 0:
-            commander_config = AppConfig.ScriptStyle
-        elif command_config_num == 1:
-            commander_config = AppConfig.CurrentThreadApp
-        elif command_config_num == 2:
-            commander_config = AppConfig.RemoteThreadApp
-        elif command_config_num == 3:
-            commander_config = AppConfig.RemoteSmartThreadApp
-        else:
-            commander_config = AppConfig.RemoteSmartThreadApp2
+        # command_config_num = total_arg_counts % 5
+        # if command_config_num == 0:
+        #     commander_config = AppConfig.ScriptStyle
+        # elif command_config_num == 1:
+        #     commander_config = AppConfig.CurrentThreadApp
+        # elif command_config_num == 2:
+        #     commander_config = AppConfig.RemoteThreadApp
+        # elif command_config_num == 3:
+        #     commander_config = AppConfig.RemoteSmartThreadApp
+        # else:
+        #     commander_config = AppConfig.RemoteSmartThreadApp2
+        commander_config = AppConfig.ScriptStyle
+        num_active_no_delay_senders = 0
+        num_active_delay_senders = 0
+        num_send_exit_senders = 0
+        num_nosend_exit_senders = 0
+        num_unreg_senders = 0
+        num_reg_senders = 0
+        if recv_msg_scenario_arg == RecvMsgScenario.ActiveNoDelaySender:
+            num_active_no_delay_senders = 1
+        elif recv_msg_scenario_arg == RecvMsgScenario.ActiveDelaySender:
+            num_active_delay_senders = 1
+        elif recv_msg_scenario_arg == RecvMsgScenario.SendExitSender:
+            num_send_exit_senders = 1
+        elif recv_msg_scenario_arg == RecvMsgScenario.NoSendExitSender:
+            num_nosend_exit_senders = 1
+        elif recv_msg_scenario_arg == RecvMsgScenario.UnregSender:
+            num_unreg_senders = 1
+        elif recv_msg_scenario_arg == RecvMsgScenario.RegSender:
+            num_reg_senders = 1
 
         args_for_scenario_builder: dict[str, Any] = {
             'timeout_type': timeout_type_arg,
-            'num_receivers': num_receivers_arg,
-            'num_active_no_delay_senders': num_active_no_delay_senders_arg,
-            'num_active_delay_senders': num_active_delay_senders_arg,
-            'num_send_exit_senders': num_send_exit_senders_arg,
-            'num_nosend_exit_senders': num_nosend_exit_senders_arg,
-            'num_unreg_senders': num_unreg_senders_arg,
-            'num_reg_senders': num_reg_senders_arg
+            'num_receivers': 1,
+            'num_active_no_delay_senders': num_active_no_delay_senders,
+            'num_active_delay_senders': num_active_delay_senders,
+            'num_send_exit_senders': num_send_exit_senders,
+            'num_nosend_exit_senders': num_nosend_exit_senders,
+            'num_unreg_senders': num_unreg_senders,
+            'num_reg_senders': num_reg_senders
         }
 
         self.scenario_driver(
@@ -15072,6 +15097,10 @@ class TestSmartThreadScenarios:
             config_ver.cmd_thread_auto_start = False
             outer_thread_app.smart_start(commander_name)
             threading.Thread.join(outer_thread_app)
+            config_ver.monitor_bail = True
+            config_ver.monitor_exit = True
+            config_ver.monitor_event.set()
+            config_ver.monitor_thread.join()
         elif commander_config == AppConfig.RemoteSmartThreadApp2:
             outer_thread_app = OuterSmartThreadApp2(
                 config_ver=config_ver,
@@ -15081,6 +15110,10 @@ class TestSmartThreadScenarios:
             config_ver.cmd_thread_auto_start = False
             outer_thread_app.smart_start(commander_name)
             threading.Thread.join(outer_thread_app)
+            config_ver.monitor_bail = True
+            config_ver.monitor_exit = True
+            config_ver.monitor_event.set()
+            config_ver.monitor_thread.join()
 
         ################################################################
         # check log results

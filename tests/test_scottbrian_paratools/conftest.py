@@ -37,7 +37,7 @@ logging.basicConfig(filename='ThreadComm.log',
                            '%(lineno)d '            
                            '%(message)s')
 
-
+logger = logging.getLogger(__name__)
 ###############################################################################
 # Thread exceptions
 # The following fixture depends on the following pytest specification:
