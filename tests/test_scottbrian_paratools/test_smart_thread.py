@@ -228,13 +228,15 @@ num_active_2_arg_list = [1, 2, 3]
 num_stopped_2_arg_list = [0, 1, 2]
 # num_stopped_2_arg_list = [0]
 
+
 ########################################################################
 # Test settings for test_recv_timeout_scenarios
 ########################################################################
 ########################################################################
-# DefDelScenario
+# RecvMsgScenario
 ########################################################################
 class RecvMsgScenario(Enum):
+    UnregToRegNoSender = auto()
     ActiveNoDelaySender = auto()
     ActiveDelaySender = auto()
     SendExitSender = auto()
@@ -242,7 +244,9 @@ class RecvMsgScenario(Enum):
     UnregSender = auto()
     RegSender = auto()
 
+
 recv_msg_scenario_arg_list = [
+    RecvMsgScenario.UnregToRegNoSender,
     RecvMsgScenario.ActiveNoDelaySender,
     RecvMsgScenario.ActiveDelaySender,
     RecvMsgScenario.SendExitSender,
@@ -6190,6 +6194,278 @@ class ConfigVerifier:
                 add_names=add_names,
                 deleter_names=deleter_names,
                 adder_names=adder_names))
+
+    ####################################################################
+    # build_recv_msg_suite
+    ####################################################################
+    def build_recv_msg_suite(
+            self,
+            timeout_type: TimeoutType,
+            recv_msg_state: st.ThreadState,
+            send_msg_lap: int,
+            error_stopped_target: bool) -> None:
+        """Add cmds to run scenario.
+
+        Args:
+            timeout_type: specifies whether the recv_msg should
+                be coded with timeout.
+            recv_msg_state: sender state when recv_msg is to be issued
+            send_msg_lap: 0 means no send is done, 1 means send is done
+                the first time sender becomes active, 2 means send is
+                done when sender becomes active a second time
+            error_stopped_target: specifies whether the recv_msg should
+                be coded with error_stopped_target. If a scenario
+                involves having the smart_thread enter the stopped state
+                and error_stopped_target is True, then the scenario
+                should get the NotAlive error.
+
+
+        """
+        def do_recv_msg(
+                timeout_type: TimeoutType,
+                error_stopped_target: bool,
+                stopped_remotes: set[str]) -> None:
+            if timeout_type == TimeoutType.TimeoutNone:
+                confirm_cmd_to_use = 'RecvMsg'
+                recv_msg_serial_num = self.add_cmd(
+                    RecvMsg(cmd_runners=receiver_names,
+                            senders=all_sender_names,
+                            exp_msgs=sender_msgs,
+                            log_msg=log_msg))
+            elif timeout_type == TimeoutType.TimeoutFalse:
+                confirm_cmd_to_use = 'RecvMsgTimeoutFalse'
+                recv_msg_serial_num = self.add_cmd(
+                    RecvMsgTimeoutFalse(
+                        cmd_runners=receiver_names,
+                        senders=all_sender_names,
+                        exp_msgs=sender_msgs,
+                        timeout=2,
+                        log_msg=log_msg))
+
+            else:  # TimeoutType.TimeoutTrue
+                confirm_cmd_to_use = 'RecvMsgTimeoutTrue'
+                recv_msg_serial_num = self.add_cmd(
+                    RecvMsgTimeoutTrue(
+                        cmd_runners=receiver_names,
+                        senders=all_sender_names,
+                        exp_msgs=sender_msgs,
+                        timeout=2,
+                        timeout_names=all_timeout_names,
+                        log_msg=log_msg))
+        # Make sure we have enough threads. Each of the scenarios will
+        # require one thread for the commander, one thread for the
+        # sender, and one thread for the receiver, for a total of three.
+        assert 3 <= len(self.unregistered_names)
+
+        timeout_time = 0.5
+        pause_time = 0.5
+
+        self.build_config(
+            cmd_runner=self.commander_name,
+            num_active=2)  # one for commander and one for receiver
+
+        self.log_name_groups()
+
+        # active_names = self.active_names.copy()
+        # remove commander for now, but if we add it later we need to
+        # be careful not to exit the commander
+        active_names = self.active_names - {self.commander_name}
+
+        ################################################################
+        # choose receiver_names
+        ################################################################
+        receiver_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=1,
+            update_collection=True,
+            var_name_for_log='receiver_names')
+
+        ################################################################
+        # choose sender_names
+        ################################################################
+        sender_names = self.choose_names(
+            name_collection=self.unregistered_names,
+            num_names_needed=1,
+            update_collection=False,
+            var_name_for_log='sender_names')
+
+        self.set_recv_timeout(
+            num_timeouts=len(all_timeout_names) * num_receivers)
+
+        log_msg = f'recv_msg log test: {self.get_ptime()}'
+
+        ################################################################
+        # setup the messages to send
+        ################################################################
+        sender_name = sender_names[0]
+        sender_msgs: dict[str, str] = {
+            sender_name: (f'recv test: {name} sending msg at '
+                          f'{self.get_ptime()}')}
+
+        ################################################################
+        # start loop to advance sender through the config states
+        ################################################################
+        for lap in range(2):
+            ############################################################
+            # unregistered
+            ############################################################
+            if recv_msg_state_arg == st.ThreadState.Unregistered:
+                do_recv_msg(
+                st.ThreadState.Unregistered,
+                st.ThreadState.Registered,
+                st.ThreadState.Alive,
+                st.ThreadState.Stopped,
+                st.ThreadState.Unregistered,
+                st.ThreadState.Registered,
+                st.ThreadState.Alive,
+                st.ThreadState.Stopped):
+
+
+        if timeout_type == TimeoutType.TimeoutNone:
+            confirm_cmd_to_use = 'RecvMsg'
+            recv_msg_serial_num = self.add_cmd(
+                RecvMsg(cmd_runners=receiver_names,
+                        senders=all_sender_names,
+                        exp_msgs=sender_msgs,
+                        log_msg=log_msg))
+        elif timeout_type == TimeoutType.TimeoutFalse:
+            confirm_cmd_to_use = 'RecvMsgTimeoutFalse'
+            recv_msg_serial_num = self.add_cmd(
+                RecvMsgTimeoutFalse(
+                    cmd_runners=receiver_names,
+                    senders=all_sender_names,
+                    exp_msgs=sender_msgs,
+                    timeout=2,
+                    log_msg=log_msg))
+
+        else:  # TimeoutType.TimeoutTrue
+            confirm_cmd_to_use = 'RecvMsgTimeoutTrue'
+            recv_msg_serial_num = self.add_cmd(
+                RecvMsgTimeoutTrue(
+                    cmd_runners=receiver_names,
+                    senders=all_sender_names,
+                    exp_msgs=sender_msgs,
+                    timeout=2,
+                    timeout_names=all_timeout_names,
+                    log_msg=log_msg))
+
+        ################################################################
+        # do send_msg from active_no_delay_senders
+        ################################################################
+        if active_no_delay_sender_names:
+            self.add_cmd(
+                SendMsg(cmd_runners=active_no_delay_sender_names,
+                        receivers=receiver_names,
+                        msgs_to_send=sender_msgs))
+
+        self.add_cmd(
+            Pause(cmd_runners=self.commander_name,
+                  pause_seconds=pause_time))
+        if timeout_type == TimeoutType.TimeoutTrue:
+            self.add_cmd(WaitForRecvTimeouts(cmd_runners=self.commander_name))
+
+        ################################################################
+        # do send_msg from active_delay_senders
+        ################################################################
+        if active_delay_sender_names:
+            self.add_cmd(
+                SendMsg(cmd_runners=active_delay_sender_names,
+                        receivers=receiver_names,
+                        msgs_to_send=sender_msgs))
+
+        ################################################################
+        # do send_msg from send_exit_senders and then exit
+        ################################################################
+        if send_exit_sender_names:
+            self.add_cmd(
+                SendMsg(cmd_runners=send_exit_sender_names,
+                        receivers=receiver_names,
+                        msgs_to_send=sender_msgs))
+
+            self.build_exit_suite(
+                cmd_runner=self.commander_name,
+                names=send_exit_sender_names,
+                validate_config=False)
+            self.build_join_suite(
+                cmd_runners=self.commander_name,
+                join_target_names=send_exit_sender_names,
+                validate_config=False)
+
+        ################################################################
+        # exit the nosend_exit_senders, then resurrect and do send_msg
+        ################################################################
+        if nosend_exit_sender_names:
+            self.build_exit_suite(
+                cmd_runner=self.commander_name,
+                names=nosend_exit_sender_names,
+                validate_config=False)
+            self.build_join_suite(
+                cmd_runners=self.commander_name,
+                join_target_names=nosend_exit_sender_names,
+                validate_config=False)
+            f1_create_items: list[F1CreateItem] = []
+            for idx, name in enumerate(nosend_exit_sender_names):
+                if idx % 2:
+                    app_config = AppConfig.ScriptStyle
+                else:
+                    app_config = AppConfig.RemoteThreadApp
+
+                f1_create_items.append(F1CreateItem(name=name,
+                                                    auto_start=True,
+                                                    target_rtn=outer_f1,
+                                                    app_config=app_config))
+            self.build_create_suite(
+                f1_create_items=f1_create_items,
+                validate_config=False)
+            self.add_cmd(
+                SendMsg(cmd_runners=nosend_exit_sender_names,
+                        receivers=receiver_names,
+                        msgs_to_send=sender_msgs))
+
+        ################################################################
+        # create and start the unreg_senders, then do send_msg
+        ################################################################
+        if unreg_sender_names:
+            f1_create_items: list[F1CreateItem] = []
+            for idx, name in enumerate(unreg_sender_names):
+                if idx % 2:
+                    app_config = AppConfig.ScriptStyle
+                else:
+                    app_config = AppConfig.RemoteThreadApp
+
+                f1_create_items.append(F1CreateItem(name=name,
+                                                    auto_start=True,
+                                                    target_rtn=outer_f1,
+                                                    app_config=app_config))
+            self.build_create_suite(
+                f1_create_items=f1_create_items,
+                validate_config=False)
+            self.add_cmd(
+                SendMsg(cmd_runners=unreg_sender_names,
+                        receivers=receiver_names,
+                        msgs_to_send=sender_msgs))
+
+        ################################################################
+        # start the reg_senders, then do send_msg
+        ################################################################
+        if reg_sender_names:
+            self.build_start_suite(
+                start_names=reg_sender_names,
+                validate_config=False)
+            self.add_cmd(
+                SendMsg(cmd_runners=reg_sender_names,
+                        receivers=receiver_names,
+                        msgs_to_send=sender_msgs))
+
+        ################################################################
+        # finally, confirm the recv_msg is done
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd=confirm_cmd_to_use,
+                confirm_serial_num=recv_msg_serial_num,
+                confirmers=receiver_names))
 
     ####################################################################
     # build_recv_msg_timeout_suite
