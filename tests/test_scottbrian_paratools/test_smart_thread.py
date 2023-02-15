@@ -441,7 +441,7 @@ def get_set(item: Optional[Iterable] = None):
 ########################################################################
 class ConfigCmd(ABC):
     def __init__(self,
-                 cmd_runners: StrOrList):
+                 cmd_runners: Iterable):
 
         # The serial number, line_num, and config_ver are filled in
         # by the ConfigVerifier add_cmd method just before queueing
@@ -453,9 +453,7 @@ class ConfigCmd(ABC):
         # specified_args are set in each subclass
         self.specified_args: dict[str, Any] = {}
 
-        if isinstance(cmd_runners, str):
-            cmd_runners = [cmd_runners]
-        self.cmd_runners = cmd_runners
+        self.cmd_runners = get_set(cmd_runners)
 
         self.arg_list: list[str] = ['cmd_runners',
                                     'serial_num',
@@ -718,15 +716,13 @@ class ExitThread(ConfigCmd):
 ########################################################################
 class Join(ConfigCmd):
     def __init__(self,
-                 cmd_runners: StrOrList,
-                 join_names: StrOrList,
+                 cmd_runners: Iterable,
+                 join_names: Iterable,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
-        if isinstance(join_names, str):
-            join_names = [join_names]
-        self.join_names = join_names
+        self.join_names = get_set(join_names)
         self.log_msg = log_msg
         self.arg_list += ['join_names']
 
@@ -749,7 +745,7 @@ class Join(ConfigCmd):
 class JoinTimeoutFalse(Join):
     def __init__(self,
                  cmd_runners: StrOrList,
-                 join_names: StrOrList,
+                 join_names: Iterable,
                  timeout: IntOrFloat,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners,
@@ -779,7 +775,7 @@ class JoinTimeoutFalse(Join):
 class JoinTimeoutTrue(JoinTimeoutFalse):
     def __init__(self,
                  cmd_runners: StrOrList,
-                 join_names: StrOrList,
+                 join_names: Iterable,
                  timeout: IntOrFloat,
                  timeout_names: StrOrList,
                  log_msg: Optional[str] = None) -> None:
@@ -1342,16 +1338,14 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
 ########################################################################
 class StartThread(ConfigCmd):
     def __init__(self,
-                 cmd_runners: StrOrList,
-                 start_names: StrOrList,
+                 cmd_runners: Iterable,
+                 start_names: Iterable,
                  unreg_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
-        if isinstance(start_names, str):
-            start_names = [start_names]
-        self.start_names = start_names
+        self.start_names = get_set(start_names)
 
         self.unreg_remotes = get_set(unreg_remotes)
 
@@ -1378,14 +1372,12 @@ class StartThread(ConfigCmd):
 ########################################################################
 class StopThread(ConfigCmd):
     def __init__(self,
-                 cmd_runners: StrOrList,
-                 stop_names: StrOrList) -> None:
+                 cmd_runners: Iterable,
+                 stop_names: Iterable) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
-        if isinstance(stop_names, str):
-            stop_names = [stop_names]
-        self.stop_names = stop_names
+        self.stop_names = get_set(stop_names)
 
         self.arg_list += ['stop_names']
 
@@ -1587,7 +1579,7 @@ class Unregister(ConfigCmd):
 ########################################################################
 class ValidateConfig(ConfigCmd):
     def __init__(self,
-                 cmd_runners: StrOrList) -> None:
+                 cmd_runners: Iterable) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
@@ -1606,14 +1598,11 @@ class ValidateConfig(ConfigCmd):
 class VerifyAlive(ConfigCmd):
     def __init__(self,
                  cmd_runners: StrOrList,
-                 exp_alive_names: StrOrList) -> None:
+                 exp_alive_names: Iterable) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
-
-        if isinstance(exp_alive_names, str):
-            exp_alive_names = [exp_alive_names]
-        self.exp_alive_names = exp_alive_names
+        self.exp_alive_names = get_set(exp_alive_names)
 
         self.arg_list += ['exp_alive_names']
 
@@ -1632,13 +1621,11 @@ class VerifyAlive(ConfigCmd):
 class VerifyAliveNot(ConfigCmd):
     def __init__(self,
                  cmd_runners: StrOrList,
-                 exp_not_alive_names: StrOrList) -> None:
+                 exp_not_alive_names: Iterable) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
-        if isinstance(exp_not_alive_names, str):
-            exp_not_alive_names = [exp_not_alive_names]
-        self.exp_not_alive_names = exp_not_alive_names
+        self.exp_not_alive_names = get_set(exp_not_alive_names)
 
         self.arg_list += ['exp_not_alive_names']
 
@@ -1656,14 +1643,12 @@ class VerifyAliveNot(ConfigCmd):
 ########################################################################
 class VerifyActive(ConfigCmd):
     def __init__(self,
-                 cmd_runners: StrOrList,
-                 exp_active_names: StrOrList) -> None:
+                 cmd_runners: Iterable,
+                 exp_active_names: Iterable) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
-        if isinstance(exp_active_names, str):
-            exp_active_names = [exp_active_names]
-        self.exp_active_names = exp_active_names
+        self.exp_active_names = get_set(exp_active_names)
 
         self.arg_list += ['exp_active_names']
 
@@ -1765,14 +1750,12 @@ class VerifyDefDel(ConfigCmd):
 ########################################################################
 class VerifyInRegistry(ConfigCmd):
     def __init__(self,
-                 cmd_runners: StrOrList,
-                 exp_in_registry_names: StrOrList) -> None:
+                 cmd_runners: Iterable,
+                 exp_in_registry_names: Iterable) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
-        if isinstance(exp_in_registry_names, str):
-            exp_in_registry_names = [exp_in_registry_names]
-        self.exp_in_registry_names = exp_in_registry_names
+        self.exp_in_registry_names = get_set(exp_in_registry_names)
 
         self.arg_list += ['exp_in_registry_names']
 
@@ -1792,14 +1775,12 @@ class VerifyInRegistry(ConfigCmd):
 ########################################################################
 class VerifyInRegistryNot(ConfigCmd):
     def __init__(self,
-                 cmd_runners: StrOrList,
-                 exp_not_in_registry_names: StrOrList) -> None:
+                 cmd_runners: Iterable,
+                 exp_not_in_registry_names: Iterable) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
-        if isinstance(exp_not_in_registry_names, str):
-            exp_not_in_registry_names = [exp_not_in_registry_names]
-        self.exp_not_in_registry_names = exp_not_in_registry_names
+        self.exp_not_in_registry_names = get_set(exp_not_in_registry_names)
 
         self.arg_list += ['exp_not_in_registry_names']
 
@@ -1819,14 +1800,12 @@ class VerifyInRegistryNot(ConfigCmd):
 ########################################################################
 class VerifyRegistered(ConfigCmd):
     def __init__(self,
-                 cmd_runners: StrOrList,
-                 exp_registered_names: StrOrList) -> None:
+                 cmd_runners: Iterable,
+                 exp_registered_names: Iterable) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
-        if isinstance(exp_registered_names, str):
-            exp_registered_names = [exp_registered_names]
-        self.exp_registered_names = exp_registered_names
+        self.exp_registered_names = get_set(exp_registered_names)
 
         self.arg_list += ['exp_registered_names']
 
@@ -1846,14 +1825,12 @@ class VerifyRegistered(ConfigCmd):
 ########################################################################
 class VerifyPaired(ConfigCmd):
     def __init__(self,
-                 cmd_runners: StrOrList,
-                 exp_paired_names: StrOrList) -> None:
+                 cmd_runners: Iterable,
+                 exp_paired_names: Iterable) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
-        if isinstance(exp_paired_names, str):
-            exp_paired_names = [exp_paired_names]
-        self.exp_paired_names = exp_paired_names
+        self.exp_paired_names = get_set(exp_paired_names)
 
         self.arg_list += ['exp_paired_names']
 
@@ -1907,14 +1884,12 @@ class VerifyPairedHalf(ConfigCmd):
 ########################################################################
 class VerifyPairedNot(ConfigCmd):
     def __init__(self,
-                 cmd_runners: StrOrList,
-                 exp_not_paired_names: StrOrList) -> None:
+                 cmd_runners: Iterable,
+                 exp_not_paired_names: Iterable) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
-        if isinstance(exp_not_paired_names, str):
-            exp_not_paired_names = [exp_not_paired_names]
-        self.exp_not_paired_names = exp_not_paired_names
+        self.exp_not_paired_names = get_set(exp_not_paired_names)
 
         self.arg_list += ['exp_not_paired_names']
 
@@ -1934,16 +1909,14 @@ class VerifyPairedNot(ConfigCmd):
 ########################################################################
 class VerifyStatus(ConfigCmd):
     def __init__(self,
-                 cmd_runners: StrOrList,
-                 check_status_names: StrOrList,
+                 cmd_runners: Iterable,
+                 check_status_names: Iterable,
                  expected_status: st.ThreadState
                  ) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
-        if isinstance(check_status_names, str):
-            check_status_names = [check_status_names]
-        self.check_status_names = check_status_names
+        self.check_status_names = get_set(check_status_names)
 
         self.expected_status = expected_status
 
@@ -3612,7 +3585,7 @@ class UpaItem:
 class MonitorEventItem:
     """Class keeps track of threads to add, start, delete, unreg."""
     client_event: threading.Event
-    targets: list[str]
+    targets: set[str]
     deferred_post_needed: bool = False
 
 
@@ -4123,7 +4096,6 @@ class CmdWaitingLogSearchItem(LogSearchItem):
         list_of_waiting_methods = ('(create_commander_thread'
                                    '|create_f1_thread'
                                    '|handle_join'
-                                   '|handle_join_tot'
                                    '|handle_recv'
                                    '|handle_recv_tof'
                                    '|handle_recv_tot'
@@ -4337,7 +4309,7 @@ class ConfigVerifier:
         self.max_msgs = max_msgs
 
         self.pending_ops_counts: dict[tuple[str, str], dict[str, int]] = {}
-        self.expected_num_recv_timouts: int = 0
+        self.expected_num_recv_timeouts: int = 0
 
         # self.del_def_pairs_count: dict[
         #     tuple[str, str, str], int] = defaultdict(int)
@@ -5133,7 +5105,7 @@ class ConfigVerifier:
     ####################################################################
     def build_exit_suite(self,
                          cmd_runner: str,
-                         names: list[str],
+                         names: Iterable,
                          validate_config: Optional[bool] = True
                          ) -> None:
         """Add ConfigCmd items for an exit.
@@ -5145,11 +5117,12 @@ class ConfigVerifier:
                 configuration
 
         """
-        if not set(names).issubset(self.active_names):
+        names = get_set(names)
+        if not names.issubset(self.active_names):
             self.abort_all_f1_threads()
             raise InvalidInputDetected(f'Input names {names} not a subset '
                                        f'of active names {self.active_names}')
-        active_names = list(self.active_names - set(names))
+        active_names = list(self.active_names - names)
 
         if names:
             self.add_cmd(StopThread(cmd_runners=cmd_runner,
@@ -5175,8 +5148,8 @@ class ConfigVerifier:
         if validate_config:
             self.add_cmd(ValidateConfig(cmd_runners=cmd_runner))
 
-        self.active_names -= set(names)
-        self.stopped_names |= set(names)
+        self.active_names -= names
+        self.stopped_names |= names
 
     ####################################################################
     # build_exit_suite_num
@@ -5250,8 +5223,8 @@ class ConfigVerifier:
     # build_join_suite
     ####################################################################
     def build_join_suite(self,
-                         cmd_runners: StrOrList,
-                         join_target_names: list[str],
+                         cmd_runners: Iterable,
+                         join_target_names: Iterable,
                          validate_config: Optional[bool] = True
                          ) -> None:
         """Return a list of ConfigCmd items for join.
@@ -5263,10 +5236,10 @@ class ConfigVerifier:
                 after the join is done
 
         """
-        if isinstance(cmd_runners, str):
-            cmd_runners = [cmd_runners]
+        cmd_runners = get_set(cmd_runners)
+        join_target_names = get_set(join_target_names)
 
-        if not set(join_target_names).issubset(self.stopped_names):
+        if not join_target_names.issubset(self.stopped_names):
             self.abort_all_f1_threads()
             raise InvalidInputDetected(f'Input {join_target_names} is not a '
                                        'subset of inactive names '
@@ -5286,8 +5259,8 @@ class ConfigVerifier:
         if validate_config:
             self.add_cmd(ValidateConfig(cmd_runners=cmd_runners))
 
-        self.unregistered_names |= set(join_target_names)
-        self.stopped_names -= set(join_target_names)
+        self.unregistered_names |= join_target_names
+        self.stopped_names -= join_target_names
 
     ####################################################################
     # build_join_suite
@@ -6202,17 +6175,17 @@ class ConfigVerifier:
             self,
             timeout_type: TimeoutType,
             recv_msg_state: st.ThreadState,
+            recv_msg_lap: int,
             send_msg_lap: int,
             error_stopped_target: bool) -> None:
         """Add cmds to run scenario.
 
         Args:
             timeout_type: specifies whether the recv_msg should
-                be coded with timeout.
+                be coded with timeout, and whether it be False or True
             recv_msg_state: sender state when recv_msg is to be issued
-            send_msg_lap: 0 means no send is done, 1 means send is done
-                the first time sender becomes active, 2 means send is
-                done when sender becomes active a second time
+            recv_msg_lap: lap 0 or 1 when the recv_msg is to be issued
+            send_msg_lap: lap 0 or 1 when the send_msg is to be issued
             error_stopped_target: specifies whether the recv_msg should
                 be coded with error_stopped_target. If a scenario
                 involves having the smart_thread enter the stopped state
@@ -6221,37 +6194,6 @@ class ConfigVerifier:
 
 
         """
-        def do_recv_msg(
-                timeout_type: TimeoutType,
-                error_stopped_target: bool,
-                stopped_remotes: set[str]) -> None:
-            if timeout_type == TimeoutType.TimeoutNone:
-                confirm_cmd_to_use = 'RecvMsg'
-                recv_msg_serial_num = self.add_cmd(
-                    RecvMsg(cmd_runners=receiver_names,
-                            senders=all_sender_names,
-                            exp_msgs=sender_msgs,
-                            log_msg=log_msg))
-            elif timeout_type == TimeoutType.TimeoutFalse:
-                confirm_cmd_to_use = 'RecvMsgTimeoutFalse'
-                recv_msg_serial_num = self.add_cmd(
-                    RecvMsgTimeoutFalse(
-                        cmd_runners=receiver_names,
-                        senders=all_sender_names,
-                        exp_msgs=sender_msgs,
-                        timeout=2,
-                        log_msg=log_msg))
-
-            else:  # TimeoutType.TimeoutTrue
-                confirm_cmd_to_use = 'RecvMsgTimeoutTrue'
-                recv_msg_serial_num = self.add_cmd(
-                    RecvMsgTimeoutTrue(
-                        cmd_runners=receiver_names,
-                        senders=all_sender_names,
-                        exp_msgs=sender_msgs,
-                        timeout=2,
-                        timeout_names=all_timeout_names,
-                        log_msg=log_msg))
         # Make sure we have enough threads. Each of the scenarios will
         # require one thread for the commander, one thread for the
         # sender, and one thread for the receiver, for a total of three.
@@ -6297,175 +6239,106 @@ class ConfigVerifier:
         ################################################################
         # setup the messages to send
         ################################################################
+        receiver_name = receiver_names[0]
         sender_name = sender_names[0]
         sender_msgs: dict[str, str] = {
-            sender_name: (f'recv test: {name} sending msg at '
+            sender_name: (f'recv test: {sender_name} sending msg at '
                           f'{self.get_ptime()}')}
 
         ################################################################
-        # start loop to advance sender through the config states
+        # lap loop
         ################################################################
         for lap in range(2):
             ############################################################
-            # unregistered
+            # start loop to advance sender through the config states
             ############################################################
-            if recv_msg_state_arg == st.ThreadState.Unregistered:
-                do_recv_msg(
-                st.ThreadState.Unregistered,
-                st.ThreadState.Registered,
-                st.ThreadState.Alive,
-                st.ThreadState.Stopped,
-                st.ThreadState.Unregistered,
-                st.ThreadState.Registered,
-                st.ThreadState.Alive,
-                st.ThreadState.Stopped):
+            for state in (
+                    st.ThreadState.Unregistered,
+                    st.ThreadState.Registered,
+                    st.ThreadState.Alive,
+                    st.ThreadState.Stopped):
+                ########################################################
+                # do join to make sender unregistered
+                ########################################################
+                if state == st.ThreadState.Unregistered:
+                    if lap == 1:  # sender already unregistered lap 0
+                        self.build_join_suite(
+                            cmd_runners=self.commander_name,
+                            join_target_names=sender_name,
+                            validate_config=False)
 
+                ########################################################
+                # do create to make sender registered
+                ########################################################
+                elif state == st.ThreadState.Registered:
+                    self.build_create_suite(
+                        f1_create_items=[
+                            F1CreateItem(name=sender_name,
+                                         auto_start=False,
+                                         target_rtn=outer_f1,
+                                         app_config=AppConfig.ScriptStyle)],
+                        validate_config=False)
+                ########################################################
+                # do start to make sender alive
+                ########################################################
+                elif state == st.ThreadState.Alive:
+                    self.build_start_suite(
+                        start_names=sender_name,
+                        validate_config=False)
+                    if send_msg_lap == lap:
+                        self.add_cmd(
+                            SendMsg(cmd_runners=sender_name,
+                                    receivers=receiver_name,
+                                    msgs_to_send=sender_msgs))
+                ########################################################
+                # do stop to make sender stopped
+                ########################################################
+                elif state == st.ThreadState.Stopped:
+                    self.build_exit_suite(
+                        cmd_runner=self.commander_name,
+                        names=sender_name,
+                        validate_config=False)
+                ########################################################
+                # issue recv_msg
+                ########################################################
+                if recv_msg_state == state and recv_msg_lap == lap:
+                    if timeout_type == TimeoutType.TimeoutNone:
+                        confirm_cmd_to_use = 'RecvMsg'
+                        recv_msg_serial_num = self.add_cmd(
+                            RecvMsg(cmd_runners=receiver_name,
+                                    senders=sender_name,
+                                    exp_msgs=sender_msgs,
+                                    log_msg=log_msg))
+                    elif timeout_type == TimeoutType.TimeoutFalse:
+                        confirm_cmd_to_use = 'RecvMsgTimeoutFalse'
+                        recv_msg_serial_num = self.add_cmd(
+                            RecvMsgTimeoutFalse(
+                                cmd_runners=receiver_name,
+                                senders=sender_name,
+                                exp_msgs=sender_msgs,
+                                timeout=timeout_time,
+                                log_msg=log_msg))
 
-        if timeout_type == TimeoutType.TimeoutNone:
-            confirm_cmd_to_use = 'RecvMsg'
-            recv_msg_serial_num = self.add_cmd(
-                RecvMsg(cmd_runners=receiver_names,
-                        senders=all_sender_names,
-                        exp_msgs=sender_msgs,
-                        log_msg=log_msg))
-        elif timeout_type == TimeoutType.TimeoutFalse:
-            confirm_cmd_to_use = 'RecvMsgTimeoutFalse'
-            recv_msg_serial_num = self.add_cmd(
-                RecvMsgTimeoutFalse(
-                    cmd_runners=receiver_names,
-                    senders=all_sender_names,
-                    exp_msgs=sender_msgs,
-                    timeout=2,
-                    log_msg=log_msg))
-
-        else:  # TimeoutType.TimeoutTrue
-            confirm_cmd_to_use = 'RecvMsgTimeoutTrue'
-            recv_msg_serial_num = self.add_cmd(
-                RecvMsgTimeoutTrue(
-                    cmd_runners=receiver_names,
-                    senders=all_sender_names,
-                    exp_msgs=sender_msgs,
-                    timeout=2,
-                    timeout_names=all_timeout_names,
-                    log_msg=log_msg))
-
-        ################################################################
-        # do send_msg from active_no_delay_senders
-        ################################################################
-        if active_no_delay_sender_names:
-            self.add_cmd(
-                SendMsg(cmd_runners=active_no_delay_sender_names,
-                        receivers=receiver_names,
-                        msgs_to_send=sender_msgs))
-
-        self.add_cmd(
-            Pause(cmd_runners=self.commander_name,
-                  pause_seconds=pause_time))
-        if timeout_type == TimeoutType.TimeoutTrue:
-            self.add_cmd(WaitForRecvTimeouts(cmd_runners=self.commander_name))
-
-        ################################################################
-        # do send_msg from active_delay_senders
-        ################################################################
-        if active_delay_sender_names:
-            self.add_cmd(
-                SendMsg(cmd_runners=active_delay_sender_names,
-                        receivers=receiver_names,
-                        msgs_to_send=sender_msgs))
-
-        ################################################################
-        # do send_msg from send_exit_senders and then exit
-        ################################################################
-        if send_exit_sender_names:
-            self.add_cmd(
-                SendMsg(cmd_runners=send_exit_sender_names,
-                        receivers=receiver_names,
-                        msgs_to_send=sender_msgs))
-
-            self.build_exit_suite(
-                cmd_runner=self.commander_name,
-                names=send_exit_sender_names,
-                validate_config=False)
-            self.build_join_suite(
-                cmd_runners=self.commander_name,
-                join_target_names=send_exit_sender_names,
-                validate_config=False)
-
-        ################################################################
-        # exit the nosend_exit_senders, then resurrect and do send_msg
-        ################################################################
-        if nosend_exit_sender_names:
-            self.build_exit_suite(
-                cmd_runner=self.commander_name,
-                names=nosend_exit_sender_names,
-                validate_config=False)
-            self.build_join_suite(
-                cmd_runners=self.commander_name,
-                join_target_names=nosend_exit_sender_names,
-                validate_config=False)
-            f1_create_items: list[F1CreateItem] = []
-            for idx, name in enumerate(nosend_exit_sender_names):
-                if idx % 2:
-                    app_config = AppConfig.ScriptStyle
-                else:
-                    app_config = AppConfig.RemoteThreadApp
-
-                f1_create_items.append(F1CreateItem(name=name,
-                                                    auto_start=True,
-                                                    target_rtn=outer_f1,
-                                                    app_config=app_config))
-            self.build_create_suite(
-                f1_create_items=f1_create_items,
-                validate_config=False)
-            self.add_cmd(
-                SendMsg(cmd_runners=nosend_exit_sender_names,
-                        receivers=receiver_names,
-                        msgs_to_send=sender_msgs))
-
-        ################################################################
-        # create and start the unreg_senders, then do send_msg
-        ################################################################
-        if unreg_sender_names:
-            f1_create_items: list[F1CreateItem] = []
-            for idx, name in enumerate(unreg_sender_names):
-                if idx % 2:
-                    app_config = AppConfig.ScriptStyle
-                else:
-                    app_config = AppConfig.RemoteThreadApp
-
-                f1_create_items.append(F1CreateItem(name=name,
-                                                    auto_start=True,
-                                                    target_rtn=outer_f1,
-                                                    app_config=app_config))
-            self.build_create_suite(
-                f1_create_items=f1_create_items,
-                validate_config=False)
-            self.add_cmd(
-                SendMsg(cmd_runners=unreg_sender_names,
-                        receivers=receiver_names,
-                        msgs_to_send=sender_msgs))
-
-        ################################################################
-        # start the reg_senders, then do send_msg
-        ################################################################
-        if reg_sender_names:
-            self.build_start_suite(
-                start_names=reg_sender_names,
-                validate_config=False)
-            self.add_cmd(
-                SendMsg(cmd_runners=reg_sender_names,
-                        receivers=receiver_names,
-                        msgs_to_send=sender_msgs))
+                    else:  # TimeoutType.TimeoutTrue
+                        confirm_cmd_to_use = 'RecvMsgTimeoutTrue'
+                        recv_msg_serial_num = self.add_cmd(
+                            RecvMsgTimeoutTrue(
+                                cmd_runners=receiver_name,
+                                senders=sender_name,
+                                exp_msgs=sender_msgs,
+                                timeout=timeout_time,
+                                timeout_names=timeout_names,
+                                log_msg=log_msg))
 
         ################################################################
         # finally, confirm the recv_msg is done
         ################################################################
-        self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=[self.commander_name],
-                confirm_cmd=confirm_cmd_to_use,
-                confirm_serial_num=recv_msg_serial_num,
-                confirmers=receiver_names))
+        # self.add_cmd(
+        #     ConfirmResponse(
+        #         cmd_runners=[self.commander_name],
+        #         confirm_cmd=confirm_cmd_to_use,
+        #         confirm_serial_num=recv_msg_serial_num,
+        #         confirmers=receiver_names))
 
     ####################################################################
     # build_recv_msg_timeout_suite
@@ -8800,7 +8673,7 @@ class ConfigVerifier:
     # build_start_suite
     ####################################################################
     def build_start_suite(self,
-                          start_names: list[str],
+                          start_names: Iterable,
                           validate_config: Optional[bool] = True
                           ) -> None:
         """Return a list of ConfigCmd items for unregister.
@@ -8810,7 +8683,8 @@ class ConfigVerifier:
             validate_config: indicates whether to validate the config
 
         """
-        if not set(start_names).issubset(self.registered_names):
+        start_names = get_set(start_names)
+        if not start_names.issubset(self.registered_names):
             self.abort_all_f1_threads()
             raise InvalidInputDetected(f'Input {start_names} is not a subset '
                                        'of registered names '
@@ -9319,7 +9193,7 @@ class ConfigVerifier:
     ####################################################################
     def dec_recv_timeout(self):
         with self.ops_lock:
-            self.expected_num_recv_timouts -= 1
+            self.expected_num_recv_timeouts -= 1
 
     ####################################################################
     # del_thread
@@ -9703,7 +9577,7 @@ class ConfigVerifier:
     ####################################################################
     def handle_join(self,
                     cmd_runner: str,
-                    join_names: list[str],
+                    join_names: set[str],
                     log_msg: str,
                     timeout_type: TimeoutType = TimeoutType.TimeoutNone,
                     timeout: Optional[IntOrFloat] = None,
@@ -9730,12 +9604,12 @@ class ConfigVerifier:
         enter_exit = ('entry', 'exit')
         if timeout_type == TimeoutType.TimeoutNone:
             self.all_threads[cmd_runner].smart_join(
-                targets=set(join_names),
+                targets=join_names,
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutFalse:
             self.all_threads[cmd_runner].smart_join(
-                targets=set(join_names),
+                targets=join_names,
                 timeout=timeout,
                 log_msg=log_msg)
 
@@ -9744,12 +9618,12 @@ class ConfigVerifier:
             error_msg = self.get_error_msg(
                     cmd_runner=cmd_runner,
                     smart_request='smart_join',
-                    targets=set(join_names),
+                    targets=join_names,
                     pending_remotes=timeout_names,
                     error_str='SmartThreadRequestTimedOut')
             with pytest.raises(st.SmartThreadRequestTimedOut) as exc:
                 self.all_threads[cmd_runner].smart_join(
-                    targets=set(join_names),
+                    targets=join_names,
                     timeout=timeout,
                     log_msg=log_msg)
 
@@ -9759,14 +9633,14 @@ class ConfigVerifier:
                 self.get_error_msg(
                     cmd_runner=cmd_runner,
                     smart_request='smart_join',
-                    targets=set(join_names),
+                    targets=join_names,
                     pending_remotes=timeout_names,
                     error_str='SmartThreadRequestTimedOut'),
                 log_level=logging.ERROR)
 
         self.add_request_log_msg(cmd_runner=cmd_runner,
                                  smart_request='smart_join',
-                                 targets=set(join_names),
+                                 targets=join_names,
                                  timeout=timeout,
                                  timeout_type=timeout_type,
                                  enter_exit=enter_exit,
@@ -10609,7 +10483,7 @@ class ConfigVerifier:
     ####################################################################
     def handle_start(self,
                      cmd_runner: str,
-                     start_names: list[str],
+                     start_names: set[str],
                      unreg_remotes: Optional[set[str]] = None,
                      log_msg: Optional[str] = None) -> None:
         """Start the named thread.
@@ -10628,27 +10502,27 @@ class ConfigVerifier:
             name='smart_start',
             seq='test_smart_thread.py::ConfigVerifier.handle_start')
 
-        exp_started_names = set(start_names)
+        exp_started_names = start_names
         enter_exit = ('entry', 'exit')
         if unreg_remotes:
             exp_started_names -= unreg_remotes
             enter_exit = ('entry',)
             with pytest.raises(st.SmartThreadRemoteThreadNotRegistered):
                 self.all_threads[cmd_runner].smart_start(
-                    targets=set(start_names),
+                    targets=start_names,
                     log_msg=log_msg)
 
             self.add_log_msg(
                 self.get_error_msg(
                     cmd_runner=cmd_runner,
                     smart_request='smart_start',
-                    targets=set(start_names),
+                    targets=start_names,
                     error_str='SmartThreadRemoteThreadNotRegistered',
                     unreg_remotes=unreg_remotes),
                 log_level=logging.ERROR)
         else:
             self.all_threads[cmd_runner].smart_start(
-                targets=set(start_names),
+                targets=start_names,
                 log_msg=log_msg)
 
         for start_name in exp_started_names:
@@ -10664,7 +10538,7 @@ class ConfigVerifier:
 
         self.add_request_log_msg(cmd_runner=cmd_runner,
                                  smart_request='smart_start',
-                                 targets=set(start_names),
+                                 targets=start_names,
                                  timeout=0,
                                  timeout_type=TimeoutType.TimeoutNone,
                                  enter_exit=enter_exit,
@@ -11471,14 +11345,14 @@ class ConfigVerifier:
     ####################################################################
     def set_recv_timeout(self, num_timeouts: int):
         with self.ops_lock:
-            self.expected_num_recv_timouts = num_timeouts
+            self.expected_num_recv_timeouts = num_timeouts
 
     ####################################################################
     # stop_thread
     ####################################################################
     def stop_thread(self,
                     cmd_runner: str,
-                    stop_names: list[str]) -> None:
+                    stop_names: set[str]) -> None:
         """Start the named thread.
 
         Args:
@@ -11512,7 +11386,7 @@ class ConfigVerifier:
                     #     if stop_name in self.expected_registered:
                     #         self.expected_registered[
                     #             stop_name].is_alive = False
-                    work_names.remove(stop_name)
+                    work_names -= {stop_name}
                     break
                 time.sleep(0.05)
 
@@ -13445,7 +13319,7 @@ class ConfigVerifier:
     ####################################################################
     def verify_in_registry(self,
                            cmd_runner: str,
-                           exp_in_registry_names: list[str]) -> None:
+                           exp_in_registry_names: set[str]) -> None:
         """Verify that the given names are registered.
 
         Args:
@@ -13473,7 +13347,7 @@ class ConfigVerifier:
     ####################################################################
     def verify_in_registry_not(self,
                                cmd_runner: str,
-                               exp_not_in_registry_names: list[str]
+                               exp_not_in_registry_names: set[str]
                                ) -> None:
         """Verify that the given names are not registered.
 
@@ -13506,7 +13380,7 @@ class ConfigVerifier:
     ####################################################################
     def verify_is_active(self,
                          cmd_runner: str,
-                         exp_active_names: list[str]) -> None:
+                         exp_active_names: set[str]) -> None:
         """Verify that the given names are active.
 
         Args:
@@ -13534,7 +13408,7 @@ class ConfigVerifier:
     ####################################################################
     # verify_is_alive
     ####################################################################
-    def verify_is_alive(self, names: list[str]) -> None:
+    def verify_is_alive(self, names: set[str]) -> None:
         """Verify that the given names are alive.
 
         Args:
@@ -13564,7 +13438,7 @@ class ConfigVerifier:
     ####################################################################
     # verify_is_alive_not
     ####################################################################
-    def verify_is_alive_not(self, names: list[str]) -> None:
+    def verify_is_alive_not(self, names: set[str]) -> None:
         """Verify that the given names are not alive.
 
         Args:
@@ -13590,7 +13464,7 @@ class ConfigVerifier:
     ####################################################################
     def verify_is_registered(self,
                              cmd_runner: str,
-                             exp_registered_names: list[str]) -> None:
+                             exp_registered_names: set[str]) -> None:
         """Verify that the given names are registered only.
 
         Args:
@@ -13615,7 +13489,7 @@ class ConfigVerifier:
     ####################################################################
     def verify_paired(self,
                       cmd_runner: str,
-                      exp_paired_names: list[str]) -> None:
+                      exp_paired_names: set[str]) -> None:
         """Verify that the given names are paired.
 
         Args:
@@ -13723,7 +13597,7 @@ class ConfigVerifier:
     ####################################################################
     def verify_paired_not(self,
                           cmd_runner: str,
-                          exp_not_paired_names: list[str]) -> None:
+                          exp_not_paired_names: set[str]) -> None:
         """Verify that the given names are not paired.
 
         Args:
@@ -13751,7 +13625,7 @@ class ConfigVerifier:
     ####################################################################
     def verify_status(self,
                       cmd_runner: str,
-                      check_status_names: list[str],
+                      check_status_names: set[str],
                       expected_status: st.ThreadState) -> None:
         """Verify that the given names have the given status.
 
@@ -13790,7 +13664,7 @@ class ConfigVerifier:
         """
         while True:
             with self.ops_lock:
-                if self.expected_num_recv_timouts == 0:
+                if self.expected_num_recv_timeouts == 0:
                     return
             time.sleep(0.1)
 
