@@ -232,29 +232,21 @@ num_stopped_2_arg_list = [0, 1, 2]
 ########################################################################
 # Test settings for test_recv_timeout_scenarios
 ########################################################################
+recv_msg_state_arg_list = [
+    st.ThreadState.Unregistered,
+    st.ThreadState.Registered,
+    st.ThreadState.Alive,
+    st.ThreadState.Stopped]
+
+recv_msg_lap_arg_list = [0, 1]
+
+send_msg_lap_arg_list = [0,1]
+
+error_stopped_target_arg_list = [False, True]
+
 ########################################################################
-# RecvMsgScenario
+# Test settings for test_recv_timeout_scenarios
 ########################################################################
-class RecvMsgScenario(Enum):
-    UnregToRegNoSender = auto()
-    ActiveNoDelaySender = auto()
-    ActiveDelaySender = auto()
-    SendExitSender = auto()
-    NoSendExitSender = auto()
-    UnregSender = auto()
-    RegSender = auto()
-
-
-recv_msg_scenario_arg_list = [
-    RecvMsgScenario.UnregToRegNoSender,
-    RecvMsgScenario.ActiveNoDelaySender,
-    RecvMsgScenario.ActiveDelaySender,
-    RecvMsgScenario.SendExitSender,
-    RecvMsgScenario.NoSendExitSender,
-    RecvMsgScenario.UnregSender,
-    RecvMsgScenario.RegSender
-]
-
 num_receivers_arg_list = [1]
 # num_receivers_arg_list = [2]
 
@@ -2414,22 +2406,6 @@ def def_del_scenario_arg(request: Any) -> DefDelScenario:
 
 
 ###############################################################################
-# recv_msg_scenario_arg
-###############################################################################
-@pytest.fixture(params=recv_msg_scenario_arg_list)  # type: ignore
-def recv_msg_scenario_arg(request: Any) -> RecvMsgScenario:
-    """Type of deferred delete to do.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(RecvMsgScenario, request.param)
-
-
-###############################################################################
 # conflict_deadlock_1_arg
 ###############################################################################
 @pytest.fixture(params=conflict_deadlock_arg_list)  # type: ignore
@@ -2659,6 +2635,41 @@ def num_senders_arg(request: Any) -> int:
     return cast(int, request.param)
 
 
+###############################################################################
+# recv_msg_state_arg
+###############################################################################
+@pytest.fixture(params=recv_msg_state_arg_list)  # type: ignore
+def recv_msg_state_arg(request: Any) -> st.ThreadState:
+    """State of sender when recv_msg is to be issued.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(st.ThreadState, request.param)
+
+
+###############################################################################
+# recv_msg_lap_arg
+###############################################################################
+@pytest.fixture(params=recv_msg_lap_arg_list)  # type: ignore
+def recv_msg_lap_arg(request: Any) -> int:
+    """Lap of sender when recv_msg is to be issued.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+recv_msg_lap_arg_list = [0, 1]
+
+send_msg_lap_arg_list = [0, 1]
+
+error_stopped_target_arg_list = [False, True]
 ###############################################################################
 # num_receivers_arg
 ###############################################################################
@@ -6199,8 +6210,8 @@ class ConfigVerifier:
         # sender, and one thread for the receiver, for a total of three.
         assert 3 <= len(self.unregistered_names)
 
-        timeout_time = 0.5
-        pause_time = 0.5
+        timeout_time = 0.25
+        pause_time = 0.1
 
         self.build_config(
             cmd_runner=self.commander_name,
@@ -6245,6 +6256,8 @@ class ConfigVerifier:
             sender_name: (f'recv test: {sender_name} sending msg at '
                           f'{self.get_ptime()}')}
 
+        confirm_cmd_to_use = 'RecvMsg'
+        recv_msg_serial_num = 0
         ################################################################
         # lap loop
         ################################################################
@@ -6285,7 +6298,8 @@ class ConfigVerifier:
                     self.build_start_suite(
                         start_names=sender_name,
                         validate_config=False)
-                    if send_msg_lap == lap:
+                    if (send_msg_lap == lap
+                            and timeout_type != TimeoutType.TimeoutTrue):
                         self.add_cmd(
                             SendMsg(cmd_runners=sender_name,
                                     receivers=receiver_name,
@@ -6293,7 +6307,7 @@ class ConfigVerifier:
                 ########################################################
                 # do stop to make sender stopped
                 ########################################################
-                elif state == st.ThreadState.Stopped:
+                else:  # state == st.ThreadState.Stopped:
                     self.build_exit_suite(
                         cmd_runner=self.commander_name,
                         names=sender_name,
@@ -6302,12 +6316,15 @@ class ConfigVerifier:
                 # issue recv_msg
                 ########################################################
                 if recv_msg_state == state and recv_msg_lap == lap:
+                    if lap == 0 and send_msg_lap == 1:
+                        stopped_remotes = {sender_name}
                     if timeout_type == TimeoutType.TimeoutNone:
-                        confirm_cmd_to_use = 'RecvMsg'
                         recv_msg_serial_num = self.add_cmd(
                             RecvMsg(cmd_runners=receiver_name,
                                     senders=sender_name,
                                     exp_msgs=sender_msgs,
+                                    error_stopped_target=error_stopped_target,
+                                    stopped_remotes=stopped_remotes,
                                     log_msg=log_msg))
                     elif timeout_type == TimeoutType.TimeoutFalse:
                         confirm_cmd_to_use = 'RecvMsgTimeoutFalse'
@@ -6317,9 +6334,16 @@ class ConfigVerifier:
                                 senders=sender_name,
                                 exp_msgs=sender_msgs,
                                 timeout=timeout_time,
+                                error_stopped_target=error_stopped_target,
+                                stopped_remotes=stopped_remotes,
                                 log_msg=log_msg))
 
                     else:  # TimeoutType.TimeoutTrue
+                        seconds_to_stop = (
+                            st.ThreadState.Stopped.value
+                            - state.value) * pause_time
+                        if timeout_time < seconds_to_stop:
+                            stopped_remotes = set()
                         confirm_cmd_to_use = 'RecvMsgTimeoutTrue'
                         recv_msg_serial_num = self.add_cmd(
                             RecvMsgTimeoutTrue(
@@ -6327,18 +6351,22 @@ class ConfigVerifier:
                                 senders=sender_name,
                                 exp_msgs=sender_msgs,
                                 timeout=timeout_time,
-                                timeout_names=timeout_names,
+                                timeout_names=sender_name,
+                                error_stopped_target=error_stopped_target,
+                                stopped_remotes=stopped_remotes,
                                 log_msg=log_msg))
-
+                self.add_cmd(
+                    Pause(cmd_runners=self.commander_name,
+                          pause_seconds=pause_time))
         ################################################################
         # finally, confirm the recv_msg is done
         ################################################################
-        # self.add_cmd(
-        #     ConfirmResponse(
-        #         cmd_runners=[self.commander_name],
-        #         confirm_cmd=confirm_cmd_to_use,
-        #         confirm_serial_num=recv_msg_serial_num,
-        #         confirmers=receiver_names))
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd=confirm_cmd_to_use,
+                confirm_serial_num=recv_msg_serial_num,
+                confirmers=receiver_names))
 
     ####################################################################
     # build_recv_msg_timeout_suite
@@ -14326,10 +14354,13 @@ class TestSmartThreadScenarios:
     ####################################################################
     # test_recv_msg_timeout_scenarios
     ####################################################################
-    def test_recv_msg_timeout_scenarios(
+    def test_recv_msg_scenarios(
             self,
             timeout_type_arg: TimeoutType,
-            recv_msg_scenario_arg: RecvMsgScenario,
+            recv_msg_state_arg: st.ThreadState,
+            recv_msg_lap_arg: int,
+            send_msg_lap_arg: int,
+            error_stopped_target_arg: bool,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
         """Test meta configuration scenarios.
@@ -14338,61 +14369,32 @@ class TestSmartThreadScenarios:
             timeout_type_arg: specifies whether the recv_msg should
                 be coded with timeout and whether the recv_msg should
                 succeed or fail with a timeout
-            recv_msg_scenario_arg: specifies which scenario to run
+            recv_msg_state_arg: sender state when recv_msg is to be
+                issued
+            recv_msg_lap_arg: lap 0 or 1 when the recv_msg is to be
+                issued
+            send_msg_lap_arg: lap 0 or 1 when the send_msg is to be
+                issued
+            error_stopped_target_arg: specifies whether the recv_msg
+                should be coded with error_stopped_target. If a scenario
+                involves having the smart_thread enter the stopped state
+                and error_stopped_target is True, then the scenario
+                should get the NotAlive error.
             caplog: pytest fixture to capture log output
 
         """
-        if timeout_type_arg != TimeoutType.TimeoutNone:
-            if not (recv_msg_scenario_arg == RecvMsgScenario.ActiveDelaySender
-                    or recv_msg_scenario_arg == RecvMsgScenario.NoSendExitSender
-                    or recv_msg_scenario_arg == RecvMsgScenario.UnregSender
-                    or recv_msg_scenario_arg == RecvMsgScenario.RegSender):
-                return
-
-        # command_config_num = total_arg_counts % 5
-        # if command_config_num == 0:
-        #     commander_config = AppConfig.ScriptStyle
-        # elif command_config_num == 1:
-        #     commander_config = AppConfig.CurrentThreadApp
-        # elif command_config_num == 2:
-        #     commander_config = AppConfig.RemoteThreadApp
-        # elif command_config_num == 3:
-        #     commander_config = AppConfig.RemoteSmartThreadApp
-        # else:
-        #     commander_config = AppConfig.RemoteSmartThreadApp2
         commander_config = AppConfig.ScriptStyle
-        num_active_no_delay_senders = 0
-        num_active_delay_senders = 0
-        num_send_exit_senders = 0
-        num_nosend_exit_senders = 0
-        num_unreg_senders = 0
-        num_reg_senders = 0
-        if recv_msg_scenario_arg == RecvMsgScenario.ActiveNoDelaySender:
-            num_active_no_delay_senders = 1
-        elif recv_msg_scenario_arg == RecvMsgScenario.ActiveDelaySender:
-            num_active_delay_senders = 1
-        elif recv_msg_scenario_arg == RecvMsgScenario.SendExitSender:
-            num_send_exit_senders = 1
-        elif recv_msg_scenario_arg == RecvMsgScenario.NoSendExitSender:
-            num_nosend_exit_senders = 1
-        elif recv_msg_scenario_arg == RecvMsgScenario.UnregSender:
-            num_unreg_senders = 1
-        elif recv_msg_scenario_arg == RecvMsgScenario.RegSender:
-            num_reg_senders = 1
 
         args_for_scenario_builder: dict[str, Any] = {
             'timeout_type': timeout_type_arg,
-            'num_receivers': 1,
-            'num_active_no_delay_senders': num_active_no_delay_senders,
-            'num_active_delay_senders': num_active_delay_senders,
-            'num_send_exit_senders': num_send_exit_senders,
-            'num_nosend_exit_senders': num_nosend_exit_senders,
-            'num_unreg_senders': num_unreg_senders,
-            'num_reg_senders': num_reg_senders
+            'recv_msg_state': recv_msg_state_arg,
+            'recv_msg_lap': recv_msg_lap_arg,
+            'send_msg_lap': send_msg_lap_arg,
+            'error_stopped_target': error_stopped_target_arg,
         }
 
         self.scenario_driver(
-            scenario_builder=ConfigVerifier.build_recv_msg_timeout_suite,
+            scenario_builder=ConfigVerifier.build_recv_msg_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
             commander_config=commander_config
