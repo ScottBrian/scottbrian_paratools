@@ -230,7 +230,7 @@ num_stopped_2_arg_list = [0, 1, 2]
 
 
 ########################################################################
-# Test settings for test_recv_timeout_scenarios
+# Test settings for test_recv_msg_scenarios
 ########################################################################
 recv_msg_state_arg_list = [
     st.ThreadState.Unregistered,
@@ -240,7 +240,17 @@ recv_msg_state_arg_list = [
 
 recv_msg_lap_arg_list = [0, 1]
 
-send_msg_lap_arg_list = [0,1]
+send_msg_lap_arg_list = [0, 1]
+
+
+########################################################################
+# Test settings for test_send_msg_scenarios
+########################################################################
+send_msg_state_arg_list = [
+    st.ThreadState.Unregistered,
+    st.ThreadState.Registered,
+    st.ThreadState.Alive,
+    st.ThreadState.Stopped]
 
 
 ########################################################################
@@ -1181,7 +1191,7 @@ class ResumeTimeoutTrue(ResumeTimeoutFalse):
 ########################################################################
 class SendMsg(ConfigCmd):
     def __init__(self,
-                 cmd_runners: StrOrList,
+                 cmd_runners: Iterable,
                  receivers: StrOrList,
                  msgs_to_send: dict[str, Any],
                  error_stopped_target: bool = True,
@@ -2640,6 +2650,22 @@ def num_senders_arg(request: Any) -> int:
 ###############################################################################
 @pytest.fixture(params=recv_msg_state_arg_list)  # type: ignore
 def recv_msg_state_arg(request: Any) -> st.ThreadState:
+    """State of sender when recv_msg is to be issued.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(st.ThreadState, request.param)
+
+
+###############################################################################
+# send_msg_state_arg
+###############################################################################
+@pytest.fixture(params=send_msg_state_arg_list)  # type: ignore
+def send_msg_state_arg(request: Any) -> st.ThreadState:
     """State of sender when recv_msg is to be issued.
 
     Args:
@@ -7952,6 +7978,194 @@ class ConfigVerifier:
                     confirm_cmd=resume_to_confirm,
                     confirm_serial_num=resume_serial_num,
                     confirmers=resumer_names))
+
+    ####################################################################
+    # build_send_msg_suite
+    ####################################################################
+    def build_send_msg_suite(
+            self,
+            timeout_type: TimeoutType,
+            send_msg_state: st.ThreadState,
+            send_msg_lap: int,
+            recv_msg_lap: int,
+            error_stopped_target: bool) -> None:
+        """Add cmds to run scenario.
+
+        Args:
+            timeout_type: specifies whether the recv_msg should
+                be coded with timeout, and whether it be False or True
+            send_msg_state: receiver state when send_msg is to be issued
+            send_msg_lap: lap 0 or 1 when the send_msg is to be issued
+            recv_msg_lap: lap 0 or 1 when the recv_msg is to be issued
+            error_stopped_target: specifies whether the send_msg should
+                be coded with error_stopped_target. If a scenario
+                involves having the smart_thread enter the stopped state
+                and error_stopped_target is True, then the scenario
+                should get the NotAlive error.
+
+
+        """
+        # Make sure we have enough threads. Each of the scenarios will
+        # require one thread for the commander, one thread for the
+        # sender, and one thread for the receiver, for a total of three.
+        assert 3 <= len(self.unregistered_names)
+
+        self.build_config(
+            cmd_runner=self.commander_name,
+            num_active=2)  # one for commander and one for sender
+
+        self.log_name_groups()
+
+        # active_names = self.active_names.copy()
+        # remove commander for now, but if we add it later we need to
+        # be careful not to exit the commander
+        active_names = self.active_names - {self.commander_name}
+
+        ################################################################
+        # choose receiver_names
+        ################################################################
+        sender_names = self.choose_names(
+            name_collection=active_names,
+            num_names_needed=1,
+            update_collection=True,
+            var_name_for_log='sender_names')
+
+        ################################################################
+        # choose sender_names
+        ################################################################
+        receiver_names = self.choose_names(
+            name_collection=self.unregistered_names,
+            num_names_needed=1,
+            update_collection=False,
+            var_name_for_log='receiver_names')
+
+        log_msg = f'send_msg log test: {self.get_ptime()}'
+
+        ################################################################
+        # setup the messages to send
+        ################################################################
+        receiver_name = receiver_names[0]
+        sender_name = sender_names[0]
+        sender_msgs: dict[str, str] = {
+            sender_name: (f'send test: {sender_name} sending msg at '
+                          f'{self.get_ptime()}')}
+
+        confirm_cmd_to_use = 'SendMsg'
+        send_msg_serial_num = 0
+        ################################################################
+        # lap loop
+        ################################################################
+        for lap in range(2):
+            ############################################################
+            # start loop to advance receiver through the config states
+            ############################################################
+            for state in (
+                    st.ThreadState.Unregistered,
+                    st.ThreadState.Registered,
+                    st.ThreadState.Alive,
+                    st.ThreadState.Stopped):
+                ########################################################
+                # do join to make receiver unregistered
+                ########################################################
+                if state == st.ThreadState.Unregistered:
+                    if lap == 1:  # receiver already unregistered lap 0
+                        self.build_join_suite(
+                            cmd_runners=self.commander_name,
+                            join_target_names=receiver_name,
+                            validate_config=False)
+
+                ########################################################
+                # do create to make receiver registered
+                ########################################################
+                elif state == st.ThreadState.Registered:
+                    self.build_create_suite(
+                        f1_create_items=[
+                            F1CreateItem(name=receiver_name,
+                                         auto_start=False,
+                                         target_rtn=outer_f1,
+                                         app_config=AppConfig.ScriptStyle)],
+                        validate_config=False)
+                ########################################################
+                # do start to make receiver alive
+                ########################################################
+                elif state == st.ThreadState.Alive:
+                    self.build_start_suite(
+                        start_names=receiver_name,
+                        validate_config=False)
+                    if recv_msg_lap == lap:
+                        if ((send_msg_state == st.ThreadState.Registered
+                                or send_msg_state == st.ThreadState.Alive)
+                                and send_msg_lap <= recv_msg_lap):
+                            self.add_cmd(
+                                RecvMsg(cmd_runners=receiver_name,
+                                        senders=sender_name,
+                                        exp_msgs=sender_msgs))
+                ########################################################
+                # do stop to make receiver stopped
+                ########################################################
+                else:  # state == st.ThreadState.Stopped:
+                    self.build_exit_suite(
+                        cmd_runner=self.commander_name,
+                        names=receiver_name,
+                        validate_config=False)
+                ########################################################
+                # issue send_msg
+                ########################################################
+                if send_msg_state == state and send_msg_lap == lap:
+                    pause_time = 1
+                    stopped_remotes = set()
+                    if state == st.ThreadState.Stopped:
+                        stopped_remotes = {receiver_name}
+
+                    if timeout_type == TimeoutType.TimeoutNone:
+                        send_msg_serial_num = self.add_cmd(
+                            SendMsg(cmd_runners=sender_name,
+                                    receivers=receiver_name,
+                                    msgs_to_send=sender_msgs,
+                                    error_stopped_target=error_stopped_target,
+                                    stopped_remotes=stopped_remotes,
+                                    log_msg=log_msg))
+                    elif (timeout_type == TimeoutType.TimeoutFalse
+                          or (timeout_type == TimeoutType.TimeoutTrue
+                              and (state == st.ThreadState.Registered
+                                   or state == st.ThreadState.Alive))):
+                        timeout_time = 6
+                        confirm_cmd_to_use = 'SendMsgTimeoutFalse'
+                        send_msg_serial_num = self.add_cmd(
+                            SendMsgTimeoutFalse(
+                                cmd_runners=sender_name,
+                                receivers=receiver_name,
+                                msgs_to_send=sender_msgs,
+                                timeout=timeout_time,
+                                error_stopped_target=error_stopped_target,
+                                stopped_remotes=stopped_remotes,
+                                log_msg=log_msg))
+
+                    else:  # TimeoutType.TimeoutTrue
+                        timeout_time = 0.5
+                        confirm_cmd_to_use = 'SendMsgTimeoutTrue'
+                        send_msg_serial_num = self.add_cmd(
+                            SendMsgTimeoutTrue(
+                                cmd_runners=sender_name,
+                                receivers=receiver_name,
+                                msgs_to_send=sender_msgs,
+                                timeout=timeout_time,
+                                unreg_timeout_names=receiver_name,
+                                error_stopped_target=error_stopped_target,
+                                stopped_remotes=stopped_remotes,
+                                log_msg=log_msg))
+                    self.add_cmd(
+                        Pause(cmd_runners=self.commander_name,
+                              pause_seconds=pause_time))
+        ################################################################
+        # finally, confirm the recv_msg is done
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd=confirm_cmd_to_use,
+                confirm_serial_num=send_msg_serial_num,
+                confirmers=sender_names))
 
     ####################################################################
     # build_msg_timeout_suite
@@ -14371,7 +14585,7 @@ class TestSmartThreadScenarios:
         )
 
     ####################################################################
-    # test_recv_msg_timeout_scenarios
+    # test_recv_msg_scenarios
     ####################################################################
     def test_recv_msg_scenarios(
             self,
@@ -14414,6 +14628,55 @@ class TestSmartThreadScenarios:
 
         self.scenario_driver(
             scenario_builder=ConfigVerifier.build_recv_msg_suite,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog,
+            commander_config=commander_config
+        )
+
+    ####################################################################
+    # test_send_msg_scenarios
+    ####################################################################
+    def test_send_msg_scenarios(
+            self,
+            timeout_type_arg: TimeoutType,
+            send_msg_state_arg: st.ThreadState,
+            send_msg_lap_arg: int,
+            recv_msg_lap_arg: int,
+            error_stopped_target_arg: bool,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            timeout_type_arg: specifies whether the recv_msg should
+                be coded with timeout and whether the recv_msg should
+                succeed or fail with a timeout
+            send_msg_state_arg: sender state when send_msg is to be
+                issued
+            send_msg_lap_arg: lap 0 or 1 when the send_msg is to be
+                issued
+            recv_msg_lap_arg: lap 0 or 1 when the recv_msg is to be
+                issued
+            error_stopped_target_arg: specifies whether the send_msg
+                should be coded with error_stopped_target. If a scenario
+                involves having the smart_thread enter the stopped state
+                and error_stopped_target is True, then the scenario
+                should get the NotAlive error.
+            caplog: pytest fixture to capture log output
+
+        """
+        commander_config = AppConfig.ScriptStyle
+
+        args_for_scenario_builder: dict[str, Any] = {
+            'timeout_type': timeout_type_arg,
+            'send_msg_state': send_msg_state_arg,
+            'send_msg_lap': send_msg_lap_arg,
+            'recv_msg_lap': recv_msg_lap_arg,
+            'error_stopped_target': error_stopped_target_arg,
+        }
+
+        self.scenario_driver(
+            scenario_builder=ConfigVerifier.build_send_msg_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
             commander_config=commander_config
