@@ -242,7 +242,6 @@ recv_msg_lap_arg_list = [0, 1]
 
 send_msg_lap_arg_list = [0,1]
 
-error_stopped_target_arg_list = [False, True]
 
 ########################################################################
 # Test settings for test_recv_timeout_scenarios
@@ -524,6 +523,7 @@ class ConfirmResponse(ConfigCmd):
             time.sleep(0.2)
             timeout_value = 60
             if time.time() - start_time > timeout_value:
+                self.config_ver.abort_all_f1_threads()
                 raise CmdTimedOut('ConfirmResponse serial_num '
                                   f'{self.serial_num} took longer than '
                                   f'{timeout_value} seconds waiting '
@@ -2665,11 +2665,24 @@ def recv_msg_lap_arg(request: Any) -> int:
         The params values are returned one at a time
     """
     return cast(int, request.param)
-recv_msg_lap_arg_list = [0, 1]
 
-send_msg_lap_arg_list = [0, 1]
 
-error_stopped_target_arg_list = [False, True]
+###############################################################################
+# send_msg_lap_arg
+###############################################################################
+@pytest.fixture(params=send_msg_lap_arg_list)  # type: ignore
+def send_msg_lap_arg(request: Any) -> int:
+    """Lap of sender when recv_msg is to be issued.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return cast(int, request.param)
+
+
 ###############################################################################
 # num_receivers_arg
 ###############################################################################
@@ -4444,6 +4457,11 @@ class ConfigVerifier:
                                       stopped_by=self.commander_name)
                 self.add_cmd_info(exit_cmd)
                 self.msgs.queue_msg(name, exit_cmd)
+        self.monitor_bail = True
+        self.monitor_exit = True
+        self.monitor_event.set()
+        if threading.current_thread() is not self.monitor_thread:
+            self.monitor_thread.join()
 
     ####################################################################
     # add_cmd
@@ -6210,9 +6228,6 @@ class ConfigVerifier:
         # sender, and one thread for the receiver, for a total of three.
         assert 3 <= len(self.unregistered_names)
 
-        timeout_time = 0.25
-        pause_time = 0.1
-
         self.build_config(
             cmd_runner=self.commander_name,
             num_active=2)  # one for commander and one for receiver
@@ -6241,9 +6256,6 @@ class ConfigVerifier:
             num_names_needed=1,
             update_collection=False,
             var_name_for_log='sender_names')
-
-        self.set_recv_timeout(
-            num_timeouts=len(all_timeout_names) * num_receivers)
 
         log_msg = f'recv_msg log test: {self.get_ptime()}'
 
@@ -6315,9 +6327,13 @@ class ConfigVerifier:
                 ########################################################
                 # issue recv_msg
                 ########################################################
+                pause_time = 0
                 if recv_msg_state == state and recv_msg_lap == lap:
-                    if lap == 0 and send_msg_lap == 1:
+                    stopped_remotes = set()
+                    if ((lap == 0 and send_msg_lap == 1)
+                            or timeout_type == TimeoutType.TimeoutTrue):
                         stopped_remotes = {sender_name}
+                        pause_time = 1
                     if timeout_type == TimeoutType.TimeoutNone:
                         recv_msg_serial_num = self.add_cmd(
                             RecvMsg(cmd_runners=receiver_name,
@@ -6327,6 +6343,7 @@ class ConfigVerifier:
                                     stopped_remotes=stopped_remotes,
                                     log_msg=log_msg))
                     elif timeout_type == TimeoutType.TimeoutFalse:
+                        timeout_time = 6
                         confirm_cmd_to_use = 'RecvMsgTimeoutFalse'
                         recv_msg_serial_num = self.add_cmd(
                             RecvMsgTimeoutFalse(
@@ -6339,11 +6356,12 @@ class ConfigVerifier:
                                 log_msg=log_msg))
 
                     else:  # TimeoutType.TimeoutTrue
-                        seconds_to_stop = (
-                            st.ThreadState.Stopped.value
-                            - state.value) * pause_time
-                        if timeout_time < seconds_to_stop:
+                        timeout_time = 0.5
+                        pause_time = 1  # ensure timeout
+                        if state != st.ThreadState.Stopped:
                             stopped_remotes = set()
+                            self.set_recv_timeout(num_timeouts=1)
+
                         confirm_cmd_to_use = 'RecvMsgTimeoutTrue'
                         recv_msg_serial_num = self.add_cmd(
                             RecvMsgTimeoutTrue(
@@ -6355,9 +6373,10 @@ class ConfigVerifier:
                                 error_stopped_target=error_stopped_target,
                                 stopped_remotes=stopped_remotes,
                                 log_msg=log_msg))
-                self.add_cmd(
-                    Pause(cmd_runners=self.commander_name,
-                          pause_seconds=pause_time))
+                    if pause_time > 0:
+                        self.add_cmd(
+                            Pause(cmd_runners=self.commander_name,
+                                  pause_seconds=pause_time))
         ################################################################
         # finally, confirm the recv_msg is done
         ################################################################
@@ -10871,7 +10890,7 @@ class ConfigVerifier:
                     cmd_runner].work_remotes
             else:
                 pending_remotes = [
-                    remote for pk, remote in self.all_threads[
+                    remote for pk, remote, _ in self.all_threads[
                         cmd_runner].work_pk_remotes]
         pending_msg = re.escape(
             f' Remotes that are pending: '
@@ -13773,7 +13792,7 @@ class ConfigVerifier:
         while work_resumers:
             for resumer in work_resumers:
                 test_timeouts = set(sorted(
-                    [remote for pk, remote in self.all_threads[
+                    [remote for pk, remote, _ in self.all_threads[
                         resumer].work_pk_remotes]))
                 if timeouts == test_timeouts:
                     work_resumers.remove(resumer)
@@ -13810,7 +13829,7 @@ class ConfigVerifier:
         while work_syncers:
             for syncer in work_syncers:
                 test_timeouts = set(sorted(
-                    [remote for pk, remote in self.all_threads[
+                    [remote for pk, remote, _ in self.all_threads[
                         syncer].work_pk_remotes]))
                 if timeouts == test_timeouts:
                     work_syncers.remove(syncer)
