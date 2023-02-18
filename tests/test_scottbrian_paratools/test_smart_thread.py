@@ -8052,6 +8052,7 @@ class ConfigVerifier:
 
         confirm_cmd_to_use = 'SendMsg'
         send_msg_serial_num = 0
+        send_msg_issued = False
         ################################################################
         # lap loop
         ################################################################
@@ -8093,9 +8094,9 @@ class ConfigVerifier:
                         start_names=receiver_name,
                         validate_config=False)
                     if recv_msg_lap == lap:
-                        if ((send_msg_state == st.ThreadState.Registered
-                                or send_msg_state == st.ThreadState.Alive)
-                                and send_msg_lap <= recv_msg_lap):
+                        if (send_msg_issued
+                                or (send_msg_state == st.ThreadState.Alive
+                                    and send_msg_lap == lap)):
                             self.add_cmd(
                                 RecvMsg(cmd_runners=receiver_name,
                                         senders=sender_name,
@@ -8104,6 +8105,7 @@ class ConfigVerifier:
                 # do stop to make receiver stopped
                 ########################################################
                 else:  # state == st.ThreadState.Stopped:
+                    send_msg_issued = False
                     self.build_exit_suite(
                         cmd_runner=self.commander_name,
                         names=receiver_name,
@@ -8114,8 +8116,10 @@ class ConfigVerifier:
                 if send_msg_state == state and send_msg_lap == lap:
                     pause_time = 1
                     stopped_remotes = set()
+                    send_msg_issued = True
                     if state == st.ThreadState.Stopped:
                         stopped_remotes = {receiver_name}
+                        send_msg_issued = False
 
                     if timeout_type == TimeoutType.TimeoutNone:
                         send_msg_serial_num = self.add_cmd(
@@ -8143,6 +8147,7 @@ class ConfigVerifier:
 
                     else:  # TimeoutType.TimeoutTrue
                         timeout_time = 0.5
+                        send_msg_issued = False
                         confirm_cmd_to_use = 'SendMsgTimeoutTrue'
                         send_msg_serial_num = self.add_cmd(
                             SendMsgTimeoutTrue(
@@ -10631,6 +10636,10 @@ class ConfigVerifier:
             timeout: value to use for timeout on the send_msg request
             error_stopped_target: specifies whether to raise error when
                 threads are stopped
+            unreg_timeout_names: names of threads that are unregistered
+                and are expected to cause timeout
+            fullq_timeout_names: names of threads whose msg_q is full
+                and are expected to cause timeout
             stopped_remotes: names of threads that are stopped
 
         """
@@ -11811,8 +11820,8 @@ class ConfigVerifier:
                     # msg will be delivered or the resume will be done
                     # (otherwise we should not have called
                     # inc_ops_count)
-                    if pend_ops_cnt := self.expected_pairs[pair_key][
-                            del_name].pending_ops_count > 0:
+                    if (pend_ops_cnt := self.expected_pairs[pair_key][
+                            del_name].pending_ops_count) > 0:
                         if pair_key not in self.pending_ops_counts:
                             self.pending_ops_counts[pair_key] = {}
                         self.pending_ops_counts[pair_key][
