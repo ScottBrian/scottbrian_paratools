@@ -1375,13 +1375,17 @@ class StartThread(ConfigCmd):
 class StopThread(ConfigCmd):
     def __init__(self,
                  cmd_runners: Iterable,
-                 stop_names: Iterable) -> None:
+                 stop_names: Iterable,
+                 reset_ops_count: bool = False) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
         self.stop_names = get_set(stop_names)
 
-        self.arg_list += ['stop_names']
+        self.reset_ops_count = reset_ops_count
+
+        self.arg_list += ['stop_names',
+                          'reset_ops_count']
 
     def run_process(self, cmd_runner: str) -> None:
         """Run the command.
@@ -1390,7 +1394,8 @@ class StopThread(ConfigCmd):
             cmd_runner: name of thread running the command
         """
         self.config_ver.stop_thread(cmd_runner=cmd_runner,
-                                    stop_names=self.stop_names)
+                                    stop_names=self.stop_names,
+                                    reset_ops_count=self.reset_ops_count)
 
 
 ########################################################################
@@ -3609,7 +3614,7 @@ class ThreadTracker:
 class ThreadPairStatus:
     """Class that keeps pair status."""
     pending_ops_count: int
-    # pending_wait_count: int
+    reset_ops_count: bool
     # expected_last_reg_updates: deque
 
 
@@ -5161,7 +5166,8 @@ class ConfigVerifier:
     def build_exit_suite(self,
                          cmd_runner: str,
                          names: Iterable,
-                         validate_config: Optional[bool] = True
+                         validate_config: bool = True,
+                         reset_ops_count: bool = False
                          ) -> None:
         """Add ConfigCmd items for an exit.
 
@@ -5170,6 +5176,8 @@ class ConfigVerifier:
             names: names of threads to exit
             validate_config: specifies whether to validate the
                 configuration
+            reset_ops_count: specifies that the pending_ops_count is to
+                be set to zero
 
         """
         names = get_set(names)
@@ -5181,7 +5189,8 @@ class ConfigVerifier:
 
         if names:
             self.add_cmd(StopThread(cmd_runners=cmd_runner,
-                                    stop_names=names))
+                                    stop_names=names,
+                                    reset_ops_count=reset_ops_count))
             if validate_config:
                 self.add_cmd(Pause(cmd_runners=cmd_runner,
                                    pause_seconds=.2))
@@ -8052,7 +8061,74 @@ class ConfigVerifier:
 
         confirm_cmd_to_use = 'SendMsg'
         send_msg_serial_num = 0
-        send_msg_issued = False
+        # send_msg_issued = False
+        # recv_msg_issued = False
+
+        recv_msg_ok = False
+        timeout_none_ok = False
+        timeout_false_ok = False
+        timeout_true_ok = False
+        reset_ops_count = False
+
+        stopped_remotes = set()
+
+        if ((send_msg_state == st.ThreadState.Unregistered
+                or send_msg_state == st.ThreadState.Registered
+                or send_msg_state == st.ThreadState.Alive)
+                and send_msg_lap == recv_msg_lap):
+            if timeout_type == TimeoutType.TimeoutTrue:
+                timeout_true_ok = True
+            else:
+                recv_msg_ok = True
+                timeout_none_ok = True
+                timeout_false_ok = True
+
+        if ((send_msg_state == st.ThreadState.Unregistered
+                or send_msg_state == st.ThreadState.Registered
+                or send_msg_state == st.ThreadState.Alive)
+                and send_msg_lap < recv_msg_lap
+                and not error_stopped_target):
+            if timeout_type == TimeoutType.TimeoutTrue:
+                timeout_true_ok = True
+            else:
+                timeout_none_ok = True
+                timeout_false_ok = True
+
+        if ((send_msg_state == st.ThreadState.Unregistered
+                or send_msg_state == st.ThreadState.Registered
+                or send_msg_state == st.ThreadState.Alive)
+                and send_msg_lap < recv_msg_lap
+                and error_stopped_target):
+            timeout_none_ok = True
+            timeout_false_ok = True
+            timeout_true_ok = True
+            # reset_ops_count = True
+
+        if (send_msg_state == st.ThreadState.Stopped
+                and not error_stopped_target
+                and send_msg_lap == recv_msg_lap):
+            timeout_none_ok = True
+            timeout_false_ok = True
+            timeout_true_ok = True
+            reset_ops_count = True
+
+        if (send_msg_state == st.ThreadState.Stopped
+                and not error_stopped_target
+                and send_msg_lap < recv_msg_lap):
+            if timeout_type == TimeoutType.TimeoutTrue:
+                timeout_true_ok = True
+            else:
+                recv_msg_ok = True
+                timeout_none_ok = True
+                timeout_false_ok = True
+
+        if (send_msg_state == st.ThreadState.Stopped
+                and error_stopped_target):
+            timeout_none_ok = True
+            timeout_false_ok = True
+            timeout_true_ok = True
+            stopped_remotes = {receiver_name}
+
         ################################################################
         # lap loop
         ################################################################
@@ -8093,35 +8169,56 @@ class ConfigVerifier:
                     self.build_start_suite(
                         start_names=receiver_name,
                         validate_config=False)
-                    if recv_msg_lap == lap:
-                        if (send_msg_issued
-                                or (send_msg_state == st.ThreadState.Alive
-                                    and send_msg_lap == lap)):
-                            self.add_cmd(
-                                RecvMsg(cmd_runners=receiver_name,
-                                        senders=sender_name,
-                                        exp_msgs=sender_msgs))
+                    # if recv_msg_lap == lap:
+                    #     if (send_msg_issued
+                    #             or (send_msg_state == st.ThreadState.Alive
+                    #                 and send_msg_lap == lap)):
+                    #         recv_msg_issued = True
+                    #         self.add_cmd(
+                    #             RecvMsg(cmd_runners=receiver_name,
+                    #                     senders=sender_name,
+                    #                     exp_msgs=sender_msgs))
+                    if recv_msg_lap == lap and recv_msg_ok:
+                        self.add_cmd(
+                            RecvMsg(cmd_runners=receiver_name,
+                                    senders=sender_name,
+                                    exp_msgs=sender_msgs))
                 ########################################################
                 # do stop to make receiver stopped
                 ########################################################
                 else:  # state == st.ThreadState.Stopped:
-                    send_msg_issued = False
+                    # send_msg_issued = False
+                    # reset_ops_count = True
+                    # if (send_msg_state.value <= st.ThreadState.Alive.value
+                    #         and send_msg_lap == recv_msg_lap):
+                    #     reset_ops_count = False
+                    # if (send_msg_state == st.ThreadState.Stopped
+                    #         and not error_stopped_target
+                    #         and send_msg_lap == 0):
+                    #     reset_ops_count = False
                     self.build_exit_suite(
                         cmd_runner=self.commander_name,
                         names=receiver_name,
-                        validate_config=False)
+                        validate_config=False,
+                        reset_ops_count=reset_ops_count)
                 ########################################################
                 # issue send_msg
                 ########################################################
                 if send_msg_state == state and send_msg_lap == lap:
                     pause_time = 1
-                    stopped_remotes = set()
-                    send_msg_issued = True
-                    if state == st.ThreadState.Stopped:
-                        stopped_remotes = {receiver_name}
-                        send_msg_issued = False
+                    # stopped_remotes = set()
+                    # send_msg_issued = True
+                    # if (state == st.ThreadState.Stopped and
+                    #         error_stopped_target):
+                    #     stopped_remotes = {receiver_name}
+                    #     send_msg_issued = False
 
-                    if timeout_type == TimeoutType.TimeoutNone:
+                    # if (timeout_type == TimeoutType.TimeoutNone
+                    #         and (state != st.ThreadState.Stopped
+                    #              or error_stopped_target)):
+                    if (timeout_type == TimeoutType.TimeoutNone
+                            and timeout_none_ok):
+                        confirm_cmd_to_use = 'SendMsg'
                         send_msg_serial_num = self.add_cmd(
                             SendMsg(cmd_runners=sender_name,
                                     receivers=receiver_name,
@@ -8129,10 +8226,12 @@ class ConfigVerifier:
                                     error_stopped_target=error_stopped_target,
                                     stopped_remotes=stopped_remotes,
                                     log_msg=log_msg))
+                    # elif (timeout_type == TimeoutType.TimeoutFalse
+                    #       or (timeout_type == TimeoutType.TimeoutTrue
+                    #           and (state == st.ThreadState.Registered
+                    #                or state == st.ThreadState.Alive))):
                     elif (timeout_type == TimeoutType.TimeoutFalse
-                          or (timeout_type == TimeoutType.TimeoutTrue
-                              and (state == st.ThreadState.Registered
-                                   or state == st.ThreadState.Alive))):
+                          and timeout_false_ok):
                         timeout_time = 6
                         confirm_cmd_to_use = 'SendMsgTimeoutFalse'
                         send_msg_serial_num = self.add_cmd(
@@ -8145,9 +8244,9 @@ class ConfigVerifier:
                                 stopped_remotes=stopped_remotes,
                                 log_msg=log_msg))
 
-                    else:  # TimeoutType.TimeoutTrue
+                    elif (timeout_type == TimeoutType.TimeoutTrue
+                          and timeout_true_ok):
                         timeout_time = 0.5
-                        send_msg_issued = False
                         confirm_cmd_to_use = 'SendMsgTimeoutTrue'
                         send_msg_serial_num = self.add_cmd(
                             SendMsgTimeoutTrue(
@@ -8156,9 +8255,13 @@ class ConfigVerifier:
                                 msgs_to_send=sender_msgs,
                                 timeout=timeout_time,
                                 unreg_timeout_names=receiver_name,
+                                fullq_timeout_names=[],
                                 error_stopped_target=error_stopped_target,
                                 stopped_remotes=stopped_remotes,
                                 log_msg=log_msg))
+                    else:
+                        assert False
+
                     self.add_cmd(
                         Pause(cmd_runners=self.commander_name,
                               pause_seconds=pause_time))
@@ -10643,7 +10746,10 @@ class ConfigVerifier:
             stopped_remotes: names of threads that are stopped
 
         """
-        self.log_test_msg(f'handle_send entry: {cmd_runner=}, {receivers=} ')
+        self.log_test_msg(f'handle_send entry: {cmd_runner=}, {receivers=}, '
+                          f'{timeout_type=}, {error_stopped_target=}, '
+                          f'{unreg_timeout_names=}, {fullq_timeout_names=}, '
+                          f'{stopped_remotes=}')
         self.log_ver.add_call_seq(
             name='send_msg',
             seq='test_smart_thread.py::ConfigVerifier.handle_send_msg')
@@ -11622,12 +11728,15 @@ class ConfigVerifier:
     ####################################################################
     def stop_thread(self,
                     cmd_runner: str,
-                    stop_names: set[str]) -> None:
+                    stop_names: set[str],
+                    reset_ops_count: bool = False) -> None:
         """Start the named thread.
 
         Args:
             cmd_runner: name of thread doing the stop thread
             stop_names: names of the threads to stop
+            reset_ops_count: specifies whether to set the
+                pending_ops_count to zero
         """
         self.log_test_msg(f'{cmd_runner=} stop_thread entry for {stop_names=}')
 
@@ -11652,10 +11761,12 @@ class ConfigVerifier:
                     self.log_test_msg(f'{stop_name} has been stopped by '
                                       f'{cmd_runner}')
                     self.monitor_event.set()
-                    # with self.ops_lock:
-                    #     if stop_name in self.expected_registered:
-                    #         self.expected_registered[
-                    #             stop_name].is_alive = False
+                    if reset_ops_count:
+                        with self.ops_lock:
+                            for pair_key in self.expected_pairs.keys():
+                                if stop_name in pair_key:
+                                    self.expected_pairs[pair_key][
+                                        stop_name].reset_ops_count = True
                     work_names -= {stop_name}
                     break
                 time.sleep(0.05)
@@ -11669,7 +11780,6 @@ class ConfigVerifier:
 
         self.log_test_msg(f'{cmd_runner=} stop_thread exiting for '
                           f'{stop_names=}')
-
 
     ####################################################################
     # update_pair_array
@@ -11717,9 +11827,11 @@ class ConfigVerifier:
                 if pair_key not in self.expected_pairs:
                     self.expected_pairs[pair_key] = {
                         new_name: ThreadPairStatus(
-                            pending_ops_count=name_poc),
+                            pending_ops_count=name_poc,
+                            reset_ops_count=False),
                         other_name: ThreadPairStatus(
-                            pending_ops_count=other_poc)}
+                            pending_ops_count=other_poc,
+                            reset_ops_count=False)}
                     self.add_log_msg(re.escape(
                         f"{cmd_runner} created "
                         "_refresh_pair_array with "
@@ -11762,7 +11874,8 @@ class ConfigVerifier:
                     # looks OK, just add in the new name
                     self.expected_pairs[pair_key][
                         new_name] = ThreadPairStatus(
-                        pending_ops_count=name_poc)
+                        pending_ops_count=name_poc,
+                        reset_ops_count=False)
                     self.add_log_msg(re.escape(
                         f"{cmd_runner} added status_blocks entry "
                         f"for pair_key = {pair_key}, "
@@ -11820,8 +11933,10 @@ class ConfigVerifier:
                     # msg will be delivered or the resume will be done
                     # (otherwise we should not have called
                     # inc_ops_count)
-                    if (pend_ops_cnt := self.expected_pairs[pair_key][
-                            del_name].pending_ops_count) > 0:
+                    if ((pend_ops_cnt := self.expected_pairs[pair_key][
+                            del_name].pending_ops_count) > 0
+                            and not self.expected_pairs[pair_key][
+                            del_name].reset_ops_count):
                         if pair_key not in self.pending_ops_counts:
                             self.pending_ops_counts[pair_key] = {}
                         self.pending_ops_counts[pair_key][
@@ -11978,6 +12093,8 @@ class ConfigVerifier:
 
                 if (self.expected_pairs[pair_key][
                     name].pending_ops_count == 0
+                        and not self.expected_pairs[pair_key][
+                            name].reset_ops_count
                         and not st.SmartThread._pair_array[
                             pair_key].status_blocks[name].msg_q.empty()):
                     self.abort_all_f1_threads()
