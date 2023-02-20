@@ -8077,35 +8077,6 @@ class ConfigVerifier:
                 recv_msg_ok = True
             reset_ops_count = False
 
-        # if (send_msg_state == st.ThreadState.Unregistered
-        #         and send_msg_lap == recv_msg_lap
-        #         and not error_stopped_target):
-        #     if timeout_type == TimeoutType.TimeoutTrue:
-        #         recv_msg_ok = False
-        #     else:
-        #         recv_msg_ok = True
-        #     reset_ops_count = False
-
-        # if (send_msg_state == st.ThreadState.Unregistered
-        #         and send_msg_lap == 0
-        #         and recv_msg_lap == 0
-        #         and error_stopped_target):
-        #     if timeout_type == TimeoutType.TimeoutTrue:
-        #         recv_msg_ok = False
-        #     else:
-        #         recv_msg_ok = True
-        #     reset_ops_count = False
-        #
-        # if (send_msg_state == st.ThreadState.Unregistered
-        #         and send_msg_lap == 1
-        #         and recv_msg_lap == 1
-        #         and error_stopped_target):
-        #     if timeout_type == TimeoutType.TimeoutTrue:
-        #         recv_msg_ok = False
-        #     else:
-        #         recv_msg_ok = True
-        #     reset_ops_count = False
-
         if (send_msg_state == st.ThreadState.Registered
                 and send_msg_lap == recv_msg_lap):
             if timeout_type == TimeoutType.TimeoutTrue:
@@ -8114,41 +8085,6 @@ class ConfigVerifier:
             else:
                 recv_msg_ok = True
             reset_ops_count = False
-
-        # if (send_msg_state == st.ThreadState.Registered
-        #         and send_msg_lap == recv_msg_lap
-        #         and not error_stopped_target):
-        #     if timeout_type == TimeoutType.TimeoutTrue:
-        #         recv_msg_ok = True
-        #         timeout_type = TimeoutType.TimeoutNone
-        #     else:
-        #         recv_msg_ok = True
-        #     reset_ops_count = False
-
-########################################################################
-        # if (send_msg_state == st.ThreadState.Registered
-        #         and send_msg_lap == 0
-        #         and recv_msg_lap == 0
-        #         and error_stopped_target):
-        #     if timeout_type == TimeoutType.TimeoutTrue:
-        #         recv_msg_ok = True
-        #         timeout_type = TimeoutType.TimeoutNone
-        #     else:
-        #         recv_msg_ok = True
-        #     reset_ops_count = False
-        #
-        # if (send_msg_state == st.ThreadState.Registered
-        #         and send_msg_lap == 1
-        #         and recv_msg_lap == 1
-        #         and error_stopped_target):
-        #     if timeout_type == TimeoutType.TimeoutTrue:
-        #         recv_msg_ok = True
-        #         timeout_type = TimeoutType.TimeoutNone
-        #     else:
-        #         recv_msg_ok = True
-        #     reset_ops_count = False
-
-########################################################################
 
         if (send_msg_state == st.ThreadState.Alive
                 and send_msg_lap == recv_msg_lap):
@@ -8159,56 +8095,22 @@ class ConfigVerifier:
                 recv_msg_ok = True
             reset_ops_count = False
 
-        # if (send_msg_state == st.ThreadState.Alive
-        #         and send_msg_lap == recv_msg_lap
-        #         and not error_stopped_target):
-        #     if timeout_type == TimeoutType.TimeoutTrue:
-        #         recv_msg_ok = True
-        #         timeout_type = TimeoutType.TimeoutNone
-        #     else:
-        #         recv_msg_ok = True
-        #     reset_ops_count = False
-        #
-        # if (send_msg_state == st.ThreadState.Alive
-        #         and send_msg_lap == 0
-        #         and recv_msg_lap == 0
-        #         and error_stopped_target):
-        #     if timeout_type == TimeoutType.TimeoutTrue:
-        #         recv_msg_ok = True
-        #         timeout_type = TimeoutType.TimeoutNone
-        #     else:
-        #         recv_msg_ok = True
-        #     reset_ops_count = False
-        #
-        # if (send_msg_state == st.ThreadState.Alive
-        #         and send_msg_lap == 1
-        #         and recv_msg_lap == 1
-        #         and error_stopped_target):
-        #     if timeout_type == TimeoutType.TimeoutTrue:
-        #         recv_msg_ok = True
-        #         timeout_type = TimeoutType.TimeoutNone
-        #     else:
-        #         recv_msg_ok = True
-        #     reset_ops_count = False
-########################################################################
-
         if (send_msg_state == st.ThreadState.Stopped
-                and send_msg_lap == recv_msg_lap
-                and not error_stopped_target):
+                and send_msg_lap == recv_msg_lap):
             if timeout_type == TimeoutType.TimeoutTrue:
                 recv_msg_ok = False
             else:
                 recv_msg_ok = False
 
-            if send_msg_lap == 1:
+            if error_stopped_target:
+                stopped_remotes = {receiver_name}
+            elif send_msg_lap == 1:
                 timeout_type = TimeoutType.TimeoutTrue
 
             reset_ops_count = False
 
         if (send_msg_state == st.ThreadState.Unregistered
-                and send_msg_lap == 0
-                and recv_msg_lap == 1
-                and not error_stopped_target):
+                and send_msg_lap != recv_msg_lap):
             if timeout_type == TimeoutType.TimeoutTrue:
                 recv_msg_ok = False
                 reset_ops_count = False
@@ -8217,9 +8119,7 @@ class ConfigVerifier:
                 reset_ops_count = True
 
         if (send_msg_state == st.ThreadState.Registered
-                and send_msg_lap == 0
-                and recv_msg_lap == 1
-                and not error_stopped_target):
+                and send_msg_lap != recv_msg_lap):
             if timeout_type == TimeoutType.TimeoutTrue:
                 recv_msg_ok = False
                 timeout_type = TimeoutType.TimeoutNone
@@ -8228,15 +8128,15 @@ class ConfigVerifier:
             reset_ops_count = True
 
         if (send_msg_state == st.ThreadState.Alive
-                and send_msg_lap == 0
-                and recv_msg_lap == 1
-                and not error_stopped_target):
+                and send_msg_lap != recv_msg_lap):
             if timeout_type == TimeoutType.TimeoutTrue:
                 recv_msg_ok = False
                 timeout_type = TimeoutType.TimeoutNone
             else:
                 recv_msg_ok = False
             reset_ops_count = True
+
+########################################################################
 
         if (send_msg_state == st.ThreadState.Stopped
                 and send_msg_lap == 0
@@ -8247,39 +8147,6 @@ class ConfigVerifier:
             else:
                 recv_msg_ok = True
             reset_ops_count = False
-
-        if (send_msg_state == st.ThreadState.Unregistered
-                and send_msg_lap == 1
-                and recv_msg_lap == 0
-                and not error_stopped_target):
-            if timeout_type == TimeoutType.TimeoutTrue:
-                recv_msg_ok = False
-                reset_ops_count = False
-            else:
-                recv_msg_ok = False
-                reset_ops_count = True
-
-        if (send_msg_state == st.ThreadState.Registered
-                and send_msg_lap == 1
-                and recv_msg_lap == 0
-                and not error_stopped_target):
-            if timeout_type == TimeoutType.TimeoutTrue:
-                recv_msg_ok = False
-                timeout_type = TimeoutType.TimeoutNone
-            else:
-                recv_msg_ok = False
-                reset_ops_count = True
-
-        if (send_msg_state == st.ThreadState.Alive
-                and send_msg_lap == 1
-                and recv_msg_lap == 0
-                and not error_stopped_target):
-            if timeout_type == TimeoutType.TimeoutTrue:
-                recv_msg_ok = False
-                timeout_type = TimeoutType.TimeoutNone
-            else:
-                recv_msg_ok = False
-                reset_ops_count = True
 
         if (send_msg_state == st.ThreadState.Stopped
                 and send_msg_lap == 1
@@ -8292,43 +8159,66 @@ class ConfigVerifier:
                 timeout_type = TimeoutType.TimeoutTrue
             reset_ops_count = False
 
+        if (send_msg_state == st.ThreadState.Stopped
+                and send_msg_lap == 0
+                and recv_msg_lap == 1
+                and error_stopped_target):
+            if timeout_type == TimeoutType.TimeoutTrue:
+                recv_msg_ok = False
+            else:
+                recv_msg_ok = False
+            reset_ops_count = False
+            stopped_remotes = {receiver_name}
+
+        if (send_msg_state == st.ThreadState.Stopped
+                and send_msg_lap == 1
+                and recv_msg_lap == 0
+                and error_stopped_target):
+            if timeout_type == TimeoutType.TimeoutTrue:
+                recv_msg_ok = False
+            else:
+                recv_msg_ok = False
+            reset_ops_count = False
+            stopped_remotes = {receiver_name}
+
+########################################################################
+
         # if (send_msg_state == st.ThreadState.Unregistered
         #         and send_msg_lap == 1
-        #         and recv_msg_lap == 1
+        #         and recv_msg_lap == 0
         #         and not error_stopped_target):
         #     if timeout_type == TimeoutType.TimeoutTrue:
         #         recv_msg_ok = False
         #         reset_ops_count = False
         #     else:
-        #         recv_msg_ok = True
-        #         reset_ops_count = False
+        #         recv_msg_ok = False
+        #         reset_ops_count = True
 
         # if (send_msg_state == st.ThreadState.Registered
         #         and send_msg_lap == 1
-        #         and recv_msg_lap == 1
+        #         and recv_msg_lap == 0
         #         and not error_stopped_target):
         #     if timeout_type == TimeoutType.TimeoutTrue:
-        #         recv_msg_ok = True
+        #         recv_msg_ok = False
         #         timeout_type = TimeoutType.TimeoutNone
-        #         reset_ops_count = False
         #     else:
-        #         recv_msg_ok = True
-        #         reset_ops_count = False
+        #         recv_msg_ok = False
+        #         reset_ops_count = True
 
         # if (send_msg_state == st.ThreadState.Alive
         #         and send_msg_lap == 1
-        #         and recv_msg_lap == 1
+        #         and recv_msg_lap == 0
         #         and not error_stopped_target):
         #     if timeout_type == TimeoutType.TimeoutTrue:
-        #         recv_msg_ok = True
+        #         recv_msg_ok = False
         #         timeout_type = TimeoutType.TimeoutNone
         #     else:
-        #         recv_msg_ok = True
-        #     reset_ops_count = False
+        #         recv_msg_ok = False
+        #         reset_ops_count = True
 
         # if (send_msg_state == st.ThreadState.Stopped
         #         and send_msg_lap == 1
-        #         and recv_msg_lap == 1
+        #         and recv_msg_lap == 0
         #         and not error_stopped_target):
         #     if timeout_type == TimeoutType.TimeoutTrue:
         #         recv_msg_ok = False
@@ -8337,184 +8227,94 @@ class ConfigVerifier:
         #         timeout_type = TimeoutType.TimeoutTrue
         #     reset_ops_count = False
 
-        ################################################################
-
         # if (send_msg_state == st.ThreadState.Unregistered
         #         and send_msg_lap == 0
-        #         and recv_msg_lap == 0
-        #         and error_stopped_target):
-        #     if timeout_type == TimeoutType.TimeoutTrue:
-        #         recv_msg_ok = False
-        #     else:
-        #         recv_msg_ok = True
-        #     reset_ops_count = False
-
-        # if (send_msg_state == st.ThreadState.Registered
-        #         and send_msg_lap == 0
-        #         and recv_msg_lap == 0
-        #         and error_stopped_target):
-        #     if timeout_type == TimeoutType.TimeoutTrue:
-        #         recv_msg_ok = True
-        #         timeout_type = TimeoutType.TimeoutNone
-        #     else:
-        #         recv_msg_ok = True
-        #     reset_ops_count = False
-
-        # if (send_msg_state == st.ThreadState.Alive
-        #         and send_msg_lap == 0
-        #         and recv_msg_lap == 0
-        #         and error_stopped_target):
-        #     if timeout_type == TimeoutType.TimeoutTrue:
-        #         recv_msg_ok = True
-        #         timeout_type = TimeoutType.TimeoutNone
-        #     else:
-        #         recv_msg_ok = True
-        #     reset_ops_count = False
-
-        if (send_msg_state == st.ThreadState.Stopped
-                and send_msg_lap == 0
-                and recv_msg_lap == 0
-                and error_stopped_target):
-            if timeout_type == TimeoutType.TimeoutTrue:
-                recv_msg_ok = False
-            else:
-                recv_msg_ok = False
-            reset_ops_count = False
-            stopped_remotes = {receiver_name}
-
-        if (send_msg_state == st.ThreadState.Unregistered
-                and send_msg_lap == 0
-                and recv_msg_lap == 1
-                and error_stopped_target):
-            if timeout_type == TimeoutType.TimeoutTrue:
-                recv_msg_ok = False
-                reset_ops_count = False
-            else:
-                recv_msg_ok = False
-                reset_ops_count = True
-
-        if (send_msg_state == st.ThreadState.Registered
-                and send_msg_lap == 0
-                and recv_msg_lap == 1
-                and error_stopped_target):
-            if timeout_type == TimeoutType.TimeoutTrue:
-                recv_msg_ok = False
-                timeout_type = TimeoutType.TimeoutNone
-                reset_ops_count = True
-            else:
-                recv_msg_ok = False
-                reset_ops_count = True
-
-        if (send_msg_state == st.ThreadState.Alive
-                and send_msg_lap == 0
-                and recv_msg_lap == 1
-                and error_stopped_target):
-            if timeout_type == TimeoutType.TimeoutTrue:
-                recv_msg_ok = False
-                timeout_type = TimeoutType.TimeoutNone
-            else:
-                recv_msg_ok = False
-            reset_ops_count = True
-
-        if (send_msg_state == st.ThreadState.Stopped
-                and send_msg_lap == 0
-                and recv_msg_lap == 1
-                and error_stopped_target):
-            if timeout_type == TimeoutType.TimeoutTrue:
-                recv_msg_ok = False
-            else:
-                recv_msg_ok = False
-            reset_ops_count = False
-            stopped_remotes = {receiver_name}
-
-        if (send_msg_state == st.ThreadState.Unregistered
-                and send_msg_lap == 1
-                and recv_msg_lap == 0
-                and error_stopped_target):
-            if timeout_type == TimeoutType.TimeoutTrue:
-                recv_msg_ok = False
-                reset_ops_count = False
-            else:
-                recv_msg_ok = False
-                reset_ops_count = True
-
-        if (send_msg_state == st.ThreadState.Registered
-                and send_msg_lap == 1
-                and recv_msg_lap == 0
-                and error_stopped_target):
-            if timeout_type == TimeoutType.TimeoutTrue:
-                recv_msg_ok = False
-                timeout_type = TimeoutType.TimeoutNone
-            else:
-                recv_msg_ok = False
-            reset_ops_count = True
-
-        if (send_msg_state == st.ThreadState.Alive
-                and send_msg_lap == 1
-                and recv_msg_lap == 0
-                and error_stopped_target):
-            if timeout_type == TimeoutType.TimeoutTrue:
-                recv_msg_ok = False
-                timeout_type = TimeoutType.TimeoutNone
-            else:
-                recv_msg_ok = False
-            reset_ops_count = True
-
-        if (send_msg_state == st.ThreadState.Stopped
-                and send_msg_lap == 1
-                and recv_msg_lap == 0
-                and error_stopped_target):
-            if timeout_type == TimeoutType.TimeoutTrue:
-                recv_msg_ok = False
-            else:
-                recv_msg_ok = False
-            reset_ops_count = False
-            stopped_remotes = {receiver_name}
-
-        # if (send_msg_state == st.ThreadState.Unregistered
-        #         and send_msg_lap == 1
         #         and recv_msg_lap == 1
         #         and error_stopped_target):
         #     if timeout_type == TimeoutType.TimeoutTrue:
         #         recv_msg_ok = False
         #         reset_ops_count = False
         #     else:
-        #         recv_msg_ok = True
+        #         recv_msg_ok = False
+        #         reset_ops_count = True
+
+        # if (send_msg_state == st.ThreadState.Registered
+        #         and send_msg_lap == 0
+        #         and recv_msg_lap == 1
+        #         and error_stopped_target):
+        #     if timeout_type == TimeoutType.TimeoutTrue:
+        #         recv_msg_ok = False
+        #         timeout_type = TimeoutType.TimeoutNone
+        #         reset_ops_count = True
+        #     else:
+        #         recv_msg_ok = False
+        #         reset_ops_count = True
+
+        # if (send_msg_state == st.ThreadState.Alive
+        #         and send_msg_lap == 0
+        #         and recv_msg_lap == 1
+        #         and error_stopped_target):
+        #     if timeout_type == TimeoutType.TimeoutTrue:
+        #         recv_msg_ok = False
+        #         timeout_type = TimeoutType.TimeoutNone
+        #     else:
+        #         recv_msg_ok = False
+        #     reset_ops_count = True
+
+        # if (send_msg_state == st.ThreadState.Stopped
+        #         and send_msg_lap == 0
+        #         and recv_msg_lap == 1
+        #         and error_stopped_target):
+        #     if timeout_type == TimeoutType.TimeoutTrue:
+        #         recv_msg_ok = False
+        #     else:
+        #         recv_msg_ok = False
+        #     reset_ops_count = False
+        #     stopped_remotes = {receiver_name}
+
+        # if (send_msg_state == st.ThreadState.Unregistered
+        #         and send_msg_lap == 1
+        #         and recv_msg_lap == 0
+        #         and error_stopped_target):
+        #     if timeout_type == TimeoutType.TimeoutTrue:
+        #         recv_msg_ok = False
         #         reset_ops_count = False
+        #     else:
+        #         recv_msg_ok = False
+        #         reset_ops_count = True
 
         # if (send_msg_state == st.ThreadState.Registered
         #         and send_msg_lap == 1
-        #         and recv_msg_lap == 1
+        #         and recv_msg_lap == 0
         #         and error_stopped_target):
         #     if timeout_type == TimeoutType.TimeoutTrue:
-        #         recv_msg_ok = True
+        #         recv_msg_ok = False
         #         timeout_type = TimeoutType.TimeoutNone
-        #         reset_ops_count = False
         #     else:
-        #         recv_msg_ok = True
-        #         reset_ops_count = False
+        #         recv_msg_ok = False
+        #     reset_ops_count = True
 
         # if (send_msg_state == st.ThreadState.Alive
         #         and send_msg_lap == 1
-        #         and recv_msg_lap == 1
+        #         and recv_msg_lap == 0
         #         and error_stopped_target):
         #     if timeout_type == TimeoutType.TimeoutTrue:
-        #         recv_msg_ok = True
+        #         recv_msg_ok = False
         #         timeout_type = TimeoutType.TimeoutNone
         #     else:
-        #         recv_msg_ok = True
-        #     reset_ops_count = False
+        #         recv_msg_ok = False
+        #     reset_ops_count = True
 
-        if (send_msg_state == st.ThreadState.Stopped
-                and send_msg_lap == 1
-                and recv_msg_lap == 1
-                and error_stopped_target):
-            if timeout_type == TimeoutType.TimeoutTrue:
-                recv_msg_ok = False
-            else:
-                recv_msg_ok = False
-            reset_ops_count = False
-            stopped_remotes = {receiver_name}
+        # if (send_msg_state == st.ThreadState.Stopped
+        #         and send_msg_lap == 1
+        #         and recv_msg_lap == 0
+        #         and error_stopped_target):
+        #     if timeout_type == TimeoutType.TimeoutTrue:
+        #         recv_msg_ok = False
+        #     else:
+        #         recv_msg_ok = False
+        #     reset_ops_count = False
+        #     stopped_remotes = {receiver_name}
 
         ################################################################
 
