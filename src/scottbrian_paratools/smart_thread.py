@@ -1861,7 +1861,7 @@ class SmartThread:
         Notes:
             must be holding the registry lock at least shared
         """
-        for pair_key, remote in pk_remotes:
+        for pair_key, remote, _ in pk_remotes:
             if pair_key in SmartThread._pair_array:
                 # having a pair_key in the array implies our entry
                 # exists - set local_sb for easy references
@@ -2421,6 +2421,9 @@ class SmartThread:
 
         """
         timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
+
+        logger.debug(
+            f'TestDebug {self.name} request with {remotes=}')
 
         if not remotes:
             raise SmartThreadInvalidInput(f'{self.name} {request_name} '
