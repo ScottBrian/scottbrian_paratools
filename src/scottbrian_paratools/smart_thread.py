@@ -2422,9 +2422,6 @@ class SmartThread:
         """
         timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
 
-        logger.debug(
-            f'TestDebug {self.name} request with {remotes=}')
-
         if not remotes:
             raise SmartThreadInvalidInput(f'{self.name} {request_name} '
                                           'request with no targets specified.')
