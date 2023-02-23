@@ -5785,7 +5785,7 @@ class ConfigVerifier:
         num_deleters = 1
         num_adders = 1
 
-        num_lockers = 3
+        num_lockers = 5
         
         num_active_needed = (num_receivers 
                              + num_senders 
@@ -5845,7 +5845,7 @@ class ConfigVerifier:
             var_name_for_log='resumer_names')
 
         ################################################################
-        # choose resumer_names
+        # choose syncer_names
         ################################################################
         syncer_names = self.choose_names(
             name_collection=active_names,
@@ -6012,8 +6012,14 @@ class ConfigVerifier:
                     validate_config=False)
 
         lock_positions: list[str] = []
+        first_cmd_lock_pos = ''
+        cmd_0_name: str = ''
+        cmd_0_confirmer: str = ''
+        cmd_0_serial_num: int = 0
         ################################################################
-        # get lock to keep the first recv_msg/wait getting too far ahead
+        # Get lock 0 to keep the first recv_msg/wait progressing beyond
+        # the lock obtain in _request_setup where the pk_remotes list
+        # is built.
         ################################################################
         obtain_lock_serial_num_0 = self.add_cmd(
             LockObtain(cmd_runners=locker_names[0]))
@@ -6027,6 +6033,12 @@ class ConfigVerifier:
                 confirm_serial_num=obtain_lock_serial_num_0,
                 confirmers=locker_names[0]))
 
+        ################################################################
+        # verify locks held: lock_0
+        ################################################################
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
         ################################################################
         # do the first recv or wait
         ################################################################
@@ -6070,16 +6082,25 @@ class ConfigVerifier:
             first_cmd_lock_pos = waiters[0]
             lock_positions.append(waiters[0])
 
+        ################################################################
+        # verify locks held: lock_0|request_0a
+        ################################################################
         self.add_cmd(
             LockVerify(cmd_runners=self.commander_name,
                        exp_positions=lock_positions.copy()))
+
         ################################################################
-        # get lock to keep second recv_msg/wait/del/add behind first
+        # Get lock 1 to keep the second recv_msg/wait progressing beyond
+        # the lock obtain in _request_setup where the pk_remotes list
+        # is built.
         ################################################################
-        obtain_lock_serial_num_1 = self.add_cmd(
+        self.add_cmd(
             LockObtain(cmd_runners=locker_names[1]))
         lock_positions.append(locker_names[1])
 
+        ################################################################
+        # verify locks held: lock_0|request_0a|lock_1
+        ################################################################
         self.add_cmd(
             LockVerify(cmd_runners=self.commander_name,
                        exp_positions=lock_positions.copy()))
@@ -6088,9 +6109,9 @@ class ConfigVerifier:
         # do second recv_msg/wait/del/add behind first
         ################################################################
         second_cmd_lock_pos: str = ''
-        cmd_1_name = ''
-        cmd_1_confirmer = ''
-        cmd_1_serial_num = 0
+        cmd_1_name: str = ''
+        cmd_1_confirmer: str = ''
+        cmd_1_serial_num: int = 0
         if (def_del_scenario == DefDelScenario.Recv0Recv1
                 or def_del_scenario == DefDelScenario.Recv1Recv0
                 or def_del_scenario == DefDelScenario.WaitRecv):
@@ -6155,28 +6176,114 @@ class ConfigVerifier:
             second_cmd_lock_pos = adder_names[0]
             lock_positions.append(adder_names[0])
 
+        ################################################################
+        # verify locks held:
+        # if second request: lock_0|request_0a|lock_1|request_1a
+        # if no second request: lock_0|request_0a|lock_1
+        ################################################################
         self.add_cmd(
             LockVerify(cmd_runners=self.commander_name,
                        exp_positions=lock_positions.copy()))
+
         ################################################################
-        # get lock to freeze first and second recv_msg/wait just
-        # before the refresh so we can swap lock positions
+        # Get lock 2 to keep the first recv_msg/wait progressing beyond
+        # the lock obtain in _request_loop.
         ################################################################
-        obtain_lock_serial_num_2 = self.add_cmd(
+        self.add_cmd(
             LockObtain(cmd_runners=locker_names[2]))
         lock_positions.append(locker_names[2])
+
+        ################################################################
+        # verify locks held:
+        # if second request: lock_0|request_0a|lock_1|request_1a|lock_2
+        # if no second request: lock_0|request_0a|lock_1|lock_2
+        ################################################################
         self.add_cmd(
             LockVerify(cmd_runners=self.commander_name,
                        exp_positions=lock_positions.copy()))
 
         ################################################################
-        # release first lock to allow first recv_msg/wait to go
+        # release lock 0 to allow first recv_msg/wait to progress
+        # to the lock obtain in _request_loop
         ################################################################
-        release_lock_serial_num_0 = self.add_cmd(
+        self.add_cmd(
             LockRelease(cmd_runners=locker_names[0]))
         lock_positions.remove(locker_names[0])
+        # releasing lock 0 will allow the first recv/wait to go and then
+        # get behind lock 2
+        lock_positions.remove(first_cmd_lock_pos)
+        lock_positions.append(first_cmd_lock_pos)
 
-        # releasing the first lock will allow the first recv/wait to go
+        ################################################################
+        # verify locks held:
+        # if second request: lock_1|request_1a|lock_2|request_0b
+        # if no second request: lock_1|lock_2|request_0b
+        ################################################################
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # get lock 3 to keep second recv_msg/wait/del/add behind first
+        ################################################################
+        self.add_cmd(
+            LockObtain(cmd_runners=locker_names[3]))
+        lock_positions.append(locker_names[3])
+
+        ################################################################
+        # verify locks held:
+        # if second request: lock_1|request_1a|lock_2|request_0b|lock_3
+        # if no second request: lock_1|lock_2|request_0b|lock_3
+        ################################################################
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # release lock 1 to allow second recv_msg/wait to progress
+        # to the lock obtain in _request_loop
+        ################################################################
+        self.add_cmd(
+            LockRelease(cmd_runners=locker_names[1]))
+        lock_positions.remove(locker_names[1])
+        if second_cmd_lock_pos:
+            lock_positions.remove(second_cmd_lock_pos)
+            lock_positions.append(second_cmd_lock_pos)
+
+        ################################################################
+        # verify locks held:
+        # if second request: lock_2|request_0b|lock_3|request_1b
+        # if no second request: lock_2|request_0b|lock_3
+        ################################################################
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # get lock 4 to freeze first and second recv_msg/wait just
+        # before the refresh so we can swap lock positions
+        ################################################################
+        self.add_cmd(
+            LockObtain(cmd_runners=locker_names[4]))
+        lock_positions.append(locker_names[4])
+
+        ################################################################
+        # verify locks held:
+        # if second request: lock_2|request_0b|lock_3|request_1b|lock_4
+        # if no second request: lock_2|request_0b|lock_3|lock_4
+        ################################################################
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # release lock_2 to allow first recv_msg/wait to go
+        ################################################################
+        release_lock_serial_num_2 = self.add_cmd(
+            LockRelease(cmd_runners=locker_names[2]))
+        lock_positions.remove(locker_names[2])
+
+        # releasing lock_2 will allow the first recv/wait to go
         lock_positions.remove(first_cmd_lock_pos)
 
         # the first recv/wait will now get behind the last lock
@@ -6192,18 +6299,29 @@ class ConfigVerifier:
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
                 confirm_cmd='LockRelease',
-                confirm_serial_num=release_lock_serial_num_0,
-                confirmers=locker_names[0]))
+                confirm_serial_num=release_lock_serial_num_2,
+                confirmers=locker_names[2]))
 
+        ################################################################
+        # verify locks held:
+        # if deferred delete case:
+        # if second request: lock_3|request_1b|lock_4|request_0c
+        # if no second request: lock_3|lock_4|request_0c
+        #
+        # if not deferred delete case:
+        # if second request: lock_3|request_1b|lock_4
+        # if no second request: lock_3|lock_4
+        ################################################################
         self.add_cmd(
             LockVerify(cmd_runners=self.commander_name,
                        exp_positions=lock_positions.copy()))
+
         ################################################################
-        # release second lock to allow second recv_msg/wait to go
+        # release lock_3 to allow second recv_msg/wait to go
         ################################################################
-        release_lock_serial_num_1 = self.add_cmd(
-            LockRelease(cmd_runners=locker_names[1]))
-        lock_positions.remove(locker_names[1])
+        release_lock_serial_num_3 = self.add_cmd(
+            LockRelease(cmd_runners=locker_names[3]))
+        lock_positions.remove(locker_names[3])
 
         # releasing the second lock will allow the second recv/wait to
         # go and then get the lock exclusive behind the last lock waiter
@@ -6218,15 +6336,33 @@ class ConfigVerifier:
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
                 confirm_cmd='LockRelease',
-                confirm_serial_num=release_lock_serial_num_1,
-                confirmers=locker_names[1]))
+                confirm_serial_num=release_lock_serial_num_3,
+                confirmers=locker_names[3]))
 
+        ################################################################
+        # verify locks held:
+        # if deferred delete case and not del:
+        # if second request: lock_4|request_0c|request_1c
+        # if no second request: lock_4|request_0c
+        #
+        # if not deferred delete case and not del:
+        # if second request: lock_4|request_1b
+        # if no second request: lock_4
+        #
+        # if deferred delete case and del:
+        # if second request: lock_4|request_0c
+        # if no second request: lock_4|request_0c
+        #
+        # if not deferred delete case and del:
+        # if second request: lock_4
+        # if no second request: lock_4
+        ################################################################
         self.add_cmd(
             LockVerify(cmd_runners=self.commander_name,
                        exp_positions=lock_positions.copy()))
         ################################################################
-        # At this point we will have the first cmd behind the third
-        # lock. If there is a second cmd, it will be behind the first
+        # At this point we will have the first cmd behind lock_4.
+        # If there is a second cmd, it will be behind the first
         # cmd. We now need to swap the lock positions for some
         # scenarios.
         ################################################################
@@ -6236,28 +6372,34 @@ class ConfigVerifier:
             lock_positions[1] = lock_positions[2]
             lock_positions[2] = lock_pos_1
 
-            assert lock_positions[0] == locker_names[2]
+            assert lock_positions[0] == locker_names[4]
             assert lock_positions[1] == second_cmd_lock_pos
             assert lock_positions[2] == first_cmd_lock_pos
 
             self.add_cmd(
                 LockSwap(cmd_runners=self.commander_name,
                          new_positions=lock_positions))
+
+            ############################################################
+            # verify locks held:
+            # if deferred delete case and not del:
+            # lock_4|request_1c|request_0c
+            ############################################################
             self.add_cmd(
                 LockVerify(cmd_runners=self.commander_name,
                            exp_positions=lock_positions.copy()))
 
         ################################################################
-        # release third lock to allow both recv_msg/wait to refresh
+        # release lock_4 to allow both recv_msg/wait to refresh
         ################################################################
-        release_lock_serial_num_2 = self.add_cmd(
-            LockRelease(cmd_runners=locker_names[2]))
+        release_lock_serial_num_4 = self.add_cmd(
+            LockRelease(cmd_runners=locker_names[4]))
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
                 confirm_cmd='LockRelease',
-                confirm_serial_num=release_lock_serial_num_2,
-                confirmers=locker_names[2]))
+                confirm_serial_num=release_lock_serial_num_4,
+                confirmers=locker_names[4]))
 
         self.add_cmd(
             ConfirmResponse(
@@ -6274,6 +6416,9 @@ class ConfigVerifier:
                     confirm_serial_num=cmd_1_serial_num,
                     confirmers=cmd_1_confirmer))
 
+        ################################################################
+        # verify no locks held
+        ################################################################
         self.add_cmd(
             LockVerify(cmd_runners=self.commander_name,
                        exp_positions=[]))
@@ -11947,6 +12092,8 @@ class ConfigVerifier:
             exp_positions: the expected positions on the lock queue
             line_num: the line number where the cmd was issued
         """
+        self.log_test_msg(f'lock_verify entry: {cmd_runner=}, '
+                          f'{exp_positions=}, {line_num=}')
         start_time = time.time()
         timeout_value = 30
         lock_verified = False
@@ -11970,6 +12117,8 @@ class ConfigVerifier:
                             f' {timeout_value} seconds waiting for the '
                             f'{exp_positions=} to match \n'
                             f'{st.SmartThread._registry_lock.owner_wait_q=} ')
+        self.log_test_msg(f'lock_verify exit: {cmd_runner=}, '
+                          f'{exp_positions=}, {line_num=}')
 
     ####################################################################
     # log_name_groups
