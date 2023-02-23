@@ -6240,20 +6240,27 @@ class ConfigVerifier:
                        exp_positions=lock_positions.copy()))
 
         ################################################################
-        # release lock 1 to allow second recv_msg/wait to progress
-        # to the lock obtain in _request_loop
+        # release lock 1 to allow second recv_msg/wait/del to progress.
+        # For recv_msg/wait, to the lock obtain in _request_loop.
+        # For del, it will finish up and not get behind the last lock.
         ################################################################
         self.add_cmd(
             LockRelease(cmd_runners=locker_names[1]))
         lock_positions.remove(locker_names[1])
+
         if second_cmd_lock_pos:
             lock_positions.remove(second_cmd_lock_pos)
-            lock_positions.append(second_cmd_lock_pos)
+            # recv, wait, or add will get behind lock_3, not del
+            if (def_del_scenario != DefDelScenario.RecvDel
+                    and def_del_scenario != DefDelScenario.WaitDel):
+                lock_positions.append(second_cmd_lock_pos)
+            else:
+                second_cmd_lock_pos = ''
 
         ################################################################
         # verify locks held:
         # if second request: lock_2|request_0b|lock_3|request_1b
-        # if no second request: lock_2|request_0b|lock_3
+        # if no second request or del: lock_2|request_0b|lock_3
         ################################################################
         self.add_cmd(
             LockVerify(cmd_runners=self.commander_name,
@@ -6270,7 +6277,7 @@ class ConfigVerifier:
         ################################################################
         # verify locks held:
         # if second request: lock_2|request_0b|lock_3|request_1b|lock_4
-        # if no second request: lock_2|request_0b|lock_3|lock_4
+        # if no second request or del: lock_2|request_0b|lock_3|lock_4
         ################################################################
         self.add_cmd(
             LockVerify(cmd_runners=self.commander_name,
@@ -6310,7 +6317,7 @@ class ConfigVerifier:
         #
         # if not deferred delete case:
         # if second request: lock_3|request_1b|lock_4
-        # if no second request: lock_3|lock_4
+        # if no second request or del: lock_3|lock_4
         ################################################################
         self.add_cmd(
             LockVerify(cmd_runners=self.commander_name,
@@ -12717,7 +12724,8 @@ class ConfigVerifier:
         ################################################################
         search_msg = ("config_cmd: RecvMsg\(serial=[0-9]+, line=[0-9]+, "
                       f"cmd_runners='{receiver_names[0]}', "
-                      f"senders='{sender_names[0]}'\)")
+                      f"senders='{sender_names[0]}', "
+                      "error_stopped_target=False\)")
 
         cc_recv_0_log_msg, cc_recv_0_log_pos = self.get_log_msg(
             search_msg=search_msg,
