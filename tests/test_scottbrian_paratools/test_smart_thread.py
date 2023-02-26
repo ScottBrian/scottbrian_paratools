@@ -233,10 +233,12 @@ num_stopped_2_arg_list = [0, 1, 2]
 # Test settings for test_recv_msg_scenarios
 ########################################################################
 recv_msg_state_arg_list = [
-    st.ThreadState.Unregistered,
-    st.ThreadState.Registered,
-    st.ThreadState.Alive,
-    st.ThreadState.Stopped]
+    (st.ThreadState.Unregistered, st.ThreadState.Unregistered),
+    (st.ThreadState.Unregistered, st.ThreadState.Registered),
+    (st.ThreadState.Registered, st.ThreadState.Unregistered),
+    (st.ThreadState.Registered, st.ThreadState.Alive),
+    (st.ThreadState.Alive, st.ThreadState.Stopped),
+    (st.ThreadState.Stopped, st.ThreadState.Unregistered)]
 
 recv_msg_lap_arg_list = [0, 1]
 
@@ -262,10 +264,12 @@ resume_lap_arg_list = [0, 1]
 # Test settings for test_send_msg_scenarios
 ########################################################################
 send_msg_state_arg_list = [
-    st.ThreadState.Unregistered,
-    st.ThreadState.Registered,
-    st.ThreadState.Alive,
-    st.ThreadState.Stopped]
+    (st.ThreadState.Unregistered, st.ThreadState.Unregistered),
+    (st.ThreadState.Unregistered, st.ThreadState.Registered),
+    (st.ThreadState.Registered, st.ThreadState.Unregistered),
+    (st.ThreadState.Registered, st.ThreadState.Alive),
+    (st.ThreadState.Alive, st.ThreadState.Stopped),
+    (st.ThreadState.Stopped, st.ThreadState.Unregistered)]
 
 
 ########################################################################
@@ -2652,7 +2656,7 @@ def num_senders_arg(request: Any) -> int:
 # recv_msg_state_arg
 ###############################################################################
 @pytest.fixture(params=recv_msg_state_arg_list)  # type: ignore
-def recv_msg_state_arg(request: Any) -> st.ThreadState:
+def recv_msg_state_arg(request: Any) -> tuple[st.ThreadState, st.ThreadState]:
     """State of sender when recv_msg is to be issued.
 
     Args:
@@ -2661,14 +2665,14 @@ def recv_msg_state_arg(request: Any) -> st.ThreadState:
     Returns:
         The params values are returned one at a time
     """
-    return cast(st.ThreadState, request.param)
+    return cast(tuple[st.ThreadState, st.ThreadState], request.param)
 
 
 ###############################################################################
 # send_msg_state_arg
 ###############################################################################
 @pytest.fixture(params=send_msg_state_arg_list)  # type: ignore
-def send_msg_state_arg(request: Any) -> st.ThreadState:
+def send_msg_state_arg(request: Any) -> tuple[st.ThreadState, st.ThreadState]:
     """State of sender when recv_msg is to be issued.
 
     Args:
@@ -2677,7 +2681,7 @@ def send_msg_state_arg(request: Any) -> st.ThreadState:
     Returns:
         The params values are returned one at a time
     """
-    return cast(st.ThreadState, request.param)
+    return cast(tuple[st.ThreadState, st.ThreadState], request.param)
 
 
 ###############################################################################
@@ -6592,7 +6596,7 @@ class ConfigVerifier:
     def build_recv_msg_suite(
             self,
             timeout_type: TimeoutType,
-            recv_msg_state: st.ThreadState,
+            recv_msg_state: tuple[st.ThreadState, st.ThreadState],
             recv_msg_lap: int,
             send_msg_lap: int,
             error_stopped_target: bool) -> None:
@@ -6662,11 +6666,14 @@ class ConfigVerifier:
         ################################################################
         # lap loop
         ################################################################
+        current_state = st.ThreadState.Unregistered
         for lap in range(2):
             ############################################################
             # start loop to advance sender through the config states
             ############################################################
             for state in (
+                    st.ThreadState.Unregistered,
+                    st.ThreadState.Registered,
                     st.ThreadState.Unregistered,
                     st.ThreadState.Registered,
                     st.ThreadState.Alive,
@@ -6675,11 +6682,25 @@ class ConfigVerifier:
                 # do join to make sender unregistered
                 ########################################################
                 if state == st.ThreadState.Unregistered:
-                    if lap == 1:  # sender already unregistered lap 0
+                    if (lap == 0
+                            and current_state == st.ThreadState.Unregistered):
+                        pass
+                    elif (lap == 0
+                            and current_state == st.ThreadState.Registered):
+                        self.add_cmd(Unregister(
+                            cmd_runners='alpha',
+                            unregister_targets=sender_name))
+                    elif (lap == 1
+                          and current_state == st.ThreadState.Stopped):
                         self.build_join_suite(
                             cmd_runners=self.commander_name,
                             join_target_names=sender_name,
                             validate_config=False)
+                    elif (lap == 1
+                          and current_state == st.ThreadState.Registered):
+                        self.add_cmd(Unregister(
+                            cmd_runners='alpha',
+                            unregister_targets=sender_name))
 
                 ########################################################
                 # do create to make sender registered
@@ -6692,6 +6713,7 @@ class ConfigVerifier:
                                          target_rtn=outer_f1,
                                          app_config=AppConfig.ScriptStyle)],
                         validate_config=False)
+                    current_state = st.ThreadState.Registered
                 ########################################################
                 # do start to make sender alive
                 ########################################################
@@ -6705,6 +6727,7 @@ class ConfigVerifier:
                             SendMsg(cmd_runners=sender_name,
                                     receivers=receiver_name,
                                     msgs_to_send=sender_msgs))
+                    current_state = st.ThreadState.Alive
                 ########################################################
                 # do stop to make sender stopped
                 ########################################################
@@ -6713,6 +6736,7 @@ class ConfigVerifier:
                         cmd_runner=self.commander_name,
                         names=sender_name,
                         validate_config=False)
+                    current_state = st.ThreadState.Stopped
                 ########################################################
                 # issue recv_msg
                 ########################################################
@@ -8536,7 +8560,7 @@ class ConfigVerifier:
     def build_send_msg_suite(
             self,
             timeout_type: TimeoutType,
-            send_msg_state: st.ThreadState,
+            send_msg_state: tuple[st.ThreadState, st.ThreadState],
             send_msg_lap: int,
             recv_msg_lap: int,
             error_stopped_target: bool,
@@ -8560,11 +8584,11 @@ class ConfigVerifier:
         # Make sure we have enough threads. Each of the scenarios will
         # require one thread for the commander, one thread for the
         # sender, and one thread for the receiver, for a total of three.
-        assert 4 <= len(self.unregistered_names)
+        assert 3 <= len(self.unregistered_names)
 
         self.build_config(
             cmd_runner=self.commander_name,
-            num_active=3)  # one for commander and two for senders
+            num_active=2)  # one for commander and two for senders
 
         self.log_name_groups()
 
@@ -8578,12 +8602,12 @@ class ConfigVerifier:
         ################################################################
         sender_names = self.choose_names(
             name_collection=active_names,
-            num_names_needed=2,
+            num_names_needed=1,
             update_collection=True,
             var_name_for_log='sender_names')
 
         ################################################################
-        # choose sender_names
+        # choose receiver_names
         ################################################################
         receiver_names = self.choose_names(
             name_collection=self.unregistered_names,
@@ -8598,10 +8622,12 @@ class ConfigVerifier:
         ################################################################
         receiver_name = receiver_names[0]
         sender_name = sender_names[0]
-        sender_name2 = sender_names[1]
         sender_msgs: dict[str, str] = {
             sender_name: (f'send test: {sender_name} sending msg at '
-                          f'{self.get_ptime()}')}
+                          f'{self.get_ptime()}'),
+            receiver_name: (f'send test: {receiver_name} sending msg at '
+                            f'{self.get_ptime()}')
+        }
 
         confirm_cmd_to_use = 'SendMsg'
         send_msg_serial_num = 0
@@ -8616,7 +8642,8 @@ class ConfigVerifier:
                 if send_msg_lap == recv_msg_lap:
                     recv_msg_ok = True
                 else:
-                    if send_resume == 'sync':
+                    if (send_resume == 'sync'
+                            or send_resume == 'sync_send'):
                         if send_msg_lap < recv_msg_lap:
                             if error_stopped_target:
                                 stopped_remotes = {receiver_name}
@@ -8635,7 +8662,8 @@ class ConfigVerifier:
             if send_msg_lap == recv_msg_lap:
                 recv_msg_ok = True
             else:
-                if send_resume == 'sync':
+                if (send_resume == 'sync'
+                        or send_resume == 'sync_send'):
                     if send_msg_lap < recv_msg_lap:
                         if error_stopped_target:
                             stopped_remotes = {receiver_name}
@@ -8653,7 +8681,8 @@ class ConfigVerifier:
                 if send_msg_lap == 1:
                     timeout_type = TimeoutType.TimeoutTrue
                 else:
-                    if send_resume == 'sync':
+                    if (send_resume == 'sync'
+                            or send_resume == 'sync_send'):
                         if send_msg_lap == recv_msg_lap:
                             timeout_type = TimeoutType.TimeoutTrue
                         else:
@@ -8704,6 +8733,21 @@ class ConfigVerifier:
                         start_names=receiver_name,
                         validate_config=False)
 
+                    if send_resume == 'sync_send':
+                        send_msg_serial_num2 = self.add_cmd(
+                            SendMsg(
+                                cmd_runners=receiver_name,
+                                receivers=sender_name,
+                                msgs_to_send=sender_msgs,
+                                error_stopped_target=True,
+                                stopped_remotes=set(),
+                                log_msg=log_msg))
+                        self.add_cmd(
+                            ConfirmResponse(
+                                cmd_runners=self.commander_name,
+                                confirm_cmd='SendMsg',
+                                confirm_serial_num=send_msg_serial_num2,
+                                confirmers=receiver_name))
                     if recv_msg_lap == lap:
                         if recv_msg_ok:
                             if send_resume == 'send':
@@ -8785,7 +8829,8 @@ class ConfigVerifier:
                                     error_stopped_target=error_stopped_target,
                                     stopped_names=stopped_remotes,
                                     log_msg=log_msg))
-                        elif send_resume == 'sync':
+                        elif (send_resume == 'sync'
+                              or send_resume == 'sync_send'):
                             confirm_cmd_to_use = 'Sync'
                             send_msg_serial_num = self.add_cmd(
                                 Sync(
@@ -8794,29 +8839,29 @@ class ConfigVerifier:
                                     error_stopped_target=error_stopped_target,
                                     stopped_remotes=stopped_remotes,
                                     log_msg=log_msg))
-                        elif send_resume == 'sync_send':
-                            confirm_cmd_to_use = 'Sync'
-                            send_msg_serial_num = self.add_cmd(
-                                Sync(
-                                    cmd_runners=sender_name,
-                                    targets=receiver_name,
-                                    error_stopped_target=error_stopped_target,
-                                    stopped_remotes=stopped_remotes,
-                                    log_msg=log_msg))
-                            send_msg_serial_num2 = self.add_cmd(
-                                SendMsg(
-                                    cmd_runners=sender_name2,
-                                    receivers=sender_name,
-                                    msgs_to_send=sender_msgs,
-                                    error_stopped_target=True,
-                                    stopped_remotes=set(),
-                                    log_msg=log_msg))
-                            self.add_cmd(
-                                ConfirmResponse(
-                                    cmd_runners=self.commander_name,
-                                    confirm_cmd='SendMsg',
-                                    confirm_serial_num=send_msg_serial_num2,
-                                    confirmers=sender_name2))
+                        # elif send_resume == 'sync_send':
+                        #     confirm_cmd_to_use = 'Sync'
+                        #     send_msg_serial_num = self.add_cmd(
+                        #         Sync(
+                        #             cmd_runners=sender_name,
+                        #             targets=receiver_name,
+                        #             error_stopped_target=error_stopped_target,
+                        #             stopped_remotes=stopped_remotes,
+                        #             log_msg=log_msg))
+                        #     send_msg_serial_num2 = self.add_cmd(
+                        #         SendMsg(
+                        #             cmd_runners=sender_name2,
+                        #             receivers=sender_name,
+                        #             msgs_to_send=sender_msgs,
+                        #             error_stopped_target=True,
+                        #             stopped_remotes=set(),
+                        #             log_msg=log_msg))
+                        #     self.add_cmd(
+                        #         ConfirmResponse(
+                        #             cmd_runners=self.commander_name,
+                        #             confirm_cmd='SendMsg',
+                        #             confirm_serial_num=send_msg_serial_num2,
+                        #             confirmers=sender_name2))
                     elif timeout_type == TimeoutType.TimeoutFalse:
                         timeout_time = 6
                         if send_resume == 'send':
@@ -8840,7 +8885,8 @@ class ConfigVerifier:
                                     error_stopped_target=error_stopped_target,
                                     stopped_names=stopped_remotes,
                                     log_msg=log_msg))
-                        elif send_resume == 'sync':
+                        elif (send_resume == 'sync'
+                              or send_resume == 'sync_send'):
                             confirm_cmd_to_use = 'SyncTimeoutFalse'
                             send_msg_serial_num = self.add_cmd(
                                 SyncTimeoutFalse(
@@ -8850,30 +8896,30 @@ class ConfigVerifier:
                                     error_stopped_target=error_stopped_target,
                                     stopped_remotes=stopped_remotes,
                                     log_msg=log_msg))
-                        elif send_resume == 'sync_send':
-                            confirm_cmd_to_use = 'SyncTimeoutFalse'
-                            send_msg_serial_num = self.add_cmd(
-                                SyncTimeoutFalse(
-                                    cmd_runners=sender_name,
-                                    targets=receiver_name,
-                                    timeout=timeout_time,
-                                    error_stopped_target=error_stopped_target,
-                                    stopped_remotes=stopped_remotes,
-                                    log_msg=log_msg))
-                            send_msg_serial_num2 = self.add_cmd(
-                                SendMsg(
-                                    cmd_runners=sender_name2,
-                                    receivers=sender_name,
-                                    msgs_to_send=sender_msgs,
-                                    error_stopped_target=True,
-                                    stopped_remotes=set(),
-                                    log_msg=log_msg))
-                            self.add_cmd(
-                                ConfirmResponse(
-                                    cmd_runners=self.commander_name,
-                                    confirm_cmd='SendMsg',
-                                    confirm_serial_num=send_msg_serial_num2,
-                                    confirmers=sender_name2))
+                        # elif send_resume == 'sync_send':
+                        #     confirm_cmd_to_use = 'SyncTimeoutFalse'
+                        #     send_msg_serial_num = self.add_cmd(
+                        #         SyncTimeoutFalse(
+                        #             cmd_runners=sender_name,
+                        #             targets=receiver_name,
+                        #             timeout=timeout_time,
+                        #             error_stopped_target=error_stopped_target,
+                        #             stopped_remotes=stopped_remotes,
+                        #             log_msg=log_msg))
+                        #     send_msg_serial_num2 = self.add_cmd(
+                        #         SendMsg(
+                        #             cmd_runners=sender_name2,
+                        #             receivers=sender_name,
+                        #             msgs_to_send=sender_msgs,
+                        #             error_stopped_target=True,
+                        #             stopped_remotes=set(),
+                        #             log_msg=log_msg))
+                        #     self.add_cmd(
+                        #         ConfirmResponse(
+                        #             cmd_runners=self.commander_name,
+                        #             confirm_cmd='SendMsg',
+                        #             confirm_serial_num=send_msg_serial_num2,
+                        #             confirmers=sender_name2))
                     else:  # timeout_type == TimeoutType.TimeoutTrue
                         timeout_time = 0.5
                         if send_resume == 'send':
@@ -8900,7 +8946,8 @@ class ConfigVerifier:
                                     error_stopped_target=error_stopped_target,
                                     stopped_names=stopped_remotes,
                                     log_msg=log_msg))
-                        elif send_resume == 'sync':
+                        elif (send_resume == 'sync'
+                              or send_resume == 'sync_send'):
                             confirm_cmd_to_use = 'SyncTimeoutTrue'
                             send_msg_serial_num = self.add_cmd(
                                 SyncTimeoutTrue(
@@ -8911,31 +8958,31 @@ class ConfigVerifier:
                                     error_stopped_target=error_stopped_target,
                                     stopped_remotes=stopped_remotes,
                                     log_msg=log_msg))
-                        elif send_resume == 'sync_send':
-                            confirm_cmd_to_use = 'SyncTimeoutTrue'
-                            send_msg_serial_num = self.add_cmd(
-                                SyncTimeoutTrue(
-                                    cmd_runners=sender_name,
-                                    targets=receiver_name,
-                                    timeout=timeout_time,
-                                    timeout_remotes=receiver_name,
-                                    error_stopped_target=error_stopped_target,
-                                    stopped_remotes=stopped_remotes,
-                                    log_msg=log_msg))
-                            send_msg_serial_num2 = self.add_cmd(
-                                SendMsg(
-                                    cmd_runners=sender_name2,
-                                    receivers=sender_name,
-                                    msgs_to_send=sender_msgs,
-                                    error_stopped_target=True,
-                                    stopped_remotes=set(),
-                                    log_msg=log_msg))
-                            self.add_cmd(
-                                ConfirmResponse(
-                                    cmd_runners=self.commander_name,
-                                    confirm_cmd='SendMsg',
-                                    confirm_serial_num=send_msg_serial_num2,
-                                    confirmers=sender_name2))
+                        # elif send_resume == 'sync_send':
+                        #     confirm_cmd_to_use = 'SyncTimeoutTrue'
+                        #     send_msg_serial_num = self.add_cmd(
+                        #         SyncTimeoutTrue(
+                        #             cmd_runners=sender_name,
+                        #             targets=receiver_name,
+                        #             timeout=timeout_time,
+                        #             timeout_remotes=receiver_name,
+                        #             error_stopped_target=error_stopped_target,
+                        #             stopped_remotes=stopped_remotes,
+                        #             log_msg=log_msg))
+                        #     send_msg_serial_num2 = self.add_cmd(
+                        #         SendMsg(
+                        #             cmd_runners=sender_name2,
+                        #             receivers=sender_name,
+                        #             msgs_to_send=sender_msgs,
+                        #             error_stopped_target=True,
+                        #             stopped_remotes=set(),
+                        #             log_msg=log_msg))
+                        #     self.add_cmd(
+                        #         ConfirmResponse(
+                        #             cmd_runners=self.commander_name,
+                        #             confirm_cmd='SendMsg',
+                        #             confirm_serial_num=send_msg_serial_num2,
+                        #             confirmers=sender_name2))
                     self.add_cmd(
                         Pause(cmd_runners=self.commander_name,
                               pause_seconds=pause_time))
@@ -8947,7 +8994,7 @@ class ConfigVerifier:
                 cmd_runners=[self.commander_name],
                 confirm_cmd=confirm_cmd_to_use,
                 confirm_serial_num=send_msg_serial_num,
-                confirmers=sender_names))
+                confirmers=sender_name))
 
     ####################################################################
     # build_msg_timeout_suite
@@ -15405,7 +15452,7 @@ class TestSmartThreadScenarios:
     def test_recv_msg_scenarios(
             self,
             timeout_type_arg: TimeoutType,
-            recv_msg_state_arg: st.ThreadState,
+            recv_msg_state_arg: tuple[st.ThreadState, st.ThreadState],
             recv_msg_lap_arg: int,
             send_msg_lap_arg: int,
             error_stopped_target_arg: bool,
@@ -15454,7 +15501,7 @@ class TestSmartThreadScenarios:
     def test_send_msg_scenarios(
             self,
             timeout_type_arg: TimeoutType,
-            send_msg_state_arg: st.ThreadState,
+            send_msg_state_arg: tuple[st.ThreadState, st.ThreadState],
             send_msg_lap_arg: int,
             recv_msg_lap_arg: int,
             error_stopped_target_arg: bool,

@@ -305,6 +305,7 @@ class SmartThread:
         del_deferred: bool = False
         wait_wait: bool = False
         sync_wait: bool = False
+        sync_wait_set_false: bool = False
         wait_timeout_specified: bool = False
         deadlock: bool = False
         conflict: bool = False
@@ -1118,6 +1119,12 @@ class SmartThread:
                     SmartThread._pair_array[
                         pair_key].status_blocks[
                         thread_name].del_deferred = True
+                    logger.debug(
+                        f'TestDebug {self.name} _refresh_pair_array '
+                        f'set del_deferred for {thread_name=}, '
+                        f'{SmartThread._pair_array[pair_key].status_blocks[thread_name].msg_q.empty()=} ,'
+                        f'{SmartThread._pair_array[pair_key].status_blocks[thread_name].wait_event.is_set()=}, '
+                        f'{SmartThread._pair_array[pair_key].status_blocks[thread_name].sync_event.is_set()=} ')
             # remove _connection_pair if both names are gone
             if not SmartThread._pair_array[
                     pair_key].status_blocks:
@@ -1746,6 +1753,7 @@ class SmartThread:
             True when request completed, False otherwise
 
         """
+        set_sync_here = False
         if not local_sb.sync_wait:
             if self._remote_stopped(request_block=request_block,
                                     pk_remote=pk_remote):
@@ -1772,6 +1780,10 @@ class SmartThread:
                     # sync resume remote thread
                     remote_sb.sync_event.set()
                     local_sb.sync_wait = True
+                    set_sync_here = True
+                    logger.debug(
+                        f'TestDebug {self.name} process_sync '
+                        f'set sync_event for {pk_remote.remote=}')
 
         if local_sb.sync_wait:
             if local_sb.sync_event.is_set():
@@ -1837,12 +1849,37 @@ class SmartThread:
                             f'TestDebug {self.name} sync '
                             f'set remote and local '
                             f'conflict flags {pk_remote=}')
+                if (pk_remote.num_stops
+                        < SmartThread._stop_array[pk_remote.remote]
+                        and not remote_sb.sync_event.is_set()):
+                    local_sb.sync_wait = False
+                    logger.debug(
+                        f'TestDebug {self.name} sync '
+                        f'reset sync_wait')
 
             if local_sb.conflict:
                 request_block.conflict_remotes |= {pk_remote.remote}
                 logger.debug(
                     f'TestDebug {self.name} sync set '
                     f'{request_block.conflict_remotes=}')
+
+            # if (pk_remote.num_stops
+            #         < SmartThread._stop_array[pk_remote.remote]
+            #         and):
+            #     request_block.stopped_remotes |= {pk_remote.remote}
+            #     if not local_sb.sync_wait_set_false:
+            #         if not local_sb.msg_q.empty():
+            #             local_sb.sync_wait = False
+            #             local_sb.sync_wait_set_false = True
+            #             logger.debug(
+            #                 f'TestDebug {self.name} sync '
+            #                 f'reset sync_wait')
+            #     return False
+            # if self._remote_stopped(request_block=request_block,
+            #                         pk_remote=pk_remote):
+            #     # @sbt temp fix - remove after error_if_stopped removed
+            #     local_sb.sync_wait = False
+            #     return False
 
         return False
 
@@ -1861,6 +1898,8 @@ class SmartThread:
         Notes:
             must be holding the registry lock at least shared
         """
+        logger.debug(
+            f'TestDebug {self.name} backout entry: {backout_request=}')
         for pair_key, remote, _ in pk_remotes:
             if pair_key in SmartThread._pair_array:
                 # having a pair_key in the array implies our entry
@@ -1881,6 +1920,9 @@ class SmartThread:
                         local_sb.sync_wait = False
                         if local_sb.sync_event.is_set():
                             local_sb.sync_event.clear()
+                            logger.debug(
+                                f'TestDebug {self.name} backout entry: '
+                                f'cleared local sync_event')
                         else:
                             if remote in SmartThread._pair_array[
                                     pair_key].status_blocks:
@@ -1888,6 +1930,9 @@ class SmartThread:
                                     pair_key].status_blocks[remote]
                                 # backout the sync resume
                                 remote_sb.sync_event.clear()
+                                logger.debug(
+                                    f'TestDebug {self.name} backout entry: '
+                                    f'cleared remote sync_event')
                     if backout_request == 'smart_wait' and local_sb.wait_wait:
                         local_sb.wait_wait = False
                         local_sb.wait_event.clear()
