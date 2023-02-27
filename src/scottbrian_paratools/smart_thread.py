@@ -60,7 +60,7 @@ import logging
 import queue
 import threading
 import time
-from typing import (Any, Callable, ClassVar, NamedTuple, Optional, Type,
+from typing import (Any, cast, Callable, ClassVar, NamedTuple, Optional, Type,
                     TypeAlias, TYPE_CHECKING, Union)
 
 ########################################################################
@@ -1038,10 +1038,9 @@ class SmartThread:
         #             continue
         pair_keys = combinations(sorted(SmartThread._registry.keys()), 2)
 
-        for pair_key_a in pair_keys:
+        for pair_key in cast(PairKey, pair_keys):
             # create new connection pair if needed
             # pair_key = self._get_pair_key(name0, name1)
-            pair_key: PairKey = pair_key_a
             if pair_key not in SmartThread._pair_array:
                 SmartThread._pair_array[pair_key] = (
                     SmartThread.ConnectionPair(
@@ -1112,15 +1111,13 @@ class SmartThread:
             if len(SmartThread._pair_array[pair_key].status_blocks) == 1:
                 thread_name = list(SmartThread._pair_array[
                         pair_key].status_blocks.keys())[0]
-                if (SmartThread._pair_array[
-                        pair_key].status_blocks[thread_name].msg_q.empty()
-                        and not SmartThread._pair_array[
-                        pair_key].status_blocks[
-                            thread_name].wait_event.is_set()
-                        and not SmartThread._pair_array[
-                        pair_key].status_blocks[
-                            thread_name].sync_event.is_set()):
-                    _ = SmartThread._pair_array[
+                remaining_sb = SmartThread._pair_array[
+                        pair_key].status_blocks[thread_name]
+                if (not remaining_sb.request_pending
+                        and remaining_sb.msg_q.empty()
+                        and not remaining_sb.wait_event.is_set()
+                        and not remaining_sb.sync_event.is_set()):
+                    SmartThread._pair_array[
                         pair_key].status_blocks.pop(thread_name, None)
                     logger.debug(
                         f'{current_thread_name} removed status_blocks entry'
@@ -1131,12 +1128,14 @@ class SmartThread:
                     SmartThread._pair_array[
                         pair_key].status_blocks[
                         thread_name].del_deferred = True
-                    logger.debug(
-                        f'TestDebug {self.name} _refresh_pair_array '
-                        f'set del_deferred for {thread_name=}, '
-                        f'{SmartThread._pair_array[pair_key].status_blocks[thread_name].msg_q.empty()=} ,'
-                        f'{SmartThread._pair_array[pair_key].status_blocks[thread_name].wait_event.is_set()=}, '
-                        f'{SmartThread._pair_array[pair_key].status_blocks[thread_name].sync_event.is_set()=} ')
+                    if remaining_sb.request_pending:
+                        remaining_sb.remote_was_stopped = True
+                    # logger.debug(
+                    #     f'TestDebug {self.name} _refresh_pair_array '
+                    #     f'set del_deferred for {thread_name=}, '
+                    #     f'{SmartThread._pair_array[pair_key].status_blocks[thread_name].msg_q.empty()=} ,'
+                    #     f'{SmartThread._pair_array[pair_key].status_blocks[thread_name].wait_event.is_set()=}, '
+                    #     f'{SmartThread._pair_array[pair_key].status_blocks[thread_name].sync_event.is_set()=} ')
             # remove _connection_pair if both names are gone
             if not SmartThread._pair_array[
                     pair_key].status_blocks:
@@ -2499,11 +2498,23 @@ class SmartThread:
                             'smart_sync', 'smart_wait'):
             self.verify_thread_is_current()
             with sel.SELockShare(SmartThread._registry_lock):
+                # pk_remotes = [PairKeyRemote(
+                #     self._get_pair_key(
+                #         threading.current_thread().name, remote),
+                #     remote,
+                #     SmartThread._stop_array[remote]) for remote in remotes]
                 pk_remotes = [PairKeyRemote(
-                    self._get_pair_key(
-                        threading.current_thread().name, remote),
-                    remote,
-                    SmartThread._stop_array[remote]) for remote in remotes]
+                    self._get_pair_key(self.name, remote), remote)
+                    for remote in remotes]
+                for pair_key, remote in pk_remotes:
+                    if pair_key in SmartThread._pair_array:
+                        # having a pair_key in the array implies our
+                        # entry exists - set local_sb for easy
+                        # references
+                        local_sb = SmartThread._pair_array[
+                            pair_key].status_blocks[self.name]
+                        local_sb.request_pending = True
+                        local_sb.remote_was_stopped = False
 
         request_block = RequestBlock(
             request_name=request_name,
@@ -2536,8 +2547,8 @@ class SmartThread:
     ####################################################################
     # issue_entry_log_msg
     ####################################################################
+    @staticmethod
     def _issue_entry_log_msg(
-            self,
             request_block: RequestBlock,
             log_msg: Optional[str] = None,
             ) -> str:
