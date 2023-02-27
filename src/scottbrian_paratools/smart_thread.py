@@ -185,7 +185,7 @@ class PairKeyRemote(NamedTuple):
     """NamedTuple for the request pair_key and remote name."""
     pair_key: PairKey
     remote: str
-    num_stops: int
+    # num_stops: int
 
 ########################################################################
 # RequestBlock
@@ -309,6 +309,8 @@ class SmartThread:
         wait_timeout_specified: bool = False
         deadlock: bool = False
         conflict: bool = False
+        request_pending: bool = False
+        remote_was_stopped: bool = False
 
     @dataclass
     class ConnectionPair:
@@ -1035,9 +1037,11 @@ class SmartThread:
         #         if name0 == name1:
         #             continue
         pair_keys = combinations(sorted(SmartThread._registry.keys()), 2)
-        for pair_key in pair_keys:
+
+        for pair_key_a in pair_keys:
             # create new connection pair if needed
             # pair_key = self._get_pair_key(name0, name1)
+            pair_key: PairKey = pair_key_a
             if pair_key not in SmartThread._pair_array:
                 SmartThread._pair_array[pair_key] = (
                     SmartThread.ConnectionPair(
@@ -1052,14 +1056,12 @@ class SmartThread:
             # add status block for name0 and name1 if needed
             # for name in (name0, name1):
             for name in pair_key:
-                if (name in SmartThread._pair_array[
-                        pair_key].status_blocks):
-                    # reset del_deferred in case it is ON and the
-                    # other name is a resurrected thread
-                    SmartThread._pair_array[
-                        pair_key].status_blocks[
-                        name].del_deferred = False
+                if name == pair_key[0]:
+                    test_pk_remote = PairKeyRemote(pair_key, pair_key[1])
                 else:
+                    test_pk_remote = PairKeyRemote(pair_key, pair_key[0])
+                if (name not in SmartThread._pair_array[
+                        pair_key].status_blocks):
                     # add an entry for this thread
                     SmartThread._pair_array[
                         pair_key].status_blocks[
@@ -1071,6 +1073,16 @@ class SmartThread:
                         f'{current_thread_name} added status_blocks entry '
                         f'for pair_key = {pair_key}, name = {name}')
                     changed = True
+                # reset del_deferred in case it is ON and the
+                # other name is a resurrected thread
+                SmartThread._pair_array[
+                    pair_key].status_blocks[
+                    name].del_deferred = False
+                if test_pk_remote in SmartThread._registry[
+                        name].work_pk_remotes:
+                    SmartThread._pair_array[
+                        pair_key].status_blocks[
+                        name].request_pending = True
 
         # find removable entries in connection pair array
         connection_array_del_list = []
@@ -1256,7 +1268,7 @@ class SmartThread:
             SmartThread._pair_array[
                 pk_remote.pair_key].status_blocks[
                 pk_remote.remote].msg_q.put(request_block.msg_to_send,
-                                        timeout=0.01)
+                                            timeout=0.01)
             logger.info(
                 f'{self.name} sent message to {pk_remote.remote}')
 
@@ -1849,13 +1861,13 @@ class SmartThread:
                             f'TestDebug {self.name} sync '
                             f'set remote and local '
                             f'conflict flags {pk_remote=}')
-                if (pk_remote.num_stops
-                        < SmartThread._stop_array[pk_remote.remote]
-                        and not remote_sb.sync_event.is_set()):
-                    local_sb.sync_wait = False
-                    logger.debug(
-                        f'TestDebug {self.name} sync '
-                        f'reset sync_wait')
+                # if (pk_remote.num_stops
+                #         < SmartThread._stop_array[pk_remote.remote]
+                #         and not remote_sb.sync_event.is_set()):
+                #     local_sb.sync_wait = False
+                #     logger.debug(
+                #         f'TestDebug {self.name} sync '
+                #         f'reset sync_wait')
 
             if local_sb.conflict:
                 request_block.conflict_remotes |= {pk_remote.remote}
@@ -2568,13 +2580,19 @@ class SmartThread:
             request_block: request block for the request
             pk_remote: has name and stop_count of smart_thread to check
         """
+        # if (self._get_state(pk_remote.remote) == ThreadState.Stopped
+        #         or (request_block.error_stopped_target
+        #             and pk_remote.num_stops
+        #             < SmartThread._stop_array[pk_remote.remote])):
+        #     request_block.stopped_remotes |= {pk_remote.remote}
+        #     return True
         if (self._get_state(pk_remote.remote) == ThreadState.Stopped
-                or (request_block.error_stopped_target
-                    and pk_remote.num_stops
-                    < SmartThread._stop_array[pk_remote.remote])):
+                or (pk_remote.pair_key in SmartThread._pair_array
+                    and SmartThread._pair_array[
+                        pk_remote.pair_key].status_blocks[
+                        self.name].remote_was_stopped)):
             request_block.stopped_remotes |= {pk_remote.remote}
             return True
-
         return False
 
     ####################################################################

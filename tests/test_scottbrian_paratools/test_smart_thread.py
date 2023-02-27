@@ -233,12 +233,12 @@ num_stopped_2_arg_list = [0, 1, 2]
 # Test settings for test_recv_msg_scenarios
 ########################################################################
 recv_msg_state_arg_list = [
-    (st.ThreadState.Unregistered, st.ThreadState.Unregistered),
-    (st.ThreadState.Unregistered, st.ThreadState.Registered),
-    (st.ThreadState.Registered, st.ThreadState.Unregistered),
-    (st.ThreadState.Registered, st.ThreadState.Alive),
-    (st.ThreadState.Alive, st.ThreadState.Stopped),
-    (st.ThreadState.Stopped, st.ThreadState.Unregistered)]
+    (st.ThreadState.Unregistered, 0),
+    (st.ThreadState.Unregistered, 1),
+    (st.ThreadState.Registered, 0),
+    (st.ThreadState.Registered, 1),
+    (st.ThreadState.Alive, 0),
+    (st.ThreadState.Stopped, 0)]
 
 recv_msg_lap_arg_list = [0, 1]
 
@@ -264,12 +264,12 @@ resume_lap_arg_list = [0, 1]
 # Test settings for test_send_msg_scenarios
 ########################################################################
 send_msg_state_arg_list = [
-    (st.ThreadState.Unregistered, st.ThreadState.Unregistered),
-    (st.ThreadState.Unregistered, st.ThreadState.Registered),
-    (st.ThreadState.Registered, st.ThreadState.Unregistered),
-    (st.ThreadState.Registered, st.ThreadState.Alive),
-    (st.ThreadState.Alive, st.ThreadState.Stopped),
-    (st.ThreadState.Stopped, st.ThreadState.Unregistered)]
+    (st.ThreadState.Unregistered, 0),
+    (st.ThreadState.Unregistered, 1),
+    (st.ThreadState.Registered, 0),
+    (st.ThreadState.Registered, 1),
+    (st.ThreadState.Alive, 0),
+    (st.ThreadState.Stopped, 0)]
 
 
 ########################################################################
@@ -2656,7 +2656,7 @@ def num_senders_arg(request: Any) -> int:
 # recv_msg_state_arg
 ###############################################################################
 @pytest.fixture(params=recv_msg_state_arg_list)  # type: ignore
-def recv_msg_state_arg(request: Any) -> tuple[st.ThreadState, st.ThreadState]:
+def recv_msg_state_arg(request: Any) -> tuple[st.ThreadState, int]:
     """State of sender when recv_msg is to be issued.
 
     Args:
@@ -2665,14 +2665,14 @@ def recv_msg_state_arg(request: Any) -> tuple[st.ThreadState, st.ThreadState]:
     Returns:
         The params values are returned one at a time
     """
-    return cast(tuple[st.ThreadState, st.ThreadState], request.param)
+    return cast(tuple[st.ThreadState, int], request.param)
 
 
 ###############################################################################
 # send_msg_state_arg
 ###############################################################################
 @pytest.fixture(params=send_msg_state_arg_list)  # type: ignore
-def send_msg_state_arg(request: Any) -> tuple[st.ThreadState, st.ThreadState]:
+def send_msg_state_arg(request: Any) -> tuple[st.ThreadState, int]:
     """State of sender when recv_msg is to be issued.
 
     Args:
@@ -2681,7 +2681,7 @@ def send_msg_state_arg(request: Any) -> tuple[st.ThreadState, st.ThreadState]:
     Returns:
         The params values are returned one at a time
     """
-    return cast(tuple[st.ThreadState, st.ThreadState], request.param)
+    return cast(tuple[st.ThreadState, int], request.param)
 
 
 ###############################################################################
@@ -6596,7 +6596,7 @@ class ConfigVerifier:
     def build_recv_msg_suite(
             self,
             timeout_type: TimeoutType,
-            recv_msg_state: tuple[st.ThreadState, st.ThreadState],
+            recv_msg_state: tuple[st.ThreadState, int],
             recv_msg_lap: int,
             send_msg_lap: int,
             error_stopped_target: bool) -> None:
@@ -6667,6 +6667,7 @@ class ConfigVerifier:
         # lap loop
         ################################################################
         current_state = st.ThreadState.Unregistered
+        reg_iteration = 0
         for lap in range(2):
             ############################################################
             # start loop to advance sender through the config states
@@ -6678,34 +6679,28 @@ class ConfigVerifier:
                     st.ThreadState.Registered,
                     st.ThreadState.Alive,
                     st.ThreadState.Stopped):
+                state_iteration = 0
                 ########################################################
                 # do join to make sender unregistered
                 ########################################################
                 if state == st.ThreadState.Unregistered:
-                    if (lap == 0
-                            and current_state == st.ThreadState.Unregistered):
-                        pass
-                    elif (lap == 0
-                            and current_state == st.ThreadState.Registered):
+                    if current_state == st.ThreadState.Registered:
                         self.add_cmd(Unregister(
                             cmd_runners='alpha',
                             unregister_targets=sender_name))
-                    elif (lap == 1
-                          and current_state == st.ThreadState.Stopped):
+                        state_iteration = 1
+                    elif current_state == st.ThreadState.Stopped:
                         self.build_join_suite(
                             cmd_runners=self.commander_name,
                             join_target_names=sender_name,
                             validate_config=False)
-                    elif (lap == 1
-                          and current_state == st.ThreadState.Registered):
-                        self.add_cmd(Unregister(
-                            cmd_runners='alpha',
-                            unregister_targets=sender_name))
-
+                    current_state = st.ThreadState.Unregistered
                 ########################################################
                 # do create to make sender registered
                 ########################################################
                 elif state == st.ThreadState.Registered:
+                    state_iteration = reg_iteration % 2
+                    reg_iteration += 1
                     self.build_create_suite(
                         f1_create_items=[
                             F1CreateItem(name=sender_name,
@@ -6741,7 +6736,9 @@ class ConfigVerifier:
                 # issue recv_msg
                 ########################################################
                 pause_time = 0
-                if recv_msg_state == state and recv_msg_lap == lap:
+                if (recv_msg_state[0] == state
+                        and recv_msg_state[1] == state_iteration
+                        and recv_msg_lap == lap):
                     stopped_remotes = set()
                     if ((lap == 0 and send_msg_lap == 1)
                             or timeout_type == TimeoutType.TimeoutTrue):
@@ -8560,7 +8557,7 @@ class ConfigVerifier:
     def build_send_msg_suite(
             self,
             timeout_type: TimeoutType,
-            send_msg_state: tuple[st.ThreadState, st.ThreadState],
+            send_msg_state: tuple[st.ThreadState, int],
             send_msg_lap: int,
             recv_msg_lap: int,
             error_stopped_target: bool,
@@ -8637,7 +8634,8 @@ class ConfigVerifier:
 
         stopped_remotes = set()
 
-        if send_msg_state == st.ThreadState.Unregistered:
+        if (send_msg_state[0] == st.ThreadState.Unregistered
+                and send_msg_state[1] == 0):
             if timeout_type != TimeoutType.TimeoutTrue:
                 if send_msg_lap == recv_msg_lap:
                     recv_msg_ok = True
@@ -8654,8 +8652,25 @@ class ConfigVerifier:
                     else:
                         reset_ops_count = True
 
-        if (send_msg_state == st.ThreadState.Registered
-                or send_msg_state == st.ThreadState.Alive):
+        if (send_msg_state[0] == st.ThreadState.Unregistered
+                and send_msg_state[1] == 1):
+            if timeout_type != TimeoutType.TimeoutTrue:
+                if send_msg_lap == recv_msg_lap:
+                    recv_msg_ok = True
+                else:
+                    if (send_resume == 'sync'
+                            or send_resume == 'sync_send'):
+                        if send_msg_lap < recv_msg_lap:
+                            if error_stopped_target:
+                                stopped_remotes = {receiver_name}
+                            else:
+                                recv_msg_ok = True
+                        elif send_msg_lap > recv_msg_lap:
+                            timeout_type = TimeoutType.TimeoutTrue
+                    else:
+                        reset_ops_count = True
+        if (send_msg_state[0] == st.ThreadState.Registered
+                or send_msg_state[0] == st.ThreadState.Alive):
             if timeout_type == TimeoutType.TimeoutTrue:
                 timeout_type = TimeoutType.TimeoutNone
 
@@ -8674,7 +8689,7 @@ class ConfigVerifier:
                 else:
                     reset_ops_count = True
 
-        if send_msg_state == st.ThreadState.Stopped:
+        if send_msg_state[0] == st.ThreadState.Stopped:
             if error_stopped_target:
                 stopped_remotes = {receiver_name}
             else:
@@ -8695,6 +8710,8 @@ class ConfigVerifier:
         ################################################################
         # lap loop
         ################################################################
+        current_state = st.ThreadState.Unregistered
+        reg_iteration = 0
         for lap in range(2):
             ############################################################
             # start loop to advance receiver through the config states
@@ -8702,22 +8719,32 @@ class ConfigVerifier:
             for state in (
                     st.ThreadState.Unregistered,
                     st.ThreadState.Registered,
+                    st.ThreadState.Unregistered,
+                    st.ThreadState.Registered,
                     st.ThreadState.Alive,
                     st.ThreadState.Stopped):
+                state_iteration = 0
                 ########################################################
                 # do join to make receiver unregistered
                 ########################################################
                 if state == st.ThreadState.Unregistered:
-                    if lap == 1:  # receiver already unregistered lap 0
+                    if current_state == st.ThreadState.Registered:
+                        self.add_cmd(Unregister(
+                            cmd_runners=self.commander_name,
+                            unregister_targets=receiver_name))
+                        state_iteration = 1
+                    elif current_state == st.ThreadState.Stopped:
                         self.build_join_suite(
                             cmd_runners=self.commander_name,
                             join_target_names=receiver_name,
                             validate_config=False)
-
+                    current_state = st.ThreadState.Unregistered
                 ########################################################
                 # do create to make receiver registered
                 ########################################################
                 elif state == st.ThreadState.Registered:
+                    state_iteration = reg_iteration % 2
+                    reg_iteration += 1
                     self.build_create_suite(
                         f1_create_items=[
                             F1CreateItem(name=receiver_name,
@@ -8725,6 +8752,7 @@ class ConfigVerifier:
                                          target_rtn=outer_f1,
                                          app_config=AppConfig.ScriptStyle)],
                         validate_config=False)
+                    current_state = st.ThreadState.Registered
                 ########################################################
                 # do start to make receiver alive
                 ########################################################
@@ -8795,6 +8823,7 @@ class ConfigVerifier:
                             self.add_cmd(
                                 Pause(cmd_runners=self.commander_name,
                                       pause_seconds=1))
+                    current_state = st.ThreadState.Alive
                 ########################################################
                 # do stop to make receiver stopped
                 ########################################################
@@ -8804,10 +8833,12 @@ class ConfigVerifier:
                         names=receiver_name,
                         validate_config=False,
                         reset_ops_count=reset_ops_count)
+                    current_state = st.ThreadState.Stopped
                 ########################################################
                 # issue send_msg
-                ########################################################
-                if send_msg_state == state and send_msg_lap == lap:
+                if (send_msg_state[0] == state
+                        and send_msg_state[1] == state_iteration
+                        and send_msg_lap == lap):
                     pause_time = 1
                     if timeout_type == TimeoutType.TimeoutNone:
                         if send_resume == 'send':
@@ -15452,7 +15483,7 @@ class TestSmartThreadScenarios:
     def test_recv_msg_scenarios(
             self,
             timeout_type_arg: TimeoutType,
-            recv_msg_state_arg: tuple[st.ThreadState, st.ThreadState],
+            recv_msg_state_arg: tuple[st.ThreadState, int],
             recv_msg_lap_arg: int,
             send_msg_lap_arg: int,
             error_stopped_target_arg: bool,
@@ -15501,7 +15532,7 @@ class TestSmartThreadScenarios:
     def test_send_msg_scenarios(
             self,
             timeout_type_arg: TimeoutType,
-            send_msg_state_arg: tuple[st.ThreadState, st.ThreadState],
+            send_msg_state_arg: tuple[st.ThreadState, int],
             send_msg_lap_arg: int,
             recv_msg_lap_arg: int,
             error_stopped_target_arg: bool,
