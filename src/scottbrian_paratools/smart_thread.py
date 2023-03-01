@@ -1608,51 +1608,47 @@ class SmartThread:
                 # If here, remote is in registry and is alive. This also
                 # means we have an entry for the remote in the
                 # pair_array
-        if pk_remote.remote not in SmartThread._registry:
-            return False
 
-        if self._remote_stopped(request_block=request_block,
-                                pk_remote=pk_remote):
-            return False
+                # setup a reference
+                remote_sb = SmartThread._pair_array[
+                    pk_remote.pair_key].status_blocks[
+                    pk_remote.remote]
 
-        # If here, remote is in registry and is alive or hopefully will
-        # be soon. This also means we have an entry for the remote in
-        # the status_blocks in the connection array
-        remote_sb = SmartThread._pair_array[
-            pk_remote.pair_key].status_blocks[pk_remote.remote]
+                ########################################################
+                # set wait_event
+                ########################################################
+                # For a resume request we check to see whether a
+                # previous wait is still in progress as indicated by the
+                # wait event being set. We also need to make sure there
+                # is not a pending conflict that the remote thread needs
+                # to clear. Note that we only worry about the conflict
+                # for wait - a sync conflict does not impede us here
+                # since we use different event blocks for sync and wait
+                if not (remote_sb.wait_event.is_set()
+                        or (remote_sb.conflict
+                            and remote_sb.wait_wait)):
+                    # # set the code, if one
+                    # if code:
+                    #     remote_sb.code = code
+                    # wake remote thread and start
+                    # the while loop again with one
+                    # less remote
+                    remote_sb.wait_event.set()
+                    return True
+            else:
+                if (remote_state == ThreadState.Stopped
+                        or local_sb.remote_was_stopped):
+                    request_block.stopped_remotes |= {pk_remote.remote}
+                    return True  # we are done with this remote
 
-        # for a wait request we check to see
-        # whether a previous wait is still
-        # in progress as indicated by the
-        # wait event being set. We also need
-        # to make sure there is not a
-        # pending conflict that the remote
-        # thread needs to clear. Note that
-        # we only worry about the conflict
-        # for wait - a sync conflict does
-        # not impede us here since we are
-        # using a different event block
-        if not (remote_sb.wait_event.is_set()
-                or (remote_sb.conflict
-                    and remote_sb.wait_wait)):
-
-            # # set the code, if one
-            # if code:
-            #     remote_sb.code = code
-            # wake remote thread and start
-            # the while loop again with one
-            # less remote
-            remote_sb.wait_event.set()
-            return True
-
-        return False
+        # remote is unregistered or registered or has pending conflict
+        return False  # give the remote some more time
 
     ####################################################################
     # smart_sync
     ####################################################################
     def smart_sync(self, *,
                    targets: Iterable,
-                   error_stopped_target: bool = True,
                    log_msg: Optional[str] = None,
                    timeout: OptIntFloat = None):
         """Sync up with the remote threads.
@@ -1665,8 +1661,6 @@ class SmartThread:
 
         Args:
          targets: remote threads we will sync with
-         error_stopped_target: request will raise an error if any
-                one of the targets is in a stopped state.
          log_msg: log msg for the log
          timeout: number of seconds to allow for sync to happen
 
@@ -1712,7 +1706,7 @@ class SmartThread:
         request_block = self._request_setup(
             request_name='smart_sync',
             remotes=targets,
-            error_stopped_target=error_stopped_target,
+            error_stopped_target=True,
             process_rtn=self._process_sync,
             cleanup_rtn=self._sync_wait_error_cleanup,
             get_block_lock=True,
@@ -1743,6 +1737,74 @@ class SmartThread:
             True when request completed, False otherwise
 
         """
+        with sel.SELockShare(SmartThread._registry_lock):
+            remote_state = self._get_state(name=pk_remote.remote)
+
+            if (remote_state == ThreadState.Alive
+                    and not local_sb.remote_was_stopped):
+                # If here, remote is in registry and is alive. This also
+                # means we have an entry for the remote in the
+                # pair_array
+
+                # setup a reference
+                remote_sb = SmartThread._pair_array[
+                    pk_remote.pair_key].status_blocks[
+                    pk_remote.remote]
+
+                if not local_sb.sync_wait:
+                    # for a sync request we check to see whether a
+                    # previous sync is still in progress as indicated by
+                    # the sync event being set. We also need to make
+                    # sure there is not a pending conflict that the
+                    # remote thread needs to clear. Note that we only
+                    # worry about the conflict for sync - a wait
+                    # conflict does not impede us here since we use
+                    # different event blocks for sync and wait
+                    if not (remote_sb.sync_event.is_set()
+                            or (remote_sb.conflict
+                                and remote_sb.sync_wait)):
+                        # sync resume remote thread
+                        remote_sb.sync_event.set()
+                        local_sb.sync_wait = True
+                        set_sync_here = True
+                        logger.debug(
+                            f'TestDebug {self.name} process_sync '
+                            f'set sync_event for {pk_remote.remote=}')
+                    else:
+                        return False  # remote needs more time
+
+                # we make a quick check here before releasing lock
+                if local_sb.sync_wait:
+                    if local_sb.sync_event.is_set():
+                        local_sb.sync_wait = False
+                        local_sb.wait_timeout_specified = False
+
+                        # be ready for next sync wait
+                        local_sb.sync_event.clear()
+                        if (local_sb.del_deferred and
+                                not local_sb.wait_event.is_set()):
+                            request_block.do_refresh = True
+                        logger.info(
+                            f'{self.name} smart_sync resumed by '
+                            f'{pk_remote.remote}')
+
+                        # exit, we are done with this remote
+                        return True
+
+                # set flag to indicate request is progress to prevent
+                # the pair_array entry for the target from being removed
+                # in case the target is stopped
+                remote_sb.request_target = True
+                ########################################################
+                # set sync_event
+                ########################################################
+            else:
+                if (remote_state == ThreadState.Stopped
+                        or local_sb.remote_was_stopped):
+                    request_block.stopped_remotes |= {pk_remote.remote}
+                    local_sb.sync_wait = False
+                    return True  # we are done with this remote
+
         set_sync_here = False
         if not local_sb.sync_wait:
             if self._remote_stopped(request_block=request_block,
@@ -1870,6 +1932,11 @@ class SmartThread:
             #     # @sbt temp fix - remove after error_if_stopped removed
             #     local_sb.sync_wait = False
             #     return False
+
+        with sel.SELockShare(SmartThread._registry_lock):
+            remote_sb.request_target = False
+            if remote_sb.del_deferred:
+                request_block.do_refresh = True
 
         return False
 
