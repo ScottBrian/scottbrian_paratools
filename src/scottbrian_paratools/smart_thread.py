@@ -315,7 +315,6 @@ class SmartThread:
         conflict: bool = False
         request_pending: bool = False
         request_target: bool = False
-        remote_was_stopped: bool = False
 
     @dataclass
     class ConnectionPair:
@@ -527,6 +526,40 @@ class SmartThread:
                 SmartThread._registry[name].st_state == ThreadState.Alive):
             return ThreadState.Stopped
         return SmartThread._registry[name].st_state
+
+    ####################################################################
+    # _get_target_state
+    ####################################################################
+    @staticmethod
+    def _get_target_state(pk_remote: PairKeyRemote) -> ThreadState:
+        """Get the status of a thread that is the target of a request.
+
+        Args:
+            pk_remote: contains target thread info
+
+        Returns:
+            The thread status
+
+        Notes:
+            Must be called holding the registry lock either shared or
+            exclusive
+        """
+        if pk_remote.remote not in SmartThread._registry:
+            return ThreadState.Unregistered
+
+        if (not SmartThread._registry[pk_remote.remote].thread.is_alive()
+                and SmartThread._registry[
+                    pk_remote.remote].st_state == ThreadState.Alive):
+            return ThreadState.Stopped
+
+        if (pk_remote.pair_key in SmartThread._pair_array
+                and pk_remote.remote in SmartThread._pair_array[
+                    pk_remote.pair_key].status_blocks
+                and SmartThread._pair_array[pk_remote.pair_key].status_blocks[
+                    pk_remote.remote].create_time != pk_remote.create_time):
+            return ThreadState.Stopped
+
+        return SmartThread._registry[pk_remote.remote].st_state
 
     ####################################################################
     # _set_status
@@ -1067,21 +1100,15 @@ class SmartThread:
 
             # add status block for name0 and name1 if needed
             for name in pair_key:
-                if name == pair_key[0]:
-                    other_name = pair_key[1]
-                    test_pk_remote = PairKeyRemote(pair_key, other_name, 0.0)
-                else:
-                    other_name = pair_key[0]
-                    test_pk_remote = PairKeyRemote(pair_key, other_name, 0.0)
-
                 if (name not in SmartThread._pair_array[
                         pair_key].status_blocks):
 
-                    # geet a unique time stamp
+                    # get a unique time stamp
                     create_time = time.time()
                     while create_time == (
                             SmartThread._create_pair_array_entry_time):
                         create_time = time.time()
+                    # update last create time
                     SmartThread._create_pair_array_entry_time = create_time
 
                     # add an entry for this thread
@@ -1097,30 +1124,27 @@ class SmartThread:
                         f'for pair_key = {pair_key}, name = {name}')
                     changed = True
 
+                    # find and update a zero create time in work_pk_remotes
                     if name == pair_key.name0:
                         other_name = pair_key.name1
                     else:
                         other_name = pair_key.name0
                     test_pk_remote = PairKeyRemote(pair_key, name, 0.0)
-                    if test_pk_remote in SmartThread._registry[
-                            other_name].work_pk_remotes:
-                        if SmartThread._registry[
-                                other_name].work_pk_remotes[
-                                pair_key].create_time == 0.0:
-                            SmartThread._registry[
-                                other_name].work_pk_remotes[
-                                pair_key].create_time = create_time
-                else:
+                    try:
+                        idx = SmartThread._registry[
+                            other_name].work_pk_remotes.index(test_pk_remote)
+                        SmartThread._registry[
+                            other_name].work_pk_remotes[
+                            idx].create_time = create_time
+                    except ValueError:
+                        pass  # the new entry is not a request target
+
+                else:  # entry already exists
                     # reset del_deferred in case it is ON and the
                     # other name is a resurrected thread
                     SmartThread._pair_array[
                         pair_key].status_blocks[
                         name].del_deferred = False
-                if test_pk_remote in SmartThread._registry[
-                        name].work_pk_remotes:
-                    SmartThread._pair_array[
-                        pair_key].status_blocks[
-                        name].request_pending = True
 
         # find removable entries in connection pair array
         connection_array_del_list = []
@@ -1130,31 +1154,26 @@ class SmartThread:
                 if (thread_name not in SmartThread._registry
                         and thread_name in SmartThread._pair_array[
                             pair_key].status_blocks):
-                    if (SmartThread._pair_array[
-                            pair_key].status_blocks[
-                            thread_name].request_target):
-                        SmartThread._pair_array[
-                            pair_key].status_blocks[
-                            thread_name].del_deferred = True
-                    else:
-                        SmartThread._pair_array[
-                                pair_key].status_blocks.pop(thread_name, None)
-                        logger.debug(
-                            f'{current_thread_name} removed status_blocks '
-                            f'entry for pair_key = {pair_key}, '
-                            f'name = {thread_name}')
-                        changed = True
+                    SmartThread._pair_array[
+                            pair_key].status_blocks.pop(thread_name, None)
+                    logger.debug(
+                        f'{current_thread_name} removed status_blocks '
+                        f'entry for pair_key = {pair_key}, '
+                        f'name = {thread_name}')
+                    changed = True
 
             # At this point, either or both threads of the pair will
             # have been removed if no longer registered. If only one
             # thread was removed, then the remaining thread is still
             # registered but should also be removed unless it has one or
-            # more messages pending, in which case we need to leave the
-            # entry in place to allow the thread to eventually read its
-            # messages. For this case, we will set the del_pending flag
-            # to indicate in the recv_msg method that once the msg_q is
-            # empty, _refresh_pair_array should be called to clean up
-            # this entry.
+            # more messages pending, a wait pending, or is in the middle
+            # of a request, in which case we need to leave the entry in
+            # place to allow the thread to eventually read its messages
+            # or recognize the wait or complete the request. For this
+            # case, we will set the del_pending flag to indicate in the
+            # request methods that once the request is completed,
+            # _refresh_pair_array should be called to clean up this
+            # entry.
             if len(SmartThread._pair_array[pair_key].status_blocks) == 1:
                 thread_name = list(SmartThread._pair_array[
                         pair_key].status_blocks.keys())[0]
@@ -1175,8 +1194,6 @@ class SmartThread:
                     SmartThread._pair_array[
                         pair_key].status_blocks[
                         thread_name].del_deferred = True
-                    if remaining_sb.request_pending:
-                        remaining_sb.remote_was_stopped = True
                     # logger.debug(
                     #     f'TestDebug {self.name} _refresh_pair_array '
                     #     f'set del_deferred for {thread_name=}, '
@@ -1307,10 +1324,9 @@ class SmartThread:
         ################################################################
 
         with sel.SELockShare(SmartThread._registry_lock):
-            remote_state = self._get_state(name=pk_remote.remote)
+            remote_state = self._get_target_state(pk_remote)
 
-            if (remote_state == ThreadState.Alive
-                    and not local_sb.remote_was_stopped):
+            if remote_state == ThreadState.Alive:
                 # If here, remote is in registry and is alive. This also
                 # means we have an entry for the remote in the
                 # pair_array
@@ -1484,8 +1500,7 @@ class SmartThread:
             # local flag again to make sure we don't miss a join and
             # a restart since checking the flag just above.
             with sel.SELockShare(SmartThread._registry_lock):
-                if (self._get_state(pk_remote.remote) == ThreadState.Stopped
-                        or local_sb.remote_was_stopped):
+                if self._get_target_state(pk_remote) == ThreadState.Stopped:
                     request_block.stopped_remotes |= {pk_remote.remote}
                     return True  # we are done with this remote
 
@@ -1640,10 +1655,9 @@ class SmartThread:
         # check for this and continue to wait in hopes that
         # the thread will be resurrected.
         with sel.SELockShare(SmartThread._registry_lock):
-            remote_state = self._get_state(name=pk_remote.remote)
+            remote_state = self._get_target_state(pk_remote)
 
-            if (remote_state == ThreadState.Alive
-                    and not local_sb.remote_was_stopped):
+            if remote_state == ThreadState.Alive:
                 # If here, remote is in registry and is alive. This also
                 # means we have an entry for the remote in the
                 # pair_array
@@ -1675,8 +1689,7 @@ class SmartThread:
                     remote_sb.wait_event.set()
                     return True
             else:
-                if (remote_state == ThreadState.Stopped
-                        or local_sb.remote_was_stopped):
+                if remote_state == ThreadState.Stopped:
                     request_block.stopped_remotes |= {pk_remote.remote}
                     return True  # we are done with this remote
 
@@ -1777,10 +1790,9 @@ class SmartThread:
 
         """
         with sel.SELockShare(SmartThread._registry_lock):
-            remote_state = self._get_state(name=pk_remote.remote)
+            remote_state = self._get_target_state(pk_remote)
 
-            if (remote_state == ThreadState.Alive
-                    and not local_sb.remote_was_stopped):
+            if remote_state == ThreadState.Alive:
                 # If here, remote is in registry and is alive. This also
                 # means we have an entry for the remote in the
                 # pair_array
@@ -2734,56 +2746,29 @@ class SmartThread:
     ####################################################################
     # remote_stopped
     ####################################################################
-    def _remote_stopped(self,
-                        request_block: RequestBlock,
-                        pk_remote: PairKeyRemote) -> bool:
-        """Determine whether remote thread is or was stopped.
-
-        Args:
-            request_block: request block for the request
-            pk_remote: has name and stop_count of smart_thread to check
-        """
-        # if (self._get_state(pk_remote.remote) == ThreadState.Stopped
-        #         or (request_block.error_stopped_target
-        #             and pk_remote.num_stops
-        #             < SmartThread._stop_array[pk_remote.remote])):
-        #     request_block.stopped_remotes |= {pk_remote.remote}
-        #     return True
-        if (self._get_state(pk_remote.remote) == ThreadState.Stopped
-                or (pk_remote.pair_key in SmartThread._pair_array
-                    and SmartThread._pair_array[
-                        pk_remote.pair_key].status_blocks[
-                        self.name].remote_was_stopped)):
-            request_block.stopped_remotes |= {pk_remote.remote}
-            return True
-        return False
-
-    ####################################################################
-    # remote_stopped
-    ####################################################################
-    def _remote_state(self,
-                      request_block: RequestBlock,
-                      pk_remote: PairKeyRemote) -> bool:
-        """Determine whether remote thread is or was stopped.
-
-        Args:
-            request_block: request block for the request
-            pk_remote: has name and stop_count of smart_thread to check
-        """
-        # if (self._get_state(pk_remote.remote) == ThreadState.Stopped
-        #         or (request_block.error_stopped_target
-        #             and pk_remote.num_stops
-        #             < SmartThread._stop_array[pk_remote.remote])):
-        #     request_block.stopped_remotes |= {pk_remote.remote}
-        #     return True
-        if (self._get_state(pk_remote.remote) == ThreadState.Stopped
-                or (pk_remote.pair_key in SmartThread._pair_array
-                    and SmartThread._pair_array[
-                        pk_remote.pair_key].status_blocks[
-                        self.name].remote_was_stopped)):
-            request_block.stopped_remotes |= {pk_remote.remote}
-            return True
-        return False
+    # def _remote_stopped(self,
+    #                     request_block: RequestBlock,
+    #                     pk_remote: PairKeyRemote) -> bool:
+    #     """Determine whether remote thread is or was stopped.
+    #
+    #     Args:
+    #         request_block: request block for the request
+    #         pk_remote: has name and stop_count of smart_thread to check
+    #     """
+    #     # if (self._get_state(pk_remote.remote) == ThreadState.Stopped
+    #     #         or (request_block.error_stopped_target
+    #     #             and pk_remote.num_stops
+    #     #             < SmartThread._stop_array[pk_remote.remote])):
+    #     #     request_block.stopped_remotes |= {pk_remote.remote}
+    #     #     return True
+    #     if (self._get_state(pk_remote.remote) == ThreadState.Stopped
+    #             or (pk_remote.pair_key in SmartThread._pair_array
+    #                 and SmartThread._pair_array[
+    #                     pk_remote.pair_key].status_blocks[
+    #                     self.name].remote_was_stopped)):
+    #         request_block.stopped_remotes |= {pk_remote.remote}
+    #         return True
+    #     return False
 
     ####################################################################
     # verify_thread_is_current
