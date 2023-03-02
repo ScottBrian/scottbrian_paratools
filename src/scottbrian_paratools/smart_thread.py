@@ -328,6 +328,7 @@ class SmartThread:
         2000, 1, 1, 12, 0, 1)
 
     K_REQUEST_INTERVAL: IntFloat = 10
+
     ####################################################################
     # __init__
     ####################################################################
@@ -1353,11 +1354,7 @@ class SmartThread:
                     logger.info(
                         f'{self.name} sent message to {pk_remote.remote}')
 
-                    # we need to remove the remote from the unreg
-                    # or fullq sets since the send now succeeded
-                    request_block.full_send_q_remotes -= {pk_remote.remote}
-                    self.remotes_full_send_q -= {pk_remote.remote}
-                    ret_code = True
+                    return True
                 except queue.Full:
                     # If the target msg queue is full, move on to
                     # the next target (if one). We will come back
@@ -1366,48 +1363,15 @@ class SmartThread:
                     # queue before we time out.
                     request_block.full_send_q_remotes |= {pk_remote.remote}
                     self.remotes_full_send_q |= {pk_remote.remote}
-                    return True # we are done with this target
+                    return True  # we are done with this target
             else:
-                if (remote_state == ThreadState.Stopped
-                        or local_sb.remote_was_stopped):
+                if remote_state == ThreadState.Stopped:
                     request_block.stopped_remotes |= {pk_remote.remote}
                     return True  # we are done with this remote
 
                 if remote_state == ThreadState.Unregistered:
                     self.remotes_unregistered |= {pk_remote.remote}
                     return False  # give the remote some more time
-        ################################################################
-        # put the msg on the target msg_q
-        ################################################################
-        timeout_value = min(self.request_interval,
-                            request_block.request_interval)
-        ret_code = False
-        try:
-            remote_sb.msg_q.put(request_block.msg_to_send,
-                                timeout=timeout_value)
-            logger.info(
-                f'{self.name} sent message to {pk_remote.remote}')
-
-            # we need to remove the remote from the unreg
-            # or fullq sets since the send now succeeded
-            request_block.full_send_q_remotes -= {pk_remote.remote}
-            self.remotes_full_send_q -= {pk_remote.remote}
-            ret_code = True
-        except queue.Full:
-            # If the target msg queue is full, move on to
-            # the next target (if one). We will come back
-            # to the full target later and hope that it
-            # reads its messages and frees up space on its
-            # queue before we time out.
-            request_block.full_send_q_remotes |= {pk_remote.remote}
-            self.remotes_full_send_q |= {pk_remote.remote}
-
-        with sel.SELockShare(SmartThread._registry_lock):
-            remote_sb.request_target = False
-            if remote_sb.del_deferred:
-                request_block.do_refresh = True
-
-        return ret_code
 
     ####################################################################
     # recv_msg
@@ -1464,11 +1428,47 @@ class SmartThread:
             True when request completed, False otherwise
 
         """
+        with sel.SELockShare(SmartThread._registry_lock):
+            # we start off assuming remote is alive and we have a msg
+            try:
+                # recv message from remote
+                request_block.ret_msg = local_sb.msg_q.get(timeout=0.01)
+                logger.info(
+                    f'{self.name} received msg from {pk_remote.remote}')
+                # if we had wanted to delete an entry in the
+                # pair array for this thread because the other
+                # thread exited, but we could not because this
+                # thread had a pending msg to recv, then we
+                # deferred the delete. If the msg_q for this
+                # thread is now empty as a result of this recv,
+                # we can go ahead and delete the pair, so
+                # set the flag to do a refresh
+                if local_sb.del_deferred and local_sb.msg_q.empty():
+                    request_block.do_refresh = True
+                return True
+
+            except queue.Empty:
+                # The msg queue was just now empty which rules out that
+                # case that the pair_key is valid only because of a
+                # deferred delete. So, we know the remote is in the
+                # registry and in the status block.
+
+                remote_state = self._get_target_state(pk_remote)
+
+                if remote_state == ThreadState.Stopped:
+                    request_block.stopped_remotes |= {pk_remote.remote}
+                    return True  # we are done with this remote
+
+                if remote_state == ThreadState.Alive:
+                    local_sb.request_pending = True
+                else:
+                    return False  # remote needs more time
+
         timeout_value = min(self.request_interval,
                             request_block.request_interval)
         try:
             # recv message from remote
-            request_block.ret_msg = local_sb.msg_q.get(timeout=timeout_value)
+            request_block.ret_msg = local_sb.msg_q.get(timeout=0.01)
             logger.info(
                 f'{self.name} received msg from {pk_remote.remote}')
             # if we had wanted to delete an entry in the
@@ -1484,26 +1484,6 @@ class SmartThread:
             return True
 
         except queue.Empty:
-            # The msg queue was just now empty which rules out that case
-            # that the pair_key is valid only because of a deferred
-            # delete. So, we know the remote is in the registry and in
-            # the status block.
-
-            # we can check our local_sb without the lock, so this is a
-            # fast but incomplete check for the remote being stopped
-            if local_sb.remote_was_stopped:
-                request_block.stopped_remotes |= {pk_remote.remote}
-                return True  # we are done with this remote
-
-            # getting the is a little more disruptive, but we need
-            # to know if the remote is stopped. Also, we check the
-            # local flag again to make sure we don't miss a join and
-            # a restart since checking the flag just above.
-            with sel.SELockShare(SmartThread._registry_lock):
-                if self._get_target_state(pk_remote) == ThreadState.Stopped:
-                    request_block.stopped_remotes |= {pk_remote.remote}
-                    return True  # we are done with this remote
-
         return False  # give the remote more time
 
     ####################################################################

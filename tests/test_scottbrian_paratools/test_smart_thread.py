@@ -2161,29 +2161,21 @@ class WaitForResumeTimeouts(ConfigCmd):
 ########################################################################
 class WaitForSendTimeouts(ConfigCmd):
     def __init__(self,
-                 cmd_runners: StrOrList,
-                 sender_names: StrOrList,
-                 unreg_names: StrOrList,
-                 fullq_names: StrOrList
+                 cmd_runners: Iterable,
+                 sender_names: Iterable,
+                 timeout_names: Iterable,
                  ) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
-        if isinstance(sender_names, str):
-            sender_names = [sender_names]
-        self.sender_names = sender_names
+        self.sender_names = get_set(sender_names)
 
         if isinstance(unreg_names, str):
             unreg_names = [unreg_names]
-        self.unreg_names = unreg_names
-
-        if isinstance(fullq_names, str):
-            fullq_names = [fullq_names]
-        self.fullq_names = fullq_names
+        self.timeout_names = get_set(timeout_names)
 
         self.arg_list += ['sender_names',
-                          'unreg_names',
-                          'fullq_names']
+                          'timeout_names']
 
     def run_process(self, cmd_runner: str) -> None:
         """Run the command.
@@ -2191,11 +2183,10 @@ class WaitForSendTimeouts(ConfigCmd):
         Args:
             cmd_runner: name of thread running the command
         """
-        self.config_ver.wait_for_send_msg_timeouts(
+        self.config_ver.wait_for_request_timeouts(
             cmd_runner=cmd_runner,
-            sender_names=self.sender_names,
-            unreg_names=self.unreg_names,
-            fullq_names=self.fullq_names)
+            actor_names=self.sender_names,
+            timeout_names=self.timeout_names)
 
 
 ########################################################################
@@ -14823,58 +14814,42 @@ class ConfigVerifier:
             time.sleep(0.1)
 
     ####################################################################
-    # wait_for_msg_timeouts
+    # wait_for_request_timeouts
     ####################################################################
-    def wait_for_send_msg_timeouts(self,
+    def wait_for_request_timeouts(self,
                                    cmd_runner: str,
-                                   sender_names: list[str],
-                                   unreg_names: list[str],
-                                   fullq_names: list[str]) -> None:
+                                   actor_names: set[str],
+                                   timeout_names: set[str]) -> None:
         """Verify that the senders have detected the timeout threads.
 
         Args:
             cmd_runner: thread doing the wait
             sender_names: names of the threads to check for timeout
-            unreg_names: threads that cause timeout by being
+            timeout_names: threads that cause timeout by being
                 unregistered
-            fullq_names: threads that cause timeout because their msg_q
-                is full
 
         """
-        unregs = []
-        if unreg_names:
-            unregs = sorted(unreg_names)
-        fullqs = []
-        if fullq_names:
-            fullqs = sorted(fullq_names)
+        timeouts: set[str] = set()
+        if timeout_names:
+            timeouts = set(sorted(timeout_names))
 
-        work_senders = sender_names.copy()
+        work_actors = actor_names.copy()
         start_time = time.time()
-        while work_senders:
-            for sender in work_senders:
-                test_unregs = []
-                test_fullqs = []
-                if sender == self.commander_name:
-                    if self.commander_thread.remotes_unregistered:
-                        test_unregs = sorted(
-                            self.commander_thread.remotes_unregistered)
-                    if self.commander_thread.remotes_full_send_q:
-                        test_fullqs = sorted(
-                            self.commander_thread.remotes_full_send_q)
-                else:
-                    if self.all_threads[sender].remotes_unregistered:
-                        test_unregs = sorted(
-                            self.all_threads[sender].remotes_unregistered)
-                    if self.all_threads[sender].remotes_full_send_q:
-                        test_fullqs = sorted(
-                            self.all_threads[sender].remotes_full_send_q)
-
-                if unregs == test_unregs and fullqs == test_fullqs:
-                    work_senders.remove(sender)
+        test_timeouts: set[str] = set()
+        while work_actors:
+            for actor in work_actors:
+                test_timeouts = set(sorted(
+                    [remote for pk, remote, _ in self.all_threads[
+                        actor].work_pk_remotes]))
+                if timeouts == test_timeouts:
+                    work_actors.remove(actor)
+                    break
 
             time.sleep(0.1)
-            assert time.time() < start_time + 30  # allow 30 seconds
-
+            if start_time + 30 < time.time():
+                raise CmdTimedOut('wait_for_request_timeouts timed out '
+                                  f'with {work_actors=}, '
+                                  f'{timeouts=}, {sorted(test_timeouts)=}')
     ####################################################################
     # wait_for_resume_timeouts
     ####################################################################
