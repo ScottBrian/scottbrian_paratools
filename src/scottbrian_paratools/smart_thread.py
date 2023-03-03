@@ -327,7 +327,15 @@ class SmartThread:
     _pair_array_last_update: datetime = datetime(
         2000, 1, 1, 12, 0, 1)
 
-    K_REQUEST_INTERVAL: IntFloat = 10
+    # the following constant is the amount of time we will allow
+    # for a request to complete while holding the registry lock before
+    # checking the remote state
+    K_REQUEST_MIN_INTERVAL: IntFloat = 0.01
+
+    # the following constant is the default amount of time we will allow
+    # for a request to complete while holding the registry lock after
+    # determining that the remote state is alive
+    K_REQUEST_MAX_INTERVAL: IntFloat = 1.0
 
     ####################################################################
     # __init__
@@ -341,7 +349,8 @@ class SmartThread:
                  auto_start: Optional[bool] = True,
                  default_timeout: OptIntFloat = None,
                  max_msgs: int = 0,
-                 request_interval: IntFloat = K_REQUEST_INTERVAL) -> None:
+                 request_max_interval: IntFloat = K_REQUEST_MAX_INTERVAL
+                 ) -> None:
         """Initialize an instance of the SmartThread class.
 
         Args:
@@ -454,10 +463,7 @@ class SmartThread:
         self.code = None
 
         self.max_msgs = max_msgs
-        self.request_interval = request_interval
-
-        self.remotes_unregistered: set[str] = set()
-        self.remotes_full_send_q: set[str] = set()
+        self.request_max_interval = request_max_interval
 
         self.work_remotes: set[str] = set()
         self.work_pk_remotes: list[PairKeyRemote] = []
@@ -1155,12 +1161,23 @@ class SmartThread:
                 if (thread_name not in SmartThread._registry
                         and thread_name in SmartThread._pair_array[
                             pair_key].status_blocks):
+                    rem_entry = SmartThread._pair_array[
+                            pair_key].status_blocks[
+                            thread_name]
+                    extra_msg = ''
+                    if not rem_entry.msg_q.empty():
+                        extra_msg += ', with non-empty msg_q'
+                    if rem_entry.wait_event.is_set():
+                        extra_msg += ', with wait event set'
+                    if rem_entry.sync_event.is_set():
+                        extra_msg += ', with sync event set'
                     SmartThread._pair_array[
                             pair_key].status_blocks.pop(thread_name, None)
+
                     logger.debug(
                         f'{current_thread_name} removed status_blocks '
                         f'entry for pair_key = {pair_key}, '
-                        f'name = {thread_name}')
+                        f'name = {thread_name}{extra_msg}')
                     changed = True
 
             # At this point, either or both threads of the pair will
@@ -1195,12 +1212,21 @@ class SmartThread:
                     SmartThread._pair_array[
                         pair_key].status_blocks[
                         thread_name].del_deferred = True
-                    # logger.debug(
-                    #     f'TestDebug {self.name} _refresh_pair_array '
-                    #     f'set del_deferred for {thread_name=}, '
-                    #     f'{SmartThread._pair_array[pair_key].status_blocks[thread_name].msg_q.empty()=} ,'
-                    #     f'{SmartThread._pair_array[pair_key].status_blocks[thread_name].wait_event.is_set()=}, '
-                    #     f'{SmartThread._pair_array[pair_key].status_blocks[thread_name].sync_event.is_set()=} ')
+                    extra_msg = ', reasons: '
+                    if remaining_sb.request_pending:
+                        extra_msg += 'pending request'
+                    if not remaining_sb.msg_q.empty():
+                        extra_msg += ', non-empty msg_q'
+                    if remaining_sb.wait_event.is_set():
+                        extra_msg += ', wait event set'
+                    if remaining_sb.sync_event.is_set():
+                        extra_msg += ', sync event set'
+
+                    logger.debug(
+                        f'{current_thread_name} deferred removal of '
+                        f'status_blocks entry for pair_key = {pair_key}, '
+                        f'name = {thread_name}{extra_msg}')
+
             # remove _connection_pair if both names are gone
             if not SmartThread._pair_array[
                     pair_key].status_blocks:
@@ -1277,8 +1303,6 @@ class SmartThread:
             msg_to_send=msg,
             log_msg=log_msg)
 
-        self.remotes_unregistered = set()
-        self.remotes_full_send_q = set()
         self._request_loop(request_block=request_block)
 
         logger.debug(request_block.exit_log_msg)
@@ -1324,54 +1348,42 @@ class SmartThread:
         # a log entry is written.
         ################################################################
 
-        with sel.SELockShare(SmartThread._registry_lock):
-            remote_state = self._get_target_state(pk_remote)
+        remote_state = self._get_target_state(pk_remote)
 
-            if remote_state == ThreadState.Alive:
-                # If here, remote is in registry and is alive. This also
-                # means we have an entry for the remote in the
-                # pair_array
+        if remote_state == ThreadState.Alive:
+            # If here, remote is in registry and is alive. This also
+            # means we have an entry for the remote in the
+            # pair_array
 
-                # we may have indicated that the remote was unregistered
-                # earlier, but now that it is alive we need to undo that
-                # @sbt - we set remotes_unregistered for testing
-                # purposes - we should find another way so we don't have
-                # to manage remotes_unregistered
-                self.remotes_unregistered -= {pk_remote.remote}
+            # setup a reference
+            remote_sb = SmartThread._pair_array[
+                    pk_remote.pair_key].status_blocks[
+                    pk_remote.remote]
 
-                # setup a reference
-                remote_sb = SmartThread._pair_array[
-                        pk_remote.pair_key].status_blocks[
-                        pk_remote.remote]
+            ########################################################
+            # put the msg on the target msg_q
+            ########################################################
+            try:
+                remote_sb.msg_q.put(request_block.msg_to_send,
+                                    timeout=0.01)
+                logger.info(
+                    f'{self.name} sent message to {pk_remote.remote}')
 
-                ########################################################
-                # put the msg on the target msg_q
-                ########################################################
-                ret_code = False
-                try:
-                    remote_sb.msg_q.put(request_block.msg_to_send,
-                                        timeout=0.01)
-                    logger.info(
-                        f'{self.name} sent message to {pk_remote.remote}')
+                return True
+            except queue.Full:
+                # If the target msg queue is full, move on to
+                # the next target (if one). We will come back
+                # to the full target later and hope that it
+                # reads its messages and frees up space on its
+                # queue before we time out.
+                request_block.full_send_q_remotes |= {pk_remote.remote}
+                return True  # we are done with this target
+        else:
+            if remote_state == ThreadState.Stopped:
+                request_block.stopped_remotes |= {pk_remote.remote}
+                return True  # we are done with this remote
 
-                    return True
-                except queue.Full:
-                    # If the target msg queue is full, move on to
-                    # the next target (if one). We will come back
-                    # to the full target later and hope that it
-                    # reads its messages and frees up space on its
-                    # queue before we time out.
-                    request_block.full_send_q_remotes |= {pk_remote.remote}
-                    self.remotes_full_send_q |= {pk_remote.remote}
-                    return True  # we are done with this target
-            else:
-                if remote_state == ThreadState.Stopped:
-                    request_block.stopped_remotes |= {pk_remote.remote}
-                    return True  # we are done with this remote
-
-                if remote_state == ThreadState.Unregistered:
-                    self.remotes_unregistered |= {pk_remote.remote}
-                    return False  # give the remote some more time
+        return False  # give the remote some more time
 
     ####################################################################
     # recv_msg
@@ -1428,11 +1440,19 @@ class SmartThread:
             True when request completed, False otherwise
 
         """
-        with sel.SELockShare(SmartThread._registry_lock):
-            # we start off assuming remote is alive and we have a msg
+        # We start off assuming remote is alive and we have a msg,
+        # meaning we make the timeout_value very small just to test
+        # the msg_q. If there is no msg, we check the remote state
+        # and to decide whether to fail the recv_msg (remote
+        # stopped), try to retrieve the msg again with a longer
+        # timeout_value (remote alive), or return False to give
+        # the remote more time (remote is not alive, but no stopped)
+        for timeout_value in (SmartThread.K_REQUEST_MIN_INTERVAL,
+                              request_block.request_max_interval):
             try:
                 # recv message from remote
-                request_block.ret_msg = local_sb.msg_q.get(timeout=0.01)
+                request_block.ret_msg = local_sb.msg_q.get(
+                    timeout=timeout_value)
                 logger.info(
                     f'{self.name} received msg from {pk_remote.remote}')
                 # if we had wanted to delete an entry in the
@@ -1448,10 +1468,10 @@ class SmartThread:
                 return True
 
             except queue.Empty:
-                # The msg queue was just now empty which rules out that
-                # case that the pair_key is valid only because of a
-                # deferred delete. So, we know the remote is in the
-                # registry and in the status block.
+                # The msg queue was just now empty which rules out
+                # that case that the pair_key is valid only because
+                # of a deferred delete. So, we know the remote is in
+                # the registry and in the status block.
 
                 remote_state = self._get_target_state(pk_remote)
 
@@ -1459,32 +1479,10 @@ class SmartThread:
                     request_block.stopped_remotes |= {pk_remote.remote}
                     return True  # we are done with this remote
 
-                if remote_state == ThreadState.Alive:
-                    local_sb.request_pending = True
-                else:
+                if remote_state != ThreadState.Alive:
                     return False  # remote needs more time
 
-        timeout_value = min(self.request_interval,
-                            request_block.request_interval)
-        try:
-            # recv message from remote
-            request_block.ret_msg = local_sb.msg_q.get(timeout=0.01)
-            logger.info(
-                f'{self.name} received msg from {pk_remote.remote}')
-            # if we had wanted to delete an entry in the
-            # pair array for this thread because the other
-            # thread exited, but we could not because this
-            # thread had a pending msg to recv, then we
-            # deferred the delete. If the msg_q for this
-            # thread is now empty as a result of this recv,
-            # we can go ahead and delete the pair, so
-            # set the flag to do a refresh
-            if local_sb.del_deferred and local_sb.msg_q.empty():
-                request_block.do_refresh = True
-            return True
-
-        except queue.Empty:
-        return False  # give the remote more time
+        return False
 
     ####################################################################
     # resume
@@ -2341,6 +2339,17 @@ class SmartThread:
         while len(self.work_pk_remotes) > request_block.completion_count:
             # num_start_loop_work_remotes = len(self.work_pk_remotes)
             for pk_remote in self.work_pk_remotes.copy():
+                # determine timeout_value to use for request
+                if request_block.timer.is_specified():
+                    request_block.request_max_interval = min(
+                        self.request_max_interval,
+                        (request_block.timer.remaining_time()
+                         / len(self.work_pk_remotes))
+                    )
+                else:
+                    request_block.request_max_interval = (
+                        self.request_max_interval)
+
                 # we need to hold the lock to ensure the pair_array
                 # remains stable while getting local_sb. The
                 # request_pending flag in our entry will prevent our
@@ -2352,28 +2361,19 @@ class SmartThread:
                         # references
                         local_sb = SmartThread._pair_array[
                             pk_remote.pair_key].status_blocks[self.name]
-                    else:
-                        continue
 
-                # Getting back True from the process_rtn means we are
-                # done with this remote, either because the command was
-                # successful or there was an unresolvable error which
-                # will be processed later after all remotes are
-                # processed. Getting back False means the remote is not
-                # yet ready to participate in the request, so we keep it
-                # in the work list and try again until it works, fails,
-                # times out
-                if request_block.timer.is_specified():
-                    request_block.request_interval = (
-                       request_block.timer.remaining_time()
-                       / len(self.work_pk_remotes))
-                else:
-                    request_block.interval = (SmartThread.K_REQUEST_INTERVAL
-                                              / len(self.work_pk_remotes))
-                if request_block.process_rtn(request_block,
-                                             pk_remote,
-                                             local_sb):
-                    self.work_pk_remotes.remove(pk_remote)
+                        # Getting back True from the process_rtn means we are
+                        # done with this remote, either because the command was
+                        # successful or there was an unresolvable error which
+                        # will be processed later after all remotes are
+                        # processed. Getting back False means the remote is not
+                        # yet ready to participate in the request, so we keep it
+                        # in the work list and try again until it works, fails,
+                        # or times out
+                        if request_block.process_rtn(request_block,
+                                                     pk_remote,
+                                                     local_sb):
+                            self.work_pk_remotes.remove(pk_remote)
 
                         # lock needed to coordinate conflict/deadlock
                         # with self._connection_block_lock(
@@ -2387,13 +2387,13 @@ class SmartThread:
                         #         request_block.stopped_remotes -= {
                         #             pk_remote.remote}
 
-            if request_block.do_refresh:
-                with sel.SELockExcl(SmartThread._registry_lock):
-                    self._refresh_pair_array()
-                request_block.do_refresh = False
+                if request_block.do_refresh:
+                    with sel.SELockExcl(SmartThread._registry_lock):
+                        self._refresh_pair_array()
+                    request_block.do_refresh = False
 
             # handle any error or timeout cases - don't worry about any
-            # remotes that were still pending we need fail the request
+            # remotes that were still pending - we need fail the request
             # as soon as we know about any unresolvable failures
             if ((request_block.error_stopped_target
                  and request_block.stopped_remotes)
@@ -2416,37 +2416,15 @@ class SmartThread:
 
                 self._handle_loop_errors(request_block=request_block,
                                          pending_remotes=pending_remotes)
-            # if no progress was made
-            # if len(self.work_pk_remotes) == num_start_loop_work_remotes:
-            #     if ((request_block.error_stopped_target
-            #          and request_block.stopped_remotes)
-            #             or (request_block.error_not_registered_target
-            #                 and request_block.not_registered_remotes)
-            #             or request_block.conflict_remotes
-            #             or request_block.deadlock_remotes
-            #             or request_block.timer.is_expired()):
-            #
-            #         # cleanup before doing the error
-            #         with sel.SELockShare(SmartThread._registry_lock):
-            #             if request_block.cleanup_rtn:
-            #                 request_block.cleanup_rtn(
-            #                     self.work_pk_remotes,
-            #                     request_block.request_name)
-            #
-            #             pending_remotes = [remote for pk, remote, _ in
-            #                                self.work_pk_remotes]
-            #             self.work_pk_remotes = []
-            #
-            #         self._handle_loop_errors(request_block=request_block,
-            #                                  pending_remotes=pending_remotes)
 
             time.sleep(0.2)
 
         ################################################################
         # cleanup
         ################################################################
-        with sel.SELockShare(SmartThread._registry_lock):
-            self.work_pk_remotes = []
+        if self.work_pk_remotes:
+            with sel.SELockShare(SmartThread._registry_lock):
+                self.work_pk_remotes = []
 
     ####################################################################
     # _handle_loop_errors

@@ -2157,21 +2157,19 @@ class WaitForResumeTimeouts(ConfigCmd):
 
 
 ########################################################################
-# WaitForSendTimeouts
+# WaitForRequestTimeouts
 ########################################################################
-class WaitForSendTimeouts(ConfigCmd):
+class WaitForRequestTimeouts(ConfigCmd):
     def __init__(self,
                  cmd_runners: Iterable,
-                 sender_names: Iterable,
+                 actor_names: Iterable,
                  timeout_names: Iterable,
                  ) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
-        self.sender_names = get_set(sender_names)
+        self.actor_names = get_set(actor_names)
 
-        if isinstance(unreg_names, str):
-            unreg_names = [unreg_names]
         self.timeout_names = get_set(timeout_names)
 
         self.arg_list += ['sender_names',
@@ -2185,7 +2183,7 @@ class WaitForSendTimeouts(ConfigCmd):
         """
         self.config_ver.wait_for_request_timeouts(
             cmd_runner=cmd_runner,
-            actor_names=self.sender_names,
+            actor_names=self.actor_names,
             timeout_names=self.timeout_names)
 
 
@@ -9329,11 +9327,10 @@ class ConfigVerifier:
                             msgs_to_send=sender_msgs))
                 confirm_cmd_to_use = 'SendMsg'
 
-            self.add_cmd(WaitForSendTimeouts(
+            self.add_cmd(WaitForRequestTimeouts(
                 cmd_runners=self.commander_name,
-                sender_names=sender_names,
-                unreg_names=unreg_timeout_names + exit_names,
-                fullq_names=full_q_names))
+                actor_names=sender_names,
+                timeout_names=unreg_timeout_names + exit_names))
 
             # restore config by adding back the exited threads and
             # creating the un_reg threads so send_msg will complete
