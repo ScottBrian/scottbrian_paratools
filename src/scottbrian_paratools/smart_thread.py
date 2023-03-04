@@ -214,7 +214,7 @@ class RequestBlock:
     conflict_remotes: set[str]
     deadlock_remotes: set[str]
     full_send_q_remotes: set[str]
-    request_max_interval: IntFloat
+    request_max_interval: IntFloat = 0.0
 
 
 ########################################################################
@@ -1119,6 +1119,7 @@ class SmartThread:
                         pair_key].status_blocks[
                         name] = SmartThread.ConnectionStatusBlock(
                                 create_time=create_time,
+                                target_create_time=0.0,
                                 wait_event=threading.Event(),
                                 sync_event=threading.Event(),
                                 msg_q=queue.Queue(maxsize=self.max_msgs))
@@ -1128,10 +1129,10 @@ class SmartThread:
                     changed = True
 
                     # find and update a zero create time in work_pk_remotes
-                    if name == pair_key.name0:
-                        other_name = pair_key.name1
+                    if name == pair_key[0]:
+                        other_name = pair_key[1]
                     else:
-                        other_name = pair_key.name0
+                        other_name = pair_key[0]
                     test_pk_remote = PairKeyRemote(pair_key, name, 0.0)
                     try:
                         idx = SmartThread._registry[
@@ -1356,24 +1357,23 @@ class SmartThread:
                     pk_remote.pair_key].status_blocks[
                     pk_remote.remote]
 
-            ########################################################
-            # put the msg on the target msg_q
-            ########################################################
-            try:
-                remote_sb.msg_q.put(request_block.msg_to_send,
-                                    timeout=0.01)
-                logger.info(
-                    f'{self.name} sent message to {pk_remote.remote}')
+            if (remote_sb.target_create_time == 0.0
+                    or remote_sb.target_create_time
+                    == local_sb.create_time):
+                ########################################################
+                # put the msg on the target msg_q
+                ########################################################
+                try:
+                    remote_sb.msg_q.put(request_block.msg_to_send,
+                                        timeout=0.01)
+                    logger.info(
+                        f'{self.name} sent message to {pk_remote.remote}')
 
-                return True
-            except queue.Full:
-                # If the target msg queue is full, move on to
-                # the next target (if one). We will come back
-                # to the full target later and hope that it
-                # reads its messages and frees up space on its
-                # queue before we time out.
-                request_block.full_send_q_remotes |= {pk_remote.remote}
-                return True  # we are done with this target
+                    return True
+                except queue.Full:
+                    # We fail this request when the msg_q is full
+                    request_block.full_send_q_remotes |= {pk_remote.remote}
+                    return True  # we are done with this target
         else:
             if remote_state == ThreadState.Stopped:
                 request_block.stopped_remotes |= {pk_remote.remote}
@@ -1653,14 +1653,17 @@ class SmartThread:
             if not (remote_sb.wait_event.is_set()
                     or (remote_sb.conflict
                         and remote_sb.wait_wait)):
+                if (remote_sb.target_create_time == 0.0
+                        or remote_sb.target_create_time
+                        == local_sb.create_time):
                 # # set the code, if one
-                # if code:
-                #     remote_sb.code = code
-                # wake remote thread and start
-                # the while loop again with one
-                # less remote
-                remote_sb.wait_event.set()
-                return True
+                    # if code:
+                    #     remote_sb.code = code
+                    # wake remote thread and start
+                    # the while loop again with one
+                    # less remote
+                    remote_sb.wait_event.set()
+                    return True
         else:
             if remote_state == ThreadState.Stopped:
                 request_block.stopped_remotes |= {pk_remote.remote}
@@ -1896,7 +1899,15 @@ class SmartThread:
             backout_request: sync or wait
 
         Notes:
-            must be holding the registry lock at least shared
+            1) must be holding the registry lock at least shared
+            2) It is possible during cleanup to find that a request that
+               had failed for timeout is now completed. We could figure
+               out if all such requests are now complete and no other
+               requests have suffered an unresolvable error, and then
+               we can skip the timeout error and allow the request to
+               return as a success. The additional code to do that,
+               however, would seem more costly than reasonable for this
+               case which would seem rare.
         """
         logger.debug(
             f'TestDebug {self.name} backout entry: {backout_request=}')
@@ -2276,18 +2287,23 @@ class SmartThread:
                         local_sb = SmartThread._pair_array[
                             pk_remote.pair_key].status_blocks[self.name]
 
-                        # Getting back True from the process_rtn means we are
-                        # done with this remote, either because the command was
-                        # successful or there was an unresolvable error which
-                        # will be processed later after all remotes are
-                        # processed. Getting back False means the remote is not
-                        # yet ready to participate in the request, so we keep it
-                        # in the work list and try again until it works, fails,
-                        # or times out
+                        # Getting back True from the process_rtn means
+                        # we are done with this remote, either because
+                        # the command was successful or there was an
+                        # unresolvable error which will be processed
+                        # later after all remotes are processed.
+                        # Getting back False means the remote is not yet
+                        # ready to participate in the request, so we
+                        # keep it in the work list and try again until
+                        # it works (unless and until we encounter an
+                        # unresolvable error with any request, or we
+                        # eventually timeout when timeout is specified)
                         if request_block.process_rtn(request_block,
                                                      pk_remote,
                                                      local_sb):
                             self.work_pk_remotes.remove(pk_remote)
+                            local_sb.target_create_time = 0.0
+                            local_sb.request_pending = False
 
                         # lock needed to coordinate conflict/deadlock
                         # with self._connection_block_lock(

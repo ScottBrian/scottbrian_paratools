@@ -10944,13 +10944,11 @@ class ConfigVerifier:
                 if timeout_type == TimeoutType.TimeoutNone:
                     recvd_msg = self.all_threads[cmd_runner].recv_msg(
                         remote=remote,
-                        error_stopped_target=error_stopped_target,
                         log_msg=log_msg)
                 else:
                     recvd_msg = self.all_threads[cmd_runner].recv_msg(
                         remote=remote,
                         timeout=timeout,
-                        error_stopped_target=error_stopped_target,
                         log_msg=log_msg)
 
             self.add_log_msg(
@@ -10965,7 +10963,6 @@ class ConfigVerifier:
         elif timeout_type == TimeoutType.TimeoutNone:
             recvd_msg = self.all_threads[cmd_runner].recv_msg(
                 remote=remote,
-                error_stopped_target=error_stopped_target,
                 log_msg=log_msg)
             assert recvd_msg == exp_msgs[remote]
             self.add_log_msg(
@@ -10976,7 +10973,6 @@ class ConfigVerifier:
             recvd_msg = self.all_threads[cmd_runner].recv_msg(
                 remote=remote,
                 timeout=timeout,
-                error_stopped_target=error_stopped_target,
                 log_msg=log_msg)
             assert recvd_msg == exp_msgs[remote]
             self.add_log_msg(
@@ -10989,7 +10985,6 @@ class ConfigVerifier:
                 recvd_msg = self.all_threads[cmd_runner].recv_msg(
                     remote=remote,
                     timeout=timeout,
-                    error_stopped_target=error_stopped_target,
                     log_msg=log_msg)
 
             self.dec_recv_timeout()
@@ -11388,13 +11383,11 @@ class ConfigVerifier:
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_resume(
                         targets=targets,
-                        error_stopped_target=error_stopped_target,
                         log_msg=log_msg)
                 else:
                     self.all_threads[cmd_runner].smart_resume(
                         targets=targets,
                         timeout=timeout,
-                        error_stopped_target=error_stopped_target,
                         log_msg=log_msg)
 
             self.add_log_msg(
@@ -11410,7 +11403,6 @@ class ConfigVerifier:
             self.inc_ops_count(targets.copy(), cmd_runner)
             self.all_threads[cmd_runner].smart_resume(
                 targets=targets,
-                error_stopped_target=error_stopped_target,
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutFalse:
@@ -11418,7 +11410,6 @@ class ConfigVerifier:
             self.all_threads[cmd_runner].smart_resume(
                 targets=targets,
                 timeout=timeout,
-                error_stopped_target=error_stopped_target,
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutTrue:
@@ -11429,7 +11420,6 @@ class ConfigVerifier:
                 self.all_threads[cmd_runner].smart_resume(
                     targets=targets,
                     timeout=timeout,
-                    error_stopped_target=error_stopped_target,
                     log_msg=log_msg)
 
             self.add_log_msg(
@@ -11523,14 +11513,12 @@ class ConfigVerifier:
                     self.all_threads[cmd_runner].send_msg(
                         targets=set(receivers),
                         msg=msg_to_send,
-                        error_stopped_target=error_stopped_target,
                         log_msg=log_msg)
                 else:
                     self.all_threads[cmd_runner].send_msg(
                         targets=set(receivers),
                         msg=msg_to_send,
                         timeout=timeout,
-                        error_stopped_target=error_stopped_target,
                         log_msg=log_msg)
 
             self.add_log_msg(
@@ -11546,7 +11534,6 @@ class ConfigVerifier:
             self.all_threads[cmd_runner].send_msg(
                 targets=set(receivers),
                 msg=msg_to_send,
-                error_stopped_target=error_stopped_target,
                 log_msg=log_msg)
             elapsed_time += (time.time() - start_time)
         elif timeout_type == TimeoutType.TimeoutFalse:
@@ -11554,7 +11541,6 @@ class ConfigVerifier:
                 targets=set(receivers),
                 msg=msg_to_send,
                 timeout=timeout,
-                error_stopped_target=error_stopped_target,
                 log_msg=log_msg)
             elapsed_time += (time.time() - start_time)
         elif timeout_type == TimeoutType.TimeoutTrue:
@@ -11564,7 +11550,6 @@ class ConfigVerifier:
                     targets=set(receivers),
                     msg=msg_to_send,
                     timeout=timeout,
-                    error_stopped_target=error_stopped_target,
                     log_msg=log_msg)
             elapsed_time += (time.time() - start_time)
             self.add_log_msg(
@@ -11781,13 +11766,11 @@ class ConfigVerifier:
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_sync(
                         targets=targets,
-                        error_stopped_target=error_stopped_target,
                         log_msg=log_msg)
                 else:
                     self.all_threads[cmd_runner].smart_sync(
                         targets=targets,
                         timeout=timeout,
-                        error_stopped_target=error_stopped_target,
                         log_msg=log_msg)
 
             self.add_log_msg(
@@ -11806,13 +11789,11 @@ class ConfigVerifier:
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_sync(
                         targets=targets,
-                        error_stopped_target=error_stopped_target,
                         log_msg=log_msg)
                 else:
                     self.all_threads[cmd_runner].smart_sync(
                         targets=targets,
                         timeout=timeout,
-                        error_stopped_target=error_stopped_target,
                         log_msg=log_msg)
 
             self.add_log_msg(
@@ -11828,14 +11809,12 @@ class ConfigVerifier:
         elif timeout_type == TimeoutType.TimeoutNone:
             self.all_threads[cmd_runner].smart_sync(
                 targets=targets,
-                error_stopped_target=error_stopped_target,
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutFalse:
             self.all_threads[cmd_runner].smart_sync(
                 targets=targets,
                 timeout=timeout,
-                error_stopped_target=error_stopped_target,
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutTrue:
@@ -11846,7 +11825,6 @@ class ConfigVerifier:
                 self.all_threads[cmd_runner].smart_sync(
                     targets=targets,
                     timeout=timeout,
-                    error_stopped_target=error_stopped_target,
                     log_msg=log_msg)
 
             self.add_log_msg(
@@ -12128,14 +12106,12 @@ class ConfigVerifier:
                     self.all_threads[cmd_runner].smart_wait(
                         remotes=resumers,
                         wait_for=wait_for,
-                        error_stopped_target=error_stopped_target,
                         log_msg=log_msg)
                 else:
                     self.all_threads[cmd_runner].smart_wait(
                         remotes=resumers,
                         wait_for=wait_for,
                         timeout=timeout,
-                        error_stopped_target=error_stopped_target,
                         log_msg=log_msg)
 
             self.add_log_msg(
@@ -12155,14 +12131,12 @@ class ConfigVerifier:
                     self.all_threads[cmd_runner].smart_wait(
                         remotes=resumers,
                         wait_for=wait_for,
-                        error_stopped_target=error_stopped_target,
                         log_msg=log_msg)
                 else:
                     self.all_threads[cmd_runner].smart_wait(
                         remotes=resumers,
                         wait_for=wait_for,
                         timeout=timeout,
-                        error_stopped_target=error_stopped_target,
                         log_msg=log_msg)
 
             self.add_log_msg(
@@ -12182,14 +12156,12 @@ class ConfigVerifier:
                     self.all_threads[cmd_runner].smart_wait(
                         remotes=resumers,
                         wait_for=wait_for,
-                        error_stopped_target=error_stopped_target,
                         log_msg=log_msg)
                 else:
                     self.all_threads[cmd_runner].smart_wait(
                         remotes=resumers,
                         wait_for=wait_for,
                         timeout=timeout,
-                        error_stopped_target=error_stopped_target,
                         log_msg=log_msg)
 
             self.add_log_msg(
@@ -12206,7 +12178,6 @@ class ConfigVerifier:
             self.all_threads[cmd_runner].smart_wait(
                 remotes=resumers,
                 wait_for=wait_for,
-                error_stopped_target=error_stopped_target,
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutFalse:
@@ -12214,7 +12185,6 @@ class ConfigVerifier:
                 remotes=resumers,
                 wait_for=wait_for,
                 timeout=timeout,
-                error_stopped_target=error_stopped_target,
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutTrue:
@@ -12224,7 +12194,6 @@ class ConfigVerifier:
                     remotes=resumers,
                     wait_for=wait_for,
                     timeout=timeout,
-                    error_stopped_target=error_stopped_target,
                     log_msg=log_msg)
 
             self.add_log_msg(
