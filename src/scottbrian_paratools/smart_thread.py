@@ -298,6 +298,7 @@ class SmartThread:
     class ConnectionStatusBlock:
         """Connection status block."""
         create_time: float
+        target_create_time: float
         wait_event: threading.Event
         sync_event: threading.Event
         msg_q: queue.Queue[Any]
@@ -2511,22 +2512,24 @@ class SmartThread:
                             'smart_sync', 'smart_wait'):
             self.verify_thread_is_current()
             with sel.SELockShare(SmartThread._registry_lock):
-                # pk_remotes = [PairKeyRemote(
-                #     self._get_pair_key(
-                #         threading.current_thread().name, remote),
-                #     remote,
-                #     SmartThread._stop_array[remote]) for remote in remotes]
-                pk_remotes = [PairKeyRemote(
-                    self._get_pair_key(self.name, remote), remote)
-                    for remote in remotes]
-                for pair_key, remote in pk_remotes:
+                for remote in remotes:
+                    pair_key = self._get_pair_key(self.name, remote)
                     if pair_key in SmartThread._pair_array:
-                        # having a pair_key in the array implies our
-                        # entry exists - set local_sb for easy
-                        # references
                         local_sb = SmartThread._pair_array[
                             pair_key].status_blocks[self.name]
                         local_sb.request_pending = True
+                        if (remote in
+                            SmartThread._pair_array[pair_key].status_blocks):
+                            target_create_time = SmartThread._pair_array[
+                                pair_key].status_blocks[remote].create_time
+                        else:
+                            target_create_time = 0.0
+                        local_sb.target_create_time = target_create_time
+                        local_sb.request_pending = True
+                    pk_remote = PairKeyRemote(pair_key=pair_key,
+                                              remote=remote,
+                                              create_time=target_create_time)
+                    pk_remotes.append(pk_remote)
 
                 # we need to set the work remotes before releasing the
                 # lock - any starts or deletes need to be accounted for
