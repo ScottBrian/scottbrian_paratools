@@ -9844,7 +9844,6 @@ class ConfigVerifier:
                                   num_syncers: int,
                                   num_stopped_syncers: int,
                                   num_timeout_syncers: int,
-                                  error_stopped_target: bool,
                                   ) -> None:
         """Build ConfigCmd items for sync scenarios.
 
@@ -9856,8 +9855,6 @@ class ConfigVerifier:
                 cause a not alive error
             num_timeout_syncers: number of threads that will
                 cause a timeout error
-            error_stopped_target: specifies whether to raise not alive
-                for stopped syncers
 
         """
         # Make sure we have enough threads. Note that we subtract 1 from
@@ -9868,7 +9865,6 @@ class ConfigVerifier:
                 + num_timeout_syncers) <= len(self.unregistered_names) - 1
 
         timeout_time = ((num_syncers * 0.64)
-                        + (num_stopped_syncers * 0.64)
                         + (num_timeout_syncers * 0.64))
 
         pause_time = timeout_time
@@ -9932,8 +9928,7 @@ class ConfigVerifier:
                     targets=set(all_targets),
                     timeout=timeout_time,
                     timeout_remotes=set(timeout_syncer_names),
-                    stopped_remotes=set(stopped_syncer_names),
-                    error_stopped_target=error_stopped_target))
+                    stopped_remotes=set(stopped_syncer_names)))
         else:
             ############################################################
             # timeout False
@@ -9946,8 +9941,7 @@ class ConfigVerifier:
                         targets=set(all_targets),
                         timeout=timeout_time,
                         timeout_remotes=set(timeout_syncer_names),
-                        stopped_remotes=set(stopped_syncer_names),
-                        error_stopped_target=error_stopped_target))
+                        stopped_remotes=set(stopped_syncer_names)))
             else:
                 ########################################################
                 # timeout None
@@ -9959,7 +9953,6 @@ class ConfigVerifier:
                          timeout=timeout_time,
                          timeout_remotes=set(timeout_syncer_names),
                          stopped_remotes=set(stopped_syncer_names),
-                         error_stopped_target=error_stopped_target,
                          log_msg='sync test1'))
 
             self.add_cmd(Pause(cmd_runners=self.commander_name,
@@ -9975,39 +9968,36 @@ class ConfigVerifier:
             ############################################################
             # join stopped syncers and then create to get them active
             ############################################################
-            if stopped_syncer_names:
-                self.build_join_suite(
-                    cmd_runners=self.commander_name,
-                    join_target_names=list(stopped_syncer_names))
-                f1_create_items: list[F1CreateItem] = []
-                for idx, name in enumerate(stopped_syncer_names):
-                    if idx % 2:
-                        app_config = AppConfig.ScriptStyle
-                    else:
-                        app_config = AppConfig.RemoteThreadApp
-
-                    f1_create_items.append(F1CreateItem(name=name,
-                                                        auto_start=True,
-                                                        target_rtn=outer_f1,
-                                                        app_config=app_config))
-                self.build_create_suite(
-                    f1_create_items=f1_create_items,
-                    validate_config=False)
+            # if stopped_syncer_names:
+            #     self.build_join_suite(
+            #         cmd_runners=self.commander_name,
+            #         join_target_names=list(stopped_syncer_names))
+            #     f1_create_items: list[F1CreateItem] = []
+            #     for idx, name in enumerate(stopped_syncer_names):
+            #         if idx % 2:
+            #             app_config = AppConfig.ScriptStyle
+            #         else:
+            #             app_config = AppConfig.RemoteThreadApp
+            #
+            #         f1_create_items.append(F1CreateItem(name=name,
+            #                                             auto_start=True,
+            #                                             target_rtn=outer_f1,
+            #                                             app_config=app_config))
+            #     self.build_create_suite(
+            #         f1_create_items=f1_create_items,
+            #         validate_config=False)
 
             ############################################################
             # do sync for newly started syncers
             ############################################################
-            if ((not (stopped_syncer_names and error_stopped_target))
-                    and (timeout_syncer_names or stopped_syncer_names)):
-                started_cmd_runners = (list(timeout_syncer_names)
-                                       + list(stopped_syncer_names))
+            if timeout_syncer_names:
+                started_cmd_runners = list(timeout_syncer_names)
                 sync_serial_num2 = self.add_cmd(
                     Sync(cmd_runners=started_cmd_runners,
                          targets=set(all_targets),
                          timeout=timeout_time,
                          timeout_remotes=set(timeout_syncer_names),
                          stopped_remotes=set(stopped_syncer_names),
-                         error_stopped_target=error_stopped_target,
                          log_msg='sync test2'))
                 self.add_cmd(
                     ConfirmResponse(cmd_runners=[self.commander_name],
@@ -15796,7 +15786,6 @@ class TestSmartThreadScenarios:
             num_syncers_arg: int,
             num_stopped_syncers_arg: int,
             num_timeout_syncers_arg: int,
-            error_stopped_target_arg: bool,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
         """Test smart_sync scenarios.
@@ -15809,8 +15798,6 @@ class TestSmartThreadScenarios:
                 cause a not alive error
             num_timeout_syncers_arg: number of threads that will
                 cause a timeout error
-            error_stopped_target_arg: specifies whether to raise not alive
-                for stopped syncers
             caplog: pytest fixture to capture log output
 
         """
@@ -15823,8 +15810,7 @@ class TestSmartThreadScenarios:
             return
 
         if (timeout_type_arg == TimeoutType.TimeoutTrue
-                and ((num_stopped_syncers_arg
-                     + num_timeout_syncers_arg) == 0)):
+                and (num_timeout_syncers_arg == 0)):
             return
 
         command_config_num = total_arg_counts % 5
@@ -15844,7 +15830,6 @@ class TestSmartThreadScenarios:
             'num_syncers': num_syncers_arg,
             'num_stopped_syncers': num_stopped_syncers_arg,
             'num_timeout_syncers': num_timeout_syncers_arg,
-            'error_stopped_target': error_stopped_target_arg
         }
 
         self.scenario_driver(
