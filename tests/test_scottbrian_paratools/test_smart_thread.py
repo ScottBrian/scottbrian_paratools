@@ -4391,10 +4391,8 @@ class RequestEntryLogSearchItem(LogSearchItem):
                             '|smart_sync'
                             '|smart_wait)')
         super().__init__(
-            # search_str=(f"{list_of_requests}: [0-9]+ {list_of_requests} "
-            #             f"entry: requestor: [a-z]+ targets: \[('[a-z]+')+\]"),
-            # search_str=f"smart_wait entry:",
-            search_str=f'active_names:',
+            search_str=(f"{list_of_requests} (entry|exit): "
+                        "requestor: [a-z]+ targets: \[('[a-z]+')+\]"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -4420,31 +4418,137 @@ class RequestEntryLogSearchItem(LogSearchItem):
 
     def run_process(self):
         split_msg = self.found_log_msg.split()
+        request_name = split_msg[0]
+        entry_exit = split_msg[1]
         cmd_runner = split_msg[3]
+        target_msg = self.found_log_msg.split('[')[1].split(']')[0].split(', ')
 
         targets: list[str] = []
-        first_target = split_msg[5]
-        if first_target[-1] == ']':
-            first_target = first_target[2:-2]
-            targets.append(first_target)
+        for item in target_msg:
+            targets.append(item[1:-1])
+        self.config_ver.log_test_msg(f'request msg parse {request_name=}, '
+                                     f'{entry_exit=}, '
+                                     f'{cmd_runner=}, '
+                                     f'{targets=}')
+
+        if entry_exit == 'entry:':
+            self.config_ver.handle_request_entry_log_msg(
+                cmd_runner=cmd_runner,
+                targets=targets)
         else:
-            first_target = first_target[2:-1]
-            targets.append(first_target)
-        #     idx = 6
-        #     while True:
-        #         target = split_msg[idx]
-        #         if target[-1] == ']':
-        #             target = target[1:-2]
-        #             targets.append(target)
-        #             break
-        #         else:
-        #             target = target[1:-1]
-        #             targets.append(target)
+            self.config_ver.handle_request_exit_log_msg(
+                cmd_runner=cmd_runner)
+
+
+########################################################################
+# HandleRequestLogSearchItem
+########################################################################
+class HandleRequestLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+        """
+        list_of_requests = ('(handle_wait'
+                            '|handle_resume)')
+        super().__init__(
+            search_str=(f"{list_of_requests} exit for cmd_runner='[a-z]+'"),
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int
+                           ) -> "HandleRequestLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            SyncResumedLogSearchItem containing found message and index
+        """
+        return HandleRequestLogSearchItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+    def run_process(self):
+        split_msg = self.found_log_msg.split()
+        handle_name = split_msg[0]
+        cmd_runner = split_msg[3].split(sep='=')[1]
+        cmd_runner = cmd_runner[1:-1]
+
+        self.config_ver.log_test_msg(f'request msg parse {handle_name=}, '
+                                     f'{cmd_runner=}')
+
+        self.config_ver.handle_request_exit_log_msg(
+            cmd_runner=cmd_runner)
+
+
+########################################################################
+# RequestAckLogSearchItem
+########################################################################
+class RequestAckLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+        """
+        list_of_requests = ('(handle_wait'
+                            '|handle_resume)')
+        super().__init__(
+            search_str=(f"[a-z+] smart_wait resumed by [a-z]+"),
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int
+                           ) -> "RequestAckLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            SyncResumedLogSearchItem containing found message and index
+        """
+        return RequestAckLogSearchItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+    def run_process(self):
+        split_msg = self.found_log_msg.split()
+        cmd_runner = split_msg[0]
+        target = split_msg[4]
 
         self.config_ver.log_test_msg(f'request msg parse {cmd_runner=}, '
-                                     f'{targets=}')
-        # self.config_ver.handle_cmd_waiting_log_msg(
-        #     cmd_runner=cmd_runner)
+                                     f'{target=}')
+
+        self.config_ver.handle_request_exit_log_msg(
+            cmd_runner=cmd_runner)
 
 
 LogSearchItems: TypeAlias = Union[
@@ -4461,7 +4565,9 @@ LogSearchItems: TypeAlias = Union[
     SyncResumedLogSearchItem,
     TestDebugLogSearchItem,
     DeferredRemovalLogSearchItem,
-    RequestEntryLogSearchItem]
+    RequestEntryLogSearchItem,
+    HandleRequestLogSearchItem,
+    RequestAckLogSearchItem]
 
 
 @dataclass
@@ -4547,6 +4653,7 @@ class ConfigVerifier:
         # self.started_event_items: dict[str, MonitorEventItem] = {}
         self.stopped_event_items: dict[str, MonitorEventItem] = {}
         self.cmd_waiting_event_items: dict[str, threading.Event] = {}
+        self.request_pending_pair_keys: dict[str, list[st.PairKey]] = {}
 
         self.stopping_names: list[str] = []
 
@@ -4570,7 +4677,9 @@ class ConfigVerifier:
             SyncResumedLogSearchItem(config_ver=self),
             TestDebugLogSearchItem(config_ver=self),
             DeferredRemovalLogSearchItem(config_ver=self),
-            RequestEntryLogSearchItem(config_ver=self)
+            RequestEntryLogSearchItem(config_ver=self),
+            HandleRequestLogSearchItem(config_ver=self),
+            RequestAckLogSearchItem(config_ver=self)
         )
         self.last_update_pair_array_log_msg: str = ''
         self.add_thread_cmd_runner_for_upa_msg: str = ''
@@ -11303,6 +11412,43 @@ class ConfigVerifier:
         self.log_test_msg(f'handle_recv_tof exit: {cmd_runner=}')
 
     ####################################################################
+    # handle_request_entry_log_msg
+    ####################################################################
+    def handle_request_entry_log_msg(self,
+                                     cmd_runner: str,
+                                     targets: list[str]) -> None:
+
+        """Handle the send_cmd execution and log msgs.
+
+        Args:
+            cmd_runner: name of thread doing the cmd
+            targets: targets of the request
+
+        """
+        # build list of pair_keys and place in dict
+        pair_keys: list[st.PairKey] = []
+        for target in targets:
+            pair_key = st.SmartThread._get_pair_key(cmd_runner, target)
+            pair_keys.append(pair_key)
+        self.request_pending_pair_keys[cmd_runner] = pair_keys
+
+    ####################################################################
+    # handle_request_exit_log_msg
+    ####################################################################
+    def handle_request_exit_log_msg(self,
+                                    cmd_runner: str) -> None:
+
+        """Handle the send_cmd execution and log msgs.
+
+        Args:
+            cmd_runner: name of thread doing the cmd
+            targets: targets of the request
+
+        """
+        if cmd_runner in self.request_pending_pair_keys:
+            del self.request_pending_pair_keys[cmd_runner]
+
+    ####################################################################
     # handle_recv_waiting_log_msg
     ####################################################################
     def handle_cmd_waiting_log_msg(self,
@@ -11314,6 +11460,7 @@ class ConfigVerifier:
             cmd_runner: name of thread doing the cmd
 
         """
+        # set the event for the cmd_runner
         self.cmd_waiting_event_items[cmd_runner].set()
 
     ####################################################################
@@ -12690,7 +12837,7 @@ class ConfigVerifier:
                                       f'{name_poc=}')
 
     ####################################################################
-    # update_pair_array
+    # update_pair_array_del
     ####################################################################
     def update_pair_array_del(self,
                               cmd_runner: str,
@@ -12724,8 +12871,16 @@ class ConfigVerifier:
             if other_name not in self.expected_pairs[pair_key].keys():
                 pair_keys_to_delete.append(pair_key)
             else:
-                if self.expected_pairs[pair_key][
-                        other_name].pending_ops_count == 0:
+                request_is_pending = False
+                if (other_name in self.request_pending_pair_keys
+                        and pair_key in self.request_pending_pair_keys[
+                            other_name]):
+                    request_is_pending = True
+                    self.log_test_msg('found request_pending for '
+                                      f'{other_name=}, {pair_key=}')
+                if (self.expected_pairs[pair_key][
+                        other_name].pending_ops_count == 0
+                        and not request_is_pending):
                     pair_keys_to_delete.append(pair_key)
                     self.add_log_msg(re.escape(
                         f"{cmd_runner} removed status_blocks entry "
