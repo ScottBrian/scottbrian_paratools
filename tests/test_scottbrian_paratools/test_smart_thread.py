@@ -4426,18 +4426,22 @@ class RequestEntryLogSearchItem(LogSearchItem):
         targets: list[str] = []
         for item in target_msg:
             targets.append(item[1:-1])
-        self.config_ver.log_test_msg(f'request msg parse {request_name=}, '
-                                     f'{entry_exit=}, '
-                                     f'{cmd_runner=}, '
-                                     f'{targets=}')
+        # self.config_ver.log_test_msg(f'request msg parse {request_name=}, '
+        #                              f'{entry_exit=}, '
+        #                              f'{cmd_runner=}, '
+        #                              f'{targets=}')
 
         if entry_exit == 'entry:':
             self.config_ver.handle_request_entry_log_msg(
                 cmd_runner=cmd_runner,
                 targets=targets)
+            self.config_ver.log_test_msg('request_pending set for '
+                                         f'{cmd_runner=}, {targets=}')
         else:
             self.config_ver.handle_request_exit_log_msg(
                 cmd_runner=cmd_runner)
+            self.config_ver.log_test_msg('request_pending reset for '
+                                         f'{cmd_runner=} via request exit')
 
 
 ########################################################################
@@ -4487,13 +4491,15 @@ class HandleRequestLogSearchItem(LogSearchItem):
         split_msg = self.found_log_msg.split()
         handle_name = split_msg[0]
         cmd_runner = split_msg[3].split(sep='=')[1]
-        cmd_runner = cmd_runner[1:-1]
+        cmd_runner = cmd_runner[1:-2]
 
-        self.config_ver.log_test_msg(f'request msg parse {handle_name=}, '
-                                     f'{cmd_runner=}')
+        # self.config_ver.log_test_msg(f'request msg parse {handle_name=}, '
+        #                              f'{cmd_runner=}')
 
         self.config_ver.handle_request_exit_log_msg(
             cmd_runner=cmd_runner)
+        self.config_ver.log_test_msg('request_pending reset for '
+                                     f'{cmd_runner=} handle exit')
 
 
 ########################################################################
@@ -4515,7 +4521,7 @@ class RequestAckLogSearchItem(LogSearchItem):
         list_of_requests = ('(handle_wait'
                             '|handle_resume)')
         super().__init__(
-            search_str=(f"[a-z+] smart_wait resumed by [a-z]+"),
+            search_str=(f"[a-z]+ smart_wait resumed by [a-z]+"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -4544,11 +4550,13 @@ class RequestAckLogSearchItem(LogSearchItem):
         cmd_runner = split_msg[0]
         target = split_msg[4]
 
-        self.config_ver.log_test_msg(f'request msg parse {cmd_runner=}, '
-                                     f'{target=}')
+        # self.config_ver.log_test_msg(f'request msg parse {cmd_runner=}, '
+        #                              f'{target=}')
 
         self.config_ver.handle_request_exit_log_msg(
             cmd_runner=cmd_runner)
+        self.config_ver.log_test_msg('request_pending reset for '
+                                     f'{cmd_runner=} via ack')
 
 
 LogSearchItems: TypeAlias = Union[
@@ -7532,11 +7540,15 @@ class ConfigVerifier:
                 pause_time = 0
                 if wait_state == state and wait_lap == lap:
                     stopped_remotes = set()
-                    if ((lap == 0 and resume_lap == 1)
-                            or state == st.ThreadState.Stopped
-                            or timeout_type == TimeoutType.TimeoutTrue):
+                    if (wait_lap == 0 and resume_lap == 1
+                            and timeout_type != TimeoutType.TimeoutTrue):
                         stopped_remotes = {resumer_name}
                         pause_time = 1
+                    if (timeout_type == TimeoutType.TimeoutTrue
+                            and wait_state == st.ThreadState.Stopped):
+                        stopped_remotes = {resumer_name}
+                        pause_time = 1
+
                     if timeout_type == TimeoutType.TimeoutNone:
                         wait_serial_num = self.add_cmd(
                             Wait(cmd_runners=waiter_name,

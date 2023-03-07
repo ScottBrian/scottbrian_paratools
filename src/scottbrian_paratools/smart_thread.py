@@ -2262,6 +2262,11 @@ class SmartThread:
             SmartThreadWaitDeadlockDetected: a deadlock was detected
                 between two smart_wait requests.
 
+        Notes:
+            1) request_pending is used to keep the cmd_runner pair_array
+               entry from being removed between the times the lock is
+               dropped until we have completed the request and any
+               cleanup that is needed for a failed request
         """
         while len(self.work_pk_remotes) > request_block.completion_count:
             # num_start_loop_work_remotes = len(self.work_pk_remotes)
@@ -2307,18 +2312,6 @@ class SmartThread:
                             local_sb.target_create_time = 0.0
                             local_sb.request_pending = False
 
-                        # lock needed to coordinate conflict/deadlock
-                        # with self._connection_block_lock(
-                        #         lock=SmartThread._pair_array[
-                        #             pk_remote.pair_key].status_lock,
-                        #         obtain_tf=request_block.get_block_lock):
-                        #     if request_block.process_rtn(request_block,
-                        #                                  pk_remote,
-                        #                                  local_sb):
-                        #         self.work_pk_remotes.remove(pk_remote)
-                        #         request_block.stopped_remotes -= {
-                        #             pk_remote.remote}
-
                 if request_block.do_refresh:
                     with sel.SELockExcl(SmartThread._registry_lock):
                         self._refresh_pair_array()
@@ -2338,6 +2331,15 @@ class SmartThread:
                         request_block.cleanup_rtn(
                             self.work_pk_remotes,
                             request_block.request_name)
+
+                    # clear request_pending for remaining work remotes
+                    for pair_key, remote, _ in self.work_pk_remotes:
+                        if pair_key in SmartThread._pair_array:
+                            # having a pair_key in the array implies our
+                            # entry exists
+                            SmartThread._pair_array[
+                                pair_key].status_blocks[
+                                self.name].request_pending = False
 
                     pending_remotes = [remote for pk, remote, _ in
                                        self.work_pk_remotes]
