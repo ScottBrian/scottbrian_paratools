@@ -81,6 +81,17 @@ class Actors(Enum):
 
 
 ########################################################################
+# ConflictDeadlockScenario
+########################################################################
+class ConflictDeadlockScenario(Enum):
+    NormalSync = auto()
+    NormalResumeWait = auto()
+    ResumeSyncSyncWait = auto()
+    SyncConflict = auto()
+    WaitDeadlock = auto()
+
+
+########################################################################
 # DefDelScenario
 ########################################################################
 class DefDelScenario(Enum):
@@ -101,15 +112,12 @@ class DefDelScenario(Enum):
 
 
 ########################################################################
-# ConflictDeadlockScenario
+# RequestConfirmParms
 ########################################################################
-class ConflictDeadlockScenario(Enum):
-    NormalSync = auto()
-    NormalResumeWait = auto()
-    ResumeSyncSyncWait = auto()
-    SyncConflict = auto()
-    WaitDeadlock = auto()
-
+@dataclass()
+class RequestConfirmParms:
+    request_name: str
+    serial_number: int
 
 ########################################################################
 # Test settings for conflict_deadlock_scenarios
@@ -966,21 +974,20 @@ class Pause(ConfigCmd):
 ########################################################################
 class RecvMsg(ConfigCmd):
     def __init__(self,
-                 cmd_runners: StrOrList,
+                 cmd_runners: Iterable,
                  senders: Iterable,
                  exp_msgs: dict[str, Any],
-                 error_stopped_target: bool = False,
                  stopped_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
         self.senders = get_set(senders)
+
         self.exp_msgs = exp_msgs
 
         self.log_msg = log_msg
 
-        self.error_stopped_target = error_stopped_target
         self.stopped_remotes = get_set(stopped_remotes)
 
         self.arg_list += ['senders',
@@ -997,7 +1004,6 @@ class RecvMsg(ConfigCmd):
             cmd_runner=cmd_runner,
             senders=self.senders,
             exp_msgs=self.exp_msgs,
-            error_stopped_target=self.error_stopped_target,
             stopped_remotes=self.stopped_remotes,
             timeout_type=TimeoutType.TimeoutNone,
             timeout=0,
@@ -1014,13 +1020,11 @@ class RecvMsgTimeoutFalse(RecvMsg):
                  senders: StrOrList,
                  exp_msgs: dict[str, Any],
                  timeout: IntOrFloat,
-                 error_stopped_target: bool = False,
                  stopped_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners,
                          senders=senders,
                          exp_msgs=exp_msgs,
-                         error_stopped_target=error_stopped_target,
                          stopped_remotes=stopped_remotes,
                          log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
@@ -1039,7 +1043,6 @@ class RecvMsgTimeoutFalse(RecvMsg):
             cmd_runner=cmd_runner,
             senders=self.senders,
             exp_msgs=self.exp_msgs,
-            error_stopped_target=self.error_stopped_target,
             stopped_remotes=self.stopped_remotes,
             timeout_type=TimeoutType.TimeoutFalse,
             timeout=self.timeout,
@@ -1057,14 +1060,12 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
                  exp_msgs: dict[str, Any],
                  timeout: IntOrFloat,
                  timeout_names: Iterable,
-                 error_stopped_target: bool = False,
                  stopped_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners,
                          senders=senders,
                          exp_msgs=exp_msgs,
                          timeout=timeout,
-                         error_stopped_target=error_stopped_target,
                          stopped_remotes=stopped_remotes,
                          log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
@@ -1083,7 +1084,6 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
             cmd_runner=cmd_runner,
             senders=self.senders,
             exp_msgs=self.exp_msgs,
-            error_stopped_target=self.error_stopped_target,
             stopped_remotes=self.stopped_remotes,
             timeout_type=TimeoutType.TimeoutTrue,
             timeout=self.timeout,
@@ -1098,8 +1098,7 @@ class Resume(ConfigCmd):
     def __init__(self,
                  cmd_runners: Iterable,
                  targets: Iterable,
-                 stopped_names: Iterable,
-                 error_stopped_target: bool = True,
+                 stopped_remotes: Iterable,
                  code: Optional[Any] = None,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners)
@@ -1107,16 +1106,13 @@ class Resume(ConfigCmd):
 
         self.targets = get_set(targets)
 
-        self.stopped_names = get_set(stopped_names)
-
-        self.error_stopped_target = error_stopped_target
+        self.stopped_remotes = get_set(stopped_remotes)
 
         self.code = code
 
         self.log_msg = log_msg
 
-        self.arg_list += ['targets',
-                          'error_stopped_target']
+        self.arg_list += ['targets']
 
     def run_process(self, cmd_runner: str) -> None:
         """Run the command.
@@ -1127,11 +1123,10 @@ class Resume(ConfigCmd):
         self.config_ver.handle_resume(
             cmd_runner=cmd_runner,
             targets=self.targets,
-            stopped_remotes=self.stopped_names,
+            stopped_remotes=self.stopped_remotes,
             timeout=0,
             timeout_names=set(),
             timeout_type=TimeoutType.TimeoutNone,
-            error_stopped_target=self.error_stopped_target,
             code=self.code,
             log_msg=self.log_msg)
 
@@ -1143,15 +1138,13 @@ class ResumeTimeoutFalse(Resume):
     def __init__(self,
                  cmd_runners: Iterable,
                  targets: Iterable,
-                 stopped_names: Iterable,
+                 stopped_remotes: Iterable,
                  timeout: IntOrFloat,
-                 error_stopped_target: bool = True,
                  code: Optional[Any] = None,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners,
                          targets=targets,
-                         stopped_names=stopped_names,
-                         error_stopped_target=error_stopped_target,
+                         stopped_remotes=stopped_remotes,
                          code=code,
                          log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
@@ -1169,11 +1162,10 @@ class ResumeTimeoutFalse(Resume):
         self.config_ver.handle_resume(
             cmd_runner=cmd_runner,
             targets=self.targets,
-            stopped_remotes=self.stopped_names,
+            stopped_remotes=self.stopped_remotes,
             timeout=self.timeout,
             timeout_names=set(),
             timeout_type=TimeoutType.TimeoutFalse,
-            error_stopped_target=self.error_stopped_target,
             code=self.code,
             log_msg=self.log_msg)
 
@@ -1185,17 +1177,15 @@ class ResumeTimeoutTrue(ResumeTimeoutFalse):
     def __init__(self,
                  cmd_runners: Iterable,
                  targets: Iterable,
-                 stopped_names: Iterable,
+                 stopped_remotes: Iterable,
                  timeout: IntOrFloat,
                  timeout_names: StrOrList,
-                 error_stopped_target: bool = True,
                  code: Optional[Any] = None,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners,
                          targets=targets,
-                         stopped_names=stopped_names,
+                         stopped_remotes=stopped_remotes,
                          timeout=timeout,
-                         error_stopped_target=error_stopped_target,
                          code=code,
                          log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
@@ -1215,11 +1205,10 @@ class ResumeTimeoutTrue(ResumeTimeoutFalse):
         self.config_ver.handle_resume(
             cmd_runner=cmd_runner,
             targets=self.targets,
-            stopped_remotes=self.stopped_names,
+            stopped_remotes=self.stopped_remotes,
             timeout=self.timeout,
             timeout_names=set(self.timeout_names),
             timeout_type=TimeoutType.TimeoutTrue,
-            error_stopped_target=self.error_stopped_target,
             code=self.code,
             log_msg=self.log_msg)
 
@@ -1232,7 +1221,6 @@ class SendMsg(ConfigCmd):
                  cmd_runners: Iterable,
                  receivers: StrOrList,
                  msgs_to_send: dict[str, Any],
-                 error_stopped_target: bool = True,
                  stopped_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners)
@@ -1242,7 +1230,6 @@ class SendMsg(ConfigCmd):
             receivers = [receivers]
         self.receivers = receivers
         self.msgs_to_send = msgs_to_send
-        self.error_stopped_target = error_stopped_target
 
         self.stopped_remotes = get_set(stopped_remotes)
 
@@ -1263,7 +1250,6 @@ class SendMsg(ConfigCmd):
             msg_to_send=self.msgs_to_send[cmd_runner],
             timeout_type=TimeoutType.TimeoutNone,
             timeout=0,
-            error_stopped_target=self.error_stopped_target,
             unreg_timeout_names=None,
             fullq_timeout_names=None,
             stopped_remotes=self.stopped_remotes,
@@ -1279,7 +1265,6 @@ class SendMsgTimeoutFalse(SendMsg):
                  receivers: StrOrList,
                  msgs_to_send: dict[str, Any],
                  timeout: IntOrFloat,
-                 error_stopped_target: bool = True,
                  stopped_remotes: Optional[StrOrSet] = None,
                  # unreg_timeout_names: StrOrList,
                  # fullq_timeout_names: StrOrList,
@@ -1288,7 +1273,6 @@ class SendMsgTimeoutFalse(SendMsg):
             cmd_runners=cmd_runners,
             receivers=receivers,
             msgs_to_send=msgs_to_send,
-            error_stopped_target=error_stopped_target,
             stopped_remotes=stopped_remotes,
             log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
@@ -1309,7 +1293,6 @@ class SendMsgTimeoutFalse(SendMsg):
             msg_to_send=self.msgs_to_send[cmd_runner],
             timeout_type=TimeoutType.TimeoutFalse,
             timeout=self.timeout,
-            error_stopped_target=self.error_stopped_target,
             unreg_timeout_names=None,
             fullq_timeout_names=None,
             stopped_remotes=self.stopped_remotes,
@@ -1327,7 +1310,6 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
                  timeout: IntOrFloat,
                  unreg_timeout_names: StrOrList,
                  fullq_timeout_names: StrOrList,
-                 error_stopped_target: bool = True,
                  stopped_remotes: Optional[StrOrSet] = None,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(
@@ -1335,7 +1317,6 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
             receivers=receivers,
             msgs_to_send=msgs_to_send,
             timeout=timeout,
-            error_stopped_target=error_stopped_target,
             stopped_remotes=stopped_remotes,
             # unreg_timeout_names=unreg_timeout_names,
             # fullq_timeout_names=fullq_timeout_names,
@@ -1365,7 +1346,6 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
             msg_to_send=self.msgs_to_send[cmd_runner],
             timeout_type=TimeoutType.TimeoutTrue,
             timeout=self.timeout,
-            error_stopped_target=self.error_stopped_target,
             unreg_timeout_names=set(self.unreg_timeout_names),
             fullq_timeout_names=set(self.fullq_timeout_names),
             stopped_remotes=self.stopped_remotes,
@@ -1537,7 +1517,6 @@ class SyncTimeoutTrue(SyncTimeoutFalse):
                  timeout_remotes: Iterable,
                  stopped_remotes: Optional[Iterable] = None,
                  conflict_remotes: Optional[Iterable] = None,
-                 error_stopped_target: bool = True,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners,
                          targets=targets,
@@ -4785,7 +4764,7 @@ class ConfigVerifier:
         self.unregistered_names: set[str] = set(self.thread_names)
         self.registered_names: set[str] = set()
         self.active_names: set[str] = set()
-        self.stopped_names: set[str] = set()
+        self.stopped_remotes: set[str] = set()
         self.expected_registered: dict[str, ThreadTracker] = {}
         self.expected_pairs: dict[tuple[str, str],
                                   dict[str, ThreadPairStatus]] = {}
@@ -5144,7 +5123,7 @@ class ConfigVerifier:
         resume_serial_num = self.add_cmd(
             Resume(cmd_runners=resumers,
                    targets=waiters,
-                   stopped_names=[],
+                   stopped_remotes=[],
                    log_msg='cd normal resume wait test'))
         self.add_cmd(
             ConfirmResponse(
@@ -5183,7 +5162,7 @@ class ConfigVerifier:
         resume_serial_num = self.add_cmd(
             Resume(cmd_runners=resumers,
                    targets=waiters,
-                   stopped_names=[],
+                   stopped_remotes=[],
                    log_msg='cd resume sync sync wait test'))
         self.add_cmd(
             ConfirmResponse(
@@ -5398,7 +5377,7 @@ class ConfigVerifier:
 
         num_adjust_registered = len(self.registered_names) - num_registered
         num_adjust_active = len(self.active_names) - num_active
-        num_adjust_stopped = len(self.stopped_names) - num_stopped
+        num_adjust_stopped = len(self.stopped_remotes) - num_stopped
 
         num_create_auto_start = 0
         num_create_no_start = 0
@@ -5673,7 +5652,7 @@ class ConfigVerifier:
             self.add_cmd(ValidateConfig(cmd_runners=cmd_runner))
 
         self.active_names -= names
-        self.stopped_names |= names
+        self.stopped_remotes |= names
 
     ####################################################################
     # build_exit_suite_num
@@ -5763,11 +5742,11 @@ class ConfigVerifier:
         cmd_runners = get_set(cmd_runners)
         join_target_names = get_set(join_target_names)
 
-        if not join_target_names.issubset(self.stopped_names):
+        if not join_target_names.issubset(self.stopped_remotes):
             self.abort_all_f1_threads()
             raise InvalidInputDetected(f'Input {join_target_names} is not a '
                                        'subset of inactive names '
-                                       f'{self.stopped_names}')
+                                       f'{self.stopped_remotes}')
 
         if join_target_names:
             self.add_cmd(Join(
@@ -5784,7 +5763,7 @@ class ConfigVerifier:
             self.add_cmd(ValidateConfig(cmd_runners=cmd_runners))
 
         self.unregistered_names |= join_target_names
-        self.stopped_names -= join_target_names
+        self.stopped_remotes -= join_target_names
 
     ####################################################################
     # build_join_suite
@@ -5800,15 +5779,15 @@ class ConfigVerifier:
 
         """
         assert num_to_join > 0
-        if len(self.stopped_names) < num_to_join:
+        if len(self.stopped_remotes) < num_to_join:
             self.abort_all_f1_threads()
             raise InvalidInputDetected(f'Input num_to_join {num_to_join} '
                                        f'is greater than the number of '
                                        f'stopped threads '
-                                       f'{len(self.stopped_names)}')
+                                       f'{len(self.stopped_remotes)}')
 
         names: list[str] = list(
-            random.sample(self.stopped_names, num_to_join))
+            random.sample(self.stopped_remotes, num_to_join))
 
         self.build_join_suite(
             cmd_runners=cmd_runners,
@@ -6442,7 +6421,7 @@ class ConfigVerifier:
             resume_serial_num_0 = self.add_cmd(
                 Resume(cmd_runners=resumer_names[0],
                        targets=waiters,
-                       stopped_names=[]))
+                       stopped_remotes=[]))
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
@@ -7143,7 +7122,6 @@ class ConfigVerifier:
                             RecvMsg(cmd_runners=receiver_name,
                                     senders=sender_name,
                                     exp_msgs=sender_msgs,
-                                    error_stopped_target=error_stopped_target,
                                     stopped_remotes=stopped_remotes,
                                     log_msg=log_msg))
                     elif timeout_type == TimeoutType.TimeoutFalse:
@@ -7155,7 +7133,6 @@ class ConfigVerifier:
                                 senders=sender_name,
                                 exp_msgs=sender_msgs,
                                 timeout=timeout_time,
-                                error_stopped_target=error_stopped_target,
                                 stopped_remotes=stopped_remotes,
                                 log_msg=log_msg))
 
@@ -7174,7 +7151,6 @@ class ConfigVerifier:
                                 exp_msgs=sender_msgs,
                                 timeout=timeout_time,
                                 timeout_names=sender_name,
-                                error_stopped_target=error_stopped_target,
                                 stopped_remotes=stopped_remotes,
                                 log_msg=log_msg))
                     if pause_time > 0:
@@ -7703,7 +7679,7 @@ class ConfigVerifier:
                         self.add_cmd(
                             Resume(cmd_runners=resumer_name,
                                    targets=waiter_name,
-                                   stopped_names=[]))
+                                   stopped_remotes=[]))
                 ########################################################
                 # do stop to make resumer stopped
                 ########################################################
@@ -7818,7 +7794,7 @@ class ConfigVerifier:
                 resume_cmd_serial_num = self.add_cmd(
                     Resume(cmd_runners=actor_names,
                            targets=target_names,
-                           stopped_names=[]))
+                           stopped_remotes=[]))
                 self.add_cmd(
                     ConfirmResponse(
                         cmd_runners=[self.commander_name],
@@ -7906,7 +7882,7 @@ class ConfigVerifier:
                 resume_cmd_serial_num = self.add_cmd(
                     Resume(cmd_runners=actor_names,
                            targets=list(target_names),
-                           stopped_names=[]))
+                           stopped_remotes=[]))
                 self.add_cmd(
                     ConfirmResponse(
                         cmd_runners=[self.commander_name],
@@ -7974,7 +7950,7 @@ class ConfigVerifier:
                 resume_cmd_serial_num = self.add_cmd(
                     Resume(cmd_runners=actor_names,
                            targets=target_names,
-                           stopped_names=[]))
+                           stopped_remotes=[]))
 
                 self.add_cmd(
                     ConfirmResponse(
@@ -8073,10 +8049,10 @@ class ConfigVerifier:
 
             if len(target_names) % 2:
                 error_stopped_target = True
-                stopped_names = set(actor_names.copy())
+                stopped_remotes = set(actor_names.copy())
             else:
                 error_stopped_target = False
-                stopped_names = set()
+                stopped_remotes = set()
 
             if target_names:
                 target_names = list(target_names)
@@ -8086,7 +8062,7 @@ class ConfigVerifier:
                     WaitTimeoutFalse(
                         cmd_runners=target_names,
                         resumers=actor_names,
-                        stopped_remotes=stopped_names,
+                        stopped_remotes=stopped_remotes,
                         timeout=timeout_time,
                         wait_for=st.WaitFor.All,
                         error_stopped_target=error_stopped_target))
@@ -8128,7 +8104,7 @@ class ConfigVerifier:
                     resume_cmd_serial_num = self.add_cmd(
                         Resume(cmd_runners=actor_names,
                                targets=target_names,
-                               stopped_names=[]))
+                               stopped_remotes=[]))
 
                     self.add_cmd(
                         ConfirmResponse(
@@ -8154,19 +8130,19 @@ class ConfigVerifier:
                 error_stopped_target = True
                 exit_was_done = False
                 if len(timeout_names) % 2:
-                    stopped_names = set(actor_names.copy())
+                    stopped_remotes = set(actor_names.copy())
                     self.build_exit_suite(cmd_runner=self.commander_name,
                                           names=actor_names)
                     exit_was_done = True
                 else:
-                    stopped_names = set()
+                    stopped_remotes = set()
 
                 timeout_time = 0.5
                 wait_serial_num = self.add_cmd(
                     WaitTimeoutTrue(
                         cmd_runners=timeout_names,
                         resumers=actor_names,
-                        stopped_remotes=stopped_names,
+                        stopped_remotes=stopped_remotes,
                         timeout=timeout_time,
                         timeout_remotes=set(actor_names),
                         wait_for=st.WaitFor.All,
@@ -8265,7 +8241,7 @@ class ConfigVerifier:
                 resume_cmd_serial_num = self.add_cmd(
                     Resume(cmd_runners=actor_names,
                            targets=target_names,
-                           stopped_names=[]))
+                           stopped_remotes=[]))
 
                 self.add_cmd(
                     ConfirmResponse(
@@ -8350,7 +8326,7 @@ class ConfigVerifier:
                 resume_cmd_serial_num = self.add_cmd(
                     Resume(cmd_runners=actor_names,
                            targets=target_names,
-                           stopped_names=[]))
+                           stopped_remotes=[]))
 
                 self.add_cmd(
                     ConfirmResponse(
@@ -8512,9 +8488,9 @@ class ConfigVerifier:
         ################################################################
         # choose stopped_no_delay_targets
         ################################################################
-        stopped_names_copy = self.stopped_names.copy()
+        stopped_remotes_copy = self.stopped_remotes.copy()
         stopped_no_delay_targets = self.choose_names(
-            name_collection=stopped_names_copy,
+            name_collection=stopped_remotes_copy,
             num_names_needed=num_stopped_no_delay,
             update_collection=True,
             var_name_for_log='stopped_no_delay_targets')
@@ -8523,7 +8499,7 @@ class ConfigVerifier:
         # choose stopped_delay_targets
         ################################################################
         stopped_delay_targets = self.choose_names(
-            name_collection=stopped_names_copy,
+            name_collection=stopped_remotes_copy,
             num_names_needed=num_stopped_delay,
             update_collection=True,
             var_name_for_log='stopped_delay_targets')
@@ -8540,10 +8516,10 @@ class ConfigVerifier:
 
         if len(all_targets) % 2:
             error_stopped_target = True
-            stopped_names = stopped_no_delay_targets + stopped_delay_targets
+            stopped_remotes = stopped_no_delay_targets + stopped_delay_targets
         else:
             error_stopped_target = False
-            stopped_names = stopped_delay_targets
+            stopped_remotes = stopped_delay_targets
 
         ################################################################
         # issue smart_wait for active_target_names
@@ -8576,32 +8552,29 @@ class ConfigVerifier:
             resume_serial_num = self.add_cmd(
                 Resume(cmd_runners=resumer_names,
                        targets=all_targets,
-                       stopped_names=stopped_names,
-                       error_stopped_target=error_stopped_target))
+                       stopped_remotes=stopped_remotes))
         elif timeout_type == TimeoutType.TimeoutFalse:
             resume_to_confirm = 'ResumeTimeoutFalse'
             resume_serial_num = self.add_cmd(
                 ResumeTimeoutFalse(
                     cmd_runners=resumer_names,
                     targets=all_targets,
-                    stopped_names=stopped_names,
-                    timeout=timeout_time,
-                    error_stopped_target=error_stopped_target))
+                    stopped_remotes=stopped_remotes,
+                    timeout=timeout_time))
         else:
             resume_to_confirm = 'ResumeTimeoutTrue'
             resume_serial_num = self.add_cmd(
                 ResumeTimeoutTrue(
                     cmd_runners=resumer_names,
                     targets=all_targets,
-                    stopped_names=stopped_names,
+                    stopped_remotes=stopped_remotes,
                     timeout=timeout_time,
-                    timeout_names=timeout_names,
-                    error_stopped_target=error_stopped_target))
+                    timeout_names=timeout_names))
 
         ################################################################
         # prevent stopped_no_delay from getting started too soon
         ################################################################
-        if error_stopped_target and stopped_names:
+        if error_stopped_target and stopped_remotes:
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
@@ -8672,7 +8645,7 @@ class ConfigVerifier:
         ################################################################
         # wait for resume timeouts to be known
         ################################################################
-        if not (error_stopped_target and stopped_names):
+        if not (error_stopped_target and stopped_remotes):
             self.add_cmd(WaitForResumeTimeouts(
                 cmd_runners=self.commander_name,
                 resumer_names=resumer_names,
@@ -8798,7 +8771,7 @@ class ConfigVerifier:
         # confirm the unreg_no_delay_names
         ####################################################
         if unreg_no_delay_names:
-            if error_stopped_target and stopped_names:
+            if error_stopped_target and stopped_remotes:
                 self.add_cmd(
                     ConfirmResponseNot(
                         cmd_runners=[self.commander_name],
@@ -8810,9 +8783,8 @@ class ConfigVerifier:
                     ResumeTimeoutFalse(
                         cmd_runners=resumer_names,
                         targets=unreg_no_delay_names,
-                        stopped_names=[],
-                        timeout=0.5,
-                        error_stopped_target=True))
+                        stopped_remotes=[],
+                        timeout=0.5))
                 self.add_cmd(
                     ConfirmResponse(
                         cmd_runners=[self.commander_name],
@@ -8830,7 +8802,7 @@ class ConfigVerifier:
         ####################################################
         if unreg_delay_names:
             if (timeout_type == TimeoutType.TimeoutTrue
-                    or (error_stopped_target and stopped_names)):
+                    or (error_stopped_target and stopped_remotes)):
                 self.add_cmd(
                     ConfirmResponseNot(
                         cmd_runners=[self.commander_name],
@@ -8842,9 +8814,8 @@ class ConfigVerifier:
                     ResumeTimeoutFalse(
                         cmd_runners=resumer_names,
                         targets=unreg_delay_names,
-                        stopped_names=[],
-                        timeout=0.5,
-                        error_stopped_target=True))
+                        stopped_remotes=[],
+                        timeout=0.5))
                 self.add_cmd(
                     ConfirmResponse(
                         cmd_runners=[self.commander_name],
@@ -8861,7 +8832,7 @@ class ConfigVerifier:
         # confirm the stopped_no_delay_targets
         ####################################################
         if stopped_no_delay_targets:
-            if error_stopped_target and stopped_names:
+            if error_stopped_target and stopped_remotes:
                 self.add_cmd(
                     ConfirmResponseNot(
                         cmd_runners=[self.commander_name],
@@ -8873,9 +8844,8 @@ class ConfigVerifier:
                     ResumeTimeoutFalse(
                         cmd_runners=resumer_names,
                         targets=stopped_no_delay_targets,
-                        stopped_names=[],
-                        timeout=0.5,
-                        error_stopped_target=True))
+                        stopped_remotes=[],
+                        timeout=0.5))
                 self.add_cmd(
                     ConfirmResponse(
                         cmd_runners=[self.commander_name],
@@ -8890,11 +8860,11 @@ class ConfigVerifier:
                     confirmers=stopped_no_delay_targets))
 
         ####################################################
-        # confirm the stopped_names
+        # confirm the stopped_remotes
         ####################################################
         if stopped_delay_targets:
             if (timeout_type == TimeoutType.TimeoutTrue
-                    or (error_stopped_target and stopped_names)):
+                    or (error_stopped_target and stopped_remotes)):
                 self.add_cmd(
                     ConfirmResponseNot(
                         cmd_runners=[self.commander_name],
@@ -8906,9 +8876,8 @@ class ConfigVerifier:
                     ResumeTimeoutFalse(
                         cmd_runners=resumer_names,
                         targets=stopped_delay_targets,
-                        stopped_names=[],
-                        timeout=0.5,
-                        error_stopped_target=True))
+                        stopped_remotes=[],
+                        timeout=0.5))
                 self.add_cmd(
                     ConfirmResponse(
                         cmd_runners=[self.commander_name],
@@ -8925,7 +8894,7 @@ class ConfigVerifier:
         ####################################################
         # confirm the resumer_names
         ####################################################
-        if not (error_stopped_target and stopped_names):
+        if not (error_stopped_target and stopped_remotes):
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
@@ -9255,7 +9224,7 @@ class ConfigVerifier:
                                 Resume(
                                     cmd_runners=sender_name,
                                     targets=receiver_name,
-                                    stopped_names=stopped_remotes,
+                                    stopped_remotes=stopped_remotes,
                                     log_msg=log_msg))
                         elif (send_resume == 'sync'
                               or send_resume == 'sync_send'):
@@ -9286,7 +9255,7 @@ class ConfigVerifier:
                                     cmd_runners=sender_name,
                                     targets=receiver_name,
                                     timeout=timeout_time,
-                                    stopped_names=stopped_remotes,
+                                    stopped_remotes=stopped_remotes,
                                     log_msg=log_msg))
                         elif (send_resume == 'sync'
                               or send_resume == 'sync_send'):
@@ -9320,7 +9289,7 @@ class ConfigVerifier:
                                     targets=receiver_name,
                                     timeout=timeout_time,
                                     timeout_names=receiver_name,
-                                    stopped_names=stopped_remotes,
+                                    stopped_remotes=stopped_remotes,
                                     log_msg=log_msg))
                         elif (send_resume == 'sync'
                               or send_resume == 'sync_send'):
@@ -9410,30 +9379,33 @@ class ConfigVerifier:
         req0_name = req0_names[0]
         req1_name = req1_names[0]
 
+        sender_msgs: dict[str, str] = {
+            req0_name: (f'send test: {req0_name} sending msg at '
+                        f'{self.get_ptime()}'),
+            req1_name: (f'send test: {req1_name} sending msg at '
+                        f'{self.get_ptime()}')
+        }
+
+        conflict_remotes: set[str] = set()
+        deadlock_remotes: set[str] = set()
+
+        request_specific_args: dict[str, Any] = {
+            'sender_msgs': sender_msgs,
+            'conflict_remotes': conflict_remotes,
+            'deadlock_remotes': deadlock_remotes,
+        }
+
         ################################################################
         # request rtns
         ################################################################
-        actions: dict[Actors, Callable[..., None]] = {
-            Actors.ActiveBeforeActor:
-                self.build_resume_before_wait_timeout_suite,
-            Actors.ActiveAfterActor:
-                self.build_resume_after_wait_timeout_suite,
-            Actors.ActionExitActor:
-                self.build_resume_exit_wait_timeout_suite,
-            Actors.ExitActionActor:
-                self.build_exit_resume_wait_timeout_suite,
-            Actors.UnregActor:
-                self.build_unreg_resume_wait_timeout_suite,
-            Actors.RegActor:
-                self.build_reg_resume_wait_timeout_suite,
+        request_build_rtns: dict[SmartRequestType,
+                                 Callable[..., RequestConfirmParms]] = {
+            SmartRequestType.SendMsg: self.build_send_msg_request,
+            SmartRequestType.RecvMsg: self.build_recv_msg_request,
+            SmartRequestType.Resume: self.build_resume_request,
+            SmartRequestType.Sync: self.build_sync_request,
+            SmartRequestType.Wait: self.build_wait_request,
         }
-        for actor in actor_list:
-            actions[actor](waiter_names=waiter_names,
-                           actor_names=actor_names)
-        confirm_cmd_to_use = req0.name
-        req0_serial_num = 0
-
-
 
         ################################################################
         # req0 and req1 combinations and expected result
@@ -9474,19 +9446,20 @@ class ConfigVerifier:
         # result: req0 - raise NotAlive
         # result: req1 - ok, RecvMsg timeout needed
 
-        stopped_remotes = set()
-        req1_timeout = False
+        stopped_remotes_for_req0 = set()
+        stopped_remotes_for_req1 = set()
+        req1_timeout_type: TimeoutType = TimeoutType.TimeoutNone
         reset_ops_count = False
         if ((req0_when_req1_state[0] == st.ThreadState.Unregistered
                 or req0_when_req1_state[0] == st.ThreadState.Registered)
                 and req0_when_req1_state[1] == 0
                 and timeout_type != TimeoutType.TimeoutTrue):
-            stopped_remotes = {req1_name}
+            stopped_remotes_for_req0 = {req1_name}
 
         ################################################################
         # lap loop
         ################################################################
-        current_state = st.ThreadState.Unregistered
+        current_req1_state = st.ThreadState.Unregistered
         reg_iteration = 0
         for lap in range(2):
             ############################################################
@@ -9504,18 +9477,18 @@ class ConfigVerifier:
                 # do join to make receiver unregistered
                 ########################################################
                 if state == st.ThreadState.Unregistered:
-                    if current_state == st.ThreadState.Registered:
+                    if current_req1_state == st.ThreadState.Registered:
                         self.add_cmd(Unregister(
                             cmd_runners=self.commander_name,
                             unregister_targets=req1_name))
                         self.unregistered_names |= {req1_name}
                         state_iteration = 1
-                    elif current_state == st.ThreadState.Stopped:
+                    elif current_req1_state == st.ThreadState.Stopped:
                         self.build_join_suite(
                             cmd_runners=self.commander_name,
                             join_target_names=req1_name,
                             validate_config=False)
-                    current_state = st.ThreadState.Unregistered
+                    current_req1_state = st.ThreadState.Unregistered
                 ########################################################
                 # do create to make receiver registered
                 ########################################################
@@ -9529,73 +9502,37 @@ class ConfigVerifier:
                                          target_rtn=outer_f1,
                                          app_config=AppConfig.ScriptStyle)],
                         validate_config=False)
-                    current_state = st.ThreadState.Registered
+                    current_req1_state = st.ThreadState.Registered
                 ########################################################
-                # do start to make receiver alive
+                # do start to make req1 alive
                 ########################################################
                 elif state == st.ThreadState.Alive:
                     self.build_start_suite(
                         start_names=req1_name,
                         validate_config=False)
 
-                    if send_resume == 'sync_send':
-                        send_msg_serial_num2 = self.add_cmd(
-                            SendMsg(
-                                cmd_runners=req1_name,
-                                receivers=req0_name,
-                                msgs_to_send=sender_msgs,
-                                stopped_remotes=set(),
-                                log_msg=log_msg))
+                    if req1_lap == lap:
+                        confirm_parms = request_build_rtns[req1](
+                            timeout_type=req1_timeout_type,
+                            cmd_runner=req1_name,
+                            target=req0_name,
+                            stopped_remotes=stopped_remotes_for_req1,
+                            request_specific_args=request_specific_args)
                         self.add_cmd(
                             ConfirmResponse(
                                 cmd_runners=self.commander_name,
                                 confirm_cmd='SendMsg',
                                 confirm_serial_num=send_msg_serial_num2,
                                 confirmers=req1_name))
-                    if recv_msg_lap == lap:
-                        if recv_msg_ok:
-                            if send_resume == 'send':
-                                self.add_cmd(
-                                    RecvMsg(cmd_runners=req1_name,
-                                            senders=req0_name,
-                                            exp_msgs=sender_msgs))
-                            elif send_resume == 'resume':
-                                self.add_cmd(
-                                    Wait(cmd_runners=req1_name,
-                                         resumers=req0_name,
-                                         wait_for=st.WaitFor.All))
-                            else:
-                                self.add_cmd(
-                                    Sync(cmd_runners=req1_name,
-                                         targets=req0_name))
+
+                        if req1_timeout_type == TimeoutType.TimeoutTrue:
+                            req1_pause_time = 0.5
                         else:
-                            if send_resume == 'send':
-                                self.add_cmd(
-                                    RecvMsgTimeoutTrue(
-                                        cmd_runners=req1_name,
-                                        senders=req0_name,
-                                        timeout=0.5,
-                                        timeout_names=req0_name,
-                                        exp_msgs=sender_msgs))
-                            elif send_resume == 'resume':
-                                self.add_cmd(
-                                    WaitTimeoutTrue(
-                                        cmd_runners=req1_name,
-                                        resumers=req0_name,
-                                        wait_for=st.WaitFor.All,
-                                        timeout=0.5,
-                                        timeout_remotes=req0_name))
-                            else:
-                                self.add_cmd(
-                                    SyncTimeoutTrue(
-                                        cmd_runners=req1_name,
-                                        targets=req0_name,
-                                        timeout=0.5,
-                                        timeout_remotes=req0_name))
-                            self.add_cmd(
-                                Pause(cmd_runners=self.commander_name,
-                                      pause_seconds=1))
-                    current_state = st.ThreadState.Alive
+                            req1_pause_time = 1
+                        self.add_cmd(
+                            Pause(cmd_runners=self.commander_name,
+                                  pause_seconds=req1_pause_time))
+                    current_req1_state = st.ThreadState.Alive
                 ########################################################
                 # do stop to make receiver stopped
                 ########################################################
@@ -9605,108 +9542,21 @@ class ConfigVerifier:
                         names=req1_name,
                         validate_config=False,
                         reset_ops_count=reset_ops_count)
-                    current_state = st.ThreadState.Stopped
+                    current_req1_state = st.ThreadState.Stopped
                 ########################################################
                 # issue send_msg
                 ########################################################
-                if (send_msg_state[0] == state
-                        and send_msg_state[1] == state_iteration
-                        and send_msg_lap == lap):
+                if (req0_when_req1_state[0] == state
+                        and req0_when_req1_state[1] == state_iteration
+                        and req0_when_req1_lap == lap):
                     pause_time = 1
-                    if timeout_type == TimeoutType.TimeoutNone:
-                        if send_resume == 'send':
-                            confirm_cmd_to_use = 'SendMsg'
-                            send_msg_serial_num = self.add_cmd(
-                                SendMsg(
-                                    cmd_runners=req0_name,
-                                    receivers=req1_name,
-                                    msgs_to_send=sender_msgs,
-                                    stopped_remotes=stopped_remotes,
-                                    log_msg=log_msg))
-                        elif send_resume == 'resume':
-                            confirm_cmd_to_use = 'Resume'
-                            send_msg_serial_num = self.add_cmd(
-                                Resume(
-                                    cmd_runners=req0_name,
-                                    targets=req1_name,
-                                    stopped_names=stopped_remotes,
-                                    log_msg=log_msg))
-                        elif (send_resume == 'sync'
-                              or send_resume == 'sync_send'):
-                            confirm_cmd_to_use = 'Sync'
-                            send_msg_serial_num = self.add_cmd(
-                                Sync(
-                                    cmd_runners=req0_name,
-                                    targets=req1_name,
-                                    stopped_remotes=stopped_remotes,
-                                    log_msg=log_msg))
+                    confirm_parms = request_build_rtns[req0](
+                        timeout_type=timeout_type,
+                        cmd_runner=req0_name,
+                        target=req1_name,
+                        stopped_remotes=stopped_remotes_for_req0,
+                        request_specific_args=request_specific_args)
 
-                    elif timeout_type == TimeoutType.TimeoutFalse:
-                        timeout_time = 6
-                        if send_resume == 'send':
-                            confirm_cmd_to_use = 'SendMsgTimeoutFalse'
-                            send_msg_serial_num = self.add_cmd(
-                                SendMsgTimeoutFalse(
-                                    cmd_runners=req0_name,
-                                    receivers=req1_name,
-                                    msgs_to_send=sender_msgs,
-                                    timeout=timeout_time,
-                                    stopped_remotes=stopped_remotes,
-                                    log_msg=log_msg))
-                        elif send_resume == 'resume':
-                            confirm_cmd_to_use = 'ResumeTimeoutFalse'
-                            send_msg_serial_num = self.add_cmd(
-                                ResumeTimeoutFalse(
-                                    cmd_runners=req0_name,
-                                    targets=req1_name,
-                                    timeout=timeout_time,
-                                    stopped_names=stopped_remotes,
-                                    log_msg=log_msg))
-                        elif (send_resume == 'sync'
-                              or send_resume == 'sync_send'):
-                            confirm_cmd_to_use = 'SyncTimeoutFalse'
-                            send_msg_serial_num = self.add_cmd(
-                                SyncTimeoutFalse(
-                                    cmd_runners=req0_name,
-                                    targets=req1_name,
-                                    timeout=timeout_time,
-                                    stopped_remotes=stopped_remotes,
-                                    log_msg=log_msg))
-                    else:  # timeout_type == TimeoutType.TimeoutTrue
-                        timeout_time = 0.5
-                        if send_resume == 'send':
-                            confirm_cmd_to_use = 'SendMsgTimeoutTrue'
-                            send_msg_serial_num = self.add_cmd(
-                                SendMsgTimeoutTrue(
-                                    cmd_runners=req0_name,
-                                    receivers=req1_name,
-                                    msgs_to_send=sender_msgs,
-                                    timeout=timeout_time,
-                                    unreg_timeout_names=req1_name,
-                                    fullq_timeout_names=[],
-                                    stopped_remotes=stopped_remotes,
-                                    log_msg=log_msg))
-                        elif send_resume == 'resume':
-                            confirm_cmd_to_use = 'ResumeTimeoutTrue'
-                            send_msg_serial_num = self.add_cmd(
-                                ResumeTimeoutTrue(
-                                    cmd_runners=req0_name,
-                                    targets=req1_name,
-                                    timeout=timeout_time,
-                                    timeout_names=req1_name,
-                                    stopped_names=stopped_remotes,
-                                    log_msg=log_msg))
-                        elif (send_resume == 'sync'
-                              or send_resume == 'sync_send'):
-                            confirm_cmd_to_use = 'SyncTimeoutTrue'
-                            send_msg_serial_num = self.add_cmd(
-                                SyncTimeoutTrue(
-                                    cmd_runners=req0_name,
-                                    targets=req1_name,
-                                    timeout=timeout_time,
-                                    timeout_remotes=req1_name,
-                                    stopped_remotes=stopped_remotes,
-                                    log_msg=log_msg))
                     self.add_cmd(
                         Pause(cmd_runners=self.commander_name,
                               pause_seconds=pause_time))
@@ -9716,19 +9566,20 @@ class ConfigVerifier:
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
-                confirm_cmd=confirm_cmd_to_use,
-                confirm_serial_num=send_msg_serial_num,
+                confirm_cmd=confirm_parms.request_name,
+                confirm_serial_num=confirm_parms.serial_number,
                 confirmers=req0_name))
 
     ####################################################################
-    # build_wait_active_suite
+    # build_send_msg_request
     ####################################################################
     def build_send_msg_request(
             self,
             timeout_type: TimeoutType,
             cmd_runner: str,
             target: str,
-            stopped_remotes: set[str]) -> tuple[int, str]:
+            stopped_remotes: set[str],
+            request_specific_args: dict[str, Any]) -> RequestConfirmParms:
         """Adds cmds to the cmd queue.
 
         Args:
@@ -9737,49 +9588,284 @@ class ConfigVerifier:
             target: name of thread that is the target of the request
             stopped_remotes: names of threads that are expected to be
                 detected by the request as stopped
+            request_specific_args: specific args for each request
 
         Returns:
-            the name of the request and serial number of the request for
-            confirmation purposes
+            the name and serial number of the request for confirmation
+            purposes
 
         """
-        sender_msgs: dict[str, str] = {
-            cmd_runner: (f'send test: {cmd_runner} sending msg at '
-                        f'{self.get_ptime()}'),
-        }
         if timeout_type == TimeoutType.TimeoutNone:
-            confirm_cmd_to_use = 'SendMsg'
+            confirm_request_name = 'SendMsg'
             request_serial_num = self.add_cmd(
                 SendMsg(
                     cmd_runners=cmd_runner,
                     receivers=target,
-                    msgs_to_send=sender_msgs,
+                    msgs_to_send=request_specific_args['msgs_to_send'],
                     stopped_remotes=stopped_remotes))
         elif timeout_type == TimeoutType.TimeoutFalse:
-            confirm_cmd_to_use = 'SendMsgTimeoutFalse'
+            confirm_request_name = 'SendMsgTimeoutFalse'
             timeout_time = 6
             request_serial_num = self.add_cmd(
                 SendMsgTimeoutFalse(
                     cmd_runners=cmd_runner,
                     receivers=target,
-                    msgs_to_send=sender_msgs,
+                    msgs_to_send=request_specific_args['msgs_to_send'],
                     timeout=timeout_time,
                     stopped_remotes=stopped_remotes))
         else:  # timeout_type == TimeoutType.TimeoutTrue
             timeout_time = 0.5
-            confirm_cmd_to_use = 'SendMsgTimeoutTrue'
+            confirm_request_name = 'SendMsgTimeoutTrue'
             request_serial_num = self.add_cmd(
                 SendMsgTimeoutTrue(
                     cmd_runners=cmd_runner,
                     receivers=target,
-                    msgs_to_send=sender_msgs,
+                    msgs_to_send=request_specific_args['msgs_to_send'],
                     timeout=timeout_time,
                     unreg_timeout_names=target,
                     fullq_timeout_names=[],
-                    stopped_remotes=stopped_remotes,
-                    log_msg=log_msg))
+                    stopped_remotes=stopped_remotes))
 
-        return request_serial_num, confirm_cmd_to_use
+        return RequestConfirmParms(request_name=confirm_request_name,
+                                   serial_number=request_serial_num)
+
+    ####################################################################
+    # build_recv_msg_request
+    ####################################################################
+    def build_recv_msg_request(
+            self,
+            timeout_type: TimeoutType,
+            cmd_runner: str,
+            target: str,
+            stopped_remotes: set[str],
+            request_specific_args: dict[str, Any]) -> RequestConfirmParms:
+        """Adds cmds to the cmd queue.
+
+        Args:
+            timeout_type: None, False, or True for timeout
+            cmd_runner: name of thread that will do the request
+            target: name of thread that is the target of the request
+            stopped_remotes: names of threads that are expected to be
+                detected by the request as stopped
+            request_specific_args: specific args for each request
+
+        Returns:
+            the name and serial number of the request for confirmation
+            purposes
+
+        """
+        if timeout_type == TimeoutType.TimeoutNone:
+            confirm_request_name = 'RecvMsg'
+            request_serial_num = self.add_cmd(
+                RecvMsg(
+                    cmd_runners=cmd_runner,
+                    senders=target,
+                    exp_msgs=request_specific_args['msgs_to_send'],
+                    stopped_remotes=stopped_remotes))
+        elif timeout_type == TimeoutType.TimeoutFalse:
+            confirm_request_name = 'RecvMsgTimeoutFalse'
+            timeout_time = 6
+            request_serial_num = self.add_cmd(
+                RecvMsgTimeoutFalse(
+                    cmd_runners=cmd_runner,
+                    senders=target,
+                    exp_msgs=request_specific_args['msgs_to_send'],
+                    timeout=timeout_time,
+                    stopped_remotes=stopped_remotes))
+        else:  # timeout_type == TimeoutType.TimeoutTrue
+            timeout_time = 0.5
+            confirm_request_name = 'RecvMsgTimeoutTrue'
+            request_serial_num = self.add_cmd(
+                RecvMsgTimeoutTrue(
+                    cmd_runners=cmd_runner,
+                    senders=target,
+                    exp_msgs=request_specific_args['msgs_to_send'],
+                    timeout=timeout_time,
+                    timeout_names=target,
+                    stopped_remotes=stopped_remotes))
+
+        return RequestConfirmParms(request_name=confirm_request_name,
+                                   serial_number=request_serial_num)
+
+    ####################################################################
+    # build_resume_request
+    ####################################################################
+    def build_resume_request(
+            self,
+            timeout_type: TimeoutType,
+            cmd_runner: str,
+            target: str,
+            stopped_remotes: set[str],
+            request_specific_args: dict[str, Any]) -> RequestConfirmParms:
+        """Adds cmds to the cmd queue.
+
+        Args:
+            timeout_type: None, False, or True for timeout
+            cmd_runner: name of thread that will do the request
+            target: name of thread that is the target of the request
+            stopped_remotes: names of threads that are expected to be
+                detected by the request as stopped
+            request_specific_args: specific args for each request
+
+        Returns:
+            the name and serial number of the request for confirmation
+            purposes
+
+        """
+        if timeout_type == TimeoutType.TimeoutNone:
+            confirm_request_name = 'Resume'
+            request_serial_num = self.add_cmd(
+                Resume(
+                    cmd_runners=cmd_runner,
+                    targets=target,
+                    stopped_remotes=stopped_remotes))
+        elif timeout_type == TimeoutType.TimeoutFalse:
+            confirm_request_name = 'ResumeTimeoutFalse'
+            timeout_time = 6
+            request_serial_num = self.add_cmd(
+                ResumeTimeoutFalse(
+                    cmd_runners=cmd_runner,
+                    targets=target,
+                    timeout=timeout_time,
+                    stopped_remotes=stopped_remotes))
+        else:  # timeout_type == TimeoutType.TimeoutTrue
+            timeout_time = 0.5
+            confirm_request_name = 'ResumeTimeoutTrue'
+            request_serial_num = self.add_cmd(
+                ResumeTimeoutTrue(
+                    cmd_runners=cmd_runner,
+                    targets=target,
+                    timeout=timeout_time,
+                    timeout_names=target,
+                    stopped_remotes=stopped_remotes))
+
+        return RequestConfirmParms(request_name=confirm_request_name,
+                                   serial_number=request_serial_num)
+
+    ####################################################################
+    # build_sync_request
+    ####################################################################
+    def build_sync_request(
+            self,
+            timeout_type: TimeoutType,
+            cmd_runner: str,
+            target: str,
+            stopped_remotes: set[str],
+            request_specific_args: dict[str, Any]) -> RequestConfirmParms:
+        """Adds cmds to the cmd queue.
+
+        Args:
+            timeout_type: None, False, or True for timeout
+            cmd_runner: name of thread that will do the request
+            target: name of thread that is the target of the request
+            stopped_remotes: names of threads that are expected to be
+                detected by the request as stopped
+            request_specific_args: specific args for each request
+
+        Returns:
+            the name and serial number of the request for confirmation
+            purposes
+
+        """
+        if timeout_type == TimeoutType.TimeoutNone:
+            confirm_request_name = 'Sync'
+            request_serial_num = self.add_cmd(
+                Sync(
+                    cmd_runners=cmd_runner,
+                    targets=target,
+                    stopped_remotes=stopped_remotes,
+                    conflict_remotes=request_specific_args['conflict_remotes']
+                ))
+        elif timeout_type == TimeoutType.TimeoutFalse:
+            confirm_request_name = 'SyncTimeoutFalse'
+            timeout_time = 6
+            request_serial_num = self.add_cmd(
+                SyncTimeoutFalse(
+                    cmd_runners=cmd_runner,
+                    targets=target,
+                    timeout=timeout_time,
+                    stopped_remotes=stopped_remotes,
+                    conflict_remotes=request_specific_args['conflict_remotes']
+                ))
+        else:  # timeout_type == TimeoutType.TimeoutTrue
+            timeout_time = 0.5
+            confirm_request_name = 'SyncTimeoutTrue'
+            request_serial_num = self.add_cmd(
+                SyncTimeoutTrue(
+                    cmd_runners=cmd_runner,
+                    targets=target,
+                    timeout=timeout_time,
+                    timeout_remotes=target,
+                    stopped_remotes=stopped_remotes,
+                    conflict_remotes=request_specific_args['conflict_remotes']
+                ))
+
+        return RequestConfirmParms(request_name=confirm_request_name,
+                                   serial_number=request_serial_num)
+
+    ####################################################################
+    # build_wait_request
+    ####################################################################
+    def build_wait_request(
+            self,
+            timeout_type: TimeoutType,
+            cmd_runner: str,
+            target: str,
+            stopped_remotes: set[str],
+            request_specific_args: dict[str, Any]) -> RequestConfirmParms:
+        """Adds cmds to the cmd queue.
+
+        Args:
+            timeout_type: None, False, or True for timeout
+            cmd_runner: name of thread that will do the request
+            target: name of thread that is the target of the request
+            stopped_remotes: names of threads that are expected to be
+                detected by the request as stopped
+            request_specific_args: specific args for each request
+
+        Returns:
+            the name and serial number of the request for confirmation
+            purposes
+
+        """
+        if timeout_type == TimeoutType.TimeoutNone:
+            confirm_request_name = 'Wait'
+            request_serial_num = self.add_cmd(
+                Wait(
+                    cmd_runners=cmd_runner,
+                    resumers=target,
+                    stopped_remotes=stopped_remotes,
+                    conflict_remotes=request_specific_args['conflict_remotes'],
+                    deadlock_remotes=request_specific_args['deadlock_remotes']
+                ))
+        elif timeout_type == TimeoutType.TimeoutFalse:
+            confirm_request_name = 'WaitTimeoutFalse'
+            timeout_time = 6
+            request_serial_num = self.add_cmd(
+                WaitTimeoutFalse(
+                    cmd_runners=cmd_runner,
+                    resumers=target,
+                    timeout=timeout_time,
+                    stopped_remotes=stopped_remotes,
+                    conflict_remotes=request_specific_args['conflict_remotes'],
+                    deadlock_remotes=request_specific_args['deadlock_remotes']
+                ))
+        else:  # timeout_type == TimeoutType.TimeoutTrue
+            timeout_time = 0.5
+            confirm_request_name = 'WaitTimeoutTrue'
+            request_serial_num = self.add_cmd(
+                WaitTimeoutTrue(
+                    cmd_runners=cmd_runner,
+                    resumers=target,
+                    timeout=timeout_time,
+                    timeout_remotes=target,
+                    stopped_remotes=stopped_remotes,
+                    conflict_remotes=request_specific_args['conflict_remotes'],
+                    deadlock_remotes=request_specific_args['deadlock_remotes']
+                ))
+
+        return RequestConfirmParms(request_name=confirm_request_name,
+                                   serial_number=request_serial_num)
 
     ####################################################################
     # build_msg_timeout_suite
@@ -10375,7 +10461,7 @@ class ConfigVerifier:
         self.add_cmd(
             Resume(cmd_runners='charlie',
                    targets='beta',
-                   stopped_names=[],
+                   stopped_remotes=[],
                    log_msg='Resume test log message 4'))
 
         ################################################################
@@ -10499,22 +10585,22 @@ class ConfigVerifier:
             var_name_for_log='alive_names')
 
         ################################################################
-        # choose stopped_names
+        # choose stopped_remotes
         ################################################################
-        stopped_names = self.choose_names(
-            name_collection=self.stopped_names,
+        stopped_remotes = self.choose_names(
+            name_collection=self.stopped_remotes,
             num_names_needed=num_stopped,
             update_collection=False,
-            var_name_for_log='stopped_names')
+            var_name_for_log='stopped_remotes')
 
         targets = (manual_start_names
                    + unreg_names
                    + alive_names
-                   + stopped_names)
+                   + stopped_remotes)
 
         unreg_remotes = (unreg_names
                          + alive_names
-                         + stopped_names)
+                         + stopped_remotes)
 
         if len(targets) % 2:
             smart_start_serial_num = self.add_cmd(
@@ -10673,7 +10759,7 @@ class ConfigVerifier:
         # choose stopped_syncer_names
         ################################################################
         stopped_syncer_names = self.choose_names(
-            name_collection=self.stopped_names,
+            name_collection=self.stopped_remotes,
             num_names_needed=num_stopped_syncers,
             update_collection=False,
             var_name_for_log='stopped_syncer_names')
@@ -11579,7 +11665,6 @@ class ConfigVerifier:
                         cmd_runner: str,
                         senders: set[str],
                         exp_msgs: dict[str, Any],
-                        error_stopped_target: bool,
                         stopped_remotes: set[str],
                         timeout_type: TimeoutType,
                         timeout: IntOrFloat,
@@ -11592,9 +11677,6 @@ class ConfigVerifier:
             cmd_runner: name of thread doing the cmd
             senders: names of the senders
             exp_msgs: expected messages by sender name
-            error_stopped_target: specifies whether to raise an error if
-                the remote sender is stopped and a message was not
-                received
             stopped_remotes: names of remotes that are stopped.
             timeout_type: None, False, or True
             timeout: value to use for timeout
@@ -11604,13 +11686,8 @@ class ConfigVerifier:
 
         """
         self.log_test_msg(f'handle_recv_msg entry: {cmd_runner=}, '
-                          f'{senders=}, {error_stopped_target=} '
-                          f'{stopped_remotes=}, {timeout_type=}, '
+                          f'{senders=}, {stopped_remotes=}, {timeout_type=}, '
                           f'{timeout=}, {timeout_names=}')
-
-        # self.log_ver.add_call_seq(
-        #     name='recv_msg',
-        #     seq='test_smart_thread.py::ConfigVerifier.handle_recv_msg')
 
         self.monitor_event.set()
         timeout_true_value = timeout
@@ -11658,7 +11735,6 @@ class ConfigVerifier:
                          cmd_runner: str,
                          remote: str,
                          exp_msgs: dict[str, Any],
-                         error_stopped_target: bool,
                          stopped_remotes: set[str],
                          timeout_type: TimeoutType,
                          timeout: IntOrFloat,
@@ -11671,9 +11747,6 @@ class ConfigVerifier:
             cmd_runner: name of thread doing the cmd
             remote: names of the sender
             exp_msgs: expected messages from senders
-            error_stopped_target: specifies whether to raise an error if
-                the remote sender is stopped and a message was not
-                received
             stopped_remotes: name of remote that is stopped. Will be
                 None or the same name as remote
             timeout_type: None, False, or True
@@ -11685,15 +11758,14 @@ class ConfigVerifier:
 
             """
         self.log_test_msg(f'handle_recv_msg2 entry: {cmd_runner=}, '
-                          f'{remote=}, {error_stopped_target=} '
-                          f'{stopped_remotes=}')
+                          f'{remote=}, {stopped_remotes=}')
 
         self.log_ver.add_call_seq(
             name='recv_msg',
             seq='test_smart_thread.py::ConfigVerifier.handle_recv_msg2')
 
         enter_exit = ('entry', 'exit')
-        if error_stopped_target and stopped_remotes:
+        if stopped_remotes:
             enter_exit = ('entry', )
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
@@ -11761,217 +11833,8 @@ class ConfigVerifier:
                                  enter_exit=enter_exit,
                                  log_msg=log_msg)
 
-        # self.wait_for_monitor(cmd_runner=cmd_runner,
-        #                       rtn_name='handle_recv')
-
         self.log_test_msg(f'handle_recv_msg2 exit: {cmd_runner=}, '
-                          f'{remote=}, {error_stopped_target=} '
-                          f'{stopped_remotes=}')
-
-    ####################################################################
-    # handle_recv_msg_tof
-    ####################################################################
-    def handle_recv_msg_tof(self,
-                            cmd_runner: str,
-                            senders: list[str],
-                            exp_msgs: Any,
-                            timeout: IntOrFloat,
-                            del_deferred: Union[list[str], None],
-                            log_msg: str) -> None:
-
-        """Handle the send_recv_cmd execution and log msgs.
-
-        Args:
-            cmd_runner: name of thread doing the cmd
-            senders: names of the senders
-            exp_msgs: expected messages by sender name
-            timeout: number of seconds to wait for message
-            del_deferred: names of senders who might exit and cause the
-                receiver to be marked as delete deferred
-            log_msg: log message to isee on recv_msg
-
-        """
-        self.log_test_msg(f'handle_recv_tof entry: {cmd_runner=}, '
-                          f'{senders=}, {del_deferred=}')
-
-        self.log_ver.add_call_seq(
-            name='recv_msg',
-            seq='test_smart_thread.py::ConfigVerifier.handle_recv_msg_tof')
-
-        # self.recv_msg_event_items[cmd_runner] = MonitorEventItem(
-        #     client_event=threading.Event(),
-        #     deferred_post_needed=False,
-        #     targets=senders.copy()
-        # )
-
-        self.monitor_event.set()
-        elapsed_time: float = 0
-        for from_name in senders:
-            start_time = time.time()
-            recvd_msg = self.all_threads[cmd_runner].recv_msg(
-                remote=from_name,
-                timeout=timeout,
-                log_msg=log_msg)
-            elapsed_time += (time.time() - start_time)
-
-            # if log_msg:
-            #     log_msg_2 = (
-            #         f'{self.log_ver.get_call_seq("handle_recv_msg_tof")} ')
-            #     log_msg_3 = re.escape(f'{log_msg}')
-            #     for enter_exit in ('entry', 'exit'):
-            #         log_msg_1 = re.escape(
-            #             f'recv_msg() {enter_exit}: '
-            #             f'{cmd_runner} <- {from_name}. ')
-            #
-            #         self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
-            self.add_request_log_msg(cmd_runner=cmd_runner,
-                                     smart_request='recv_msg',
-                                     targets={from_name},
-                                     timeout=0,
-                                     timeout_type=TimeoutType.TimeoutFalse,
-                                     enter_exit=('entry', 'exit'),
-                                     log_msg=log_msg)
-
-            assert recvd_msg == exp_msgs[from_name]
-
-            recv_log_msg = f"{cmd_runner} received msg from {from_name}"
-            self.log_ver.add_msg(
-                log_name='scottbrian_paratools.smart_thread',
-                log_level=logging.INFO,
-                log_msg=recv_log_msg)
-
-        self.monitor_event.set()
-
-        with self.ops_lock:
-            self.cmd_waiting_event_items[cmd_runner] = threading.Event()
-        self.log_test_msg(f'{cmd_runner=} handle_recv_tof waiting for monitor')
-        self.monitor_event.set()
-        self.cmd_waiting_event_items[cmd_runner].wait()
-        with self.ops_lock:
-            # del self.recv_msg_event_items[cmd_runner]
-            del self.cmd_waiting_event_items[cmd_runner]
-
-        mean_elapsed_time = elapsed_time / len(senders)
-        self.log_test_msg(f'handle_recv_tof exit: {cmd_runner=}, '
-                          f'{elapsed_time=}, {len(senders)=}, '
-                          f'{mean_elapsed_time=}')
-
-    ####################################################################
-    # handle_recv_msg_tot
-    ####################################################################
-    def handle_recv_msg_tot(self,
-                            cmd_runner: str,
-                            senders: list[str],
-                            exp_msgs: Any,
-                            timeout: IntOrFloat,
-                            timeout_names: list[str],
-                            del_deferred: Union[list[str], None],
-                            log_msg: str) -> None:
-
-        """Handle the send_recv_cmd execution and log msgs.
-
-        Args:
-            cmd_runner: name of thread doing the cmd
-            senders: names of the senders
-            exp_msgs: expected messages by sender name
-            timeout: number of seconds to wait for message
-            timeout_names: names of senders that are delayed to cause a
-                timeout while receiving
-            del_deferred: names of senders who might exit and cause the
-                receiver to be marked as delete deferred
-            log_msg: log message to isee on recv_msg
-
-        """
-        self.log_test_msg(f'handle_recv_tot entry: {cmd_runner=}, '
-                          f'{senders=} and {del_deferred=}')
-
-        self.log_ver.add_call_seq(
-            name='recv_msg',
-            seq='test_smart_thread.py::ConfigVerifier.handle_recv_msg_tot')
-
-        non_timeout_senders = list(set(senders) - set(timeout_names))
-
-        # if non_timeout_senders:
-        #     self.recv_msg_event_items[cmd_runner] = MonitorEventItem(
-        #         client_event=threading.Event(),
-        #         deferred_post_needed=False,
-        #         targets=non_timeout_senders.copy()
-        #     )
-
-        self.monitor_event.set()
-        timeout_true_value = timeout
-        # elapsed_time: float = 0
-        for from_name in senders:
-            enter_exit_list = ('entry', 'exit')
-            if from_name not in timeout_names:
-                # start_time = time.time()
-                recvd_msg = self.all_threads[cmd_runner].recv_msg(
-                    remote=from_name,
-                    timeout=timeout_true_value,
-                    log_msg=log_msg)
-                # elapsed_time += (time.time() - start_time)
-            else:
-                enter_exit_list = ('entry', )
-                with pytest.raises(st.SmartThreadRecvMsgTimedOut):
-                    recvd_msg = self.all_threads[cmd_runner].recv_msg(
-                        remote=from_name,
-                        timeout=timeout_true_value,
-                        log_msg=log_msg)
-
-                # remaining timeouts are shorter so we don't have
-                # to pause for the cumulative timeouts before
-                # sending messages
-                timeout_true_value = 0.2
-                recv_log_msg = (
-                    f'{cmd_runner} raising SmartThreadRecvMsgTimedOut '
-                    f'waiting for {from_name}')
-                self.log_ver.add_msg(
-                    log_name='scottbrian_paratools.smart_thread',
-                    log_level=logging.ERROR,
-                    log_msg=recv_log_msg)
-                self.dec_recv_timeout()
-
-            # if log_msg:
-            #     log_msg_2 = (
-            #         f'{self.log_ver.get_call_seq("handle_recv_msg_tot")} ')
-            #     log_msg_3 = re.escape(f'{log_msg}')
-            #     for enter_exit in enter_exit_list:
-            #         log_msg_1 = re.escape(
-            #             f'recv_msg() {enter_exit}: '
-            #             f'{cmd_runner} <- {from_name}. ')
-            #
-            #         self.add_log_msg(log_msg_1 + log_msg_2 + log_msg_3)
-            self.add_request_log_msg(cmd_runner=cmd_runner,
-                                     smart_request='recv_msg',
-                                     targets={from_name},
-                                     timeout=0,
-                                     timeout_type=TimeoutType.TimeoutTrue,
-                                     enter_exit=enter_exit_list,
-                                     log_msg=log_msg)
-
-            if 'exit' in enter_exit_list:
-                assert recvd_msg == exp_msgs[from_name]
-
-                recv_log_msg = f"{cmd_runner} received msg from {from_name}"
-                self.log_ver.add_msg(
-                    log_name='scottbrian_paratools.smart_thread',
-                    log_level=logging.INFO,
-                    log_msg=recv_log_msg)
-
-        self.monitor_event.set()
-
-        if non_timeout_senders:
-            with self.ops_lock:
-                self.cmd_waiting_event_items[cmd_runner] = threading.Event()
-            self.log_test_msg(
-                f'{cmd_runner=} handle_recv_tot waiting for monitor')
-            self.monitor_event.set()
-            self.cmd_waiting_event_items[cmd_runner].wait()
-            with self.ops_lock:
-                # del self.recv_msg_event_items[cmd_runner]
-                del self.cmd_waiting_event_items[cmd_runner]
-
-        self.log_test_msg(f'handle_recv_tof exit: {cmd_runner=}')
+                          f'{remote=}, {stopped_remotes=}')
 
     ####################################################################
     # handle_request_entry_log_msg
@@ -12155,7 +12018,6 @@ class ConfigVerifier:
                       timeout: IntOrFloat,
                       timeout_names: set[str],
                       timeout_type: TimeoutType,
-                      error_stopped_target: bool,
                       code: Optional[Any] = None,
                       log_msg: Optional[str] = None) -> None:
         """Resume a waiter.
@@ -12169,8 +12031,6 @@ class ConfigVerifier:
             timeout: timeout value for smart_resume
             timeout_names: names that will cause timeout
             timeout_type: None, False, or True
-            error_stopped_target: specifies that smart_resume should raise an
-                error if any targets are not alive
             code: code to provide to waiter
             log_msg: log msg for smart_resume
         """
@@ -12181,7 +12041,7 @@ class ConfigVerifier:
             seq='test_smart_thread.py::ConfigVerifier.handle_resume')
 
         enter_exit = ('entry', 'exit')
-        if error_stopped_target and stopped_remotes:
+        if stopped_remotes:
             inc_ops_names: set[str] = targets - stopped_remotes
             self.inc_ops_count(inc_ops_names, cmd_runner)
             enter_exit = ('entry', )
@@ -12260,7 +12120,6 @@ class ConfigVerifier:
                         log_msg: str,
                         timeout_type: TimeoutType = TimeoutType.TimeoutNone,
                         timeout: IntOrFloat = 0,
-                        error_stopped_target: bool = True,
                         unreg_timeout_names: Optional[set[str]] = None,
                         fullq_timeout_names: Optional[set[str]] = None,
                         stopped_remotes: Optional[set[str]] = None) -> None:
@@ -12274,8 +12133,6 @@ class ConfigVerifier:
             log_msg: log message for send_msg to issue
             timeout_type: specifies None, False, or True
             timeout: value to use for timeout on the send_msg request
-            error_stopped_target: specifies whether to raise error when
-                threads are stopped
             unreg_timeout_names: names of threads that are unregistered
                 and are expected to cause timeout
             fullq_timeout_names: names of threads whose msg_q is full
@@ -12312,7 +12169,7 @@ class ConfigVerifier:
         start_time = time.time()
 
         enter_exit = ('entry', 'exit')
-        if error_stopped_target and stopped_remotes:
+        if stopped_remotes:
             enter_exit = ('entry', )
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
@@ -13194,7 +13051,7 @@ class ConfigVerifier:
         self.log_ver.add_msg(log_msg=re.escape(log_msg))
         logger.debug(log_msg)
 
-        log_msg = f'stopped_names: {sorted(self.stopped_names)}'
+        log_msg = f'stopped_remotes: {sorted(self.stopped_remotes)}'
         self.log_ver.add_msg(log_msg=re.escape(log_msg))
         logger.debug(log_msg)
 
