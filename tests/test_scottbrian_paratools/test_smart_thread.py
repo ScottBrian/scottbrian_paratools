@@ -9409,15 +9409,31 @@ class ConfigVerifier:
         ################################################################
         req0_name = req0_names[0]
         req1_name = req1_names[0]
-        sender_msgs: dict[str, str] = {
-            req0_name: (f'send test: {req0_name} sending msg at '
-                        f'{self.get_ptime()}'),
-            req1_name: (f'send test: {req1_name} sending msg at '
-                        f'{self.get_ptime()}')
-        }
 
+        ################################################################
+        # request rtns
+        ################################################################
+        actions: dict[Actors, Callable[..., None]] = {
+            Actors.ActiveBeforeActor:
+                self.build_resume_before_wait_timeout_suite,
+            Actors.ActiveAfterActor:
+                self.build_resume_after_wait_timeout_suite,
+            Actors.ActionExitActor:
+                self.build_resume_exit_wait_timeout_suite,
+            Actors.ExitActionActor:
+                self.build_exit_resume_wait_timeout_suite,
+            Actors.UnregActor:
+                self.build_unreg_resume_wait_timeout_suite,
+            Actors.RegActor:
+                self.build_reg_resume_wait_timeout_suite,
+        }
+        for actor in actor_list:
+            actions[actor](waiter_names=waiter_names,
+                           actor_names=actor_names)
         confirm_cmd_to_use = req0.name
         req0_serial_num = 0
+
+
 
         ################################################################
         # req0 and req1 combinations and expected result
@@ -9703,6 +9719,67 @@ class ConfigVerifier:
                 confirm_cmd=confirm_cmd_to_use,
                 confirm_serial_num=send_msg_serial_num,
                 confirmers=req0_name))
+
+    ####################################################################
+    # build_wait_active_suite
+    ####################################################################
+    def build_send_msg_request(
+            self,
+            timeout_type: TimeoutType,
+            cmd_runner: str,
+            target: str,
+            stopped_remotes: set[str]) -> tuple[int, str]:
+        """Adds cmds to the cmd queue.
+
+        Args:
+            timeout_type: None, False, or True for timeout
+            cmd_runner: name of thread that will do the request
+            target: name of thread that is the target of the request
+            stopped_remotes: names of threads that are expected to be
+                detected by the request as stopped
+
+        Returns:
+            the name of the request and serial number of the request for
+            confirmation purposes
+
+        """
+        sender_msgs: dict[str, str] = {
+            cmd_runner: (f'send test: {cmd_runner} sending msg at '
+                        f'{self.get_ptime()}'),
+        }
+        if timeout_type == TimeoutType.TimeoutNone:
+            confirm_cmd_to_use = 'SendMsg'
+            request_serial_num = self.add_cmd(
+                SendMsg(
+                    cmd_runners=cmd_runner,
+                    receivers=target,
+                    msgs_to_send=sender_msgs,
+                    stopped_remotes=stopped_remotes))
+        elif timeout_type == TimeoutType.TimeoutFalse:
+            confirm_cmd_to_use = 'SendMsgTimeoutFalse'
+            timeout_time = 6
+            request_serial_num = self.add_cmd(
+                SendMsgTimeoutFalse(
+                    cmd_runners=cmd_runner,
+                    receivers=target,
+                    msgs_to_send=sender_msgs,
+                    timeout=timeout_time,
+                    stopped_remotes=stopped_remotes))
+        else:  # timeout_type == TimeoutType.TimeoutTrue
+            timeout_time = 0.5
+            confirm_cmd_to_use = 'SendMsgTimeoutTrue'
+            request_serial_num = self.add_cmd(
+                SendMsgTimeoutTrue(
+                    cmd_runners=cmd_runner,
+                    receivers=target,
+                    msgs_to_send=sender_msgs,
+                    timeout=timeout_time,
+                    unreg_timeout_names=target,
+                    fullq_timeout_names=[],
+                    stopped_remotes=stopped_remotes,
+                    log_msg=log_msg))
+
+        return request_serial_num, confirm_cmd_to_use
 
     ####################################################################
     # build_msg_timeout_suite
