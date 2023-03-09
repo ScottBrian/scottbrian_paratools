@@ -797,6 +797,7 @@ class SmartThread:
                 changed = True
 
             # add status block for name0 and name1 if needed
+            set_pending_request_name = ''
             for name in pair_key:
                 if (name not in SmartThread._pair_array[
                         pair_key].status_blocks):
@@ -837,6 +838,7 @@ class SmartThread:
                             idx] = PairKeyRemote(pair_key,
                                                  name,
                                                  create_time)
+                        set_pending_request_name = other_name
                     except ValueError:
                         pass  # the new entry is not a request target
 
@@ -846,7 +848,12 @@ class SmartThread:
                     SmartThread._pair_array[
                         pair_key].status_blocks[
                         name].del_deferred = False
-
+            if set_pending_request_name:
+                SmartThread._pair_array[
+                    pair_key].status_blocks[
+                    set_pending_request_name].request_pending = True
+                logger.debug(
+                    f'TestDebug {self.name} set request_pending in refresh')
         # find removable entries in connection pair array
         connection_array_del_list = []
         for pair_key in SmartThread._pair_array.keys():
@@ -2311,6 +2318,9 @@ class SmartThread:
                             self.work_pk_remotes.remove(pk_remote)
                             local_sb.target_create_time = 0.0
                             local_sb.request_pending = False
+                            logger.debug(
+                                f'TestDebug {self.name} reset '
+                                f'request_pending for {pk_remote.remote=}')
 
                 if request_block.do_refresh:
                     with sel.SELockExcl(SmartThread._registry_lock):
@@ -2318,8 +2328,8 @@ class SmartThread:
                     request_block.do_refresh = False
 
             # handle any error or timeout cases - don't worry about any
-            # remotes that were still pending - we need fail the request
-            # as soon as we know about any unresolvable failures
+            # remotes that were still pending - we need to fail the
+            # request as soon as we know about any unresolvable failures
             if (request_block.stopped_remotes
                     or request_block.conflict_remotes
                     or request_block.deadlock_remotes
@@ -2552,6 +2562,9 @@ class SmartThread:
                         local_sb = SmartThread._pair_array[
                             pair_key].status_blocks[self.name]
                         local_sb.request_pending = True
+                        logger.debug(
+                            f'TestDebug {self.name} set '
+                            f'request_pending for {remote=}')
                         if (remote in SmartThread._pair_array[
                                 pair_key].status_blocks):
                             target_create_time = SmartThread._pair_array[
