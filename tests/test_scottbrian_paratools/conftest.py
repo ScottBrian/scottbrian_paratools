@@ -135,6 +135,7 @@ def thread_exc(monkeypatch: Any) -> "ExcHook":
 
     # the following assert ensures -p no:threadexception was specified
     assert threading.excepthook == new_hook
+    print(f'conftest is OK')
 
 
 ###############################################################################
