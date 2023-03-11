@@ -9432,7 +9432,12 @@ class ConfigVerifier:
         reset_ops_count = False
 
         req0_requires_ack = False
+        req0_unmatched_ack = False
+        req0_residual_ack = False
+
         req1_requires_ack = False
+        req1_unmatched_ack = False
+        req1_residual_ack = False
 
         deadlock_potential = False
         conflict_potential = False
@@ -9442,10 +9447,37 @@ class ConfigVerifier:
                 or req0 == SmartRequestType.Wait):
             req0_requires_ack = True
 
+            if ((req0 == SmartRequestType.RecvMsg
+                    and req1 != SmartRequestType.SendMsg)
+                    or (req0 == SmartRequestType.Sync
+                        and req1 != SmartRequestType.Sync)
+                    or (req0 == SmartRequestType.Wait
+                        and req1 != SmartRequestType.Resume)):
+                req0_unmatched_ack = True
+
+            if ((req0 == SmartRequestType.RecvMsg
+                 and req1 == SmartRequestType.SendMsg)
+                    or (req0 == SmartRequestType.Wait
+                        and req1 == SmartRequestType.Resume)):
+                req0_residual_ack = True
+
         if (req1 == SmartRequestType.RecvMsg
                 or req1 == SmartRequestType.Sync
                 or req1 == SmartRequestType.Wait):
             req1_requires_ack = True
+            if ((req1 == SmartRequestType.RecvMsg
+                    and req0 != SmartRequestType.SendMsg)
+                    or (req1 == SmartRequestType.Sync
+                    and req0 != SmartRequestType.Sync)
+                    or (req1 == SmartRequestType.Wait
+                    and req0 != SmartRequestType.Resume)):
+                req1_unmatched_ack = True
+
+            if ((req1 == SmartRequestType.RecvMsg
+                 and req0 == SmartRequestType.SendMsg)
+                    or (req1 == SmartRequestType.Wait
+                        and req0 == SmartRequestType.Resume)):
+                req1_residual_ack = True
 
         if (req0 == SmartRequestType.Wait
                 and req1 == SmartRequestType.Wait):
@@ -9484,6 +9516,10 @@ class ConfigVerifier:
                     elif conflict_potential:
                         req0_specific_args['conflict_remotes'] = {req1_name}
                         req1_specific_args['conflict_remotes'] = {req0_name}
+                    if req0_unmatched_ack:
+                        timeout_type = TimeoutType.TimeoutTrue
+                    if req1_unmatched_ack:
+                        req1_timeout_type = TimeoutType.TimeoutTrue
                 else:
                     if req0_requires_ack:
                         req0_stopped_remotes = {req1_name}
@@ -9557,13 +9593,13 @@ class ConfigVerifier:
                             target=req0_name,
                             stopped_remotes=req1_stopped_remotes,
                             request_specific_args=req1_specific_args)
-                        self.add_cmd(
-                            ConfirmResponse(
-                                cmd_runners=self.commander_name,
-                                confirm_cmd=req1_confirm_parms.request_name,
-                                confirm_serial_num=
-                                req1_confirm_parms.serial_number,
-                                confirmers=req1_name))
+                        # self.add_cmd(
+                        #     ConfirmResponse(
+                        #         cmd_runners=self.commander_name,
+                        #         confirm_cmd=req1_confirm_parms.request_name,
+                        #         confirm_serial_num=
+                        #         req1_confirm_parms.serial_number,
+                        #         confirmers=req1_name))
 
                         if req1_timeout_type == TimeoutType.TimeoutTrue:
                             req1_pause_time = 0.5
