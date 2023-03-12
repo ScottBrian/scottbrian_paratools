@@ -1859,11 +1859,7 @@ class SmartThread:
             remote_sb = SmartThread._pair_array[
                 pk_remote.pair_key].status_blocks[pk_remote.remote]
             with SmartThread._pair_array[pk_remote.pair_key].status_lock:
-                if not (local_sb.wait_timeout_specified
-                        or remote_sb.wait_timeout_specified
-                        or local_sb.deadlock
-                        or local_sb.conflict):
-
+                if not (local_sb.deadlock or local_sb.conflict):
                     if (remote_sb.wait_wait
                             and not
                             (remote_sb.wait_event.is_set()
@@ -2132,10 +2128,7 @@ class SmartThread:
                         pk_remote.pair_key].status_blocks:
                     remote_sb = SmartThread._pair_array[
                         pk_remote.pair_key].status_blocks[pk_remote.remote]
-                    if not (local_sb.wait_timeout_specified
-                            or remote_sb.wait_timeout_specified
-                            or local_sb.deadlock
-                            or local_sb.conflict):
+                    if not (local_sb.deadlock or local_sb.conflict):
                         # the following checks apply to both
                         # sync_wait and wait_wait
                         if (remote_sb.sync_wait
