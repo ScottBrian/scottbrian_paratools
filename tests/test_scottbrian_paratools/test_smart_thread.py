@@ -1444,7 +1444,8 @@ class Sync(ConfigCmd):
         self.arg_list += ['targets',
                           'timeout',
                           'stopped_remotes',
-                          'timeout_remotes']
+                          'timeout_remotes',
+                          'conflict_remotes']
 
     def run_process(self, cmd_runner: str) -> None:
         """Run the command.
@@ -1972,7 +1973,9 @@ class Wait(ConfigCmd):
         self.log_msg = log_msg
 
         self.arg_list += ['resumers',
-                          'wait_for']
+                          'stopped_remotes',
+                          'conflict_remotes',
+                          'deadlock_remotes']
 
     def run_process(self, cmd_runner: str) -> None:
         """Run the command.
@@ -2064,6 +2067,8 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
         self.specified_args = locals()  # used for __repr__
 
         self.timeout_remotes = get_set(timeout_remotes)
+
+        self.arg_list += ['timeout_remotes']
 
     def run_process(self, cmd_runner: str) -> None:
         """Run the command.
@@ -9433,14 +9438,33 @@ class ConfigVerifier:
 
         req0_requires_ack = False
         req0_unmatched_ack = False
-        req0_residual_ack = False
+        req0_persistent_ack = False
 
         req1_requires_ack = False
         req1_unmatched_ack = False
-        req1_residual_ack = False
+        req1_persistent_ack = False
 
         deadlock_potential = False
         conflict_potential = False
+
+        @dataclass
+        class ReqFlags:
+            req0_requires_ack: bool = False
+            req0_unmatched_ack: bool = False
+            req0_persistent_ack: bool = False
+            req1_requires_ack: bool = False
+            req1_unmatched_ack: bool = False
+            req1_persistent_ack: bool = False
+
+        request_table: dict[tuple[int, int], ReqFlags] = {
+            (SmartRequestType.RecvMsg.value, SmartRequestType.RecvMsg.value):
+                ReqFlags(req0_requires_ack=False,
+                         req0_unmatched_ack=False,
+                         req0_persistent_ack=False,
+                         req1_requires_ack=False,
+                         req1_unmatched_ack=False,
+                         req1_persistent_ack=True)
+        }
 
         if (req0 == SmartRequestType.RecvMsg
                 or req0 == SmartRequestType.Sync
@@ -9459,7 +9483,7 @@ class ConfigVerifier:
                  and req1 == SmartRequestType.SendMsg)
                     or (req0 == SmartRequestType.Wait
                         and req1 == SmartRequestType.Resume)):
-                req0_residual_ack = True
+                req0_persistent_ack = True
 
         if (req1 == SmartRequestType.RecvMsg
                 or req1 == SmartRequestType.Sync
@@ -9468,16 +9492,16 @@ class ConfigVerifier:
             if ((req1 == SmartRequestType.RecvMsg
                     and req0 != SmartRequestType.SendMsg)
                     or (req1 == SmartRequestType.Sync
-                    and req0 != SmartRequestType.Sync)
+                        and req0 != SmartRequestType.Sync)
                     or (req1 == SmartRequestType.Wait
-                    and req0 != SmartRequestType.Resume)):
+                        and req0 != SmartRequestType.Resume)):
                 req1_unmatched_ack = True
 
             if ((req1 == SmartRequestType.RecvMsg
                  and req0 == SmartRequestType.SendMsg)
                     or (req1 == SmartRequestType.Wait
                         and req0 == SmartRequestType.Resume)):
-                req1_residual_ack = True
+                req1_persistent_ack = True
 
         if (req0 == SmartRequestType.Wait
                 and req1 == SmartRequestType.Wait):
@@ -9492,10 +9516,13 @@ class ConfigVerifier:
         if timeout_type == TimeoutType.TimeoutTrue:
             if (req0_when_req1_state[0] == st.ThreadState.Unregistered
                     or req0_when_req1_state[0] == st.ThreadState.Registered):
-                if req1_requires_ack:
+                if req0_persistent_ack and (req1_lap < req0_when_req1_lap):
+                    supress_req1 = True
+                elif req1_requires_ack:
                     req1_timeout_type = TimeoutType.TimeoutTrue
             elif req0_when_req1_state[0] == st.ThreadState.Alive:
-                if req0_when_req1_lap == req1_lap:
+                if (req0_persistent_ack and (req1_lap < req0_when_req1_lap)
+                        or req0_when_req1_lap == req1_lap):
                     supress_req1 = True
                 elif req1_requires_ack:
                     req1_timeout_type = TimeoutType.TimeoutTrue
@@ -9503,9 +9530,11 @@ class ConfigVerifier:
             if ((req0_when_req1_state[0] == st.ThreadState.Unregistered
                  or req0_when_req1_state[0] == st.ThreadState.Registered)
                     and req0_when_req1_state[1] == 0):
-                req0_stopped_remotes = {req1_name}
-                if req1_requires_ack:
-                    req1_timeout_type = TimeoutType.TimeoutTrue
+                if not (req0_persistent_ack
+                        and (req1_lap < req0_when_req1_lap)):
+                    req0_stopped_remotes = {req1_name}
+                    if req1_requires_ack:
+                        req1_timeout_type = TimeoutType.TimeoutTrue
             elif (req0_when_req1_state[0] == st.ThreadState.Unregistered
                   or req0_when_req1_state[0] == st.ThreadState.Registered
                   or req0_when_req1_state[0] == st.ThreadState.Alive):
@@ -9516,20 +9545,25 @@ class ConfigVerifier:
                     elif conflict_potential:
                         req0_specific_args['conflict_remotes'] = {req1_name}
                         req1_specific_args['conflict_remotes'] = {req0_name}
-                    if req0_unmatched_ack:
-                        timeout_type = TimeoutType.TimeoutTrue
-                    if req1_unmatched_ack:
-                        req1_timeout_type = TimeoutType.TimeoutTrue
-                else:
+                    else:
+                        if req0_unmatched_ack:
+                            timeout_type = TimeoutType.TimeoutTrue
+                        if req1_unmatched_ack:
+                            req1_timeout_type = TimeoutType.TimeoutTrue
+                elif not (req0_persistent_ack
+                          and (req1_lap < req0_when_req1_lap)):
                     if req0_requires_ack:
                         req0_stopped_remotes = {req1_name}
                     if req1_requires_ack:
                         req1_timeout_type = TimeoutType.TimeoutTrue
 
         if req0_when_req1_state[0] == st.ThreadState.Stopped:
-            req0_stopped_remotes = {req1_name}
-            if req1_requires_ack:
-                req1_timeout_type = TimeoutType.TimeoutTrue
+            if not (req0_persistent_ack
+                    and ((req1_lap == req0_when_req1_lap)
+                         or (req1_lap < req0_when_req1_lap))):
+                req0_stopped_remotes = {req1_name}
+                if req1_requires_ack:
+                    req1_timeout_type = TimeoutType.TimeoutTrue
 
         ################################################################
         # lap loop
@@ -9559,6 +9593,17 @@ class ConfigVerifier:
                         self.unregistered_names |= {req1_name}
                         state_iteration = 1
                     elif current_req1_state == st.ThreadState.Stopped:
+                        # pause to allow req0 to recognize that req1 is
+                        # stopped so that it will have time to issue
+                        # the raise error log message that the test code
+                        # will intercept and use to reset
+                        # request_pending in the test code before we
+                        # start deleting req1 from the pair_array so
+                        # that we determine the correct log messages to
+                        # add for log verification
+                        self.add_cmd(
+                            Pause(cmd_runners=self.commander_name,
+                                  pause_seconds=1))
                         self.build_join_suite(
                             cmd_runners=self.commander_name,
                             join_target_names=req1_name,
@@ -11473,6 +11518,9 @@ class ConfigVerifier:
                 pair_keys_to_delete.append(pair_key)
                 self.del_deferred_list.remove(del_def_key)
                 update_pair_array_msg_needed = True
+                self.log_test_msg(f'handle_deferred_deletes '
+                                  f'_refresh_pair_array rem_pair_key 1'
+                                  f' {pair_key}, {def_del_name}')
                 self.add_log_msg(re.escape(
                     f"{cmd_runner} removed status_blocks entry "
                     f"for pair_key = {pair_key}, "
@@ -12481,7 +12529,8 @@ class ConfigVerifier:
             log_msg: log msg to be specified with the sync request
         """
         self.log_test_msg(f'{cmd_runner=} handle_sync entry for '
-                          f'{targets=}, {timeout_type=}')
+                          f'{targets=}, {timeout_type=}, {timeout_remotes=}, '
+                          f'{stopped_remotes=}, {conflict_remotes=}')
 
         self.log_ver.add_call_seq(
             name='smart_sync',
@@ -12810,7 +12859,9 @@ class ConfigVerifier:
 
         """
         self.log_test_msg(f'handle_wait entry for {cmd_runner=}, '
-                          f'{resumers=}, {stopped_remotes=}')
+                          f'{resumers=}, {stopped_remotes=}, '
+                          f'{timeout_remotes=}, {conflict_remotes=} '
+                          f'{deadlock_remotes=}')
 
         self.log_ver.add_call_seq(
             name='smart_wait',
@@ -13291,12 +13342,16 @@ class ConfigVerifier:
                         "_refresh_pair_array with "
                         f"pair_key = {pair_key}"))
 
-                    self.log_test_msg(f'{cmd_runner} created expected_pairs '
+                    self.log_test_msg(f'{cmd_runner} update_pair_array_add '
+                                      'created expected_pairs '
                                       f'for {pair_key=}, {new_name=} with '
                                       f'{name_poc=}, and {other_name} with '
                                       f'{other_poc=}')
 
                     for pair_name in pair_key:
+                        self.log_test_msg('update_pair_array_add '
+                                          '_refresh_pair_array add_pair_key 1 '
+                                          f'{pair_key}, {pair_name}')
                         self.add_log_msg(re.escape(
                             f"{cmd_runner} added status_blocks entry "
                             f"for pair_key = {pair_key}, "
@@ -13330,6 +13385,9 @@ class ConfigVerifier:
                         new_name] = ThreadPairStatus(
                         pending_ops_count=name_poc,
                         reset_ops_count=False)
+                    self.log_test_msg('update_pair_array_add '
+                                      '_refresh_pair_array add_pair_key 2 '
+                                      f'{pair_key}, {new_name}')
                     self.add_log_msg(re.escape(
                         f"{cmd_runner} added status_blocks entry "
                         f"for pair_key = {pair_key}, "
@@ -13386,6 +13444,9 @@ class ConfigVerifier:
                         other_name].pending_ops_count == 0
                         and not request_is_pending):
                     pair_keys_to_delete.append(pair_key)
+                    self.log_test_msg(
+                        f'update_pair_array_del rem_pair_key 2 {pair_key}, '
+                        f'{other_name}')
                     self.add_log_msg(re.escape(
                         f"{cmd_runner} removed status_blocks entry "
                         f"for pair_key = {pair_key}, "
@@ -13414,6 +13475,9 @@ class ConfigVerifier:
                     # best we can do is delete the del_name for now
                     del self.expected_pairs[pair_key][del_name]
 
+            self.log_test_msg(
+                f'update_pair_array_del 2 rem_pair_key 3 {pair_key}, '
+                f'{del_name}')
             self.add_log_msg(re.escape(
                 f"{cmd_runner} removed status_blocks entry "
                 f"for pair_key = {pair_key}, "
@@ -13463,8 +13527,11 @@ class ConfigVerifier:
         # other update the recv_msg found, such as another deferred
         # delete that was also done between the above mentioned events
 
-        pair_key = st.SmartThread._get_pair_key(def_del_name, target_name)
+        pair_key_1 = st.SmartThread._get_pair_key(def_del_name, target_name)
 
+        # convert pair_key_1 to tuple so that it will match the removed
+        # pair_key log message issued by SmartThread which uses tuples
+        pair_key = (pair_key_1.name0, pair_key_1.name1)
         if (target_name not in self.expected_registered
                 and pair_key in self.expected_pairs
                 and target_name not in self.expected_pairs[pair_key].keys()
@@ -13472,6 +13539,9 @@ class ConfigVerifier:
                     def_del_name].pending_ops_count == 0):
             del self.expected_pairs[pair_key]
 
+            self.log_test_msg(
+                f'update_pair_array_def_del rem_pair_key 4 {pair_key}, '
+                f'{def_del_name}')
             self.add_log_msg(re.escape(
                 f"{cmd_runner} removed status_blocks entry "
                 f"for pair_key = {pair_key}, "
