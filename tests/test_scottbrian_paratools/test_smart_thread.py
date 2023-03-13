@@ -9292,7 +9292,7 @@ class ConfigVerifier:
                 confirmers=sender_name))
 
     ####################################################################
-    # build_send_msg_suite
+    # build_rotate_state_suite
     ####################################################################
     def build_rotate_state_suite(
             self,
@@ -9483,7 +9483,9 @@ class ConfigVerifier:
                  and req1 == SmartRequestType.SendMsg)
                     or (req0 == SmartRequestType.Wait
                         and req1 == SmartRequestType.Resume)):
-                req0_persistent_ack = True
+                if (req1_lap == req0_when_req1_lap
+                        or req1_lap < req0_when_req1_lap):
+                    req0_persistent_ack = True
 
         if (req1 == SmartRequestType.RecvMsg
                 or req1 == SmartRequestType.Sync
@@ -9501,7 +9503,8 @@ class ConfigVerifier:
                  and req0 == SmartRequestType.SendMsg)
                     or (req1 == SmartRequestType.Wait
                         and req0 == SmartRequestType.Resume)):
-                req1_persistent_ack = True
+                if req1_lap == req0_when_req1_lap:
+                    req1_persistent_ack = True
 
         if (req0 == SmartRequestType.Wait
                 and req1 == SmartRequestType.Wait):
@@ -9521,11 +9524,34 @@ class ConfigVerifier:
                 elif req1_requires_ack:
                     req1_timeout_type = TimeoutType.TimeoutTrue
             elif req0_when_req1_state[0] == st.ThreadState.Alive:
-                if (req0_persistent_ack and (req1_lap < req0_when_req1_lap)
-                        or req0_when_req1_lap == req1_lap):
-                    supress_req1 = True
-                elif req1_requires_ack:
-                    req1_timeout_type = TimeoutType.TimeoutTrue
+                if req0_when_req1_lap == req1_lap:
+                    if deadlock_potential:
+                        req0_specific_args['deadlock_remotes'] = {req1_name}
+                        req1_specific_args['deadlock_remotes'] = {req0_name}
+                    elif conflict_potential:
+                        req0_specific_args['conflict_remotes'] = {req1_name}
+                        req1_specific_args['conflict_remotes'] = {req0_name}
+                    else:
+                        if req0_requires_ack:
+                            if not req0_unmatched_ack:
+                                supress_req1 = True
+                            req0_stopped_remotes = {req1_name}
+                        else:
+                            timeout_type = TimeoutType.TimeoutNone
+                elif req0_when_req1_lap < req1_lap:
+                    if req0_requires_ack:
+                        req0_stopped_remotes = {req1_name}
+                        if req1_requires_ack:
+                            req1_timeout_type = TimeoutType.TimeoutTrue
+                    else:
+                        timeout_type = TimeoutType.TimeoutNone
+                        if req1_requires_ack:
+                            req1_timeout_type = TimeoutType.TimeoutTrue
+                else:  # req1_lap < req0_when_req1_lap
+                    if req0_persistent_ack:
+                        supress_req1 = True
+                    elif not (req0_requires_ack or req0_unmatched_ack):
+                        timeout_type = TimeoutType.TimeoutNone
         else:
             if ((req0_when_req1_state[0] == st.ThreadState.Unregistered
                  or req0_when_req1_state[0] == st.ThreadState.Registered)
@@ -9547,7 +9573,10 @@ class ConfigVerifier:
                         req1_specific_args['conflict_remotes'] = {req0_name}
                     else:
                         if req0_unmatched_ack:
-                            timeout_type = TimeoutType.TimeoutTrue
+                            if req1_unmatched_ack:
+                                timeout_type = TimeoutType.TimeoutTrue
+                            else:
+                                req0_stopped_remotes = {req1_name}
                         if req1_unmatched_ack:
                             req1_timeout_type = TimeoutType.TimeoutTrue
                 elif not (req0_persistent_ack
@@ -9631,28 +9660,28 @@ class ConfigVerifier:
                         start_names=req1_name,
                         validate_config=False)
 
-                    if req1_lap == lap and not supress_req1:
-                        req1_confirm_parms = request_build_rtns[req1](
-                            timeout_type=req1_timeout_type,
-                            cmd_runner=req1_name,
-                            target=req0_name,
-                            stopped_remotes=req1_stopped_remotes,
-                            request_specific_args=req1_specific_args)
-                        # self.add_cmd(
-                        #     ConfirmResponse(
-                        #         cmd_runners=self.commander_name,
-                        #         confirm_cmd=req1_confirm_parms.request_name,
-                        #         confirm_serial_num=
-                        #         req1_confirm_parms.serial_number,
-                        #         confirmers=req1_name))
+                    if req1_lap == lap:
+                        if not supress_req1:
+                            req1_confirm_parms = request_build_rtns[req1](
+                                timeout_type=req1_timeout_type,
+                                cmd_runner=req1_name,
+                                target=req0_name,
+                                stopped_remotes=req1_stopped_remotes,
+                                request_specific_args=req1_specific_args)
+                            # self.add_cmd(
+                            #     ConfirmResponse(
+                            #         cmd_runners=self.commander_name,
+                            #         confirm_cmd=
+                            #         req1_confirm_parms.request_name,
+                            #         confirm_serial_num=
+                            #         req1_confirm_parms.serial_number,
+                            #         confirmers=req1_name))
 
-                        if req1_timeout_type == TimeoutType.TimeoutTrue:
-                            req1_pause_time = 0.5
-                        else:
-                            req1_pause_time = 1
-                        self.add_cmd(
-                            Pause(cmd_runners=self.commander_name,
-                                  pause_seconds=req1_pause_time))
+                        # if supress_req1 or not req0_requires_ack:
+                        #     req1_pause_time = 1
+                        #     self.add_cmd(
+                        #         Pause(cmd_runners=self.commander_name,
+                        #               pause_seconds=req1_pause_time))
                     current_req1_state = st.ThreadState.Alive
                 ########################################################
                 # do stop to make receiver stopped
@@ -9670,7 +9699,7 @@ class ConfigVerifier:
                 if (req0_when_req1_state[0] == state
                         and req0_when_req1_state[1] == state_iteration
                         and req0_when_req1_lap == lap):
-                    pause_time = 1
+                    pause_time = 0.5
                     req0_confirm_parms = request_build_rtns[req0](
                         timeout_type=timeout_type,
                         cmd_runner=req0_name,
