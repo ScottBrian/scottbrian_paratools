@@ -286,12 +286,18 @@ req0_arg_list = [
     SmartRequestType.Sync,
     SmartRequestType.Wait]
 
+req0_arg_list = [
+    SmartRequestType.Sync]
+
 req1_arg_list = [
     SmartRequestType.SendMsg,
     SmartRequestType.RecvMsg,
     SmartRequestType.Resume,
     SmartRequestType.Sync,
     SmartRequestType.Wait]
+
+req1_arg_list = [
+    SmartRequestType.RecvMsg]
 
 req0_when_req1_state_arg_list = [
     (st.ThreadState.Unregistered, 0),
@@ -300,6 +306,9 @@ req0_when_req1_state_arg_list = [
     (st.ThreadState.Registered, 1),
     (st.ThreadState.Alive, 0),
     (st.ThreadState.Stopped, 0)]
+
+req0_when_req1_state_arg_list = [
+    (st.ThreadState.Alive, 0)]
 
 req0_when_req1_lap_arg_list = [0, 1]
 
@@ -9447,111 +9456,345 @@ class ConfigVerifier:
         deadlock_potential = False
         conflict_potential = False
 
+        class ReqCategory(Enum):
+            Throw = auto()
+            Catch = auto()
+            Handshake = auto()
+
         @dataclass
         class ReqFlags:
-            req0_requires_ack: bool = False
-            req0_unmatched_ack: bool = False
-            req0_persistent_ack: bool = False
-            req1_requires_ack: bool = False
-            req1_unmatched_ack: bool = False
-            req1_persistent_ack: bool = False
+            req0_category: ReqCategory
+            req1_category: ReqCategory
+            req_matched: bool
+            req_conflict: bool
+            req_deadlock: bool
 
-        request_table: dict[tuple[int, int], ReqFlags] = {
-            (SmartRequestType.RecvMsg.value, SmartRequestType.RecvMsg.value):
-                ReqFlags(req0_requires_ack=False,
-                         req0_unmatched_ack=False,
-                         req0_persistent_ack=False,
-                         req1_requires_ack=False,
-                         req1_unmatched_ack=False,
-                         req1_persistent_ack=True)
+        request_table: dict[
+            tuple[SmartRequestType, SmartRequestType], ReqFlags] = {
+
+            (SmartRequestType.SendMsg, SmartRequestType.SendMsg):
+                ReqFlags(req0_category=ReqCategory.Throw,
+                         req1_category=ReqCategory.Throw,
+                         req_matched=False,
+                         req_conflict=False,
+                         req_deadlock=False),
+            (SmartRequestType.SendMsg, SmartRequestType.RecvMsg):
+                ReqFlags(req0_category=ReqCategory.Throw,
+                         req1_category=ReqCategory.Catch,
+                         req_matched=True,
+                         req_conflict=False,
+                         req_deadlock=False),
+            (SmartRequestType.SendMsg, SmartRequestType.Resume):
+                ReqFlags(req0_category=ReqCategory.Throw,
+                         req1_category=ReqCategory.Throw,
+                         req_matched=False,
+                         req_conflict=False,
+                         req_deadlock=False),
+            (SmartRequestType.SendMsg, SmartRequestType.Sync):
+                ReqFlags(req0_category=ReqCategory.Throw,
+                         req1_category=ReqCategory.Handshake,
+                         req_matched=False,
+                         req_conflict=False,
+                         req_deadlock=False),
+            (SmartRequestType.SendMsg, SmartRequestType.Wait):
+                ReqFlags(req0_category=ReqCategory.Throw,
+                         req1_category=ReqCategory.Catch,
+                         req_matched=False,
+                         req_conflict=False,
+                         req_deadlock=False),
+
+            (SmartRequestType.RecvMsg, SmartRequestType.SendMsg):
+                ReqFlags(req0_category=ReqCategory.Catch,
+                         req1_category=ReqCategory.Throw,
+                         req_matched=True,
+                         req_conflict=False,
+                         req_deadlock=False),
+            (SmartRequestType.RecvMsg, SmartRequestType.RecvMsg):
+                ReqFlags(req0_category=ReqCategory.Catch,
+                         req1_category=ReqCategory.Catch,
+                         req_matched=False,
+                         req_conflict=False,
+                         req_deadlock=False),
+            (SmartRequestType.RecvMsg, SmartRequestType.Resume):
+                ReqFlags(req0_category=ReqCategory.Catch,
+                         req1_category=ReqCategory.Throw,
+                         req_matched=False,
+                         req_conflict=False,
+                         req_deadlock=False),
+            (SmartRequestType.RecvMsg, SmartRequestType.Sync):
+                ReqFlags(req0_category=ReqCategory.Catch,
+                         req1_category=ReqCategory.Handshake,
+                         req_matched=False,
+                         req_conflict=False,
+                         req_deadlock=False),
+            (SmartRequestType.RecvMsg, SmartRequestType.Wait):
+                ReqFlags(req0_category=ReqCategory.Catch,
+                         req1_category=ReqCategory.Catch,
+                         req_matched=False,
+                         req_conflict=False,
+                         req_deadlock=False),
+
+            (SmartRequestType.Resume, SmartRequestType.SendMsg):
+                ReqFlags(req0_category=ReqCategory.Throw,
+                         req1_category=ReqCategory.Throw,
+                         req_matched=False,
+                         req_conflict=False,
+                         req_deadlock=False),
+            (SmartRequestType.Resume, SmartRequestType.RecvMsg):
+                ReqFlags(req0_category=ReqCategory.Throw,
+                         req1_category=ReqCategory.Catch,
+                         req_matched=False,
+                         req_conflict=False,
+                         req_deadlock=False),
+            (SmartRequestType.Resume, SmartRequestType.Resume):
+                ReqFlags(req0_category=ReqCategory.Throw,
+                         req1_category=ReqCategory.Throw,
+                         req_matched=False,
+                         req_conflict=False,
+                         req_deadlock=False),
+            (SmartRequestType.Resume, SmartRequestType.Sync):
+                ReqFlags(req0_category=ReqCategory.Throw,
+                         req1_category=ReqCategory.Handshake,
+                         req_matched=False,
+                         req_conflict=False,
+                         req_deadlock=False),
+            (SmartRequestType.Resume, SmartRequestType.Wait):
+                ReqFlags(req0_category=ReqCategory.Throw,
+                         req1_category=ReqCategory.Catch,
+                         req_matched=True,
+                         req_conflict=False,
+                         req_deadlock=False),
+
+            (SmartRequestType.Sync, SmartRequestType.SendMsg):
+                ReqFlags(req0_category=ReqCategory.Handshake,
+                         req1_category=ReqCategory.Throw,
+                         req_matched=False,
+                         req_conflict=False,
+                         req_deadlock=False),
+            (SmartRequestType.Sync, SmartRequestType.RecvMsg):
+                ReqFlags(req0_category=ReqCategory.Handshake,
+                         req1_category=ReqCategory.Catch,
+                         req_matched=False,
+                         req_conflict=False,
+                         req_deadlock=False),
+            (SmartRequestType.Sync, SmartRequestType.Resume):
+                ReqFlags(req0_category=ReqCategory.Handshake,
+                         req1_category=ReqCategory.Throw,
+                         req_matched=False,
+                         req_conflict=False,
+                         req_deadlock=False),
+            (SmartRequestType.Sync, SmartRequestType.Sync):
+                ReqFlags(req0_category=ReqCategory.Handshake,
+                         req1_category=ReqCategory.Handshake,
+                         req_matched=True,
+                         req_conflict=False,
+                         req_deadlock=False),
+            (SmartRequestType.Sync, SmartRequestType.Wait):
+                ReqFlags(req0_category=ReqCategory.Handshake,
+                         req1_category=ReqCategory.Catch,
+                         req_matched=False,
+                         req_conflict=True,
+                         req_deadlock=False),
+
+            (SmartRequestType.Wait, SmartRequestType.SendMsg):
+                ReqFlags(req0_category=ReqCategory.Catch,
+                         req1_category=ReqCategory.Throw,
+                         req_matched=False,
+                         req_conflict=False,
+                         req_deadlock=False),
+            (SmartRequestType.Wait, SmartRequestType.RecvMsg):
+                ReqFlags(req0_category=ReqCategory.Catch,
+                         req1_category=ReqCategory.Catch,
+                         req_matched=False,
+                         req_conflict=False,
+                         req_deadlock=False),
+            (SmartRequestType.Wait, SmartRequestType.Resume):
+                ReqFlags(req0_category=ReqCategory.Catch,
+                         req1_category=ReqCategory.Throw,
+                         req_matched=True,
+                         req_conflict=False,
+                         req_deadlock=True),
+            (SmartRequestType.Wait, SmartRequestType.Sync):
+                ReqFlags(req0_category=ReqCategory.Catch,
+                         req1_category=ReqCategory.Handshake,
+                         req_matched=False,
+                         req_conflict=True,
+                         req_deadlock=False),
+            (SmartRequestType.Wait, SmartRequestType.Wait):
+                ReqFlags(req0_category=ReqCategory.Catch,
+                         req1_category=ReqCategory.Catch,
+                         req_matched=False,
+                         req_conflict=False,
+                         req_deadlock=True),
         }
 
-        if (req0 == SmartRequestType.RecvMsg
-                or req0 == SmartRequestType.Sync
-                or req0 == SmartRequestType.Wait):
-            req0_requires_ack = True
+        # if (req0 == SmartRequestType.RecvMsg
+        #         or req0 == SmartRequestType.Sync
+        #         or req0 == SmartRequestType.Wait):
+        #     req0_requires_ack = True
+        #
+        #     if ((req0 == SmartRequestType.RecvMsg
+        #             and req1 != SmartRequestType.SendMsg)
+        #             or (req0 == SmartRequestType.Sync
+        #                 and req1 != SmartRequestType.Sync)
+        #             or (req0 == SmartRequestType.Wait
+        #                 and req1 != SmartRequestType.Resume)):
+        #         req0_unmatched_ack = True
+        #
+        #     if ((req0 == SmartRequestType.RecvMsg
+        #          and req1 == SmartRequestType.SendMsg)
+        #             or (req0 == SmartRequestType.Wait
+        #                 and req1 == SmartRequestType.Resume)):
+        #         if (req1_lap == req0_when_req1_lap
+        #                 or req1_lap < req0_when_req1_lap):
+        #             req0_persistent_ack = True
+        #
+        # if (req1 == SmartRequestType.RecvMsg
+        #         or req1 == SmartRequestType.Sync
+        #         or req1 == SmartRequestType.Wait):
+        #     req1_requires_ack = True
+        #     if ((req1 == SmartRequestType.RecvMsg
+        #             and req0 != SmartRequestType.SendMsg)
+        #             or (req1 == SmartRequestType.Sync
+        #                 and req0 != SmartRequestType.Sync)
+        #             or (req1 == SmartRequestType.Wait
+        #                 and req0 != SmartRequestType.Resume)):
+        #         req1_unmatched_ack = True
+        #
+        #     if ((req1 == SmartRequestType.RecvMsg
+        #          and req0 == SmartRequestType.SendMsg)
+        #             or (req1 == SmartRequestType.Wait
+        #                 and req0 == SmartRequestType.Resume)):
+        #         if req1_lap == req0_when_req1_lap:
+        #             req1_persistent_ack = True
+        #
+        # if (req0 == SmartRequestType.Wait
+        #         and req1 == SmartRequestType.Wait):
+        #     deadlock_potential = True
+        #
+        # if ((req0 == SmartRequestType.Wait
+        #         and req1 == SmartRequestType.Sync)
+        #         or (req0 == SmartRequestType.Sync
+        #             and req1 == SmartRequestType.Wait)):
+        #     conflict_potential = True
 
-            if ((req0 == SmartRequestType.RecvMsg
-                    and req1 != SmartRequestType.SendMsg)
-                    or (req0 == SmartRequestType.Sync
-                        and req1 != SmartRequestType.Sync)
-                    or (req0 == SmartRequestType.Wait
-                        and req1 != SmartRequestType.Resume)):
-                req0_unmatched_ack = True
+        # if timeout_type == TimeoutType.TimeoutTrue:
+        #     if (req0_when_req1_state[0] == st.ThreadState.Unregistered
+        #             or req0_when_req1_state[0] == st.ThreadState.Registered):
+        #         if req0_persistent_ack and (req1_lap < req0_when_req1_lap):
+        #             supress_req1 = True
+        #         elif req1_requires_ack:
+        #             req1_timeout_type = TimeoutType.TimeoutTrue
+        #     elif req0_when_req1_state[0] == st.ThreadState.Alive:
+        #         if req0_when_req1_lap == req1_lap:
+        #             if deadlock_potential:
+        #                 req0_specific_args['deadlock_remotes'] = {req1_name}
+        #                 req1_specific_args['deadlock_remotes'] = {req0_name}
+        #             elif conflict_potential:
+        #                 req0_specific_args['conflict_remotes'] = {req1_name}
+        #                 req1_specific_args['conflict_remotes'] = {req0_name}
+        #             else:
+        #                 if req0_requires_ack:
+        #                     supress_req1 = True
+        #                 else:
+        #                     timeout_type = TimeoutType.TimeoutNone
+        #                     if req1_unmatched_ack:
+        #                         req1_timeout_type = TimeoutType.TimeoutTrue
+        #                         req0_stopped_remotes = {req1_name}
+        #
+        #         elif req0_when_req1_lap < req1_lap:
+        #             if req0_requires_ack:
+        #                 if req1_requires_ack:
+        #                     req1_timeout_type = TimeoutType.TimeoutTrue
+        #             else:
+        #                 timeout_type = TimeoutType.TimeoutNone
+        #                 if req1_requires_ack:
+        #                     req1_timeout_type = TimeoutType.TimeoutTrue
+        #         else:  # req1_lap < req0_when_req1_lap
+        #             if req0_persistent_ack:
+        #                 supress_req1 = True
+        #             elif not (req0_requires_ack or req0_unmatched_ack):
+        #                 timeout_type = TimeoutType.TimeoutNone
+        #                 if req1_requires_ack:
+        #                     req1_timeout_type = TimeoutType.TimeoutTrue
+        # else:
+        #     if ((req0_when_req1_state[0] == st.ThreadState.Unregistered
+        #          or req0_when_req1_state[0] == st.ThreadState.Registered)
+        #             and req0_when_req1_state[1] == 0):
+        #         if not (req0_persistent_ack
+        #                 and (req1_lap < req0_when_req1_lap)):
+        #             req0_stopped_remotes = {req1_name}
+        #             if req1_requires_ack:
+        #                 req1_timeout_type = TimeoutType.TimeoutTrue
+        #     elif (req0_when_req1_state[0] == st.ThreadState.Unregistered
+        #           or req0_when_req1_state[0] == st.ThreadState.Registered
+        #           or req0_when_req1_state[0] == st.ThreadState.Alive):
+        #         if req0_when_req1_lap == req1_lap:
+        #             if deadlock_potential:
+        #                 req0_specific_args['deadlock_remotes'] = {req1_name}
+        #                 req1_specific_args['deadlock_remotes'] = {req0_name}
+        #             elif conflict_potential:
+        #                 req0_specific_args['conflict_remotes'] = {req1_name}
+        #                 req1_specific_args['conflict_remotes'] = {req0_name}
+        #             else:
+        #                 if req0_unmatched_ack:
+        #                     req0_stopped_remotes = {req1_name}
+        #                 if req1_unmatched_ack:
+        #                     req1_timeout_type = TimeoutType.TimeoutTrue
+        #         elif not (req0_persistent_ack
+        #                   and (req1_lap < req0_when_req1_lap)):
+        #             if req0_requires_ack:
+        #                 req0_stopped_remotes = {req1_name}
+        #             if req1_requires_ack:
+        #                 req1_timeout_type = TimeoutType.TimeoutTrue
+        #
+        # if req0_when_req1_state[0] == st.ThreadState.Stopped:
+        #     if not (req0_persistent_ack
+        #             and ((req1_lap == req0_when_req1_lap)
+        #                  or (req1_lap < req0_when_req1_lap))):
+        #         req0_stopped_remotes = {req1_name}
+        #         if req1_requires_ack:
+        #             req1_timeout_type = TimeoutType.TimeoutTrue
 
-            if ((req0 == SmartRequestType.RecvMsg
-                 and req1 == SmartRequestType.SendMsg)
-                    or (req0 == SmartRequestType.Wait
-                        and req1 == SmartRequestType.Resume)):
-                if (req1_lap == req0_when_req1_lap
-                        or req1_lap < req0_when_req1_lap):
-                    req0_persistent_ack = True
+        ReqFlags(req0_category=ReqCategory.Catch,
+                 req1_category=ReqCategory.Catch,
+                 req_matched=False,
+                 req_conflict=False,
+                 req_deadlock=True),
 
-        if (req1 == SmartRequestType.RecvMsg
-                or req1 == SmartRequestType.Sync
-                or req1 == SmartRequestType.Wait):
-            req1_requires_ack = True
-            if ((req1 == SmartRequestType.RecvMsg
-                    and req0 != SmartRequestType.SendMsg)
-                    or (req1 == SmartRequestType.Sync
-                        and req0 != SmartRequestType.Sync)
-                    or (req1 == SmartRequestType.Wait
-                        and req0 != SmartRequestType.Resume)):
-                req1_unmatched_ack = True
-
-            if ((req1 == SmartRequestType.RecvMsg
-                 and req0 == SmartRequestType.SendMsg)
-                    or (req1 == SmartRequestType.Wait
-                        and req0 == SmartRequestType.Resume)):
-                if req1_lap == req0_when_req1_lap:
-                    req1_persistent_ack = True
-
-        if (req0 == SmartRequestType.Wait
-                and req1 == SmartRequestType.Wait):
-            deadlock_potential = True
-
-        if ((req0 == SmartRequestType.Wait
-                and req1 == SmartRequestType.Sync)
-                or (req0 == SmartRequestType.Sync
-                    and req1 == SmartRequestType.Wait)):
-            conflict_potential = True
+        req_flags = request_table[(req0, req1)]
 
         if timeout_type == TimeoutType.TimeoutTrue:
             if (req0_when_req1_state[0] == st.ThreadState.Unregistered
                     or req0_when_req1_state[0] == st.ThreadState.Registered):
-                if req0_persistent_ack and (req1_lap < req0_when_req1_lap):
-                    supress_req1 = True
-                elif req1_requires_ack:
+                if req_flags.req1_category != ReqCategory.Throw:
                     req1_timeout_type = TimeoutType.TimeoutTrue
+
             elif req0_when_req1_state[0] == st.ThreadState.Alive:
                 if req0_when_req1_lap == req1_lap:
-                    if deadlock_potential:
+                    if req_flags.req_deadlock:
                         req0_specific_args['deadlock_remotes'] = {req1_name}
                         req1_specific_args['deadlock_remotes'] = {req0_name}
-                    elif conflict_potential:
+                    elif req_flags.req_conflict:
                         req0_specific_args['conflict_remotes'] = {req1_name}
                         req1_specific_args['conflict_remotes'] = {req0_name}
-                    else:
-                        if req0_requires_ack:
-                            if not req0_unmatched_ack:
-                                supress_req1 = True
-                            req0_stopped_remotes = {req1_name}
-                        else:
-                            timeout_type = TimeoutType.TimeoutNone
-                elif req0_when_req1_lap < req1_lap:
-                    if req0_requires_ack:
-                        req0_stopped_remotes = {req1_name}
-                        if req1_requires_ack:
-                            req1_timeout_type = TimeoutType.TimeoutTrue
-                    else:
+                    elif req_flags.req0_category == ReqCategory.Throw:
                         timeout_type = TimeoutType.TimeoutNone
-                        if req1_requires_ack:
-                            req1_timeout_type = TimeoutType.TimeoutTrue
-                else:  # req1_lap < req0_when_req1_lap
-                    if req0_persistent_ack:
+                    elif (req_flags.req1_category != ReqCategory.Throw
+                          or req_flags.req_matched):
                         supress_req1 = True
-                    elif not (req0_requires_ack or req0_unmatched_ack):
+
+                elif req0_when_req1_lap < req1_lap:
+                    if req_flags.req0_category == ReqCategory.Throw:
                         timeout_type = TimeoutType.TimeoutNone
+                    elif req_flags.req1_category != ReqCategory.Throw:
+                        req1_timeout_type = TimeoutType.TimeoutTrue
+
+                else:  # req1_lap < req0_when_req1_lap
+                    if req_flags.req0_category == ReqCategory.Throw:
+                        timeout_type = TimeoutType.TimeoutNone
+                    elif req_flags.req1_category != ReqCategory.Throw:
+                        req1_timeout_type = TimeoutType.TimeoutTrue
         else:
             if ((req0_when_req1_state[0] == st.ThreadState.Unregistered
                  or req0_when_req1_state[0] == st.ThreadState.Registered)
@@ -9573,10 +9816,7 @@ class ConfigVerifier:
                         req1_specific_args['conflict_remotes'] = {req0_name}
                     else:
                         if req0_unmatched_ack:
-                            if req1_unmatched_ack:
-                                timeout_type = TimeoutType.TimeoutTrue
-                            else:
-                                req0_stopped_remotes = {req1_name}
+                            req0_stopped_remotes = {req1_name}
                         if req1_unmatched_ack:
                             req1_timeout_type = TimeoutType.TimeoutTrue
                 elif not (req0_persistent_ack
@@ -9593,7 +9833,6 @@ class ConfigVerifier:
                 req0_stopped_remotes = {req1_name}
                 if req1_requires_ack:
                     req1_timeout_type = TimeoutType.TimeoutTrue
-
         ################################################################
         # lap loop
         ################################################################
@@ -9699,7 +9938,10 @@ class ConfigVerifier:
                 if (req0_when_req1_state[0] == state
                         and req0_when_req1_state[1] == state_iteration
                         and req0_when_req1_lap == lap):
-                    pause_time = 0.5
+                    if timeout_type == TimeoutType.TimeoutTrue:
+                        pause_time = 1
+                    else:
+                        pause_time = 0.5
                     req0_confirm_parms = request_build_rtns[req0](
                         timeout_type=timeout_type,
                         cmd_runner=req0_name,
