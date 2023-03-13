@@ -9784,41 +9784,54 @@ class ConfigVerifier:
                           or req_flags.req_matched):
                         supress_req1 = True
 
-                elif req0_when_req1_lap < req1_lap:
+                else:  # req0_when_req1_lap != req1_lap:
                     if req_flags.req0_category == ReqCategory.Throw:
                         timeout_type = TimeoutType.TimeoutNone
                     elif req_flags.req1_category != ReqCategory.Throw:
                         req1_timeout_type = TimeoutType.TimeoutTrue
 
-                else:  # req1_lap < req0_when_req1_lap
-                    if req_flags.req0_category == ReqCategory.Throw:
-                        timeout_type = TimeoutType.TimeoutNone
-                    elif req_flags.req1_category != ReqCategory.Throw:
-                        req1_timeout_type = TimeoutType.TimeoutTrue
-        else:
+        # not an else since we might have cases where timeout_type True
+        # was changed to None in the above section
+        if timeout_type != TimeoutType.TimeoutTrue:
             if ((req0_when_req1_state[0] == st.ThreadState.Unregistered
                  or req0_when_req1_state[0] == st.ThreadState.Registered)
                     and req0_when_req1_state[1] == 0):
-                if not (req0_persistent_ack
-                        and (req1_lap < req0_when_req1_lap)):
+                if req0_when_req1_lap == req1_lap:
                     req0_stopped_remotes = {req1_name}
-                    if req1_requires_ack:
+                    if req_flags.req1_category != ReqCategory.Throw:
                         req1_timeout_type = TimeoutType.TimeoutTrue
+                elif req0_when_req1_lap < req1_lap:
+                    req0_stopped_remotes = {req1_name}
+                    if req_flags.req1_category != ReqCategory.Throw:
+                        req1_timeout_type = TimeoutType.TimeoutTrue
+                elif req1_lap < req0_when_req1_lap:
+                    if req_flags.req1_category != ReqCategory.Throw:
+                        req1_timeout_type = TimeoutType.TimeoutTrue
+                    else:
+                        if not req_flags.req_matched:
+                            req0_stopped_remotes = {req1_name}
+
             elif (req0_when_req1_state[0] == st.ThreadState.Unregistered
                   or req0_when_req1_state[0] == st.ThreadState.Registered
                   or req0_when_req1_state[0] == st.ThreadState.Alive):
                 if req0_when_req1_lap == req1_lap:
-                    if deadlock_potential:
+                    if req_flags.req_deadlock:
                         req0_specific_args['deadlock_remotes'] = {req1_name}
                         req1_specific_args['deadlock_remotes'] = {req0_name}
-                    elif conflict_potential:
+                    elif req_flags.req_conflict:
                         req0_specific_args['conflict_remotes'] = {req1_name}
                         req1_specific_args['conflict_remotes'] = {req0_name}
                     else:
-                        if req0_unmatched_ack:
-                            req0_stopped_remotes = {req1_name}
-                        if req1_unmatched_ack:
-                            req1_timeout_type = TimeoutType.TimeoutTrue
+                        if req_flags.req0_category == ReqCategory.Throw:
+                            if not req_flags.req_matched:
+                                if (req_flags.req1_category !=
+                                        ReqCategory.Throw):
+                                    req1_timeout_type = TimeoutType.TimeoutTrue
+                        else:
+                            if not req_flags.req_matched:
+                                req0_stopped_remotes = {req1_name}
+                                req1_timeout_type = TimeoutType.TimeoutTrue
+
                 elif not (req0_persistent_ack
                           and (req1_lap < req0_when_req1_lap)):
                     if req0_requires_ack:
