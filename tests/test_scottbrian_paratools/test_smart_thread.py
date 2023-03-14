@@ -286,8 +286,7 @@ req0_arg_list = [
     SmartRequestType.Sync,
     SmartRequestType.Wait]
 
-req0_arg_list = [
-    SmartRequestType.Sync]
+# req0_arg_list = [SmartRequestType.Sync]
 
 req1_arg_list = [
     SmartRequestType.SendMsg,
@@ -296,19 +295,17 @@ req1_arg_list = [
     SmartRequestType.Sync,
     SmartRequestType.Wait]
 
-req1_arg_list = [
-    SmartRequestType.RecvMsg]
+# req1_arg_list = [SmartRequestType.RecvMsg]
 
 req0_when_req1_state_arg_list = [
     (st.ThreadState.Unregistered, 0),
-    (st.ThreadState.Unregistered, 1),
     (st.ThreadState.Registered, 0),
+    (st.ThreadState.Unregistered, 1),
     (st.ThreadState.Registered, 1),
     (st.ThreadState.Alive, 0),
     (st.ThreadState.Stopped, 0)]
 
-req0_when_req1_state_arg_list = [
-    (st.ThreadState.Alive, 0)]
+# req0_when_req1_state_arg_list = [(st.ThreadState.Alive, 0)]
 
 req0_when_req1_lap_arg_list = [0, 1]
 
@@ -2665,6 +2662,7 @@ def req1_arg(request: Any) -> SmartRequestType:
     """
     return cast(SmartRequestType, request.param)
 
+
 ###############################################################################
 # req0_when_req1_state_arg
 ###############################################################################
@@ -2679,6 +2677,7 @@ def req0_when_req1_state_arg(request: Any) -> tuple[st.ThreadState, int]:
         The params values are returned one at a time
     """
     return cast(tuple[st.ThreadState, int], request.param)
+
 
 ###############################################################################
 # req0_when_req1_lap_arg
@@ -2695,6 +2694,7 @@ def req0_when_req1_lap_arg(request: Any) -> int:
     """
     return cast(int, request.param)
 
+
 ###############################################################################
 # req1_lap_arg
 ###############################################################################
@@ -2709,6 +2709,7 @@ def req1_lap_arg_arg(request: Any) -> int:
         The params values are returned one at a time
     """
     return cast(int, request.param)
+
 
 ###############################################################################
 # recv_msg_state_arg
@@ -9613,7 +9614,7 @@ class ConfigVerifier:
                          req1_category=ReqCategory.Throw,
                          req_matched=True,
                          req_conflict=False,
-                         req_deadlock=True),
+                         req_deadlock=False),
             (SmartRequestType.Wait, SmartRequestType.Sync):
                 ReqFlags(req0_category=ReqCategory.Catch,
                          req1_category=ReqCategory.Handshake,
@@ -9628,141 +9629,9 @@ class ConfigVerifier:
                          req_deadlock=True),
         }
 
-        # if (req0 == SmartRequestType.RecvMsg
-        #         or req0 == SmartRequestType.Sync
-        #         or req0 == SmartRequestType.Wait):
-        #     req0_requires_ack = True
-        #
-        #     if ((req0 == SmartRequestType.RecvMsg
-        #             and req1 != SmartRequestType.SendMsg)
-        #             or (req0 == SmartRequestType.Sync
-        #                 and req1 != SmartRequestType.Sync)
-        #             or (req0 == SmartRequestType.Wait
-        #                 and req1 != SmartRequestType.Resume)):
-        #         req0_unmatched_ack = True
-        #
-        #     if ((req0 == SmartRequestType.RecvMsg
-        #          and req1 == SmartRequestType.SendMsg)
-        #             or (req0 == SmartRequestType.Wait
-        #                 and req1 == SmartRequestType.Resume)):
-        #         if (req1_lap == req0_when_req1_lap
-        #                 or req1_lap < req0_when_req1_lap):
-        #             req0_persistent_ack = True
-        #
-        # if (req1 == SmartRequestType.RecvMsg
-        #         or req1 == SmartRequestType.Sync
-        #         or req1 == SmartRequestType.Wait):
-        #     req1_requires_ack = True
-        #     if ((req1 == SmartRequestType.RecvMsg
-        #             and req0 != SmartRequestType.SendMsg)
-        #             or (req1 == SmartRequestType.Sync
-        #                 and req0 != SmartRequestType.Sync)
-        #             or (req1 == SmartRequestType.Wait
-        #                 and req0 != SmartRequestType.Resume)):
-        #         req1_unmatched_ack = True
-        #
-        #     if ((req1 == SmartRequestType.RecvMsg
-        #          and req0 == SmartRequestType.SendMsg)
-        #             or (req1 == SmartRequestType.Wait
-        #                 and req0 == SmartRequestType.Resume)):
-        #         if req1_lap == req0_when_req1_lap:
-        #             req1_persistent_ack = True
-        #
-        # if (req0 == SmartRequestType.Wait
-        #         and req1 == SmartRequestType.Wait):
-        #     deadlock_potential = True
-        #
-        # if ((req0 == SmartRequestType.Wait
-        #         and req1 == SmartRequestType.Sync)
-        #         or (req0 == SmartRequestType.Sync
-        #             and req1 == SmartRequestType.Wait)):
-        #     conflict_potential = True
-
-        # if timeout_type == TimeoutType.TimeoutTrue:
-        #     if (req0_when_req1_state[0] == st.ThreadState.Unregistered
-        #             or req0_when_req1_state[0] == st.ThreadState.Registered):
-        #         if req0_persistent_ack and (req1_lap < req0_when_req1_lap):
-        #             supress_req1 = True
-        #         elif req1_requires_ack:
-        #             req1_timeout_type = TimeoutType.TimeoutTrue
-        #     elif req0_when_req1_state[0] == st.ThreadState.Alive:
-        #         if req0_when_req1_lap == req1_lap:
-        #             if deadlock_potential:
-        #                 req0_specific_args['deadlock_remotes'] = {req1_name}
-        #                 req1_specific_args['deadlock_remotes'] = {req0_name}
-        #             elif conflict_potential:
-        #                 req0_specific_args['conflict_remotes'] = {req1_name}
-        #                 req1_specific_args['conflict_remotes'] = {req0_name}
-        #             else:
-        #                 if req0_requires_ack:
-        #                     supress_req1 = True
-        #                 else:
-        #                     timeout_type = TimeoutType.TimeoutNone
-        #                     if req1_unmatched_ack:
-        #                         req1_timeout_type = TimeoutType.TimeoutTrue
-        #                         req0_stopped_remotes = {req1_name}
-        #
-        #         elif req0_when_req1_lap < req1_lap:
-        #             if req0_requires_ack:
-        #                 if req1_requires_ack:
-        #                     req1_timeout_type = TimeoutType.TimeoutTrue
-        #             else:
-        #                 timeout_type = TimeoutType.TimeoutNone
-        #                 if req1_requires_ack:
-        #                     req1_timeout_type = TimeoutType.TimeoutTrue
-        #         else:  # req1_lap < req0_when_req1_lap
-        #             if req0_persistent_ack:
-        #                 supress_req1 = True
-        #             elif not (req0_requires_ack or req0_unmatched_ack):
-        #                 timeout_type = TimeoutType.TimeoutNone
-        #                 if req1_requires_ack:
-        #                     req1_timeout_type = TimeoutType.TimeoutTrue
-        # else:
-        #     if ((req0_when_req1_state[0] == st.ThreadState.Unregistered
-        #          or req0_when_req1_state[0] == st.ThreadState.Registered)
-        #             and req0_when_req1_state[1] == 0):
-        #         if not (req0_persistent_ack
-        #                 and (req1_lap < req0_when_req1_lap)):
-        #             req0_stopped_remotes = {req1_name}
-        #             if req1_requires_ack:
-        #                 req1_timeout_type = TimeoutType.TimeoutTrue
-        #     elif (req0_when_req1_state[0] == st.ThreadState.Unregistered
-        #           or req0_when_req1_state[0] == st.ThreadState.Registered
-        #           or req0_when_req1_state[0] == st.ThreadState.Alive):
-        #         if req0_when_req1_lap == req1_lap:
-        #             if deadlock_potential:
-        #                 req0_specific_args['deadlock_remotes'] = {req1_name}
-        #                 req1_specific_args['deadlock_remotes'] = {req0_name}
-        #             elif conflict_potential:
-        #                 req0_specific_args['conflict_remotes'] = {req1_name}
-        #                 req1_specific_args['conflict_remotes'] = {req0_name}
-        #             else:
-        #                 if req0_unmatched_ack:
-        #                     req0_stopped_remotes = {req1_name}
-        #                 if req1_unmatched_ack:
-        #                     req1_timeout_type = TimeoutType.TimeoutTrue
-        #         elif not (req0_persistent_ack
-        #                   and (req1_lap < req0_when_req1_lap)):
-        #             if req0_requires_ack:
-        #                 req0_stopped_remotes = {req1_name}
-        #             if req1_requires_ack:
-        #                 req1_timeout_type = TimeoutType.TimeoutTrue
-        #
-        # if req0_when_req1_state[0] == st.ThreadState.Stopped:
-        #     if not (req0_persistent_ack
-        #             and ((req1_lap == req0_when_req1_lap)
-        #                  or (req1_lap < req0_when_req1_lap))):
-        #         req0_stopped_remotes = {req1_name}
-        #         if req1_requires_ack:
-        #             req1_timeout_type = TimeoutType.TimeoutTrue
-
-        ReqFlags(req0_category=ReqCategory.Catch,
-                 req1_category=ReqCategory.Catch,
-                 req_matched=False,
-                 req_conflict=False,
-                 req_deadlock=True),
-
         req_flags = request_table[(req0, req1)]
+
+        self.log_test_msg(f'{req_flags=}')
 
         if timeout_type == TimeoutType.TimeoutTrue:
             if (req0_when_req1_state[0] == st.ThreadState.Unregistered
@@ -9807,6 +9676,7 @@ class ConfigVerifier:
                 elif req1_lap < req0_when_req1_lap:
                     if req_flags.req1_category != ReqCategory.Throw:
                         req1_timeout_type = TimeoutType.TimeoutTrue
+                        req0_stopped_remotes = {req1_name}
                     else:
                         if not req_flags.req_matched:
                             req0_stopped_remotes = {req1_name}
@@ -9830,22 +9700,55 @@ class ConfigVerifier:
                         else:
                             if not req_flags.req_matched:
                                 req0_stopped_remotes = {req1_name}
-                                req1_timeout_type = TimeoutType.TimeoutTrue
+                                if (req_flags.req1_category
+                                        != ReqCategory.Throw):
+                                    req1_timeout_type = TimeoutType.TimeoutTrue
 
-                elif not (req0_persistent_ack
-                          and (req1_lap < req0_when_req1_lap)):
-                    if req0_requires_ack:
+                elif req0_when_req1_lap < req1_lap:
+                    if req_flags.req0_category == ReqCategory.Throw:
+                        if req_flags.req1_category != ReqCategory.Throw:
+                            req1_timeout_type = TimeoutType.TimeoutTrue
+                    else:
                         req0_stopped_remotes = {req1_name}
-                    if req1_requires_ack:
+                        if req_flags.req1_category != ReqCategory.Throw:
+                            req1_timeout_type = TimeoutType.TimeoutTrue
+
+                else:  # req1_lap < req0_when_req1_lap
+                    if req_flags.req1_category == ReqCategory.Throw:
+                        if not req_flags.req_matched:
+                            if req_flags.req0_category != ReqCategory.Throw:
+                                req0_stopped_remotes = {req1_name}
+                    else:
                         req1_timeout_type = TimeoutType.TimeoutTrue
+                        if req_flags.req0_category != ReqCategory.Throw:
+                            req0_stopped_remotes = {req1_name}
 
         if req0_when_req1_state[0] == st.ThreadState.Stopped:
-            if not (req0_persistent_ack
-                    and ((req1_lap == req0_when_req1_lap)
-                         or (req1_lap < req0_when_req1_lap))):
-                req0_stopped_remotes = {req1_name}
-                if req1_requires_ack:
+            if req0_when_req1_lap == req1_lap:
+                if req_flags.req1_category == ReqCategory.Throw:
+                    if not req_flags.req_matched:
+                        req0_stopped_remotes = {req1_name}
+                    else:
+                        if timeout_type == TimeoutType.TimeoutTrue:
+                            timeout_type = TimeoutType.TimeoutNone
+                else:
                     req1_timeout_type = TimeoutType.TimeoutTrue
+                    req0_stopped_remotes = {req1_name}
+            elif req0_when_req1_lap < req1_lap:
+                req0_stopped_remotes = {req1_name}
+                if req_flags.req1_category != ReqCategory.Throw:
+                    req1_timeout_type = TimeoutType.TimeoutTrue
+            else:  # req1_lap < req0_when_req1_lap
+                if req_flags.req1_category == ReqCategory.Throw:
+                    if not req_flags.req_matched:
+                        req0_stopped_remotes = {req1_name}
+                    else:
+                        if timeout_type == TimeoutType.TimeoutTrue:
+                            timeout_type = TimeoutType.TimeoutNone
+                else:
+                    req1_timeout_type = TimeoutType.TimeoutTrue
+                    req0_stopped_remotes = {req1_name}
+
         ################################################################
         # lap loop
         ################################################################
@@ -9882,9 +9785,10 @@ class ConfigVerifier:
                         # start deleting req1 from the pair_array so
                         # that we determine the correct log messages to
                         # add for log verification
-                        self.add_cmd(
-                            Pause(cmd_runners=self.commander_name,
-                                  pause_seconds=1))
+                        if req0_stopped_remotes:
+                            self.add_cmd(
+                                Pause(cmd_runners=self.commander_name,
+                                      pause_seconds=1))
                         self.build_join_suite(
                             cmd_runners=self.commander_name,
                             join_target_names=req1_name,
