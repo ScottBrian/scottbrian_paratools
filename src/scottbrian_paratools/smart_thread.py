@@ -432,6 +432,8 @@ class SmartThread:
 
         if target:  # caller wants a thread created
             self.thread_create = ThreadCreate.Target
+            if args is None:
+                args=()
             self.thread = threading.Thread(target=target,
                                            args=args,
                                            kwargs=kwargs,
@@ -2529,6 +2531,10 @@ class SmartThread:
         else:
             remotes = set(remotes)
 
+        if request_name in ('send_msg', 'recv_msg', 'smart_resume',
+                            'smart_sync', 'smart_wait'):
+            self.verify_thread_is_current()
+
         if (request_name != 'smart_start'
                 and threading.current_thread().name in remotes):
             raise SmartThreadInvalidInput(f'{self.name} {request_name} is '
@@ -2538,7 +2544,6 @@ class SmartThread:
 
         if request_name in ('send_msg', 'recv_msg', 'smart_resume',
                             'smart_sync', 'smart_wait'):
-            self.verify_thread_is_current()
             with sel.SELockShare(SmartThread._registry_lock):
                 for remote in remotes:
                     target_create_time = 0.0
