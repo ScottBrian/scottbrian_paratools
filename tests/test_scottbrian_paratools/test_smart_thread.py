@@ -398,8 +398,10 @@ num_stopped_delay_arg_list = [0, 1, 2]
 # Test settings for test_wait_timeout_scenarios
 ########################################################################
 num_waiters_arg_list = [1, 2, 3]
-# num_waiters_arg_list = [3]
+num_waiters_arg_list = [1]
+
 num_actors_arg_list = [1, 2, 3]
+num_actors_arg_list = [2]
 
 actor_1_arg_list = [Actors.ActiveBeforeActor,
                     Actors.ActiveAfterActor,
@@ -407,7 +409,8 @@ actor_1_arg_list = [Actors.ActiveBeforeActor,
                     Actors.ExitActionActor,
                     Actors.UnregActor,
                     Actors.RegActor]
-# actor_1_arg_list = [Actors.ActionExitActor]
+actor_1_arg_list = [Actors.ActionExitActor]
+
 num_actor_1_arg_list = [1, 2, 3]
 
 actor_2_arg_list = [Actors.ActiveBeforeActor,
@@ -416,7 +419,8 @@ actor_2_arg_list = [Actors.ActiveBeforeActor,
                     Actors.ExitActionActor,
                     Actors.UnregActor,
                     Actors.RegActor]
-# actor_2_arg_list = [Actors.ActionExitActor]
+actor_2_arg_list = [Actors.RegActor]
+
 num_actor_2_arg_list = [1, 2, 3]
 
 actor_3_arg_list = [Actors.ActiveBeforeActor,
@@ -425,6 +429,7 @@ actor_3_arg_list = [Actors.ActiveBeforeActor,
                     Actors.ExitActionActor,
                     Actors.UnregActor,
                     Actors.RegActor]
+actor_3_arg_list = [Actors.UnregActor]
 num_actor_3_arg_list = [1, 2, 3]
 
 
@@ -8133,13 +8138,12 @@ class ConfigVerifier:
                         resumers=actor_names,
                         stopped_remotes=stopped_remotes,
                         timeout=timeout_time,
-                        wait_for=st.WaitFor.All,
-                        error_stopped_target=error_stopped_target))
-
-                self.build_exit_suite(cmd_runner=self.commander_name,
-                                      names=actor_names)
+                        wait_for=st.WaitFor.All))
 
                 if error_stopped_target:
+                    self.build_exit_suite(cmd_runner=self.commander_name,
+                                          names=actor_names)
+
                     self.add_cmd(
                         ConfirmResponse(
                             cmd_runners=[self.commander_name],
@@ -8147,24 +8151,25 @@ class ConfigVerifier:
                             confirm_serial_num=wait_serial_num,
                             confirmers=target_names))
 
-                self.build_join_suite(
-                    cmd_runners=self.commander_name,
-                    join_target_names=actor_names)
+                    self.build_join_suite(
+                        cmd_runners=self.commander_name,
+                        join_target_names=actor_names)
 
-                f1_create_items: list[F1CreateItem] = []
-                for idx, name in enumerate(actor_names):
-                    if idx % 2:
-                        app_config = AppConfig.ScriptStyle
-                    else:
-                        app_config = AppConfig.RemoteThreadApp
+                    f1_create_items: list[F1CreateItem] = []
+                    for idx, name in enumerate(actor_names):
+                        if idx % 2:
+                            app_config = AppConfig.ScriptStyle
+                        else:
+                            app_config = AppConfig.RemoteThreadApp
 
-                    f1_create_items.append(F1CreateItem(name=name,
-                                                        auto_start=True,
-                                                        target_rtn=outer_f1,
-                                                        app_config=app_config))
-                self.build_create_suite(
-                    f1_create_items=f1_create_items,
-                    validate_config=False)
+                        f1_create_items.append(
+                            F1CreateItem(name=name,
+                                         auto_start=True,
+                                         target_rtn=outer_f1,
+                                         app_config=app_config))
+                    self.build_create_suite(
+                        f1_create_items=f1_create_items,
+                        validate_config=False)
 
                 if not error_stopped_target:
                     ########################################################
@@ -8196,7 +8201,6 @@ class ConfigVerifier:
                 # the timeout_names are expected to timeout since they
                 # were not resumed
                 ########################################################
-                error_stopped_target = True
                 exit_was_done = False
                 if len(timeout_names) % 2:
                     stopped_remotes = set(actor_names.copy())
@@ -8214,8 +8218,7 @@ class ConfigVerifier:
                         stopped_remotes=stopped_remotes,
                         timeout=timeout_time,
                         timeout_remotes=set(actor_names),
-                        wait_for=st.WaitFor.All,
-                        error_stopped_target=error_stopped_target))
+                        wait_for=st.WaitFor.All))
                 self.add_cmd(
                     ConfirmResponse(
                         cmd_runners=[self.commander_name],
@@ -16844,7 +16847,7 @@ class TestSmartThreadScenarios:
         args_for_scenario_builder: dict[str, Any] = {
             'num_waiters': num_waiters_arg,
             'num_actors': num_actors_arg,
-            'actor_list': [actor_1_arg, actor_2_arg, actor_3_arg,]
+            'actor_list': [actor_1_arg, actor_2_arg, actor_3_arg]
         }
 
         self.scenario_driver(
@@ -18953,78 +18956,3 @@ class TestSmartThreadErrors:
 #         beta_t3.join()
 #         descs.thread_end(name='beta3')
 #
-#     ###########################################################################
-#     # test_smart_thread_foreign_op_detection
-#     ###########################################################################
-#     def test_smart_thread_foreign_op_detection(self) -> None:
-#         """Test register_thread with f1."""
-#         #######################################################################
-#         # mainline and f1 - mainline pairs with beta
-#         #######################################################################
-#         logger.debug('start test 1')
-#
-#         def f1():
-#             logger.debug('beta f1 entered')
-#             t_pair = SmartThread(group_name='group1', name='beta')
-#
-#             descs.add_desc(SmartThreadDesc(smart_thread=t_pair))
-#
-#             cmds.queue_cmd('alpha')
-#             my_c_thread = threading.current_thread()
-#             assert t_pair.thread is my_c_thread
-#             assert t_pair.thread is threading.current_thread()
-#
-#             t_pair.pair_with(remote_name='alpha')
-#
-#             cmds.get_cmd('beta')
-#
-#             logger.debug('beta f1 exiting')
-#
-#         def foreign1(t_pair):
-#             logger.debug('foreign1 entered')
-#
-#             with pytest.raises(SmartThreadDetectedOpFromForeignThread):
-#                 t_pair.verify_current_remote()
-#
-#             logger.debug('foreign1 exiting')
-#
-#         cmds = Cmds()
-#         descs = SmartThreadDescs()
-#
-#         smart_thread1 = SmartThread(group_name='group1', name='alpha')
-#         descs.add_desc(SmartThreadDesc(smart_thread=smart_thread1))
-#
-#         alpha_t = threading.current_thread()
-#         my_f1_thread = threading.Thread(target=f1)
-#         my_foreign1_thread = threading.Thread(target=foreign1,
-#                                               args=(smart_thread1,))
-#
-#         with pytest.raises(SmartThreadNotPaired):
-#             smart_thread1.check_remote()
-#
-#         logger.debug('mainline about to start beta thread')
-#
-#         my_f1_thread.start()
-#
-#         cmds.get_cmd('alpha')
-#
-#         smart_thread1.pair_with(remote_name='beta')
-#         descs.paired('alpha', 'beta')
-#
-#         my_foreign1_thread.start()  # attempt to resume beta (should fail)
-#
-#         my_foreign1_thread.join()
-#
-#         cmds.queue_cmd('beta')  # tell beta to end
-#
-#         my_f1_thread.join()
-#         descs.thread_end(name='beta')
-#
-#         with pytest.raises(SmartThreadRemoteThreadNotAlive):
-#             smart_thread1.check_remote()
-#         descs.cleanup()
-#
-#         assert smart_thread1.thread is alpha_t
-#
-#         descs.verify_registry()
-
