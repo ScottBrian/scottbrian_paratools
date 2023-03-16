@@ -166,7 +166,7 @@ class SmartThreadInvalidInput(SmartThreadError):
     pass
 
 
-class SmartThreadWorkUnexpectedData(SmartThreadError):
+class SmartThreadWorkDataException(SmartThreadError):
     """SmartThread exception for unexpected data encountered."""
     pass
 
@@ -471,7 +471,7 @@ class SmartThread:
         self.work_remotes: set[str] = set()
         self.work_pk_remotes: list[PairKeyRemote] = []
         self.missing_remotes: set[str] = set()
-        self.added_pk_remotes: list[PairKeyRemote] = []
+        self.found_pk_remotes: list[PairKeyRemote] = []
 
         # register this new SmartThread so others can find us
         self._register()
@@ -2314,7 +2314,7 @@ class SmartThread:
                 # request_pending flag in our entry will prevent our
                 # entry for being removed (but not the remote)
                 with sel.SELockShare(SmartThread._registry_lock):
-                    if self.added_pk_remotes:
+                    if self.found_pk_remotes:
                         self._handle_found_pk_remotes()
 
                     if pk_remote.pair_key in SmartThread._pair_array:
@@ -2395,20 +2395,23 @@ class SmartThread:
     ####################################################################
     def _handle_found_pk_remotes(self) -> None:
         """Update the work_pk_remotes with newly found threads."""
-        for added_pk_remote in self.added_pk_remotes:
-            test_pk_remote = PairKeyRemote(added_pk_remote.pair_key,
-                                           added_pk_remote.remote,
+        for found_pk_remote in self.found_pk_remotes:
+            test_pk_remote = PairKeyRemote(found_pk_remote.pair_key,
+                                           found_pk_remote.remote,
                                            0.0)
             try:
                 idx = self.work_pk_remotes.index(test_pk_remote)
                 self.work_pk_remotes[idx] = PairKeyRemote(
-                    added_pk_remote.pair_key,
-                    added_pk_remote.remote,
-                    added_pk_remote.create_time)
+                    found_pk_remote.pair_key,
+                    found_pk_remote.remote,
+                    found_pk_remote.create_time)
             except ValueError:
-                raise SmartThreadWorkUnexpectedData()
+                raise SmartThreadWorkDataException(
+                    f'_handle_found_pk_remotes failed to find an '
+                    f'entry for {found_pk_remote=} in '
+                    f'{self.work_pk_remotes=}')
 
-        self.added_pk_remotes = []
+        self.found_pk_remotes = []
 
     ####################################################################
     # _handle_loop_errors
@@ -2634,7 +2637,7 @@ class SmartThread:
                 # starting now
                 self.work_pk_remotes: list[PairKeyRemote] = (
                     pk_remotes.copy())
-                self.added_pk_remotes: list[PairKeyRemote] = []
+                self.found_pk_remotes: list[PairKeyRemote] = []
 
         request_block = RequestBlock(
             request_name=request_name,
