@@ -269,6 +269,7 @@ wait_lap_arg_list = [0, 1]
 
 resume_lap_arg_list = [0, 1]
 
+
 ########################################################################
 # Test settings for test_rotate_state_scenarios
 ########################################################################
@@ -398,10 +399,10 @@ num_stopped_delay_arg_list = [0, 1, 2]
 # Test settings for test_wait_timeout_scenarios
 ########################################################################
 num_waiters_arg_list = [1, 2, 3]
-num_waiters_arg_list = [1]
+# num_waiters_arg_list = [1]
 
 num_actors_arg_list = [1, 2, 3]
-num_actors_arg_list = [2]
+# num_actors_arg_list = [1, 2]
 
 actor_1_arg_list = [Actors.ActiveBeforeActor,
                     Actors.ActiveAfterActor,
@@ -409,7 +410,7 @@ actor_1_arg_list = [Actors.ActiveBeforeActor,
                     Actors.ExitActionActor,
                     Actors.UnregActor,
                     Actors.RegActor]
-actor_1_arg_list = [Actors.ActionExitActor]
+# actor_1_arg_list = [Actors.ActiveAfterActor, Actors.ActionExitActor]
 
 num_actor_1_arg_list = [1, 2, 3]
 
@@ -419,7 +420,7 @@ actor_2_arg_list = [Actors.ActiveBeforeActor,
                     Actors.ExitActionActor,
                     Actors.UnregActor,
                     Actors.RegActor]
-actor_2_arg_list = [Actors.RegActor]
+# actor_2_arg_list = [Actors.ExitActionActor, Actors.UnregActor]
 
 num_actor_2_arg_list = [1, 2, 3]
 
@@ -429,7 +430,7 @@ actor_3_arg_list = [Actors.ActiveBeforeActor,
                     Actors.ExitActionActor,
                     Actors.UnregActor,
                     Actors.RegActor]
-actor_3_arg_list = [Actors.UnregActor]
+# actor_3_arg_list = [Actors.ExitActionActor, Actors.UnregActor]
 num_actor_3_arg_list = [1, 2, 3]
 
 
@@ -5341,16 +5342,14 @@ class ConfigVerifier:
             num_active=num_cd_actors + 1)
 
         self.log_name_groups()
-        # active_names = self.active_names.copy()
-        # remove commander for now, but if we add it later we need to
-        # be careful not to exit the commander
-        active_names = self.active_names - {self.commander_name}
+
+        active_names_copy = self.active_names - {self.commander_name}
 
         ################################################################
         # choose actor_names
         ################################################################
         actor_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_cd_actors,
             update_collection=True,
             var_name_for_log='actor_names')
@@ -5806,13 +5805,13 @@ class ConfigVerifier:
             num_active=3)  # one for commander and two for threads
         self.log_name_groups()
 
-        active_names = self.active_names - {self.commander_name}
+        active_names_copy = self.active_names - {self.commander_name}
 
         ################################################################
         # choose receiver_names
         ################################################################
         victim_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=1,
             update_collection=True,
             var_name_for_log='victim_names')
@@ -5987,18 +5986,15 @@ class ConfigVerifier:
 
         self.log_name_groups()
 
-        # active_names = self.active_names.copy()
-        # remove commander for now, but if we add it later we need to
-        # be careful not to exit the commander
-        unregistered_names = self.unregistered_names.copy()
-        registered_names = self.registered_names.copy()
-        active_names = self.active_names - {self.commander_name}
+        unregistered_names_copy = self.unregistered_names.copy()
+        registered_names_copy = self.registered_names.copy()
+        active_names_copy = self.active_names - {self.commander_name}
 
         ################################################################
         # choose receiver_names
         ################################################################
         active_no_target_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_active_no_target,
             update_collection=True,
             var_name_for_log='active_no_target_names')
@@ -6007,7 +6003,7 @@ class ConfigVerifier:
         # choose active_no_delay_sender_names
         ################################################################
         no_delay_exit_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_no_delay_exit,
             update_collection=True,
             var_name_for_log='no_delay_exit_names')
@@ -6016,7 +6012,7 @@ class ConfigVerifier:
         # choose active_delay_sender_names
         ################################################################
         delay_exit_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_delay_exit,
             update_collection=True,
             var_name_for_log='delay_exit_names')
@@ -6025,7 +6021,7 @@ class ConfigVerifier:
         # choose send_exit_sender_names
         ################################################################
         no_delay_unreg_names = self.choose_names(
-            name_collection=unregistered_names,
+            name_collection=unregistered_names_copy,
             num_names_needed=num_no_delay_unreg,
             update_collection=True,
             var_name_for_log='no_delay_unreg_names')
@@ -6034,7 +6030,7 @@ class ConfigVerifier:
         # choose nosend_exit_sender_names
         ################################################################
         delay_unreg_names = self.choose_names(
-            name_collection=unregistered_names,
+            name_collection=unregistered_names_copy,
             num_names_needed=num_delay_unreg,
             update_collection=True,
             var_name_for_log='delay_unreg_names')
@@ -6043,7 +6039,7 @@ class ConfigVerifier:
         # choose unreg_sender_names
         ################################################################
         no_delay_reg_names = self.choose_names(
-            name_collection=registered_names,
+            name_collection=registered_names_copy,
             num_names_needed=num_no_delay_reg,
             update_collection=True,
             var_name_for_log='no_delay_reg_names')
@@ -6052,7 +6048,7 @@ class ConfigVerifier:
         # choose reg_sender_names
         ################################################################
         delay_reg_names = self.choose_names(
-            name_collection=registered_names,
+            name_collection=registered_names_copy,
             num_names_needed=num_delay_reg,
             update_collection=True,
             var_name_for_log='delay_reg_names')
@@ -6274,16 +6270,13 @@ class ConfigVerifier:
 
         self.log_name_groups()
 
-        # active_names = self.active_names.copy()
-        # remove commander for now, but if we add it later we need to
-        # be careful not to exit the commander
-        active_names = self.active_names - {self.commander_name}
+        active_names_copy = self.active_names - {self.commander_name}
 
         ################################################################
         # choose receiver_names
         ################################################################
         receiver_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_receivers,
             update_collection=True,
             var_name_for_log='receiver_names')
@@ -6292,7 +6285,7 @@ class ConfigVerifier:
         # choose sender_names
         ################################################################
         sender_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_senders,
             update_collection=True,
             var_name_for_log='sender_names')
@@ -6301,7 +6294,7 @@ class ConfigVerifier:
         # choose waiter_names
         ################################################################
         waiter_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_waiters,
             update_collection=True,
             var_name_for_log='waiter_names')
@@ -6310,7 +6303,7 @@ class ConfigVerifier:
         # choose resumer_names
         ################################################################
         resumer_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_resumers,
             update_collection=True,
             var_name_for_log='resumer_names')
@@ -6319,7 +6312,7 @@ class ConfigVerifier:
         # choose syncer_names
         ################################################################
         syncer_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_syncers,
             update_collection=True,
             var_name_for_log='syncer_names')
@@ -6328,7 +6321,7 @@ class ConfigVerifier:
         # choose del_names
         ################################################################
         del_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_dels,
             update_collection=True,
             var_name_for_log='del_names')
@@ -6336,9 +6329,9 @@ class ConfigVerifier:
         ################################################################
         # choose add_names
         ################################################################
-        unregistered_names = self.unregistered_names.copy()
+        unregistered_names_copy = self.unregistered_names.copy()
         add_names = self.choose_names(
-            name_collection=unregistered_names,
+            name_collection=unregistered_names_copy,
             num_names_needed=num_adds,
             update_collection=True,
             var_name_for_log='add_names')
@@ -6347,7 +6340,7 @@ class ConfigVerifier:
         # choose deleter_names
         ################################################################
         deleter_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_deleters,
             update_collection=True,
             var_name_for_log='deleter_names')
@@ -6356,7 +6349,7 @@ class ConfigVerifier:
         # choose adder_names
         ################################################################
         adder_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_adders,
             update_collection=True,
             var_name_for_log='adder_names')
@@ -6365,7 +6358,7 @@ class ConfigVerifier:
         # choose locker_names
         ################################################################
         locker_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_lockers,
             update_collection=True,
             var_name_for_log='locker_names')
@@ -7085,16 +7078,13 @@ class ConfigVerifier:
 
         self.log_name_groups()
 
-        # active_names = self.active_names.copy()
-        # remove commander for now, but if we add it later we need to
-        # be careful not to exit the commander
-        active_names = self.active_names - {self.commander_name}
+        active_names_copy = self.active_names - {self.commander_name}
 
         ################################################################
         # choose receiver_names
         ################################################################
         receiver_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=1,
             update_collection=True,
             var_name_for_log='receiver_names')
@@ -7345,16 +7335,13 @@ class ConfigVerifier:
 
         self.log_name_groups()
 
-        # active_names = self.active_names.copy()
-        # remove commander for now, but if we add it later we need to
-        # be careful not to exit the commander
-        active_names = self.active_names - {self.commander_name}
+        active_names_copy = self.active_names - {self.commander_name}
 
         ################################################################
         # choose receiver_names
         ################################################################
         receiver_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_receivers,
             update_collection=True,
             var_name_for_log='receiver_names')
@@ -7363,7 +7350,7 @@ class ConfigVerifier:
         # choose active_no_delay_sender_names
         ################################################################
         active_no_delay_sender_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_active_no_delay_senders,
             update_collection=True,
             var_name_for_log='active_no_delay_sender_names')
@@ -7372,7 +7359,7 @@ class ConfigVerifier:
         # choose active_delay_sender_names
         ################################################################
         active_delay_sender_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_active_delay_senders,
             update_collection=True,
             var_name_for_log='active_delay_sender_names')
@@ -7381,7 +7368,7 @@ class ConfigVerifier:
         # choose send_exit_sender_names
         ################################################################
         send_exit_sender_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_send_exit_senders,
             update_collection=True,
             var_name_for_log='send_exit_sender_names')
@@ -7390,7 +7377,7 @@ class ConfigVerifier:
         # choose nosend_exit_sender_names
         ################################################################
         nosend_exit_sender_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_nosend_exit_senders,
             update_collection=True,
             var_name_for_log='nosend_exit_sender_names')
@@ -7638,19 +7625,16 @@ class ConfigVerifier:
 
         self.log_name_groups()
 
-        # active_names = self.active_names.copy()
-        # remove commander for now, but if we add it later we need to
-        # be careful not to exit the commander
-        active_names = self.active_names - {self.commander_name}
+        active_names_copy = self.active_names - {self.commander_name}
 
         waiter_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_waiters,
             update_collection=True,
             var_name_for_log='waiter_names')
 
         actor_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_actors,
             update_collection=True,
             var_name_for_log='actor_names')
@@ -7689,13 +7673,13 @@ class ConfigVerifier:
 
         self.log_name_groups()
 
-        active_names = self.active_names - {self.commander_name}
+        active_names_copy = self.active_names - {self.commander_name}
 
         ################################################################
         # choose receiver_names
         ################################################################
         waiter_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=1,
             update_collection=True,
             var_name_for_log='waiter_names')
@@ -8103,7 +8087,7 @@ class ConfigVerifier:
                         confirmers=timeout_names))
 
     ####################################################################
-    # build_wait_active_suite
+    # build_exit_resume_wait_timeout_suite
     ####################################################################
     def build_exit_resume_wait_timeout_suite(
             self,
@@ -8124,10 +8108,8 @@ class ConfigVerifier:
             timeout_names = waiter_names
 
             if len(target_names) % 2:
-                error_stopped_target = True
                 stopped_remotes = set(actor_names.copy())
             else:
-                error_stopped_target = False
                 stopped_remotes = set()
 
             if target_names:
@@ -8142,7 +8124,7 @@ class ConfigVerifier:
                         timeout=timeout_time,
                         wait_for=st.WaitFor.All))
 
-                if error_stopped_target:
+                if stopped_remotes:
                     self.build_exit_suite(cmd_runner=self.commander_name,
                                           names=actor_names)
 
@@ -8173,7 +8155,7 @@ class ConfigVerifier:
                         f1_create_items=f1_create_items,
                         validate_config=False)
 
-                if not error_stopped_target:
+                if not stopped_remotes:
                     ########################################################
                     # resume the waiters that are expected to succeed
                     ########################################################
@@ -8203,12 +8185,10 @@ class ConfigVerifier:
                 # the timeout_names are expected to timeout since they
                 # were not resumed
                 ########################################################
-                exit_was_done = False
                 if len(timeout_names) % 2:
                     stopped_remotes = set(actor_names.copy())
                     self.build_exit_suite(cmd_runner=self.commander_name,
                                           names=actor_names)
-                    exit_was_done = True
                 else:
                     stopped_remotes = set()
 
@@ -8227,7 +8207,7 @@ class ConfigVerifier:
                         confirm_cmd='WaitTimeoutTrue',
                         confirm_serial_num=wait_serial_num,
                         confirmers=timeout_names))
-                if exit_was_done:
+                if stopped_remotes:
                     self.build_join_suite(
                         cmd_runners=self.commander_name,
                         join_target_names=actor_names)
@@ -8413,7 +8393,7 @@ class ConfigVerifier:
                         confirmers=target_names))
 
     ####################################################################
-    # build_msg_timeout_suite
+    # build_resume_timeout_suite
     ####################################################################
     def build_resume_timeout_suite(self,
                                    timeout_type: TimeoutType,
@@ -8441,7 +8421,6 @@ class ConfigVerifier:
             num_unreg_no_delay: number threads unregistered before the
                 resume is done, and are then created and started within
                 the allowed timeout
-            start, and started d active, thus no timeout
             num_unreg_delay: number threads unregistered before the
                 resume is done, and are then created and started after
                 the allowed timeout
@@ -8495,15 +8474,14 @@ class ConfigVerifier:
 
         self.log_name_groups()
 
-        # remove commander for now, but if we add it later we need to
-        # be careful not to exit the commander
-        active_names = self.active_names - {self.commander_name}
+        # remove commander
+        active_names_copy = self.active_names - {self.commander_name}
 
         ################################################################
         # choose resumer_names
         ################################################################
         resumer_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_resumers,
             update_collection=True,
             var_name_for_log='resumer_names')
@@ -8512,7 +8490,7 @@ class ConfigVerifier:
         # choose active_target_names
         ################################################################
         active_target_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_active,
             update_collection=True,
             var_name_for_log='active_target_names')
@@ -8539,9 +8517,9 @@ class ConfigVerifier:
         ################################################################
         # choose unreg_no_delay_names
         ################################################################
-        unregistered_names = self.unregistered_names.copy()
+        unregistered_names_copy = self.unregistered_names.copy()
         unreg_no_delay_names = self.choose_names(
-            name_collection=unregistered_names,
+            name_collection=unregistered_names_copy,
             num_names_needed=num_unreg_no_delay,
             update_collection=True,
             var_name_for_log='unreg_no_delay_names')
@@ -8550,7 +8528,7 @@ class ConfigVerifier:
         # choose unreg_delay_names
         ################################################################
         unreg_delay_names = self.choose_names(
-            name_collection=unregistered_names,
+            name_collection=unregistered_names_copy,
             num_names_needed=num_unreg_delay,
             update_collection=True,
             var_name_for_log='unreg_delay_names')
@@ -8582,7 +8560,7 @@ class ConfigVerifier:
                                   + stopped_no_delay_targets
                                   + stopped_delay_targets)
 
-        timeout_names = unreg_delay_names + stopped_delay_targets
+        timeout_names = unreg_delay_names  # + stopped_delay_targets
 
         if len(all_targets) % 2:
             error_stopped_target = True
@@ -8599,8 +8577,7 @@ class ConfigVerifier:
                 Wait(cmd_runners=active_target_names,
                      resumers=resumer_names,
                      stopped_remotes=set(),
-                     wait_for=st.WaitFor.All,
-                     error_stopped_target=True))
+                     wait_for=st.WaitFor.All))
 
         ################################################################
         # start registered_names_before issue smart_wait
@@ -8611,8 +8588,7 @@ class ConfigVerifier:
                 Wait(cmd_runners=registered_names_before,
                      resumers=resumer_names,
                      stopped_remotes=set(),
-                     wait_for=st.WaitFor.All,
-                     error_stopped_target=True))
+                     wait_for=st.WaitFor.All))
 
         ################################################################
         # issue smart_resume
@@ -8674,8 +8650,7 @@ class ConfigVerifier:
                 Wait(cmd_runners=unreg_no_delay_names,
                      resumers=resumer_names,
                      stopped_remotes=set(),
-                     wait_for=st.WaitFor.All,
-                     error_stopped_target=True))
+                     wait_for=st.WaitFor.All))
 
         ################################################################
         # build stopped_no_delay_targets smart_wait
@@ -8709,8 +8684,7 @@ class ConfigVerifier:
                 Wait(cmd_runners=stopped_no_delay_targets,
                      resumers=resumer_names,
                      stopped_remotes=set(),
-                     wait_for=st.WaitFor.All,
-                     error_stopped_target=True))
+                     wait_for=st.WaitFor.All))
 
         ################################################################
         # wait for resume timeouts to be known
@@ -8734,8 +8708,7 @@ class ConfigVerifier:
                 Wait(cmd_runners=registered_names_after,
                      resumers=resumer_names,
                      stopped_remotes=set(),
-                     wait_for=st.WaitFor.All,
-                     error_stopped_target=True))
+                     wait_for=st.WaitFor.All))
 
         ################################################################
         # build unreg_delay_names smart_wait
@@ -8789,8 +8762,7 @@ class ConfigVerifier:
                 Wait(cmd_runners=stopped_delay_targets,
                      resumers=resumer_names,
                      stopped_remotes=set(),
-                     wait_for=st.WaitFor.All,
-                     error_stopped_target=True))
+                     wait_for=st.WaitFor.All))
 
         ################################################################
         # build unreg_delay_names smart_wait
@@ -8801,8 +8773,7 @@ class ConfigVerifier:
                 Wait(cmd_runners=unreg_delay_names,
                      resumers=resumer_names,
                      stopped_remotes=set(),
-                     wait_for=st.WaitFor.All,
-                     error_stopped_target=True))
+                     wait_for=st.WaitFor.All))
 
         ####################################################
         # confirm the active target waits
@@ -9003,16 +8974,13 @@ class ConfigVerifier:
             num_active=2)  # one for commander and two for senders
         self.log_name_groups()
 
-        # active_names = self.active_names.copy()
-        # remove commander for now, but if we add it later we need to
-        # be careful not to exit the commander
-        active_names = self.active_names - {self.commander_name}
+        active_names_copy = self.active_names - {self.commander_name}
 
         ################################################################
         # choose receiver_names
         ################################################################
         sender_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=1,
             update_collection=True,
             var_name_for_log='sender_names')
@@ -9421,13 +9389,13 @@ class ConfigVerifier:
             num_active=2)  # one for commander and one for req0
         self.log_name_groups()
 
-        active_names = self.active_names - {self.commander_name}
+        active_names_copy = self.active_names - {self.commander_name}
 
         ################################################################
         # choose receiver_names
         ################################################################
         req0_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=1,
             update_collection=True,
             var_name_for_log='req0_names')
@@ -10300,16 +10268,14 @@ class ConfigVerifier:
             num_active=num_active_needed)
 
         self.log_name_groups()
-        # active_names = self.active_names.copy()
-        # remove commander for now, but if we add it later we need to
-        # be careful not to exit the commander
-        active_names = self.active_names - {self.commander_name}
+
+        active_names_copy = self.active_names - {self.commander_name}
 
         ################################################################
         # choose sender_names
         ################################################################
         sender_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_senders,
             update_collection=True,
             var_name_for_log='sender_names')
@@ -10318,7 +10284,7 @@ class ConfigVerifier:
         # choose active_target_names
         ################################################################
         active_target_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_active_targets,
             update_collection=True,
             var_name_for_log='active_target_names')
@@ -10345,7 +10311,7 @@ class ConfigVerifier:
         # choose exit_names
         ################################################################
         exit_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_exit_timeouts,
             update_collection=True,
             var_name_for_log='exit_names')
@@ -10354,7 +10320,7 @@ class ConfigVerifier:
         # choose full_q_names
         ################################################################
         full_q_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_full_q_timeouts,
             update_collection=True,
             var_name_for_log='full_q_names')
@@ -10899,16 +10865,14 @@ class ConfigVerifier:
             num_stopped=num_stopped)
 
         self.log_name_groups()
-        # active_names = self.active_names.copy()
-        # remove commander for now, but if we add it later we need to
-        # be careful not to exit the commander
-        active_names = self.active_names - {self.commander_name}
+
+        active_names_copy = self.active_names - {self.commander_name}
 
         ################################################################
         # choose alt_cmd_runner
         ################################################################
         alt_cmd_runners = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_alt_cmd_runners,
             update_collection=True,
             var_name_for_log='alt_cmd_runner')
@@ -10935,7 +10899,7 @@ class ConfigVerifier:
         # choose alive_names
         ################################################################
         alive_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_alive,
             update_collection=True,
             var_name_for_log='alive_names')
@@ -11088,16 +11052,14 @@ class ConfigVerifier:
             num_stopped=num_stopped_syncers)
 
         self.log_name_groups()
-        # active_names = self.active_names.copy()
-        # remove commander for now, but if we add it later we need to
-        # be careful not to exit the commander
-        active_names = self.active_names - {self.commander_name}
+
+        active_names_copy = self.active_names - {self.commander_name}
 
         ################################################################
         # choose syncer_names
         ################################################################
         syncer_names = self.choose_names(
-            name_collection=active_names,
+            name_collection=active_names_copy,
             num_names_needed=num_syncers,
             update_collection=True,
             var_name_for_log='syncer_names')
@@ -14017,8 +13979,7 @@ class ConfigVerifier:
         ################################################################
         search_msg = ("config_cmd: RecvMsg\(serial=[0-9]+, line=[0-9]+, "
                       f"cmd_runners='{receiver_names[0]}', "
-                      f"senders='{sender_names[0]}', "
-                      "error_stopped_target=False\)")
+                      f"senders='{sender_names[0]}'")
 
         cc_recv_0_log_msg, cc_recv_0_log_pos = self.get_log_msg(
             search_msg=search_msg,
