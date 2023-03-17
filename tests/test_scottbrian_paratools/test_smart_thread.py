@@ -4911,8 +4911,10 @@ class ConfigVerifier:
                     # little so we don't find it again and get into a
                     # loop here
                     found_msg = found_log_item.found_log_msg
-                    semi_msg = found_msg.replace(' ', ';', 3)
-                    self.log_test_msg(f'monitor processing msg: {semi_msg}')
+                    if 'TestDebug' not in found_msg:
+                        semi_msg = found_msg.replace(' ', ';', 3)
+                        self.log_test_msg(
+                            f'monitor processing msg: {semi_msg}')
 
                     found_log_item.run_process()
                     self.log_test_msg(f'monitor completed msg: {semi_msg}')

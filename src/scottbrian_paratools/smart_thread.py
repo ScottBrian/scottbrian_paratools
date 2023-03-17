@@ -849,10 +849,19 @@ class SmartThread:
                         # time, and then we add it again to the
                         # found_pk_remotes as another entry with the
                         # same pair_key and name, but a different
-                        # create time
+                        # create time which would likely lead to an
+                        # error
+                        logger.debug(
+                            f'TestDebug found {name=} for {other_name} in '
+                            f'{SmartThread._registry[other_name].missing_remotes=} '
+                            )
                         SmartThread._registry[
                             other_name].missing_remotes.remove(name)
-
+                        logger.debug(
+                            f'TestDebug after removing {name=} for'
+                            f' {other_name} in '
+                            f'{SmartThread._registry[other_name].missing_remotes=} '
+                        )
                         # update the found_pk_remotes so that other_name
                         # will see that we have a new entry and add
                         # it to its work_pk_remotes
@@ -861,19 +870,19 @@ class SmartThread:
                             PairKeyRemote(pair_key,
                                           name,
                                           create_time))
+                        # set_pending_request_name = other_name
+                    test_pk_remote = PairKeyRemote(pair_key, name, 0.0)
+                    try:
+                        idx = SmartThread._registry[
+                            other_name].work_pk_remotes.index(test_pk_remote)
+                        SmartThread._registry[
+                            other_name].work_pk_remotes[
+                            idx] = PairKeyRemote(pair_key,
+                                                 name,
+                                                 create_time)
                         set_pending_request_name = other_name
-                    # test_pk_remote = PairKeyRemote(pair_key, name, 0.0)
-                    # try:
-                    #     idx = SmartThread._registry[
-                    #         other_name].work_pk_remotes.index(test_pk_remote)
-                    #     SmartThread._registry[
-                    #         other_name].work_pk_remotes[
-                    #         idx] = PairKeyRemote(pair_key,
-                    #                              name,
-                    #                              create_time)
-                    #     set_pending_request_name = other_name
-                    # except ValueError:
-                    #     pass  # the new entry is not a request target
+                    except ValueError:
+                        pass  # the new entry is not a request target
 
                 else:  # entry already exists
                     # reset del_deferred in case it is ON and the
@@ -2314,8 +2323,9 @@ class SmartThread:
                 # request_pending flag in our entry will prevent our
                 # entry for being removed (but not the remote)
                 with sel.SELockShare(SmartThread._registry_lock):
-                    if self.found_pk_remotes:
-                        self._handle_found_pk_remotes()
+                    # if self.found_pk_remotes:
+                    #     pk_remote = self._handle_found_pk_remotes(
+                    #         pk_remote=pk_remote)
 
                     if pk_remote.pair_key in SmartThread._pair_array:
                         # having a pair_key in the array implies our
@@ -2339,6 +2349,7 @@ class SmartThread:
                                                      pk_remote,
                                                      local_sb):
                             self.work_pk_remotes.remove(pk_remote)
+                            self.missing_remotes -= {pk_remote.remote}
                             local_sb.target_create_time = 0.0
                             local_sb.request_pending = False
                             logger.debug(
@@ -2393,8 +2404,21 @@ class SmartThread:
     ####################################################################
     # _handle_found_pk_remotes
     ####################################################################
-    def _handle_found_pk_remotes(self) -> None:
-        """Update the work_pk_remotes with newly found threads."""
+    def _handle_found_pk_remotes(self,
+                                 pk_remote: PairKeyRemote
+                                 ) -> PairKeyRemote:
+        """Update the work_pk_remotes with newly found threads.
+
+        Args:
+            pk_remote: the current pk_remote being worked on in
+                _request_loop
+
+        Returns:
+            the input pk_remote is returned eiothe as is, or updated
+            with a non-zero create_time serial if it is among the
+            found pk_remotes
+        """
+        ret_pk_remote = pk_remote
         for found_pk_remote in self.found_pk_remotes:
             test_pk_remote = PairKeyRemote(found_pk_remote.pair_key,
                                            found_pk_remote.remote,
@@ -2405,6 +2429,11 @@ class SmartThread:
                     found_pk_remote.pair_key,
                     found_pk_remote.remote,
                     found_pk_remote.create_time)
+                ret_pk_remote = PairKeyRemote(
+                    found_pk_remote.pair_key,
+                    found_pk_remote.remote,
+                    found_pk_remote.create_time)
+
             except ValueError:
                 raise SmartThreadWorkDataException(
                     f'_handle_found_pk_remotes failed to find an '
@@ -2412,6 +2441,8 @@ class SmartThread:
                     f'{self.work_pk_remotes=}')
 
         self.found_pk_remotes = []
+
+        return ret_pk_remote
 
     ####################################################################
     # _handle_loop_errors
