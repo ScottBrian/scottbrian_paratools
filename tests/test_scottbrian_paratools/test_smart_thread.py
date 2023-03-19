@@ -4912,13 +4912,13 @@ class ConfigVerifier:
                     # little so we don't find it again and get into a
                     # loop here
                     found_msg = found_log_item.found_log_msg
-                    if 'TestDebug' not in found_msg:
-                        semi_msg = found_msg.replace(' ', ';', 3)
-                        self.log_test_msg(
-                            f'monitor processing msg: {semi_msg}')
+                    # if 'TestDebug' not in found_msg:
+                    #     semi_msg = found_msg.replace(' ', ';', 3)
+                    #     self.log_test_msg(
+                    #         f'monitor processing msg: {semi_msg}')
 
                     found_log_item.run_process()
-                    self.log_test_msg(f'monitor completed msg: {semi_msg}')
+                    # self.log_test_msg(f'monitor completed msg: {semi_msg}')
 
             with self.monitor_condition:
                 self.monitor_condition.notify_all()
@@ -4929,7 +4929,7 @@ class ConfigVerifier:
     def abort_all_f1_threads(self):
         self.log_test_msg('abort_all_f1_threads entry')
         for name, thread in self.all_threads.items():
-            self.log_test_msg(f'abort_all_f1_threads looking at {name=}')
+            # self.log_test_msg(f'abort_all_f1_threads looking at {name=}')
             if name == self.commander_name:
                 continue
             self.add_log_msg(f'aborting f1_thread {name}, '
@@ -4942,13 +4942,13 @@ class ConfigVerifier:
         self.monitor_bail = True
         self.monitor_exit = True
         self.monitor_event.set()
-        self.log_test_msg('abort_all_f1_threads about to join1')
-        self.log_test_msg(f'abort_all_f1_threads '
-                          f'{threading.current_thread()=}')
-        self.log_test_msg(f'abort_all_f1_threads '
-                          f'{self.monitor_thread=}')
+        # self.log_test_msg('abort_all_f1_threads about to join1')
+        # self.log_test_msg(f'abort_all_f1_threads '
+        #                   f'{threading.current_thread()=}')
+        # self.log_test_msg(f'abort_all_f1_threads '
+        #                   f'{self.monitor_thread=}')
         if threading.current_thread() is not self.monitor_thread:
-            self.log_test_msg('abort_all_f1_threads about to join2')
+            # self.log_test_msg('abort_all_f1_threads about to join2')
             self.monitor_thread.join()
         self.log_test_msg('abort_all_f1_threads exit')
 
@@ -8413,11 +8413,23 @@ class ConfigVerifier:
                 timeout, and is so whether the send_cmd should timeout
                 or, by starting exited threads in time, not timeout
             num_resumers: number of threads doing resumes
-            num_active: number threads active, thus no timeout
-            num_registered_before: number threads registered, thus no
-                 timeout, that wait before the resume is issued
-            num_registered_after: number threads registered, thus no
-                 timeout, that wait after the resume is issued
+            num_active: number threads active that will wait before the
+                resume is done. This is the most expected use case. No
+                resume timeout should occur for active targets.
+            num_registered_before: number threads registered that will
+                be started and then wait before the resume is issued.
+                This case provides a variation by having a configuration
+                change occur while the active targets are waiting. No
+                resume timeout should occur for registered_before
+                targets.
+            num_registered_after: number threads registered that are
+                started and wait after the resume is issued. This case
+                provides a variation of a resume target being not alive
+                when the resume is issued, and then a configuration
+                change while the resume is running and the resume sees
+                that the target is now alive. There is no significant
+                delay between the resume and the start to expect the
+                registered_after targets to cause a timeout.
             num_unreg_no_delay: number threads unregistered before the
                 resume is done, and are then created and started within
                 the allowed timeout
@@ -8560,15 +8572,17 @@ class ConfigVerifier:
                                   + stopped_no_delay_targets
                                   + stopped_delay_targets)
 
-        timeout_names = unreg_delay_names  # + stopped_delay_targets
+        # timeout_names = unreg_delay_names  + stopped_delay_targets
+        timeout_names = unreg_delay_names + registered_names_after
 
-        if len(all_targets) % 2:
-            error_stopped_target = True
-            stopped_remotes = stopped_no_delay_targets + stopped_delay_targets
-        else:
-            error_stopped_target = False
-            stopped_remotes = stopped_delay_targets
-
+        # if len(all_targets) % 2:
+        #     error_stopped_target = True
+        #     stopped_remotes = stopped_no_delay_targets
+        #     + stopped_delay_targets
+        # else:
+        #     error_stopped_target = False
+        #     stopped_remotes = stopped_delay_targets
+        stopped_remotes = stopped_no_delay_targets + stopped_delay_targets
         ################################################################
         # issue smart_wait for active_target_names
         ################################################################
@@ -8581,6 +8595,8 @@ class ConfigVerifier:
 
         ################################################################
         # start registered_names_before issue smart_wait
+        # This provides a variation where a configuration change (start)
+        # is done while the above wait for active targets is in progress
         ################################################################
         if registered_names_before:
             self.build_start_suite(start_names=registered_names_before)
@@ -8620,7 +8636,8 @@ class ConfigVerifier:
         ################################################################
         # prevent stopped_no_delay from getting started too soon
         ################################################################
-        if error_stopped_target and stopped_remotes:
+        # if error_stopped_target and stopped_remotes:
+        if stopped_remotes:
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
@@ -8689,7 +8706,8 @@ class ConfigVerifier:
         ################################################################
         # wait for resume timeouts to be known
         ################################################################
-        if not (error_stopped_target and stopped_remotes):
+        # if not (error_stopped_target and stopped_remotes):
+        if not stopped_remotes:
             self.add_cmd(WaitForResumeTimeouts(
                 cmd_runners=self.commander_name,
                 resumer_names=resumer_names,
@@ -8801,6 +8819,26 @@ class ConfigVerifier:
         # confirm the registered target waits
         ####################################################
         if registered_names_after:
+            if stopped_remotes:
+                self.add_cmd(
+                    ConfirmResponseNot(
+                        cmd_runners=[self.commander_name],
+                        confirm_cmd='Wait',
+                        confirm_serial_num=wait_reg_after_target_serial_num,
+                        confirmers=registered_names_after))
+
+                resume_serial_num2 = self.add_cmd(
+                    ResumeTimeoutFalse(
+                        cmd_runners=resumer_names,
+                        targets=registered_names_after,
+                        stopped_remotes=[],
+                        timeout=0.5))
+                self.add_cmd(
+                    ConfirmResponse(
+                        cmd_runners=[self.commander_name],
+                        confirm_cmd='ResumeTimeoutFalse',
+                        confirm_serial_num=resume_serial_num2,
+                        confirmers=resumer_names))
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
@@ -8812,7 +8850,8 @@ class ConfigVerifier:
         # confirm the unreg_no_delay_names
         ####################################################
         if unreg_no_delay_names:
-            if error_stopped_target and stopped_remotes:
+            # if error_stopped_target and stopped_remotes:
+            if stopped_remotes:
                 self.add_cmd(
                     ConfirmResponseNot(
                         cmd_runners=[self.commander_name],
@@ -8829,7 +8868,7 @@ class ConfigVerifier:
                 self.add_cmd(
                     ConfirmResponse(
                         cmd_runners=[self.commander_name],
-                        confirm_cmd='ResumeTimeoutTrue',
+                        confirm_cmd='ResumeTimeoutFalse',
                         confirm_serial_num=resume_serial_num2,
                         confirmers=resumer_names))
             self.add_cmd(
@@ -8843,7 +8882,8 @@ class ConfigVerifier:
         ####################################################
         if unreg_delay_names:
             if (timeout_type == TimeoutType.TimeoutTrue
-                    or (error_stopped_target and stopped_remotes)):
+                    # or (error_stopped_target and stopped_remotes)):
+                    or stopped_remotes):
                 self.add_cmd(
                     ConfirmResponseNot(
                         cmd_runners=[self.commander_name],
@@ -8860,7 +8900,7 @@ class ConfigVerifier:
                 self.add_cmd(
                     ConfirmResponse(
                         cmd_runners=[self.commander_name],
-                        confirm_cmd='ResumeTimeoutTrue',
+                        confirm_cmd='ResumeTimeoutFalse',
                         confirm_serial_num=resume_serial_num2,
                         confirmers=resumer_names))
             self.add_cmd(
@@ -8873,7 +8913,8 @@ class ConfigVerifier:
         # confirm the stopped_no_delay_targets
         ####################################################
         if stopped_no_delay_targets:
-            if error_stopped_target and stopped_remotes:
+            # if error_stopped_target and stopped_remotes:
+            if stopped_remotes:
                 self.add_cmd(
                     ConfirmResponseNot(
                         cmd_runners=[self.commander_name],
@@ -8890,7 +8931,7 @@ class ConfigVerifier:
                 self.add_cmd(
                     ConfirmResponse(
                         cmd_runners=[self.commander_name],
-                        confirm_cmd='ResumeTimeoutTrue',
+                        confirm_cmd='ResumeTimeoutFalse',
                         confirm_serial_num=resume_serial_num2,
                         confirmers=resumer_names))
             self.add_cmd(
@@ -8905,7 +8946,8 @@ class ConfigVerifier:
         ####################################################
         if stopped_delay_targets:
             if (timeout_type == TimeoutType.TimeoutTrue
-                    or (error_stopped_target and stopped_remotes)):
+                    # or (error_stopped_target and stopped_remotes)):
+                    or stopped_remotes):
                 self.add_cmd(
                     ConfirmResponseNot(
                         cmd_runners=[self.commander_name],
@@ -8922,7 +8964,7 @@ class ConfigVerifier:
                 self.add_cmd(
                     ConfirmResponse(
                         cmd_runners=[self.commander_name],
-                        confirm_cmd='ResumeTimeoutTrue',
+                        confirm_cmd='ResumeTimeoutFalse',
                         confirm_serial_num=resume_serial_num2,
                         confirmers=resumer_names))
             self.add_cmd(
@@ -8935,7 +8977,8 @@ class ConfigVerifier:
         ####################################################
         # confirm the resumer_names
         ####################################################
-        if not (error_stopped_target and stopped_remotes):
+        # if not (error_stopped_target and stopped_remotes):
+        if not stopped_remotes:
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
@@ -16721,6 +16764,96 @@ class TestSmartThreadScenarios:
             commander_config=commander_config)
 
     ####################################################################
+    # test_resume_scenarios
+    ####################################################################
+    def test_resume_scenarios(
+            self,
+            timeout_type_arg: TimeoutType,
+            num_resumers_arg: int,
+            num_active_before_arg: int,
+            num_unreg_before_arg: int,
+            num_reg_before_arg: int,
+            num_stopped_before_arg,
+            num_active_after_arg: int,
+            num_unreg_after_arg: int,
+            num_reg_after_arg: int,
+            num_unreg_delay_arg: int,
+            num_reg_delay_arg: int,
+            num_stopped_after_arg,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            timeout_type_arg: specifies whether to issue the resume with
+                timeout, and is so whether the resume should timeout
+                or, by starting exited threads in time, not timeout
+            num_resumers_arg: number of threads doing resumes
+            num_active_arg: number threads active, thus no timeout
+            num_registered_before_arg: number threads registered, thus
+                no timeout, issued before the resume is issued
+            num_registered_after_arg: number threads registered, thus no
+                timeout, issued after the resume is issued
+            num_unreg_no_delay_arg: number threads unregistered before
+                the resume is done, and are then created and started
+                within the allowed timeout
+            num_unreg_delay_arg: number threads unregistered before the
+                resume is done, and are then created and started after
+                the allowed timeout
+            num_stopped_no_delay_arg: number of threads stopped before the resume
+                and cause a timeout
+            num_stopped_delay_arg: number of threads stopped
+                before the resume and are then joined, created, and
+                started within the allowed timeout
+            caplog: pytest fixture to capture log output
+
+        """
+        total_arg_counts = (
+                num_active_arg
+                + num_registered_before_arg
+                + num_registered_after_arg
+                + num_unreg_no_delay_arg
+                + num_unreg_delay_arg
+                + num_stopped_no_delay_arg
+                + num_stopped_delay_arg)
+        if timeout_type_arg == TimeoutType.TimeoutNone:
+            if total_arg_counts == 0:
+                return
+        else:
+            if (num_unreg_delay_arg + num_stopped_delay_arg) == 0:
+                return
+
+        command_config_num = total_arg_counts % 5
+        if command_config_num == 0:
+            commander_config = AppConfig.ScriptStyle
+        elif command_config_num == 1:
+            commander_config = AppConfig.CurrentThreadApp
+        elif command_config_num == 2:
+            commander_config = AppConfig.RemoteThreadApp
+        elif command_config_num == 3:
+            commander_config = AppConfig.RemoteSmartThreadApp
+        else:
+            commander_config = AppConfig.RemoteSmartThreadApp2
+
+        args_for_scenario_builder: dict[str, Any] = {
+            'timeout_type': timeout_type_arg,
+            'num_resumers': num_resumers_arg,
+            'num_active': num_active_arg,
+            'num_registered_before': num_registered_before_arg,
+            'num_registered_after': num_registered_after_arg,
+            'num_unreg_no_delay': num_unreg_no_delay_arg,
+            'num_unreg_delay': num_unreg_delay_arg,
+            'num_stopped_no_delay': num_stopped_no_delay_arg,
+            'num_stopped_delay': num_stopped_delay_arg
+        }
+
+        self.scenario_driver(
+            scenario_builder=ConfigVerifier.build_resume_scenarios,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog,
+            commander_config=commander_config)
+
+    ####################################################################
     # test_recv_msg_scenarios
     ####################################################################
     def test_wait_scenarios2(
@@ -17623,1299 +17756,3 @@ class TestSmartThreadErrors:
         alpha_thread.smart_join(targets=('beta', 'charlie'))
 
         logger.debug('mainline exit')
-
-# ###############################################################################
-# # TestSmartThreadBasic class to test SmartThread methods
-# ###############################################################################
-# ###############################################################################
-# # Theta class
-# ###############################################################################
-# class Theta(SmartThread):
-#     """Theta test class."""
-#     def __init__(self,
-#                  group_name: str,
-#                  name: str,
-#                  thread: Optional[threading.Thread] = None) -> None:
-#         """Initialize the Theta object.
-#
-#         Args:
-#             name: name of the Theta
-#             thread: thread to use instead of threading.current_thread()
-#
-#         """
-#         SmartThread.__init__(self, group_name=group_name, name=name, thread=thread)
-#         self.var1 = 'theta'
-#
-#
-# ###############################################################################
-# # ThetaDesc class
-# ###############################################################################
-# class ThetaDesc(SmartThreadDesc):
-#     """Describes a Theta with name and thread to verify."""
-#     def __init__(self,
-#                  group_name: Optional[str] = 'group1',
-#                  name: Optional[str] = '',
-#                  theta: Optional[Theta] = None,
-#                  thread: Optional[threading.Thread] = None,  # type: ignore
-#                  state: Optional[int] = 0,  # 0 is unknown
-#                  paired_with: Optional[Any] = None) -> None:
-#         """Initialize the ThetaDesc.
-#
-#         Args:
-#             name: name of the Theta
-#             theta: the Theta being tracked by this desc
-#             thread: the thread associated with this Theta
-#             state: describes whether the Theta is alive and registered
-#             paired_with: names the Theta paired with this one, if one
-#
-#         """
-#         SmartThreadDesc.__init__(self,
-#                                 smart_thread=theta,
-#                                 state=state,
-#                                 paired_with=paired_with)
-#
-#     def verify_state(self) -> None:
-#         """Verify the state of the Theta."""
-#         SmartThreadDesc.verify_state(self)
-#         self.verify_theta_desc()
-#         if self.paired_with is not None:
-#             self.paired_with.verify_theta_desc()
-#
-#     ###########################################################################
-#     # verify_theta_desc
-#     ###########################################################################
-#     def verify_theta_desc(self) -> None:
-#         """Verify the Theta object is initialized correctly."""
-#         assert isinstance(self.smart_thread, Theta)
-#
-#         assert self.smart_thread.var1 == 'theta'
-#
-#
-# ###############################################################################
-# # Sigma class
-# ###############################################################################
-# class Sigma(SmartThread):
-#     """Sigma test class."""
-#     def __init__(self,
-#                  group_name: str,
-#                  name: str,
-#                  thread: Optional[threading.Thread] = None) -> None:
-#         """Initialize the Sigma object.
-#
-#         Args:
-#             name: name of the Sigma
-#             thread: thread to use instead of threading.current_thread()
-#
-#         """
-#         SmartThread.__init__(self, group_name=group_name, name=name, thread=thread)
-#         self.var1 = 17
-#         self.var2 = 'sigma'
-#
-#
-# ###############################################################################
-# # SigmaDesc class
-# ###############################################################################
-# class SigmaDesc(SmartThreadDesc):
-#     """Describes a Sigma with name and thread to verify."""
-#     def __init__(self,
-#                  group_name: Optional[str] = 'group1',
-#                  name: Optional[str] = '',
-#                  sigma: Optional[Sigma] = None,
-#                  thread: Optional[threading.Thread] = None,  # type: ignore
-#                  state: Optional[int] = 0,  # 0 is unknown
-#                  paired_with: Optional[Any] = None) -> None:
-#         """Initialize the SigmaDesc.
-#
-#         Args:
-#             name: name of the Sigma
-#             sigma: the Sigma being tracked by this desc
-#             thread: the thread associated with this Sigma
-#             state: describes whether the Sigma is alive and registered
-#             paired_with: names the Sigma paired with this one, if one
-#
-#         """
-#         SmartThreadDesc.__init__(self,
-#                                 smart_thread=sigma,
-#                                 state=state,
-#                                 paired_with=paired_with)
-#
-#     def verify_state(self) -> None:
-#         """Verify the state of the Sigma."""
-#         SmartThreadDesc.verify_state(self)
-#         self.verify_sigma_desc()
-#         if self.paired_with is not None:
-#             self.paired_with.verify_sigma_desc()
-#
-#     ###########################################################################
-#     # verify_sigma_desc
-#     ###########################################################################
-#     def verify_sigma_desc(self) -> None:
-#         """Verify the Sigma object is initialized correctly."""
-#         assert isinstance(self.smart_thread, Sigma)
-#
-#         assert self.smart_thread.var1 == 17
-#         assert self.smart_thread.var2 == 'sigma'
-#
-#
-# ###############################################################################
-# # Omega class
-# ###############################################################################
-# class Omega(SmartThread):
-#     """Omega test class."""
-#     def __init__(self,
-#                  group_name: str,
-#                  name: str,
-#                  thread: Optional[threading.Thread] = None) -> None:
-#         """Initialize the Omega object.
-#
-#         Args:
-#             name: name of the Omega
-#             thread: thread to use instead of threading.current_thread()
-#
-#         """
-#         SmartThread.__init__(self, group_name=group_name, name=name, thread=thread)
-#         self.var1 = 42
-#         self.var2 = 64.9
-#         self.var3 = 'omega'
-#
-#
-# ###############################################################################
-# # OmegaDesc class
-# ###############################################################################
-# class OmegaDesc(SmartThreadDesc):
-#     """Describes a Omega with name and thread to verify."""
-#     def __init__(self,
-#                  group_name: Optional[str] = 'group1',
-#                  name: Optional[str] = '',
-#                  omega: Optional[Omega] = None,
-#                  thread: Optional[threading.Thread] = None,  # type: ignore
-#                  state: Optional[int] = 0,  # 0 is unknown
-#                  paired_with: Optional[Any] = None) -> None:
-#         """Initialize the OmegaDesc.
-#
-#         Args:
-#             name: name of the Omega
-#             omega: the Omega being tracked by this desc
-#             thread: the thread associated with this Omega
-#             state: describes whether the Omega is alive and registered
-#             paired_with: names the Omega paired with this one, if one
-#
-#         """
-#         SmartThreadDesc.__init__(self,
-#                                 smart_thread=omega,
-#                                 state=state,
-#                                 paired_with=paired_with)
-#
-#     def verify_state(self) -> None:
-#         """Verify the state of the Omega."""
-#         SmartThreadDesc.verify_state(self)
-#         self.verify_omega_desc()
-#         if self.paired_with is not None:
-#             self.paired_with.verify_omega_desc()
-#
-#     ###########################################################################
-#     # verify_omega_desc
-#     ###########################################################################
-#     def verify_omega_desc(self) -> None:
-#         """Verify the Omega object is initialized correctly."""
-#         assert isinstance(self.smart_thread, Omega)
-#
-#         assert self.smart_thread.var1 == 42
-#         assert self.smart_thread.var2 == 64.9
-#         assert self.smart_thread.var3 == 'omega'
-#
-#
-
-
-#
-#
-# ########################################################################
-# # TestSmartThreadBasic class
-# ########################################################################
-# class TestSmartThreadBasic:
-#     """Test class for SmartThread basic tests."""
-#     ####################################################################
-#     # Basic Scenario1
-#     ####################################################################
-#     def test_smart_thread_with_msg_mixin1(self):
-#
-#         ################################################################
-#         # f1
-#         ################################################################
-#         def f1():
-#             logger.debug('f1 entered')
-#
-#             msgs.get_msg('beta')
-#
-#
-#             # beta_smart_thread.wait(remote='alpha', log_msg='f1 wait 1')
-#             # beta_smart_thread.sync(targets='alpha', log_msg='f1 sync 2')
-#             beta_smart_thread.send_msg(msg='hi alpha, this is beta',
-#                                        targets='alpha',
-#                                        log_msg='f1 send_msg 3')
-#             assert beta_smart_thread.recv_msg(remote='alpha',
-#                                               log_msg='f1 recv_msg 4',
-#                                               timeout=3) == (
-#                                                   'hi beta, this is alpha')
-#             # beta_smart_thread.resume(targets='alpha', log_msg='f1 resume 5')
-#             msgs.queue_msg('alpha')
-#             logger.debug('f1 exiting')
-#
-#         ####################################################################
-#         # Create smart threads for the main thread (this thread) and f1
-#         ####################################################################
-#         logger.debug('mainline entered')
-#         logger.debug('mainline creating alpha thread')
-#
-#         alpha_smart_thread = st.SmartThread(name='alpha')
-#
-#         logger.debug('mainline creating beta thread')
-#
-#         msgs = Msgs()
-#
-#         beta_smart_thread = st.SmartThread(name='beta', target=f1)
-#         beta_smart_thread.start()
-#
-#         ####################################################################
-#         # Interact with beta
-#         ####################################################################
-#         logger.debug('mainline interacting with beta')
-#
-#         msgs.queue_msg('beta')  # tell beta to proceed
-#
-#         # alpha_smart_thread.resume(targets='beta', log_msg='ml resume 1')
-#         # alpha_smart_thread.sync(targets='beta', log_msg='ml sync 2')
-#         assert alpha_smart_thread.recv_msg(remote='beta',
-#                                            log_msg='ml recv_msg 3',
-#                                            timeout=3) == (
-#                                                'hi alpha, this is beta')
-#         alpha_smart_thread.send_msg(msg='hi beta, this is alpha', targets='beta', log_msg='ml send_msg 4')
-#         # alpha_smart_thread.wait(remote='beta', log_msg='f1 resume 5')
-#         # # alpha_smart_thread.join(targets='beta', log_msg='ml join 6')
-#         msgs.get_msg('alpha')  # wait for beta to tell us to proceed
-#         beta_smart_thread.thread.join()
-#
-#         assert not beta_smart_thread.thread.is_alive()
-#
-#         logger.debug('mainline exiting')
-#     ####################################################################
-#     # Basic Scenario1
-#     ####################################################################
-#     def test_smart_thread_basic_scenario1(self):
-#
-#         ################################################################
-#         # f1
-#         ################################################################
-#         def f1():
-#             logger.debug('f1 entered')
-#
-#             msgs.get_msg('beta')
-#             msgs.queue_msg('alpha')
-#
-#             # beta_smart_thread.wait(remote='alpha', log_msg='f1 wait 1')
-#             # beta_smart_thread.sync(targets='alpha', log_msg='f1 sync 2')
-#             # beta_smart_thread.send_msg(msg='hi alpha, this is beta', targets='alpha', log_msg='f1 send_msg 3')
-#             # assert beta_smart_thread.recv_msg(remote='alpha', log_msg='f1 recv_msg 4') == 'hi beta, this is alpha'
-#             # beta_smart_thread.resume(targets='alpha', log_msg='f1 resume 5')
-#
-#             logger.debug('f1 exiting')
-#
-#         ####################################################################
-#         # Create smart threads for the main thread (this thread) and f1
-#         ####################################################################
-#         logger.debug('mainline entered')
-#         logger.debug('mainline creating alpha thread')
-#         alpha_smart_thread = st.SmartThread(name='alpha')
-#
-#         logger.debug('mainline creating beta thread')
-#
-#         msgs = Msgs()
-#
-#         beta_smart_thread = st.SmartThread(name='beta', target=f1)
-#         beta_smart_thread.start()
-#
-#         ####################################################################
-#         # Interact with beta
-#         ####################################################################
-#         logger.debug('mainline interacting with beta')
-#
-#         msgs.queue_msg('beta')
-#         msgs.get_msg('alpha')
-#         # alpha_smart_thread.resume(targets='beta', log_msg='ml resume 1')
-#         # alpha_smart_thread.sync(targets='beta', log_msg='ml sync 2')
-#         # assert alpha_smart_thread.recv_msg(remote='beta', log_msg='ml recv_msg 3') == 'hi alpha, this is beta'
-#         # alpha_smart_thread.send_msg(msg='hi beta, this is alpha', targets='beta', log_msg='ml send_msg 4')
-#         # alpha_smart_thread.wait(remote='beta', log_msg='f1 resume 5')
-#         # # alpha_smart_thread.join(targets='beta', log_msg='ml join 6')
-#
-#         beta_smart_thread.thread.join()
-#
-#         assert not beta_smart_thread.thread.is_alive()
-#
-#         logger.debug('mainline exiting')
-#
-#     ####################################################################################################################
-#     # Basic Scenario2
-#     ####################################################################################################################
-#     def test_smart_thread_basic_scenario2(self):
-#         ####################################################################
-#         # f1
-#         ####################################################################
-#         def f1():
-#             logger.debug('f1 entered')
-#             logger.debug(f'SmartThread._registry = {st.SmartThread._registry}')
-#             beta_smart_thread.wait(remote='alpha', log_msg='f1 wait 1')
-#             beta_smart_thread.sync(targets='alpha', log_msg='f1 sync 2')
-#             beta_smart_thread.send_msg(msg='hi alpha, this is beta', targets='alpha', log_msg='f1 send_msg 3')
-#             assert beta_smart_thread.recv_msg(remote='alpha', log_msg='f1 recv_msg 4') == 'hi beta, this is alpha'
-#             beta_smart_thread.resume(targets='alpha', log_msg='f1 resume 5')
-#
-#             beta_smart_thread.wait(remote='charlie', log_msg='f1 wait 6')
-#             beta_smart_thread.sync(targets='charlie', log_msg='f1 sync 7')
-#             beta_smart_thread.send_msg(msg='hi charlie, this is beta', targets='charlie', log_msg='f1 send_msg 8')
-#             assert beta_smart_thread.recv_msg(remote='charlie', log_msg='f1 recv_msg 9') == 'hi beta, this is charlie'
-#             beta_smart_thread.resume(targets='charlie', log_msg='f1 resume 10')
-#
-#             logger.debug('f1 exiting')
-#
-#         ####################################################################
-#         # f2
-#         ####################################################################
-#         def f2():
-#             logger.debug('f2 entered')
-#
-#             charlie_smart_thread.wait(remote='alpha', log_msg='f2 wait 1')
-#             charlie_smart_thread.sync(targets='alpha', log_msg='f2 sync 2')
-#             charlie_smart_thread.send_msg(msg='hi alpha, this is charlie', targets='alpha', log_msg='f2 send_msg 3')
-#             assert charlie_smart_thread.recv_msg(remote='alpha', log_msg='f2 recv_msg 4') == 'hi charlie, this is alpha'
-#             charlie_smart_thread.resume(targets='alpha', log_msg='f2 resume 5')
-#
-#             charlie_smart_thread.resume(targets='beta', log_msg='f2 resume 6')
-#             charlie_smart_thread.sync(targets='beta', log_msg='f2 sync 7')
-#             assert charlie_smart_thread.recv_msg(remote='beta', log_msg='f2 recv_msg 9') == 'hi charlie, this is beta'
-#             charlie_smart_thread.send_msg(msg='hi beta, this is charlie', targets='beta', log_msg='f2 send_msg 8')
-#             charlie_smart_thread.wait(remote='beta', log_msg='f2 wait 10')
-#
-#             logger.debug('f2 exiting')
-#
-#         ####################################################################
-#         # Create smart threads for the main thread (this thread), f1, and f2
-#         ####################################################################
-#         logger.debug('mainline entered')
-#         logger.debug('mainline creating alpha thread')
-#         alpha_smart_thread = st.SmartThread(name='alpha')
-#
-#         logger.debug('mainline creating beta thread')
-#         # beta_thread = threading.Thread(name='beta', target=f1)
-#         beta_smart_thread = st.SmartThread(name='beta', target=f1)
-#         beta_smart_thread.thread.start()
-#         logger.debug('mainline creating charlie thread')
-#         # charlie_thread = threading.Thread(name='charlie', target=f2)
-#         charlie_smart_thread = st.SmartThread(name='charlie', target=f2)
-#         charlie_smart_thread.thread.start()
-#
-#         ####################################################################
-#         # Interact with beta and charlie
-#         ####################################################################
-#         logger.debug('mainline interacting with beta')
-#         alpha_smart_thread.resume(targets='beta', log_msg='ml resume 1')
-#         alpha_smart_thread.sync(targets='beta', log_msg='ml sync 2')
-#         assert alpha_smart_thread.recv_msg(remote='beta', log_msg='ml recv_msg 3') == 'hi alpha, this is beta'
-#         alpha_smart_thread.send_msg(msg='hi beta, this is alpha', targets='beta', log_msg='ml send_msg 4')
-#         alpha_smart_thread.wait(remote='beta', log_msg='f1 resume 5')
-#
-#         logger.debug('mainline interacting with charlie')
-#         alpha_smart_thread.resume(targets='charlie', log_msg='ml resume 6')
-#         alpha_smart_thread.sync(targets='charlie', log_msg='ml sync 7')
-#         assert alpha_smart_thread.recv_msg(remote='charlie', log_msg='ml recv_msg 8') == 'hi alpha, this is charlie'
-#         alpha_smart_thread.send_msg(msg='hi charlie, this is alpha', targets='charlie', log_msg='ml send_msg 9')
-#         alpha_smart_thread.wait(remote='charlie', log_msg='f1 resume 10')
-#
-#         alpha_smart_thread.join(targets='beta', log_msg='ml join 11')
-#         alpha_smart_thread.join(targets='charlie', log_msg='ml join 12')
-#
-#         logger.debug('mainline exiting')
-#
-#     ####################################################################################################################
-#     # Basic Scenario3
-#     ####################################################################################################################
-#     def test_smart_thread_basic_scenario3(self):
-#         ####################################################################
-#         # f1
-#         ####################################################################
-#         def f1():
-#             logger.debug('f1 entered')
-#
-#             beta_smart_thread.wait(remote='alpha', log_msg='f1 wait 1')
-#             beta_smart_thread.sync(targets='alpha', log_msg='f1 sync 2')
-#             beta_smart_thread.send_msg(msg='hi alpha, this is beta', targets='alpha', log_msg='f1 send_msg 3')
-#             assert beta_smart_thread.recv_msg(remote='alpha', log_msg='f1 recv_msg 4') == 'hi beta, this is alpha'
-#             beta_smart_thread.resume(targets='alpha', log_msg='f1 resume 5')
-#
-#             beta_smart_thread.wait(remote='charlie', log_msg='f1 wait 6')
-#             beta_smart_thread.sync(targets='charlie', log_msg='f1 sync 7')
-#             beta_smart_thread.send_msg(msg='hi charlie, this is beta', targets='charlie', log_msg='f1 send_msg 8')
-#             assert beta_smart_thread.recv_msg(remote='charlie', log_msg='f1 recv_msg 9') == 'hi beta, this is charlie'
-#             beta_smart_thread.resume(targets='charlie', log_msg='f1 resume 10')
-#
-#             logger.debug('f1 exiting')
-#
-#         ####################################################################
-#         # f2
-#         ####################################################################
-#         def f2():
-#             logger.debug('f2 entered')
-#
-#             charlie_smart_thread.wait(remote='alpha', log_msg='f2 wait 1')
-#             charlie_smart_thread.sync(targets='alpha', log_msg='f2 sync 2')
-#             charlie_smart_thread.send_msg(msg='hi alpha, this is charlie', targets='alpha', log_msg='f2 send_msg 3')
-#             assert charlie_smart_thread.recv_msg(remote='alpha', log_msg='f2 recv_msg 4') == 'hi charlie, this is alpha'
-#             charlie_smart_thread.resume(targets='alpha', log_msg='f2 resume 5')
-#
-#             charlie_smart_thread.resume(targets='beta', log_msg='f2 resume 6')
-#             charlie_smart_thread.sync(targets='beta', log_msg='f2 sync 7')
-#             assert charlie_smart_thread.recv_msg(remote='beta', log_msg='f2 recv_msg 9') == 'hi charlie, this is beta'
-#             charlie_smart_thread.send_msg(msg='hi beta, this is charlie', targets='beta', log_msg='f2 send_msg 8')
-#             charlie_smart_thread.wait(remote='beta', log_msg='f2 wait 10')
-#
-#             logger.debug('f2 exiting')
-#
-#         ####################################################################
-#         # Create smart threads for the main thread (this thread), f1, and f2
-#         ####################################################################
-#         logger.debug('mainline entered')
-#         logger.debug('mainline creating alpha thread')
-#         alpha_smart_thread = st.SmartThread(name='alpha', default_timeout=10)
-#
-#         logger.debug('mainline creating beta thread')
-#         beta_smart_thread = st.SmartThread(name='beta', target=f1)
-#         beta_smart_thread.thread.start()
-#         logger.debug('mainline creating charlie thread')
-#         charlie_smart_thread = st.SmartThread(name='charlie', target=f2)
-#         charlie_smart_thread.thread.start()
-#
-#         ####################################################################
-#         # Interact with beta and charlie
-#         ####################################################################
-#         logger.debug('mainline interacting with beta and charlie')
-#         alpha_smart_thread.resume(targets='beta', log_msg='ml resume 1')
-#         alpha_smart_thread.resume(targets='charlie', log_msg='ml resume 2')
-#         alpha_smart_thread.sync(targets='beta', log_msg='ml sync 3')
-#         alpha_smart_thread.sync(targets='charlie', log_msg='ml sync 4')
-#         assert alpha_smart_thread.recv_msg(remote='beta', log_msg='ml recv_msg 5') == 'hi alpha, this is beta'
-#         assert alpha_smart_thread.recv_msg(remote='charlie', log_msg='ml recv_msg 6') == 'hi alpha, this is charlie'
-#         alpha_smart_thread.send_msg(msg='hi beta, this is alpha', targets='beta', log_msg='ml send_msg 7')
-#         alpha_smart_thread.send_msg(msg='hi charlie, this is alpha', targets='charlie', log_msg='ml send_msg 8')
-#         alpha_smart_thread.wait(remote='beta', log_msg='f1 resume 9')
-#         alpha_smart_thread.wait(remote='charlie', log_msg='f1 resume 10')
-#
-#         alpha_smart_thread.join(targets='beta', log_msg='ml join 11')
-#         alpha_smart_thread.join(targets='charlie', log_msg='ml join 12')
-#
-#         logger.debug('mainline exiting')
-#
-#     ####################################################################################################################
-#     # Basic Scenario4
-#     ####################################################################################################################
-#     def test_smart_thread_basic_scenario4(self):
-#         ####################################################################
-#         # f1
-#         ####################################################################
-#         def f1():
-#             logger.debug('f1 entered')
-#
-#             beta_smart_thread.wait(remote='alpha', log_msg='f1 wait 1')
-#             beta_smart_thread.sync(targets={'alpha', 'charlie'}, log_msg='f1 sync 2')
-#             beta_smart_thread.send_msg(msg='hi alpha and charlie, this is beta', targets={'alpha', 'charlie'},
-#                                        log_msg='f1 send_msg 3')
-#             assert beta_smart_thread.recv_msg(remote='alpha', log_msg='f1 recv_msg 4') == 'hi beta and charlie, this is alpha'
-#             assert beta_smart_thread.recv_msg(remote='charlie',
-#                                         log_msg='f1 recv_msg 5') == 'hi alpha and beta, this is charlie'
-#             beta_smart_thread.resume(targets={'alpha', 'charlie'}, log_msg='f1 resume 6')
-#             beta_smart_thread.wait(remote='charlie', log_msg='f1 wait 7')
-#
-#             logger.debug('f1 exiting')
-#
-#         ####################################################################
-#         # f2
-#         ####################################################################
-#         def f2():
-#             logger.debug('f2 entered')
-#
-#             charlie_smart_thread.wait(remote='alpha', log_msg='f2 wait 1')
-#             charlie_smart_thread.sync(targets={'alpha', 'beta'}, log_msg='f2 sync 2')
-#             charlie_smart_thread.send_msg(msg='hi alpha and beta, this is charlie', targets={'alpha', 'beta'},
-#                                           log_msg='f2 send_msg 3')
-#             assert charlie_smart_thread.recv_msg(remote='alpha',
-#                                            log_msg='f2 recv_msg 4') == 'hi beta and charlie, this is alpha'
-#             assert charlie_smart_thread.recv_msg(remote='beta',
-#                                            log_msg='f2 recv_msg 5') == 'hi alpha and charlie, this is beta'
-#             charlie_smart_thread.wait(remote='beta', log_msg='f2 wait 6')
-#             charlie_smart_thread.resume(targets={'alpha', 'beta'}, log_msg='f2 resume 7')
-#
-#             logger.debug('f2 exiting')
-#
-#         ####################################################################
-#         # Create smart threads for the main thread (this thread), f1, and f2
-#         ####################################################################
-#         logger.debug('mainline entered')
-#         logger.debug('mainline creating alpha thread')
-#         alpha_smart_thread = st.SmartThread(name='alpha', default_timeout=10)
-#
-#         logger.debug('mainline creating beta thread')
-#         beta_thread = threading.Thread(name='beta', target=f1)
-#         beta_smart_thread = st.SmartThread(name='beta', thread=beta_thread, default_timeout=10)
-#         beta_thread.start()
-#         logger.debug('mainline creating charlie thread')
-#         charlie_thread = threading.Thread(name='charlie', target=f2)
-#         charlie_smart_thread = st.SmartThread(name='charlie', thread=charlie_thread, default_timeout=10)
-#         charlie_thread.start()
-#
-#         ####################################################################
-#         # Interact with beta and charlie
-#         ####################################################################
-#         logger.debug('mainline interacting with beta and charlie')
-#
-#         alpha_smart_thread.resume(targets={'beta', 'charlie'}, log_msg='ml resume 1')
-#         alpha_smart_thread.sync(targets={'beta', 'charlie'}, log_msg='ml sync 2')
-#         assert alpha_smart_thread.recv_msg(remote='beta', log_msg='ml recv_msg 3') == 'hi alpha and charlie, this is beta'
-#         assert alpha_smart_thread.recv_msg(remote='charlie', log_msg='ml recv_msg 4') == 'hi alpha and beta, this is charlie'
-#         alpha_smart_thread.send_msg(msg='hi beta and charlie, this is alpha', targets={'beta', 'charlie'},
-#                                     log_msg='ml send_msg 5')
-#         alpha_smart_thread.wait(remote='beta', log_msg='ml resume 6')
-#         alpha_smart_thread.wait(remote='charlie', log_msg='ml resume 7')
-#
-#         alpha_smart_thread.join(targets={'beta', 'charlie'}, log_msg='ml join 8')
-#
-#         logger.debug('mainline exiting')
-#     ###########################################################################
-#     # repr for SmartThread
-#     ###########################################################################
-#     def test_smart_thread_repr(self,
-#                               thread_exc: Any) -> None:
-#         """Test event with code repr.
-#
-#         Args:
-#             thread_exc: captures thread exceptions
-#
-#         """
-#         descs = SmartThreadDescs()
-#
-#         smart_thread = SmartThread(name='alpha')
-#         descs.add_desc(SmartThreadDesc(smart_thread=smart_thread))
-#
-#         expected_repr_str = 'SmartThread(group_name="group1", name="alpha")'
-#
-#         assert repr(smart_thread) == expected_repr_str
-#
-#         smart_thread2 = SmartThread(group_name="group1", name="AlphaDog")
-#         descs.add_desc(SmartThreadDesc(smart_thread=smart_thread2))
-#
-#         expected_repr_str = 'SmartThread(group_name="group1", name="AlphaDog")'
-#
-#         assert repr(smart_thread2) == expected_repr_str
-#
-#         def f1():
-#             t_pair = SmartThread(group_name='group1', name='beta1')
-#             descs.add_desc(SmartThreadDesc(smart_thread=t_pair))
-#             f1_expected_repr_str = 'SmartThread(group_name="group1", name="beta1")'
-#             assert repr(t_pair) == f1_expected_repr_str
-#
-#             cmds.queue_cmd('alpha', 'go')
-#             cmds.get_cmd('beta1')
-#
-#         def f2():
-#             t_pair = SmartThread(group_name='group1', name='beta2')
-#             descs.add_desc(SmartThreadDesc(smart_thread=t_pair))
-#             f1_expected_repr_str = 'SmartThread(group_name="group1", name="beta2")'
-#             assert repr(t_pair) == f1_expected_repr_str
-#             cmds.queue_cmd('alpha', 'go')
-#             cmds.get_cmd('beta2')
-#
-#         cmds = Cmds()
-#         a_thread1 = threading.Thread(target=f1)
-#         a_thread1.start()
-#
-#         cmds.get_cmd('alpha')
-#
-#         a_thread2 = threading.Thread(target=f2)
-#         a_thread2.start()
-#
-#         cmds.get_cmd('alpha')
-#         cmds.queue_cmd('beta1', 'go')
-#         a_thread1.join()
-#         descs.thread_end('beta1')
-#         cmds.queue_cmd('beta2', 'go')
-#         a_thread2.join()
-#         descs.thread_end('beta2')
-#
-#     ###########################################################################
-#     # test_smart_thread_instantiate_with_errors
-#     ###########################################################################
-#     def test_smart_thread_instantiate_with_errors(self) -> None:
-#         """Test register_thread alpha first."""
-#
-#         descs = SmartThreadDescs()
-#
-#         smart_thread = SmartThread(group_name='group1', name='alpha')
-#
-#         descs.add_desc(SmartThreadDesc(smart_thread=smart_thread))
-#
-#         # not OK to instantiate a new smart_thread with same name
-#         with pytest.raises(SmartThreadNameAlreadyInUse):
-#             _ = SmartThread(group_name='group1', name='alpha')
-#
-#         with pytest.raises(SmartThreadIncorrectNameSpecified):
-#             _ = SmartThread(group_name='group1', name=42)  # type: ignore
-#
-#         # try to pair with unknown remote
-#         with pytest.raises(SmartThreadPairWithTimedOut):
-#             smart_thread.pair_with(remote_name='beta', timeout=0.1)
-#
-#         # try to pair with bad name
-#         with pytest.raises(SmartThreadIncorrectNameSpecified):
-#             smart_thread.pair_with(remote_name=3)  # type: ignore
-#
-#         # make sure everything still the same
-#
-#         descs.verify_registry()
-#
-#     ###########################################################################
-#     # test_smart_thread_pairing_with_errors
-#     ###########################################################################
-#     def test_smart_thread_pairing_with_errors(self) -> None:
-#         """Test register_thread during instantiation."""
-#         def f1(name: str) -> None:
-#             """Func to test instantiate SmartThread.
-#
-#             Args:
-#                 name: name to use for t_pair
-#             """
-#             logger.debug(f'{name} f1 entered')
-#             t_pair = SmartThread(group_name='group1', name=name)
-#             descs.add_desc(SmartThreadDesc(smart_thread=t_pair))
-#
-#             cmds.queue_cmd('alpha', 'go')
-#
-#             # not OK to pair with self
-#             with pytest.raises(SmartThreadPairWithSelfNotAllowed):
-#                 t_pair.pair_with(remote_name=name)
-#
-#             t_pair.pair_with(remote_name='alpha')
-#
-#             # not OK to pair with remote a second time
-#             with pytest.raises(SmartThreadAlreadyPairedWithRemote):
-#                 t_pair.pair_with(remote_name='alpha')
-#
-#             cmds.get_cmd('beta')
-#
-#             logger.debug(f'{name} f1 exiting')
-#
-#         cmds = Cmds()
-#
-#         descs = SmartThreadDescs()
-#
-#         beta_t = threading.Thread(target=f1, args=('beta',))
-#
-#         smart_thread = SmartThread(group_name='group1', name='alpha')
-#
-#         descs.add_desc(SmartThreadDesc(smart_thread=smart_thread))
-#         beta_t.start()
-#
-#         # not OK to pair with self
-#         with pytest.raises(SmartThreadPairWithSelfNotAllowed):
-#             smart_thread.pair_with(remote_name='alpha')
-#
-#         cmds.get_cmd('alpha')
-#
-#         smart_thread.pair_with(remote_name='beta')
-#         descs.paired('alpha', 'beta')
-#
-#         # not OK to pair with remote a second time
-#         with pytest.raises(SmartThreadAlreadyPairedWithRemote):
-#             smart_thread.pair_with(remote_name='beta')
-#
-#         cmds.queue_cmd('beta')
-#
-#         beta_t.join()
-#
-#         descs.thread_end(name='beta')
-#
-#         # at this point, f1 has ended. But, the registry will not have changed,
-#         # so everything will still show paired, even both alpha and beta
-#         # SmartThreads. Alpha SmartThread will detect that beta is no longer
-#         # alive if a function is attempted.
-#
-#         descs.verify_registry()
-#
-#         #######################################################################
-#         # second case - f1 with same name beta
-#         #######################################################################
-#         beta_t2 = threading.Thread(target=f1, args=('beta',))
-#         beta_t2.start()
-#
-#         cmds.get_cmd('alpha')
-#
-#         smart_thread.pair_with(remote_name='beta')
-#         descs.paired('alpha', 'beta')
-#
-#         cmds.queue_cmd('beta')
-#
-#         beta_t2.join()
-#
-#         descs.thread_end(name='beta')
-#
-#         # at this point, f1 has ended. But, the registry will not have changed,
-#         # so everything will still show paired, even both alpha and beta
-#         # SmartThreads. Alpha SmartThread will detect that beta is no longer
-#         # alive if a function is attempted.
-#         descs.verify_registry()
-#
-#         #######################################################################
-#         # third case, use different name for f1. Should clean up old beta
-#         # from the registry.
-#         #######################################################################
-#         with pytest.raises(SmartThreadNameAlreadyInUse):
-#             smart_thread = SmartThread(group_name='group1', name='alpha')  # create fresh
-#
-#         beta_t3 = threading.Thread(target=f1, args=('charlie',))
-#         beta_t3.start()
-#
-#         cmds.get_cmd('alpha')
-#
-#         smart_thread.pair_with(remote_name='charlie')
-#         descs.paired('alpha', 'charlie')
-#
-#         assert 'beta' not in SmartThread._registry[smart_thread.group_name]
-#
-#         cmds.queue_cmd('beta')
-#
-#         beta_t3.join()
-#
-#         descs.thread_end(name='charlie')
-#
-#         # at this point, f1 has ended. But, the registry will not have changed,
-#         # so everything will still show paired, even both alpha and charlie
-#         # SmartThreads. Alpha SmartThread will detect that charlie is no longer
-#         # alive if a function is attempted.
-#
-#         # change name in SmartThread, then register a new entry to force the
-#         # SmartThreadErrorInRegistry error
-#         smart_thread.remote.name = 'bad_name'
-#         with pytest.raises(SmartThreadErrorInRegistry):
-#             _ = SmartThread(group_name='group1', name='alpha2')
-#
-#         # restore the good name to allow verify_registry to succeed
-#         smart_thread.remote.name = 'charlie'
-#
-#         descs.verify_registry()
-#
-#     ###########################################################################
-#     # test_smart_thread_pairing_with_multiple_threads
-#     ###########################################################################
-#     def test_smart_thread_pairing_with_multiple_threads(self) -> None:
-#         """Test register_thread during instantiation."""
-#         def f1(name: str) -> None:
-#             """Func to test instantiate SmartThread.
-#
-#             Args:
-#                 name: name to use for t_pair
-#             """
-#             logger.debug(f'{name} f1 entered')
-#             t_pair = SmartThread(group_name='group1', name=name)
-#
-#             descs.add_desc(SmartThreadDesc(smart_thread=t_pair))
-#
-#             # not OK to pair with self
-#             with pytest.raises(SmartThreadPairWithSelfNotAllowed):
-#                 t_pair.pair_with(remote_name=name)
-#
-#             cmds.queue_cmd('alpha', 'go')
-#
-#             t_pair.pair_with(remote_name='alpha')
-#             descs.paired('alpha', 'beta')
-#
-#             # alpha needs to wait until we are officially paired to avoid
-#             # timing issue when pairing with charlie
-#             cmds.queue_cmd('alpha')
-#
-#             # not OK to pair with remote a second time
-#             with pytest.raises(SmartThreadAlreadyPairedWithRemote):
-#                 t_pair.pair_with(remote_name='alpha')
-#
-#             cmds.queue_cmd('alpha', 'go')
-#
-#             cmds.get_cmd('beta')
-#
-#             logger.debug(f'{name} f1 exiting')
-#
-#         def f2(name: str) -> None:
-#             """Func to test instantiate SmartThread.
-#
-#             Args:
-#                 name: name to use for t_pair
-#             """
-#             logger.debug(f'{name} f2 entered')
-#             t_pair = SmartThread(group_name='group1', name=name)
-#
-#             descs.add_desc(SmartThreadDesc(smart_thread=t_pair))
-#
-#             # not OK to pair with self
-#             with pytest.raises(SmartThreadPairWithSelfNotAllowed):
-#                 t_pair.pair_with(remote_name=name)
-#
-#             with pytest.raises(SmartThreadPairWithTimedOut):
-#                 t_pair.pair_with(remote_name='alpha', timeout=1)
-#
-#             t_pair.pair_with(remote_name='alpha2')
-#
-#             descs.paired('alpha2', 'charlie')
-#
-#             # not OK to pair with remote a second time
-#             with pytest.raises(SmartThreadAlreadyPairedWithRemote):
-#                 t_pair.pair_with(remote_name='alpha2')
-#
-#             cmds.queue_cmd('alpha', 'go')
-#
-#             cmds.get_cmd('charlie')
-#
-#             logger.debug(f'{name} f2 exiting')
-#
-#         #######################################################################
-#         # mainline
-#         #######################################################################
-#         descs = SmartThreadDescs()
-#
-#         cmds = Cmds()
-#
-#         beta_t = threading.Thread(target=f1, args=('beta',))
-#         charlie_t = threading.Thread(target=f2, args=('charlie',))
-#
-#         smart_thread = SmartThread(group_name='group1', name='alpha')
-#
-#         descs.add_desc(SmartThreadDesc(smart_thread=smart_thread))
-#
-#         beta_t.start()
-#
-#         cmds.get_cmd('alpha')
-#
-#         smart_thread.pair_with(remote_name='beta')
-#
-#         #######################################################################
-#         # pair with charlie
-#         #######################################################################
-#         cmds.get_cmd('alpha')
-#
-#         smart_thread2 = SmartThread(group_name='group1', name='alpha2')
-#
-#         descs.add_desc(SmartThreadDesc(smart_thread=smart_thread2))
-#
-#         charlie_t.start()
-#
-#         smart_thread2.pair_with(remote_name='charlie')
-#
-#         cmds.get_cmd('alpha')
-#
-#         cmds.queue_cmd('beta')
-#
-#         beta_t.join()
-#
-#         descs.thread_end(name='beta')
-#
-#         cmds.queue_cmd('charlie')
-#
-#         charlie_t.join()
-#
-#         descs.thread_end(name='charlie')
-#
-#         # at this point, f1 and f2 have ended. But, the registry will not have
-#         # changed, so everything will still show paired, even all
-#         # SmartThreads. Any SmartThreads requests will detect that
-#         # their pairs are no longer active and will trigger cleanup to
-#         # remove any not alive entries from the registry. The SmartThread
-#         # objects for not alive threads remain pointed to by the alive
-#         # entries so that they may still report SmartThreadRemoteThreadNotAlive.
-#         descs.verify_registry()
-#
-#         # cause cleanup by calling cleanup directly
-#         smart_thread._clean_up_registry()
-#
-#         descs.cleanup()
-#
-#         # try to pair with old beta - should timeout
-#         with pytest.raises(SmartThreadPairWithTimedOut):
-#             smart_thread.pair_with(remote_name='beta', timeout=1)
-#
-#         # the pair_with sets smart_thread.remote to none before trying the
-#         # pair_with, and leaves it None when pair_with fails
-#         descs.paired('alpha')
-#
-#         # try to pair with old charlie - should timeout
-#         with pytest.raises(SmartThreadPairWithTimedOut):
-#             smart_thread.pair_with(remote_name='charlie', timeout=1)
-#
-#         # try to pair with nobody - should timeout
-#         with pytest.raises(SmartThreadPairWithTimedOut):
-#             smart_thread.pair_with(remote_name='nobody', timeout=1)
-#
-#         # try to pair with old beta - should timeout
-#         with pytest.raises(SmartThreadPairWithTimedOut):
-#             smart_thread2.pair_with(remote_name='beta', timeout=1)
-#
-#         # the pair_with sets smart_thread.remote to none before trying the
-#         # pair_with, and leaves it None when pair_with fails
-#         descs.paired('alpha2')
-#
-#         # try to pair with old charlie - should timeout
-#         with pytest.raises(SmartThreadPairWithTimedOut):
-#             smart_thread2.pair_with(remote_name='charlie', timeout=1)
-#
-#         # try to pair with nobody - should timeout
-#         with pytest.raises(SmartThreadPairWithTimedOut):
-#             smart_thread2.pair_with(remote_name='nobody', timeout=1)
-#
-#         descs.verify_registry()
-#
-#     ###########################################################################
-#     # test_smart_thread_pairing_with_multiple_threads
-#     ###########################################################################
-#     def test_smart_thread_remote_pair_with_other_error(self) -> None:
-#         """Test pair_with error case."""
-#         def f1() -> None:
-#             """Func to test pair_with SmartThread."""
-#             logger.debug('beta f1 entered')
-#             t_pair = SmartThread(group_name='group1', name='beta')
-#
-#             descs.add_desc(SmartThreadDesc(smart_thread=t_pair))
-#
-#             cmds.queue_cmd('alpha', 'go')
-#             with pytest.raises(SmartThreadRemotePairedWithOther):
-#                 t_pair.pair_with(remote_name='alpha')
-#
-#             cmds.get_cmd('beta')
-#             logger.debug(f'beta f1 exiting')
-#
-#         def f2() -> None:
-#             """Func to test pair_with SmartThread."""
-#             logger.debug('charlie f2 entered')
-#             t_pair = SmartThread(group_name='group1', name='charlie')
-#
-#             descs.add_desc(SmartThreadDesc(smart_thread=t_pair),
-#                            verify=False)
-#
-#             cmds.queue_cmd('alpha', 'go')
-#             t_pair.pair_with(remote_name='alpha')
-#             descs.paired('alpha', 'charlie', verify=False)
-#
-#             cmds.queue_cmd('alpha', 'go')
-#
-#             cmds.get_cmd('charlie')
-#
-#             logger.debug(f'charlie f2 exiting')
-#
-#         #######################################################################
-#         # mainline
-#         #######################################################################
-#         descs = SmartThreadDescs()
-#
-#         cmds = Cmds()
-#
-#         beta_t = threading.Thread(target=f1)
-#         charlie_t = threading.Thread(target=f2)
-#
-#         smart_thread = SmartThread(group_name='group1', name='alpha')
-#
-#         descs.add_desc(SmartThreadDesc(smart_thread=smart_thread))
-#
-#         beta_t.start()
-#
-#         cmds.get_cmd('alpha')
-#
-#         beta_se = SmartThread._registry[smart_thread.group_name]['beta']
-#
-#         # make sure beta has alpha as target of pair_with
-#         while beta_se.remote is None:
-#             time.sleep(1)
-#
-#         #######################################################################
-#         # pair with charlie
-#         #######################################################################
-#         charlie_t.start()
-#
-#         cmds.get_cmd('alpha')
-#
-#         smart_thread.pair_with(remote_name='charlie')
-#
-#         cmds.get_cmd('alpha')
-#
-#         cmds.queue_cmd('beta')
-#
-#         # wait for beta to raise SmartThreadRemotePairedWithOther and end
-#         beta_t.join()
-#
-#         descs.thread_end(name='beta')
-#
-#         # sync up with charlie to allow charlie to exit
-#         cmds.queue_cmd('charlie')
-#
-#         charlie_t.join()
-#
-#         descs.thread_end(name='charlie')
-#
-#         # cause cleanup by calling cleanup directly
-#         smart_thread._clean_up_registry()
-#
-#         descs.cleanup()
-#
-#     ###########################################################################
-#     # test_smart_thread_pairing_cleanup
-#     ###########################################################################
-#     def test_smart_thread_pairing_cleanup(self) -> None:
-#         """Test register_thread during instantiation."""
-#         def f1(name: str, remote_name: str, idx: int) -> None:
-#             """Func to test instantiate SmartThread.
-#
-#             Args:
-#                 name: name to use for t_pair
-#                 remote_name: name to pair with
-#                 idx: index into beta_smart_threads
-#
-#             """
-#             logger.debug(f'{name} f1 entered, remote {remote_name}, idx {idx}')
-#             t_pair = SmartThread(group_name='group1', name=name)
-#
-#             descs.add_desc(SmartThreadDesc(smart_thread=t_pair))
-#
-#             cmds.queue_cmd('alpha')
-#
-#             t_pair.pair_with(remote_name=remote_name,
-#                              log_msg=f'f1 {name} pair with {remote_name} '
-#                                      f'for idx {idx}')
-#
-#             cmds.queue_cmd('alpha')
-#
-#             cmds.get_cmd(name)
-#
-#             logger.debug(f'{name} f1 exiting')
-#
-#         #######################################################################
-#         # mainline start
-#         #######################################################################
-#         cmds = Cmds()
-#
-#         descs = SmartThreadDescs()
-#
-#         #######################################################################
-#         # create 4 beta threads
-#         #######################################################################
-#         beta_t0 = threading.Thread(target=f1, args=('beta0', 'alpha0', 0))
-#         beta_t1 = threading.Thread(target=f1, args=('beta1', 'alpha1', 1))
-#         beta_t2 = threading.Thread(target=f1, args=('beta2', 'alpha2', 2))
-#         beta_t3 = threading.Thread(target=f1, args=('beta3', 'alpha3', 3))
-#
-#         #######################################################################
-#         # create alpha0 SmartThread and desc, and verify
-#         #######################################################################
-#         smart_thread0 = SmartThread(group_name='group1', name='alpha0')
-#         descs.add_desc(SmartThreadDesc(smart_thread=smart_thread0))
-#
-#         #######################################################################
-#         # create alpha1 SmartThread and desc, and verify
-#         #######################################################################
-#         smart_thread1 = SmartThread(group_name='group1', name='alpha1')
-#         descs.add_desc(SmartThreadDesc(smart_thread=smart_thread1))
-#
-#         #######################################################################
-#         # create alpha2 SmartThread and desc, and verify
-#         #######################################################################
-#         smart_thread2 = SmartThread(group_name='group1', name='alpha2')
-#         descs.add_desc(SmartThreadDesc(smart_thread=smart_thread2))
-#
-#         #######################################################################
-#         # create alpha3 SmartThread and desc, and verify
-#         #######################################################################
-#         smart_thread3 = SmartThread(group_name='group1', name='alpha3')
-#         descs.add_desc(SmartThreadDesc(smart_thread=smart_thread3))
-#
-#         #######################################################################
-#         # start beta0 thread, and verify
-#         #######################################################################
-#         beta_t0.start()
-#
-#         cmds.get_cmd('alpha')
-#
-#         smart_thread0.pair_with(remote_name='beta0')
-#
-#         cmds.get_cmd('alpha')
-#         descs.paired('alpha0', 'beta0')
-#
-#         #######################################################################
-#         # start beta1 thread, and verify
-#         #######################################################################
-#         beta_t1.start()
-#
-#         cmds.get_cmd('alpha')
-#
-#         smart_thread1.pair_with(remote_name='beta1')
-#
-#         cmds.get_cmd('alpha')
-#         descs.paired('alpha1', 'beta1')
-#
-#         #######################################################################
-#         # start beta2 thread, and verify
-#         #######################################################################
-#         beta_t2.start()
-#
-#         cmds.get_cmd('alpha')
-#
-#         smart_thread2.pair_with(remote_name='beta2')
-#
-#         cmds.get_cmd('alpha')
-#         descs.paired('alpha2', 'beta2')
-#
-#         #######################################################################
-#         # start beta3 thread, and verify
-#         #######################################################################
-#         beta_t3.start()
-#
-#         cmds.get_cmd('alpha')
-#
-#         smart_thread3.pair_with(remote_name='beta3')
-#
-#         cmds.get_cmd('alpha')
-#         descs.paired('alpha3', 'beta3')
-#
-#         #######################################################################
-#         # let beta0 finish
-#         #######################################################################
-#         cmds.queue_cmd('beta0')
-#
-#         beta_t0.join()
-#
-#         descs.thread_end(name='beta0')
-#
-#         #######################################################################
-#         # replace old beta0 w new beta0 - should cleanup registry old beta0
-#         #######################################################################
-#         beta_t0 = threading.Thread(target=f1, args=('beta0', 'alpha0', 0))
-#
-#         beta_t0.start()
-#
-#         cmds.get_cmd('alpha')
-#
-#         smart_thread0.pair_with(remote_name='beta0')
-#
-#         cmds.get_cmd('alpha')
-#         descs.paired('alpha0', 'beta0')
-#
-#         #######################################################################
-#         # let beta1 and beta3 finish
-#         #######################################################################
-#         cmds.queue_cmd('beta1')
-#         beta_t1.join()
-#         descs.thread_end(name='beta1')
-#
-#         cmds.queue_cmd('beta3')
-#         beta_t3.join()
-#         descs.thread_end(name='beta3')
-#
-#         #######################################################################
-#         # replace old beta1 w new beta1 - should cleanup old beta1 and beta3
-#         #######################################################################
-#         beta_t1 = threading.Thread(target=f1, args=('beta1', 'alpha1', 1))
-#
-#         beta_t1.start()
-#
-#         cmds.get_cmd('alpha')
-#
-#         smart_thread1.pair_with(remote_name='beta1')
-#
-#         cmds.get_cmd('alpha')
-#         descs.paired('alpha1', 'beta1')
-#
-#         # should get not alive for beta3
-#         with pytest.raises(SmartThreadRemoteThreadNotAlive):
-#             smart_thread3.check_remote()
-#         descs.cleanup()
-#
-#         # should still be the same
-#         descs.verify_registry()
-#
-#         #######################################################################
-#         # get a new beta3 going
-#         #######################################################################
-#         beta_t3 = threading.Thread(target=f1, args=('beta3', 'alpha3', 3))
-#
-#         beta_t3.start()
-#
-#         cmds.get_cmd('alpha')
-#
-#         smart_thread3.pair_with(remote_name='beta3')
-#
-#         cmds.get_cmd('alpha')
-#         descs.paired('alpha3', 'beta3')
-#
-#         #######################################################################
-#         # let beta1 and beta2 finish
-#         #######################################################################
-#         cmds.queue_cmd('beta1')
-#         beta_t1.join()
-#         descs.thread_end(name='beta1')
-#
-#         cmds.queue_cmd('beta2')
-#         beta_t2.join()
-#         descs.thread_end(name='beta2')
-#
-#         #######################################################################
-#         # trigger cleanup for beta1 and beta2
-#         #######################################################################
-#         # should get not alive for beta1
-#         with pytest.raises(SmartThreadRemoteThreadNotAlive):
-#             smart_thread1.check_remote()
-#         descs.cleanup()
-#
-#         descs.cleanup()
-#
-#         #######################################################################
-#         # should get SmartThreadRemoteThreadNotAlive for beta1 and beta2
-#         #######################################################################
-#         with pytest.raises(SmartThreadRemoteThreadNotAlive):
-#             smart_thread1.check_remote()
-#
-#         with pytest.raises(SmartThreadRemoteThreadNotAlive):
-#             smart_thread2.check_remote()
-#
-#         descs.verify_registry()
-#
-#         #######################################################################
-#         # get a new beta2 going and then allow to end
-#         #######################################################################
-#         beta_t2 = threading.Thread(target=f1, args=('beta2', 'alpha2', 2))
-#
-#         beta_t2.start()
-#
-#         cmds.get_cmd('alpha')
-#
-#         smart_thread2.pair_with(remote_name='beta2')
-#
-#         cmds.get_cmd('alpha')
-#         descs.paired('alpha2', 'beta2')
-#
-#         cmds.queue_cmd('beta2')
-#         beta_t2.join()
-#         descs.thread_end(name='beta2')
-#
-#         #######################################################################
-#         # let beta0 complete
-#         #######################################################################
-#         cmds.queue_cmd('beta0')
-#         beta_t0.join()
-#         descs.thread_end(name='beta0')
-#
-#         #######################################################################
-#         # let beta3 complete
-#         #######################################################################
-#         cmds.queue_cmd('beta3')
-#         beta_t3.join()
-#         descs.thread_end(name='beta3')
-#

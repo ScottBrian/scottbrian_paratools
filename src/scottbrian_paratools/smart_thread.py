@@ -2286,7 +2286,8 @@ class SmartThread:
         """
         while len(self.work_pk_remotes) > request_block.completion_count:
             # num_start_loop_work_remotes = len(self.work_pk_remotes)
-            for pk_remote in self.work_pk_remotes.copy():
+            work_pk_remotes_copy = self.work_pk_remotes.copy()
+            for pk_remote in work_pk_remotes_copy:
                 # determine timeout_value to use for request
                 if request_block.timer.is_specified():
                     request_block.request_max_interval = min(
@@ -2305,7 +2306,9 @@ class SmartThread:
                 with sel.SELockShare(SmartThread._registry_lock):
                     if self.found_pk_remotes:
                         pk_remote = self._handle_found_pk_remotes(
-                            pk_remote=pk_remote)
+                            pk_remote=pk_remote,
+                            work_pk_remotes=work_pk_remotes_copy
+                        )
 
                     if pk_remote.pair_key in SmartThread._pair_array:
                         # having a pair_key in the array implies our
@@ -2395,16 +2398,19 @@ class SmartThread:
     # _handle_found_pk_remotes
     ####################################################################
     def _handle_found_pk_remotes(self,
-                                 pk_remote: PairKeyRemote
+                                 pk_remote: PairKeyRemote,
+                                 work_pk_remotes: list[PairKeyRemote]
                                  ) -> PairKeyRemote:
         """Update the work_pk_remotes with newly found threads.
 
         Args:
-            pk_remote: the current pk_remote being worked on in
-                _request_loop
+            pk_remote: the current pk_remote currently being processed
+                in _request_loop
+            work_pk_remotes: list of pk_remotes currently being
+                processed in _request_loop
 
         Returns:
-            the input pk_remote is returned eiothe as is, or updated
+            the input pk_remote is returned either as is, or updated
             with a non-zero create_time serial if it is among the
             found pk_remotes
         """
@@ -2420,6 +2426,19 @@ class SmartThread:
                     found_pk_remote.remote,
                     found_pk_remote.create_time)
                 ret_pk_remote = PairKeyRemote(
+                    found_pk_remote.pair_key,
+                    found_pk_remote.remote,
+                    found_pk_remote.create_time)
+
+            except ValueError:
+                raise SmartThreadWorkDataException(
+                    f'_handle_found_pk_remotes failed to find an '
+                    f'entry for {found_pk_remote=} in '
+                    f'{self.work_pk_remotes=}')
+
+            try:
+                idx = work_pk_remotes.index(test_pk_remote)
+                work_pk_remotes[idx] = PairKeyRemote(
                     found_pk_remote.pair_key,
                     found_pk_remote.remote,
                     found_pk_remote.create_time)
