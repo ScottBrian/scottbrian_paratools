@@ -299,6 +299,21 @@ class SmartThread:
     # Coordinates the various actions involved in satisfying a
     # send_msg, recv_msg, smart_wait, smart_resume, or smart_sync
     # request.
+    # Notes:
+    # 1) target_create_timee is used to ensure that a catch type request
+    # (recv_msg or wait) or handshake request (sync) are satisfied by
+    # the remote that was in the configuration when thee request was
+    # initiated. Normally, each request will periodically check the
+    # remote state and will raise an error if the remote has stopped.
+    # There is, however, the possibility that the remote will be started
+    # again (resurrected) and could potentially complete the request
+    # before the current thread notices that the remote had been
+    # stopped. We don't want a resurrected remote to complete the
+    # request, so the remote will check to ensure its create time is
+    # equal target_create_time before completing the request.
+    # 2) request_pending is used to prevent the pair array item from
+    # being removed, and this is needed to ensure that the
+    # target_create_time remains valid.
     ####################################################################
     @dataclass
     class ConnectionStatusBlock:
@@ -315,7 +330,6 @@ class SmartThread:
         deadlock: bool = False
         conflict: bool = False
         request_pending: bool = False
-        request_target: bool = False
 
     @dataclass
     class ConnectionPair:
@@ -822,15 +836,16 @@ class SmartThread:
                 if (name not in SmartThread._pair_array[
                         pair_key].status_blocks):
 
-                    # get a unique time stamp
-                    create_time = time.time()
-                    while create_time == (
-                            SmartThread._create_pair_array_entry_time):
-                        create_time = time.time()
-                    # update last create time
-                    SmartThread._create_pair_array_entry_time = create_time
+                    # # get a unique time stamp
+                    # create_time = time.time()
+                    # while create_time == (
+                    #         SmartThread._create_pair_array_entry_time):
+                    #     create_time = time.time()
+                    # # update last create time
+                    # SmartThread._create_pair_array_entry_time = create_time
 
                     # add an entry for this thread
+                    create_time = SmartThread._registry[name].create_time
                     SmartThread._pair_array[
                         pair_key].status_blocks[
                         name] = SmartThread.ConnectionStatusBlock(
@@ -2658,7 +2673,12 @@ class SmartThread:
             with sel.SELockShare(SmartThread._registry_lock):
                 self.missing_remotes: set[str] = set()
                 for remote in remotes:
-                    target_create_time = 0.0
+                    if remote in SmartThread._registry:
+                        target_create_time = SmartThread._registry[
+                            remote].create_time
+                    else:
+                        target_create_time = 0.0
+
                     pair_key = self._get_pair_key(self.name, remote)
                     if pair_key in SmartThread._pair_array:
                         local_sb = SmartThread._pair_array[
@@ -2667,10 +2687,10 @@ class SmartThread:
                         logger.debug(
                             f'TestDebug {self.name} set '
                             f'request_pending for {remote=}')
-                        if (remote in SmartThread._pair_array[
-                                pair_key].status_blocks):
-                            target_create_time = SmartThread._pair_array[
-                                pair_key].status_blocks[remote].create_time
+                        # if (remote in SmartThread._pair_array[
+                        #         pair_key].status_blocks):
+                        #     target_create_time = SmartThread._pair_array[
+                        #         pair_key].status_blocks[remote].create_time
                         local_sb.target_create_time = target_create_time
                     pk_remote = PairKeyRemote(pair_key=pair_key,
                                               remote=remote,

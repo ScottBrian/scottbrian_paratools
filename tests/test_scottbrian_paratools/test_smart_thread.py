@@ -13,7 +13,7 @@ from itertools import combinations, chain
 
 import logging
 
-from more-itertools import roundrobin
+from more_itertools import roundrobin
 import random
 import re
 from sys import _getframe
@@ -185,7 +185,7 @@ class TimeoutType(Enum):
 timeout_type_arg_list = [TimeoutType.TimeoutNone,
                          TimeoutType.TimeoutFalse,
                          TimeoutType.TimeoutTrue]
-# timeout_type_arg_list = [TimeoutType.TimeoutTrue]
+timeout_type_arg_list = [TimeoutType.TimeoutTrue]
 
 ########################################################################
 # Test settings for test_def_del_scenarios
@@ -4050,7 +4050,6 @@ class RegUpdateLogSearchItem(LogSearchItem):
             config_ver: configuration verifier
         """
         super().__init__(
-            # search_str=f'[a-z]+ did registry update at UTC {time_match}',
             search_str=(f'[a-z]+ added [a-z]+ to SmartThread registry at UTC '
                         f'{time_match}'),
             config_ver=config_ver,
@@ -4728,8 +4727,6 @@ class RequestAckLogSearchItem(LogSearchItem):
         Args:
             config_ver: configuration verifier
         """
-        list_of_requests = ('(handle_wait'
-                            '|handle_resume)')
         super().__init__(
             search_str=(f"[a-z]+ smart_wait resumed by [a-z]+"),
             config_ver=config_ver,
@@ -5009,7 +5006,7 @@ class ConfigVerifier:
         self.log_test_msg('monitor entered')
 
         while not self.monitor_exit:
-            self.monitor_event.wait()
+            self.monitor_event.wait(timeout=0.25)
             self.monitor_event.clear()
 
             if self.monitor_bail:
@@ -9619,7 +9616,8 @@ class ConfigVerifier:
         # confirm the registered target waits
         ####################################################
         if registered_names_after:
-            if stopped_remotes:
+            if (timeout_type == TimeoutType.TimeoutTrue
+                    or stopped_remotes):
                 self.add_cmd(
                     ConfirmResponseNot(
                         cmd_runners=[self.commander_name],
@@ -12489,6 +12487,7 @@ class ConfigVerifier:
         work_log = self.caplog_to_use.record_tuples.copy()
 
         end_idx = len(work_log)
+        # print(f'\n{self.log_start_idx=}, {end_idx=}, {work_log[-1]=} \n')
 
         # return if no new log message have been issued since last call
         if self.log_start_idx >= end_idx:
@@ -14230,7 +14229,9 @@ class ConfigVerifier:
             log_msg: the message to log
 
         """
-        if self.allow_log_test_msg:
+        if (self.allow_log_test_msg
+                or 'waiting for monitor' in log_msg
+                or 'has been stopped by' in log_msg):
             self.log_ver.add_msg(log_msg=re.escape(log_msg))
             logger.debug(log_msg, stacklevel=2)
 
