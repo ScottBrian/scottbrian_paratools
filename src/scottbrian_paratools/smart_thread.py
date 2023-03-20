@@ -473,6 +473,10 @@ class SmartThread:
         self.missing_remotes: set[str] = set()
         self.found_pk_remotes: list[PairKeyRemote] = []
 
+        # set create time to zero - we will update create_time in
+        # the _register method under lock
+        self.create_time: float = 0.0
+
         # register this new SmartThread so others can find us
         self._register()
 
@@ -576,8 +580,8 @@ class SmartThread:
     ####################################################################
     # _set_status
     ####################################################################
-    def _set_state(self,
-                   target_thread: "SmartThread",
+    @staticmethod
+    def _set_state(target_thread: "SmartThread",
                    new_state: ThreadState) -> bool:
         """Set the state for a thread.
 
@@ -636,6 +640,14 @@ class SmartThread:
 
             # Add entry if not already present
             if self.name not in SmartThread._registry:
+                # get a unique time stamp for create_time
+                create_time = time.time()
+                while create_time == (
+                        SmartThread._create_pair_array_entry_time):
+                    create_time = time.time()
+                # update last create time
+                SmartThread._create_pair_array_entry_time = create_time
+                self.create_time = create_time
                 SmartThread._registry[self.name] = self
                 if self.thread.is_alive():
                     new_state = ThreadState.Alive
