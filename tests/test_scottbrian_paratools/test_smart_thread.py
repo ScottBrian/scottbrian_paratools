@@ -407,9 +407,14 @@ num_unreg_before_arg_list = [0, 1, 2]
 num_stop_before_arg_list = [0, 1, 2]
 num_started_after_arg_list = [0, 1, 2]
 num_started_delay_arg_list = [0, 1, 2]
+
 num_unreg_after_arg_list = [0, 1, 2]
+num_unreg_after_arg_list = [0]  # @sbt
+
 num_stop_after_ok_arg_list = [0, 1, 2]
+
 num_stop_after_err_arg_list = [0, 1, 2]
+num_stop_after_err_arg_list = [0]  # @sbt
 
 
 
@@ -1149,7 +1154,8 @@ class Resume(ConfigCmd):
 
         self.log_msg = log_msg
 
-        self.arg_list += ['targets']
+        self.arg_list += ['targets',
+                          'stopped_remotes']
 
     def run_process(self, cmd_runner: str) -> None:
         """Run the command.
@@ -8731,6 +8737,8 @@ class ConfigVerifier:
                                     + stop_after_ok_names
                                     + stop_after_err_names)
 
+        resume_serial_num_2 = 0
+
         wait_confirms: list[ConfirmResponse] = []
         for idx, waiter in enumerate(roundrobin(start_before_names,
                                      unreg_before_names,
@@ -8815,12 +8823,13 @@ class ConfigVerifier:
             # we need this resume for the after resume waits when the
             # first resume ends early because of stopped remotes
             ############################################################
-            stopped_remotes = (unreg_after_names
-                               + stop_after_err_names)
-            resume_serial_num_2 = self.add_cmd(
-                Resume(cmd_runners=resumer_names,
-                       targets=after_targets,
-                       stopped_remotes=stopped_remotes))
+            if after_targets:
+                stopped_remotes = (unreg_after_names
+                                   + stop_after_err_names)
+                resume_serial_num_2 = self.add_cmd(
+                    Resume(cmd_runners=resumer_names,
+                           targets=after_targets,
+                           stopped_remotes=stopped_remotes))
 
         ################################################################
         # Create and start unreg_before and stop_after_ok and issue the
@@ -8903,7 +8912,7 @@ class ConfigVerifier:
                     confirm_cmd='Resume',
                     confirm_serial_num=resume_serial_num_1,
                     confirmers=resumer_names))
-        else:
+        elif after_targets:
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
@@ -12920,7 +12929,9 @@ class ConfigVerifier:
             code: code to provide to waiter
             log_msg: log msg for smart_resume
         """
-        self.log_test_msg(f'handle_resume entry: {cmd_runner=}, {targets=}')
+        self.log_test_msg(f'handle_resume entry: {cmd_runner=}, {targets=}, '
+                          f'{stopped_remotes=}, {timeout=}, {timeout_names=} '
+                          f'{timeout_type=}')
 
         self.log_ver.add_call_seq(
             name='smart_resume',
