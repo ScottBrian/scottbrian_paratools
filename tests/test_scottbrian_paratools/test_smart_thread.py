@@ -18,8 +18,8 @@ import random
 import re
 from sys import _getframe
 import time
-from typing import (Any, Callable, cast, Type, TypeAlias, TYPE_CHECKING,
-                    Optional, Union)
+from typing import (Any, Callable, cast, ClassVar, Type, TypeAlias,
+                    TYPE_CHECKING, Optional, Union)
 import threading
 
 ########################################################################
@@ -414,8 +414,7 @@ num_unreg_after_arg_list = [0]  # @sbt
 num_stop_after_ok_arg_list = [0, 1, 2]
 
 num_stop_after_err_arg_list = [0, 1, 2]
-num_stop_after_err_arg_list = [0]  # @sbt
-
+# num_stop_after_err_arg_list = [0]  # @sbt
 
 
 ########################################################################
@@ -1594,15 +1593,13 @@ class SyncTimeoutTrue(SyncTimeoutFalse):
 ########################################################################
 class Unregister(ConfigCmd):
     def __init__(self,
-                 cmd_runners: StrOrList,
-                 unregister_targets: StrOrList,
+                 cmd_runners: Iterable,
+                 unregister_targets: Iterable,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
-        if isinstance(unregister_targets, str):
-            unregister_targets = [unregister_targets]
-        self.unregister_targets = unregister_targets
+        self.unregister_targets = get_set(unregister_targets)
 
         self.log_msg = log_msg
 
@@ -4872,6 +4869,68 @@ LogSearchItems: TypeAlias = Union[
     CRunnerRaisesLogSearchItem,
     RequestAckLogSearchItem,
     MonDelLogSearchItem]
+
+class MockGetTargetState:
+    targets: ClassVar[dict[str, dict[str, tuple[Any, Any]]]] = {}
+
+    def __init__(self,
+                 targets: dict[str, tuple[Any, Any]]) -> None:
+        MockGetTargetState.targets = targets
+
+    ####################################################################
+    # mock_get_target_state
+    ####################################################################
+    def mock_get_target_state(self,
+                              pk_remote: st.PairKeyRemote
+                              ) -> st.ThreadState:
+        """Get the status of a thread that is the target of a request.
+
+        Args:
+            pk_remote: contains target thread info
+
+        Returns:
+            The thread status
+
+        Notes:
+            Must be called holding the registry lock either shared or
+            exclusive
+        """
+        logger.debug(f'mock_get_target_state entered by {self=} with '
+                     f'{MockGetTargetState.targets=}')
+
+        ret_state = st.ThreadState.Unregistered
+        if pk_remote.remote not in st.SmartThread._registry:
+            ret_state = st.ThreadState.Unregistered
+
+        else:
+            if (not st.SmartThread._registry[pk_remote.remote].thread.is_alive()
+                    and st.SmartThread._registry[
+                        pk_remote.remote].st_state == ThreadState.Alive):
+                ret_state = st.ThreadState.Stopped
+
+            if (pk_remote.pair_key in st.SmartThread._pair_array
+                    and pk_remote.remote in st.SmartThread._pair_array[
+                        pk_remote.pair_key].status_blocks
+                    and st.SmartThread._pair_array[
+                        pk_remote.pair_key].status_blocks[
+                        pk_remote.remote].create_time != pk_remote.create_time):
+                ret_state = st.ThreadState.Stopped
+
+            if (not st.SmartThread._registry[pk_remote.remote].thread.is_alive()
+                    and st.SmartThread._registry[
+                        pk_remote.remote].st_state == ThreadState.Alive):
+                ret_state = st.ThreadState.Stopped
+
+            ret_state = st.SmartThread._registry[pk_remote.remote].st_state
+
+        if self.name in MockGetTargetState.targets:
+            if pk_remote.remote in MockGetTargetState.targets[self.name]:
+                if ret_state == MockGetTargetState.targets[
+                        self.name][pk_remote.remote][0]:
+                    ret_state = MockGetTargetState.targets[
+                        self.name][pk_remote.remote][1]
+
+        return ret_state
 
 
 @dataclass
@@ -8552,47 +8611,6 @@ class ConfigVerifier:
                         confirmers=target_names))
 
     ####################################################################
-    # _get_target_state
-    ####################################################################
-    @staticmethod
-    def mock_get_target_state(pk_remote: st.PairKeyRemote
-                              ) -> st.ThreadState:
-        """Get the status of a thread that is the target of a request.
-
-        Args:
-            pk_remote: contains target thread info
-
-        Returns:
-            The thread status
-
-        Notes:
-            Must be called holding the registry lock either shared or
-            exclusive
-        """
-        if pk_remote.remote not in st.SmartThread._registry:
-            return st.ThreadState.Unregistered
-
-        if (not st.SmartThread._registry[pk_remote.remote].thread.is_alive()
-                and st.SmartThread._registry[
-                    pk_remote.remote].st_state == ThreadState.Alive):
-            return st.ThreadState.Stopped
-
-        if (pk_remote.pair_key in st.SmartThread._pair_array
-                and pk_remote.remote in st.SmartThread._pair_array[
-                    pk_remote.pair_key].status_blocks
-                and st.SmartThread._pair_array[
-                    pk_remote.pair_key].status_blocks[
-                    pk_remote.remote].create_time != pk_remote.create_time):
-            return st.ThreadState.Stopped
-
-        if (not st.SmartThread._registry[pk_remote.remote].thread.is_alive()
-                and st.SmartThread._registry[
-                    pk_remote.remote].st_state == ThreadState.Alive):
-            return st.ThreadState.Stopped
-
-        return SmartThread._registry[pk_remote.remote].st_state
-
-    ####################################################################
     # test_resume_scenarios
     ####################################################################
     def build_resume_scenarios(
@@ -8648,8 +8666,6 @@ class ConfigVerifier:
         assert num_resumers > 0
 
         num_active_needed = (num_resumers + 1)  # plus 1 for commander
-
-        pause_time = 0.5
 
         self.build_config(
             cmd_runner=self.commander_name,
@@ -8737,6 +8753,22 @@ class ConfigVerifier:
                                     + stop_after_ok_names
                                     + stop_after_err_names)
 
+        ################################################################
+        # monkeypatch for SmartThread._get_target_state
+        ################################################################
+        if stop_after_err_names:
+            a_target_mock_dict = {}
+            for resumer_name in resumer_names:
+
+                for stop_name in stop_after_err_names:
+                    a_target_mock_dict[
+                        resumer_name] = {
+                        stop_name: (st.ThreadState.Alive,
+                                    st.ThreadState.Registered)}
+
+            a_mock_get_target_state = MockGetTargetState(
+                targets=a_target_mock_dict)
+
         resume_serial_num_2 = 0
 
         wait_confirms: list[ConfirmResponse] = []
@@ -8769,13 +8801,11 @@ class ConfigVerifier:
             elif waiter in unreg_before_names:
                 self.build_create_suite(
                     f1_create_items=[F1CreateItem(name=waiter,
-                                                  auto_start=True,
+                                                  auto_start=False,
                                                   target_rtn=outer_f1,
                                                   app_config=app_config)],
                     validate_config=False)
-                self.add_cmd(
-                    Unregister(cmd_runners=self.commander_name,
-                               unregister_targets=waiter))
+                self.build_unreg_suite(names=waiter)
             elif waiter in stop_before_names:
                 self.build_create_suite(
                     f1_create_items=[F1CreateItem(name=waiter,
@@ -8784,9 +8814,10 @@ class ConfigVerifier:
                                                   app_config=app_config)],
                     validate_config=False)
                 # stop now, join later
-                self.add_cmd(
-                    StopThread(cmd_runners=self.commander_name,
-                               stop_names=waiter))
+                self.build_exit_suite(
+                    cmd_runner=self.commander_name,
+                    names=waiter,
+                    validate_config=False)
             else:
                 raise IncorrectDataDetected('build_resume_scenarios '
                                             f'{waiter=} not found in '
@@ -8833,7 +8864,7 @@ class ConfigVerifier:
 
         ################################################################
         # Create and start unreg_before and stop_after_ok and issue the
-        # wait. Note unreg_before is also used both before and after the
+        # wait. Note unreg_before is used both before and after the
         # resume
         ################################################################
         for idx, waiter in enumerate(roundrobin(unreg_before_names,
@@ -8874,13 +8905,11 @@ class ConfigVerifier:
             if waiter in unreg_after_names:
                 self.build_create_suite(
                     f1_create_items=[F1CreateItem(name=waiter,
-                                                  auto_start=True,
+                                                  auto_start=False,
                                                   target_rtn=outer_f1,
                                                   app_config=app_config)],
                     validate_config=False)
-                self.add_cmd(
-                    Unregister(cmd_runners=self.commander_name,
-                               unregister_targets=waiter))
+                self.build_unreg_suite(names=waiter)
             elif waiter in stop_after_err_names:
                 self.build_create_suite(
                     f1_create_items=[F1CreateItem(name=waiter,
@@ -11762,14 +11791,15 @@ class ConfigVerifier:
     # build_unreg_suite
     ####################################################################
     def build_unreg_suite(self,
-                          names: list[str]) -> None:
+                          names: Iterable) -> None:
         """Return a list of ConfigCmd items for unregister.
 
         Args:
             names: thread name to be unregistered
 
         """
-        if not set(names).issubset(self.registered_names):
+        names = get_set(names)
+        if not names.issubset(self.registered_names):
             self.abort_all_f1_threads()
             raise InvalidInputDetected(f'Input {names} is not a subset '
                                        'of registered names '
@@ -13562,7 +13592,7 @@ class ConfigVerifier:
     ####################################################################
     def handle_unregister(self,
                           cmd_runner: str,
-                          unregister_targets: list[str],
+                          unregister_targets: set[str],
                           log_msg: Optional[str] = None) -> None:
         """Unregister the named threads.
 
@@ -13580,7 +13610,7 @@ class ConfigVerifier:
             seq='test_smart_thread.py::ConfigVerifier.handle_unregister')
 
         self.all_threads[cmd_runner].unregister(
-            targets=set(unregister_targets),
+            targets=unregister_targets,
             log_msg=log_msg)
 
         self.monitor_event.set()
@@ -13593,7 +13623,7 @@ class ConfigVerifier:
 
         self.add_request_log_msg(cmd_runner=cmd_runner,
                                  smart_request='unregister',
-                                 targets=set(unregister_targets),
+                                 targets=unregister_targets,
                                  timeout=0,
                                  timeout_type=TimeoutType.TimeoutNone,
                                  enter_exit=('entry', 'exit'),
@@ -17313,7 +17343,8 @@ class TestSmartThreadScenarios:
             num_unreg_after_arg: int,
             num_stop_after_ok_arg: int,
             num_stop_after_err_arg: int,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.CaptureFixture[str],
+            monkeypatch: Any
     ) -> None:
         """Test meta configuration scenarios.
 
@@ -17341,8 +17372,16 @@ class TestSmartThreadScenarios:
                 see that is is alive to sety the wait_event, and should
                 result in a not alive error
             caplog: pytest fixture to capture log output
+            monkeypatch: pytest fixture used to modify code for testing
 
         """
+        ################################################################
+        # monkeypatch for SmartThread._get_target_state
+        ################################################################
+        monkeypatch.setattr(st.SmartThread,
+                            "_get_target_state",
+                            MockGetTargetState.mock_get_target_state)
+
         total_arg_counts = (
             num_resumers_arg
             + num_start_before_arg
@@ -17376,10 +17415,6 @@ class TestSmartThreadScenarios:
             'num_stop_after_ok': num_stop_after_ok_arg,
             'num_stop_after_err': num_stop_after_err_arg
         }
-
-        ################################################################
-        # monkeypatch for SmartThread._get_target_state
-        ################################################################
 
         self.scenario_driver(
             scenario_builder=ConfigVerifier.build_resume_scenarios,
@@ -18288,5 +18323,44 @@ class TestSmartThreadErrors:
         msgs.queue_msg('beta')
         msgs.queue_msg('charlie')
         alpha_thread.smart_join(targets=('beta', 'charlie'))
+
+        logger.debug('mainline exit')
+
+    ####################################################################
+    # Unreg error cases
+    ####################################################################
+    def test_unreg_scenario(self,
+                            caplog: pytest.CaptureFixture[str]
+                            ) -> None:
+        """Test unreg error cases for SmartThread.
+
+        Args:
+            caplog: pytest fixture to capture log output
+
+        """
+
+        ################################################################
+        # f1
+        ################################################################
+        def f1(f1_name: str):
+            logger.debug(f'f1 entered for {f1_name}')
+            msgs.get_msg(f1_name)
+            logger.debug(f'f1 exit for {f1_name}')
+            ############################################################
+            # exit
+            ############################################################
+
+        logger.debug('mainline entry')
+        msgs = Msgs()
+        alpha_thread = st.SmartThread(name='alpha')
+        beta_thread = st.SmartThread(name='beta',
+                                     auto_start=True,
+                                     target=f1,
+                                     kwargs={'f1_name': 'beta'})
+        with pytest.raises(st.SmartThreadRemoteThreadNotRegistered):
+            beta_thread.unregister(targets='beta')
+
+        msgs.queue_msg('beta')
+        alpha_thread.smart_join(targets='beta')
 
         logger.debug('mainline exit')
