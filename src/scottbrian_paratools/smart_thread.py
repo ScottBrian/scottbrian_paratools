@@ -575,7 +575,11 @@ class SmartThread:
             exclusive
         """
         if pk_remote.remote not in SmartThread._registry:
-            return ThreadState.Unregistered
+            # if this remote was created before, then it was stopped
+            if pk_remote.create_time > 0.0:
+                return ThreadState.Stopped
+            else:
+                return ThreadState.Unregistered
 
         if (not SmartThread._registry[pk_remote.remote].thread.is_alive()
                 and SmartThread._registry[
@@ -1436,6 +1440,7 @@ class SmartThread:
         else:
             if remote_state == ThreadState.Stopped:
                 request_block.stopped_remotes |= {pk_remote.remote}
+                request_block.do_refresh = True
                 return True  # we are done with this remote
 
         return False  # give the remote some more time
@@ -1532,6 +1537,7 @@ class SmartThread:
 
                 if remote_state == ThreadState.Stopped:
                     request_block.stopped_remotes |= {pk_remote.remote}
+                    request_block.do_refresh = True
                     return True  # we are done with this remote
 
                 if remote_state != ThreadState.Alive:
@@ -1726,6 +1732,7 @@ class SmartThread:
         else:
             if remote_state == ThreadState.Stopped:
                 request_block.stopped_remotes |= {pk_remote.remote}
+                request_block.do_refresh = True
                 return True  # we are done with this remote
 
         # remote is unregistered or registered or has pending conflict
@@ -1829,6 +1836,7 @@ class SmartThread:
             if remote_state != ThreadState.Alive:
                 if remote_state == ThreadState.Stopped:
                     request_block.stopped_remotes |= {pk_remote.remote}
+                    request_block.do_refresh = True
                     return True  # we are done with this remote
                 else:
                     return False  # remote needs more time
@@ -1923,6 +1931,7 @@ class SmartThread:
                     if (local_sb.conflict or self._get_target_state(pk_remote)
                             == ThreadState.Stopped):
                         remote_sb.sync_event.clear()
+                        request_block.do_refresh = True
 
             if local_sb.conflict:
                 request_block.conflict_remotes |= {pk_remote.remote}
@@ -1934,6 +1943,7 @@ class SmartThread:
 
             if self._get_target_state(pk_remote) == ThreadState.Stopped:
                 request_block.stopped_remotes |= {pk_remote.remote}
+                request_block.do_refresh = True
                 local_sb.sync_wait = False
                 return True  # we are done with this remote
             else:
@@ -2225,6 +2235,7 @@ class SmartThread:
 
                 if self._get_target_state(pk_remote) == ThreadState.Stopped:
                     request_block.stopped_remotes |= {pk_remote.remote}
+                    request_block.do_refresh = True
                     local_sb.wait_wait = False
                     return True  # we are done with this remote
                 else:

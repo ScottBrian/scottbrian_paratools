@@ -4900,7 +4900,10 @@ class MockGetTargetState:
 
         ret_state = st.ThreadState.Unregistered
         if pk_remote.remote not in st.SmartThread._registry:
-            ret_state = st.ThreadState.Unregistered
+            if pk_remote.create_time != 0.0:
+                ret_state = st.ThreadState.Stopped
+            else:
+                ret_state = st.ThreadState.Unregistered
 
         else:
             if (not st.SmartThread._registry[pk_remote.remote].thread.is_alive()
@@ -12811,6 +12814,7 @@ class ConfigVerifier:
                             f'{remote=}')
             else:
                 del self.request_pending_pair_keys[cmd_runner]
+        self.handle_deferred_deletes(cmd_runner=cmd_runner)
 
     ####################################################################
     # handle_recv_waiting_log_msg
@@ -14423,14 +14427,17 @@ class ConfigVerifier:
                         f' {pair_key}, but is missing in '
                         f'expected_registered: ')
                 if len(self.expected_pairs[pair_key]) == 1:
-                    if self.expected_pairs[pair_key][
-                            name].pending_ops_count == 0:
-                        self.abort_all_f1_threads()
-                        raise InvalidConfigurationDetected(
-                            f'ConfigVerifier found name {name} in '
-                            f'SmartThread._pair_array status_blocks for '
-                            f'pair_key {pair_key}, but it is a single name '
-                            f'that has a pending_ops_count of zero')
+                    if not (pair_key[0] in self.request_pending_pair_keys
+                            or pair_key[1] in
+                            self.request_pending_pair_keys):
+                        if self.expected_pairs[pair_key][
+                                name].pending_ops_count == 0:
+                            self.abort_all_f1_threads()
+                            raise InvalidConfigurationDetected(
+                                f'ConfigVerifier found name {name} in '
+                                f'SmartThread._pair_array status_blocks for '
+                                f'pair_key {pair_key}, but it is a single name '
+                                f'that has a pending_ops_count of zero')
 
                 if (self.expected_pairs[pair_key][
                     name].pending_ops_count == 0
