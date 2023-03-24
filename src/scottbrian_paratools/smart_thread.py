@@ -2326,6 +2326,9 @@ class SmartThread:
             # num_start_loop_work_remotes = len(self.work_pk_remotes)
             work_pk_remotes_copy = self.work_pk_remotes.copy()
             for pk_remote in work_pk_remotes_copy:
+                # logger.debug(
+                #     f'TestDebug _request_loop {self.name} processing '
+                #     f'{pk_remote.remote=}')
                 # determine timeout_value to use for request
                 if request_block.timer.is_specified():
                     request_block.request_max_interval = min(
