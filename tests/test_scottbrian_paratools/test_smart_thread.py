@@ -386,35 +386,18 @@ num_no_delay_reg_arg_list = [0, 1, 2]
 num_delay_reg_arg_list = [0, 1, 2]
 # num_delay_reg_arg_list = [2]
 
-########################################################################
-# Test settings for test_resume_timeout_scenarios
-########################################################################
-# num_resumers_arg_list = [1, 2, 3]
-num_active_arg_list = [0, 1, 2]
-num_registered_before_arg_list = [0, 1, 2]
-num_registered_after_arg_list = [0, 1, 2]
-num_unreg_no_delay_arg_list = [0, 1, 2]
-num_unreg_delay_arg_list = [0, 1, 2]
-num_stopped_no_delay_arg_list = [0, 1, 2]
-num_stopped_delay_arg_list = [0, 1, 2]
+# ########################################################################
+# # Test settings for test_resume_timeout_scenarios
+# ########################################################################
+# # num_resumers_arg_list = [1, 2, 3]
+# num_active_arg_list = [0, 1, 2]
+# num_registered_before_arg_list = [0, 1, 2]
+# num_registered_after_arg_list = [0, 1, 2]
+# num_unreg_no_delay_arg_list = [0, 1, 2]
+# num_unreg_delay_arg_list = [0, 1, 2]
+# num_stopped_no_delay_arg_list = [0, 1, 2]
+# num_stopped_delay_arg_list = [0, 1, 2]
 
-########################################################################
-# Test settings for test_resume_scenarios
-########################################################################
-num_resumers_arg_list = [1, 2, 3]
-num_start_before_arg_list = [0, 1, 2]
-num_unreg_before_arg_list = [0, 1, 2]
-num_stop_before_arg_list = [0, 1, 2]
-num_started_after_arg_list = [0, 1, 2]
-num_started_delay_arg_list = [0, 1, 2]
-
-num_unreg_after_arg_list = [0, 1, 2]
-num_unreg_after_arg_list = [0]  # @sbt
-
-num_stop_after_ok_arg_list = [0, 1, 2]
-
-num_stop_after_err_arg_list = [0, 1, 2]
-# num_stop_after_err_arg_list = [0]  # @sbt
 
 
 ########################################################################
@@ -3229,258 +3212,258 @@ def timeout_arg2(request: Any) -> Any:
     return request.param
 
 
-###############################################################################
-# num_resumers_arg
-###############################################################################
-@pytest.fixture(params=num_resumers_arg_list)  # type: ignore
-def num_resumers_arg(request: Any) -> int:
-    """Number of threads the do resumes.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_start_before_arg
-###############################################################################
-@pytest.fixture(params=num_start_before_arg_list)  # type: ignore
-def num_start_before_arg(request: Any) -> int:
-    """Number of threads the do resumes.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_unreg_before_arg
-###############################################################################
-@pytest.fixture(params=num_unreg_before_arg_list)  # type: ignore
-def num_unreg_before_arg(request: Any) -> int:
-    """Number of threads the do resumes.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_stop_before_arg
-###############################################################################
-@pytest.fixture(params=num_stop_before_arg_list)  # type: ignore
-def num_stop_before_arg(request: Any) -> int:
-    """Number of threads the do resumes.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_started_after_arg
-###############################################################################
-@pytest.fixture(params=num_started_after_arg_list)  # type: ignore
-def num_started_after_arg(request: Any) -> int:
-    """Number of threads the do resumes.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_started_delay_arg
-###############################################################################
-@pytest.fixture(params=num_started_delay_arg_list)  # type: ignore
-def num_started_delay_arg(request: Any) -> int:
-    """Number of threads the do resumes.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_unreg_after_arg
-###############################################################################
-@pytest.fixture(params=num_unreg_after_arg_list)  # type: ignore
-def num_unreg_after_arg(request: Any) -> int:
-    """Number of threads the do resumes.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_stop_after_ok_arg
-###############################################################################
-@pytest.fixture(params=num_stop_after_ok_arg_list)  # type: ignore
-def num_stop_after_ok_arg(request: Any) -> int:
-    """Number of threads the do resumes.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_stop_after_err_arg
-###############################################################################
-@pytest.fixture(params=num_stop_after_err_arg_list)  # type: ignore
-def num_stop_after_err_arg(request: Any) -> int:
-    """Number of threads the do resumes.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-###############################################################################
-# num_active_arg
-###############################################################################
-@pytest.fixture(params=num_active_arg_list)  # type: ignore
-def num_active_arg(request: Any) -> int:
-    """Number of active threads.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_registered_before_arg
-###############################################################################
-@pytest.fixture(params=num_registered_before_arg_list)  # type: ignore
-def num_registered_before_arg(request: Any) -> int:
-    """Number opf registered threads.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_registered_after_arg
-###############################################################################
-@pytest.fixture(params=num_registered_after_arg_list)  # type: ignore
-def num_registered_after_arg(request: Any) -> int:
-    """Number opf registered threads.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_unreg_no_delay_arg
-###############################################################################
-@pytest.fixture(params=num_unreg_no_delay_arg_list)  # type: ignore
-def num_unreg_no_delay_arg(request: Any) -> int:
-    """Number unregistered threads quickly created and started.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-###############################################################################
-# num_unreg_delay_arg
-###############################################################################
-@pytest.fixture(params=num_unreg_delay_arg_list)  # type: ignore
-def num_unreg_delay_arg(request: Any) -> int:
-    """Number unregistered threads slowly created and started.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_stopped_no_delay_arg
-###############################################################################
-@pytest.fixture(params=num_stopped_no_delay_arg_list)  # type: ignore
-def num_stopped_no_delay_arg(request: Any) -> int:
-    """Number stopped threads.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_stopped_delay_arg
-###############################################################################
-@pytest.fixture(params=num_stopped_delay_arg_list)  # type: ignore
-def num_stopped_delay_arg(request: Any) -> int:
-    """Number stopped threads quickly joined, created, and started.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
+# ###############################################################################
+# # num_resumers_arg
+# ###############################################################################
+# @pytest.fixture(params=num_resumers_arg_list)  # type: ignore
+# def num_resumers_arg(request: Any) -> int:
+#     """Number of threads the do resumes.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return cast(int, request.param)
+#
+#
+# ###############################################################################
+# # num_start_before_arg
+# ###############################################################################
+# @pytest.fixture(params=num_start_before_arg_list)  # type: ignore
+# def num_start_before_arg(request: Any) -> int:
+#     """Number of threads the do resumes.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return cast(int, request.param)
+#
+#
+# ###############################################################################
+# # num_unreg_before_arg
+# ###############################################################################
+# @pytest.fixture(params=num_unreg_before_arg_list)  # type: ignore
+# def num_unreg_before_arg(request: Any) -> int:
+#     """Number of threads the do resumes.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return cast(int, request.param)
+#
+#
+# ###############################################################################
+# # num_stop_before_arg
+# ###############################################################################
+# @pytest.fixture(params=num_stop_before_arg_list)  # type: ignore
+# def num_stop_before_arg(request: Any) -> int:
+#     """Number of threads the do resumes.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return cast(int, request.param)
+#
+#
+# ###############################################################################
+# # num_started_after_arg
+# ###############################################################################
+# @pytest.fixture(params=num_started_after_arg_list)  # type: ignore
+# def num_started_after_arg(request: Any) -> int:
+#     """Number of threads the do resumes.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return cast(int, request.param)
+#
+#
+# ###############################################################################
+# # num_started_delay_arg
+# ###############################################################################
+# @pytest.fixture(params=num_started_delay_arg_list)  # type: ignore
+# def num_started_delay_arg(request: Any) -> int:
+#     """Number of threads the do resumes.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return cast(int, request.param)
+#
+#
+# ###############################################################################
+# # num_unreg_after_arg
+# ###############################################################################
+# @pytest.fixture(params=num_unreg_after_arg_list)  # type: ignore
+# def num_unreg_after_arg(request: Any) -> int:
+#     """Number of threads the do resumes.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return cast(int, request.param)
+#
+#
+# ###############################################################################
+# # num_stop_after_ok_arg
+# ###############################################################################
+# @pytest.fixture(params=num_stop_after_ok_arg_list)  # type: ignore
+# def num_stop_after_ok_arg(request: Any) -> int:
+#     """Number of threads the do resumes.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return cast(int, request.param)
+#
+#
+# ###############################################################################
+# # num_stop_after_err_arg
+# ###############################################################################
+# @pytest.fixture(params=num_stop_after_err_arg_list)  # type: ignore
+# def num_stop_after_err_arg(request: Any) -> int:
+#     """Number of threads the do resumes.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return cast(int, request.param)
+#
+# ###############################################################################
+# # num_active_arg
+# ###############################################################################
+# @pytest.fixture(params=num_active_arg_list)  # type: ignore
+# def num_active_arg(request: Any) -> int:
+#     """Number of active threads.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return cast(int, request.param)
+#
+#
+# ###############################################################################
+# # num_registered_before_arg
+# ###############################################################################
+# @pytest.fixture(params=num_registered_before_arg_list)  # type: ignore
+# def num_registered_before_arg(request: Any) -> int:
+#     """Number opf registered threads.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return cast(int, request.param)
+#
+#
+# ###############################################################################
+# # num_registered_after_arg
+# ###############################################################################
+# @pytest.fixture(params=num_registered_after_arg_list)  # type: ignore
+# def num_registered_after_arg(request: Any) -> int:
+#     """Number opf registered threads.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return cast(int, request.param)
+#
+#
+# ###############################################################################
+# # num_unreg_no_delay_arg
+# ###############################################################################
+# @pytest.fixture(params=num_unreg_no_delay_arg_list)  # type: ignore
+# def num_unreg_no_delay_arg(request: Any) -> int:
+#     """Number unregistered threads quickly created and started.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return cast(int, request.param)
+#
+# ###############################################################################
+# # num_unreg_delay_arg
+# ###############################################################################
+# @pytest.fixture(params=num_unreg_delay_arg_list)  # type: ignore
+# def num_unreg_delay_arg(request: Any) -> int:
+#     """Number unregistered threads slowly created and started.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return cast(int, request.param)
+#
+#
+# ###############################################################################
+# # num_stopped_no_delay_arg
+# ###############################################################################
+# @pytest.fixture(params=num_stopped_no_delay_arg_list)  # type: ignore
+# def num_stopped_no_delay_arg(request: Any) -> int:
+#     """Number stopped threads.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return cast(int, request.param)
+#
+#
+# ###############################################################################
+# # num_stopped_delay_arg
+# ###############################################################################
+# @pytest.fixture(params=num_stopped_delay_arg_list)  # type: ignore
+# def num_stopped_delay_arg(request: Any) -> int:
+#     """Number stopped threads quickly joined, created, and started.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return cast(int, request.param)
 
 
 ########################################################################
@@ -4627,7 +4610,7 @@ class RequestEntryLogSearchItem(LogSearchItem):
                             '|smart_wait)')
         super().__init__(
             search_str=(f"{list_of_requests} (entry|exit): "
-                        "requestor: [a-z]+ targets: \[('[a-z]+')+\]"),
+                        "requestor: [a-z]+ targets: \[([a-z]*|,|'| )*\]"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -4870,12 +4853,23 @@ LogSearchItems: TypeAlias = Union[
     RequestAckLogSearchItem,
     MonDelLogSearchItem]
 
+
+########################################################################
+# MockGetTargetState
+########################################################################
+TargetsDict: TypeAlias = dict[str, dict[str, tuple[st.ThreadState,
+                                                   st.ThreadState]]]
+
+
 class MockGetTargetState:
-    targets: ClassVar[dict[str, dict[str, tuple[Any, Any]]]] = {}
+    targets: ClassVar[TargetsDict] = {}
+    config_ver: ClassVar["ConfigVerifier"]
 
     def __init__(self,
-                 targets: dict[str, tuple[Any, Any]]) -> None:
+                 targets: TargetsDict,
+                 config_ver: "ConfigVerifier") -> None:
         MockGetTargetState.targets = targets
+        MockGetTargetState.config_ver = config_ver
 
     ####################################################################
     # mock_get_target_state
@@ -4895,8 +4889,9 @@ class MockGetTargetState:
             Must be called holding the registry lock either shared or
             exclusive
         """
-        logger.debug(f'mock_get_target_state entered by {self=} with '
-                     f'{MockGetTargetState.targets=}')
+        # MockGetTargetState.config_ver.log_test_msg(
+        #     f'mock_get_target_state entered by {self=} with '
+        #     f'{MockGetTargetState.targets=}')
 
         ret_state = st.ThreadState.Unregistered
         if pk_remote.remote not in st.SmartThread._registry:
@@ -4906,12 +4901,16 @@ class MockGetTargetState:
                 ret_state = st.ThreadState.Unregistered
 
         else:
+            # MockGetTargetState.config_ver.log_test_msg(
+            #     f'mock {self.name} for {pk_remote.remote=} with '
+            #     f'{st.SmartThread._registry[pk_remote.remote].thread.is_alive()=} '
+            #     f'{st.SmartThread._registry[pk_remote.remote].st_state=}')
             if (not st.SmartThread._registry[pk_remote.remote].thread.is_alive()
                     and st.SmartThread._registry[
-                        pk_remote.remote].st_state == ThreadState.Alive):
+                        pk_remote.remote].st_state == st.ThreadState.Alive):
                 ret_state = st.ThreadState.Stopped
 
-            if (pk_remote.pair_key in st.SmartThread._pair_array
+            elif (pk_remote.pair_key in st.SmartThread._pair_array
                     and pk_remote.remote in st.SmartThread._pair_array[
                         pk_remote.pair_key].status_blocks
                     and st.SmartThread._pair_array[
@@ -4919,20 +4918,29 @@ class MockGetTargetState:
                         pk_remote.remote].create_time != pk_remote.create_time):
                 ret_state = st.ThreadState.Stopped
 
-            if (not st.SmartThread._registry[pk_remote.remote].thread.is_alive()
+            elif (not st.SmartThread._registry[
+                pk_remote.remote].thread.is_alive()
                     and st.SmartThread._registry[
-                        pk_remote.remote].st_state == ThreadState.Alive):
+                        pk_remote.remote].st_state == st.ThreadState.Alive):
                 ret_state = st.ThreadState.Stopped
 
-            ret_state = st.SmartThread._registry[pk_remote.remote].st_state
+            else:
+                ret_state = st.SmartThread._registry[pk_remote.remote].st_state
 
         if self.name in MockGetTargetState.targets:
             if pk_remote.remote in MockGetTargetState.targets[self.name]:
                 if ret_state == MockGetTargetState.targets[
                         self.name][pk_remote.remote][0]:
+                    old_ret_state = ret_state
                     ret_state = MockGetTargetState.targets[
                         self.name][pk_remote.remote][1]
+                    MockGetTargetState.config_ver.log_test_msg(
+                        f'mock {self.name} set state for {pk_remote.remote=} '
+                        f'from {old_ret_state= } to {ret_state=}')
 
+        # MockGetTargetState.config_ver.log_test_msg(
+        #     f'mock {self.name} returning for {pk_remote.remote=} '
+        #     f'with {ret_state=}')
         return ret_state
 
 
@@ -5133,10 +5141,10 @@ class ConfigVerifier:
                     # little so we don't find it again and get into a
                     # loop here
                     found_msg = found_log_item.found_log_msg
-                    # if 'TestDebug' not in found_msg:
-                    #     semi_msg = found_msg.replace(' ', ';', 3)
-                    #     self.log_test_msg(
-                    #         f'monitor processing msg: {semi_msg}')
+                    if 'TestDebug' not in found_msg:
+                        semi_msg = found_msg.replace(' ', ';', 3)
+                        self.log_test_msg(
+                            f'monitor processing msg: {semi_msg}')
 
                     found_log_item.run_process()
                     # self.log_test_msg(f'monitor completed msg: {semi_msg}')
@@ -8759,18 +8767,18 @@ class ConfigVerifier:
         ################################################################
         # monkeypatch for SmartThread._get_target_state
         ################################################################
+        a_target_mock_dict = {}
         if stop_after_err_names:
-            a_target_mock_dict = {}
             for resumer_name in resumer_names:
-
+                a_sub_dict = {}
                 for stop_name in stop_after_err_names:
-                    a_target_mock_dict[
-                        resumer_name] = {
-                        stop_name: (st.ThreadState.Alive,
-                                    st.ThreadState.Registered)}
+                    a_sub_dict[stop_name] = (st.ThreadState.Alive,
+                                             st.ThreadState.Registered)
+                a_target_mock_dict[resumer_name] = a_sub_dict
 
-            a_mock_get_target_state = MockGetTargetState(
-                targets=a_target_mock_dict)
+        a_mock_get_target_state = MockGetTargetState(
+            targets=a_target_mock_dict,
+            config_ver=self)
 
         resume_serial_num_2 = 0
 
@@ -12317,7 +12325,16 @@ class ConfigVerifier:
             else:
                 sender_name = pair_key[0]
 
-            if (pair_key in self.expected_pairs
+            request_is_pending = False
+            if (def_del_name in self.request_pending_pair_keys
+                    and pair_key in self.request_pending_pair_keys[
+                        def_del_name]):
+                request_is_pending = True
+                self.log_test_msg(f'handle_deferred_deletes {cmd_runner=} '
+                                  'found request_pending for '
+                                  f'{def_del_name=}, {pair_key=}')
+            if (not request_is_pending
+                    and pair_key in self.expected_pairs
                     and sender_name not in self.expected_pairs[pair_key]
                     and def_del_name in self.expected_pairs[pair_key]
                     and self.expected_pairs[pair_key][
@@ -12325,21 +12342,25 @@ class ConfigVerifier:
                 pair_keys_to_delete.append(pair_key)
                 self.del_deferred_list.remove(del_def_key)
                 update_pair_array_msg_needed = True
-                self.log_test_msg(f'handle_deferred_deletes '
+                self.log_test_msg(f'handle_deferred_deletes {cmd_runner=} '
                                   f'_refresh_pair_array rem_pair_key 1'
                                   f' {pair_key}, {def_del_name}')
-                self.add_log_msg(re.escape(
-                    f"{cmd_runner} removed status_blocks entry "
-                    f"for pair_key = {pair_key}, "
-                    f"name = {def_del_name}"))
+                rem_msg_1 = f"[a-z]+ "
+                rem_msg_2 = re.escape(
+                    f"removed status_blocks entry for pair_key = {pair_key}, "
+                    f"name = {def_del_name}")
+                self.add_log_msg(f'{rem_msg_1}{rem_msg_2}')
+                # self.add_log_msg(re.escape(
+                #     f"{cmd_runner} removed status_blocks entry "
+                #     f"for pair_key = {pair_key}, "
+                #     f"name = {def_del_name}"))
 
         for pair_key in pair_keys_to_delete:
             self.log_test_msg(f'handle_deferred_deletes for {cmd_runner=} '
                               f'deleted {pair_key=}')
             del self.expected_pairs[pair_key]
-            self.add_log_msg(re.escape(
-                f'{cmd_runner} removed _pair_array entry'
-                f' for pair_key = {pair_key}'))
+            self.add_log_msg("[a-z]+ " + re.escape(
+                f'removed _pair_array entry for pair_key = {pair_key}'))
             update_pair_array_msg_needed = True
 
         return update_pair_array_msg_needed
@@ -12785,6 +12806,9 @@ class ConfigVerifier:
             pair_key = st.SmartThread._get_pair_key(cmd_runner, target)
             pair_keys.append(pair_key)
         self.request_pending_pair_keys[cmd_runner] = pair_keys
+        self.log_test_msg(
+            f'request_pending added for {cmd_runner=}, '
+            f'{pair_keys=}')
 
     ####################################################################
     # handle_request_exit_log_msg
@@ -12811,9 +12835,13 @@ class ConfigVerifier:
                             pair_key)
                         self.log_test_msg(
                             f'request_pending removed for {cmd_runner=}, '
-                            f'{remote=}')
+                            f'{pair_key=}')
             else:
+                removed_pair_keys = self.request_pending_pair_keys[cmd_runner]
                 del self.request_pending_pair_keys[cmd_runner]
+                self.log_test_msg(
+                    f'request_pending removed for {cmd_runner=}, '
+                    f'{removed_pair_keys=}')
         self.handle_deferred_deletes(cmd_runner=cmd_runner)
 
     ####################################################################
@@ -13539,12 +13567,15 @@ class ConfigVerifier:
         pending_msg = (
             f" Remotes that are pending: \[([a-z]*|,|'| )*\].")
 
-        if stopped_remotes:
-            stopped_msg = re.escape(
-                ' Remotes that are stopped: '
-                f'{sorted(stopped_remotes)}.')
-        else:
-            stopped_msg = ''
+        # if stopped_remotes:
+        #     stopped_msg = re.escape(
+        #         ' Remotes that are stopped: '
+        #         f'{sorted(stopped_remotes)}.')
+        # else:
+        #     stopped_msg = ''
+
+        stopped_msg = (
+            f" Remotes that are stopped: \[([a-z]*|,|'| )*\].")
 
         if unreg_remotes:
             unreg_msg = re.escape(
@@ -17254,6 +17285,18 @@ class TestSmartThreadScenarios:
     ####################################################################
     # test_resume_timeout_scenarios
     ####################################################################
+    @pytest.mark.parametrize("timeout_type_arg",
+                             [TimeoutType.TimeoutNone,
+                              TimeoutType.TimeoutFalse,
+                              TimeoutType.TimeoutTrue])
+    @pytest.mark.parametrize("num_resumers_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_active_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_registered_before_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_registered_after_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_unreg_no_delay_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_unreg_delay_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_stopped_no_delay_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_stopped_delay_arg", [0, 1, 2])
     def test_resume_timeout_scenarios(
             self,
             timeout_type_arg: TimeoutType,
@@ -17341,6 +17384,13 @@ class TestSmartThreadScenarios:
     ####################################################################
     # test_resume_scenarios
     ####################################################################
+    @pytest.mark.parametrize("num_resumers_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_start_before_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_unreg_before_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_stop_before_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_unreg_after_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_stop_after_ok_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_stop_after_err_arg", [0, 1, 2])
     def test_resume_scenarios(
             self,
             num_resumers_arg: int,
@@ -17430,6 +17480,104 @@ class TestSmartThreadScenarios:
             commander_config=commander_config)
 
     ####################################################################
+    # test_resume_scenarios
+    ####################################################################
+    @pytest.mark.parametrize("num_resumers_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_start_before_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_unreg_before_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_stop_before_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_unreg_after_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_stop_after_ok_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_stop_after_err_arg", [0, 1, 2])
+    def test_wait_scenarios(
+            self,
+            num_resumers_arg: int,
+            num_start_before_arg: int,
+            num_unreg_before_arg: int,
+            num_stop_before_arg: int,
+            num_unreg_after_arg: int,
+            num_stop_after_ok_arg: int,
+            num_stop_after_err_arg: int,
+            caplog: pytest.CaptureFixture[str],
+            monkeypatch: Any
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            num_resumers_arg: number of threads doing resumes
+            num_start_before_arg: number of target threads that will
+                be started and issue a wait before the resume is done,
+                and should succeed
+            num_unreg_before_arg: number of target threads that will be
+                registered and then unregistered before the resume, and
+                then started after the resume, and should succeed
+            num_stop_before_arg: number of target threads that will
+                be started and then stopped (but not joined) before the
+                resume, and should result in a not alive error
+            num_unreg_after_arg: number of target threads that will be
+                unregistered after the resume, and should cause an error
+            num_stop_after_ok_arg: number of target threads that will
+                be started after the resume is issued, and will stay
+                alive long enough for the resume to set the wait_event,
+                and will then be stopped and joined, and should result
+                in success
+            num_stop_after_err_arg: number of target threads that will
+                be started after the resume is issued, and will quickly
+                be stopped and joined before the resume has a chance to
+                see that is is alive to sety the wait_event, and should
+                result in a not alive error
+            caplog: pytest fixture to capture log output
+            monkeypatch: pytest fixture used to modify code for testing
+
+        """
+        ################################################################
+        # monkeypatch for SmartThread._get_target_state
+        ################################################################
+        monkeypatch.setattr(st.SmartThread,
+                            "_get_target_state",
+                            MockGetTargetState.mock_get_target_state)
+
+        total_arg_counts = (
+                num_resumers_arg
+                + num_start_before_arg
+                + num_unreg_before_arg
+                + num_stop_before_arg
+                + num_unreg_after_arg
+                + num_stop_after_ok_arg
+                + num_stop_after_err_arg)
+
+        if total_arg_counts - num_resumers_arg == 0:
+            return
+
+        command_config_num = total_arg_counts % 5
+        if command_config_num == 0:
+            commander_config = AppConfig.ScriptStyle
+        elif command_config_num == 1:
+            commander_config = AppConfig.CurrentThreadApp
+        elif command_config_num == 2:
+            commander_config = AppConfig.RemoteThreadApp
+        elif command_config_num == 3:
+            commander_config = AppConfig.RemoteSmartThreadApp
+        else:
+            commander_config = AppConfig.RemoteSmartThreadApp2
+
+        args_for_scenario_builder: dict[str, Any] = {
+            'num_resumers': num_resumers_arg,
+            'num_start_before': num_start_before_arg,
+            'num_unreg_before': num_unreg_before_arg,
+            'num_stop_before': num_stop_before_arg,
+            'num_unreg_after': num_unreg_after_arg,
+            'num_stop_after_ok': num_stop_after_ok_arg,
+            'num_stop_after_err': num_stop_after_err_arg
+        }
+
+        self.scenario_driver(
+            scenario_builder=ConfigVerifier.build_wait_scenarios,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog,
+            commander_config=commander_config)
+
+    ####################################################################
     # test_recv_msg_scenarios
     ####################################################################
     def test_wait_scenarios2(
@@ -17474,7 +17622,7 @@ class TestSmartThreadScenarios:
     ####################################################################
     # test_wait_timeout_scenarios
     ####################################################################
-    def test_wait_scenarios(
+    def test_wait_scenarios3(
             self,
             num_waiters_arg: int,
             num_actors_arg: int,

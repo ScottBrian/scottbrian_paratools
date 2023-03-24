@@ -2419,6 +2419,7 @@ class SmartThread:
                     pending_remotes = [remote for pk, remote, _ in
                                        self.work_pk_remotes]
                     self.work_pk_remotes = []
+                    self.missing_remotes = []
 
                 self._handle_loop_errors(request_block=request_block,
                                          pending_remotes=pending_remotes)
