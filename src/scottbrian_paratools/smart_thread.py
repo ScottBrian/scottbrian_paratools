@@ -2327,8 +2327,8 @@ class SmartThread:
             work_pk_remotes_copy = self.work_pk_remotes.copy()
             for pk_remote in work_pk_remotes_copy:
                 # logger.debug(
-                #     f'TestDebug _request_loop {self.name} processing '
-                #     f'{pk_remote.remote=}')
+                #     f'TestDebug {self.name} _request_loop processing '
+                #     f'{pk_remote.remote=}, {work_pk_remotes_copy=}')
                 # determine timeout_value to use for request
                 if request_block.timer.is_specified():
                     request_block.request_max_interval = min(
@@ -2404,7 +2404,7 @@ class SmartThread:
                     or request_block.timer.is_expired()):
 
                 # cleanup before doing the error
-                with sel.SELockShare(SmartThread._registry_lock):
+                with sel.SELockExcl(SmartThread._registry_lock):
                     if request_block.cleanup_rtn:
                         request_block.cleanup_rtn(
                             self.work_pk_remotes,
@@ -2423,6 +2423,7 @@ class SmartThread:
                                        self.work_pk_remotes]
                     self.work_pk_remotes = []
                     self.missing_remotes = []
+                    self._refresh_pair_array()
 
                 self._handle_loop_errors(request_block=request_block,
                                          pending_remotes=pending_remotes)
@@ -2467,10 +2468,14 @@ class SmartThread:
                     found_pk_remote.pair_key,
                     found_pk_remote.remote,
                     found_pk_remote.create_time)
-                ret_pk_remote = PairKeyRemote(
-                    found_pk_remote.pair_key,
-                    found_pk_remote.remote,
-                    found_pk_remote.create_time)
+                # if we are currently processing the newly found
+                # pk_remote then return the updated version with the
+                # non-zero create_time
+                if pk_remote.remote == found_pk_remote.remote:
+                    ret_pk_remote = PairKeyRemote(
+                        found_pk_remote.pair_key,
+                        found_pk_remote.remote,
+                        found_pk_remote.create_time)
 
             except ValueError:
                 raise SmartThreadWorkDataException(

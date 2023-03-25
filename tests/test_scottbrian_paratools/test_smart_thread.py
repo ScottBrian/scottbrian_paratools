@@ -2172,7 +2172,7 @@ class WaitForRequestTimeouts(ConfigCmd):
 
         self.timeout_names = get_set(timeout_names)
 
-        self.arg_list += ['sender_names',
+        self.arg_list += ['actor_names',
                           'timeout_names']
 
     def run_process(self, cmd_runner: str) -> None:
@@ -4759,7 +4759,7 @@ class RequestAckLogSearchItem(LogSearchItem):
         #                              f'{target=}')
 
         self.config_ver.handle_request_exit_log_msg(
-            cmd_runner=cmd_runner)
+            cmd_runner=cmd_runner,targets=[target])
         self.config_ver.log_test_msg('request_pending reset for '
                                      f'{cmd_runner=} via ack')
 
@@ -8828,6 +8828,14 @@ class ConfigVerifier:
                                             f'{stop_before_names=}')
 
         ################################################################
+        # wait for wait to be running and waiting to be resumed
+        ################################################################
+        if start_before_names:
+            self.add_cmd(WaitForRequestTimeouts(
+                cmd_runners=self.commander_name,
+                actor_names=start_before_names,
+                timeout_names=resumer_names))
+        ################################################################
         # issue smart_resume
         ################################################################
         if stop_before_names:
@@ -9179,7 +9187,10 @@ class ConfigVerifier:
         # issue smart_wait
         ################################################################
         if stop_before_names:
-            stopped_remotes = stop_before_names + unreg_before_names
+            stopped_remotes = (stop_before_names
+                               + unreg_before_names
+                               + unreg_after_names
+                               + stop_after_err_names)
         else:
             stopped_remotes = (unreg_after_names
                                + stop_after_err_names)
@@ -16776,14 +16787,14 @@ class ConfigVerifier:
     # wait_for_request_timeouts
     ####################################################################
     def wait_for_request_timeouts(self,
-                                   cmd_runner: str,
-                                   actor_names: set[str],
-                                   timeout_names: set[str]) -> None:
+                                  cmd_runner: str,
+                                  actor_names: set[str],
+                                  timeout_names: set[str]) -> None:
         """Verify that the senders have detected the timeout threads.
 
         Args:
             cmd_runner: thread doing the wait
-            sender_names: names of the threads to check for timeout
+            actor_names: names of the threads to check for timeout
             timeout_names: threads that cause timeout by being
                 unregistered
 
@@ -17820,20 +17831,13 @@ class TestSmartThreadScenarios:
     ####################################################################
     # test_wait_scenarios
     ####################################################################
-    # @pytest.mark.parametrize("num_waiters_arg", [1, 2, 3])
-    # @pytest.mark.parametrize("num_start_before_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_unreg_before_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_stop_before_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_unreg_after_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_stop_after_ok_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_stop_after_err_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_waiters_arg", [2])
-    @pytest.mark.parametrize("num_start_before_arg", [1])
-    @pytest.mark.parametrize("num_unreg_before_arg", [0])
-    @pytest.mark.parametrize("num_stop_before_arg", [0])
-    @pytest.mark.parametrize("num_unreg_after_arg", [1])
-    @pytest.mark.parametrize("num_stop_after_ok_arg", [0])
-    @pytest.mark.parametrize("num_stop_after_err_arg", [0])
+    @pytest.mark.parametrize("num_waiters_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_start_before_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_unreg_before_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_stop_before_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_unreg_after_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_stop_after_ok_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_stop_after_err_arg", [0, 1, 2])
     def test_wait_scenarios(
             self,
             num_waiters_arg: int,
