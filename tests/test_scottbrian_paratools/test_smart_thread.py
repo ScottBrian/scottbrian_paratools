@@ -1001,7 +1001,7 @@ class RecvMsg(ConfigCmd):
     def __init__(self,
                  cmd_runners: Iterable,
                  senders: Iterable,
-                 exp_msgs: dict[str, Any],
+                 exp_msgs: dict[str, list[Any]],
                  stopped_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners)
@@ -1042,7 +1042,7 @@ class RecvMsgTimeoutFalse(RecvMsg):
     def __init__(self,
                  cmd_runners: StrOrList,
                  senders: StrOrList,
-                 exp_msgs: dict[str, Any],
+                 exp_msgs: dict[str, list[Any]],
                  timeout: IntOrFloat,
                  stopped_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
@@ -1081,7 +1081,7 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
     def __init__(self,
                  cmd_runners: StrOrList,
                  senders: StrOrList,
-                 exp_msgs: dict[str, Any],
+                 exp_msgs: dict[str, list[Any]],
                  timeout: IntOrFloat,
                  timeout_names: Iterable,
                  stopped_remotes: Optional[Iterable] = None,
@@ -1245,7 +1245,7 @@ class SendMsg(ConfigCmd):
     def __init__(self,
                  cmd_runners: Iterable,
                  receivers: StrOrList,
-                 msgs_to_send: dict[str, Any],
+                 msgs_to_send: dict[str, list[Any]],
                  stopped_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         super().__init__(cmd_runners=cmd_runners)
@@ -1288,7 +1288,7 @@ class SendMsgTimeoutFalse(SendMsg):
     def __init__(self,
                  cmd_runners: StrOrList,
                  receivers: StrOrList,
-                 msgs_to_send: dict[str, Any],
+                 msgs_to_send: dict[str, list[Any]],
                  timeout: IntOrFloat,
                  stopped_remotes: Optional[StrOrSet] = None,
                  # unreg_timeout_names: StrOrList,
@@ -1331,7 +1331,7 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
     def __init__(self,
                  cmd_runners: StrOrList,
                  receivers: StrOrList,
-                 msgs_to_send: dict[str, Any],
+                 msgs_to_send: dict[str, list[Any]],
                  timeout: IntOrFloat,
                  unreg_timeout_names: StrOrList,
                  fullq_timeout_names: StrOrList,
@@ -4759,7 +4759,7 @@ class RequestAckLogSearchItem(LogSearchItem):
         #                              f'{target=}')
 
         self.config_ver.handle_request_exit_log_msg(
-            cmd_runner=cmd_runner,targets=[target])
+            cmd_runner=cmd_runner, targets=[target])
         self.config_ver.log_test_msg('request_pending reset for '
                                      f'{cmd_runner=} via ack')
 
@@ -5100,29 +5100,29 @@ class ConfigVerifier:
             if self.monitor_bail:
                 break
 
-            for key, tracker in self.expected_registered.items():
-                if key in self.request_pending_pair_keys:
-                    del_list: list[str] = []
-                    for pair_key in self.request_pending_pair_keys[key]:
-                        pair_key_exists = False
-                        for pair_key2, remote, _ in (
-                                tracker.thread.work_pk_remotes):
-                            if pair_key == pair_key2:
-                                pair_key_exists = True
-                                break
-                        if not pair_key_exists:
-                            if key == pair_key.name0:
-                                remote = pair_key.name1
-                            else:
-                                remote = pair_key.name0
-                            del_list.append(remote)
-                    if del_list:
-                        # do not use log_test_msg for this one - the
-                        # allow_log_test_msg flag may be False, but this
-                        # msg is needed and must not be suppressed
-                        a_msg = f'monitor found del keys {del_list} for {key}'
-                        self.log_ver.add_msg(log_msg=re.escape(a_msg))
-                        logger.debug(a_msg)
+            # for key, tracker in self.expected_registered.items():
+            #     if key in self.request_pending_pair_keys:
+            #         del_list: list[str] = []
+            #         for pair_key in self.request_pending_pair_keys[key]:
+            #             pair_key_exists = False
+            #             for pair_key2, remote, _ in (
+            #                     tracker.thread.work_pk_remotes):
+            #                 if pair_key == pair_key2:
+            #                     pair_key_exists = True
+            #                     break
+            #             if not pair_key_exists:
+            #                 if key == pair_key.name0:
+            #                     remote = pair_key.name1
+            #                 else:
+            #                     remote = pair_key.name0
+            #                 del_list.append(remote)
+            #         if del_list:
+            #             # do not use log_test_msg for this one - the
+            #             # allow_log_test_msg flag may be False, but this
+            #             # msg is needed and must not be suppressed
+            #             a_msg = f'monitor found del keys {del_list} for {key}'
+            #             self.log_ver.add_msg(log_msg=re.escape(a_msg))
+            #             logger.debug(a_msg)
 
             while self.get_log_msgs():
                 while self.log_found_items:
@@ -6051,19 +6051,19 @@ class ConfigVerifier:
         victim_name = victim_names[0]
         foreign_name = foreign_names[0]
 
-        sender_msgs: dict[str, str] = {
-            victim_name: (f'send test: {victim_name} sending msg at '
-                          f'{self.get_ptime()}'),
-            foreign_name: (f'send test: {foreign_name} sending msg at '
-                           f'{self.get_ptime()}')
+        sender_msgs: dict[str, list[Any]] = {
+            victim_name: [f'send test: {victim_name} sending msg at '
+                          f'{self.get_ptime()}'],
+            foreign_name: [f'send test: {foreign_name} sending msg at '
+                           f'{self.get_ptime()}']
         }
 
-        foreign_confirm_parms = request_build_rtns[req0](
-            timeout_type=timeout_type,
-            cmd_runner=req0_name,
-            target=req1_name,
-            stopped_remotes=req0_stopped_remotes,
-            request_specific_args=req0_specific_args)
+        # foreign_confirm_parms = request_build_rtns[req0](
+        #     timeout_type=timeout_type,
+        #     cmd_runner=req0_name,
+        #     target=req1_name,
+        #     stopped_remotes=req0_stopped_remotes,
+        #     request_specific_args=req0_specific_args)
 
         self.add_cmd(
             Pause(cmd_runners=self.commander_name,
@@ -6078,6 +6078,7 @@ class ConfigVerifier:
                 confirm_cmd=req0_confirm_parms.request_name,
                 confirm_serial_num=req0_confirm_parms.serial_number,
                 confirmers=req0_name))
+
     ####################################################################
     # build_join_suite
     ####################################################################
@@ -6433,9 +6434,9 @@ class ConfigVerifier:
             to_name: names of threads that receive
 
         """
-        msgs_to_send: dict[str, str] = {}
+        msgs_to_send: dict[str, list[Any]] = {}
         for from_name in from_names:
-            msgs_to_send[from_name] = f'send test: {self.get_ptime()}'
+            msgs_to_send[from_name] = [f'send test: {self.get_ptime()}']
         self.add_cmd(
             SendMsg(cmd_runners=from_names,
                     receivers=to_names,
@@ -6586,10 +6587,10 @@ class ConfigVerifier:
         ################################################################
         # setup msgs to send
         ################################################################
-        sender_msgs: dict[str, str] = {}
+        sender_msgs: dict[str, list[Any]] = {}
         for name in sender_names:
-            sender_msgs[name] = (f'recv test: {name} sending msg '
-                                 f'at {self.get_ptime()}')
+            sender_msgs[name] = [f'recv test: {name} sending msg '
+                                 f'at {self.get_ptime()}']
 
         ################################################################
         # tracking vars for locks
@@ -7325,9 +7326,9 @@ class ConfigVerifier:
         ################################################################
         receiver_name = receiver_names[0]
         sender_name = sender_names[0]
-        sender_msgs: dict[str, str] = {
-            sender_name: (f'recv test: {sender_name} sending msg at '
-                          f'{self.get_ptime()}')}
+        sender_msgs: dict[str, list[Any]] = {
+            sender_name: [f'recv test: {sender_name} sending msg at '
+                          f'{self.get_ptime()}']}
 
         confirm_cmd_to_use = 'RecvMsg'
         recv_msg_serial_num = 0
@@ -7647,10 +7648,10 @@ class ConfigVerifier:
         ################################################################
         # setup the messages to send
         ################################################################
-        sender_msgs: dict[str, str] = {}
+        sender_msgs: dict[str, list[Any]] = {}
         for name in all_sender_names:
-            sender_msgs[name] = (f'recv test: {name} sending msg '
-                                 f'at {self.get_ptime()}')
+            sender_msgs[name] = [f'recv test: {name} sending msg '
+                                 f'at {self.get_ptime()}']
 
         if timeout_type == TimeoutType.TimeoutNone:
             confirm_cmd_to_use = 'RecvMsg'
@@ -9158,7 +9159,8 @@ class ConfigVerifier:
                                                   target_rtn=outer_f1,
                                                   app_config=app_config)],
                     validate_config=False)
-                self.build_unreg_suite(names=resumer)
+                self.build_unreg_suite(names=resumer,
+                                       validate_config=False)
             elif resumer in stop_before_names:
                 self.build_create_suite(
                     f1_create_items=[F1CreateItem(name=resumer,
@@ -9190,6 +9192,7 @@ class ConfigVerifier:
             stopped_remotes = (stop_before_names
                                + unreg_before_names
                                + unreg_after_names
+                               + stop_after_ok_names
                                + stop_after_err_names)
         else:
             stopped_remotes = (unreg_after_names
@@ -9269,7 +9272,8 @@ class ConfigVerifier:
                                                   target_rtn=outer_f1,
                                                   app_config=app_config)],
                     validate_config=False)
-                self.build_unreg_suite(names=resumer)
+                self.build_unreg_suite(names=resumer,
+                                       validate_config=False)
             elif resumer in stop_after_err_names:
                 self.build_create_suite(
                     f1_create_items=[F1CreateItem(name=resumer,
@@ -9965,11 +9969,11 @@ class ConfigVerifier:
         ################################################################
         receiver_name = receiver_names[0]
         sender_name = sender_names[0]
-        sender_msgs: dict[str, str] = {
-            sender_name: (f'send test: {sender_name} sending msg at '
-                          f'{self.get_ptime()}'),
-            receiver_name: (f'send test: {receiver_name} sending msg at '
-                            f'{self.get_ptime()}')
+        sender_msgs: dict[str, list[Any]] = {
+            sender_name: [f'send test: {sender_name} sending msg at '
+                          f'{self.get_ptime()}'],
+            receiver_name: [f'send test: {receiver_name} sending msg at '
+                            f'{self.get_ptime()}']
         }
 
         confirm_cmd_to_use = 'SendMsg'
@@ -10379,11 +10383,11 @@ class ConfigVerifier:
         req0_name = req0_names[0]
         req1_name = req1_names[0]
 
-        sender_msgs: dict[str, str] = {
-            req0_name: (f'send test: {req0_name} sending msg at '
-                        f'{self.get_ptime()}'),
-            req1_name: (f'send test: {req1_name} sending msg at '
-                        f'{self.get_ptime()}')
+        sender_msgs: dict[str, list[Any]] = {
+            req0_name: [f'send test: {req0_name} sending msg at '
+                        f'{self.get_ptime()}'],
+            req1_name: [f'send test: {req1_name} sending msg at '
+                        f'{self.get_ptime()}']
         }
 
         req0_conflict_remotes: set[str] = set()
@@ -11296,15 +11300,15 @@ class ConfigVerifier:
         ################################################################
         # setup the messages to send
         ################################################################
-        sender_msgs: dict[str, str] = {}
+        sender_msgs: dict[str, list[Any]] = {}
         for name in sender_names:
-            sender_msgs[name] = (f'recv test: {name} sending msg '
-                                 f'at {self.get_ptime()}')
+            sender_msgs[name] = [f'recv test: {name} sending msg '
+                                 f'at {self.get_ptime()}']
 
-        sender_1_msg_1: dict[str, str] = {}
+        sender_1_msg_1: dict[str, list[Any]] = {}
         if exit_names and num_senders >= 2:
             for exit_name in exit_names:
-                sender_1_msg_1[exit_name] = f'send test: {self.get_ptime()}'
+                sender_1_msg_1[exit_name] = [f'send test: {self.get_ptime()}']
                 log_msg = f'log test: {self.get_ptime()}'
 
                 send_msg_serial_num = self.add_cmd(
@@ -11322,11 +11326,11 @@ class ConfigVerifier:
                                     confirm_serial_num=send_msg_serial_num,
                                     confirmers=[exit_name]))
 
-        sender_2_msg_1: dict[str, str] = {}
-        sender_2_msg_2: dict[str, str] = {}
+        sender_2_msg_1: dict[str, list[Any]] = {}
+        sender_2_msg_2: dict[str, list[Any]] = {}
         if exit_names and num_senders == 3:
             for exit_name in exit_names:
-                sender_2_msg_1[exit_name] = f'send test: {self.get_ptime()}'
+                sender_2_msg_1[exit_name] = [f'send test: {self.get_ptime()}']
                 send_msg_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=exit_name,
                             receivers=sender_names[2],
@@ -11341,7 +11345,7 @@ class ConfigVerifier:
                                     confirm_serial_num=send_msg_serial_num,
                                     confirmers=[exit_name]))
 
-                sender_2_msg_2[exit_name] = f'send test: {self.get_ptime()}'
+                sender_2_msg_2[exit_name] = [f'send test: {self.get_ptime()}']
                 log_msg = f'log test: {self.get_ptime()}'
 
                 send_msg_serial_num = self.add_cmd(
@@ -11698,8 +11702,9 @@ class ConfigVerifier:
         ################################################################
         # send_msg
         ################################################################
-        msgs_to_send: dict[str, Any] = {'delta': 'send msg from delta',
-                                        'echo': 'send msg from echo'}
+        msgs_to_send: dict[str, list[Any]] = {
+            'delta': ['send msg from delta'],
+            'echo': ['send msg from echo']}
         send_msg_serial_num = self.add_cmd(
             SendMsg(cmd_runners=['delta', 'echo'],
                     receivers=['alpha', 'beta', 'charlie'],
@@ -12151,7 +12156,8 @@ class ConfigVerifier:
     # build_unreg_suite
     ####################################################################
     def build_unreg_suite(self,
-                          names: Iterable) -> None:
+                          names: Iterable,
+                          validate_config: bool = True) -> None:
         """Return a list of ConfigCmd items for unregister.
 
         Args:
@@ -12174,7 +12180,8 @@ class ConfigVerifier:
             cmd_runners=self.commander_name,
             exp_not_paired_names=names))
 
-        self.add_cmd(ValidateConfig(cmd_runners=self.commander_name))
+        if validate_config:
+            self.add_cmd(ValidateConfig(cmd_runners=self.commander_name))
 
         self.registered_names -= set(names)
         self.unregistered_names |= set(names)
@@ -12746,6 +12753,25 @@ class ConfigVerifier:
         #         self.pending_recv_msg_par[cmd_runner] = True
         #     else:  # anyone else is no longer eligible either
         #         self.pending_recv_msg_par = defaultdict(bool)
+        for key, tracker in self.expected_registered.items():
+            if key == cmd_runner and key in self.request_pending_pair_keys:
+                del_list: list[str] = []
+                for pair_key in self.request_pending_pair_keys[key]:
+                    pair_key_exists = False
+                    for pair_key2, remote, _ in (
+                            tracker.thread.work_pk_remotes):
+                        if pair_key == pair_key2:
+                            pair_key_exists = True
+                            break
+                    if not pair_key_exists:
+                        if key == pair_key.name0:
+                            remote = pair_key.name1
+                        else:
+                            remote = pair_key.name0
+                        del_list.append(remote)
+                if del_list:
+                    self.handle_request_exit_log_msg(cmd_runner=key,
+                                                     targets=del_list)
 
     ####################################################################
     # handle_exp_status_log_msgs
@@ -12930,6 +12956,8 @@ class ConfigVerifier:
         self.add_log_msg(re.escape(upa_msg))
 
         with self.ops_lock:
+            if not self.update_pair_array_items:
+                self.handle_deferred_deletes(cmd_runner=cmd_runner)
             while self.update_pair_array_items:
                 upa_item = self.update_pair_array_items.popleft()
 
@@ -12965,7 +12993,7 @@ class ConfigVerifier:
     def handle_recv_msg(self,
                         cmd_runner: str,
                         senders: set[str],
-                        exp_msgs: dict[str, Any],
+                        exp_msgs: dict[str, list[Any]],
                         stopped_remotes: set[str],
                         timeout_type: TimeoutType,
                         timeout: IntOrFloat,
@@ -13069,11 +13097,11 @@ class ConfigVerifier:
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
                     recvd_msg = self.all_threads[cmd_runner].recv_msg(
-                        remote=remote,
+                        targets=remote,
                         log_msg=log_msg)
                 else:
                     recvd_msg = self.all_threads[cmd_runner].recv_msg(
-                        remote=remote,
+                        targets=remote,
                         timeout=timeout,
                         log_msg=log_msg)
 
@@ -13088,19 +13116,19 @@ class ConfigVerifier:
 
         elif timeout_type == TimeoutType.TimeoutNone:
             recvd_msg = self.all_threads[cmd_runner].recv_msg(
-                remote=remote,
+                targets=remote,
                 log_msg=log_msg)
-            assert recvd_msg == exp_msgs[remote]
+            assert recvd_msg[remote] == exp_msgs[remote]
             self.add_log_msg(
                 new_log_msg=f"{cmd_runner} received msg from {remote}",
                 log_level=logging.INFO)
 
         elif timeout_type == TimeoutType.TimeoutFalse:
             recvd_msg = self.all_threads[cmd_runner].recv_msg(
-                remote=remote,
+                targets=remote,
                 timeout=timeout,
                 log_msg=log_msg)
-            assert recvd_msg == exp_msgs[remote]
+            assert recvd_msg[remote] == exp_msgs[remote]
             self.add_log_msg(
                 new_log_msg=f"{cmd_runner} received msg from {remote}",
                 log_level=logging.INFO)
@@ -13109,7 +13137,7 @@ class ConfigVerifier:
             enter_exit = ('entry', )
             with pytest.raises(st.SmartThreadRequestTimedOut):
                 recvd_msg = self.all_threads[cmd_runner].recv_msg(
-                    remote=remote,
+                    targets=remote,
                     timeout=timeout,
                     log_msg=log_msg)
 
@@ -13424,7 +13452,7 @@ class ConfigVerifier:
     def handle_send_msg(self,
                         cmd_runner: str,
                         receivers: list[str],
-                        msg_to_send: Any,
+                        msg_to_send: dict[str, list[Any]],
                         log_msg: str,
                         timeout_type: TimeoutType = TimeoutType.TimeoutNone,
                         timeout: IntOrFloat = 0,
