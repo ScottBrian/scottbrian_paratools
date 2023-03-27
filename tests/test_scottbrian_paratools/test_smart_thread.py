@@ -2525,7 +2525,7 @@ def num_stopped_2_arg(request: Any) -> int:
 ###############################################################################
 @pytest.fixture(params=commander_config_arg_list)  # type: ignore
 def commander_config_arg(request: Any) -> AppConfig:
-    """Type of send_msg timeout to test.
+    """Type of smart_send timeout to test.
 
     Args:
         request: special fixture that returns the fixture params
@@ -2541,7 +2541,7 @@ def commander_config_arg(request: Any) -> AppConfig:
 ###############################################################################
 @pytest.fixture(params=timeout_type_arg_list)  # type: ignore
 def timeout_type_arg(request: Any) -> TimeoutType:
-    """Type of send_msg timeout to test.
+    """Type of smart_send timeout to test.
 
     Args:
         request: special fixture that returns the fixture params
@@ -4521,7 +4521,7 @@ class RequestEntryLogSearchItem(LogSearchItem):
         Args:
             config_ver: configuration verifier
         """
-        list_of_requests = ('(send_msg'
+        list_of_requests = ('(smart_send'
                             '|recv_msg'
                             '|smart_resume'
                             '|smart_sync'
@@ -7226,7 +7226,7 @@ class ConfigVerifier:
                 be coded with timeout, and whether it be False or True
             recv_msg_state: sender state when recv_msg is to be issued
             recv_msg_lap: lap 0 or 1 when the recv_msg is to be issued
-            send_msg_lap: lap 0 or 1 when the send_msg is to be issued
+            send_msg_lap: lap 0 or 1 when the smart_send is to be issued
 
         """
         # Make sure we have enough threads. Each of the scenarios will
@@ -7426,18 +7426,18 @@ class ConfigVerifier:
             num_receivers: number of threads that will do the
                 recv_msg
             num_active_no_delay_senders: number of threads that are
-                active and will do the send_msg immediately
+                active and will do the smart_send immediately
             num_active_delay_senders: number of threads that are active
-                and will do the send_msg after a delay
+                and will do the smart_send after a delay
             num_send_exit_senders: number of threads that are active
-                and will do the send_msg and then exit
+                and will do the smart_send and then exit
             num_nosend_exit_senders: number of threads that are
-                active and will not do the send_msg and then exit
+                active and will not do the smart_send and then exit
             num_unreg_senders: number of threads that are
                 unregistered and will be created and started and then
-                do the send_msg
+                do the smart_send
             num_reg_senders: number of threads that are registered
-                and will be started and then do the send_msg
+                and will be started and then do the smart_send
 
         """
         # Make sure we have enough threads. Note that we subtract 1 from
@@ -7623,7 +7623,7 @@ class ConfigVerifier:
                     log_msg=log_msg))
 
         ################################################################
-        # do send_msg from active_no_delay_senders
+        # do smart_send from active_no_delay_senders
         ################################################################
         if active_no_delay_sender_names:
             self.add_cmd(
@@ -7638,7 +7638,7 @@ class ConfigVerifier:
             self.add_cmd(WaitForRecvTimeouts(cmd_runners=self.commander_name))
 
         ################################################################
-        # do send_msg from active_delay_senders
+        # do smart_send from active_delay_senders
         ################################################################
         if active_delay_sender_names:
             self.add_cmd(
@@ -7647,7 +7647,7 @@ class ConfigVerifier:
                         msgs_to_send=sender_msgs))
 
         ################################################################
-        # do send_msg from send_exit_senders and then exit
+        # do smart_send from send_exit_senders and then exit
         ################################################################
         if send_exit_sender_names:
             self.add_cmd(
@@ -7665,7 +7665,7 @@ class ConfigVerifier:
                 validate_config=False)
 
         ################################################################
-        # exit the nosend_exit_senders, then resurrect and do send_msg
+        # exit the nosend_exit_senders, then resurrect and do smart_send
         ################################################################
         if nosend_exit_sender_names:
             self.build_exit_suite(
@@ -7696,7 +7696,7 @@ class ConfigVerifier:
                         msgs_to_send=sender_msgs))
 
         ################################################################
-        # create and start the unreg_senders, then do send_msg
+        # create and start the unreg_senders, then do smart_send
         ################################################################
         if unreg_sender_names:
             f1_create_items: list[F1CreateItem] = []
@@ -7719,7 +7719,7 @@ class ConfigVerifier:
                         msgs_to_send=sender_msgs))
 
         ################################################################
-        # start the reg_senders, then do send_msg
+        # start the reg_senders, then do smart_send
         ################################################################
         if reg_sender_names:
             self.build_start_suite(
@@ -9867,8 +9867,8 @@ class ConfigVerifier:
         Args:
             timeout_type: specifies whether the recv_msg should
                 be coded with timeout, and whether it be False or True
-            send_msg_state: receiver state when send_msg is to be issued
-            send_msg_lap: lap 0 or 1 when the send_msg is to be issued
+            send_msg_state: receiver state when smart_send is to be issued
+            send_msg_lap: lap 0 or 1 when the smart_send is to be issued
             recv_msg_lap: lap 0 or 1 when the recv_msg is to be issued
             send_resume: 'send' or 'resume'
 
@@ -9903,7 +9903,7 @@ class ConfigVerifier:
             update_collection=False,
             var_name_for_log='receiver_names')
 
-        log_msg = f'send_msg log test: {self.get_ptime()}'
+        log_msg = f'smart_send log test: {self.get_ptime()}'
 
         ################################################################
         # setup the messages to send
@@ -10149,7 +10149,7 @@ class ConfigVerifier:
                         reset_ops_count=reset_ops_count)
                     current_state = st.ThreadState.Stopped
                 ########################################################
-                # issue send_msg
+                # issue smart_send
                 ########################################################
                 if (send_msg_state[0] == state
                         and send_msg_state[1] == state_iteration
@@ -11259,7 +11259,7 @@ class ConfigVerifier:
                             log_msg=log_msg))
 
                 ########################################################
-                # confirm the send_msg
+                # confirm the smart_send
                 ########################################################
                 self.add_cmd(
                     ConfirmResponse(cmd_runners=self.commander_name,
@@ -11278,7 +11278,7 @@ class ConfigVerifier:
                             msgs_to_send=sender_2_msg_1))
 
                 ########################################################
-                # confirm the send_msg
+                # confirm the smart_send
                 ########################################################
                 self.add_cmd(
                     ConfirmResponse(cmd_runners=[self.commander_name],
@@ -11296,7 +11296,7 @@ class ConfigVerifier:
                             log_msg=log_msg))
 
                 ########################################################
-                # confirm the send_msg
+                # confirm the smart_send
                 ########################################################
                 self.add_cmd(
                     ConfirmResponse(cmd_runners=[self.commander_name],
@@ -11318,7 +11318,7 @@ class ConfigVerifier:
                             msgs_to_send=sender_msgs))
 
                 ########################################################
-                # confirm the send_msg
+                # confirm the smart_send
                 ########################################################
                 self.add_cmd(
                     ConfirmResponse(cmd_runners=[self.commander_name],
@@ -11342,7 +11342,7 @@ class ConfigVerifier:
                                 log_msg=log_msg))
 
                     ####################################################
-                    # confirm the send_msg
+                    # confirm the smart_send
                     ####################################################
                     self.add_cmd(
                         ConfirmResponse(cmd_runners=[self.commander_name],
@@ -11416,7 +11416,7 @@ class ConfigVerifier:
                 timeout_names=unreg_timeout_names + exit_names))
 
             # restore config by adding back the exited threads and
-            # creating the un_reg threads so send_msg will complete
+            # creating the un_reg threads so smart_send will complete
             # before timing out
             if unreg_timeout_names or exit_names:
                 f1_create_items: list[F1CreateItem] = []
@@ -11435,7 +11435,7 @@ class ConfigVerifier:
                     validate_config=False)
 
             # tell the fullq threads to read the stacked up msgs
-            # so that the send_msg will complete
+            # so that the smart_send will complete
             if full_q_names:
                 for idx in range(self.max_msgs):
                     self.add_cmd(
@@ -11446,7 +11446,7 @@ class ConfigVerifier:
             final_recv_names = all_targets
 
         ################################################################
-        # confirm the send_msg
+        # confirm the smart_send
         ################################################################
         self.add_cmd(
             ConfirmResponse(cmd_runners=[self.commander_name],
@@ -11641,7 +11641,7 @@ class ConfigVerifier:
         self.add_cmd(ValidateConfig(
             cmd_runners='alpha'))
         ################################################################
-        # send_msg
+        # smart_send
         ################################################################
         msgs_to_send: dict[str, list[Any]] = {
             'delta': ['send msg from delta'],
@@ -11653,7 +11653,7 @@ class ConfigVerifier:
                     log_msg='SendCmd test log message 1'))
 
         ################################################################
-        # confirm the send_msg
+        # confirm the smart_send
         ################################################################
         self.add_cmd(
             ConfirmResponse(cmd_runners='alpha',
@@ -13407,9 +13407,9 @@ class ConfigVerifier:
             cmd_runner: name of thread doing the cmd
             receivers: names of threads to receive the message
             msg_to_send: message to send to the receivers
-            log_msg: log message for send_msg to issue
+            log_msg: log message for smart_send to issue
             timeout_type: specifies None, False, or True
-            timeout: value to use for timeout on the send_msg request
+            timeout: value to use for timeout on the smart_send request
             unreg_timeout_names: names of threads that are unregistered
                 and are expected to cause timeout
             fullq_timeout_names: names of threads whose msg_q is full
@@ -13421,7 +13421,7 @@ class ConfigVerifier:
                           f'{timeout_type=}, {unreg_timeout_names=}, '
                           f'{fullq_timeout_names=}, {stopped_remotes=}')
         self.log_ver.add_call_seq(
-            name='send_msg',
+            name='smart_send',
             seq='test_smart_thread.py::ConfigVerifier.handle_send_msg')
         ops_count_names = receivers.copy()
 
@@ -13449,12 +13449,12 @@ class ConfigVerifier:
             enter_exit = ('entry', )
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
-                    self.all_threads[cmd_runner].send_msg(
+                    self.all_threads[cmd_runner].smart_send(
                         targets=receivers,
                         msg=msg_to_send,
                         log_msg=log_msg)
                 else:
-                    self.all_threads[cmd_runner].send_msg(
+                    self.all_threads[cmd_runner].smart_send(
                         targets=receivers,
                         msg=msg_to_send,
                         timeout=timeout,
@@ -13463,20 +13463,20 @@ class ConfigVerifier:
             self.add_log_msg(
                 self.get_error_msg(
                     cmd_runner=cmd_runner,
-                    smart_request='send_msg',
+                    smart_request='smart_send',
                     targets=receivers,
                     error_str='SmartThreadRemoteThreadNotAlive',
                     stopped_remotes=stopped_remotes),
                 log_level=logging.ERROR)
 
         elif timeout_type == TimeoutType.TimeoutNone:
-            self.all_threads[cmd_runner].send_msg(
+            self.all_threads[cmd_runner].smart_send(
                 targets=receivers,
                 msg=msg_to_send,
                 log_msg=log_msg)
             elapsed_time += (time.time() - start_time)
         elif timeout_type == TimeoutType.TimeoutFalse:
-            self.all_threads[cmd_runner].send_msg(
+            self.all_threads[cmd_runner].smart_send(
                 targets=receivers,
                 msg=msg_to_send,
                 timeout=timeout,
@@ -13485,7 +13485,7 @@ class ConfigVerifier:
         elif timeout_type == TimeoutType.TimeoutTrue:
             enter_exit = ('entry', )
             with pytest.raises(st.SmartThreadRequestTimedOut):
-                self.all_threads[cmd_runner].send_msg(
+                self.all_threads[cmd_runner].smart_send(
                     targets=receivers,
                     msg=msg_to_send,
                     timeout=timeout,
@@ -13494,14 +13494,14 @@ class ConfigVerifier:
             self.add_log_msg(
                 self.get_error_msg(
                     cmd_runner=cmd_runner,
-                    smart_request='send_msg',
+                    smart_request='smart_send',
                     targets=receivers,
                     error_str='SmartThreadRequestTimedOut',
                     stopped_remotes=set(stopped_remotes)),
                 log_level=logging.ERROR)
 
         self.add_request_log_msg(cmd_runner=cmd_runner,
-                                 smart_request='send_msg',
+                                 smart_request='smart_send',
                                  targets=receivers,
                                  timeout=timeout,
                                  timeout_type=timeout_type,
@@ -14201,7 +14201,7 @@ class ConfigVerifier:
                                       f'{target=} set to {ops_count=}')
                 else:
                     # we are assuming that the remote will be started
-                    # while send_msg is running and that the msg
+                    # while smart_send is running and that the msg
                     # will be delivered (otherwise we should not have
                     # called inc_ops_count)
                     if pair_key not in self.pending_ops_counts:
@@ -14614,7 +14614,7 @@ class ConfigVerifier:
                         f"for pair_key = {pair_key}, "
                         f"name = {other_name}"))
                     # we are assuming that the remote will be started
-                    # while send_msg or resume is running and that the
+                    # while smart_send or resume is running and that the
                     # msg will be delivered or the resume will be done
                     # (otherwise we should not have called
                     # inc_ops_count)
@@ -14929,7 +14929,7 @@ class ConfigVerifier:
             cmd_runner: name of thread doing the cmd
             def_del_scenario: deferred delete scenario to verify
             receiver_names: names that do recv_msg
-            sender_names: names that do send_msg
+            sender_names: names that do smart_send
             waiter_names: names that do smart_wait
             resumer_names: names that do smart_resume
             del_names: names deleted during recv or wait
@@ -17387,7 +17387,7 @@ class TestSmartThreadScenarios:
                 issued
             recv_msg_lap_arg: lap 0 or 1 when the recv_msg is to be
                 issued
-            send_msg_lap_arg: lap 0 or 1 when the send_msg is to be
+            send_msg_lap_arg: lap 0 or 1 when the smart_send is to be
                 issued
             caplog: pytest fixture to capture log output
 
@@ -17426,9 +17426,9 @@ class TestSmartThreadScenarios:
             timeout_type_arg: specifies whether the recv_msg should
                 be coded with timeout and whether the recv_msg should
                 succeed or fail with a timeout
-            send_msg_state_arg: sender state when send_msg is to be
+            send_msg_state_arg: sender state when smart_send is to be
                 issued
-            send_msg_lap_arg: lap 0 or 1 when the send_msg is to be
+            send_msg_lap_arg: lap 0 or 1 when the smart_send is to be
                 issued
             recv_msg_lap_arg: lap 0 or 1 when the recv_msg is to be
                 issued
@@ -18214,7 +18214,7 @@ class TestSmartThreadScenarios:
             args=(f1_name, ),
             max_msgs=10)
 
-        commander_thread.send_msg(targets='beta', msg='alpha sends to beta')
+        commander_thread.smart_send(targets='beta', msg='alpha sends to beta')
 
         commander_thread.smart_resume(targets='beta')
 
@@ -18241,11 +18241,11 @@ class TestSmartThreadScenarios:
              'ThreadState.Initializing to ThreadState.Alive'),
             'alpha added alpha to SmartThread registry at UTC',
             'alpha entered _refresh_pair_array',
-            (f"send_msg entry: requestor: alpha targets: "
+            (f"smart_send entry: requestor: alpha targets: "
              "\['beta'\] timeout value: None "
              "test_smart_thread.py::TestSmartThreadScenarios."
              "test_smart_thread_log_msg:"),
-            (f"send_msg exit: requestor: alpha targets: "
+            (f"smart_send exit: requestor: alpha targets: "
              "\['beta'\] timeout value: None "
              "test_smart_thread.py::TestSmartThreadScenarios."
              "test_smart_thread_log_msg:"),
@@ -18691,7 +18691,7 @@ class TestSmartThreadErrors:
                                      target=f1,
                                      kwargs={'f1_name': 'beta'})
         with pytest.raises(st.SmartThreadDetectedOpFromForeignThread):
-            beta_thread.send_msg(targets='alpha', msg='hi alpha')
+            beta_thread.smart_send(targets='alpha', msg='hi alpha')
 
         with pytest.raises(st.SmartThreadDetectedOpFromForeignThread):
             beta_thread.recv_msg(remote='alpha')

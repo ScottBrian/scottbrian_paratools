@@ -96,6 +96,8 @@ RequestCallable: TypeAlias = Callable[
 
 ProcessRtn: TypeAlias = Union[ConfigCmdCallable, RequestCallable]
 
+SendMsgs: TypeAlias = dict[str, list[Any]]
+
 
 ########################################################################
 # SmartThread class exceptions
@@ -170,6 +172,10 @@ class SmartThreadWorkDataException(SmartThreadError):
     """SmartThread exception for unexpected data encountered."""
     pass
 
+
+class SmartThreadNoRemoteTargets(SmartThreadError):
+    """SmartThread exception for no remote targets."""
+    pass
 
 ########################################################################
 # ReqType
@@ -297,7 +303,7 @@ class SmartThread:
     ####################################################################
     # ConnectionStatusBlock
     # Coordinates the various actions involved in satisfying a
-    # send_msg, recv_msg, smart_wait, smart_resume, or smart_sync
+    # smart_send, recv_msg, smart_wait, smart_resume, or smart_sync
     # request.
     # Notes:
     # 1) target_create_timee is used to ensure that a catch type request
@@ -452,10 +458,12 @@ class SmartThread:
 
         if target:  # caller wants a thread created
             self.thread_create = ThreadCreate.Target
-            if args is None:
-                args=()
+            if args:
+                target_args = (self, *args)
+            else:
+                target_args = (self,)
             self.thread = threading.Thread(target=target,
-                                           args=args,
+                                           args=target_args,
                                            kwargs=kwargs,
                                            name=name)
         elif thread:  # caller provided the thread to use
@@ -769,6 +777,13 @@ class SmartThread:
             return PairKey(name0, name1)
         else:
             return PairKey(name1, name0)
+
+    ########################################################################
+    # get_set
+    ########################################################################
+    @staticmethod
+    def get_set(item: Optional[Iterable] = None):
+        return set({item} if isinstance(item, str) else item or '')
 
     ###########################################################################
     # _refresh_pair_array
@@ -1309,51 +1324,146 @@ class SmartThread:
         return False
 
     ####################################################################
-    # send_msg
+    # smart_send
     ####################################################################
-    def send_msg(self,
-                 targets: Iterable,
-                 msg: Any,
-                 log_msg: Optional[str] = None,
-                 timeout: OptIntFloat = None) -> None:
-        """Send a msg.
+    def smart_send(self,
+                   msgs: SendMsgs,
+                   targets: Optional[Iterable] = None,
+                   log_msg: Optional[str] = None,
+                   timeout: OptIntFloat = None) -> None:
+        """Send one or more messages to remote threads.
+
+        For *smart_send*, a message is any type (e.g., text, lists,
+        sets, class objects). *smart_send* can be used to:
+            1) send a single message to a single remote thread
+            2) send a single message to multiple remote threads
+            3) send multiple messages to a single remote thread
+            4) send multiple messages to multiple remote threads
+            5) send any mixture of single and multiple messages
+               individually to each remote thread
+
+        Examples of each of the above cases is provided below.
 
         Args:
-            msg: the msg to be sent
-            targets: names to send the message to
+            msgs: the msg or set of msgs to be sent. This may be
+                  specified as a single item, an iterable, or as a
+                  dict of items or iterables indexed by remote thread
+                  name.
+            targets: names of remote threads to send the message to. If
+                     None, the message will be sent to all remote
+                     threads.
             log_msg: log message to issue
-            timeout: number of seconds to wait for full queue to get
-                       free slot
+            timeout: number of seconds to wait for the targets to become
+                     alive and ready to accept messages
 
-        :Example: instantiate a SmartThread and send a message
+        :Example: case 1: instantiate a SmartThread and send a single
+                  message to a single remote thread
 
-        >>> import scottbrian_utils.smart_thread as st
-        >>> import threading
-        >>> def f1() -> None:
+        >>> import scottbrian_paratools.smart_thread as st
+        >>> def f1(smart_thread: SmartThread) -> None:
         ...     print('f1 beta entered')
-        ...     msg = beta_smart_thread.recv_msg(remote='alpha')
-        ...     if msg == 'hello beta thread':
-        ...         beta_smart_thread.send_msg(targets='alpha',
-        ...                                    msg='hi alpha')
+        ...     my_msg = smart_thread.recv_msg(senders='alpha')
+        ...     print(my_msg)
         ...     print('f1 beta exiting')
         >>> print('mainline alpha entered')
         >>> alpha_smart_thread = SmartThread(name='alpha')
         >>> beta_smart_thread = SmartThread(name='beta', target=f1)
-        >>> beta_smart_thread.smart_start()
-        >>> alpha_smart_thread.send_msg('hello beta thread')
+        >>> alpha_smart_thread.smart_send(msg='hello beta', targets='beta')
         >>> alpha_smart_thread.smart_join(targets='beta')
-        >>> print(alpha_smart_thread.recv_msg(remote='beta'))
         >>> print('mainline alpha exiting')
         mainline alpha entered
         f1 beta entered
+        {'alpha': 'hello beta'}
+        f1 beta exiting
+        mainline alpha exiting
+
+        :Example: case 2: instantiate a SmartThread and send a single
+                  message to multiple remote threads
+
+        >>> import scottbrian_paratools.smart_thread as st
+        >>> import time
+        >>> def f1(smart_thread: SmartThread) -> None:
+        ...     if my_smart_thread.name == 'charlie':
+        ...         time.sleep(0.5)  # delay for non-interleaved msgs
+        ...     print(f'f1 {my_smart_thread.name} entered')
+        ...     my_msg = smart_thread.recv_msg(senders='alpha')
+        ...     print(my_msg)
+        ...     smart_thread.smart_send(msg='hi alpha', targets='alpha')
+        ...     print(f'f1 {smart_thread.name} exiting')
+        >>> print('mainline alpha entered')
+        >>> alpha_smart_thread = SmartThread(name='alpha')
+        >>> beta_smart_thread = SmartThread(name='beta',
+        ...                                 target=f1)
+        >>> charlie_smart_thread = SmartThread(name='charlie',
+        ...                                    target=f1)
+        >>> alpha_smart_thread.smart_send(msg='hello remotes',
+        ...                               targets=('beta', 'charlie'))
+        >>> print(alpha_smart_thread.recv_msg(senders=('beta', 'charlie')))
+        >>> alpha_smart_thread.smart_join(targets='beta')
+        >>> print('mainline alpha exiting')
+        mainline alpha entered
+        f1 beta entered
+        {'alpha': 'hello remotes'}
+        f1 beta exiting
+        f1 charlie entered
+        {'alpha': 'hello remotes'}
+        f1 charlie exiting
+        mainline alpha exiting
+
+
+        :Example: case 2: instantiate a SmartThread and send a single
+                  message to multiple remote threads
+
+        >>> import scottbrian_paratools.smart_thread as st
+        >>> def f1(my_name: str) -> None:
+        ...     print(f'f1 {my_name} entered')
+        ...     my_msg = beta_smart_thread.recv_msg()
+        ...     print(my_msg)
+        ...     if my_msg == f'hello {my_name} thread':
+        ...         beta_smart_thread.smart_send('hi alpha')
+        ...     print(f'f1 {my_name} exiting')
+        >>> print('mainline alpha entered')
+        >>> alpha_smart_thread = SmartThread(name='alpha')
+        >>> beta_smart_thread = SmartThread(name='beta',
+        ...                                 target=f1,
+        ...                                 args=('beta',))
+        >>> charlie_smart_thread = SmartThread(name='charlie',
+        ...                                    target=f1,
+        ...                                    args=('charlie',))
+        >>> alpha_smart_thread.smart_send('hello remote threads')
+        >>> print(alpha_smart_thread.recv_msg())
+        >>> alpha_smart_thread.smart_join(targets='beta')
+        >>> print('mainline alpha exiting')
+        mainline alpha entered
+        f1 beta entered
+        hello beta thread
         f1 beta exiting
         hi alpha
         mainline alpha exiting
 
         """
+        if targets is None:
+            work_targets = set(SmartThread._registry.keys())
+        else:
+            work_targets = self.get_set(targets)
+        work_targets -= {self.name}
+        if not work_targets:
+            raise SmartThreadNoRemoteTargets(
+                f'{self.name} issued a smart_send request but there are '
+                'no remote targets in the configuration to send to')
+
+        work_msgs: SendMsgs = {}
+        if isinstance(msgs, dict):
+            work_msgs = msgs.copy()
+        else:
+            if isinstance(msgs, str) or not isinstance(msgs, Iterable):
+                msgs = [msgs]
+            for target in targets:
+                work_msgs[target] = msgs
+
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
-            request_name='send_msg',
+            request_name='smart_send',
             remotes=targets,
             error_stopped_target=True,
             process_rtn=self._process_send_msg,
@@ -1376,7 +1486,7 @@ class SmartThread:
                           pk_remote: PairKeyRemote,
                           local_sb: ConnectionStatusBlock,
                           ) -> bool:
-        """Process the send_msg request.
+        """Process the smart_send request.
 
         Args:
             request_block: contains request related data
@@ -2812,7 +2922,7 @@ class SmartThread:
                 registered.
             timeout: number of seconds to allow for request completion
             log_msg: caller log message to issue
-            msg_to_send: send_msg message to send
+            msg_to_send: smart_send message to send
 
 
         Returns:
@@ -2831,7 +2941,7 @@ class SmartThread:
         else:
             remotes = set(remotes)
 
-        if request_name in ('send_msg', 'recv_msg', 'smart_resume',
+        if request_name in ('smart_send', 'recv_msg', 'smart_resume',
                             'smart_sync', 'smart_wait'):
             self.verify_thread_is_current()
 
@@ -2842,7 +2952,7 @@ class SmartThread:
 
         pk_remotes: list[PairKeyRemote] = []
 
-        if request_name in ('send_msg', 'recv_msg', 'smart_resume',
+        if request_name in ('smart_send', 'recv_msg', 'smart_resume',
                             'smart_sync', 'smart_wait'):
             with sel.SELockShare(SmartThread._registry_lock):
                 self.missing_remotes: set[str] = set()
@@ -2981,7 +3091,7 @@ class SmartThread:
         This method is called from _request_loop to obtain the
         connection_block lock for those requests that need it
         (smart_resume, smart_wait, and smart_sync) and to not obtain
-        it for those requests that do not need it (send_msg, recv_msg).
+        it for those requests that do not need it (smart_send, recv_msg).
         This allows the code in _request_loop to use the with statement
         for the lock obtain with having to code around it.
 

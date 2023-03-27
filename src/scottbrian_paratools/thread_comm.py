@@ -23,7 +23,7 @@ message and wait for a reply with the send_rcv_msg.
 ...         msg = beta_thread_comm.recv_msg()
 ...         if msg == 42:
 ...             print(f'f1 received message {msg}')
-...             beta_thread_comm.send_msg(17)
+...             beta_thread_comm.smart_send(17)
 ...         elif msg == 'exit':
 ...             print(f'received message {msg}')
 ...             break
