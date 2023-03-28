@@ -2573,7 +2573,7 @@ def num_senders_arg(request: Any) -> int:
 ###############################################################################
 @pytest.fixture(params=req0_arg_list)  # type: ignore
 def req0_arg(request: Any) -> SmartRequestType:
-    """State of sender when recv_msg is to be issued.
+    """State of sender when smart_recv is to be issued.
 
     Args:
         request: special fixture that returns the fixture params
@@ -2588,7 +2588,7 @@ def req0_arg(request: Any) -> SmartRequestType:
 ###############################################################################
 @pytest.fixture(params=req1_arg_list)  # type: ignore
 def req1_arg(request: Any) -> SmartRequestType:
-    """State of sender when recv_msg is to be issued.
+    """State of sender when smart_recv is to be issued.
 
     Args:
         request: special fixture that returns the fixture params
@@ -2604,7 +2604,7 @@ def req1_arg(request: Any) -> SmartRequestType:
 ###############################################################################
 @pytest.fixture(params=req0_when_req1_state_arg_list)  # type: ignore
 def req0_when_req1_state_arg(request: Any) -> tuple[st.ThreadState, int]:
-    """State of sender when recv_msg is to be issued.
+    """State of sender when smart_recv is to be issued.
 
     Args:
         request: special fixture that returns the fixture params
@@ -2620,7 +2620,7 @@ def req0_when_req1_state_arg(request: Any) -> tuple[st.ThreadState, int]:
 ###############################################################################
 @pytest.fixture(params=req0_when_req1_lap_arg_list)  # type: ignore
 def req0_when_req1_lap_arg(request: Any) -> int:
-    """Lap of sender when recv_msg is to be issued.
+    """Lap of sender when smart_recv is to be issued.
 
     Args:
         request: special fixture that returns the fixture params
@@ -2636,7 +2636,7 @@ def req0_when_req1_lap_arg(request: Any) -> int:
 ###############################################################################
 @pytest.fixture(params=req1_lap_arg_list)  # type: ignore
 def req1_lap_arg_arg(request: Any) -> int:
-    """Lap of sender when recv_msg is to be issued.
+    """Lap of sender when smart_recv is to be issued.
 
     Args:
         request: special fixture that returns the fixture params
@@ -2652,7 +2652,7 @@ def req1_lap_arg_arg(request: Any) -> int:
 ###############################################################################
 @pytest.fixture(params=recv_msg_state_arg_list)  # type: ignore
 def recv_msg_state_arg(request: Any) -> tuple[st.ThreadState, int]:
-    """State of sender when recv_msg is to be issued.
+    """State of sender when smart_recv is to be issued.
 
     Args:
         request: special fixture that returns the fixture params
@@ -2668,7 +2668,7 @@ def recv_msg_state_arg(request: Any) -> tuple[st.ThreadState, int]:
 ###############################################################################
 # @pytest.fixture(params=send_msg_state_arg_list)  # type: ignore
 # def send_msg_state_arg(request: Any) -> tuple[st.ThreadState, int]:
-#     """State of sender when recv_msg is to be issued.
+#     """State of sender when smart_recv is to be issued.
 #
 #     Args:
 #         request: special fixture that returns the fixture params
@@ -2684,7 +2684,7 @@ def recv_msg_state_arg(request: Any) -> tuple[st.ThreadState, int]:
 ###############################################################################
 @pytest.fixture(params=recv_msg_lap_arg_list)  # type: ignore
 def recv_msg_lap_arg(request: Any) -> int:
-    """Lap of sender when recv_msg is to be issued.
+    """Lap of sender when smart_recv is to be issued.
 
     Args:
         request: special fixture that returns the fixture params
@@ -2700,7 +2700,7 @@ def recv_msg_lap_arg(request: Any) -> int:
 ###############################################################################
 @pytest.fixture(params=send_msg_lap_arg_list)  # type: ignore
 def send_msg_lap_arg(request: Any) -> int:
-    """Lap of sender when recv_msg is to be issued.
+    """Lap of sender when smart_recv is to be issued.
 
     Args:
         request: special fixture that returns the fixture params
@@ -2732,7 +2732,7 @@ def send_resume_arg(request: Any) -> str:
 ###############################################################################
 @pytest.fixture(params=wait_state_arg_list)  # type: ignore
 def wait_state_arg(request: Any) -> st.ThreadState:
-    """State of sender when recv_msg is to be issued.
+    """State of sender when smart_recv is to be issued.
 
     Args:
         request: special fixture that returns the fixture params
@@ -2748,7 +2748,7 @@ def wait_state_arg(request: Any) -> st.ThreadState:
 ###############################################################################
 @pytest.fixture(params=wait_lap_arg_list)  # type: ignore
 def wait_lap_arg(request: Any) -> int:
-    """Lap of sender when recv_msg is to be issued.
+    """Lap of sender when smart_recv is to be issued.
 
     Args:
         request: special fixture that returns the fixture params
@@ -2764,7 +2764,7 @@ def wait_lap_arg(request: Any) -> int:
 ###############################################################################
 @pytest.fixture(params=resume_lap_arg_list)  # type: ignore
 def resume_lap_arg(request: Any) -> int:
-    """Lap of sender when recv_msg is to be issued.
+    """Lap of sender when smart_recv is to be issued.
 
     Args:
         request: special fixture that returns the fixture params
@@ -4152,7 +4152,7 @@ class RecvMsgLogSearchItem(LogSearchItem):
         self.config_ver.dec_ops_count(
             cmd_runner=split_msg[0],
             sender=split_msg[4],
-            dec_ops_type='recv_msg')
+            dec_ops_type='smart_recv')
 
 
 ########################################################################
@@ -4522,7 +4522,7 @@ class RequestEntryLogSearchItem(LogSearchItem):
             config_ver: configuration verifier
         """
         list_of_requests = ('(smart_send'
-                            '|recv_msg'
+                            '|smart_recv'
                             '|smart_resume'
                             '|smart_sync'
                             '|smart_wait)')
@@ -6339,7 +6339,7 @@ class ConfigVerifier:
                                   validate_config=False)
 
         ################################################################
-        # finally, confirm the recv_msg is done
+        # finally, confirm the smart_recv is done
         ################################################################
         self.add_cmd(
             ConfirmResponse(
@@ -6581,7 +6581,7 @@ class ConfigVerifier:
             del_add_request = True
 
         ################################################################
-        # Determine whether first request is recv_msg or wait
+        # Determine whether first request is smart_recv or wait
         ################################################################
         if (def_del_scenario == DefDelScenario.NormalRecv
                 or def_del_scenario == DefDelScenario.ResurrectionRecv
@@ -6611,7 +6611,7 @@ class ConfigVerifier:
             waiters.append(wait_0_name)
 
         ################################################################
-        # Determine whether second request (if one) is recv_msg or wait
+        # Determine whether second request (if one) is smart_recv or wait
         ################################################################
         if (def_del_scenario == DefDelScenario.Recv0Recv1
                 or def_del_scenario == DefDelScenario.Recv1Recv0
@@ -6647,7 +6647,7 @@ class ConfigVerifier:
         exit_names: list[str] = []
         if receivers:
             ############################################################
-            # send a msg that will sit on the recv_msg msg_q (1 or 2)
+            # send a msg that will sit on the smart_recv msg_q (1 or 2)
             ############################################################
             exit_names.append(sender_names[0])
 
@@ -6714,7 +6714,7 @@ class ConfigVerifier:
 
         ################################################################
         # For scenarios that have a second request, get lock 0 to keep
-        # the first recv_msg/wait progressing beyond the lock obtain in
+        # the first smart_recv/wait progressing beyond the lock obtain in
         # _request_setup where the pk_remotes list is built.
         ################################################################
         if not single_request:
@@ -6780,7 +6780,7 @@ class ConfigVerifier:
                        exp_positions=lock_positions.copy()))
 
         ################################################################
-        # Get lock 1 to keep the second recv_msg/wait progressing beyond
+        # Get lock 1 to keep the second smart_recv/wait progressing beyond
         # the lock obtain in _request_setup where the pk_remotes list
         # is built.
         ################################################################
@@ -6965,7 +6965,7 @@ class ConfigVerifier:
                        exp_positions=lock_positions.copy()))
 
         ################################################################
-        # Get lock 2 to keep the first recv_msg/wait progressing beyond
+        # Get lock 2 to keep the first smart_recv/wait progressing beyond
         # the lock obtain in _request_loop.
         ################################################################
         self.add_cmd(
@@ -6980,7 +6980,7 @@ class ConfigVerifier:
                        exp_positions=lock_positions.copy()))
 
         ################################################################
-        # release lock 0 to allow first recv_msg/wait to progress
+        # release lock 0 to allow first smart_recv/wait to progress
         # to the lock obtain in _request_loop
         ################################################################
         self.add_cmd(
@@ -6999,7 +6999,7 @@ class ConfigVerifier:
                        exp_positions=lock_positions.copy()))
 
         ################################################################
-        # get lock 3 to keep second recv_msg/wait behind first
+        # get lock 3 to keep second smart_recv/wait behind first
         ################################################################
         self.add_cmd(
             LockObtain(cmd_runners=locker_names[3]))
@@ -7013,8 +7013,8 @@ class ConfigVerifier:
                        exp_positions=lock_positions.copy()))
 
         ################################################################
-        # release lock 1 to allow second recv_msg/wait to progress.
-        # For recv_msg/wait, to the lock obtain in _request_loop.
+        # release lock 1 to allow second smart_recv/wait to progress.
+        # For smart_recv/wait, to the lock obtain in _request_loop.
         ################################################################
         self.add_cmd(
             LockRelease(cmd_runners=locker_names[1]))
@@ -7031,7 +7031,7 @@ class ConfigVerifier:
                        exp_positions=lock_positions.copy()))
 
         ################################################################
-        # get lock 4 to freeze first and second recv_msg/wait just
+        # get lock 4 to freeze first and second smart_recv/wait just
         # before the refresh so we can swap lock positions (if needed)
         ################################################################
         self.add_cmd(
@@ -7046,7 +7046,7 @@ class ConfigVerifier:
                        exp_positions=lock_positions.copy()))
 
         ################################################################
-        # release lock_2 to allow first recv_msg/wait to go
+        # release lock_2 to allow first smart_recv/wait to go
         ################################################################
         release_lock_serial_num_2 = self.add_cmd(
             LockRelease(cmd_runners=locker_names[2]))
@@ -7075,7 +7075,7 @@ class ConfigVerifier:
                        exp_positions=lock_positions.copy()))
 
         ################################################################
-        # release lock_3 to allow second recv_msg/wait to go
+        # release lock_3 to allow second smart_recv/wait to go
         ################################################################
         release_lock_serial_num_3 = self.add_cmd(
             LockRelease(cmd_runners=locker_names[3]))
@@ -7129,7 +7129,7 @@ class ConfigVerifier:
                            exp_positions=lock_positions.copy()))
 
         ################################################################
-        # release lock_4 to allow both recv_msg/wait to refresh
+        # release lock_4 to allow both smart_recv/wait to refresh
         ################################################################
         release_lock_serial_num_4 = self.add_cmd(
             LockRelease(cmd_runners=locker_names[4]))
@@ -7222,10 +7222,10 @@ class ConfigVerifier:
         """Add cmds to run scenario.
 
         Args:
-            timeout_type: specifies whether the recv_msg should
+            timeout_type: specifies whether the smart_recv should
                 be coded with timeout, and whether it be False or True
-            recv_msg_state: sender state when recv_msg is to be issued
-            recv_msg_lap: lap 0 or 1 when the recv_msg is to be issued
+            recv_msg_state: sender state when smart_recv is to be issued
+            recv_msg_lap: lap 0 or 1 when the smart_recv is to be issued
             send_msg_lap: lap 0 or 1 when the smart_send is to be issued
 
         """
@@ -7260,7 +7260,7 @@ class ConfigVerifier:
             update_collection=False,
             var_name_for_log='sender_names')
 
-        log_msg = f'recv_msg log test: {self.get_ptime()}'
+        log_msg = f'smart_recv log test: {self.get_ptime()}'
 
         ################################################################
         # setup the messages to send
@@ -7343,7 +7343,7 @@ class ConfigVerifier:
                         validate_config=False)
                     current_state = st.ThreadState.Stopped
                 ########################################################
-                # issue recv_msg
+                # issue smart_recv
                 ########################################################
                 pause_time = 0
                 if (recv_msg_state[0] == state
@@ -7395,7 +7395,7 @@ class ConfigVerifier:
                             Pause(cmd_runners=self.commander_name,
                                   pause_seconds=pause_time))
         ################################################################
-        # finally, confirm the recv_msg is done
+        # finally, confirm the smart_recv is done
         ################################################################
         self.add_cmd(
             ConfirmResponse(
@@ -7420,11 +7420,11 @@ class ConfigVerifier:
         """Return a list of ConfigCmd items for a msg timeout.
 
         Args:
-            timeout_type: specifies whether the recv_msg should
-                be coded with timeout and whether the recv_msg should
+            timeout_type: specifies whether the smart_recv should
+                be coded with timeout and whether the smart_recv should
                 succeed or fail with a timeout
             num_receivers: number of threads that will do the
-                recv_msg
+                smart_recv
             num_active_no_delay_senders: number of threads that are
                 active and will do the smart_send immediately
             num_active_delay_senders: number of threads that are active
@@ -7582,7 +7582,7 @@ class ConfigVerifier:
             num_timeouts=len(all_timeout_names) * num_receivers)
 
         if len(all_sender_names) % 2 == 0:
-            log_msg = f'recv_msg log test: {self.get_ptime()}'
+            log_msg = f'smart_recv log test: {self.get_ptime()}'
         else:
             log_msg = None
 
@@ -7731,7 +7731,7 @@ class ConfigVerifier:
                         msgs_to_send=sender_msgs))
 
         ################################################################
-        # finally, confirm the recv_msg is done
+        # finally, confirm the smart_recv is done
         ################################################################
         self.add_cmd(
             ConfirmResponse(
@@ -7817,7 +7817,7 @@ class ConfigVerifier:
         """Add cmds to run scenario.
 
         Args:
-            timeout_type: specifies whether the recv_msg should
+            timeout_type: specifies whether the smart_recv should
                 be coded with timeout, and whether it be False or True
             wait_state: resume state when wait is to be issued
             wait_lap: lap 0 or 1 when the wait is to be issued
@@ -7972,7 +7972,7 @@ class ConfigVerifier:
                             Pause(cmd_runners=self.commander_name,
                                   pause_seconds=pause_time))
         ################################################################
-        # finally, confirm the recv_msg is done
+        # finally, confirm the smart_recv is done
         ################################################################
         self.add_cmd(
             ConfirmResponse(
@@ -9865,11 +9865,11 @@ class ConfigVerifier:
         """Add cmds to run scenario.
 
         Args:
-            timeout_type: specifies whether the recv_msg should
+            timeout_type: specifies whether the smart_recv should
                 be coded with timeout, and whether it be False or True
             send_msg_state: receiver state when smart_send is to be issued
             send_msg_lap: lap 0 or 1 when the smart_send is to be issued
-            recv_msg_lap: lap 0 or 1 when the recv_msg is to be issued
+            recv_msg_lap: lap 0 or 1 when the smart_recv is to be issued
             send_resume: 'send' or 'resume'
 
         """
@@ -10253,7 +10253,7 @@ class ConfigVerifier:
                         Pause(cmd_runners=self.commander_name,
                               pause_seconds=pause_time))
         ################################################################
-        # finally, confirm the recv_msg is done
+        # finally, confirm the smart_recv is done
         ################################################################
         self.add_cmd(
             ConfirmResponse(
@@ -10276,7 +10276,7 @@ class ConfigVerifier:
         """Add cmds to run scenario.
 
         Args:
-            timeout_type: specifies whether the recv_msg should
+            timeout_type: specifies whether the smart_recv should
                 be coded with timeout, and whether it be False or True
             req0: the SmartRequest that req0 will make
             req1: the SmartRequest that req1 will make
@@ -11468,7 +11468,7 @@ class ConfigVerifier:
                         log_msg=log_msg))
 
             ############################################################
-            # confirm the recv_msg
+            # confirm the smart_recv
             ############################################################
             self.add_cmd(
                 ConfirmResponse(cmd_runners=[self.commander_name],
@@ -11488,7 +11488,7 @@ class ConfigVerifier:
                                 exp_msgs=sender_1_msg_1))
 
                     ####################################################
-                    # confirm the recv_msg
+                    # confirm the smart_recv
                     ####################################################
                     self.add_cmd(
                         ConfirmResponse(cmd_runners=[self.commander_name],
@@ -11504,7 +11504,7 @@ class ConfigVerifier:
                                 exp_msgs=sender_2_msg_1))
 
                     ####################################################
-                    # confirm the recv_msg
+                    # confirm the smart_recv
                     ####################################################
                     self.add_cmd(
                         ConfirmResponse(cmd_runners=[self.commander_name],
@@ -11518,7 +11518,7 @@ class ConfigVerifier:
                                 exp_msgs=sender_2_msg_2))
 
                     ####################################################
-                    # confirm the recv_msg
+                    # confirm the smart_recv
                     ####################################################
                     self.add_cmd(
                         ConfirmResponse(cmd_runners=[self.commander_name],
@@ -11661,7 +11661,7 @@ class ConfigVerifier:
                             confirm_serial_num=send_msg_serial_num,
                             confirmers=['delta', 'echo']))
         ################################################################
-        # recv_msg
+        # smart_recv
         ################################################################
         recv_msg_serial_num = self.add_cmd(
             RecvMsg(cmd_runners=['alpha', 'beta', 'charlie'],
@@ -11670,7 +11670,7 @@ class ConfigVerifier:
                     log_msg='RecvMsg test log message 2'))
 
         ################################################################
-        # confirm the recv_msg
+        # confirm the smart_recv
         ################################################################
         self.add_cmd(
             ConfirmResponse(cmd_runners='alpha',
@@ -11840,7 +11840,7 @@ class ConfigVerifier:
                     unreg_remotes=unreg_remotes,
                     log_msg='smart_start test 1'))
             ################################################################
-            # confirm the recv_msg
+            # confirm the smart_recv
             ################################################################
             self.add_cmd(
                 ConfirmResponse(cmd_runners='alpha',
@@ -12316,7 +12316,7 @@ class ConfigVerifier:
                 decremented
             sender: the name of the threads that is paired with the
                 cmd_runner
-            dec_ops_type: recv_msg or wait
+            dec_ops_type: smart_recv or wait
 
         """
         pair_key = st.SmartThread._get_pair_key(cmd_runner, sender)
@@ -12677,12 +12677,12 @@ class ConfigVerifier:
         # received a message and have the potential to update the
         # pair array in the case where a deferred delete was done.
         # These thread names will have been added to the
-        # pending_recv_msg_par when they issued the recv_msg log msg.
+        # pending_recv_msg_par when they issued the smart_recv log msg.
         # We are now handling the enter _pair_array_refresh log
-        # message that follows the recv_msg, but also follows a register
+        # message that follows the smart_recv, but also follows a register
         # update or delete. The race is on. If the issuer (cmd_runner)
         # of the enter _pair_array_refresh message is indeed the pending
-        # recv_msg, then we will continue to allow that thread to
+        # smart_recv, then we will continue to allow that thread to
         # remain pending until the third step occurs, the pair array
         # updated log message is issued. Any other case will cause us to
         # reset the pending_recv_msg_par to empty.
@@ -12917,7 +12917,7 @@ class ConfigVerifier:
                 elif upa_item.upa_type == 'del':
                     self.update_pair_array_del(cmd_runner=cmd_runner,
                                                upa_item=upa_item)
-                elif upa_item.upa_type == 'recv_msg':
+                elif upa_item.upa_type == 'smart_recv':
                     self.update_pair_array_def_del(cmd_runner=cmd_runner,
                                                    upa_item=upa_item)
                 elif upa_item.upa_type == 'wait':
@@ -12952,7 +12952,7 @@ class ConfigVerifier:
             timeout: value to use for timeout
             timeout_names: names of remotes that fail to send a message
                 within the timeout time.
-            log_msg: log message to isee on recv_msg
+            log_msg: log message to isee on smart_recv
 
         """
         self.log_test_msg(f'handle_recv_msg entry: {cmd_runner=}, '
@@ -13022,14 +13022,14 @@ class ConfigVerifier:
             timeout_names: name of remote that fails to send a message
                 within the timeout time. Will be None or the same name
                 as the remote
-            log_msg: log message to isee on recv_msg
+            log_msg: log message to isee on smart_recv
 
             """
         self.log_test_msg(f'handle_recv_msg2 entry: {cmd_runner=}, '
                           f'{remote=}, {stopped_remotes=}')
 
         self.log_ver.add_call_seq(
-            name='recv_msg',
+            name='smart_recv',
             seq='test_smart_thread.py::ConfigVerifier.handle_recv_msg2')
 
         enter_exit = ('entry', 'exit')
@@ -13037,11 +13037,11 @@ class ConfigVerifier:
             enter_exit = ('entry', )
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
-                    recvd_msg = self.all_threads[cmd_runner].recv_msg(
+                    recvd_msg = self.all_threads[cmd_runner].smart_recv(
                         targets=remote,
                         log_msg=log_msg)
                 else:
-                    recvd_msg = self.all_threads[cmd_runner].recv_msg(
+                    recvd_msg = self.all_threads[cmd_runner].smart_recv(
                         targets=remote,
                         timeout=timeout,
                         log_msg=log_msg)
@@ -13049,14 +13049,14 @@ class ConfigVerifier:
             self.add_log_msg(
                 self.get_error_msg(
                     cmd_runner=cmd_runner,
-                    smart_request='recv_msg',
+                    smart_request='smart_recv',
                     targets={remote},
                     error_str='SmartThreadRemoteThreadNotAlive',
                     stopped_remotes=stopped_remotes),
                 log_level=logging.ERROR)
 
         elif timeout_type == TimeoutType.TimeoutNone:
-            recvd_msg = self.all_threads[cmd_runner].recv_msg(
+            recvd_msg = self.all_threads[cmd_runner].smart_recv(
                 targets=remote,
                 log_msg=log_msg)
             assert recvd_msg[remote] == exp_msgs[remote]
@@ -13065,7 +13065,7 @@ class ConfigVerifier:
                 log_level=logging.INFO)
 
         elif timeout_type == TimeoutType.TimeoutFalse:
-            recvd_msg = self.all_threads[cmd_runner].recv_msg(
+            recvd_msg = self.all_threads[cmd_runner].smart_recv(
                 targets=remote,
                 timeout=timeout,
                 log_msg=log_msg)
@@ -13077,7 +13077,7 @@ class ConfigVerifier:
         elif timeout_type == TimeoutType.TimeoutTrue:
             enter_exit = ('entry', )
             with pytest.raises(st.SmartThreadRequestTimedOut):
-                recvd_msg = self.all_threads[cmd_runner].recv_msg(
+                recvd_msg = self.all_threads[cmd_runner].smart_recv(
                     targets=remote,
                     timeout=timeout,
                     log_msg=log_msg)
@@ -13087,14 +13087,14 @@ class ConfigVerifier:
             self.add_log_msg(
                 self.get_error_msg(
                     cmd_runner=cmd_runner,
-                    smart_request='recv_msg',
+                    smart_request='smart_recv',
                     targets={remote},
                     error_str='SmartThreadRequestTimedOut',
                     stopped_remotes=stopped_remotes),
                 log_level=logging.ERROR)
 
         self.add_request_log_msg(cmd_runner=cmd_runner,
-                                 smart_request='recv_msg',
+                                 smart_request='smart_recv',
                                  targets={remote},
                                  timeout=timeout,
                                  timeout_type=timeout_type,
@@ -14630,7 +14630,7 @@ class ConfigVerifier:
                     #         f'update_pair_array_del for {pair_key=}, '
                     #         f'{del_name=} set pending {pend_ops_cnt=}')
                 else:
-                    # remember for next update by recv_msg or wait
+                    # remember for next update by smart_recv or wait
                     del_def_key = (pair_key, other_name)
                     self.del_deferred_list.append(del_def_key)
 
@@ -14683,10 +14683,10 @@ class ConfigVerifier:
         target_name = upa_item.upa_target
 
         # It is possible that the target_name could have been resurrected if
-        # an add was done between the time that recv_msg issued the
+        # an add was done between the time that smart_recv issued the
         # recvd msg log msg its entry to refresh_pair_array. In this
         # case, the updated pair array log message must be for some
-        # other update the recv_msg found, such as another deferred
+        # other update the smart_recv found, such as another deferred
         # delete that was also done between the above mentioned events
 
         pair_key_1 = st.SmartThread._get_pair_key(def_del_name, target_name)
@@ -14928,7 +14928,7 @@ class ConfigVerifier:
         Args:
             cmd_runner: name of thread doing the cmd
             def_del_scenario: deferred delete scenario to verify
-            receiver_names: names that do recv_msg
+            receiver_names: names that do smart_recv
             sender_names: names that do smart_send
             waiter_names: names that do smart_wait
             resumer_names: names that do smart_resume
@@ -14942,7 +14942,7 @@ class ConfigVerifier:
         # start by gathering log messages, both expected and not
         ################################################################
         ################################################################
-        # get first config_cmd recv_msg log msg
+        # get first config_cmd smart_recv log msg
         ################################################################
         search_msg = ("config_cmd: RecvMsg\(serial=[0-9]+, line=[0-9]+, "
                       f"cmd_runners='{receiver_names[0]}', "
@@ -14970,14 +14970,14 @@ class ConfigVerifier:
             reverse_search=False)
 
         # if cc_recv_0_log_msg and cc_wait_0_log_msg:
-        #     raise FailedDefDelVerify('verify_def_del found both recv_msg '
+        #     raise FailedDefDelVerify('verify_def_del found both smart_recv '
         #                              'and wait initial config_cmd log '
         #                              'messages - only one or the other is '
         #                              'expected.'
         #                              f'{cc_recv_0_log_msg=}. '
         #                              f'{cc_wait_0_log_msg=}.')
         if not cc_recv_0_log_msg and not cc_wait_0_log_msg:
-            raise FailedDefDelVerify('verify_def_del found neither recv_msg '
+            raise FailedDefDelVerify('verify_def_del found neither smart_recv '
                                      'nor wait initial config_cmd log '
                                      'messages - one and only one is '
                                      'expected.')
@@ -15006,7 +15006,7 @@ class ConfigVerifier:
         end_log_idx = cc_verify_dd_log_pos
 
         ################################################################
-        # get first recv_msg log msg
+        # get first smart_recv log msg
         ################################################################
         search_msg = (f'{receiver_names[0]} received msg from '
                       f'{sender_names[0]}')
@@ -15019,7 +15019,7 @@ class ConfigVerifier:
             reverse_search=False)
 
         ################################################################
-        # get first recv_msg pair array log msgs found
+        # get first smart_recv pair array log msgs found
         ################################################################
         recv_0_pa_msgs_found = self.find_def_del_pair_array_msgs(
             cmd_runner=receiver_names[0],
@@ -15029,7 +15029,7 @@ class ConfigVerifier:
             end_log_idx=end_log_idx)
 
         ################################################################
-        # get second recv_msg log msg
+        # get second smart_recv log msg
         ################################################################
         search_msg = (f'{receiver_names[1]} received msg from '
                       f'{sender_names[0]}')
@@ -15042,7 +15042,7 @@ class ConfigVerifier:
             reverse_search=False)
 
         ################################################################
-        # get second recv_msg pair array log msgs found
+        # get second smart_recv pair array log msgs found
         ################################################################
         recv_1_pa_msgs_found = self.find_def_del_pair_array_msgs(
             cmd_runner=receiver_names[1],
@@ -17334,8 +17334,8 @@ class TestSmartThreadScenarios:
         """Test meta configuration scenarios.
 
         Args:
-            timeout_type_arg: specifies whether the recv_msg should
-                be coded with timeout and whether the recv_msg should
+            timeout_type_arg: specifies whether the smart_recv should
+                be coded with timeout and whether the smart_recv should
                 succeed or fail with a timeout
             req0_arg: the SmartRequest that req0 will make
             req1_arg: the SmartRequest that req1 will make
@@ -17380,12 +17380,12 @@ class TestSmartThreadScenarios:
         """Test meta configuration scenarios.
 
         Args:
-            timeout_type_arg: specifies whether the recv_msg should
-                be coded with timeout and whether the recv_msg should
+            timeout_type_arg: specifies whether the smart_recv should
+                be coded with timeout and whether the smart_recv should
                 succeed or fail with a timeout
-            recv_msg_state_arg: sender state when recv_msg is to be
+            recv_msg_state_arg: sender state when smart_recv is to be
                 issued
-            recv_msg_lap_arg: lap 0 or 1 when the recv_msg is to be
+            recv_msg_lap_arg: lap 0 or 1 when the smart_recv is to be
                 issued
             send_msg_lap_arg: lap 0 or 1 when the smart_send is to be
                 issued
@@ -17423,14 +17423,14 @@ class TestSmartThreadScenarios:
         """Test meta configuration scenarios.
 
         Args:
-            timeout_type_arg: specifies whether the recv_msg should
-                be coded with timeout and whether the recv_msg should
+            timeout_type_arg: specifies whether the smart_recv should
+                be coded with timeout and whether the smart_recv should
                 succeed or fail with a timeout
             send_msg_state_arg: sender state when smart_send is to be
                 issued
             send_msg_lap_arg: lap 0 or 1 when the smart_send is to be
                 issued
-            recv_msg_lap_arg: lap 0 or 1 when the recv_msg is to be
+            recv_msg_lap_arg: lap 0 or 1 when the smart_recv is to be
                 issued
             send_resume_arg: specifies whether to test send or resume
             caplog: pytest fixture to capture log output
@@ -17835,8 +17835,8 @@ class TestSmartThreadScenarios:
         """Test meta configuration scenarios.
 
         Args:
-            timeout_type_arg: specifies whether the recv_msg should
-                be coded with timeout and whether the recv_msg should
+            timeout_type_arg: specifies whether the smart_recv should
+                be coded with timeout and whether the smart_recv should
                 succeed or fail with a timeout
             wait_state_arg: resumer state when wait is to be
                 issued
@@ -18153,7 +18153,7 @@ class TestSmartThreadScenarios:
 
             time.sleep(1)
 
-            f1_st.recv_msg(remote='alpha')
+            f1_st.smart_recv(remote='alpha')
 
             f1_st.smart_wait(remotes='alpha')
 
@@ -18392,10 +18392,10 @@ class TestSmartThreadScenarios:
             ("smart_start exit: requestor: alpha targets: "
              "\['beta'\] timeout value: None "
              "smart_thread.py::SmartThread.__init__:"),
-            ("recv_msg entry: requestor: beta targets: "
+            ("smart_recv entry: requestor: beta targets: "
              "\['alpha'\] timeout value: None "
              "test_smart_thread.py::f1:"),
-            ("recv_msg exit: requestor: beta targets: "
+            ("smart_recv exit: requestor: beta targets: "
              "\['alpha'\] timeout value: None "
              "test_smart_thread.py::f1:"),
             ("smart_wait entry: requestor: beta targets: \['alpha'\] "
@@ -18694,7 +18694,7 @@ class TestSmartThreadErrors:
             beta_thread.smart_send(targets='alpha', msg='hi alpha')
 
         with pytest.raises(st.SmartThreadDetectedOpFromForeignThread):
-            beta_thread.recv_msg(remote='alpha')
+            beta_thread.smart_recv(remote='alpha')
 
         with pytest.raises(st.SmartThreadDetectedOpFromForeignThread):
             beta_thread.smart_resume(targets='alpha')

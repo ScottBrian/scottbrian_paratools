@@ -20,7 +20,7 @@ message and wait for a reply with the send_rcv_msg.
 ...     beta_thread_comm = ThreadComm(name='beta')
 ...     beta_thread_comm.pair_with(remote_name='alpha')
 ...     while True:
-...         msg = beta_thread_comm.recv_msg()
+...         msg = beta_thread_comm.smart_recv()
 ...         if msg == 42:
 ...             print(f'f1 received message {msg}')
 ...             beta_thread_comm.smart_send(17)

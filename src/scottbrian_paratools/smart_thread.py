@@ -304,11 +304,11 @@ class SmartThread:
     ####################################################################
     # ConnectionStatusBlock
     # Coordinates the various actions involved in satisfying a
-    # smart_send, recv_msg, smart_wait, smart_resume, or smart_sync
+    # smart_send, smart_recv, smart_wait, smart_resume, or smart_sync
     # request.
     # Notes:
     # 1) target_create_timee is used to ensure that a catch type request
-    # (recv_msg or wait) or handshake request (sync) are satisfied by
+    # (smart_recv or wait) or handshake request (sync) are satisfied by
     # the remote that was in the configuration when thee request was
     # initiated. Normally, each request will periodically check the
     # remote state and will raise an error if the remote has stopped.
@@ -1294,7 +1294,7 @@ class SmartThread:
             # re-obtain the registry lock in between
             # attempts. This is done to ensure we don't
             # deadlock with any of the other services
-            # (e.g., recv_msg)
+            # (e.g., smart_recv)
             try:
                 SmartThread._registry[remote].thread.join(timeout=0.2)
             except RuntimeError:
@@ -1349,8 +1349,6 @@ class SmartThread:
             6) send any mixture of single and multiple messages
                individually to each remote thread
 
-        Examples of each of the above cases is provided below.
-
         Args:
             msg: the msg or set of msgs to be sent. This may be
                  specified as a single item, an iterable, or as a
@@ -1369,7 +1367,7 @@ class SmartThread:
         >>> import scottbrian_paratools.smart_thread as st
         >>> def f1(smart_thread: SmartThread) -> None:
         ...     print('f1 beta entered')
-        ...     my_msg = smart_thread.recv_msg(senders='alpha')
+        ...     my_msg = smart_thread.smart_recv(senders='alpha')
         ...     print(my_msg)
         ...     print('f1 beta exiting')
         >>> print('mainline alpha entered')
@@ -1393,7 +1391,7 @@ class SmartThread:
         ...     if smart_thread.name == 'charlie':
         ...         time.sleep(0.5)  # delay for non-interleaved msgs
         ...     print(f'f1 {smart_thread.name} entered')
-        ...     my_msg = smart_thread.recv_msg(senders='alpha')
+        ...     my_msg = smart_thread.smart_recv(senders='alpha')
         ...     print(my_msg)
         ...     print(f'f1 {smart_thread.name} exiting')
         >>> print('mainline alpha entered')
@@ -1425,7 +1423,7 @@ class SmartThread:
         >>> def f1(smart_thread: SmartThread, delay_secs) -> None:
         ...     time.sleep(delay_secs)  # delay for non-interleaved msgs
         ...     print(f'f1 {smart_thread.name} entered')
-        ...     my_msg = smart_thread.recv_msg(senders='alpha')
+        ...     my_msg = smart_thread.smart_recv(senders='alpha')
         ...     print(my_msg)
         ...     print(f'f1 {smart_thread.name} exiting')
         >>> print('mainline alpha entered')
@@ -1461,7 +1459,7 @@ class SmartThread:
         >>> import time
         >>> def f1(smart_thread: SmartThread) -> None:
         ...     print(f'f1 {smart_thread.name} entered')
-        ...     my_msg = smart_thread.recv_msg(senders='alpha')
+        ...     my_msg = smart_thread.smart_recv(senders='alpha')
         ...     print(my_msg)
         ...     print(f'f1 {smart_thread.name} exiting')
         >>> print('mainline alpha entered')
@@ -1486,7 +1484,7 @@ class SmartThread:
         >>> def f1(smart_thread: SmartThread, delay_secs) -> None:
         ...     time.sleep(delay_secs)  # delay for non-interleaved msgs
         ...     print(f'f1 {smart_thread.name} entered')
-        ...     my_msg = smart_thread.recv_msg(senders='alpha')
+        ...     my_msg = smart_thread.smart_recv(senders='alpha')
         ...     print(my_msg)
         ...     print(f'f1 {smart_thread.name} exiting')
         >>> print('mainline alpha entered')
@@ -1525,7 +1523,7 @@ class SmartThread:
         >>> def f1(smart_thread: SmartThread, delay_secs) -> None:
         ...     time.sleep(delay_secs)  # delay for non-interleaved msgs
         ...     print(f'f1 {smart_thread.name} entered')
-        ...     my_msg = smart_thread.recv_msg(senders='alpha')
+        ...     my_msg = smart_thread.smart_recv(senders='alpha')
         ...     print(my_msg)
         ...     print(f'f1 {smart_thread.name} exiting')
         >>> print('mainline alpha entered')
@@ -1680,16 +1678,50 @@ class SmartThread:
         return False  # give the remote some more time
 
     ####################################################################
-    # recv_msg
+    # smart_recv
     ####################################################################
-    def recv_msg(self,
-                 targets: Iterable,
-                 log_msg: Optional[str] = None,
-                 timeout: OptIntFloat = None) -> dict[str, Any]:
-        """Receive a msg.
+    def smart_recv(self,
+                   senders: Iterable,
+                   log_msg: Optional[str] = None,
+                   timeout: OptIntFloat = None) -> dict[str, Any]:
+        """Receive one or more messages from remote threads.
 
-        Args:
-            targets: thread names expected to send a message to this
+         For *smart_recv*, a message is any type (e.g., text, lists,
+         sets, class objects). *smart_recv* can be used to receive a
+         single message or multiple messages from a single remote
+         thread, from multiple remote threads, or from every remote
+         thread in the configuration. *smart_recv* will return 
+         messages in a dictionay indexed by sender thread name.
+           
+         When *smart_recv* gets control, it will check its message
+         queues for each of the specified senders and move any and all
+         messages that are found into the dictionary. If there are no
+         messages on any of the message queues, *smart_recv* will
+         continue to check until at least one message from one sender
+         is found, at which point it will return. If timeout is
+         specified, *smart_recv* will raise a timeout error if no
+         messages appear within the specified time.
+          
+         If no targets are specified, the *smart_recv* will check its
+         message queues for all threads in the current configuration.
+         If the configuration changes, *smart_recv* will simply continue
+         to check its message queues for any threads that are currently
+         alive. In this way, *smart_recv* can be used by a thread acting
+         as a server, receiving and returning request messages from the
+         current configuration as soon as they arrive.
+
+         Eamples are provided below for the following cases:
+             1) receive a single message from a single remote thread
+             2) receive a single message from multiple remote threads
+             3) receive a single message from all remote threads in the
+                configuration
+             4) receive multiple messages from a single remote thread
+             5) receive multiple messages from multiple remote threads
+             6) receive any mixture of single and multiple messages
+                individually from each remote thread
+
+         Args:
+            senders: thread names expected to send a message to this
                 thread
             log_msg: log message to issue
             timeout: number of seconds to wait for message
@@ -1697,10 +1729,31 @@ class SmartThread:
         Returns:
             dictionary of received messages, indexed by thread name
 
+         :Example: case 1: receive a single message from a single remote
+                   thread
+
+         >>> import scottbrian_paratools.smart_thread as st
+         >>> def f1(smart_thread: SmartThread) -> None:
+         ...     print('f1 beta entered')
+         ...     smart_thread.smart_send(msg='hi alpha')
+         ...     print('f1 beta exiting')
+         >>> print('mainline alpha entered')
+         >>> alpha_smart_thread = SmartThread(name='alpha')
+         >>> beta_smart_thread = SmartThread(name='beta', target=f1)
+         >>> my_msg = alpha_smart_thread.smart_recv(senders='beta')
+         >>> print(my_msg)
+         >>> alpha_smart_thread.smart_join(targets='beta')
+         >>> print('mainline alpha exiting')
+         mainline alpha entered
+         f1 beta entered
+         f1 beta exiting
+         {'beta': 'hello alpha'}
+         mainline alpha exiting
+
         """
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
-            request_name='recv_msg',
+            request_name='smart_recv',
             remotes=targets,
             error_stopped_target=True,
             process_rtn=self._process_recv_msg,
@@ -1725,7 +1778,7 @@ class SmartThread:
                           pk_remote: PairKeyRemote,
                           local_sb: ConnectionStatusBlock,
                           ) -> bool:
-        """Process the recv_msg request.
+        """Process the smart_recv request.
 
         Args:
             request_block: contains request related data
@@ -1739,7 +1792,7 @@ class SmartThread:
         # We start off assuming remote is alive and we have a msg,
         # meaning we make the timeout_value very small just to test
         # the msg_q. If there is no msg, we check the remote state
-        # and to decide whether to fail the recv_msg (remote
+        # and to decide whether to fail the smart_recv (remote
         # stopped), try to retrieve the msg again with a longer
         # timeout_value (remote alive), or return False to give
         # the remote more time (remote is not alive, but no stopped)
@@ -2077,7 +2130,7 @@ class SmartThread:
         # the next remote in the list.
         # We are OK with leaving a message in the receiver
         # msg_q if we think there is a chance the receiver
-        # will recv_msg to get it. But, if the receiver is
+        # will smart_recv to get it. But, if the receiver is
         # stopped and is on its way out, its msg_q will be
         # deleted and the message will be lost. So we will
         # check for this and continue to wait in hopes that
@@ -2765,7 +2818,7 @@ class SmartThread:
 
                             # We may have been able to successfully
                             # complete this request despite not yet
-                            # having an alive remote (recv_msg and wait,
+                            # having an alive remote (smart_recv and wait,
                             # for example, do not require an alive
                             # remote if the message or wait bit was
                             # previously delivered or set). We thus need
@@ -3066,7 +3119,7 @@ class SmartThread:
         else:
             remotes = set(remotes)
 
-        if request_name in ('smart_send', 'recv_msg', 'smart_resume',
+        if request_name in ('smart_send', 'smart_recv', 'smart_resume',
                             'smart_sync', 'smart_wait'):
             self.verify_thread_is_current()
 
@@ -3077,7 +3130,7 @@ class SmartThread:
 
         pk_remotes: list[PairKeyRemote] = []
 
-        if request_name in ('smart_send', 'recv_msg', 'smart_resume',
+        if request_name in ('smart_send', 'smart_recv', 'smart_resume',
                             'smart_sync', 'smart_wait'):
             with sel.SELockShare(SmartThread._registry_lock):
                 self.missing_remotes: set[str] = set()
@@ -3216,7 +3269,7 @@ class SmartThread:
         This method is called from _request_loop to obtain the
         connection_block lock for those requests that need it
         (smart_resume, smart_wait, and smart_sync) and to not obtain
-        it for those requests that do not need it (smart_send, recv_msg).
+        it for those requests that do not need it (smart_send, smart_recv).
         This allows the code in _request_loop to use the with statement
         for the lock obtain with having to code around it.
 
