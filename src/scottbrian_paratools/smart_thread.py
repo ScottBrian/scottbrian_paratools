@@ -1330,6 +1330,7 @@ class SmartThread:
     def smart_send(self,
                    msg: Any,
                    targets: Optional[Iterable] = None,
+                   dict_msg: SendMsgs,
                    log_msg: Optional[str] = None,
                    timeout: OptIntFloat = None) -> None:
         """Send one or more messages to remote threads.
@@ -1350,13 +1351,16 @@ class SmartThread:
                individually to each remote thread
 
         Args:
-            msg: the msg or set of msgs to be sent. This may be
-                 specified as a single item, an iterable, or as a
-                 dict of lists of items, indexed by remote thread
-                 name.
+            msg: the msg to be sent. This may be a single item or a
+                 collection of items in any type of data structure.
+                 Mutually exclusive with *dict_msg*.
             targets: names of remote threads to send the message to. If
                      None, the message will be sent to all remote
-                     threads.
+                     threads. Requires *msg*. Mutually exclusive with
+                     *dict_msg*.
+            dict_msg: a dictionary that contain the msgs to be sent
+                      indexed by the names of the target threads.
+                      Mutually exclusive with *msg* and *targets*.
             log_msg: log message to issue
             timeout: number of seconds to wait for the targets to become
                      alive and ready to accept messages
@@ -1537,13 +1541,12 @@ class SmartThread:
         >>> delta_smart_thread = SmartThread(name='delta',
         ...                                  target=f1,
         ...                                  kwargs={'delay_secs': 1.1}))
-        >>> msgs_to_send: SendMsgs = {
+        >>> msgs_to_send: st.SendMsgs = {
         ...     'beta': 'hi beta',
         ...     'charlie': ('hi charlie', 'have a greate day'),
         ...     'delta': [42, 'hi delta', {'nums': (1, 2, 3)}]
         ...                          }
-        >>> alpha_smart_thread.smart_send(msg=msgs_to_send,
-        ...                               targets=['beta', 'charlie', 'delta'])
+        >>> alpha_smart_thread.smart_send(dict_msg=msgs_to_send)
         >>> alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
         >>> print('mainline alpha exiting')
         mainline alpha entered
@@ -1694,21 +1697,26 @@ class SmartThread:
          messages in a dictionay indexed by sender thread name.
            
          When *smart_recv* gets control, it will check its message
-         queues for each of the specified senders and move any and all
-         messages that are found into the dictionary. If there are no
-         messages on any of the message queues, *smart_recv* will
-         continue to check until at least one message from one sender
-         is found, at which point it will return. If timeout is
-         specified, *smart_recv* will raise a timeout error if no
-         messages appear within the specified time.
+         queues for each of the specified senders. If one or more
+         messages are found, it will immediately return them in the
+         RecvMsgs dictionary. If no messages were initially found,
+         *smart_recv* will continue to check until one or more messages
+         arrives and will return them. If timeout is specified,
+         *smart_recv* will raise a timeout error if no messages appear
+         within the specified time.
           
-         If no targets are specified, the *smart_recv* will check its
+         If no senders are specified, the *smart_recv* will check its
          message queues for all threads in the current configuration.
          If the configuration changes, *smart_recv* will simply continue
          to check its message queues for any threads that are currently
-         alive. In this way, *smart_recv* can be used by a thread acting
-         as a server, receiving and returning request messages from the
-         current configuration as soon as they arrive.
+         alive. In this way, a thread acting as a server can issue the
+         *smart_recv* to simply park itself on the message queues and
+         returning with request messages as soon as they arrive.
+
+         If senders are specified, *smart_recv* will look for messages
+         only on its message queues for the speccified senders. Unlike
+         the "no senders specified" case, *smart_recv* will raise an
+         error if any of the specified senders become inactive.
 
          Eamples are provided below for the following cases:
              1) receive a single message from a single remote thread
@@ -1717,38 +1725,182 @@ class SmartThread:
                 configuration
              4) receive multiple messages from a single remote thread
              5) receive multiple messages from multiple remote threads
-             6) receive any mixture of single and multiple messages
-                individually from each remote thread
 
          Args:
-            senders: thread names expected to send a message to this
-                thread
+            senders: thread names whose sent messages are to be received
             log_msg: log message to issue
             timeout: number of seconds to wait for message
 
         Returns:
             dictionary of received messages, indexed by thread name
 
-         :Example: case 1: receive a single message from a single remote
+        :Example: case 1: receive a single message from a single remote
                    thread
 
-         >>> import scottbrian_paratools.smart_thread as st
-         >>> def f1(smart_thread: SmartThread) -> None:
-         ...     print('f1 beta entered')
-         ...     smart_thread.smart_send(msg='hi alpha')
-         ...     print('f1 beta exiting')
-         >>> print('mainline alpha entered')
-         >>> alpha_smart_thread = SmartThread(name='alpha')
-         >>> beta_smart_thread = SmartThread(name='beta', target=f1)
-         >>> my_msg = alpha_smart_thread.smart_recv(senders='beta')
-         >>> print(my_msg)
-         >>> alpha_smart_thread.smart_join(targets='beta')
-         >>> print('mainline alpha exiting')
-         mainline alpha entered
-         f1 beta entered
-         f1 beta exiting
-         {'beta': 'hello alpha'}
-         mainline alpha exiting
+        >>> import scottbrian_paratools.smart_thread as st
+        >>> def f1(smart_thread: SmartThread) -> None:
+        ...     print('f1 beta entered')
+        ...     smart_thread.smart_send(msg='hi alpha', targets='alpha')
+        ...     print('f1 beta exiting')
+        >>> print('mainline alpha entered')
+        >>> alpha_smart_thread = SmartThread(name='alpha')
+        >>> beta_smart_thread = SmartThread(name='beta', target=f1)
+        >>> my_msg = alpha_smart_thread.smart_recv(senders='beta')
+        >>> print(my_msg)
+        >>> alpha_smart_thread.smart_join(targets='beta')
+        >>> print('mainline alpha exiting')
+        mainline alpha entered
+        f1 beta entered
+        f1 beta exiting
+        {'beta': 'hello alpha'}
+        mainline alpha exiting
+
+        :Example: case 2: receive a single message from multiple remote
+                  threads
+
+        >>> import scottbrian_paratools.smart_thread as st
+        >>> import time
+        >>> def f1(smart_thread: SmartThread) -> None:
+        ...     print(f'f1 {smart_thread.name} entered')
+        ...     smart_thread.smart_send(msg=f'{smart_thread.name} says hi',
+        ...                             targets='alpha')
+        ...     print(f'f1 {smart_thread.name} exiting')
+        >>> print('mainline alpha entered')
+        >>> alpha_smart_thread = SmartThread(name='alpha')
+        >>> beta_smart_thread = SmartThread(name='beta', target=f1)
+        >>> time.sleep(0.2)
+        >>> charlie_smart_thread = SmartThread(name='charlie', target=f1)
+        >>> time.sleep(0.2)
+        >>> my_msg = alpha_smart_thread.smart_recv(senders=('beta', 'charlie')
+        >>> print(my_msg)
+        >>> alpha_smart_thread.smart_join(targets=('beta', 'charlie'))
+        >>> print('mainline alpha exiting')
+        mainline alpha entered
+        f1 beta entered
+        f1 beta exiting
+        f1 charlie entered
+        f1 charlie exiting
+        {'beta': 'beta says hi', 'charlie': 'charlie says hi'}
+        mainline alpha exiting
+
+        :Example: case 3: receive a single message from all remote
+                  threads in the configuration
+
+        >>> import scottbrian_paratools.smart_thread as st
+        >>> import time
+        >>> def f1(smart_thread: SmartThread, greeting: str) -> None:
+        ...     print(f'f1 {smart_thread.name} entered')
+        ...     smart_thread.smart_send(msg=f'{greeting}',
+        ...                             targets='alpha')
+        ...     print(f'f1 {smart_thread.name} exiting')
+        >>> print('mainline alpha entered')
+        >>> alpha_smart_thread = SmartThread(name='alpha')
+        >>> beta_smart_thread = SmartThread(name='beta',
+        ...                                 target=f1,
+        ...                                 args=('hi',))
+        >>> time.sleep(0.2)
+        >>> charlie_smart_thread = SmartThread(name='beta',
+        ...                                    target=f1,
+        ...                                    args=('hello',))
+        >>> time.sleep(0.2)
+        >>> delta_smart_thread = SmartThread(name='charlie',
+        ...                                  target=f1,
+        ...                                  args=('aloha',))
+        >>> time.sleep(0.2)
+        >>> my_msg = alpha_smart_thread.smart_recv()
+        >>> print(my_msg)
+        >>> alpha_smart_thread.smart_join(targets=('beta',
+        ...                                        'charlie',
+        ...                                        'delta'))
+        >>> print('mainline alpha exiting')
+        mainline alpha entered
+        f1 beta entered
+        f1 beta exiting
+        f1 charlie entered
+        f1 charlie exiting
+        f1 delta entered
+        f1 delta exiting
+        {'beta': 'hi', 'charlie': 'hello', 'deta': 'aloha'}
+        mainline alpha exiting
+
+        :Example: case 4: receive multiple messages from a single remote
+                  thread
+
+        >>> import scottbrian_paratools.smart_thread as st
+        >>> import time
+        >>> def f1(smart_thread: SmartThread, greeting: str) -> None:
+        ...     print(f'f1 {smart_thread.name} entered')
+        ...     smart_thread.smart_send(msg=f'{greeting}', targets='alpha')
+        ...     smart_thread.smart_send(msg=["it's great to be here",
+        ...                                  "life is good"],
+        ...                             targets='alpha')
+        ...     smart_thread.smart_send(msg=("let's do lunch sometime",
+        ...                                  "life is good"),
+        ...                             targets='alpha')
+        ...     print(f'f1 {smart_thread.name} exiting')
+        >>> print('mainline alpha entered')
+        >>> alpha_smart_thread = SmartThread(name='alpha')
+        >>> beta_smart_thread = SmartThread(name='beta',
+        ...                                 target=f1,
+        ...                                 args=('hi',))
+        >>> time.sleep(0.2)
+        >>> my_msg = alpha_smart_thread.smart_recv(senders='beta')
+        >>> print(my_msg)
+        >>> alpha_smart_thread.smart_join(targets='beta')
+        >>> print('mainline alpha exiting')
+        mainline alpha entered
+        f1 beta entered
+        f1 beta exiting
+        {'beta': ['hi', ["it's great to be here", "life is good"],
+        ...       ("let's do lunch sometime", "life is good")}
+        mainline alpha exiting
+
+        :Example: case 5: receive any mixture of single and multiple
+                  messages from specified remote threads
+
+        >>> import scottbrian_paratools.smart_thread as st
+        >>> import time
+        >>> def f1(smart_thread: SmartThread, greeting: str) -> None:
+        ...     print(f'f1 {smart_thread.name} entered')
+        ...     smart_thread.smart_send(msg=f'{greeting}', targets='alpha')
+        ...     if smart_thread.name in ('charlie', 'delta'):
+        ...         smart_thread.smart_send(msg=["miles to go", (1, 2, 3)],
+        ...                                 targets='alpha')
+        ...     if smart_thread.name == 'delta':
+        ...         smart_thread.smart_send(msg={'forty_two': 42, 42: 42}],
+        ...                                 targets='alpha')
+        ...     print(f'f1 {smart_thread.name} exiting')
+        >>> print('mainline alpha entered')
+        >>> alpha_smart_thread = SmartThread(name='alpha')
+        >>> beta_smart_thread = SmartThread(name='beta',
+        ...                                 target=f1,
+        ...                                 args=('hi',))
+        >>> time.sleep(0.2)
+        >>> charlie_smart_thread = SmartThread(name='beta',
+        ...                                    target=f1,
+        ...                                    args=('hello',))
+        >>> time.sleep(0.2)
+        >>> delta_smart_thread = SmartThread(name='charlie',
+        ...                                  target=f1,
+        ...                                  args=('aloha',))
+        >>> time.sleep(0.2)
+        >>> my_msg = alpha_smart_thread.smart_recv(senders={'beta', 'delta'})
+        >>> print(my_msg)
+        >>> alpha_smart_thread.smart_join(targets=('beta',
+        ...                                        'charlie',
+        ...                                        'delta'))
+        >>> print('mainline alpha exiting')
+        mainline alpha entered
+        f1 beta entered
+        f1 beta exiting
+        f1 charlie entered
+        f1 charlie exiting
+        f1 delta entered
+        f1 delta exiting
+        {'beta': ['hi'],
+        'delta': ['hello', ['miles to go', (1, 2, 3)],
+                            {'forty_two': 42, 42: 42}]}
+        mainline alpha exiting
 
         """
         # get RequestBlock with targets in a set and a timer object
