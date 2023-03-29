@@ -96,7 +96,11 @@ RequestCallable: TypeAlias = Callable[
 
 ProcessRtn: TypeAlias = Union[ConfigCmdCallable, RequestCallable]
 
-SendMsgs: TypeAlias = dict[str, list[Any]]
+# SendMsgs: TypeAlias = dict[str, list[Any]]
+
+@dataclass
+class SendMsgs:
+    send_msgs: dict[str, list[Any]]
 
 
 ########################################################################
@@ -1330,7 +1334,7 @@ class SmartThread:
     def smart_send(self,
                    msg: Any,
                    targets: Optional[Iterable] = None,
-                   dict_msg: SendMsgs,
+                   # dict_msg: SendMsgs,
                    log_msg: Optional[str] = None,
                    timeout: OptIntFloat = None) -> None:
         """Send one or more messages to remote threads.
@@ -1541,12 +1545,12 @@ class SmartThread:
         >>> delta_smart_thread = SmartThread(name='delta',
         ...                                  target=f1,
         ...                                  kwargs={'delay_secs': 1.1}))
-        >>> msgs_to_send: st.SendMsgs = {
+        >>> msgs_to_send = st.SendMsgs(send_msgs= {
         ...     'beta': 'hi beta',
         ...     'charlie': ('hi charlie', 'have a greate day'),
         ...     'delta': [42, 'hi delta', {'nums': (1, 2, 3)}]
-        ...                          }
-        >>> alpha_smart_thread.smart_send(dict_msg=msgs_to_send)
+        ...                          })
+        >>> alpha_smart_thread.smart_send(msgs=msgs_to_send)
         >>> alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
         >>> print('mainline alpha exiting')
         mainline alpha entered
@@ -1563,8 +1567,8 @@ class SmartThread:
 
         """
         if targets is None:
-            if isinstance(msg, dict):
-                work_targets = set(msg.keys())
+            if isinstance(msg, SendMsgs):
+                work_targets = set(msg.send_msgs.keys())
             else:
                 work_targets = set(SmartThread._registry.keys())
         else:
@@ -1575,14 +1579,13 @@ class SmartThread:
                 f'{self.name} issued a smart_send request but there are '
                 'no remote targets in the configuration to send to')
 
-        work_msgs: SendMsgs = {}
-        if isinstance(msg, dict):
+        work_msgs: SendMsgs
+        if isinstance(msg, SendMsgs):
             work_msgs = msg
         else:
-            if isinstance(msg, str) or not isinstance(msg, Iterable):
-                msgs = [msg]
+            work_msgs = SendMsgs({})
             for target in targets:
-                work_msgs[target] = msg
+                work_msgs.send_msgs[target] = msg
 
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
@@ -1661,7 +1664,7 @@ class SmartThread:
                 # put the msg on the target msg_q
                 ########################################################
                 try:
-                    remote_sb.msg_q.put(request_block.msg_to_send[
+                    remote_sb.msg_q.put(request_block.msg_to_send.send_msgs[
                                             pk_remote.remote],
                                         timeout=0.01)
                     logger.info(
