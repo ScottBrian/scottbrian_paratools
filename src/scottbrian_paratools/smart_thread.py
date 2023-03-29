@@ -1566,11 +1566,16 @@ class SmartThread:
         mainline alpha exiting
 
         """
+        work_targets: set[str]
         if targets is None:
             if isinstance(msg, SendMsgs):
                 work_targets = set(msg.send_msgs.keys())
             else:
-                work_targets = set(SmartThread._registry.keys())
+                work_targets = set()
+                with sel.SELockShare(SmartThread._registry_lock):
+                    for remote in list(SmartThread._registry.keys()):
+                        if self._get_state(remote) != ThreadState.Stopped:
+                            work_targets |= {remote}
         else:
             work_targets = self.get_set(targets)
         work_targets -= {self.name}
@@ -1704,17 +1709,18 @@ class SmartThread:
          messages are found, it will immediately return them in the
          RecvMsgs dictionary. If no messages were initially found,
          *smart_recv* will continue to check until one or more messages
-         arrives and will return them. If timeout is specified,
-         *smart_recv* will raise a timeout error if no messages appear
-         within the specified time.
+         arrives, at which time it will then return them. If timeout is
+         specified, *smart_recv* will raise a timeout error if no
+         messages appear within the specified time.
           
          If no senders are specified, the *smart_recv* will check its
-         message queues for all threads in the current configuration.
-         If the configuration changes, *smart_recv* will simply continue
-         to check its message queues for any threads that are currently
-         alive. In this way, a thread acting as a server can issue the
-         *smart_recv* to simply park itself on the message queues and
-         returning with request messages as soon as they arrive.
+         message queues for all threads in the current configuration. If
+         no messages are found, *smart_recv* will continue to check all
+         thread in the current configuration, even as the configuration
+         changes. In this way, a thread acting as a server can issue the
+         *smart_recv* to simply park itself on the message queues of all
+         threads to return with any request messages as soon as they
+         arrive.
 
          If senders are specified, *smart_recv* will look for messages
          only on its message queues for the speccified senders. Unlike
@@ -1889,6 +1895,8 @@ class SmartThread:
         >>> time.sleep(0.2)
         >>> my_msg = alpha_smart_thread.smart_recv(senders={'beta', 'delta'})
         >>> print(my_msg)
+        >>> my_msg = alpha_smart_thread.smart_recv(senders={'charlie'})
+        >>> print(my_msg)
         >>> alpha_smart_thread.smart_join(targets=('beta',
         ...                                        'charlie',
         ...                                        'delta'))
@@ -1903,13 +1911,14 @@ class SmartThread:
         {'beta': ['hi'],
         'delta': ['hello', ['miles to go', (1, 2, 3)],
                             {'forty_two': 42, 42: 42}]}
+        {'charlie': ['hi'], ["miles to go", (1, 2, 3)]}
         mainline alpha exiting
 
         """
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
             request_name='smart_recv',
-            remotes=targets,
+            remotes=senders,
             error_stopped_target=True,
             process_rtn=self._process_recv_msg,
             cleanup_rtn=None,
@@ -2919,7 +2928,9 @@ class SmartThread:
                dropped until we have completed the request and any
                cleanup that is needed for a failed request
         """
-        while len(self.work_pk_remotes) > request_block.completion_count:
+        continue_request_loop = True
+        while continue_request_loop:
+        # while len(self.work_pk_remotes) > request_block.completion_count:
             # num_start_loop_work_remotes = len(self.work_pk_remotes)
             work_pk_remotes_copy = self.work_pk_remotes.copy()
             for pk_remote in work_pk_remotes_copy:
@@ -3025,7 +3036,12 @@ class SmartThread:
                 self._handle_loop_errors(request_block=request_block,
                                          pending_remotes=pending_remotes)
 
-            time.sleep(0.2)
+            if len(self.work_pk_remotes) < request_block.completion_count:
+                continue_request_loop = False
+            else:
+                if not request_block.remotes:
+                    self._set_work_pk_remotes(request_block)
+                time.sleep(0.2)
 
         ################################################################
         # cleanup
@@ -3033,6 +3049,65 @@ class SmartThread:
         if self.work_pk_remotes:
             with sel.SELockShare(SmartThread._registry_lock):
                 self.work_pk_remotes = []
+
+    ####################################################################
+    # _set_work_pk_remotes
+    ####################################################################
+
+    def _set_work_pk_remotes(self,
+                             request_block: RequestBlock) -> None:
+        """Update the work_pk_remotes with newly found threads.
+
+        Args:
+            request_block: continue request info
+
+        """
+        pk_remotes: list[PairKeyRemote] = []
+
+        with sel.SELockShare(SmartThread._registry_lock):
+            if request_block.remotes:
+                remotes = request_block.remotes
+            else:
+                remotes = set(SmartThread._registry.keys())
+            self.missing_remotes: set[str] = set()
+            for remote in remotes:
+                if remote in SmartThread._registry:
+                    target_create_time = SmartThread._registry[
+                        remote].create_time
+                else:
+                    target_create_time = 0.0
+
+                pair_key = self._get_pair_key(self.name, remote)
+                if pair_key in SmartThread._pair_array:
+                    local_sb = SmartThread._pair_array[
+                        pair_key].status_blocks[self.name]
+                    local_sb.request_pending = True
+                    logger.debug(
+                        f'TestDebug {self.name} set '
+                        f'request_pending for {remote=}')
+                    # if (remote in SmartThread._pair_array[
+                    #         pair_key].status_blocks):
+                    #     target_create_time = SmartThread._pair_array[
+                    #         pair_key].status_blocks[remote].create_time
+                    local_sb.target_create_time = target_create_time
+                pk_remote = PairKeyRemote(pair_key=pair_key,
+                                          remote=remote,
+                                          create_time=target_create_time)
+                pk_remotes.append(pk_remote)
+
+                # if we just added a pk_remote that has not yet
+                # come into existence
+                if target_create_time == 0.0:
+                    # tell _refresh_pair_array that we are looking
+                    # for this remote
+                    self.missing_remotes |= {remote}
+
+            # we need to set the work remotes before releasing the
+            # lock - any starts or deletes need to be accounted for
+            # starting now
+            self.work_pk_remotes: list[PairKeyRemote] = (
+                pk_remotes.copy())
+            self.found_pk_remotes: list[PairKeyRemote] = []
 
     ####################################################################
     # _handle_found_pk_remotes
