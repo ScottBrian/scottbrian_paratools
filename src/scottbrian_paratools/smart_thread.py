@@ -56,7 +56,7 @@ from collections.abc import Iterable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
-from enum import auto, Enum, Flag
+from enum import auto, Enum, Flag, StrEnum
 from itertools import combinations
 import logging
 import queue
@@ -137,13 +137,8 @@ class SmartThreadRemoteThreadNotRegistered(SmartThreadError):
     """SmartThread exception for remote thread not registered."""
 
 
-class SmartThreadConflictDeadlockDetected(SmartThreadError):
-    """SmartThread exception for conflicting requests."""
-    pass
-
-
-class SmartThreadWaitDeadlockDetected(SmartThreadError):
-    """SmartThread exception for wait deadlock detected."""
+class SmartThreadDeadlockDetected(SmartThreadError):
+    """SmartThread exception for deadlock detected."""
     pass
 
 
@@ -186,13 +181,27 @@ class SmartThreadNoRemoteTargets(SmartThreadError):
 # ReqType
 # contains the type of request
 ########################################################################
-class ReqType(Enum):
+class ReqType(StrEnum):
     NoReq = auto()
-    SendMsg = auto()
-    RecvMsg = auto()
-    Resume = auto()
-    Sync = auto()
-    Wait = auto()
+    Smart_start = auto()
+    Smart_unreg = auto()
+    Smart_join = auto()
+    Smart_send = auto()
+    Smart_recv = auto()
+    Smart_resume = auto()
+    Smart_sync = auto()
+    Smart_wait = auto()
+
+
+########################################################################
+# ReqCategory
+# contains the category of the request
+########################################################################
+class ReqCategory(Enum):
+    Config = auto()
+    Throw = auto()
+    Catch = auto()
+    Handshake = auto()
 
 
 class PairKey(NamedTuple):
@@ -215,6 +224,8 @@ class PairKeyRemote(NamedTuple):
 class RequestBlock:
     """Setup block."""
     request_name: str
+    request: ReqType
+    request_category: ReqCategory
     process_rtn: ProcessRtn
     cleanup_rtn: Callable[[list[PairKeyRemote], str], None]
     get_block_lock: bool
@@ -346,7 +357,6 @@ class SmartThread:
         wait_wait: bool = False
         sync_wait: bool = False
         deadlock: bool = False
-        conflict: bool = False
         request_pending: bool = False
 
     @dataclass
@@ -496,6 +506,8 @@ class SmartThread:
         self.auto_start = auto_start
 
         self.default_timeout = default_timeout
+
+        self.request: ReqType = ReqType.NoReq
 
         self.code = None
 
@@ -933,6 +945,10 @@ class SmartThread:
                 SmartThread._pair_array[
                     pair_key].status_blocks[
                     set_pending_request_name].request_pending = True
+                SmartThread._pair_array[
+                    pair_key].status_blocks[
+                    set_pending_request_name].request = SmartThread._registry[
+                            other_name].request
                 logger.debug(
                     f'TestDebug {current_thread_name} set request_pending in '
                     f'refresh for {pair_key=}, {set_pending_request_name=}')
@@ -1055,6 +1071,7 @@ class SmartThread:
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
             request_name='smart_start',
+            request=ReqType.Smart_start,
             remotes=targets,
             error_stopped_target=True,
             error_not_registered_target=True,
@@ -1164,6 +1181,7 @@ class SmartThread:
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
             request_name='unregister',
+            request=ReqType.Smart_unreg,
             remotes=targets,
             error_stopped_target=False,
             error_not_registered_target=True,
@@ -1262,6 +1280,7 @@ class SmartThread:
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
             request_name='smart_join',
+            request=ReqType.Smart_join,
             remotes=targets,
             error_stopped_target=False,
             process_rtn=self._process_smart_join,
@@ -1626,6 +1645,7 @@ class SmartThread:
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
             request_name='smart_send',
+            request=ReqType.Smart_send,
             remotes=work_targets,
             error_stopped_target=True,
             process_rtn=self._process_send_msg,
@@ -1949,6 +1969,7 @@ class SmartThread:
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
             request_name='smart_recv',
+            request=ReqType.Smart_recv,
             remotes=senders,
             error_stopped_target=True,
             process_rtn=self._process_recv_msg,
@@ -2074,7 +2095,7 @@ class SmartThread:
                     local_sb.recv_wait = True
                     # Check for error conditions first before
                     # checking whether the remote is alive. If the
-                    # remote detects a deadlock or conflict issue,
+                    # remote detects a deadlock issue,
                     # it will set the flags in our entry and then
                     # raise an error and will likely be gone when we
                     # check. We want to raise the same error on
@@ -2200,7 +2221,7 @@ class SmartThread:
         #    happens, this resume will complete as a pre-resume.
         # 2) Remote waiting and deadlock. The remote was flagged as
         #    being in a deadlock and has not been given control to
-        #    raise the SmartThreadWaitDeadlockDetected error. The remote
+        #    raise the SmartThreadDeadlockDetected error. The remote
         #    could recover, in which case this resume will complete,
         #    or the thread could become inactive, in which case
         #    resume will see that and raise the
@@ -2215,11 +2236,11 @@ class SmartThread:
 
         ################################################################
         # Cases where we do the resume:
-        # 1) Remote is waiting, event is not resumed, and neither
-        #    deadlock nor conflict flags are True. This is the most
-        #    expected case in a normally running system where the
-        #    remote put something in action and is now waiting on a
-        #    response (the resume) that the action is complete.
+        # 1) Remote is waiting, event is not resumed, and the deadlock
+        #    flags is False. This is the most expected case in a
+        #    normally running system where the remote put something in
+        #    action and is now waiting on a response (the resume) that
+        #    the action is complete.
         # 2) Remote is not waiting, not sync_wait, and event not
         #    resumed. This is a case where we will do a pre-resume and
         #    the remote is expected to do the wait momentarily.
@@ -2243,6 +2264,7 @@ class SmartThread:
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
             request_name='smart_resume',
+            request=ReqType.Smart_resume,
             remotes=targets,
             error_stopped_target=True,
             process_rtn=self._process_resume,
@@ -2301,14 +2323,10 @@ class SmartThread:
             ########################################################
             # For a resume request we check to see whether a
             # previous wait is still in progress as indicated by the
-            # wait event being set. We also need to make sure there
-            # is not a pending conflict that the remote thread needs
-            # to clear. Note that we only worry about the conflict
-            # for wait - a sync conflict does not impede us here
-            # since we use different event blocks for sync and wait
+            # wait event being set, or if it has yet to recognize a
+            # deadlock.
             if not (remote_sb.wait_event.is_set()
-                    or (remote_sb.conflict
-                        and remote_sb.wait_wait)):
+                    or remote_sb.deadlock):
                 if (remote_sb.target_create_time == 0.0
                         or remote_sb.target_create_time
                         == local_sb.create_time):
@@ -2326,7 +2344,7 @@ class SmartThread:
                 request_block.do_refresh = True
                 return True  # we are done with this remote
 
-        # remote is unregistered or registered or has pending conflict
+        # remote is unregistered or registered or has pending deadlock
         return False  # give the remote some more time
 
     ####################################################################
@@ -2355,7 +2373,7 @@ class SmartThread:
             ``wait()`` request to an event that was not
             **pre-resumed**, also without **timeout** specified,
             then both threads will recognize and raise a
-            **SmartThreadConflictDeadlockDetected** error. This is
+            **SmartThreadDeadlockDetected** error. This is
             needed since neither the ``sync()`` request nor the
             ``wait()`` request has any chance of completing. The
             ``sync()`` request is waiting for a matching ``sync()``
@@ -2387,6 +2405,7 @@ class SmartThread:
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
             request_name='smart_sync',
+            request=ReqType.Smart_sync,
             remotes=targets,
             error_stopped_target=True,
             process_rtn=self._process_sync,
@@ -2444,14 +2463,13 @@ class SmartThread:
                     # for a sync request we check to see whether a
                     # previous sync is still in progress as indicated by
                     # the sync event being set. We also need to make
-                    # sure there is not a pending conflict that the
-                    # remote thread needs to clear. Note that we only
-                    # worry about the conflict for sync - a wait
-                    # conflict does not impede us here since we use
-                    # different event blocks for sync and wait
+                    # sure there is not a pending deadlock that the
+                    # remote thread needs to clear.
+                    # if not (remote_sb.sync_event.is_set()
+                    #         or (remote_sb.conflict
+                    #             and remote_sb.sync_wait)):
                     if not (remote_sb.sync_event.is_set()
-                            or (remote_sb.conflict
-                                and remote_sb.sync_wait)):
+                            or remote_sb.deadlock):
                         if (remote_sb.target_create_time == 0.0
                                 or remote_sb.target_create_time
                                 == local_sb.create_time):
@@ -2496,7 +2514,7 @@ class SmartThread:
 
             # Check for error conditions first before
             # checking whether the remote is alive. If the
-            # remote detects a deadlock or conflict issue,
+            # remote detects a deadlock issue,
             # it will set the flags in our entry and then
             # raise an error and will likely be gone when we
             # check. We want to raise the same error on
@@ -2517,12 +2535,12 @@ class SmartThread:
                         remote_sb.sync_event.clear()
                         request_block.do_refresh = True
 
-            if local_sb.conflict:
-                request_block.conflict_remotes |= {pk_remote.remote}
+            if local_sb.deadlock:
+                request_block.deadlock_remotes |= {pk_remote.remote}
                 local_sb.sync_wait = False
                 logger.debug(
                     f'TestDebug {self.name} sync set '
-                    f'{request_block.conflict_remotes=}')
+                    f'{request_block.deadlock_remotes=}')
                 return True  # we are done with this remote
 
             if self._get_target_state(pk_remote) == ThreadState.Stopped:
@@ -2598,7 +2616,6 @@ class SmartThread:
                         local_sb.wait_event.clear()
 
                     local_sb.deadlock = False
-                    local_sb.conflict = False
 
     ####################################################################
     # wait
@@ -2619,10 +2636,10 @@ class SmartThread:
                 resumed
 
         Raises:
-            SmartThreadWaitDeadlockDetected: Two threads are
+            SmartThreadDeadlockDetected: Two threads are
                 deadlocked in a ''wait()'', each waiting on the other to
                 ``resume()`` their event.
-            SmartThreadConflictDeadlockDetected: A sync request was made
+            SmartThreadDeadlockDetected: A sync request was made
                 by thread {self.name} but remote thread {remote}
                 detected deadlock instead which indicates that the
                 remote thread did not make a matching sync request.
@@ -2638,7 +2655,7 @@ class SmartThread:
                ``wait()`` request to an event that was not
                **pre-resumed**, also without **timeout** specified, then
                both threads will recognize and raise a
-               **SmartThreadConflictDeadlockDetected** error. This is
+               **SmartThreadDeadlockDetected** error. This is
                needed since neither the ``sync()`` request nor the
                ``wait()`` request has any chance of completing. The
                ``sync()`` request is waiting for a matching ``sync()``
@@ -2650,7 +2667,7 @@ class SmartThread:
                request to an event that was not **pre-resumed**, also
                without **timeout** specified, then both threads will
                recognize and raise a
-               **SmartThreadWaitDeadlockDetected** error. This is needed
+               **SmartThreadDeadlockDetected** error. This is needed
                since neither ``wait()`` request has any chance of
                completing as each ``wait()`` request is waiting for a
                matching ``resume()`` request.
@@ -2677,6 +2694,7 @@ class SmartThread:
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
             request_name='smart_wait',
+            request=ReqType.Smart_wait,
             remotes=remotes,
             error_stopped_target=True,
             process_rtn=self._process_wait,
@@ -2741,7 +2759,7 @@ class SmartThread:
                 local_sb.wait_wait = True
                 # Check for error conditions first before
                 # checking whether the remote is alive. If the
-                # remote detects a deadlock or conflict issue,
+                # remote detects a deadlock issue,
                 # it will set the flags in our entry and then
                 # raise an error and will likely be gone when we
                 # check. We want to raise the same error on
@@ -2809,10 +2827,8 @@ class SmartThread:
                 waiting for the remote.
             SmartThreadRemoteThreadNotAlive: request detected remote
                 thread is not alive.
-            SmartThreadConflictDeadlockDetected: a deadlock was detected
-                between a smart_sync request and a smart_wait request.
-            SmartThreadWaitDeadlockDetected: a deadlock was detected
-                between two smart_wait requests.
+            SmartThreadDeadlockDetected: a deadlock was detected
+                between two requests.
 
         """
         with self.cmd_lock:
@@ -2858,10 +2874,8 @@ class SmartThread:
                 waiting for the remote.
             SmartThreadRemoteThreadNotAlive: request detected remote
                 thread is not alive.
-            SmartThreadConflictDeadlockDetected: a deadlock was detected
-                between a smart_sync request and a smart_wait request.
-            SmartThreadWaitDeadlockDetected: a deadlock was detected
-                between two smart_wait requests.
+            SmartThreadDeadlockDetected: a deadlock was detected
+                between two requests.
 
         Notes:
             1) request_pending is used to keep the cmd_runner pair_array
@@ -2948,7 +2962,6 @@ class SmartThread:
             # remotes that were still pending - we need to fail the
             # request as soon as we know about any unresolvable failures
             if ((request_block.stopped_remotes and request_block.remotes)
-                    or request_block.conflict_remotes
                     or request_block.deadlock_remotes
                     or request_block.timer.is_expired()):
 
@@ -2996,10 +3009,11 @@ class SmartThread:
     ####################################################################
 
     def _set_work_pk_remotes(self,
-                             remotes: Optional[str] = None) -> None:
+                             remotes: Optional[set[str]] = None) -> None:
         """Update the work_pk_remotes with newly found threads.
 
         Args:
+            request: type of request being performed
             remotes: names of threads that are targets for the
                 request
 
@@ -3022,6 +3036,7 @@ class SmartThread:
                     local_sb = SmartThread._pair_array[
                         pair_key].status_blocks[self.name]
                     local_sb.request_pending = True
+                    local_sb.request = self.request
                     logger.debug(
                         f'TestDebug {self.name} set '
                         f'request_pending for {remote=}')
@@ -3132,10 +3147,8 @@ class SmartThread:
                 waiting for the remote.
             SmartThreadRemoteThreadNotAlive: request detected remote
                 thread is not alive.
-            SmartThreadConflictDeadlockDetected: a deadlock was detected
-                between a smart_sync request and a smart_wait request.
-            SmartThreadWaitDeadlockDetected: a deadlock was detected
-                between two smart_wait requests.
+            SmartThreadDeadlockDetected: a deadlock was detected
+                between two requests.
 
         """
         targets_msg = (f'while processing a '
@@ -3160,22 +3173,9 @@ class SmartThread:
         else:
             not_registered_msg = ''
 
-        if request_block.conflict_remotes:
-            if request_block.request_name == 'smart_sync':
-                remote_request = 'smart_wait'
-            else:
-                remote_request = 'smart_sync'
-            conflict_msg = (
-                f' Remotes doing a {remote_request} '
-                'request that are deadlocked: '
-                f'{sorted(request_block.conflict_remotes)}.')
-        else:
-            conflict_msg = ''
-
         if request_block.deadlock_remotes:
             deadlock_msg = (
-                f' Remotes doing a smart_wait '
-                'request that are deadlocked: '
+                f' Remotes that are deadlocked: '
                 f'{sorted(request_block.deadlock_remotes)}.')
         else:
             deadlock_msg = ''
@@ -3188,8 +3188,7 @@ class SmartThread:
             full_send_q_msg = ''
 
         msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
-                     f'{not_registered_msg}{conflict_msg}'
-                     f'{deadlock_msg}{full_send_q_msg}')
+                     f'{not_registered_msg}{deadlock_msg}{full_send_q_msg}')
 
         # If an error should be raised for stopped threads
         if (request_block.error_stopped_target
@@ -3209,19 +3208,12 @@ class SmartThread:
             logger.error(error_msg)
             raise SmartThreadRemoteThreadNotRegistered(error_msg)
 
-        if request_block.conflict_remotes:
-            error_msg = (
-                f'{self.name} raising '
-                f'SmartThreadConflictDeadlockDetected {msg_suite}')
-            logger.error(error_msg)
-            raise SmartThreadConflictDeadlockDetected(error_msg)
-
         if request_block.deadlock_remotes:
             error_msg = (
                 f'{self.name} raising '
-                f'SmartThreadWaitDeadlockDetected {msg_suite}')
+                f'SmartThreadDeadlockDetected {msg_suite}')
             logger.error(error_msg)
-            raise SmartThreadWaitDeadlockDetected(error_msg)
+            raise SmartThreadDeadlockDetected(error_msg)
 
         # Note that the timer will never be expired if timeout
         # was not specified either explicitly on the smart_wait
@@ -3255,24 +3247,24 @@ class SmartThread:
             # the following checks apply to both
             # sync_wait and wait_wait
             if (remote_sb.sync_wait
-                    and not local_sb.request == ReqType.Sync
+                    and not local_sb.request == ReqType.Smart_sync
                     and not (remote_sb.sync_event.is_set()
                              or remote_sb.deadlock)):
                 remote_sb.deadlock = True
                 remote_sb.remote_deadlock_request = local_sb.request
                 local_sb.deadlock = True
-                local_sb.remote_deadlock_request = ReqType.Sync
+                local_sb.remote_deadlock_request = ReqType.Smart_sync
                 logger.debug(
                     f'TestDebug {self.name} wait '
                     f'set remote and local '
-                    f'conflict flags {remote_sb.name=}')
+                    f'deadlock flags {remote_sb.name=}')
             elif (remote_sb.wait_wait
                     and not (remote_sb.wait_event.is_set()
                              or remote_sb.deadlock)):
                 remote_sb.deadlock = True
                 remote_sb.remote_deadlock_request = local_sb.request
                 local_sb.deadlock = True
-                local_sb.remote_deadlock_request = ReqType.Wait
+                local_sb.remote_deadlock_request = ReqType.Smart_wait
                 logger.debug(
                     f'TestDebug {self.name} wait '
                     f'set remote and local '
@@ -3283,7 +3275,7 @@ class SmartThread:
                 remote_sb.deadlock = True
                 remote_sb.remote_deadlock_request = local_sb.request
                 local_sb.deadlock = True
-                local_sb.remote_deadlock_request = ReqType.RecvMsg
+                local_sb.remote_deadlock_request = ReqType.Smart_recv
                 logger.debug(
                     f'TestDebug {self.name} wait '
                     f'set remote and local '
@@ -3294,6 +3286,7 @@ class SmartThread:
     ####################################################################
     def _request_setup(self, *,
                        request_name: str,
+                       request: ReqType,
                        process_rtn: Callable[
                            ["RequestBlock",
                             PairKeyRemote,
@@ -3313,6 +3306,7 @@ class SmartThread:
 
         Args:
             request_name: name of smart request
+            request: type of request
             process_rtn: method to process the request for each
                 iteration of the request loop
             cleanup_rtn: method to back out a failed request
@@ -3344,19 +3338,35 @@ class SmartThread:
         else:
             remotes = set(remotes)
 
-        if request_name in ('smart_send', 'smart_recv', 'smart_resume',
-                            'smart_sync', 'smart_wait'):
+        request_category: ReqCategory
+        if request in (ReqType.Smart_start,
+                       ReqType.Smart_unreg,
+                       ReqType.Smart_join):
+            request_category = ReqCategory.Config
+        else:
             self.verify_thread_is_current()
+            if request in (ReqType.Smart_send, ReqType.Smart_resume):
+                request_category = ReqCategory.Throw
+            elif request in (ReqType.Smart_recv, ReqType.Smart_wait):
+                request_category = ReqCategory.Catch
+            elif request == ReqType.Smart_sync:
+                request_category = ReqCategory.Handshake
+            else:
+                raise SmartThreadInvalidInput(f'{request=} is not recognized '
+                                              'as a valid request type')
 
-        if (request_name != 'smart_start'
+        if (request != ReqType.Smart_start
                 and threading.current_thread().name in remotes):
             raise SmartThreadInvalidInput(f'{self.name} {request_name} is '
                                           f'also a target: {remotes=}')
 
         pk_remotes: list[PairKeyRemote] = []
 
-        if request_name in ('smart_send', 'smart_recv', 'smart_resume',
-                            'smart_sync', 'smart_wait'):
+        self.request = request
+
+        if request in (ReqType.Smart_send, ReqType.Smart_recv,
+                       ReqType.Smart_resume, ReqType.Smart_sync,
+                       ReqType.Smart_wait):
             self._set_work_pk_remotes()
             # with sel.SELockShare(SmartThread._registry_lock):
             #     self.missing_remotes: set[str] = set()
@@ -3401,6 +3411,8 @@ class SmartThread:
 
         request_block = RequestBlock(
             request_name=request_name,
+            request=request,
+            request_category=request_category,
             process_rtn=process_rtn,
             cleanup_rtn=cleanup_rtn,
             get_block_lock=get_block_lock,
@@ -3416,7 +3428,6 @@ class SmartThread:
             ret_msg=None,
             stopped_remotes=set(),
             not_registered_remotes=set(),
-            conflict_remotes=set(),
             deadlock_remotes=set(),
             full_send_q_remotes=set())
 
