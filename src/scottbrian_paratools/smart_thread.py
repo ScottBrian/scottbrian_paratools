@@ -1339,12 +1339,35 @@ class SmartThread:
                    timeout: OptIntFloat = None) -> None:
         """Send one or more messages to remote threads.
 
-        For *smart_send*, a message is any type (e.g., text, lists,
-        sets, class objects). *smart_send* can be used to send a single
-        message or multiple messages to a single remote thread,
-        to multiple remote threads, or to every remote thread in the
-        configuration. Eamples are provided below for the following
-        cases:
+        *smart_send* can be used to send a single message or multiple
+        messages to a single remote thread, to multiple remote threads,
+        or to every active remote thread in the configuration. A message
+        is any type (e.g., text, int, float, list, set, or
+        class object).
+
+        The *msg* arg species the message or messages to be sent. A
+        special case exists where the message can be specified as an
+        instance of the SendMsgs class where the messages for one or
+        more targets are placed into a dictionary indexed by the target
+        names. The *targets* arg must be omitted when SendMsgs is
+        specified.
+
+        The *targets* arg specifies the names of remote threads that
+        the message is to be sent to. As mentioned above, *targets*
+        must be omitted when SendMsgs is specified for the *msgs* arg.
+        If SendMsgs is not specifed for *msgs*, *targets* may be omitted
+        to indicte that the message is to be sent to all remote threads
+        in the configuration that are currently active at the time the
+        ^smart_send* is issued. Note that *smart_send* will raise an
+        error if any targets are stopped while *smart_send* is in
+        control, regardless of whether *targets* was specified or not.
+        Also, when *targets* is specified, names of threads that are
+        not yet in the configuration or are not yet active may be
+        specified in anticipation that those threads will become active.
+        If *timeout* is specified, those inactive threads must become
+        active before the timeout expires.
+
+        Eamples are provided below for the following cases:
             1) send a single message to a single remote thread
             2) send a single message to multiple remote threads
             3) send a single message to all remote threads in the
@@ -1574,11 +1597,12 @@ class SmartThread:
                 work_targets = set()
                 with sel.SELockShare(SmartThread._registry_lock):
                     for remote in list(SmartThread._registry.keys()):
-                        if self._get_state(remote) != ThreadState.Stopped:
+                        if (remote != self.name and
+                                self._get_state(remote) == ThreadState.Alive):
                             work_targets |= {remote}
         else:
             work_targets = self.get_set(targets)
-        work_targets -= {self.name}
+
         if not work_targets:
             raise SmartThreadNoRemoteTargets(
                 f'{self.name} issued a smart_send request but there are '
@@ -1595,7 +1619,7 @@ class SmartThread:
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
             request_name='smart_send',
-            remotes=targets,
+            remotes=work_targets,
             error_stopped_target=True,
             process_rtn=self._process_send_msg,
             cleanup_rtn=None,
@@ -3068,7 +3092,7 @@ class SmartThread:
             if request_block.remotes:
                 remotes = request_block.remotes
             else:
-                remotes = set(SmartThread._registry.keys())
+                remotes = set(SmartThread._registry.keys()) - {self.name}
             self.missing_remotes: set[str] = set()
             for remote in remotes:
                 if remote in SmartThread._registry:
@@ -3312,7 +3336,7 @@ class SmartThread:
                        completion_count: int = 0,
                        timeout: OptIntFloat = None,
                        log_msg: Optional[str] = None,
-                       msg_to_send: Any = None,
+                       msg_to_send: Optional[SendMsgs] = None,
                        ) -> RequestBlock:
         """Do common setup for each request.
 
