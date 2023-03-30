@@ -187,6 +187,9 @@ class SmartThreadNoRemoteTargets(SmartThreadError):
 # contains the type of request
 ########################################################################
 class ReqType(Enum):
+    NoReq = auto()
+    SendMsg = auto()
+    RecvMsg = auto()
     Resume = auto()
     Sync = auto()
     Wait = auto()
@@ -227,10 +230,10 @@ class RequestBlock:
     ret_msg: Any
     stopped_remotes: set[str]
     not_registered_remotes: set[str]
-    conflict_remotes: set[str]
     deadlock_remotes: set[str]
     full_send_q_remotes: set[str]
     request_max_interval: IntFloat = 0.0
+    remote_deadlock_request: ReqType = ReqType.NoReq
 
 
 ########################################################################
@@ -329,12 +332,15 @@ class SmartThread:
     @dataclass
     class ConnectionStatusBlock:
         """Connection status block."""
+        name: str
         create_time: float
         target_create_time: float
         wait_event: threading.Event
         sync_event: threading.Event
         msg_q: queue.Queue[Any]
         code: Any = None
+        request: ReqType = ReqType.NoReq
+        remote_deadlock_request: ReqType = ReqType.NoReq
         del_deferred: bool = False
         recv_wait: bool = False
         wait_wait: bool = False
@@ -874,6 +880,7 @@ class SmartThread:
                     SmartThread._pair_array[
                         pair_key].status_blocks[
                         name] = SmartThread.ConnectionStatusBlock(
+                                name=name,
                                 create_time=create_time,
                                 target_create_time=0.0,
                                 wait_event=threading.Event(),
@@ -2090,74 +2097,28 @@ class SmartThread:
                     # a new wait and the remote has not yet woken up
                     # to deal with the earlier deadlock. We can
                     # simply ignore it for now.
+                    # We could allow the deadlock to persist if timeout
+                    # was specified on either request since the timeout
+                    # will eventually break the deadlock, but the end
+                    # result is similar in that an error will be raised.
+                    # It will be better to raise the error sooner than
+                    # waiting for the timeout expiration error.
                     if pk_remote.remote in SmartThread._pair_array[
                             pk_remote.pair_key].status_blocks:
                         remote_sb = SmartThread._pair_array[
                             pk_remote.pair_key].status_blocks[pk_remote.remote]
-                        if not (local_sb.deadlock or local_sb.conflict):
-                            # the following checks apply to both
-                            # sync_wait and wait_wait
-                            if (remote_sb.sync_wait
-                                    and not
-                                    (remote_sb.sync_event.is_set()
-                                     or remote_sb.conflict)):
-                                remote_sb.conflict = True
-                                local_sb.conflict = True
-                                logger.debug(
-                                    f'TestDebug {self.name} wait '
-                                    f'set remote and local '
-                                    f'conflict flags {pk_remote.remote=}')
-                            elif (remote_sb.wait_wait
-                                  # I think this is a bug to check
-                                  # our wait_event, so I comment
-                                  # it out for now and change it
-                                  # to check the remote wait_event
-                                  # and not
-                                  # (local_sb.wait_event.is_set()
-                                  and not
-                                  (remote_sb.wait_event.is_set()
-                                   or remote_sb.deadlock
-                                   or remote_sb.conflict)):
-                                remote_sb.deadlock = True
-                                local_sb.deadlock = True
-                                logger.debug(
-                                    f'TestDebug {self.name} wait '
-                                    f'set remote and local '
-                                    f'deadlock flags {pk_remote.remote=}')
-                            elif (remote_sb.recv_wait
-                                  # I think this is a bug to check
-                                  # our wait_event, so I comment
-                                  # it out for now and change it
-                                  # to check the remote wait_event
-                                  # and not
-                                  # (local_sb.wait_event.is_set()
-                                  and not
-                                  (remote_sb.wait_event.is_set()
-                                   or remote_sb.deadlock
-                                   or remote_sb.conflict)):
-                                remote_sb.deadlock = True
-                                local_sb.deadlock = True
-                                logger.debug(
-                                    f'TestDebug {self.name} wait '
-                                    f'set remote and local '
-                                    f'deadlock flags {pk_remote.remote=}')
 
-                    if local_sb.conflict:
-                        local_sb.conflict = False
-                        local_sb.wait_wait = False
-                        request_block.conflict_remotes |= {pk_remote.remote}
-                        logger.debug(
-                            f'TestDebug {self.name} wait set '
-                            f'{pk_remote.remote=}'
-                            f'{request_block.conflict_remotes=}')
-                        return True
+                        self._check_for_deadlock(local_sb=local_sb,
+                                                 remote_sb=remote_sb)
 
                     if local_sb.deadlock:
                         local_sb.deadlock = False
                         local_sb.recv_wait = False
                         request_block.deadlock_remotes |= {pk_remote.remote}
+                        request_block.remote_deadlock_request = (
+                            local_sb.remote_deadlock_request)
                         logger.debug(
-                            f'TestDebug {self.name} wait set '
+                            f'TestDebug {self.name} recv set '
                             f'{pk_remote.remote=}'
                             f'{request_block.deadlock_remotes=}')
                         return True
@@ -2545,20 +2506,13 @@ class SmartThread:
                     pk_remote.pair_key].status_blocks:
                 remote_sb = SmartThread._pair_array[
                     pk_remote.pair_key].status_blocks[pk_remote.remote]
+
                 with SmartThread._pair_array[pk_remote.pair_key].status_lock:
-                    if not (local_sb.deadlock or local_sb.conflict):
-                        if (remote_sb.wait_wait
-                                and not
-                                (remote_sb.wait_event.is_set()
-                                 or remote_sb.deadlock
-                                 or remote_sb.conflict)):
-                            remote_sb.conflict = True
-                            local_sb.conflict = True
-                            logger.debug(
-                                f'TestDebug {self.name} sync '
-                                f'set remote and local '
-                                f'conflict flags {pk_remote=}')
-                    if (local_sb.conflict or self._get_target_state(pk_remote)
+                    self._check_for_deadlock(local_sb=local_sb,
+                                             remote_sb=remote_sb)
+
+                    if (local_sb.deadlock or self._get_target_state(
+                            pk_remote)
                             == ThreadState.Stopped):
                         remote_sb.sync_event.clear()
                         request_block.do_refresh = True
@@ -2814,45 +2768,8 @@ class SmartThread:
                         pk_remote.pair_key].status_blocks:
                     remote_sb = SmartThread._pair_array[
                         pk_remote.pair_key].status_blocks[pk_remote.remote]
-                    if not (local_sb.deadlock or local_sb.conflict):
-                        # the following checks apply to both
-                        # sync_wait and wait_wait
-                        if (remote_sb.sync_wait
-                                and not
-                                (remote_sb.sync_event.is_set()
-                                 or remote_sb.conflict)):
-                            remote_sb.conflict = True
-                            local_sb.conflict = True
-                            logger.debug(
-                                f'TestDebug {self.name} wait '
-                                f'set remote and local '
-                                f'conflict flags {pk_remote.remote=}')
-                        elif (remote_sb.wait_wait
-                              # I think this is a bug to check
-                              # our wait_event, so I comment
-                              # it out for now and change it
-                              # to check the remote wait_event
-                              # and not
-                              # (local_sb.wait_event.is_set()
-                              and not
-                              (remote_sb.wait_event.is_set()
-                               or remote_sb.deadlock
-                               or remote_sb.conflict)):
-                            remote_sb.deadlock = True
-                            local_sb.deadlock = True
-                            logger.debug(
-                                f'TestDebug {self.name} wait '
-                                f'set remote and local '
-                                f'deadlock flags {pk_remote.remote=}')
-
-                if local_sb.conflict:
-                    local_sb.conflict = False
-                    local_sb.wait_wait = False
-                    request_block.conflict_remotes |= {pk_remote.remote}
-                    logger.debug(
-                        f'TestDebug {self.name} wait set {pk_remote.remote=}'
-                        f'{request_block.conflict_remotes=}')
-                    return True
+                    self._check_for_deadlock(local_sb=local_sb,
+                                             remote_sb=remote_sb)
 
                 if local_sb.deadlock:
                     local_sb.deadlock = False
@@ -3030,7 +2947,7 @@ class SmartThread:
             # handle any error or timeout cases - don't worry about any
             # remotes that were still pending - we need to fail the
             # request as soon as we know about any unresolvable failures
-            if (request_block.stopped_remotes
+            if ((request_block.stopped_remotes and request_block.remotes)
                     or request_block.conflict_remotes
                     or request_block.deadlock_remotes
                     or request_block.timer.is_expired()):
@@ -3064,7 +2981,7 @@ class SmartThread:
                 continue_request_loop = False
             else:
                 if not request_block.remotes:
-                    self._set_work_pk_remotes(request_block)
+                    self._set_work_pk_remotes()
                 time.sleep(0.2)
 
         ################################################################
@@ -3079,19 +2996,18 @@ class SmartThread:
     ####################################################################
 
     def _set_work_pk_remotes(self,
-                             request_block: RequestBlock) -> None:
+                             remotes: Optional[str] = None) -> None:
         """Update the work_pk_remotes with newly found threads.
 
         Args:
-            request_block: continue request info
+            remotes: names of threads that are targets for the
+                request
 
         """
         pk_remotes: list[PairKeyRemote] = []
 
         with sel.SELockShare(SmartThread._registry_lock):
-            if request_block.remotes:
-                remotes = request_block.remotes
-            else:
+            if not remotes:
                 remotes = set(SmartThread._registry.keys()) - {self.name}
             self.missing_remotes: set[str] = set()
             for remote in remotes:
@@ -3319,6 +3235,61 @@ class SmartThread:
             raise SmartThreadRequestTimedOut(error_msg)
 
     ####################################################################
+    # _check_for_deadlock
+    ####################################################################
+    def _check_for_deadlock(self, *,
+                            local_sb: ConnectionStatusBlock,
+                            remote_sb: ConnectionStatusBlock) -> None:
+        """Check the remote thread for deadlock requests.
+
+        Args:
+            local_sb: connection block for this thread
+            remote_sb: connection block for remote thread
+        """
+
+        # if the deadlock has already been detected by
+        # the remote, no need to analyse this side. Just
+        # drop down to the code below to return with the
+        # error.
+        if not local_sb.deadlock:
+            # the following checks apply to both
+            # sync_wait and wait_wait
+            if (remote_sb.sync_wait
+                    and not local_sb.request == ReqType.Sync
+                    and not (remote_sb.sync_event.is_set()
+                             or remote_sb.deadlock)):
+                remote_sb.deadlock = True
+                remote_sb.remote_deadlock_request = local_sb.request
+                local_sb.deadlock = True
+                local_sb.remote_deadlock_request = ReqType.Sync
+                logger.debug(
+                    f'TestDebug {self.name} wait '
+                    f'set remote and local '
+                    f'conflict flags {remote_sb.name=}')
+            elif (remote_sb.wait_wait
+                    and not (remote_sb.wait_event.is_set()
+                             or remote_sb.deadlock)):
+                remote_sb.deadlock = True
+                remote_sb.remote_deadlock_request = local_sb.request
+                local_sb.deadlock = True
+                local_sb.remote_deadlock_request = ReqType.Wait
+                logger.debug(
+                    f'TestDebug {self.name} wait '
+                    f'set remote and local '
+                    f'deadlock flags {remote_sb.name=}')
+            elif (remote_sb.recv_wait
+                    and (remote_sb.msg_q.empty()
+                         or remote_sb.deadlock)):
+                remote_sb.deadlock = True
+                remote_sb.remote_deadlock_request = local_sb.request
+                local_sb.deadlock = True
+                local_sb.remote_deadlock_request = ReqType.RecvMsg
+                logger.debug(
+                    f'TestDebug {self.name} wait '
+                    f'set remote and local '
+                    f'deadlock flags {remote_sb.name=}')
+
+    ####################################################################
     # _request_setup
     ####################################################################
     def _request_setup(self, *,
@@ -3386,46 +3357,47 @@ class SmartThread:
 
         if request_name in ('smart_send', 'smart_recv', 'smart_resume',
                             'smart_sync', 'smart_wait'):
-            with sel.SELockShare(SmartThread._registry_lock):
-                self.missing_remotes: set[str] = set()
-                for remote in remotes:
-                    if remote in SmartThread._registry:
-                        target_create_time = SmartThread._registry[
-                            remote].create_time
-                    else:
-                        target_create_time = 0.0
-
-                    pair_key = self._get_pair_key(self.name, remote)
-                    if pair_key in SmartThread._pair_array:
-                        local_sb = SmartThread._pair_array[
-                            pair_key].status_blocks[self.name]
-                        local_sb.request_pending = True
-                        logger.debug(
-                            f'TestDebug {self.name} set '
-                            f'request_pending for {remote=}')
-                        # if (remote in SmartThread._pair_array[
-                        #         pair_key].status_blocks):
-                        #     target_create_time = SmartThread._pair_array[
-                        #         pair_key].status_blocks[remote].create_time
-                        local_sb.target_create_time = target_create_time
-                    pk_remote = PairKeyRemote(pair_key=pair_key,
-                                              remote=remote,
-                                              create_time=target_create_time)
-                    pk_remotes.append(pk_remote)
-
-                    # if we just added a pk_remote that has not yet
-                    # come into existence
-                    if target_create_time == 0.0:
-                        # tell _refresh_pair_array that we are looking
-                        # for this remote
-                        self.missing_remotes |= {remote}
-
-                # we need to set the work remotes before releasing the
-                # lock - any starts or deletes need to be accounted for
-                # starting now
-                self.work_pk_remotes: list[PairKeyRemote] = (
-                    pk_remotes.copy())
-                self.found_pk_remotes: list[PairKeyRemote] = []
+            self._set_work_pk_remotes()
+            # with sel.SELockShare(SmartThread._registry_lock):
+            #     self.missing_remotes: set[str] = set()
+            #     for remote in remotes:
+            #         if remote in SmartThread._registry:
+            #             target_create_time = SmartThread._registry[
+            #                 remote].create_time
+            #         else:
+            #             target_create_time = 0.0
+            #
+            #         pair_key = self._get_pair_key(self.name, remote)
+            #         if pair_key in SmartThread._pair_array:
+            #             local_sb = SmartThread._pair_array[
+            #                 pair_key].status_blocks[self.name]
+            #             local_sb.request_pending = True
+            #             logger.debug(
+            #                 f'TestDebug {self.name} set '
+            #                 f'request_pending for {remote=}')
+            #             # if (remote in SmartThread._pair_array[
+            #             #         pair_key].status_blocks):
+            #             #     target_create_time = SmartThread._pair_array[
+            #             #         pair_key].status_blocks[remote].create_time
+            #             local_sb.target_create_time = target_create_time
+            #         pk_remote = PairKeyRemote(pair_key=pair_key,
+            #                                   remote=remote,
+            #                                   create_time=target_create_time)
+            #         pk_remotes.append(pk_remote)
+            #
+            #         # if we just added a pk_remote that has not yet
+            #         # come into existence
+            #         if target_create_time == 0.0:
+            #             # tell _refresh_pair_array that we are looking
+            #             # for this remote
+            #             self.missing_remotes |= {remote}
+            #
+            #     # we need to set the work remotes before releasing the
+            #     # lock - any starts or deletes need to be accounted for
+            #     # starting now
+            #     self.work_pk_remotes: list[PairKeyRemote] = (
+            #         pk_remotes.copy())
+            #     self.found_pk_remotes: list[PairKeyRemote] = []
 
         request_block = RequestBlock(
             request_name=request_name,
