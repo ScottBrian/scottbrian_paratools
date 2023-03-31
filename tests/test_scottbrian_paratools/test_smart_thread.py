@@ -563,7 +563,10 @@ class ConfigCmd(ABC):
                         parms += comma + f"{key}={item}"
                     # comma = ', '  # after first item, now need comma
             if key == 'f1_create_items':
-                parms += comma + f"{key}={item}"
+                create_names: list[str] = []
+                for create_item in item:
+                    create_names.append(create_item.name)
+                parms += comma + f"{create_names=}"
 
         return f'{classname}({parms})'
 
@@ -4027,7 +4030,7 @@ class RegRemoveLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=("[a-z]+ removed [a-z]+ from registry for "
-                        "process='(join|unregister)'"),
+                        "process='(join|smart_unreg)'"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -5824,7 +5827,7 @@ class ConfigVerifier:
     ####################################################################
     def build_exit_suite_num(self,
                              num_to_exit: int) -> None:
-        """Return a list of ConfigCmd items for unregister.
+        """Return a list of ConfigCmd items for smart_unreg.
 
         Args:
             num_to_exit: number of threads to exit
@@ -6388,8 +6391,8 @@ class ConfigVerifier:
         sender_names = get_set(sender_names)
         receiver_names = get_set(receiver_names)
         send_recv_msgs: SendRecvMsgs = SendRecvMsgs({})
-        for sr_key in product(sender_names, receiver_names):
-            sr_key = cast(SrKey, sr_key)
+        for sr_pair in product(sender_names, receiver_names):
+            sr_key: SrKey = SrKey(sr_pair[0], sr_pair[1])
             msgs: list[Any] = []
             for idx in range(num_msgs):
                 msgs.append(f'send recv test: {sr_key.sender} '
@@ -11247,10 +11250,13 @@ class ConfigVerifier:
         ################################################################
         # setup the messages to send
         ################################################################
-        sender_msgs: dict[str, list[Any]] = {}
-        for name in sender_names:
-            sender_msgs[name] = [f'recv test: {name} sending msg '
-                                 f'at {self.get_ptime()}']
+        all_targets: list[str] = (active_target_names
+                                  + registered_target_names
+                                  + unreg_timeout_names
+                                  + exit_names
+                                  + full_q_names)
+
+        sender_msgs = self.create_msgs(sender_names, all_targets)
 
         sender_1_msg_1: SendRecvMsgs = SendRecvMsgs({})
         if exit_names and num_senders >= 2:
@@ -11385,12 +11391,6 @@ class ConfigVerifier:
                         cmd_runners=self.commander_name,
                         removed_names=exit_name,
                         exp_half_paired_names=sender_names[2]))
-
-        all_targets: list[str] = (active_target_names
-                                  + registered_target_names
-                                  + unreg_timeout_names
-                                  + exit_names
-                                  + full_q_names)
 
         if timeout_type == TimeoutType.TimeoutTrue:
             send_msg_serial_num = self.add_cmd(
@@ -11654,9 +11654,8 @@ class ConfigVerifier:
         ################################################################
         # smart_send
         ################################################################
-        msgs_to_send: dict[str, list[Any]] = {
-            'delta': ['send msg from delta'],
-            'echo': ['send msg from echo']}
+        msgs_to_send = self.create_msgs(['delta', 'echo'],
+                                        ['alpha', 'beta', 'charlie'])
         send_msg_serial_num = self.add_cmd(
             SendMsg(cmd_runners=['delta', 'echo'],
                     receivers=['alpha', 'beta', 'charlie'],
@@ -11758,7 +11757,7 @@ class ConfigVerifier:
                                 num_alive: int,
                                 num_stopped: int
                                 ) -> None:
-        """Return a list of ConfigCmd items for unregister.
+        """Return a list of ConfigCmd items for smart_unreg.
 
         Args:
             num_auto_start: number of threads to auto start
@@ -11877,7 +11876,7 @@ class ConfigVerifier:
                           start_names: Iterable,
                           validate_config: Optional[bool] = True
                           ) -> None:
-        """Return a list of ConfigCmd items for unregister.
+        """Return a list of ConfigCmd items for smart_unreg.
 
         Args:
             start_names: thread names to be started
@@ -11909,7 +11908,7 @@ class ConfigVerifier:
     ####################################################################
     def build_start_suite_num(self,
                               num_to_start: int) -> None:
-        """Return a list of ConfigCmd items for unregister.
+        """Return a list of ConfigCmd items for smart_unreg.
 
         Args:
             num_to_start: number of threads to be started
@@ -12110,7 +12109,7 @@ class ConfigVerifier:
     def build_unreg_suite(self,
                           names: Iterable,
                           validate_config: bool = True) -> None:
-        """Return a list of ConfigCmd items for unregister.
+        """Return a list of ConfigCmd items for smart_unreg.
 
         Args:
             names: thread name to be unregistered
@@ -12143,7 +12142,7 @@ class ConfigVerifier:
     ####################################################################
     def build_unreg_suite_num(self,
                               num_to_unreg: int) -> None:
-        """Return a list of ConfigCmd items for unregister.
+        """Return a list of ConfigCmd items for smart_unreg.
 
         Args:
             num_to_unreg: number of threads to be unregistered
@@ -12401,7 +12400,7 @@ class ConfigVerifier:
         Args:
             cmd_runner: name of thread doing the delete (for log msg)
             del_name: name of thread to be deleted
-            process: names the process, either join or unregister
+            process: names the process, either join or smart_unreg
             del_msg_idx: index in the log for the del message
         """
         self.log_test_msg(f'del_thread entered: {cmd_runner=}, '
@@ -13071,7 +13070,7 @@ class ConfigVerifier:
             recvd_msg = self.all_threads[cmd_runner].smart_recv(
                 senders=remote,
                 log_msg=log_msg)
-            assert recvd_msg[remote] == exp_msgs.send_msgs[sr_key]
+            assert recvd_msg[remote] == [exp_msgs.send_msgs[sr_key]]
             self.add_log_msg(
                 new_log_msg=f"{cmd_runner} received msg from {remote}",
                 log_level=logging.INFO)
@@ -13081,7 +13080,7 @@ class ConfigVerifier:
                 senders=remote,
                 timeout=timeout,
                 log_msg=log_msg)
-            assert recvd_msg[remote] == exp_msgs[sr_key]
+            assert recvd_msg[remote] == [exp_msgs.send_msgs[sr_key]]
             self.add_log_msg(
                 new_log_msg=f"{cmd_runner} received msg from {remote}",
                 log_level=logging.INFO)
@@ -13204,7 +13203,7 @@ class ConfigVerifier:
         Args:
             cmd_runner: name of thread doing the cmd
             del_name: name of thread being removed
-            process: either join or unregister
+            process: either join or smart_unreg
             reg_rem_log_idx: index in log messages for reg remove msg
         """
         self.log_test_msg(f'handle_reg_remove entered: {cmd_runner=}, '
@@ -13461,13 +13460,24 @@ class ConfigVerifier:
 
         send_msg: Any = None
         send_msgs: st.SendMsgs = st.SendMsgs({})
-        for sr_key, item in msg_to_send.send_msgs.items():
-            if sr_key.sender == cmd_runner:
-                if receivers or broadcast:
-                    send_msg = item
-                    break
-                else:
-                    send_msgs[sr_key.receiver] = item
+
+        if receivers or broadcast:
+            # For receivers or broadcast, the same message is sent to
+            # each of the targets, so we need to modify SendRecvMsgs to
+            # make each message the same for each sender, receiver pair
+            # for this cmd_runner.
+            send_msg = 'this is a test message from handle_send_msg'
+            sr_keys = list(msg_to_send.send_msgs.keys())
+            for sr_key in sr_keys:
+                if sr_key.sender == cmd_runner:
+                    msg_to_send.send_msgs[sr_key] = send_msg
+        else:
+            # for a smart_send using the SendMsgs option, we need to
+            # build a SendMsgs dict from the SendRecvMsgs test messages
+            for sr_key, item in msg_to_send.send_msgs.items():
+                if sr_key.sender == cmd_runner:
+                    send_msgs.send_msgs[sr_key.receiver] = item
+            send_msg = send_msgs
 
         enter_exit = ('entry', 'exit')
         if stopped_remotes:
@@ -13476,12 +13486,12 @@ class ConfigVerifier:
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_send(
                         targets=receivers,
-                        msg=send_msg | send_msgs,
+                        msg=send_msg,
                         log_msg=log_msg)
                 else:
                     self.all_threads[cmd_runner].smart_send(
                         targets=receivers,
-                        msg=send_msg | send_msgs,
+                        msg=send_msg,
                         timeout=timeout,
                         log_msg=log_msg)
 
@@ -13497,13 +13507,13 @@ class ConfigVerifier:
         elif timeout_type == TimeoutType.TimeoutNone:
             self.all_threads[cmd_runner].smart_send(
                 targets=receivers,
-                msg=send_msg | send_msgs,
+                msg=send_msg,
                 log_msg=log_msg)
             elapsed_time += (time.time() - start_time)
         elif timeout_type == TimeoutType.TimeoutFalse:
             self.all_threads[cmd_runner].smart_send(
                 targets=receivers,
-                msg=send_msg | send_msgs,
+                msg=send_msg,
                 timeout=timeout,
                 log_msg=log_msg)
             elapsed_time += (time.time() - start_time)
@@ -13512,7 +13522,7 @@ class ConfigVerifier:
             with pytest.raises(st.SmartThreadRequestTimedOut):
                 self.all_threads[cmd_runner].smart_send(
                     targets=receivers,
-                    msg=send_msg | send_msgs,
+                    msg=send_msg,
                     timeout=timeout,
                     log_msg=log_msg)
             elapsed_time += (time.time() - start_time)
@@ -13896,7 +13906,7 @@ class ConfigVerifier:
             f'{sorted(targets)}.')
 
         if not pending_remotes:
-            if smart_request in ('smart_join', 'smart_start', 'unregister'):
+            if smart_request in ('smart_join', 'smart_start', 'smart_unreg'):
                 pending_remotes = self.all_threads[
                     cmd_runner].work_remotes
             else:
@@ -13975,19 +13985,19 @@ class ConfigVerifier:
         """Unregister the named threads.
 
         Args:
-            cmd_runner: name of thread doing the unregister
+            cmd_runner: name of thread doing the smart_unreg
             unregister_targets: names of threads to be unregistered
-            log_msg: log msg for the unregister request
+            log_msg: log msg for the smart_unreg request
 
         """
         self.log_test_msg(f'handle_unregister entry for {cmd_runner=}, '
                           f'{unregister_targets=}')
 
         self.log_ver.add_call_seq(
-            name='unregister',
+            name='smart_unreg',
             seq='test_smart_thread.py::ConfigVerifier.handle_unregister')
 
-        self.all_threads[cmd_runner].unregister(
+        self.all_threads[cmd_runner].smart_unreg(
             targets=unregister_targets,
             log_msg=log_msg)
 
@@ -14000,7 +14010,7 @@ class ConfigVerifier:
                           f'monitor')
 
         self.add_request_log_msg(cmd_runner=cmd_runner,
-                                 smart_request='unregister',
+                                 smart_request='smart_unreg',
                                  targets=unregister_targets,
                                  timeout=0,
                                  timeout_type=TimeoutType.TimeoutNone,
@@ -18253,7 +18263,7 @@ class TestSmartThreadScenarios:
             args=(f1_name,),
             auto_start=False)
 
-        commander_thread.unregister(targets='beta')
+        commander_thread.smart_unreg(targets='beta')
 
         ################################################################
         # commander log messages
@@ -18335,11 +18345,11 @@ class TestSmartThreadScenarios:
             ("alpha added status_blocks entry for pair_key = "
              "\('alpha', 'beta'\), name = beta"),
             'alpha updated _pair_array at UTC',
-            ("unregister entry: requestor: alpha targets: \['beta'\] "
+            ("smart_unreg entry: requestor: alpha targets: \['beta'\] "
              "timeout value: None "
              "test_smart_thread.py::TestSmartThreadScenarios."
              "test_smart_thread_log_msg:"),
-            ("unregister exit: requestor: alpha targets: \['beta'\] "
+            ("smart_unreg exit: requestor: alpha targets: \['beta'\] "
              "timeout value: None "
              "test_smart_thread.py::TestSmartThreadScenarios."
              "test_smart_thread_log_msg:"),
@@ -18351,7 +18361,7 @@ class TestSmartThreadScenarios:
             ("name=beta, smart_thread=SmartThread\(name='beta', target=f1, "
              "args=\('beta',\)\), is_alive\(\)=False, "
              "state=<ThreadState.Stopped: 32>"),
-            "alpha removed beta from registry for process='unregister'",
+            "alpha removed beta from registry for process='smart_unreg'",
             'alpha entered _refresh_pair_array',
             ("alpha removed status_blocks entry for pair_key = "
              "\('alpha', 'beta'\), name = beta"),
@@ -18361,7 +18371,7 @@ class TestSmartThreadScenarios:
              "\('alpha', 'beta'\)"),
             'alpha updated _pair_array at UTC',
             "alpha did cleanup of registry at UTC",
-            'alpha did successful unregister of beta.',
+            'alpha did successful smart_unreg of beta.',
         ]
 
         commander_info_log_msgs = [
@@ -18782,7 +18792,7 @@ class TestSmartThreadErrors:
                                      target=f1,
                                      kwargs={'f1_name': 'beta'})
         with pytest.raises(st.SmartThreadRemoteThreadNotRegistered):
-            beta_thread.unregister(targets='beta')
+            beta_thread.smart_unreg(targets='beta')
 
         msgs.queue_msg('beta')
         alpha_thread.smart_join(targets='beta')

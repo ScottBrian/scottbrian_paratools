@@ -158,7 +158,7 @@ class SmartThreadArgsSpecificationWithoutTarget(SmartThreadError):
 
 
 class SmartThreadInvalidUnregister(SmartThreadError):
-    """SmartThread exception for invalid unregister request."""
+    """SmartThread exception for invalid smart_unreg request."""
     pass
 
 
@@ -1146,11 +1146,11 @@ class SmartThread:
         return False
 
     ####################################################################
-    # unregister
+    # smart_unreg
     ####################################################################
-    def unregister(self, *,
-                   targets: Iterable,
-                   log_msg: Optional[str] = None) -> None:
+    def smart_unreg(self, *,
+                    targets: Iterable,
+                    log_msg: Optional[str] = None) -> None:
         """Unregister threads that were never started.
 
         Args:
@@ -1164,7 +1164,7 @@ class SmartThread:
                enters the active state
 
         :Example: instantiate SmartThread without auto_start and then
-                      unregister the thread
+                      smart_unreg the thread
 
         >>> import scottbrian_paratools.smart_event as st
         >>> def f1() -> None:
@@ -1176,7 +1176,7 @@ class SmartThread:
         >>> beta_smart_thread = SmartThread(name='beta',
         ...                                 target=f1,
         ...                                 auto_start=False)
-        >>> beta_smart_thread.unregister()
+        >>> beta_smart_thread.smart_unreg()
 
         """
         # get RequestBlock with targets in a set and a timer object
@@ -1221,10 +1221,10 @@ class SmartThread:
         self._set_state(
             target_thread=SmartThread._registry[remote],
             new_state=ThreadState.Stopped)
-        self._clean_up_registry(process='unregister')
+        self._clean_up_registry(process='smart_unreg')
 
         logger.debug(
-            f'{self.name} did successful unregister of '
+            f'{self.name} did successful smart_unreg of '
             f'{remote}.')
 
         # restart while loop with one less remote
@@ -2053,12 +2053,12 @@ class SmartThread:
                 # recv message from remote
                 recvd_msg = local_sb.msg_q.get(
                     timeout=timeout_value)
-                received_msgs.append(recvd_msg.copy())
+                received_msgs.append(recvd_msg)
                 logger.info(
                     f'{self.name} received msg from {pk_remote.remote}')
                 while not local_sb.msg_q.empty():
                     recvd_msg = local_sb.msg_q.get()
-                    received_msgs.append(recvd_msg.copy())
+                    received_msgs.append(recvd_msg)
 
                 request_block.ret_msg[pk_remote.remote] = received_msgs
                 # if we had wanted to delete an entry in the
@@ -2965,7 +2965,7 @@ class SmartThread:
                     if request_block.cleanup_rtn:
                         request_block.cleanup_rtn(
                             self.work_pk_remotes,
-                            request_block.request.name)
+                            request_block.request.value)
 
                     # clear request_pending for remaining work remotes
                     for pair_key, remote, _ in self.work_pk_remotes:
@@ -2988,7 +2988,7 @@ class SmartThread:
                 self._handle_loop_errors(request_block=request_block,
                                          pending_remotes=pending_remotes)
 
-            if len(self.work_pk_remotes) < request_block.completion_count:
+            if len(self.work_pk_remotes) <= request_block.completion_count:
                 continue_request_loop = False
             else:
                 if not request_block.remotes:
@@ -3150,7 +3150,7 @@ class SmartThread:
 
         """
         targets_msg = (f'while processing a '
-                       f'{request_block.request.name} '
+                       f'{request_block.request.value} '
                        f'request with remotes '
                        f'{sorted(request_block.remotes)}.')
 
@@ -3326,7 +3326,7 @@ class SmartThread:
         timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
 
         if not remotes:
-            raise SmartThreadInvalidInput(f'{self.name} {request.name} '
+            raise SmartThreadInvalidInput(f'{self.name} {request.value} '
                                           'request with no targets specified.')
 
         if isinstance(remotes, str):
@@ -3353,7 +3353,7 @@ class SmartThread:
 
         if (request != ReqType.Smart_start
                 and threading.current_thread().name in remotes):
-            raise SmartThreadInvalidInput(f'{self.name} {request.name} is '
+            raise SmartThreadInvalidInput(f'{self.name} {request.value} is '
                                           f'also a target: {remotes=}')
 
         pk_remotes: list[PairKeyRemote] = []
@@ -3363,7 +3363,7 @@ class SmartThread:
         if request in (ReqType.Smart_send, ReqType.Smart_recv,
                        ReqType.Smart_resume, ReqType.Smart_sync,
                        ReqType.Smart_wait):
-            self._set_work_pk_remotes()
+            self._set_work_pk_remotes(remotes)
             # with sel.SELockShare(SmartThread._registry_lock):
             #     self.missing_remotes: set[str] = set()
             #     for remote in remotes:
@@ -3460,10 +3460,10 @@ class SmartThread:
             log_msg_body += f' {log_msg}'
 
         entry_log_msg = (
-            f'{request_block.request.name} entry: {log_msg_body}')
+            f'{request_block.request.value} entry: {log_msg_body}')
 
         exit_log_msg = (
-            f'{request_block.request.name} exit: {log_msg_body}')
+            f'{request_block.request.value} exit: {log_msg_body}')
 
         logger.debug(entry_log_msg, stacklevel=3)
         return exit_log_msg
