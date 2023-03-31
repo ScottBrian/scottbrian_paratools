@@ -223,7 +223,6 @@ class PairKeyRemote(NamedTuple):
 @dataclass
 class RequestBlock:
     """Setup block."""
-    request_name: str
     request: ReqType
     request_category: ReqCategory
     process_rtn: ProcessRtn
@@ -388,6 +387,7 @@ class SmartThread:
                  target: Optional[Callable[..., Any]] = None,
                  args: Optional[tuple[Any, ...]] = None,
                  kwargs: Optional[dict[str, Any]] = None,
+                 thread_parm_name: Optional[str] = None,
                  thread: Optional[threading.Thread] = None,
                  auto_start: Optional[bool] = True,
                  default_timeout: OptIntFloat = None,
@@ -409,6 +409,8 @@ class SmartThread:
                       specified.
             kwargs: keyword args for the thread creation when *target*
                 is specified.
+            thread_parm_name: specifies the keyword name to use to pass
+                the smart_thread instance to the target routine.
             thread: specifies the thread to use instead of the current
                         thread - needed when SmartThread is instantiated
                         in a class that inherits threading.Thread in
@@ -479,13 +481,12 @@ class SmartThread:
 
         if target:  # caller wants a thread created
             self.thread_create = ThreadCreate.Target
-            if args:
-                target_args = (self, *args)
-            else:
-                target_args = (self,)
+            keyword_args: dict[str, Any] = kwargs
+            if thread_parm_name:
+                keyword_args = keyword_args | {thread_parm_name: self}
             self.thread = threading.Thread(target=target,
-                                           args=target_args,
-                                           kwargs=kwargs,
+                                           args=args,
+                                           kwargs=keyword_args,
                                            name=name)
         elif thread:  # caller provided the thread to use
             self.thread_create = ThreadCreate.Thread
@@ -874,7 +875,7 @@ class SmartThread:
                 changed = True
 
             # add status block for name0 and name1 if needed
-            set_pending_request_name = ''
+            set_pending_requestor_name = ''
             for name in pair_key:
                 if (name not in SmartThread._pair_array[
                         pair_key].status_blocks):
@@ -933,7 +934,7 @@ class SmartThread:
                             PairKeyRemote(pair_key,
                                           name,
                                           create_time))
-                        set_pending_request_name = other_name
+                        set_pending_requestor_name = other_name
 
                 else:  # entry already exists
                     # reset del_deferred in case it is ON and the
@@ -941,17 +942,18 @@ class SmartThread:
                     SmartThread._pair_array[
                         pair_key].status_blocks[
                         name].del_deferred = False
-            if set_pending_request_name:
+            if set_pending_requestor_name:
                 SmartThread._pair_array[
                     pair_key].status_blocks[
-                    set_pending_request_name].request_pending = True
+                    set_pending_requestor_name].request_pending = True
                 SmartThread._pair_array[
                     pair_key].status_blocks[
-                    set_pending_request_name].request = SmartThread._registry[
-                            other_name].request
+                    set_pending_requestor_name].request = \
+                    SmartThread._registry[
+                            set_pending_requestor_name].request
                 logger.debug(
                     f'TestDebug {current_thread_name} set request_pending in '
-                    f'refresh for {pair_key=}, {set_pending_request_name=}')
+                    f'refresh for {pair_key=}, {set_pending_requestor_name=}')
         # find removable entries in connection pair array
         connection_array_del_list = []
         for pair_key in SmartThread._pair_array.keys():
@@ -1070,7 +1072,6 @@ class SmartThread:
         """
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
-            request_name='smart_start',
             request=ReqType.Smart_start,
             remotes=targets,
             error_stopped_target=True,
@@ -1180,7 +1181,6 @@ class SmartThread:
         """
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
-            request_name='unregister',
             request=ReqType.Smart_unreg,
             remotes=targets,
             error_stopped_target=False,
@@ -1279,7 +1279,6 @@ class SmartThread:
         """
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
-            request_name='smart_join',
             request=ReqType.Smart_join,
             remotes=targets,
             error_stopped_target=False,
@@ -1644,7 +1643,6 @@ class SmartThread:
 
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
-            request_name='smart_send',
             request=ReqType.Smart_send,
             remotes=work_targets,
             error_stopped_target=True,
@@ -1968,7 +1966,6 @@ class SmartThread:
         """
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
-            request_name='smart_recv',
             request=ReqType.Smart_recv,
             remotes=senders,
             error_stopped_target=True,
@@ -2263,7 +2260,6 @@ class SmartThread:
 
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
-            request_name='smart_resume',
             request=ReqType.Smart_resume,
             remotes=targets,
             error_stopped_target=True,
@@ -2404,7 +2400,6 @@ class SmartThread:
         """
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
-            request_name='smart_sync',
             request=ReqType.Smart_sync,
             remotes=targets,
             error_stopped_target=True,
@@ -2693,7 +2688,6 @@ class SmartThread:
         """
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
-            request_name='smart_wait',
             request=ReqType.Smart_wait,
             remotes=remotes,
             error_stopped_target=True,
@@ -2949,6 +2943,7 @@ class SmartThread:
                             self.missing_remotes -= {pk_remote.remote}
                             local_sb.target_create_time = 0.0
                             local_sb.request_pending = False
+                            local_sb.request = ReqType.NoReq
                             logger.debug(
                                 f'TestDebug {self.name} reset '
                                 f'request_pending for {pk_remote.remote=}')
@@ -2970,7 +2965,7 @@ class SmartThread:
                     if request_block.cleanup_rtn:
                         request_block.cleanup_rtn(
                             self.work_pk_remotes,
-                            request_block.request_name)
+                            request_block.request.name)
 
                     # clear request_pending for remaining work remotes
                     for pair_key, remote, _ in self.work_pk_remotes:
@@ -2980,6 +2975,9 @@ class SmartThread:
                             SmartThread._pair_array[
                                 pair_key].status_blocks[
                                 self.name].request_pending = False
+                            SmartThread._pair_array[
+                                pair_key].status_blocks[
+                                self.name].request = ReqType.NoReq
 
                     pending_remotes = [remote for pk, remote, _ in
                                        self.work_pk_remotes]
@@ -3152,7 +3150,7 @@ class SmartThread:
 
         """
         targets_msg = (f'while processing a '
-                       f'{request_block.request_name} '
+                       f'{request_block.request.name} '
                        f'request with remotes '
                        f'{sorted(request_block.remotes)}.')
 
@@ -3285,7 +3283,6 @@ class SmartThread:
     # _request_setup
     ####################################################################
     def _request_setup(self, *,
-                       request_name: str,
                        request: ReqType,
                        process_rtn: Callable[
                            ["RequestBlock",
@@ -3305,7 +3302,6 @@ class SmartThread:
         """Do common setup for each request.
 
         Args:
-            request_name: name of smart request
             request: type of request
             process_rtn: method to process the request for each
                 iteration of the request loop
@@ -3330,7 +3326,7 @@ class SmartThread:
         timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
 
         if not remotes:
-            raise SmartThreadInvalidInput(f'{self.name} {request_name} '
+            raise SmartThreadInvalidInput(f'{self.name} {request.name} '
                                           'request with no targets specified.')
 
         if isinstance(remotes, str):
@@ -3357,7 +3353,7 @@ class SmartThread:
 
         if (request != ReqType.Smart_start
                 and threading.current_thread().name in remotes):
-            raise SmartThreadInvalidInput(f'{self.name} {request_name} is '
+            raise SmartThreadInvalidInput(f'{self.name} {request.name} is '
                                           f'also a target: {remotes=}')
 
         pk_remotes: list[PairKeyRemote] = []
@@ -3410,7 +3406,6 @@ class SmartThread:
             #     self.found_pk_remotes: list[PairKeyRemote] = []
 
         request_block = RequestBlock(
-            request_name=request_name,
             request=request,
             request_category=request_category,
             process_rtn=process_rtn,
@@ -3465,10 +3460,10 @@ class SmartThread:
             log_msg_body += f' {log_msg}'
 
         entry_log_msg = (
-            f'{request_block.request_name} entry: {log_msg_body}')
+            f'{request_block.request.name} entry: {log_msg_body}')
 
         exit_log_msg = (
-            f'{request_block.request_name} exit: {log_msg_body}')
+            f'{request_block.request.name} exit: {log_msg_body}')
 
         logger.debug(entry_log_msg, stacklevel=3)
         return exit_log_msg
