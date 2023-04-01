@@ -18641,18 +18641,163 @@ class TestSmartThreadScenarios:
 class TestSmartThreadInterface:
     """Test class for SmartThread example tests."""
     ####################################################################
-    # test_smart_send_example_1
+    # test_smart_thread_interface_1
     ####################################################################
+    @pytest.mark.parametrize("num_f1_args", [(0, 0, 0),
+                                             (0, 0, 1),
+                                             (0, 0, 2),
+                                             (0, 0, 3)])
     def test_smart_thread_interface_1(self,
-                                      capsys: Any) -> None:
+                                      num_f1_args: tuple[int, int, int]
+                                      ) -> None:
+        """Test smart_send example 1 with no parms."""
+        from scottbrian_paratools.smart_thread import SmartThread, ThreadState
+
+        def f1_0_0_0() -> None:
+            logger.debug('f1 beta entry')
+            logger.debug('there are no args to check')
+            logger.debug('f1 beta entry')
+
+        def f1_0_0_1(arg1: int) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}')
+            assert arg1 == 42
+            logger.debug('f1 beta entry')
+
+        def f1_0_0_2(arg1: int, arg2: str) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            logger.debug('f1 beta entry')
+
+        def f1_0_0_3(arg1: int, arg2: str, arg3: list[int]) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert arg3 == [1, 2, 3]
+            logger.debug('f1 beta entry')
+
+        def f1_1_0_0(smart_thread: SmartThread) -> None:
+            logger.debug('f1 beta entry')
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            logger.debug('there are no args to check')
+            logger.debug('f1 beta entry')
+
+        # logger.debug('f1 beta exit')
+
+        logger.debug('mainline entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        if num_f1_args == (0, 0, 0):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_0_0_0)
+        elif num_f1_args == (0, 0, 1):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_0_0_1,
+                                            args=(42, ))
+        elif num_f1_args == (0, 0, 2):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_0_0_2,
+                                            args=(42, "my arg 2"))
+        elif num_f1_args == (0, 0, 3):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_0_0_3,
+                                            args=(42, "my arg 2", [1, 2, 3]))
+        time.sleep(0.5)
+        assert beta_smart_thread._get_state('beta') == ThreadState.Stopped
+        alpha_smart_thread.smart_join(targets='beta')
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_thread_interface_2
+    ####################################################################
+    def test_smart_thread_interface_2(self) -> None:
         """Test smart_send example 1 with no parms."""
         from scottbrian_paratools.smart_thread import SmartThread
 
         # def f1(smart_thread: SmartThread) -> None:
+        def f1(arg1: Any) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}')
+            assert arg1 == 42
+            logger.debug('f1 beta entry')
+
+        # logger.debug('f1 beta exit')
+
+        logger.debug('mainline entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        beta_smart_thread = SmartThread(name='beta',
+                                        target=f1,
+                                        args=(42, ))
+        alpha_smart_thread.smart_join(targets='beta')
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_thread_interface_3
+    ####################################################################
+    def test_smart_thread_interface_3(self) -> None:
+        """Test smart_send example 1 with no parms."""
+        from scottbrian_paratools.smart_thread import SmartThread
+
+        # def f1(smart_thread: SmartThread) -> None:
+        def f1(arg1: Any, arg2: Any) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            logger.debug('f1 beta entry')
+
+        # logger.debug('f1 beta exit')
+
+        logger.debug('mainline entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        beta_smart_thread = SmartThread(name='beta',
+                                        target=f1,
+                                        args=(42, "my arg 2"))
+        alpha_smart_thread.smart_join(targets='beta')
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_thread_interface_4
+    ####################################################################
+    def test_smart_thread_interface_4(self) -> None:
+        """Test smart_send example 1 with no parms."""
+        from scottbrian_paratools.smart_thread import SmartThread
+
+        # def f1(smart_thread: SmartThread) -> None:
+        def f1(arg1: int, arg2: str, arg3: list[int]) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert arg3 == [1, 2, 3]
+            logger.debug('f1 beta entry')
+
+        # logger.debug('f1 beta exit')
+
+        logger.debug('mainline entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        beta_smart_thread = SmartThread(name='beta',
+                                        target=f1,
+                                        args=(42, "my arg 2", [1, 2, 3]))
+        alpha_smart_thread.smart_join(targets='beta')
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_thread_interface_5
+    ####################################################################
+    def test_smart_thread_interface_5(self) -> None:
+        """Test smart_send example 1 with no parms."""
+        from scottbrian_paratools.smart_thread import SmartThread, ThreadState
+
+        # def f1(smart_thread: SmartThread) -> None:
         def f1() -> None:
-            # time.sleep(1)
-            pass
-        # logger.debug('f1 beta entry')
+            logger.debug('f1 beta entry')
+            # assert beta_smart_thread._get_state('beta') == (
+            #        SmartThread.ThreadState.Alive)
+            logger.debug('there are no args to check')
+            logger.debug('f1 beta entry')
 
         # logger.debug('f1 beta exit')
 
@@ -18660,8 +18805,86 @@ class TestSmartThreadInterface:
         alpha_smart_thread = SmartThread(name='alpha')
         beta_smart_thread = SmartThread(name='beta',
                                         target=f1)
+        time.sleep(0.5)
+        assert beta_smart_thread._get_state('beta') == ThreadState.Stopped
         alpha_smart_thread.smart_join(targets='beta')
         logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_thread_interface_6
+    ####################################################################
+    def test_smart_thread_interface_6(self) -> None:
+        """Test smart_send example 1 with no parms."""
+        from scottbrian_paratools.smart_thread import SmartThread
+
+        # def f1(smart_thread: SmartThread) -> None:
+        def f1(arg1: Any) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}')
+            assert arg1 == 42
+            logger.debug('f1 beta entry')
+
+        # logger.debug('f1 beta exit')
+
+        logger.debug('mainline entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        beta_smart_thread = SmartThread(name='beta',
+                                        target=f1,
+                                        args=(42, ))
+        alpha_smart_thread.smart_join(targets='beta')
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_thread_interface_7
+    ####################################################################
+    def test_smart_thread_interface_7(self) -> None:
+        """Test smart_send example 1 with no parms."""
+        from scottbrian_paratools.smart_thread import SmartThread
+
+        # def f1(smart_thread: SmartThread) -> None:
+        def f1(arg1: Any, arg2: Any) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            logger.debug('f1 beta entry')
+
+        # logger.debug('f1 beta exit')
+
+        logger.debug('mainline entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        beta_smart_thread = SmartThread(name='beta',
+                                        target=f1,
+                                        args=(42, "my arg 2"))
+        alpha_smart_thread.smart_join(targets='beta')
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_thread_interface_8
+    ####################################################################
+    def test_smart_thread_interface_8(self) -> None:
+        """Test smart_send example 1 with no parms."""
+        from scottbrian_paratools.smart_thread import SmartThread
+
+        # def f1(smart_thread: SmartThread) -> None:
+        def f1(arg1: int, arg2: str, arg3: list[int]) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert arg3 == [1, 2, 3]
+            logger.debug('f1 beta entry')
+
+        # logger.debug('f1 beta exit')
+
+        logger.debug('mainline entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        beta_smart_thread = SmartThread(name='beta',
+                                        target=f1,
+                                        args=(42, "my arg 2", [1, 2, 3]))
+        alpha_smart_thread.smart_join(targets='beta')
+        logger.debug('mainline exiting')
+
 
 ########################################################################
 # TestSmartThreadErrors class

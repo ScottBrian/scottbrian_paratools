@@ -368,16 +368,20 @@ class SmartThread:
 
         def run(self) -> None:
             try:
-                self.smart_thread._set_state(target_thread=self.smart_thread,
-                                             new_state=ThreadState.Alive)
+                with sel.SELockExcl(SmartThread._registry_lock):
+                    self.smart_thread._set_state(
+                        target_thread=self.smart_thread,
+                        new_state=ThreadState.Alive)
                 if self._target is not None:
                     self._target(*self._args, **self._kwargs)
             finally:
                 # Avoid a refcycle if the thread is running a function with
                 # an argument that has a member that points to the thread.
                 del self._target, self._args, self._kwargs
-                self.smart_thread._set_state(target_thread=self.smart_thread,
-                                             new_state=ThreadState.Stopped)
+                with sel.SELockExcl(SmartThread._registry_lock):
+                    self.smart_thread._set_state(
+                        target_thread=self.smart_thread,
+                        new_state=ThreadState.Stopped)
     ####################################################################
     # ConnectionStatusBlock
     # Coordinates the various actions involved in satisfying a
@@ -688,9 +692,16 @@ class SmartThread:
         """
         if name not in SmartThread._registry:
             return ThreadState.Unregistered
+
+        # is_alive will be False when the thread has not yet been
+        # started or after the thread has ended. For the former, the
+        # ThreadState will probably be Registered. For the latter it
+        # will be Alive, in which case we can safely return Stopped.
         if (not SmartThread._registry[name].thread.is_alive() and
                 SmartThread._registry[name].st_state == ThreadState.Alive):
             return ThreadState.Stopped
+
+        # For all other cases, we can rely on the state being correct
         return SmartThread._registry[name].st_state
 
     ####################################################################
@@ -1207,75 +1218,110 @@ class SmartThread:
             True when request completed, False otherwise
 
         """
-        if self._get_state(remote) != ThreadState.Registered:
-            request_block.not_registered_remotes |= {remote}
-            state = self._get_state(remote)
-            logger.debug(
-                f'TestDebug {threading.current_thread().name} smart_start '
-                f'found {remote=} has {state=} which is not registered ')
-            return False
-
-        request_block.not_registered_remotes -= {remote}
-
-        if self._get_state(remote) == ThreadState.Stopped:
-            request_block.stopped_remotes |= {remote}
-            return False
-
-        # if (not SmartThread._registry[remote].thread.is_alive()
-        #         and not SmartThread._registry[remote].start_issued):
-        #     SmartThread._registry[remote].start_issued = True
-        #     self._set_state(
-        #         target_thread=SmartThread._registry[remote],
-        #         new_state=ThreadState.Starting)
-        #     # self.thread.start()
-        #     threading.Thread.start(SmartThread._registry[remote].thread)
-
-        logger.debug(
-            f'TestDebug {threading.current_thread().name} smart_start '
-            f'for {remote=} is about to check for thread.start with '
-            f'{SmartThread._registry[remote].thread=}'
-            f'{SmartThread._registry[remote].thread.is_alive()=}')
-        if not SmartThread._registry[remote].thread.is_alive():
+        if self._get_state(remote) == ThreadState.Registered:
             self._set_state(
                 target_thread=SmartThread._registry[remote],
                 new_state=ThreadState.Starting)
             SmartThread._registry[remote].thread.start()
-            new_state = self._get_state(remote)
-            logger.debug(
-                f'TestDebug {threading.current_thread().name} smart_start '
-                f'for {remote=} is back from thread.start with {new_state=}, '
-                f'{SmartThread._registry[remote].thread=}'
-                f'{SmartThread._registry[remote].thread.is_alive()=}')
-            time.sleep(1)
-            logger.debug(
-                f'TestDebug {threading.current_thread().name} smart_start '
-                f'for {remote=} is back from thread.start with {new_state=}, '
-                f'{SmartThread._registry[remote].thread=}'
-                f'{SmartThread._registry[remote].thread.is_alive()=}')
-            if self._get_state(remote) == ThreadState.Stopped:
-                return True
+            # At this point, the thread was started and the bootstrap
+            # method received control and set the Event that start waits
+            # on. The bootstrap method will call run and eventually the
+            # the thread will end. So, at this point, run has not yet
+            # been called, the thread is running, or the thread is
+            # already stopped. The is_alive() method will return True
+            # if the Event is set (it is) and will return False when
+            # the thread is stopped. So, we can rely on is_alive here
+            # nd will set set the correct state. Since we are holding
+            # the registry lock exclusive, the configuration can not
+            # change and a join will wait behind us. The only thing that
+            # could happen is we get back True from is_alive and set
+            # the state to alive, but then the thread ends and now we
+            # still show it as alive. This is not a problem since the
+            # _get_state method will detect that case and return stopped
+            # as the state
+            if SmartThread._registry[remote].thread.is_alive():
+                self._set_state(
+                    target_thread=SmartThread._registry[remote],
+                    new_state=ThreadState.Alive)
+            else:  # start failed or thread finished already
+                self._set_state(
+                    target_thread=SmartThread._registry[remote],
+                    new_state=ThreadState.Stopped)
+        else:
+            # if here, the remote is not registered
+            request_block.not_registered_remotes |= {remote}
 
-        if SmartThread._registry[remote].thread.is_alive():
-            self._set_state(
-                target_thread=SmartThread._registry[remote],
-                new_state=ThreadState.Alive)
-
-            logger.debug(
-                f'{threading.current_thread().name} started thread '
-                f'{SmartThread._registry[remote].name}, '
-                'thread.is_alive(): '
-                f'{SmartThread._registry[remote].thread.is_alive()}, '
-                f'state: {SmartThread._registry[remote].st_state}')
-
-            logger.debug(
-                f'TestDebug {threading.current_thread().name} smart_start '
-                f'is returning True')
-            return True
-
-        logger.debug(
-            f'TestDebug {threading.current_thread().name} smart_start '
-            f'is returning False')
-        return False
+        return True  # there are no cases that need to allow more time
+        ################################################################
+        # if self._get_state(remote) != ThreadState.Registered:
+        #     request_block.not_registered_remotes |= {remote}
+        #     state = self._get_state(remote)
+        #     logger.debug(
+        #         f'TestDebug {threading.current_thread().name} smart_start '
+        #         f'found {remote=} has {state=} which is not registered ')
+        #     return False
+        #
+        # request_block.not_registered_remotes -= {remote}
+        #
+        # if self._get_state(remote) == ThreadState.Stopped:
+        #     request_block.stopped_remotes |= {remote}
+        #     return False
+        #
+        # # if (not SmartThread._registry[remote].thread.is_alive()
+        # #         and not SmartThread._registry[remote].start_issued):
+        # #     SmartThread._registry[remote].start_issued = True
+        # #     self._set_state(
+        # #         target_thread=SmartThread._registry[remote],
+        # #         new_state=ThreadState.Starting)
+        # #     # self.thread.start()
+        # #     threading.Thread.start(SmartThread._registry[remote].thread)
+        #
+        # logger.debug(
+        #     f'TestDebug {threading.current_thread().name} smart_start '
+        #     f'for {remote=} is about to check for thread.start with '
+        #     f'{SmartThread._registry[remote].thread=}'
+        #     f'{SmartThread._registry[remote].thread.is_alive()=}')
+        # if not SmartThread._registry[remote].thread.is_alive():
+        #     self._set_state(
+        #         target_thread=SmartThread._registry[remote],
+        #         new_state=ThreadState.Starting)
+        #     SmartThread._registry[remote].thread.start()
+        #     new_state = self._get_state(remote)
+        #     logger.debug(
+        #         f'TestDebug {threading.current_thread().name} smart_start '
+        #         f'for {remote=} is back from thread.start with {new_state=}, '
+        #         f'{SmartThread._registry[remote].thread=}'
+        #         f'{SmartThread._registry[remote].thread.is_alive()=}')
+        #     time.sleep(1)
+        #     logger.debug(
+        #         f'TestDebug {threading.current_thread().name} smart_start '
+        #         f'for {remote=} is back from thread.start with {new_state=}, '
+        #         f'{SmartThread._registry[remote].thread=}'
+        #         f'{SmartThread._registry[remote].thread.is_alive()=}')
+        #     if self._get_state(remote) == ThreadState.Stopped:
+        #         return True
+        #
+        # if SmartThread._registry[remote].thread.is_alive():
+        #     self._set_state(
+        #         target_thread=SmartThread._registry[remote],
+        #         new_state=ThreadState.Alive)
+        #
+        #     logger.debug(
+        #         f'{threading.current_thread().name} started thread '
+        #         f'{SmartThread._registry[remote].name}, '
+        #         'thread.is_alive(): '
+        #         f'{SmartThread._registry[remote].thread.is_alive()}, '
+        #         f'state: {SmartThread._registry[remote].st_state}')
+        #
+        #     logger.debug(
+        #         f'TestDebug {threading.current_thread().name} smart_start '
+        #         f'is returning True')
+        #     return True
+        #
+        # logger.debug(
+        #     f'TestDebug {threading.current_thread().name} smart_start '
+        #     f'is returning False')
+        # return False
 
     ####################################################################
     # smart_unreg
