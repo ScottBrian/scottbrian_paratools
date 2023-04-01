@@ -291,6 +291,34 @@ class WaitFor(Enum):
     Any = auto()
 
 
+# class TargetThread(threading.Thread):
+#     def __init__(self,*,
+#                  smart_thread: "SmartThread",
+#                  target: Optional[Callable[..., Any]] = None,
+#                  args: Optional[tuple[Any, ...]] = (),
+#                  kwargs: Optional[dict[str, Any]] = {},
+#                  name: str,
+#                  ):
+#         super().__init__(target=target,
+#                          args=args,
+#                          kwargs=kwargs,
+#                          name=name)
+#         self.smart_thread = smart_thread
+#
+#     def run(self) -> None:
+#         try:
+#             self.smart_thread._set_state(target_thread=self.smart_thread,
+#                                          new_state=ThreadState.Alive)
+#             if self._target is not None:
+#                 self._target(*self._args, **self._kwargs)
+#         finally:
+#             # Avoid a refcycle if the thread is running a function with
+#             # an argument that has a member that points to the thread.
+#             del self._target, self._args, self._kwargs
+#             self.smart_thread._set_state(target_thread=self.smart_thread,
+#                                          new_state=ThreadState.Stopped)
+
+
 ########################################################################
 # SmartThread Class
 ########################################################################
@@ -318,6 +346,38 @@ class SmartThread:
 
     _create_pair_array_entry_time: float = 0.0
 
+    ####################################################################
+    # TargetThread is used to override the threading.Thread run
+    # method so that we can set the ThreadState directly and avoid some
+    # of the asynchronous effects of starting the thread and having it
+    # finish before we can set the state from Starting to Alive
+    ####################################################################
+    class TargetThread(threading.Thread):
+        def __init__(self, *,
+                     smart_thread: "SmartThread",
+                     target: Optional[Callable[..., Any]] = None,
+                     args: Optional[tuple[Any, ...]] = (),
+                     kwargs: Optional[dict[str, Any]] = {},
+                     name: str,
+                     ):
+            super().__init__(target=target,
+                             args=args,
+                             kwargs=kwargs,
+                             name=name)
+            self.smart_thread = smart_thread
+
+        def run(self) -> None:
+            try:
+                self.smart_thread._set_state(target_thread=self.smart_thread,
+                                             new_state=ThreadState.Alive)
+                if self._target is not None:
+                    self._target(*self._args, **self._kwargs)
+            finally:
+                # Avoid a refcycle if the thread is running a function with
+                # an argument that has a member that points to the thread.
+                del self._target, self._args, self._kwargs
+                self.smart_thread._set_state(target_thread=self.smart_thread,
+                                             new_state=ThreadState.Stopped)
     ####################################################################
     # ConnectionStatusBlock
     # Coordinates the various actions involved in satisfying a
@@ -487,25 +547,50 @@ class SmartThread:
             #         keyword_args = keyword_args | {thread_parm_name: self}
             #     else:
             #         keyword_args = {thread_parm_name: self}
+            # if kwargs:
+            #     if args:
+            #         self.thread = threading.Thread(target=target,
+            #                                        args=args,
+            #                                        kwargs=kwargs,
+            #                                        name=name)
+            #     else:
+            #         self.thread = threading.Thread(target=target,
+            #                                        kwargs=kwargs,
+            #                                        name=name)
+            # else:
+            #     if args:
+            #         self.thread = threading.Thread(target=target,
+            #                                        args=args,
+            #                                        name=name)
+            #     else:
+            #         self.thread = threading.Thread(target=target,
+            #                                        name=name)
             if kwargs:
                 if args:
-                    self.thread = threading.Thread(target=target,
-                                                   args=args,
-                                                   kwargs=kwargs,
-                                                   name=name)
+                    self.thread = SmartThread.TargetThread(
+                        smart_thread=self,
+                        target=target,
+                        args=args,
+                        kwargs=kwargs,
+                        name=name)
                 else:
-                    self.thread = threading.Thread(target=target,
-                                                   kwargs=kwargs,
-                                                   name=name)
+                    self.thread = SmartThread.TargetThread(
+                        smart_thread=self,
+                        target=target,
+                        kwargs=kwargs,
+                        name=name)
             else:
                 if args:
-                    self.thread = threading.Thread(target=target,
-                                                   args=args,
-                                                   name=name)
+                    self.thread = SmartThread.TargetThread(
+                        smart_thread=self,
+                        target=target,
+                        args=args,
+                        name=name)
                 else:
-                    self.thread = threading.Thread(target=target,
-                                                   name=name)
-
+                    self.thread = SmartThread.TargetThread(
+                        smart_thread=self,
+                        target=target,
+                        name=name)
         elif thread:  # caller provided the thread to use
             self.thread_create = ThreadCreate.Thread
             self.thread = thread
@@ -1122,20 +1207,20 @@ class SmartThread:
             True when request completed, False otherwise
 
         """
-        # if self._get_state(remote) != ThreadState.Registered:
-        #     request_block.not_registered_remotes |= {remote}
-        #     state = self._get_state(remote)
-        #     logger.debug(
-        #         f'TestDebug {threading.current_thread().name} smart_start '
-        #         f'found {remote=} has {state=} which is not registered ')
-        #     return False
-        #
-        # request_block.not_registered_remotes -= {remote}
+        if self._get_state(remote) != ThreadState.Registered:
+            request_block.not_registered_remotes |= {remote}
+            state = self._get_state(remote)
+            logger.debug(
+                f'TestDebug {threading.current_thread().name} smart_start '
+                f'found {remote=} has {state=} which is not registered ')
+            return False
 
-        # if self._get_state(remote) == ThreadState.Stopped:
-        #     request_block.stopped_remotes |= {remote}
-        #     return False
-        #
+        request_block.not_registered_remotes -= {remote}
+
+        if self._get_state(remote) == ThreadState.Stopped:
+            request_block.stopped_remotes |= {remote}
+            return False
+
         # if (not SmartThread._registry[remote].thread.is_alive()
         #         and not SmartThread._registry[remote].start_issued):
         #     SmartThread._registry[remote].start_issued = True
@@ -1155,11 +1240,20 @@ class SmartThread:
                 target_thread=SmartThread._registry[remote],
                 new_state=ThreadState.Starting)
             SmartThread._registry[remote].thread.start()
+            new_state = self._get_state(remote)
             logger.debug(
                 f'TestDebug {threading.current_thread().name} smart_start '
-                f'for {remote=} is back from thread.start with '
+                f'for {remote=} is back from thread.start with {new_state=}, '
                 f'{SmartThread._registry[remote].thread=}'
                 f'{SmartThread._registry[remote].thread.is_alive()=}')
+            time.sleep(1)
+            logger.debug(
+                f'TestDebug {threading.current_thread().name} smart_start '
+                f'for {remote=} is back from thread.start with {new_state=}, '
+                f'{SmartThread._registry[remote].thread=}'
+                f'{SmartThread._registry[remote].thread.is_alive()=}')
+            if self._get_state(remote) == ThreadState.Stopped:
+                return True
 
         if SmartThread._registry[remote].thread.is_alive():
             self._set_state(

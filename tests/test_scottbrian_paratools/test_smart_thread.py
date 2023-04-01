@@ -18636,6 +18636,34 @@ class TestSmartThreadScenarios:
 
 
 ########################################################################
+# TestSmartThreadInterface class
+########################################################################
+class TestSmartThreadInterface:
+    """Test class for SmartThread example tests."""
+    ####################################################################
+    # test_smart_send_example_1
+    ####################################################################
+    def test_smart_thread_interface_1(self,
+                                      capsys: Any) -> None:
+        """Test smart_send example 1 with no parms."""
+        from scottbrian_paratools.smart_thread import SmartThread
+
+        # def f1(smart_thread: SmartThread) -> None:
+        def f1() -> None:
+            # time.sleep(1)
+            pass
+        # logger.debug('f1 beta entry')
+
+        # logger.debug('f1 beta exit')
+
+        logger.debug('mainline entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        beta_smart_thread = SmartThread(name='beta',
+                                        target=f1)
+        alpha_smart_thread.smart_join(targets='beta')
+        logger.debug('mainline exiting')
+
+########################################################################
 # TestSmartThreadErrors class
 ########################################################################
 class TestSmartThreadErrors:
