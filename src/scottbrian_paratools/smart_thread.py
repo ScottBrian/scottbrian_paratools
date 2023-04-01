@@ -481,13 +481,31 @@ class SmartThread:
 
         if target:  # caller wants a thread created
             self.thread_create = ThreadCreate.Target
-            keyword_args: dict[str, Any] = kwargs
-            if thread_parm_name:
-                keyword_args = keyword_args | {thread_parm_name: self}
-            self.thread = threading.Thread(target=target,
-                                           args=args,
-                                           kwargs=keyword_args,
-                                           name=name)
+            # keyword_args: dict[str, Any] = kwargs
+            # if thread_parm_name:
+            #     if kwargs:
+            #         keyword_args = keyword_args | {thread_parm_name: self}
+            #     else:
+            #         keyword_args = {thread_parm_name: self}
+            if kwargs:
+                if args:
+                    self.thread = threading.Thread(target=target,
+                                                   args=args,
+                                                   kwargs=kwargs,
+                                                   name=name)
+                else:
+                    self.thread = threading.Thread(target=target,
+                                                   kwargs=kwargs,
+                                                   name=name)
+            else:
+                if args:
+                    self.thread = threading.Thread(target=target,
+                                                   args=args,
+                                                   name=name)
+                else:
+                    self.thread = threading.Thread(target=target,
+                                                   name=name)
+
         elif thread:  # caller provided the thread to use
             self.thread_create = ThreadCreate.Thread
             self.thread = thread
@@ -1104,11 +1122,15 @@ class SmartThread:
             True when request completed, False otherwise
 
         """
-        if self._get_state(remote) != ThreadState.Registered:
-            request_block.not_registered_remotes |= {remote}
-            return False
-
-        request_block.not_registered_remotes -= {remote}
+        # if self._get_state(remote) != ThreadState.Registered:
+        #     request_block.not_registered_remotes |= {remote}
+        #     state = self._get_state(remote)
+        #     logger.debug(
+        #         f'TestDebug {threading.current_thread().name} smart_start '
+        #         f'found {remote=} has {state=} which is not registered ')
+        #     return False
+        #
+        # request_block.not_registered_remotes -= {remote}
 
         # if self._get_state(remote) == ThreadState.Stopped:
         #     request_block.stopped_remotes |= {remote}
@@ -1123,11 +1145,21 @@ class SmartThread:
         #     # self.thread.start()
         #     threading.Thread.start(SmartThread._registry[remote].thread)
 
+        logger.debug(
+            f'TestDebug {threading.current_thread().name} smart_start '
+            f'for {remote=} is about to check for thread.start with '
+            f'{SmartThread._registry[remote].thread=}'
+            f'{SmartThread._registry[remote].thread.is_alive()=}')
         if not SmartThread._registry[remote].thread.is_alive():
             self._set_state(
                 target_thread=SmartThread._registry[remote],
                 new_state=ThreadState.Starting)
             SmartThread._registry[remote].thread.start()
+            logger.debug(
+                f'TestDebug {threading.current_thread().name} smart_start '
+                f'for {remote=} is back from thread.start with '
+                f'{SmartThread._registry[remote].thread=}'
+                f'{SmartThread._registry[remote].thread.is_alive()=}')
 
         if SmartThread._registry[remote].thread.is_alive():
             self._set_state(
@@ -1141,8 +1173,14 @@ class SmartThread:
                 f'{SmartThread._registry[remote].thread.is_alive()}, '
                 f'state: {SmartThread._registry[remote].st_state}')
 
+            logger.debug(
+                f'TestDebug {threading.current_thread().name} smart_start '
+                f'is returning True')
             return True
 
+        logger.debug(
+            f'TestDebug {threading.current_thread().name} smart_start '
+            f'is returning False')
         return False
 
     ####################################################################

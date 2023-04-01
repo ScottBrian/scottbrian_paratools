@@ -18798,3 +18798,46 @@ class TestSmartThreadErrors:
         alpha_thread.smart_join(targets='beta')
 
         logger.debug('mainline exit')
+
+
+########################################################################
+# TestSmartThreadErrors class
+########################################################################
+class TestSmartThreadExamples:
+    """Test class for SmartThread example tests."""
+    ####################################################################
+    # test_smart_send_example_1
+    ####################################################################
+    def test_smart_send_example_1(self,
+                                  capsys: Any) -> None:
+        """Test smart_send example 1."""
+        from scottbrian_paratools.smart_thread import SmartThread
+
+        # def f1(smart_thread: SmartThread) -> None:
+        def f1() -> None:
+            # print('f1 beta entered')
+            logger.debug('f1 entry')
+            # my_msg = beta_smart_thread.smart_recv(senders='alpha')
+            # print(my_msg)
+            # print('f1 beta exiting')
+
+        print('mainline alpha entered')
+        logger.debug('mainline entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        beta_smart_thread = SmartThread(name='beta',
+                                        target=f1)
+        alpha_smart_thread.smart_send(msg='hello beta', targets='beta')
+        alpha_smart_thread.smart_join(targets='beta')
+        print('mainline alpha exiting')
+
+        expected_result = 'mainline alpha entered\n'
+        expected_result += 'f1 beta entered\n'
+        expected_result += "{'alpha': 'hello beta'}\n"
+        expected_result += 'f1 beta exiting\n'
+        expected_result += 'mainline alpha exiting\n'
+
+        captured = capsys.readouterr().out
+
+        assert captured == expected_result
+
+        logger.debug('mainline exiting')
