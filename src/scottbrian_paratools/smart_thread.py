@@ -569,19 +569,25 @@ class SmartThread:
             #     else:
             #         self.thread = threading.Thread(target=target,
             #                                        name=name)
-            if kwargs:
+            if kwargs or thread_parm_name:
+                kwargs_to_use = {}
+                if kwargs:
+                    kwargs_to_use = kwargs
+                if thread_parm_name:
+                    kwargs_to_use[thread_parm_name] = self
+
                 if args:
                     self.thread = SmartThread.TargetThread(
                         smart_thread=self,
                         target=target,
                         args=args,
-                        kwargs=kwargs,
+                        kwargs=kwargs_to_use,
                         name=name)
                 else:
                     self.thread = SmartThread.TargetThread(
                         smart_thread=self,
                         target=target,
-                        kwargs=kwargs,
+                        kwargs=kwargs_to_use,
                         name=name)
             else:
                 if args:
