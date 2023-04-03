@@ -355,25 +355,20 @@ class SmartThread:
     class TargetThread(threading.Thread):
         def __init__(self, *,
                      smart_thread: "SmartThread",
-                     target: Optional[Callable[..., Any]] = None,
-                     args: Optional[tuple[Any, ...]] = (),
-                     kwargs: Optional[dict[str, Any]] = {},
+                     target: Callable[..., Any],
                      name: str,
+                     args: Optional[tuple[Any, ...]] = None,
+                     kwargs: Optional[dict[str, Any]] = None,
                      ):
             super().__init__(target=target,
-                             args=args,
-                             kwargs=kwargs,
+                             args=args or (),
+                             kwargs=kwargs or {},
                              name=name)
             self.smart_thread = smart_thread
 
         def run(self) -> None:
             try:
-                with sel.SELockExcl(SmartThread._registry_lock):
-                    self.smart_thread._set_state(
-                        target_thread=self.smart_thread,
-                        new_state=ThreadState.Alive)
-                if self._target is not None:
-                    self._target(*self._args, **self._kwargs)
+                self._target(*self._args, **self._kwargs)
             finally:
                 # Avoid a refcycle if the thread is running a function with
                 # an argument that has a member that points to the thread.
@@ -545,103 +540,22 @@ class SmartThread:
 
         if target:  # caller wants a thread created
             self.thread_create = ThreadCreate.Target
-            keyword_args: dict[str, Any] = {}
-            if thread_parm_name:
-                if kwargs:
-                    keyword_args = kwargs.copy()
+
+            keyword_args: Optional[dict[str, Any]] = None
+            if kwargs:
+                keyword_args = kwargs.copy()
+                if thread_parm_name:
                     keyword_args[thread_parm_name] = self
-                else:
-                    keyword_args = {thread_parm_name: self}
-            if keyword_args:
-                if args:
-                    self.thread = SmartThread.TargetThread(
-                        smart_thread=self,
-                        target=target,
-                        args=args,
-                        kwargs=keyword_args,
-                        name=name)
-                else:
-                    self.thread = SmartThread.TargetThread(
-                        smart_thread=self,
-                        target=target,
-                        kwargs=keyword_args,
-                        name=name)
             else:
-                if args:
-                    self.thread = SmartThread.TargetThread(
-                        smart_thread=self,
-                        target=target,
-                        args=args,
-                        name=name)
-                else:
-                    self.thread = SmartThread.TargetThread(
-                        smart_thread=self,
-                        target=target,
-                        name=name)
+                if thread_parm_name:
+                    keyword_args = {thread_parm_name: self}
 
-
-            # self.thread = SmartThread.TargetThread(
-            #             smart_thread=self,
-            #             target=target,
-            #             args=args,
-            #             kwargs=kwargs,
-            #             name=name)
-            # keyword_args: dict[str, Any] = kwargs
-            # if thread_parm_name:
-            #     if kwargs:
-            #         keyword_args = keyword_args | {thread_parm_name: self}
-            #     else:
-            #         keyword_args = {thread_parm_name: self}
-            # if kwargs:
-            #     if args:
-            #         self.thread = threading.Thread(target=target,
-            #                                        args=args,
-            #                                        kwargs=kwargs,
-            #                                        name=name)
-            #     else:
-            #         self.thread = threading.Thread(target=target,
-            #                                        kwargs=kwargs,
-            #                                        name=name)
-            # else:
-            #     if args:
-            #         self.thread = threading.Thread(target=target,
-            #                                        args=args,
-            #                                        name=name)
-            #     else:
-            #         self.thread = threading.Thread(target=target,
-            #                                        name=name)
-            # if kwargs or thread_parm_name:
-            #     kwargs_to_use = {}
-            #     if kwargs:
-            #         kwargs_to_use = kwargs
-            #     if thread_parm_name:
-            #         kwargs_to_use[thread_parm_name] = self
-            #
-            #     if args:
-            #         self.thread = SmartThread.TargetThread(
-            #             smart_thread=self,
-            #             target=target,
-            #             args=args,
-            #             kwargs=kwargs_to_use,
-            #             name=name)
-            #     else:
-            #         self.thread = SmartThread.TargetThread(
-            #             smart_thread=self,
-            #             target=target,
-            #             kwargs=kwargs_to_use,
-            #             name=name)
-            # else:
-            #     if args:
-            #         self.thread = SmartThread.TargetThread(
-            #             smart_thread=self,
-            #             target=target,
-            #             args=args,
-            #             name=name)
-            #     else:
-            #         self.thread = SmartThread.TargetThread(
-            #             smart_thread=self,
-            #             target=target,
-            #             name=name)
+            self.thread = SmartThread.TargetThread(
+                    smart_thread=self,
+                    target=target,
+                    args=args,
+                    kwargs=keyword_args,
+                    name=name)
         elif thread:  # caller provided the thread to use
             self.thread_create = ThreadCreate.Thread
             self.thread = thread
