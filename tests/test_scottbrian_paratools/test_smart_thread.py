@@ -19652,6 +19652,8 @@ class TestSmartThreadInterface:
         if num_f1_args[2] == 3:
             args_to_specify = (42, "my arg 2", [1, 2, 3])
 
+        logger.debug(f'Before: {kwargs_to_specify}')
+
         if smart_thread_name_to_specify:
             if args_to_specify:
                 if kwargs_to_specify:
@@ -19703,6 +19705,7 @@ class TestSmartThreadInterface:
                         name='beta',
                         target=eval(f1_target_to_specify))
 
+        logger.debug(f'After: {kwargs_to_specify}')
         time.sleep(0.5)
         assert beta_smart_thread._get_state('beta') == ThreadState.Stopped
         alpha_smart_thread.smart_join(targets='beta')
@@ -19727,548 +19730,208 @@ class TestSmartThreadInterface:
         """Test smart_send example 3 with no parms."""
         from scottbrian_paratools.smart_thread import SmartThread, ThreadState
 
-        def f1_0_0_0() -> None:
+        def f1(*args, **kwargs) -> None:
             logger.debug('f1 beta entry')
-            logger.debug('there are no args to check')
-            assert num_f1_args == (0, 0, 0)
-            logger.debug('f1 beta exit')
 
-        def f1_0_0_1(arg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            assert arg1 == 42
-            assert num_f1_args == (0, 0, 1)
-            logger.debug('f1 beta exit')
+            exp_args = (0, 42, "my arg 2", [1, 2, 3])
+            exp_kwargs = {'kwarg1': 13,
+                          'kwarg2': "second kwarg",
+                          'kwarg3': [11, 22, 33]
+                         }
+            args_str = ''
+            comma = ''
+            for idx, arg in enumerate(args, 1):
+                args_str = f'{args_str}{comma}arg{idx}={arg}'
+                comma = ', '
+                assert arg == exp_args[idx]
+            if args_str:
+                logger.debug(args_str)
 
-        def f1_0_0_2(arg1: int, arg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert num_f1_args == (0, 0, 2)
-            logger.debug('f1 beta exit')
+            smart_thread_arg = False
+            kwargs_str = ''
+            comma = ''
+            for key, value in kwargs.items():
+                if key == 'smart_thread':
+                    smart_thread_arg = True
+                    smart_thread = value
+                else:
+                    kwargs_str = f'{kwargs_str}{comma}{key}={value}'
+                    comma = ', '
+                    assert exp_kwargs[key] == value
+            if kwargs_str:
+                logger.debug(kwargs_str)
 
-        def f1_0_0_3(arg1: int, arg2: str, arg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert num_f1_args == (0, 0, 3)
-            logger.debug('f1 beta exit')
+            if smart_thread_arg:
+                logger.debug(f'{smart_thread=}')
+                assert smart_thread._get_state('beta') == ThreadState.Alive
 
-        def f1_0_1_0(kwarg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{kwarg1=}')
-            assert kwarg1 == 13
-            assert num_f1_args == (0, 1, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_0_1_1(arg1: int,
-                     kwarg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            logger.debug(f'{kwarg1=}')
-            assert arg1 == 42
-            assert kwarg1 == 13
-            assert num_f1_args == (0, 1, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_0_1_2(arg1: int, arg2: str,
-                     kwarg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{kwarg1=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert kwarg1 == 13
-            assert num_f1_args == (0, 1, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_0_1_3(arg1: int, arg2: str, arg3: list[int],
-                     kwarg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{kwarg1=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert kwarg1 == 13
-            assert num_f1_args == (0, 1, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_0_2_0(kwarg1: int, kwarg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert num_f1_args == (0, 2, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_0_2_1(arg1: int,
-                     kwarg1: int, kwarg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            assert arg1 == 42
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert num_f1_args == (0, 2, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_0_2_2(arg1: int, arg2: str,
-                     kwarg1: int, kwarg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert num_f1_args == (0, 2, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_0_2_3(arg1: int, arg2: str, arg3: list[int],
-                     kwarg1: int, kwarg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert num_f1_args == (0, 2, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_0_3_0(kwarg1: int, kwarg2: str, kwarg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert kwarg3 == [11, 22, 33]
-            assert num_f1_args == (0, 3, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_0_3_1(arg1: int,
-                     kwarg1: int, kwarg2: str, kwarg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            assert arg1 == 42
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert kwarg3 == [11, 22, 33]
-            assert num_f1_args == (0, 3, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_0_3_2(arg1: int, arg2: str,
-                     kwarg1: int, kwarg2: str, kwarg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert kwarg3 == [11, 22, 33]
-            assert num_f1_args == (0, 3, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_0_3_3(arg1: int, arg2: str, arg3: list[int],
-                     kwarg1: int, kwarg2: str, kwarg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert kwarg1 == 13
-            assert kwarg3 == [11, 22, 33]
-            assert kwarg2 == "second kwarg"
-            assert num_f1_args == (0, 3, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_1_0_0(smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{smart_thread=}')
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 0, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_1_0_1(arg1: int,
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            assert arg1 == 42
-            logger.debug(f'{smart_thread=}')
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 0, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_1_0_2(arg1: int, arg2: str,
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 0, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_1_0_3(arg1: int, arg2: str, arg3: list[int],
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 0, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_1_1_0(kwarg1: int,
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{kwarg1=}')
-            logger.debug(f'{smart_thread=}')
-            assert kwarg1 == 13
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 1, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_1_1_1(arg1: int,
-                     smart_thread: SmartThread,
-                     kwarg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            logger.debug(f'{kwarg1=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert kwarg1 == 13
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 1, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_1_1_2(arg1: int, arg2: str,
-                     kwarg1: int,
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{kwarg1=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert kwarg1 == 13
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 1, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_1_1_3(arg1: int, arg2: str, arg3: list[int],
-                     smart_thread: SmartThread,
-                     kwarg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{kwarg1=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert kwarg1 == 13
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 1, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_1_2_0(kwarg1: int, kwarg2: str,
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            logger.debug(f'{smart_thread=}')
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 2, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_1_2_1(arg1: int,
-                     kwarg1: int,
-                     smart_thread: SmartThread,
-                     kwarg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 2, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_1_2_2(arg1: int, arg2: str,
-                     kwarg1: int, kwarg2: str,
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 2, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_1_2_3(arg1: int, arg2: str, arg3: list[int],
-                     smart_thread: SmartThread,
-                     kwarg1: int, kwarg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 2, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_1_3_0(kwarg1: int,
-                     kwarg2: str,
-                     smart_thread: SmartThread,
-                     kwarg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            logger.debug(f'{smart_thread=}')
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert kwarg3 == [11, 22, 33]
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 3, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_1_3_1(arg1: int,
-                     kwarg1: int,
-                     smart_thread: SmartThread,
-                     kwarg2: str,
-                     kwarg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert kwarg3 == [11, 22, 33]
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 3, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_1_3_2(arg1: int, arg2: str,
-                     kwarg1: int,
-                     kwarg2: str,
-                     kwarg3: list[int],
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert kwarg3 == [11, 22, 33]
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 3, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_1_3_3(arg1: int, arg2: str, arg3: list[int],
-                     kwarg1: int, kwarg2: str, kwarg3: list[int],
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert kwarg1 == 13
-            assert kwarg3 == [11, 22, 33]
-            assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 3, 3)
             logger.debug('f1 beta exit')
 
         logger.debug('mainline entered')
         alpha_smart_thread = SmartThread(name='alpha')
         if num_f1_args == (0, 0, 0):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_0_0)
+                                            target=f1)
         elif num_f1_args == (0, 0, 1):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_0_1,
+                                            target=f1,
                                             args=(42, ))
         elif num_f1_args == (0, 0, 2):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_0_2,
+                                            target=f1,
                                             args=(42, "my arg 2"))
         elif num_f1_args == (0, 0, 3):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_0_3,
+                                            target=f1,
                                             args=(42, "my arg 2", [1, 2, 3]))
         elif num_f1_args == (0, 1, 0):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_1_0,
+                                            target=f1,
                                             kwargs={'kwarg1': 13})
         elif num_f1_args == (0, 1, 1):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_1_1,
+                                            target=f1,
                                             args=(42, ),
                                             kwargs={'kwarg1': 13})
         elif num_f1_args == (0, 1, 2):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_1_2,
+                                            target=f1,
                                             args=(42, "my arg 2"),
                                             kwargs={'kwarg1': 13})
         elif num_f1_args == (0, 1, 3):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_1_3,
+                                            target=f1,
                                             args=(42, "my arg 2", [1, 2, 3]),
                                             kwargs={'kwarg1': 13})
         elif num_f1_args == (0, 2, 0):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_2_0,
+                                            target=f1,
                                             kwargs={'kwarg1': 13,
                                                     'kwarg2': "second kwarg"})
         elif num_f1_args == (0, 2, 1):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_2_1,
+                                            target=f1,
                                             args=(42, ),
                                             kwargs={'kwarg1': 13,
                                                     'kwarg2': "second kwarg"})
         elif num_f1_args == (0, 2, 2):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_2_2,
+                                            target=f1,
                                             args=(42, "my arg 2"),
                                             kwargs={'kwarg1': 13,
                                                     'kwarg2': "second kwarg"})
         elif num_f1_args == (0, 2, 3):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_2_3,
+                                            target=f1,
                                             args=(42, "my arg 2", [1, 2, 3]),
                                             kwargs={'kwarg1': 13,
                                                     'kwarg2': "second kwarg"})
         elif num_f1_args == (0, 3, 0):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_3_0,
+                                            target=f1,
                                             kwargs={'kwarg1': 13,
                                                     'kwarg2': "second kwarg",
                                                     'kwarg3': [11, 22, 33]})
         elif num_f1_args == (0, 3, 1):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_3_1,
+                                            target=f1,
                                             args=(42, ),
                                             kwargs={'kwarg1': 13,
                                                     'kwarg2': "second kwarg",
                                                     'kwarg3': [11, 22, 33]})
         elif num_f1_args == (0, 3, 2):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_3_2,
+                                            target=f1,
                                             args=(42, "my arg 2"),
                                             kwargs={'kwarg1': 13,
                                                     'kwarg2': "second kwarg",
                                                     'kwarg3': [11, 22, 33]})
         elif num_f1_args == (0, 3, 3):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_3_3,
+                                            target=f1,
                                             args=(42, "my arg 2", [1, 2, 3]),
                                             kwargs={'kwarg1': 13,
                                                     'kwarg2': "second kwarg",
                                                     'kwarg3': [11, 22, 33]})
         elif num_f1_args == (1, 0, 0):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_0_0,
+                                            target=f1,
                                             thread_parm_name='smart_thread')
         elif num_f1_args == (1, 0, 1):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_0_1,
+                                            target=f1,
                                             thread_parm_name='smart_thread',
                                             args=(42, ))
         elif num_f1_args == (1, 0, 2):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_0_2,
+                                            target=f1,
                                             thread_parm_name='smart_thread',
                                             args=(42, "my arg 2"))
         elif num_f1_args == (1, 0, 3):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_0_3,
+                                            target=f1,
                                             thread_parm_name='smart_thread',
                                             args=(42, "my arg 2", [1, 2, 3]))
         elif num_f1_args == (1, 1, 0):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_1_0,
+                                            target=f1,
                                             thread_parm_name='smart_thread',
                                             kwargs={'kwarg1': 13})
         elif num_f1_args == (1, 1, 1):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_1_1,
+                                            target=f1,
                                             thread_parm_name='smart_thread',
                                             args=(42, ),
                                             kwargs={'kwarg1': 13})
         elif num_f1_args == (1, 1, 2):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_1_2,
+                                            target=f1,
                                             thread_parm_name='smart_thread',
                                             args=(42, "my arg 2"),
                                             kwargs={'kwarg1': 13})
         elif num_f1_args == (1, 1, 3):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_1_3,
+                                            target=f1,
                                             thread_parm_name='smart_thread',
                                             args=(42, "my arg 2", [1, 2, 3]),
                                             kwargs={'kwarg1': 13})
         elif num_f1_args == (1, 2, 0):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_2_0,
+                                            target=f1,
                                             thread_parm_name='smart_thread',
                                             kwargs={'kwarg1': 13,
                                                     'kwarg2': "second kwarg"})
         elif num_f1_args == (1, 2, 1):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_2_1,
+                                            target=f1,
                                             thread_parm_name='smart_thread',
                                             args=(42, ),
                                             kwargs={'kwarg1': 13,
                                                     'kwarg2': "second kwarg"})
         elif num_f1_args == (1, 2, 2):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_2_2,
+                                            target=f1,
                                             thread_parm_name='smart_thread',
                                             args=(42, "my arg 2"),
                                             kwargs={'kwarg1': 13,
                                                     'kwarg2': "second kwarg"})
         elif num_f1_args == (1, 2, 3):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_2_3,
+                                            target=f1,
                                             thread_parm_name='smart_thread',
                                             args=(42, "my arg 2", [1, 2, 3]),
                                             kwargs={'kwarg1': 13,
                                                     'kwarg2': "second kwarg"})
         elif num_f1_args == (1, 3, 0):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_3_0,
+                                            target=f1,
                                             thread_parm_name='smart_thread',
                                             kwargs={'kwarg1': 13,
                                                     'kwarg2': "second kwarg",
                                                     'kwarg3': [11, 22, 33]})
         elif num_f1_args == (1, 3, 1):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_3_1,
+                                            target=f1,
                                             thread_parm_name='smart_thread',
                                             args=(42, ),
                                             kwargs={'kwarg1': 13,
@@ -20276,7 +19939,7 @@ class TestSmartThreadInterface:
                                                     'kwarg3': [11, 22, 33]})
         elif num_f1_args == (1, 3, 2):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_3_2,
+                                            target=f1,
                                             thread_parm_name='smart_thread',
                                             args=(42, "my arg 2"),
                                             kwargs={'kwarg1': 13,
@@ -20284,7 +19947,7 @@ class TestSmartThreadInterface:
                                                     'kwarg3': [11, 22, 33]})
         elif num_f1_args == (1, 3, 3):
             beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_3_3,
+                                            target=f1,
                                             thread_parm_name='smart_thread',
                                             args=(42, "my arg 2", [1, 2, 3]),
                                             kwargs={'kwarg1': 13,
@@ -20315,569 +19978,80 @@ class TestSmartThreadInterface:
         """Test smart_send example 4 with no parms."""
         from scottbrian_paratools.smart_thread import SmartThread, ThreadState
 
-        def f1_0_0_0() -> None:
+        def f1(*args,
+               kwarg1: Optional[int] = None,
+               kwarg2: Optional[str] = None,
+               kwarg3: Optional[list[int]] = None,
+               smart_thread: Optional[SmartThread] = None) -> None:
             logger.debug('f1 beta entry')
-            logger.debug('there are no args to check')
-            assert num_f1_args == (0, 0, 0)
-            logger.debug('f1 beta exit')
 
-        def f1_0_0_1(arg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            assert arg1 == 42
-            assert num_f1_args == (0, 0, 1)
-            logger.debug('f1 beta exit')
+            exp_args = (0, 42, "my arg 2", [1, 2, 3])
+            exp_kwargs = {'kwarg1': 13,
+                          'kwarg2': "second kwarg",
+                          'kwarg3': [11, 22, 33]
+                         }
+            args_str = ''
+            comma = ''
+            for idx, arg in enumerate(args, 1):
+                args_str = f'{args_str}{comma}arg{idx}={arg}'
+                comma = ', '
+                assert arg == exp_args[idx]
+            if args_str:
+                logger.debug(args_str)
 
-        def f1_0_0_2(arg1: int, arg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert num_f1_args == (0, 0, 2)
-            logger.debug('f1 beta exit')
+            kwargs_str = ''
+            if kwarg1:
+                kwargs_str = f'{kwargs_str}{kwarg1=}'
+                assert kwarg1 == exp_kwargs['kwarg1']
+            if kwarg2:
+                kwargs_str = f'{kwargs_str}, {kwarg2=}'
+                assert kwarg2 == exp_kwargs['kwarg2']
+            if kwarg3:
+                kwargs_str = f'{kwargs_str}, {kwarg3=}'
+                assert kwarg3 == exp_kwargs['kwarg3']
 
-        def f1_0_0_3(arg1: int, arg2: str, arg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert num_f1_args == (0, 0, 3)
-            logger.debug('f1 beta exit')
+            if kwargs_str:
+                logger.debug(kwargs_str)
 
-        def f1_0_1_0(kwarg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{kwarg1=}')
-            assert kwarg1 == 13
-            assert num_f1_args == (0, 1, 0)
-            logger.debug('f1 beta exit')
+            if smart_thread:
+                logger.debug(f'{smart_thread=}')
+                assert smart_thread._get_state('beta') == ThreadState.Alive
 
-        def f1_0_1_1(arg1: int,
-                     kwarg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            logger.debug(f'{kwarg1=}')
-            assert arg1 == 42
-            assert kwarg1 == 13
-            assert num_f1_args == (0, 1, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_0_1_2(arg1: int, arg2: str,
-                     kwarg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{kwarg1=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert kwarg1 == 13
-            assert num_f1_args == (0, 1, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_0_1_3(arg1: int, arg2: str, arg3: list[int],
-                     kwarg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{kwarg1=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert kwarg1 == 13
-            assert num_f1_args == (0, 1, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_0_2_0(kwarg1: int, kwarg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert num_f1_args == (0, 2, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_0_2_1(arg1: int,
-                     kwarg1: int, kwarg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            assert arg1 == 42
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert num_f1_args == (0, 2, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_0_2_2(arg1: int, arg2: str,
-                     kwarg1: int, kwarg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert num_f1_args == (0, 2, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_0_2_3(arg1: int, arg2: str, arg3: list[int],
-                     kwarg1: int, kwarg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert num_f1_args == (0, 2, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_0_3_0(kwarg1: int, kwarg2: str, kwarg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert kwarg3 == [11, 22, 33]
-            assert num_f1_args == (0, 3, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_0_3_1(arg1: int,
-                     kwarg1: int, kwarg2: str, kwarg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            assert arg1 == 42
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert kwarg3 == [11, 22, 33]
-            assert num_f1_args == (0, 3, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_0_3_2(arg1: int, arg2: str,
-                     kwarg1: int, kwarg2: str, kwarg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert kwarg3 == [11, 22, 33]
-            assert num_f1_args == (0, 3, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_0_3_3(arg1: int, arg2: str, arg3: list[int],
-                     kwarg1: int, kwarg2: str, kwarg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert kwarg1 == 13
-            assert kwarg3 == [11, 22, 33]
-            assert kwarg2 == "second kwarg"
-            assert num_f1_args == (0, 3, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_1_0_0(smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{smart_thread=}')
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 0, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_1_0_1(arg1: int,
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            assert arg1 == 42
-            logger.debug(f'{smart_thread=}')
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 0, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_1_0_2(arg1: int, arg2: str,
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 0, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_1_0_3(arg1: int, arg2: str, arg3: list[int],
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 0, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_1_1_0(kwarg1: int,
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{kwarg1=}')
-            logger.debug(f'{smart_thread=}')
-            assert kwarg1 == 13
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 1, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_1_1_1(arg1: int,
-                     smart_thread: SmartThread,
-                     kwarg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            logger.debug(f'{kwarg1=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert kwarg1 == 13
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 1, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_1_1_2(arg1: int, arg2: str,
-                     kwarg1: int,
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{kwarg1=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert kwarg1 == 13
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 1, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_1_1_3(arg1: int, arg2: str, arg3: list[int],
-                     smart_thread: SmartThread,
-                     kwarg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{kwarg1=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert kwarg1 == 13
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 1, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_1_2_0(kwarg1: int, kwarg2: str,
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            logger.debug(f'{smart_thread=}')
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 2, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_1_2_1(arg1: int,
-                     kwarg1: int,
-                     smart_thread: SmartThread,
-                     kwarg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 2, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_1_2_2(arg1: int, arg2: str,
-                     kwarg1: int, kwarg2: str,
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 2, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_1_2_3(arg1: int, arg2: str, arg3: list[int],
-                     smart_thread: SmartThread,
-                     kwarg1: int, kwarg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 2, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_1_3_0(kwarg1: int,
-                     kwarg2: str,
-                     smart_thread: SmartThread,
-                     kwarg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            logger.debug(f'{smart_thread=}')
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert kwarg3 == [11, 22, 33]
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 3, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_1_3_1(arg1: int,
-                     kwarg1: int,
-                     smart_thread: SmartThread,
-                     kwarg2: str,
-                     kwarg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert kwarg3 == [11, 22, 33]
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 3, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_1_3_2(arg1: int, arg2: str,
-                     kwarg1: int,
-                     kwarg2: str,
-                     kwarg3: list[int],
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert kwarg3 == [11, 22, 33]
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 3, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_1_3_3(arg1: int, arg2: str, arg3: list[int],
-                     kwarg1: int, kwarg2: str, kwarg3: list[int],
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert kwarg1 == 13
-            assert kwarg3 == [11, 22, 33]
-            assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 3, 3)
             logger.debug('f1 beta exit')
 
         logger.debug('mainline entered')
         alpha_smart_thread = SmartThread(name='alpha')
-        if num_f1_args == (0, 0, 0):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_0_0)
-        elif num_f1_args == (0, 0, 1):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_0_1,
-                                            args=(42, ))
-        elif num_f1_args == (0, 0, 2):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_0_2,
-                                            args=(42, "my arg 2"))
-        elif num_f1_args == (0, 0, 3):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_0_3,
-                                            args=(42, "my arg 2", [1, 2, 3]))
-        elif num_f1_args == (0, 1, 0):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_1_0,
-                                            kwargs={'kwarg1': 13})
-        elif num_f1_args == (0, 1, 1):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_1_1,
-                                            args=(42, ),
-                                            kwargs={'kwarg1': 13})
-        elif num_f1_args == (0, 1, 2):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_1_2,
-                                            args=(42, "my arg 2"),
-                                            kwargs={'kwarg1': 13})
-        elif num_f1_args == (0, 1, 3):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_1_3,
-                                            args=(42, "my arg 2", [1, 2, 3]),
-                                            kwargs={'kwarg1': 13})
-        elif num_f1_args == (0, 2, 0):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_2_0,
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg"})
-        elif num_f1_args == (0, 2, 1):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_2_1,
-                                            args=(42, ),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg"})
-        elif num_f1_args == (0, 2, 2):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_2_2,
-                                            args=(42, "my arg 2"),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg"})
-        elif num_f1_args == (0, 2, 3):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_2_3,
-                                            args=(42, "my arg 2", [1, 2, 3]),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg"})
-        elif num_f1_args == (0, 3, 0):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_3_0,
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg",
-                                                    'kwarg3': [11, 22, 33]})
-        elif num_f1_args == (0, 3, 1):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_3_1,
-                                            args=(42, ),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg",
-                                                    'kwarg3': [11, 22, 33]})
-        elif num_f1_args == (0, 3, 2):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_3_2,
-                                            args=(42, "my arg 2"),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg",
-                                                    'kwarg3': [11, 22, 33]})
-        elif num_f1_args == (0, 3, 3):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_3_3,
-                                            args=(42, "my arg 2", [1, 2, 3]),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg",
-                                                    'kwarg3': [11, 22, 33]})
-        elif num_f1_args == (1, 0, 0):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_0_0,
-                                            thread_parm_name='smart_thread')
-        elif num_f1_args == (1, 0, 1):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_0_1,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, ))
-        elif num_f1_args == (1, 0, 2):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_0_2,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, "my arg 2"))
-        elif num_f1_args == (1, 0, 3):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_0_3,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, "my arg 2", [1, 2, 3]))
-        elif num_f1_args == (1, 1, 0):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_1_0,
-                                            thread_parm_name='smart_thread',
-                                            kwargs={'kwarg1': 13})
-        elif num_f1_args == (1, 1, 1):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_1_1,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, ),
-                                            kwargs={'kwarg1': 13})
-        elif num_f1_args == (1, 1, 2):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_1_2,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, "my arg 2"),
-                                            kwargs={'kwarg1': 13})
-        elif num_f1_args == (1, 1, 3):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_1_3,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, "my arg 2", [1, 2, 3]),
-                                            kwargs={'kwarg1': 13})
-        elif num_f1_args == (1, 2, 0):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_2_0,
-                                            thread_parm_name='smart_thread',
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg"})
-        elif num_f1_args == (1, 2, 1):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_2_1,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, ),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg"})
-        elif num_f1_args == (1, 2, 2):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_2_2,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, "my arg 2"),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg"})
-        elif num_f1_args == (1, 2, 3):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_2_3,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, "my arg 2", [1, 2, 3]),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg"})
-        elif num_f1_args == (1, 3, 0):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_3_0,
-                                            thread_parm_name='smart_thread',
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg",
-                                                    'kwarg3': [11, 22, 33]})
-        elif num_f1_args == (1, 3, 1):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_3_1,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, ),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg",
-                                                    'kwarg3': [11, 22, 33]})
-        elif num_f1_args == (1, 3, 2):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_3_2,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, "my arg 2"),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg",
-                                                    'kwarg3': [11, 22, 33]})
-        elif num_f1_args == (1, 3, 3):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_3_3,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, "my arg 2", [1, 2, 3]),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg",
-                                                    'kwarg3': [11, 22, 33]})
+        # f1_target_to_specify = (f'f1_'
+        #                         f'{num_f1_args[0]}_'
+        #                         f'{num_f1_args[1]}_'
+        #                         f'{num_f1_args[2]}')
+
+        smart_thread_name_to_specify = None
+        args_to_specify = None
+        kwargs_to_specify = None
+        if num_f1_args[0] == 1:
+            smart_thread_name_to_specify = 'smart_thread'
+
+        if num_f1_args[1] >= 1:
+            kwargs_to_specify = {'kwarg1': 13}
+        if num_f1_args[1] >= 2:
+            kwargs_to_specify['kwarg2'] = "second kwarg"
+        if num_f1_args[1] == 3:
+            kwargs_to_specify['kwarg3'] = [11, 22, 33]
+
+        if num_f1_args[2] == 1:
+            args_to_specify = (42, )
+        if num_f1_args[2] >= 2:
+            args_to_specify = (42, "my arg 2")
+        if num_f1_args[2] == 3:
+            args_to_specify = (42, "my arg 2", [1, 2, 3])
+
+        beta_smart_thread = SmartThread(
+            name='beta',
+            target=f1,
+            thread_parm_name=smart_thread_name_to_specify,
+            args=args_to_specify,
+            kwargs=kwargs_to_specify)
 
         time.sleep(0.5)
         assert beta_smart_thread._get_state('beta') == ThreadState.Stopped
