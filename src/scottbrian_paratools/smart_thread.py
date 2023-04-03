@@ -1449,6 +1449,11 @@ class SmartThread:
             True when request completed, False otherwise
 
         """
+        # if the remote is not in the registry then a smart thread for
+        # it was never, or it ended and set its state to stopped and was
+        # removed from the registry by some other command that saw it
+        # was stopped. In either case, we have nothing to do and can
+        # simply return True to move on to the next target
         if remote in SmartThread._registry:
             # Note that if the remote thread was never
             # started, the following join will raise an
@@ -1490,7 +1495,7 @@ class SmartThread:
                 # restart while loop with one less remote
                 return True
 
-        return False
+        return True
 
     ####################################################################
     # smart_send
@@ -1559,7 +1564,7 @@ class SmartThread:
         :Example: case 1: send a single message to a single remote
                   thread
 
-        >>> import scottbrian_paratools.smart_thread as st
+        >>> from scottbrian_paratools.smart_thread import SmartThread
         >>> def f1(smart_thread: SmartThread) -> None:
         ...     print('f1 beta entered')
         ...     my_msg = smart_thread.smart_recv(senders='alpha')
@@ -1567,7 +1572,9 @@ class SmartThread:
         ...     print('f1 beta exiting')
         >>> print('mainline alpha entered')
         >>> alpha_smart_thread = SmartThread(name='alpha')
-        >>> beta_smart_thread = SmartThread(name='beta', target=f1)
+        >>> beta_smart_thread = SmartThread(name='beta',
+        ...                                 target=f1,
+        ...                                 thread_parm_name='smart_thread')
         >>> alpha_smart_thread.smart_send(msg='hello beta', targets='beta')
         >>> alpha_smart_thread.smart_join(targets='beta')
         >>> print('mainline alpha exiting')
@@ -1580,7 +1587,7 @@ class SmartThread:
         :Example: case 2: send a single message to multiple remote
                   threads
 
-        >>> import scottbrian_paratools.smart_thread as st
+        >>> from scottbrian_paratools.smart_thread import SmartThread
         >>> import time
         >>> def f1(smart_thread: SmartThread) -> None:
         ...     if smart_thread.name == 'charlie':
@@ -1592,19 +1599,21 @@ class SmartThread:
         >>> print('mainline alpha entered')
         >>> alpha_smart_thread = SmartThread(name='alpha')
         >>> beta_smart_thread = SmartThread(name='beta',
-        ...                                 target=f1)
+        ...                                 target=f1,
+        ...                                 thread_parm_name='smart_thread')
         >>> charlie_smart_thread = SmartThread(name='charlie',
-        ...                                    target=f1)
+        ...                                    target=f1,
+        ...                                    thread_parm_name='smart_thread')
         >>> alpha_smart_thread.smart_send(msg='hello remotes',
         ...                               targets=('beta', 'charlie'))
         >>> alpha_smart_thread.smart_join(targets=('beta', 'charlie'))
         >>> print('mainline alpha exiting')
         mainline alpha entered
         f1 beta entered
-        {'alpha': 'hello remotes'}
+        {'alpha': ['hello remotes']}
         f1 beta exiting
         f1 charlie entered
-        {'alpha': 'hello remotes'}
+        {'alpha': ['hello remotes']}
         f1 charlie exiting
         mainline alpha exiting
 
@@ -1613,9 +1622,9 @@ class SmartThread:
                   the configuration (by simply ommiting the targets
                   argument)
 
-        >>> import scottbrian_paratools.smart_thread as st
+        >>> from scottbrian_paratools.smart_thread import SmartThread
         >>> import time
-        >>> def f1(smart_thread: SmartThread, delay_secs) -> None:
+        >>> def f1(smart_thread: SmartThread, delay_secs: float) -> None:
         ...     time.sleep(delay_secs)  # delay for non-interleaved msgs
         ...     print(f'f1 {smart_thread.name} entered')
         ...     my_msg = smart_thread.smart_recv(senders='alpha')
@@ -1625,25 +1634,28 @@ class SmartThread:
         >>> alpha_smart_thread = SmartThread(name='alpha')
         >>> beta_smart_thread = SmartThread(name='beta',
         ...                                 target=f1,
+        ...                                 thread_parm_name='smart_thread',
         ...                                 kwargs={'delay_secs': 0.1})
         >>> charlie_smart_thread = SmartThread(name='charlie',
         ...                                    target=f1,
-        ...                                    kwargs={'delay_secs': 0.6}))
+        ...                                    thread_parm_name='smart_thread',
+        ...                                    kwargs={'delay_secs': 0.6})
         >>> delta_smart_thread = SmartThread(name='delta',
         ...                                  target=f1,
-        ...                                  kwargs={'delay_secs': 1.1}))
+        ...                                  thread_parm_name='smart_thread',
+        ...                                  kwargs={'delay_secs': 1.1})
         >>> alpha_smart_thread.smart_send(msg='hello remotes')
         >>> alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
         >>> print('mainline alpha exiting')
         mainline alpha entered
         f1 beta entered
-        {'alpha': 'hello remotes'}
+        {'alpha': ['hello remotes']}
         f1 beta exiting
         f1 charlie entered
-        {'alpha': 'hello remotes'}
+        {'alpha': ['hello remotes']}
         f1 charlie exiting
         f1 delta entered
-        {'alpha': 'hello remotes'}
+        {'alpha': ['hello remotes']}
         f1 delta exiting
         mainline alpha exiting
 
@@ -1660,14 +1672,15 @@ class SmartThread:
         >>> print('mainline alpha entered')
         >>> alpha_smart_thread = SmartThread(name='alpha')
         >>> beta_smart_thread = SmartThread(name='beta',
-        ...                                 target=f1)
+        ...                                 target=f1,
+        ...                                 thread_parm_name='smart_thread')
         >>> alpha_smart_thread.smart_send(msg=('hello beta',
         ...                                    'have a great day', 42))
         >>> alpha_smart_thread.smart_join(targets='beta')
         >>> print('mainline alpha exiting')
         mainline alpha entered
         f1 beta entered
-        {'alpha': ('hello beta', 'have a great day', 42)}
+        {'alpha': [('hello beta', 'have a great day', 42)]}
         f1 beta exiting
         mainline alpha exiting
 
@@ -1686,13 +1699,16 @@ class SmartThread:
         >>> alpha_smart_thread = SmartThread(name='alpha')
         >>> beta_smart_thread = SmartThread(name='beta',
         ...                                 target=f1,
+        ...                                 thread_parm_name='smart_thread',
         ...                                 kwargs={'delay_secs': 0.1})
         >>> charlie_smart_thread = SmartThread(name='charlie',
         ...                                    target=f1,
-        ...                                    kwargs={'delay_secs': 0.6}))
+        ...                                    thread_parm_name='smart_thread',
+        ...                                    kwargs={'delay_secs': 0.6})
         >>> delta_smart_thread = SmartThread(name='delta',
         ...                                  target=f1,
-        ...                                  kwargs={'delay_secs': 1.1}))
+        ...                                  thread_parm_name='smart_thread',
+        ...                                  kwargs={'delay_secs': 1.1})
         >>> alpha_smart_thread.smart_send(msg=['hello remotes',
         ...                                    'have a great day', 42],
         ...                               targets=['beta', 'delta'] )
@@ -1700,13 +1716,13 @@ class SmartThread:
         >>> print('mainline alpha exiting')
         mainline alpha entered
         f1 beta entered
-        {'alpha': ['hello remotes', 'have a great day', 42]}
+        {'alpha': [['hello remotes', 'have a great day', 42]]}
         f1 beta exiting
         f1 charlie entered
-        {'alpha': ['hello remotes', 'have a great day', 42]}
+        {'alpha': [['hello remotes', 'have a great day', 42]]}
         f1 charlie exiting
         f1 delta entered
-        {'alpha': ['hello remotes', 'have a great day', 42]}
+        {'alpha': [['hello remotes', 'have a great day', 42]]}
         f1 delta exiting
         mainline alpha exiting
 
@@ -1725,13 +1741,16 @@ class SmartThread:
         >>> alpha_smart_thread = SmartThread(name='alpha')
         >>> beta_smart_thread = SmartThread(name='beta',
         ...                                 target=f1,
+        ...                                 thread_parm_name='smart_thread',
         ...                                 kwargs={'delay_secs': 0.1})
         >>> charlie_smart_thread = SmartThread(name='charlie',
         ...                                    target=f1,
-        ...                                    kwargs={'delay_secs': 0.6}))
+        ...                                    thread_parm_name='smart_thread',
+        ...                                    kwargs={'delay_secs': 0.6})
         >>> delta_smart_thread = SmartThread(name='delta',
         ...                                  target=f1,
-        ...                                  kwargs={'delay_secs': 1.1}))
+        ...                                  thread_parm_name='smart_thread',
+        ...                                  kwargs={'delay_secs': 1.1})
         >>> msgs_to_send = st.SendMsgs(send_msgs= {
         ...     'beta': 'hi beta',
         ...     'charlie': ('hi charlie', 'have a greate day'),
@@ -1745,10 +1764,10 @@ class SmartThread:
         {'alpha': 'hi beta'}
         f1 beta exiting
         f1 charlie entered
-        {'alpha': ('hi charlie', 'have a greate day')}
+        {'alpha': [('hi charlie', 'have a greate day')]}
         f1 charlie exiting
         f1 delta entered
-        {'alpha': [42, 'hi delta', {'nums': (1, 2, 3)}]}
+        {'alpha': [[42, 'hi delta', {'nums': (1, 2, 3)}]]}
         f1 delta exiting
         mainline alpha exiting
 
@@ -1777,7 +1796,7 @@ class SmartThread:
             work_msgs = msg
         else:
             work_msgs = SendMsgs({})
-            for target in targets:
+            for target in work_targets:
                 work_msgs.send_msgs[target] = msg
 
         # get RequestBlock with targets in a set and a timer object

@@ -20021,10 +20021,6 @@ class TestSmartThreadInterface:
 
         logger.debug('mainline entered')
         alpha_smart_thread = SmartThread(name='alpha')
-        # f1_target_to_specify = (f'f1_'
-        #                         f'{num_f1_args[0]}_'
-        #                         f'{num_f1_args[1]}_'
-        #                         f'{num_f1_args[2]}')
 
         smart_thread_name_to_specify = None
         args_to_specify = None
@@ -20238,26 +20234,122 @@ class TestSmartThreadExamples:
         from scottbrian_paratools.smart_thread import SmartThread
 
         # def f1(smart_thread: SmartThread) -> None:
-        def f1() -> None:
-            # print('f1 beta entered')
-            logger.debug('f1 entry')
-            # my_msg = beta_smart_thread.smart_recv(senders='alpha')
-            # print(my_msg)
-            # print('f1 beta exiting')
+        def f1(smart_thread: SmartThread) -> None:
+            print('f1 beta entered')
+            my_msg = smart_thread.smart_recv(senders='alpha')
+            print(my_msg)
+            print('f1 beta exiting')
 
         print('mainline alpha entered')
         logger.debug('mainline entered')
         alpha_smart_thread = SmartThread(name='alpha')
         beta_smart_thread = SmartThread(name='beta',
-                                        target=f1)
+                                        target=f1,
+                                        thread_parm_name='smart_thread')
         alpha_smart_thread.smart_send(msg='hello beta', targets='beta')
         alpha_smart_thread.smart_join(targets='beta')
         print('mainline alpha exiting')
 
         expected_result = 'mainline alpha entered\n'
         expected_result += 'f1 beta entered\n'
-        expected_result += "{'alpha': 'hello beta'}\n"
+        expected_result += "{'alpha': ['hello beta']}\n"
         expected_result += 'f1 beta exiting\n'
+        expected_result += 'mainline alpha exiting\n'
+
+        captured = capsys.readouterr().out
+
+        assert captured == expected_result
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_send_example_2
+    ####################################################################
+    def test_smart_send_example_2(self,
+                                  capsys: Any) -> None:
+        """Test smart_send example 1."""
+        from scottbrian_paratools.smart_thread import SmartThread
+        import time
+
+        def f1(smart_thread: SmartThread) -> None:
+            if smart_thread.name == 'charlie':
+                time.sleep(0.5)  # delay for non-interleaved msgs
+            print(f'f1 {smart_thread.name} entered')
+            my_msg = smart_thread.smart_recv(senders='alpha')
+            print(my_msg)
+            print(f'f1 {smart_thread.name} exiting')
+        print('mainline alpha entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        beta_smart_thread = SmartThread(name='beta',
+                                        target=f1,
+                                        thread_parm_name='smart_thread')
+        charlie_smart_thread = SmartThread(name='charlie',
+                                           target=f1,
+                                           thread_parm_name='smart_thread')
+        alpha_smart_thread.smart_send(msg='hello remotes',
+                                      targets=('beta', 'charlie'))
+        alpha_smart_thread.smart_join(targets=('beta', 'charlie'))
+        print('mainline alpha exiting')
+
+        expected_result = 'mainline alpha entered\n'
+        expected_result += 'f1 beta entered\n'
+        expected_result += "{'alpha': ['hello remotes']}\n"
+        expected_result += 'f1 beta exiting\n'
+        expected_result += 'f1 charlie entered\n'
+        expected_result += "{'alpha': ['hello remotes']}\n"
+        expected_result += 'f1 charlie exiting\n'
+        expected_result += 'mainline alpha exiting\n'
+
+        captured = capsys.readouterr().out
+
+        assert captured == expected_result
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_send_example_3
+    ####################################################################
+    def test_smart_send_example_3(self,
+                                  capsys: Any) -> None:
+        """Test smart_send example 1."""
+        from scottbrian_paratools.smart_thread import SmartThread
+        import time
+
+        def f1(smart_thread: SmartThread, delay_secs: float) -> None:
+            time.sleep(delay_secs)  # delay for non-interleaved msgs
+            print(f'f1 {smart_thread.name} entered')
+            my_msg = smart_thread.smart_recv(senders='alpha')
+            print(my_msg)
+            print(f'f1 {smart_thread.name} exiting')
+
+        print('mainline alpha entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        beta_smart_thread = SmartThread(name='beta',
+                                        target=f1,
+                                        thread_parm_name='smart_thread',
+                                        kwargs={'delay_secs': 0.1})
+        charlie_smart_thread = SmartThread(name='charlie',
+                                           target=f1,
+                                           thread_parm_name='smart_thread',
+                                           kwargs={'delay_secs': 1.1})
+        delta_smart_thread = SmartThread(name='delta',
+                                         target=f1,
+                                         thread_parm_name='smart_thread',
+                                         kwargs={'delay_secs': 2.1})
+        alpha_smart_thread.smart_send(msg='hello remotes')
+        alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
+        print('mainline alpha exiting')
+
+        expected_result = 'mainline alpha entered\n'
+        expected_result += 'f1 beta entered\n'
+        expected_result += "{'alpha': ['hello remotes']}\n"
+        expected_result += 'f1 beta exiting\n'
+        expected_result += 'f1 charlie entered\n'
+        expected_result += "{'alpha': ['hello remotes']}\n"
+        expected_result += 'f1 charlie exiting\n'
+        expected_result += 'f1 delta entered\n'
+        expected_result += "{'alpha': ['hello remotes']}\n"
+        expected_result += 'f1 delta exiting\n'
         expected_result += 'mainline alpha exiting\n'
 
         captured = capsys.readouterr().out
