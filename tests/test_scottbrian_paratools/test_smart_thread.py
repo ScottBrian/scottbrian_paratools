@@ -20230,10 +20230,15 @@ class TestSmartThreadExamples:
     ####################################################################
     def test_smart_send_example_1(self,
                                   capsys: Any) -> None:
-        """Test smart_send example 1."""
+        """Test smart_send example 1.
+
+        send a single message to a single remote thread
+
+        Args:
+            capsys: pytest fixture to get the print output
+        """
         from scottbrian_paratools.smart_thread import SmartThread
 
-        # def f1(smart_thread: SmartThread) -> None:
         def f1(smart_thread: SmartThread) -> None:
             print('f1 beta entered')
             my_msg = smart_thread.smart_recv(senders='alpha')
@@ -20267,7 +20272,13 @@ class TestSmartThreadExamples:
     ####################################################################
     def test_smart_send_example_2(self,
                                   capsys: Any) -> None:
-        """Test smart_send example 2."""
+        """Test smart_send example 2.
+
+        send a single message to multiple remote threads
+
+        Args:
+            capsys: pytest fixture to get the print output
+        """
         from scottbrian_paratools.smart_thread import SmartThread
         import time
 
@@ -20311,7 +20322,16 @@ class TestSmartThreadExamples:
     ####################################################################
     def test_smart_send_example_3(self,
                                   capsys: Any) -> None:
-        """Test smart_send example 3."""
+        """Test smart_send example 3.
+
+        send a single message to all alive remote threads in the
+        configuration as a broadcast (by simply omitting the *receivers*
+        argument). Note the use of smart_wait and smart_resume to
+        coordinate the actions for ordered and consistent print output.
+
+        Args:
+            capsys: pytest fixture to get the print output
+        """
         from scottbrian_paratools.smart_thread import SmartThread
 
         def f1(smart_thread: SmartThread,
@@ -20370,7 +20390,13 @@ class TestSmartThreadExamples:
     ####################################################################
     def test_smart_send_example_4(self,
                                   capsys: Any) -> None:
-        """Test smart_send example 4."""
+        """Test smart_send example 4.
+
+        send multiple messages to a single remote thread
+
+        Args:
+            capsys: pytest fixture to get the print output
+        """
         from scottbrian_paratools.smart_thread import SmartThread
 
         def f1(smart_thread: SmartThread) -> None:
@@ -20401,3 +20427,305 @@ class TestSmartThreadExamples:
         assert captured == expected_result
 
         logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_send_example_5
+    ####################################################################
+    def test_smart_send_example_5(self,
+                                  capsys: Any) -> None:
+        """Test smart_send example 5.
+
+        send multiple messages to multiple remote threads
+
+        Args:
+            capsys: pytest fixture to get the print output
+        """
+        from scottbrian_paratools.smart_thread import SmartThread
+
+        def f1(smart_thread: SmartThread,
+               wait_for: Optional[str] = None,
+               resume_target: Optional[str] = None) -> None:
+            if wait_for:
+                smart_thread.smart_wait(remotes=wait_for)
+            print(f'f1 {smart_thread.name} entered')
+            my_msg = smart_thread.smart_recv(senders='alpha')
+            print(my_msg)
+            print(f'f1 {smart_thread.name} exiting')
+            if resume_target:
+                smart_thread.smart_resume(targets=resume_target)
+
+        print('mainline alpha entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        beta_smart_thread = SmartThread(name='beta',
+                                        target=f1,
+                                        thread_parm_name='smart_thread',
+                                        kwargs={'resume_target': 'charlie'})
+        charlie_smart_thread = SmartThread(name='charlie',
+                                           target=f1,
+                                           thread_parm_name='smart_thread',
+                                           kwargs={'wait_for': 'beta',
+                                                   'resume_target': 'delta'})
+        delta_smart_thread = SmartThread(name='delta',
+                                         target=f1,
+                                         thread_parm_name='smart_thread',
+                                         kwargs={'wait_for': 'charlie',
+                                                 'resume_target': 'alpha'})
+        alpha_smart_thread.smart_send(msg=['hello remotes',
+                                           'have a great day', 42],
+                                      receivers=['beta', 'charlie', 'delta'])
+        alpha_smart_thread.smart_wait(remotes='delta')
+        alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
+        print('mainline alpha exiting')
+
+        expected_result = 'mainline alpha entered\n'
+        expected_result += 'f1 beta entered\n'
+        expected_result += ("{'alpha': [['hello remotes', "
+                            "'have a great day', 42]]}\n")
+        expected_result += 'f1 beta exiting\n'
+        expected_result += 'f1 charlie entered\n'
+        expected_result += ("{'alpha': [['hello remotes', "
+                            "'have a great day', 42]]}\n")
+        expected_result += 'f1 charlie exiting\n'
+        expected_result += 'f1 delta entered\n'
+        expected_result += ("{'alpha': [['hello remotes', "
+                            "'have a great day', 42]]}\n")
+        expected_result += 'f1 delta exiting\n'
+        expected_result += 'mainline alpha exiting\n'
+
+        captured = capsys.readouterr().out
+
+        assert captured == expected_result
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_send_example_6
+    ####################################################################
+    def test_smart_send_example_6(self,
+                                  capsys: Any) -> None:
+        """Test smart_send example 6.
+
+        send any mixture of single and multiple messages individually to
+        each remote thread
+
+        Args:
+            capsys: pytest fixture to get the print output
+        """
+        from scottbrian_paratools.smart_thread import SmartThread
+
+        def f1(smart_thread: SmartThread,
+               wait_for: Optional[str] = None,
+               resume_target: Optional[str] = None) -> None:
+            if wait_for:
+                smart_thread.smart_wait(remotes=wait_for)
+            print(f'f1 {smart_thread.name} entered')
+            my_msg = smart_thread.smart_recv(senders='alpha')
+            print(my_msg)
+            print(f'f1 {smart_thread.name} exiting')
+            if resume_target:
+                smart_thread.smart_resume(targets=resume_target)
+
+        print('mainline alpha entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        beta_smart_thread = SmartThread(name='beta',
+                                        target=f1,
+                                        thread_parm_name='smart_thread',
+                                        kwargs={'resume_target': 'charlie'})
+        charlie_smart_thread = SmartThread(name='charlie',
+                                           target=f1,
+                                           thread_parm_name='smart_thread',
+                                           kwargs={'wait_for': 'beta',
+                                                   'resume_target': 'delta'})
+        delta_smart_thread = SmartThread(name='delta',
+                                         target=f1,
+                                         thread_parm_name='smart_thread',
+                                         kwargs={'wait_for': 'charlie',
+                                                 'resume_target': 'alpha'})
+        msgs_to_send = st.SendMsgs(send_msgs={
+            'beta': 'hi beta',
+            'charlie': ('hi charlie', 'have a great day'),
+            'delta': [42, 'hi delta', {'nums': (1, 2, 3)}]})
+        alpha_smart_thread.smart_send(msg=msgs_to_send)
+        alpha_smart_thread.smart_wait(remotes='delta')
+        alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
+        print('mainline alpha exiting')
+
+        expected_result = 'mainline alpha entered\n'
+        expected_result += 'f1 beta entered\n'
+        expected_result += "{'alpha': ['hi beta']}\n"
+        expected_result += 'f1 beta exiting\n'
+        expected_result += 'f1 charlie entered\n'
+        expected_result += ("{'alpha': [('hi charlie', "
+                            "'have a great day')]}\n")
+        expected_result += 'f1 charlie exiting\n'
+        expected_result += 'f1 delta entered\n'
+        expected_result += ("{'alpha': [[42, 'hi delta', "
+                            "{'nums': (1, 2, 3)}]]}\n")
+        expected_result += 'f1 delta exiting\n'
+        expected_result += 'mainline alpha exiting\n'
+
+        captured = capsys.readouterr().out
+
+        assert captured == expected_result
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_recv_example_1
+    ####################################################################
+    def test_smart_recv_example_1(self,
+                                  capsys: Any) -> None:
+        """Test smart_recv example 1.
+
+        receive a single message from a single remote thread
+
+        Args:
+            capsys: pytest fixture to get the print output
+        """
+        from scottbrian_paratools.smart_thread import SmartThread
+
+        def f1(smart_thread: SmartThread) -> None:
+            print('f1 beta entered')
+            smart_thread.smart_send(msg='hi alpha', receivers='alpha')
+            print('f1 beta exiting')
+
+        print('mainline alpha entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        beta_smart_thread = SmartThread(name='beta',
+                                        target=f1,
+                                        thread_parm_name='smart_thread')
+        my_msg = alpha_smart_thread.smart_recv(senders='beta')
+        print(my_msg)
+        alpha_smart_thread.smart_join(targets='beta')
+        print('mainline alpha exiting')
+
+        expected_result = 'mainline alpha entered\n'
+        expected_result += 'f1 beta entered\n'
+        expected_result += 'f1 beta exiting\n'
+        expected_result += "{'beta': ['hi alpha']}\n"
+        expected_result += 'mainline alpha exiting\n'
+
+        captured = capsys.readouterr().out
+
+        assert captured == expected_result
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_recv_example_2
+    ####################################################################
+    def test_smart_recv_example_2(self,
+                                  capsys: Any) -> None:
+        """Test smart_recv example 2.
+
+        receive a single message from multiple remote threads
+
+        Args:
+            capsys: pytest fixture to get the print output
+        """
+        from scottbrian_paratools.smart_thread import SmartThread
+        import time
+
+        def f1(smart_thread: SmartThread) -> None:
+            print(f'f1 {smart_thread.name} entered')
+            smart_thread.smart_send(msg=f'{smart_thread.name} says hi',
+                                    receivers='alpha')
+            print(f'f1 {smart_thread.name} exiting')
+
+        print('mainline alpha entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        beta_smart_thread = SmartThread(name='beta',
+                                        target=f1,
+                                        thread_parm_name='smart_thread')
+        time.sleep(0.2)
+        charlie_smart_thread = SmartThread(name='charlie',
+                                           target=f1,
+                                           thread_parm_name='smart_thread')
+        time.sleep(0.2)
+        my_msg = alpha_smart_thread.smart_recv(senders=('beta', 'charlie'))
+        print(my_msg['beta'])
+        print(my_msg['charlie'])
+        alpha_smart_thread.smart_join(targets=('beta', 'charlie'))
+        print('mainline alpha exiting')
+
+        expected_result = 'mainline alpha entered\n'
+        expected_result += 'f1 beta entered\n'
+        expected_result += 'f1 beta exiting\n'
+        expected_result += 'f1 charlie entered\n'
+        expected_result += 'f1 charlie exiting\n'
+        expected_result += "['beta says hi']\n"
+        expected_result += "['charlie says hi']\n"
+        expected_result += 'mainline alpha exiting\n'
+
+        captured = capsys.readouterr().out
+
+        assert captured == expected_result
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_recv_example_3
+    ####################################################################
+    def test_smart_recv_example_3(self,
+                                  capsys: Any) -> None:
+        """Test smart_recv example 3.
+
+        receive a single message from all remote threads in the
+        configuration
+
+        Args:
+            capsys: pytest fixture to get the print output
+        """
+        from scottbrian_paratools.smart_thread import SmartThread
+        import time
+
+        def f1(greeting: str, smart_thread: SmartThread) -> None:
+            print(f'f1 {smart_thread.name} entered')
+            smart_thread.smart_send(msg=f'{greeting}',
+                                    receivers='alpha')
+            print(f'f1 {smart_thread.name} exiting')
+
+        print('mainline alpha entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        beta_smart_thread = SmartThread(name='beta',
+                                        target=f1,
+                                        thread_parm_name='smart_thread',
+                                        args=('hi',))
+        time.sleep(0.2)
+        charlie_smart_thread = SmartThread(name='charlie',
+                                           target=f1,
+                                           thread_parm_name='smart_thread',
+                                           args=('hello',))
+        time.sleep(0.2)
+        delta_smart_thread = SmartThread(name='delta',
+                                         target=f1,
+                                         thread_parm_name='smart_thread',
+                                         args=('aloha',))
+        time.sleep(1.5)
+        my_msg = alpha_smart_thread.smart_recv()
+        print(my_msg['beta'])
+        print(my_msg['charlie'])
+        print(my_msg['delta'])
+        alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
+        print('mainline alpha exiting')
+
+        expected_result = 'mainline alpha entered\n'
+        expected_result += 'f1 beta entered\n'
+        expected_result += 'f1 beta exiting\n'
+        expected_result += 'f1 charlie entered\n'
+        expected_result += 'f1 charlie exiting\n'
+        expected_result += 'f1 delta entered\n'
+        expected_result += 'f1 delta exiting\n'
+        expected_result += "['hi']\n"
+        expected_result += "['hello']\n"
+        expected_result += "['aloha']\n"
+        expected_result += 'mainline alpha exiting\n'
+
+        captured = capsys.readouterr().out
+
+        assert captured == expected_result
+
+        logger.debug('mainline exiting')
+
+
+
