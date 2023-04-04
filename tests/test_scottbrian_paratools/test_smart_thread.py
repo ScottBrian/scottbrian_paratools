@@ -11328,7 +11328,7 @@ class ConfigVerifier:
             for idx in range(self.max_msgs):
                 # send from each sender thread to ensure we get
                 # exactly max_msgs on each pair between sender and the
-                # full_q targets
+                # full_q receivers
                 send_msg_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=sender_names,
                             receivers=full_q_names,
@@ -11469,7 +11469,7 @@ class ConfigVerifier:
         if registered_target_names:
             self.build_start_suite(start_names=registered_target_names)
 
-        # do RecvMsg to verify the SendMsg for targets
+        # do RecvMsg to verify the SendMsg for receivers
         if final_recv_names:
             log_msg = f'log test: {self.get_ptime()}'
             recv_msg_serial_num = self.add_cmd(
@@ -13463,7 +13463,7 @@ class ConfigVerifier:
 
         if receivers or broadcast:
             # For receivers or broadcast, the same message is sent to
-            # each of the targets, so we need to modify SendRecvMsgs to
+            # each of the receivers, so we need to modify SendRecvMsgs to
             # make each message the same for each sender, receiver pair
             # for this cmd_runner.
             send_msg = 'this is a test message from handle_send_msg'
@@ -13485,12 +13485,12 @@ class ConfigVerifier:
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_send(
-                        targets=receivers,
+                        receivers=receivers,
                         msg=send_msg,
                         log_msg=log_msg)
                 else:
                     self.all_threads[cmd_runner].smart_send(
-                        targets=receivers,
+                        receivers=receivers,
                         msg=send_msg,
                         timeout=timeout,
                         log_msg=log_msg)
@@ -13506,13 +13506,13 @@ class ConfigVerifier:
 
         elif timeout_type == TimeoutType.TimeoutNone:
             self.all_threads[cmd_runner].smart_send(
-                targets=receivers,
+                receivers=receivers,
                 msg=send_msg,
                 log_msg=log_msg)
             elapsed_time += (time.time() - start_time)
         elif timeout_type == TimeoutType.TimeoutFalse:
             self.all_threads[cmd_runner].smart_send(
-                targets=receivers,
+                receivers=receivers,
                 msg=send_msg,
                 timeout=timeout,
                 log_msg=log_msg)
@@ -13521,7 +13521,7 @@ class ConfigVerifier:
             enter_exit = ('entry', )
             with pytest.raises(st.SmartThreadRequestTimedOut):
                 self.all_threads[cmd_runner].smart_send(
-                    targets=receivers,
+                    receivers=receivers,
                     msg=send_msg,
                     timeout=timeout,
                     log_msg=log_msg)
@@ -17509,11 +17509,11 @@ class TestSmartThreadScenarios:
             num_active_targets_arg: number of active threads to recv
             num_registered_targets_arg: number registered thread to
                 recv
-            num_unreg_timeouts_arg: number of threads to be targets that
+            num_unreg_timeouts_arg: number of threads to be receivers that
                 cause a timeout by being unregistering
-            num_exit_timeouts_arg: number of threads to be targets that
+            num_exit_timeouts_arg: number of threads to be receivers that
                 cause a timeout by exiting
-            num_full_q_timeouts_arg: number of threads to be targets
+            num_full_q_timeouts_arg: number of threads to be receivers
                 that cause a timeout by having a full msgq
             caplog: pytest fixture to capture log output
 
@@ -18249,7 +18249,7 @@ class TestSmartThreadScenarios:
             args=(f1_name, ),
             max_msgs=10)
 
-        commander_thread.smart_send(targets='beta', msg='alpha sends to beta')
+        commander_thread.smart_send(receivers='beta', msg='alpha sends to beta')
 
         commander_thread.smart_resume(targets='beta')
 
@@ -18276,11 +18276,11 @@ class TestSmartThreadScenarios:
              'ThreadState.Initializing to ThreadState.Alive'),
             'alpha added alpha to SmartThread registry at UTC',
             'alpha entered _refresh_pair_array',
-            (f"smart_send entry: requestor: alpha targets: "
+            (f"smart_send entry: requestor: alpha receivers: "
              "\['beta'\] timeout value: None "
              "test_smart_thread.py::TestSmartThreadScenarios."
              "test_smart_thread_log_msg:"),
-            (f"smart_send exit: requestor: alpha targets: "
+            (f"smart_send exit: requestor: alpha receivers: "
              "\['beta'\] timeout value: None "
              "test_smart_thread.py::TestSmartThreadScenarios."
              "test_smart_thread_log_msg:"),
@@ -20146,7 +20146,7 @@ class TestSmartThreadErrors:
                                      target=f1,
                                      kwargs={'f1_name': 'beta'})
         with pytest.raises(st.SmartThreadDetectedOpFromForeignThread):
-            beta_thread.smart_send(targets='alpha', msg='hi alpha')
+            beta_thread.smart_send(receivers='alpha', msg='hi alpha')
 
         with pytest.raises(st.SmartThreadDetectedOpFromForeignThread):
             beta_thread.smart_recv(remote='alpha')
@@ -20246,7 +20246,7 @@ class TestSmartThreadExamples:
         beta_smart_thread = SmartThread(name='beta',
                                         target=f1,
                                         thread_parm_name='smart_thread')
-        alpha_smart_thread.smart_send(msg='hello beta', targets='beta')
+        alpha_smart_thread.smart_send(msg='hello beta', receivers='beta')
         alpha_smart_thread.smart_join(targets='beta')
         print('mainline alpha exiting')
 
@@ -20267,7 +20267,7 @@ class TestSmartThreadExamples:
     ####################################################################
     def test_smart_send_example_2(self,
                                   capsys: Any) -> None:
-        """Test smart_send example 1."""
+        """Test smart_send example 2."""
         from scottbrian_paratools.smart_thread import SmartThread
         import time
 
@@ -20287,7 +20287,7 @@ class TestSmartThreadExamples:
                                            target=f1,
                                            thread_parm_name='smart_thread')
         alpha_smart_thread.smart_send(msg='hello remotes',
-                                      targets=('beta', 'charlie'))
+                                      receivers=('beta', 'charlie'))
         alpha_smart_thread.smart_join(targets=('beta', 'charlie'))
         print('mainline alpha exiting')
 
@@ -20313,7 +20313,6 @@ class TestSmartThreadExamples:
                                   capsys: Any) -> None:
         """Test smart_send example 3."""
         from scottbrian_paratools.smart_thread import SmartThread
-        import time
 
         def f1(smart_thread: SmartThread,
                wait_for: Optional[str] = None,
@@ -20358,6 +20357,43 @@ class TestSmartThreadExamples:
         expected_result += 'f1 delta entered\n'
         expected_result += "{'alpha': ['hello remotes']}\n"
         expected_result += 'f1 delta exiting\n'
+        expected_result += 'mainline alpha exiting\n'
+
+        captured = capsys.readouterr().out
+
+        assert captured == expected_result
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_send_example_4
+    ####################################################################
+    def test_smart_send_example_4(self,
+                                  capsys: Any) -> None:
+        """Test smart_send example 4."""
+        from scottbrian_paratools.smart_thread import SmartThread
+
+        def f1(smart_thread: SmartThread) -> None:
+            print(f'f1 {smart_thread.name} entered')
+            my_msg = smart_thread.smart_recv(senders='alpha')
+            print(my_msg)
+            print(f'f1 {smart_thread.name} exiting')
+
+        print('mainline alpha entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        beta_smart_thread = SmartThread(name='beta',
+                                        target=f1,
+                                        thread_parm_name='smart_thread')
+        alpha_smart_thread.smart_send(msg=('hello beta',
+                                      'have a great day', 42))
+        alpha_smart_thread.smart_join(targets='beta')
+        print('mainline alpha exiting')
+
+        expected_result = 'mainline alpha entered\n'
+        expected_result += 'f1 beta entered\n'
+        expected_result += ("{'alpha': [('hello beta', "
+                            "'have a great day', 42)]}\n")
+        expected_result += 'f1 beta exiting\n'
         expected_result += 'mainline alpha exiting\n'
 
         captured = capsys.readouterr().out

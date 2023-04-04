@@ -16,7 +16,7 @@ beta, send a message, and wait for a response.
 >>> import scottbrian_paratools.smart_thread as st
 >>> def f1() -> None:
 ...     print('f1 beta entered')
-...     beta_thread.smart_send(targets='alpha', msg='hi alpha, this is beta')
+...     beta_thread.smart_send(receivers='alpha', msg='hi alpha, this is beta')
 ...     beta_thread.smart_wait(targets='alpha')
 ...     print('f1 beta exiting')
 >>> print('mainline entered')
@@ -173,7 +173,7 @@ class SmartThreadWorkDataException(SmartThreadError):
 
 
 class SmartThreadNoRemoteTargets(SmartThreadError):
-    """SmartThread exception for no remote targets."""
+    """SmartThread exception for no remote receivers."""
     pass
 
 
@@ -1376,7 +1376,7 @@ class SmartThread:
                    targets: Iterable,
                    timeout: OptIntFloat = None,
                    log_msg: Optional[str] = None) -> None:
-        """Join with remote targets.
+        """Join with remote receivers.
 
         Args:
             targets: thread names that are to be joined
@@ -1384,7 +1384,7 @@ class SmartThread:
             log_msg: log message to issue
 
         Raises:
-            SmartThreadRequestTimedOut: join timed out waiting for targets.
+            SmartThreadRequestTimedOut: join timed out waiting for receivers.
 
         Notes:
             1) A ``resume()`` request can be done on an event that is not yet
@@ -1502,8 +1502,7 @@ class SmartThread:
     ####################################################################
     def smart_send(self,
                    msg: Any,
-                   targets: Optional[Iterable] = None,
-                   # dict_msg: SendMsgs,
+                   receivers: Optional[Iterable] = None,
                    log_msg: Optional[str] = None,
                    timeout: OptIntFloat = None) -> None:
         """Send one or more messages to remote threads.
@@ -1518,23 +1517,30 @@ class SmartThread:
         special case exists where the message can be specified as an
         instance of the SendMsgs class where the messages for one or
         more targets are placed into a dictionary indexed by the target
-        names. The *targets* arg must be omitted when SendMsgs is
-        specified.
+        names. The *receiver* arg must be omitted when a SendMsgs object
+        is specified.
 
-        The *targets* arg specifies the names of remote threads that
-        the message is to be sent to. As mentioned above, *targets*
-        must be omitted when SendMsgs is specified for the *msgs* arg.
-        If SendMsgs is not specifed for *msgs*, *targets* may be omitted
-        to indicte that the message is to be sent to all remote threads
-        in the configuration that are currently active at the time the
-        ^smart_send* is issued. Note that *smart_send* will raise an
-        error if any targets are stopped while *smart_send* is in
-        control, regardless of whether *targets* was specified or not.
-        Also, when *targets* is specified, names of threads that are
-        not yet in the configuration or are not yet active may be
-        specified in anticipation that those threads will become active.
-        If *timeout* is specified, those inactive threads must become
-        active before the timeout expires.
+        The *receivers* arg specifies the names of remote threads that
+        the message is to be sent to. There are two cases where
+        *receivers* is not specified:
+            1) when a SendMsgs object is specified for the *msgs* arg.
+            2) when a broadcast message is to be sent to all remote
+               threads in the configuration that are currently active
+               when the *smart_send* is issued.
+
+        The thread names specified for *receivers* or in a SendMsgs
+        object may be in states unregistered, registered, or alive.
+        *smart_send* will complete the send for any *receivers* that are
+        in the unregistered or registered state as soon as they go to
+        the alive state. If timeout is specified, a timeout error will
+        be raised if any threads did not become alive with the
+        specified amount of time.
+
+        An error will be raised if any receivers are stopped before the
+        message can be sent to them. This is true for receivers that are
+        sopecified as an argument for *receivers*, specified in the
+        SendMsgs object, or chosen for a broadcast message because they
+        were alive at the time of the *send_msg*.
 
         Eamples are provided below for the following cases:
             1) send a single message to a single remote thread
@@ -1549,14 +1555,9 @@ class SmartThread:
         Args:
             msg: the msg to be sent. This may be a single item or a
                  collection of items in any type of data structure.
-                 Mutually exclusive with *dict_msg*.
-            targets: names of remote threads to send the message to. If
-                     None, the message will be sent to all remote
-                     threads. Requires *msg*. Mutually exclusive with
-                     *dict_msg*.
-            dict_msg: a dictionary that contain the msgs to be sent
-                      indexed by the names of the target threads.
-                      Mutually exclusive with *msg* and *targets*.
+            receivers: names of remote threads to send the message to.
+                       If None, the message will be sent to all remote
+                       threads that are alive.
             log_msg: log message to issue
             timeout: number of seconds to wait for the targets to become
                      alive and ready to accept messages
@@ -1575,7 +1576,7 @@ class SmartThread:
         >>> beta_smart_thread = SmartThread(name='beta',
         ...                                 target=f1,
         ...                                 thread_parm_name='smart_thread')
-        >>> alpha_smart_thread.smart_send(msg='hello beta', targets='beta')
+        >>> alpha_smart_thread.smart_send(msg='hello beta', receivers='beta')
         >>> alpha_smart_thread.smart_join(targets='beta')
         >>> print('mainline alpha exiting')
         mainline alpha entered
@@ -1605,7 +1606,7 @@ class SmartThread:
         ...                                    target=f1,
         ...                                    thread_parm_name='smart_thread')
         >>> alpha_smart_thread.smart_send(msg='hello remotes',
-        ...                               targets=('beta', 'charlie'))
+        ...                               receivers=('beta', 'charlie'))
         >>> alpha_smart_thread.smart_join(targets=('beta', 'charlie'))
         >>> print('mainline alpha exiting')
         mainline alpha entered
@@ -1618,35 +1619,47 @@ class SmartThread:
         mainline alpha exiting
 
 
-        :Example: case 3: send a single message to all remote threads in
-                  the configuration (by simply ommiting the targets
-                  argument)
+        :Example: case 3: send a single message to all alive remote
+                  threads in the configuration as a broadcast (by simply
+                  ommiting the *receivers* argument). Note the use of
+                  smart_wait and smart_resume to coordinate the actions
+                  for ordered and consitent print output.
 
         >>> from scottbrian_paratools.smart_thread import SmartThread
-        >>> import time
-        >>> def f1(smart_thread: SmartThread, delay_secs: float) -> None:
-        ...     time.sleep(delay_secs)  # delay for non-interleaved msgs
+        >>> def f1(smart_thread: SmartThread,
+        ...        wait_for: Optional[str] = None,
+        ...        resume_target: Optional[str] = None) -> None:
+        ...     if wait_for:
+        ...         smart_thread.smart_wait(remotes=wait_for)
         ...     print(f'f1 {smart_thread.name} entered')
         ...     my_msg = smart_thread.smart_recv(senders='alpha')
         ...     print(my_msg)
         ...     print(f'f1 {smart_thread.name} exiting')
+        ...     if resume_target:
+        ...         smart_thread.smart_resume(targets=resume_target)
         >>> print('mainline alpha entered')
         >>> alpha_smart_thread = SmartThread(name='alpha')
         >>> beta_smart_thread = SmartThread(name='beta',
         ...                                 target=f1,
         ...                                 thread_parm_name='smart_thread',
-        ...                                 kwargs={'delay_secs': 0.1})
+        ...                                 kwargs={
+        ...                                     'resume_target':'charlie'})
         >>> charlie_smart_thread = SmartThread(name='charlie',
         ...                                    target=f1,
         ...                                    thread_parm_name='smart_thread',
-        ...                                    kwargs={'delay_secs': 0.6})
+        ...                                    kwargs={
+        ...                                        'wait_for': 'beta',
+        ...                                        'resume_target': 'delta'})
         >>> delta_smart_thread = SmartThread(name='delta',
         ...                                  target=f1,
         ...                                  thread_parm_name='smart_thread',
-        ...                                  kwargs={'delay_secs': 1.1})
+        ...                                  kwargs={
+        ...                                      'wait_for': 'charlie',
+        ...                                      'resume_target': 'alpha'})
         >>> alpha_smart_thread.smart_send(msg='hello remotes')
+        >>> alpha_smart_thread.smart_wait(remotes='delta')
         >>> alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
-        >>> print('mainline alpha exiting')
+        print('mainline alpha exiting')
         mainline alpha entered
         f1 beta entered
         {'alpha': ['hello remotes']}
@@ -1662,8 +1675,7 @@ class SmartThread:
         :Example: case 4: send multiple messages to a single remote
                   thread
 
-        >>> import scottbrian_paratools.smart_thread as st
-        >>> import time
+        >>> from scottbrian_paratools.smart_thread import SmartThread
         >>> def f1(smart_thread: SmartThread) -> None:
         ...     print(f'f1 {smart_thread.name} entered')
         ...     my_msg = smart_thread.smart_recv(senders='alpha')
@@ -1711,7 +1723,7 @@ class SmartThread:
         ...                                  kwargs={'delay_secs': 1.1})
         >>> alpha_smart_thread.smart_send(msg=['hello remotes',
         ...                                    'have a great day', 42],
-        ...                               targets=['beta', 'delta'] )
+        ...                               receivers=['beta', 'delta'] )
         >>> alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
         >>> print('mainline alpha exiting')
         mainline alpha entered
@@ -1773,7 +1785,7 @@ class SmartThread:
 
         """
         work_targets: set[str]
-        if targets is None:
+        if receivers is None:
             if isinstance(msg, SendMsgs):
                 work_targets = set(msg.send_msgs.keys())
             else:
@@ -1784,12 +1796,12 @@ class SmartThread:
                                 self._get_state(remote) == ThreadState.Alive):
                             work_targets |= {remote}
         else:
-            work_targets = self.get_set(targets)
+            work_targets = self.get_set(receivers)
 
         if not work_targets:
             raise SmartThreadNoRemoteTargets(
                 f'{self.name} issued a smart_send request but there are '
-                'no remote targets in the configuration to send to')
+                'no remote receivers in the configuration to send to')
 
         work_msgs: SendMsgs
         if isinstance(msg, SendMsgs):
@@ -1956,7 +1968,7 @@ class SmartThread:
         >>> import scottbrian_paratools.smart_thread as st
         >>> def f1(smart_thread: SmartThread) -> None:
         ...     print('f1 beta entered')
-        ...     smart_thread.smart_send(msg='hi alpha', targets='alpha')
+        ...     smart_thread.smart_send(msg='hi alpha', receivers='alpha')
         ...     print('f1 beta exiting')
         >>> print('mainline alpha entered')
         >>> alpha_smart_thread = SmartThread(name='alpha')
@@ -1979,7 +1991,7 @@ class SmartThread:
         >>> def f1(smart_thread: SmartThread) -> None:
         ...     print(f'f1 {smart_thread.name} entered')
         ...     smart_thread.smart_send(msg=f'{smart_thread.name} says hi',
-        ...                             targets='alpha')
+        ...                             receivers='alpha')
         ...     print(f'f1 {smart_thread.name} exiting')
         >>> print('mainline alpha entered')
         >>> alpha_smart_thread = SmartThread(name='alpha')
@@ -2007,7 +2019,7 @@ class SmartThread:
         >>> def f1(smart_thread: SmartThread, greeting: str) -> None:
         ...     print(f'f1 {smart_thread.name} entered')
         ...     smart_thread.smart_send(msg=f'{greeting}',
-        ...                             targets='alpha')
+        ...                             receivers='alpha')
         ...     print(f'f1 {smart_thread.name} exiting')
         >>> print('mainline alpha entered')
         >>> alpha_smart_thread = SmartThread(name='alpha')
@@ -2046,13 +2058,13 @@ class SmartThread:
         >>> import time
         >>> def f1(smart_thread: SmartThread, greeting: str) -> None:
         ...     print(f'f1 {smart_thread.name} entered')
-        ...     smart_thread.smart_send(msg=f'{greeting}', targets='alpha')
+        ...     smart_thread.smart_send(msg=f'{greeting}', receivers='alpha')
         ...     smart_thread.smart_send(msg=["it's great to be here",
         ...                                  "life is good"],
-        ...                             targets='alpha')
+        ...                             receivers='alpha')
         ...     smart_thread.smart_send(msg=("let's do lunch sometime",
         ...                                  "life is good"),
-        ...                             targets='alpha')
+        ...                             receivers='alpha')
         ...     print(f'f1 {smart_thread.name} exiting')
         >>> print('mainline alpha entered')
         >>> alpha_smart_thread = SmartThread(name='alpha')
@@ -2078,10 +2090,10 @@ class SmartThread:
         >>> import time
         >>> def f1(smart_thread: SmartThread, greeting: str) -> None:
         ...     print(f'f1 {smart_thread.name} entered')
-        ...     smart_thread.smart_send(msg=f'{greeting}', targets='alpha')
+        ...     smart_thread.smart_send(msg=f'{greeting}', receivers='alpha')
         ...     if smart_thread.name in ('charlie', 'delta'):
         ...         smart_thread.smart_send(msg=["miles to go", (1, 2, 3)],
-        ...                                 targets='alpha')
+        ...                                 receivers='alpha')
         ...     if smart_thread.name == 'delta':
         ...         smart_thread.smart_send(msg={'forty_two': 42, 42: 42}],
         ...                                 targets='alpha')
@@ -2329,7 +2341,7 @@ class SmartThread:
         Raises:
             SmartThreadRemoteThreadNotAlive: resume() detected remote
                 thread is not alive.
-            SmartThreadRequestTimedOut: timed out waiting for targets.
+            SmartThreadRequestTimedOut: timed out waiting for receivers.
 
         Notes:
             1) A ``resume()`` request can be done on an event that is not yet
@@ -2346,7 +2358,7 @@ class SmartThread:
                becomes not alive, the ``resume()`` request raises a
                **SmartThreadRemoteThreadNotAlive** error, but only when
                error_stopped_target is True.
-            4) The reason for allowing multiple targets is in support of
+            4) The reason for allowing multiple receivers is in support of
                a sync request among many threads. When one can also
                resume many non-sync waiters at once, it does not seem to
                be useful at this time.
@@ -2510,7 +2522,7 @@ class SmartThread:
                    timeout: OptIntFloat = None):
         """Sync up with the remote threads.
 
-        Each of the targets does a resume request to pre-resume the
+        Each of the receivers does a resume request to pre-resume the
         remote sync events, and then waits for each remote to resume
         their sync events. This ensures that each thread in the target
         set has reached the sync point before any thread moves forward
@@ -2540,15 +2552,15 @@ class SmartThread:
         >>> def f1() -> None:
         ...     print('f2 beta entered')
         ...     beta_smart_thread = SmartThread(name='beta')
-        ...     beta_smart_thread.sync(targets='alpha')
+        ...     beta_smart_thread.sync(receivers='alpha')
         ...     print('f2 beta exiting')
 
         >>> print('mainline alpha entered')
         >>> alpha_smart_thread  = SmartThread(name='alpha')
         >>> beta_thread = threading.Thread(target=f1)
         >>> beta_thread.smart_start()
-        >>> alpha_smart_thread.sync(targets='beta')
-        >>> alpha_smart_thread.smart_join(targets='beta')
+        >>> alpha_smart_thread.sync(receivers='beta')
+        >>> alpha_smart_thread.smart_join(receivers='beta')
         >>> print('mainline alpha exiting')
         mainline alpha entered
         f2 beta entered
@@ -2835,13 +2847,13 @@ class SmartThread:
         >>> def f1() -> None:
         ...     beta_smart_thread = SmartThread(name='beta')
         ...     time.sleep(1)
-        ...     beta_smart_thread.resume(targets='alpha')
+        ...     beta_smart_thread.resume(receivers='alpha')
 
         >>> alpha_smart_event = SmartThread(name='alpha')
         >>> f1_thread = threading.Thread(target=f1)
         >>> f1_thread.smart_start()
         >>> alpha_smart_event.wait(remote='beta')
-        >>> alpha_smart_event.smart_join(targets='beta')
+        >>> alpha_smart_event.smart_join(receivers='beta')
 
         """
         # get RequestBlock with targets in a set and a timer object
@@ -2969,10 +2981,10 @@ class SmartThread:
         """Main loop for each config command.
 
         Each of the requests calls this method to perform the loop of
-        the targets.
+        the receivers.
 
         Args:
-            request_block: contains targets, timeout, etc
+            request_block: contains receivers, timeout, etc
 
         Raises:
             SmartThreadRequestTimedOut: request processing timed out
@@ -3016,10 +3028,10 @@ class SmartThread:
         """Main loop for each request.
 
         Each of the requests calls this method to perform the loop of
-        the targets.
+        the receivers.
 
         Args:
-            request_block: contains targets, timeout, etc
+            request_block: contains receivers, timeout, etc
 
         Raises:
             SmartThreadRequestTimedOut: request processing timed out
@@ -3170,7 +3182,7 @@ class SmartThread:
 
         Args:
             request: type of request being performed
-            remotes: names of threads that are targets for the
+            remotes: names of threads that are receivers for the
                 request
 
         """
@@ -3293,10 +3305,10 @@ class SmartThread:
         """Raise an error if needed.
 
         Each of the requests calls this method to perform the loop of
-        the targets.
+        the receivers.
 
         Args:
-            request_block: contains targets, timeout, etc
+            request_block: contains receivers, timeout, etc
 
         Raises:
             SmartThreadRequestTimedOut: request processing timed out
@@ -3467,9 +3479,9 @@ class SmartThread:
             get_block_lock: True or False
             remotes: remote threads for the request
             error_stopped_target: request will raise an error if any
-                one of the targets is in a stopped state.
+                one of the receivers is in a stopped state.
             error_not_registered_target: request will raise an error if
-                any one of the targets is in any state other than
+                any one of the receivers is in any state other than
                 registered.
             timeout: number of seconds to allow for request completion
             log_msg: caller log message to issue
@@ -3485,7 +3497,7 @@ class SmartThread:
 
         if not remotes:
             raise SmartThreadInvalidInput(f'{self.name} {request.value} '
-                                          'request with no targets specified.')
+                                          'request with no receivers specified.')
 
         if isinstance(remotes, str):
             remotes = {remotes}
@@ -3610,7 +3622,7 @@ class SmartThread:
         """
         log_msg_body = (
             f'requestor: {threading.current_thread().name} '
-            f'targets: {sorted(request_block.remotes)} '
+            f'receivers: {sorted(request_block.remotes)} '
             f'timeout value: {request_block.timer.timeout_value()} '
             f'{get_formatted_call_sequence(latest=3, depth=1)}')
 
