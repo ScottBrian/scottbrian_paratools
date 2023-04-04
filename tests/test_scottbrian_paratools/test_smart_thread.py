@@ -20311,32 +20311,40 @@ class TestSmartThreadExamples:
     ####################################################################
     def test_smart_send_example_3(self,
                                   capsys: Any) -> None:
-        """Test smart_send example 1."""
+        """Test smart_send example 3."""
         from scottbrian_paratools.smart_thread import SmartThread
         import time
 
-        def f1(smart_thread: SmartThread, delay_secs: float) -> None:
-            time.sleep(delay_secs)  # delay for non-interleaved msgs
+        def f1(smart_thread: SmartThread,
+               wait_for: Optional[str] = None,
+               resume_target: Optional[str] = None) -> None:
+            if wait_for:
+                smart_thread.smart_wait(remotes=wait_for)
             print(f'f1 {smart_thread.name} entered')
             my_msg = smart_thread.smart_recv(senders='alpha')
             print(my_msg)
             print(f'f1 {smart_thread.name} exiting')
+            if resume_target:
+                smart_thread.smart_resume(targets=resume_target)
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
         beta_smart_thread = SmartThread(name='beta',
                                         target=f1,
                                         thread_parm_name='smart_thread',
-                                        kwargs={'delay_secs': 0.1})
+                                        kwargs={'resume_target': 'charlie'})
         charlie_smart_thread = SmartThread(name='charlie',
                                            target=f1,
                                            thread_parm_name='smart_thread',
-                                           kwargs={'delay_secs': 1.1})
+                                           kwargs={'wait_for': 'beta',
+                                                   'resume_target': 'delta'})
         delta_smart_thread = SmartThread(name='delta',
                                          target=f1,
                                          thread_parm_name='smart_thread',
-                                         kwargs={'delay_secs': 2.1})
+                                         kwargs={'wait_for': 'charlie',
+                                                 'resume_target': 'alpha'})
         alpha_smart_thread.smart_send(msg='hello remotes')
+        alpha_smart_thread.smart_wait(remotes='delta')
         alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
         print('mainline alpha exiting')
 
