@@ -1949,21 +1949,21 @@ class SmartThread:
          messages are found, it will immediately return them in the
          RecvMsgs dictionary. If no messages were initially found,
          *smart_recv* will continue to check until one or more messages
-         arrives, at which time it will then return them. If timeout is
+         arrive, at which point it will return them. If timeout is
          specified, *smart_recv* will raise a timeout error if no
          messages appear within the specified time.
           
          If no senders are specified, the *smart_recv* will check its
          message queues for all threads in the current configuration. If
          no messages are found, *smart_recv* will continue to check all
-         thread in the current configuration, even as the configuration
+         threads in the current configuration, even as the configuration
          changes. In this way, a thread acting as a server can issue the
          *smart_recv* to simply park itself on the message queues of all
-         threads to return with any request messages as soon as they
+         threads and return with any request messages as soon as they
          arrive.
 
          If senders are specified, *smart_recv* will look for messages
-         only on its message queues for the speccified senders. Unlike
+         only on its message queues for the specified senders. Unlike
          the "no senders specified" case, *smart_recv* will raise an
          error if any of the specified senders become inactive.
 
@@ -2054,17 +2054,17 @@ class SmartThread:
         >>> alpha_smart_thread = SmartThread(name='alpha')
         >>> beta_smart_thread = SmartThread(name='beta',
         ...                                 target=f1,
-        ...                                 thread_parm_name='smart_thread'
+        ...                                 thread_parm_name='smart_thread',
         ...                                 args=('hi',))
         >>> time.sleep(0.2)
         >>> charlie_smart_thread = SmartThread(name='charlie',
         ...                                    target=f1,
-        ...                                    thread_parm_name='smart_thread'
+        ...                                    thread_parm_name='smart_thread',
         ...                                    args=('hello',))
         >>> time.sleep(0.2)
         >>> delta_smart_thread = SmartThread(name='delta',
         ...                                  target=f1,
-        ...                                  thread_parm_name='smart_thread'
+        ...                                  thread_parm_name='smart_thread',
         ...                                  args=('aloha',))
         >>> time.sleep(0.2)
         >>> my_msg = alpha_smart_thread.smart_recv()
@@ -2091,23 +2091,22 @@ class SmartThread:
                   thread
 
         >>> from scottbrian_paratools.smart_thread import SmartThread
-        >>> import time
-        >>> def f1(smart_thread: SmartThread, greeting: str) -> None:
+        >>> def f1(greeting: str, smart_thread: SmartThread) -> None:
         ...     print(f'f1 {smart_thread.name} entered')
         ...     smart_thread.smart_send(msg=f'{greeting}', receivers='alpha')
         ...     smart_thread.smart_send(msg=["it's great to be here",
         ...                                  "life is good"],
         ...                             receivers='alpha')
         ...     smart_thread.smart_send(msg=("let's do lunch sometime",
-        ...                                  "life is good"),
+        ...                                  "Tuesday afternoons are best"),
         ...                             receivers='alpha')
         ...     print(f'f1 {smart_thread.name} exiting')
         >>> print('mainline alpha entered')
         >>> alpha_smart_thread = SmartThread(name='alpha')
         >>> beta_smart_thread = SmartThread(name='beta',
         ...                                 target=f1,
+        ...                                 thread_parm_name='smart_thread',
         ...                                 args=('hi',))
-        >>> time.sleep(0.2)
         >>> my_msg = alpha_smart_thread.smart_recv(senders='beta')
         >>> print(my_msg)
         >>> alpha_smart_thread.smart_join(targets='beta')
@@ -2116,7 +2115,7 @@ class SmartThread:
         f1 beta entered
         f1 beta exiting
         {'beta': ['hi', ["it's great to be here", "life is good"],
-        ...       ("let's do lunch sometime", "life is good")}
+        ("let's do lunch sometime", "Tuesday afternoons are best")}
         mainline alpha exiting
 
         :Example: case 5: receive any mixture of single and multiple
@@ -2255,6 +2254,8 @@ class SmartThread:
         for timeout_value in (SmartThread.K_REQUEST_MIN_INTERVAL,
                               request_block.request_max_interval):
             try:
+                logger.debug(f'TestDebug {self.name} checking for message '
+                             f'from {pk_remote.remote}')
                 received_msgs: list[Any] = []
                 # recv message from remote
                 recvd_msg = local_sb.msg_q.get(
@@ -2267,6 +2268,8 @@ class SmartThread:
                     received_msgs.append(recvd_msg)
 
                 request_block.ret_msg[pk_remote.remote] = received_msgs
+                logger.debug(f'TestDebug {self.name} got message '
+                             f'from {pk_remote.remote}, {received_msgs=}')
                 # if we had wanted to delete an entry in the
                 # pair array for this thread because the other
                 # thread exited, but we could not because this
@@ -3083,6 +3086,9 @@ class SmartThread:
                dropped until we have completed the request and any
                cleanup that is needed for a failed request
         """
+        if request_block.request == ReqType.Smart_recv:
+            logger.debug(f'TestDebug {self.name} entered _request_loop '
+                         f'with {self.work_pk_remotes=}')
         continue_request_loop = True
         while continue_request_loop:
         # while len(self.work_pk_remotes) > request_block.completion_count:
@@ -3194,12 +3200,16 @@ class SmartThread:
                 self._handle_loop_errors(request_block=request_block,
                                          pending_remotes=pending_remotes)
 
-            if len(self.work_pk_remotes) <= request_block.completion_count:
-                continue_request_loop = False
+            if request_block.remotes:  # remotes were specified
+                if len(self.work_pk_remotes) <= request_block.completion_count:
+                    continue_request_loop = False
             else:
-                if not request_block.remotes:
-                    self._set_work_pk_remotes()
-                time.sleep(0.2)
+                if request_block.request == ReqType.Smart_recv:
+                    if request_block.ret_msg:
+                        continue_request_loop = False
+                    else:  # keep looking
+                        self._set_work_pk_remotes(request_block.request)
+                        time.sleep(0.2)
 
         ################################################################
         # cleanup
@@ -3213,6 +3223,7 @@ class SmartThread:
     ####################################################################
 
     def _set_work_pk_remotes(self,
+                             request: ReqType,
                              remotes: Optional[set[str]] = None) -> None:
         """Update the work_pk_remotes with newly found threads.
 
@@ -3226,7 +3237,19 @@ class SmartThread:
 
         with sel.SELockShare(SmartThread._registry_lock):
             if not remotes:
-                remotes = set(SmartThread._registry.keys()) - {self.name}
+                remotes: set[str] = set()
+                if request == ReqType.Smart_recv:
+                    for pair_key, item in SmartThread._pair_array.items():
+                        if (self.name in pair_key
+                                and not SmartThread._pair_array[
+                                    pair_key].status_blocks[
+                                    self.name].msg_q.empty()):
+                            if self.name == pair_key[0]:
+                                remotes |= {pair_key[1]}
+                            else:
+                                remotes |= {pair_key[0]}
+                else:
+                    remotes = set(SmartThread._registry.keys()) - {self.name}
             self.missing_remotes: set[str] = set()
             for remote in remotes:
                 if remote in SmartThread._registry:
@@ -3572,7 +3595,8 @@ class SmartThread:
         if request in (ReqType.Smart_send, ReqType.Smart_recv,
                        ReqType.Smart_resume, ReqType.Smart_sync,
                        ReqType.Smart_wait):
-            self._set_work_pk_remotes(remotes)
+            self._set_work_pk_remotes(request=request,
+                                      remotes=remotes)
             # with sel.SELockShare(SmartThread._registry_lock):
             #     self.missing_remotes: set[str] = set()
             #     for remote in remotes:

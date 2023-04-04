@@ -20727,5 +20727,61 @@ class TestSmartThreadExamples:
 
         logger.debug('mainline exiting')
 
+    ####################################################################
+    # test_smart_recv_example_4
+    ####################################################################
+    def test_smart_recv_example_4(self,
+                                  capsys: Any) -> None:
+        """Test smart_recv example 4.
+
+        receive multiple messages from a single remote thread
+
+        Args:
+            capsys: pytest fixture to get the print output
+        """
+        from scottbrian_paratools.smart_thread import SmartThread
+
+        def f1(greeting: str, smart_thread: SmartThread) -> None:
+            print(f'f1 {smart_thread.name} entered')
+            smart_thread.smart_send(msg=f'{greeting}', receivers='alpha')
+            smart_thread.smart_send(msg=["it's great to be here",
+                                         "life is good"],
+                                    receivers='alpha')
+            smart_thread.smart_send(msg=("let's do lunch sometime",
+                                         "Tuesday afternoons are best"),
+                                    receivers='alpha')
+            print(f'f1 {smart_thread.name} exiting')
+
+        print('mainline alpha entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        beta_smart_thread = SmartThread(name='beta',
+                                        target=f1,
+                                        thread_parm_name = 'smart_thread',
+                                        args = ('hi',))
+        my_msg = alpha_smart_thread.smart_recv(senders='beta')
+        print(my_msg)
+        alpha_smart_thread.smart_join(targets='beta')
+        print('mainline alpha exiting')
+
+        expected_result = 'mainline alpha entered\n'
+        expected_result += 'f1 beta entered\n'
+        expected_result += 'f1 beta exiting\n'
+        expected_result += 'f1 charlie entered\n'
+        expected_result += 'f1 charlie exiting\n'
+        expected_result += 'f1 delta entered\n'
+        expected_result += 'f1 delta exiting\n'
+        expected_result += ("{'beta': ['hi', "
+                            '["it''s great to be here", "life is good"],'
+                            '("let''s do lunch sometime", '
+                              '"Tuesday afternoons are best")}\n')
+        expected_result += 'mainline alpha exiting\n'
+
+        captured = capsys.readouterr().out
+
+        assert captured == expected_result
+
+        logger.debug('mainline exiting')
+
+
 
 
