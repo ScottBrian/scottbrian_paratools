@@ -2094,10 +2094,10 @@ class SmartThread:
         >>> def f1(greeting: str, smart_thread: SmartThread) -> None:
         ...     print(f'f1 {smart_thread.name} entered')
         ...     smart_thread.smart_send(msg=f'{greeting}', receivers='alpha')
-        ...     smart_thread.smart_send(msg=["it's great to be here",
-        ...                                  "life is good"],
+        ...     smart_thread.smart_send(msg=["great to be here",
+        ...                                 "life is good"],
         ...                             receivers='alpha')
-        ...     smart_thread.smart_send(msg=("let's do lunch sometime",
+        ...     smart_thread.smart_send(msg=("we should do lunch sometime",
         ...                                  "Tuesday afternoons are best"),
         ...                             receivers='alpha')
         ...     print(f'f1 {smart_thread.name} exiting')
@@ -2122,8 +2122,12 @@ class SmartThread:
                   messages from specified remote threads
 
         >>> from scottbrian_paratools.smart_thread import SmartThread
-        >>> import time
-        >>> def f1(smart_thread: SmartThread, greeting: str) -> None:
+        >>> def f1(greeting: str,
+        ...        smart_thread: SmartThread,
+        ...        wait_for: Optional[str] = None,
+        ...        resume_target: Optional[str] = None) -> None:
+        ...    if wait_for:
+        ...        smart_thread.smart_wait(remotes=wait_for)
         ...     print(f'f1 {smart_thread.name} entered')
         ...     smart_thread.smart_send(msg=f'{greeting}', receivers='alpha')
         ...     if smart_thread.name in ('charlie', 'delta'):
@@ -2133,22 +2137,32 @@ class SmartThread:
         ...         smart_thread.smart_send(msg={'forty_two': 42, 42: 42}],
         ...                                 targets='alpha')
         ...     print(f'f1 {smart_thread.name} exiting')
+        ...     if resume_target:
+        ...         smart_thread.smart_resume(targets=resume_target)
         >>> print('mainline alpha entered')
         >>> alpha_smart_thread = SmartThread(name='alpha')
         >>> beta_smart_thread = SmartThread(name='beta',
         ...                                 target=f1,
-        ...                                 args=('hi',))
-        >>> time.sleep(0.2)
-        >>> charlie_smart_thread = SmartThread(name='beta',
+        ...                                 thread_parm_name='smart_thread',
+        ...                                 args=('hi',),
+        ...                                 kwargs={
+        ...                                     'resume_target':'charlie'})
+        >>> charlie_smart_thread = SmartThread(name='charlie',
         ...                                    target=f1,
-        ...                                    args=('hello',))
-        >>> time.sleep(0.2)
-        >>> delta_smart_thread = SmartThread(name='charlie',
+        ...                                    thread_parm_name='smart_thread',
+        ...                                    args=('hello',),
+        ...                                    kwargs={'wait_for': 'beta',
+        ...                                           'resume_target':'delta'})
+        >>> delta_smart_thread = SmartThread(name='delta',
         ...                                  target=f1,
-        ...                                  args=('aloha',))
-        >>> time.sleep(0.2)
+        ...                                  thread_parm_name='smart_thread',
+        ...                                  args=('aloha',),
+        ...                                  kwargs={'wait_for': 'charlie',
+        ...                                          'resume_target': 'alpha'})
+        >>> alpha_smart_thread.smart_wait(remotes='delta')
         >>> my_msg = alpha_smart_thread.smart_recv(senders={'beta', 'delta'})
-        >>> print(my_msg)
+        >>> print(my_msg['beta'])
+        >>> print(my_msg['delta'])
         >>> my_msg = alpha_smart_thread.smart_recv(senders={'charlie'})
         >>> print(my_msg)
         >>> alpha_smart_thread.smart_join(targets=('beta',
@@ -2162,10 +2176,9 @@ class SmartThread:
         f1 charlie exiting
         f1 delta entered
         f1 delta exiting
-        {'beta': ['hi'],
-        'delta': ['hello', ['miles to go', (1, 2, 3)],
-                            {'forty_two': 42, 42: 42}]}
-        {'charlie': ['hi'], ["miles to go", (1, 2, 3)]}
+        "['hi']\n"
+        "['aloha', ['miles to go', (1, 2, 3)], {'forty_two': 42, 42: 42}]\n"
+        {'charlie': ['hi'], ['miles to go', (1, 2, 3)]}
         mainline alpha exiting
 
         """
@@ -3684,17 +3697,15 @@ class SmartThread:
             the log message to use for the exit call
         """
         if request_block.remotes:
-            log_msg_body = (
-                f'requestor: {threading.current_thread().name} '
-                f'receivers: {sorted(request_block.remotes)} '
-                f'timeout value: {request_block.timer.timeout_value()} '
-                f'{get_formatted_call_sequence(latest=3, depth=1)}')
+            targets_to_use = sorted(request_block.remotes)
         else:
-            log_msg_body = (
-                f'requestor: {threading.current_thread().name} '
-                f'receivers: alive threads '
-                f'timeout value: {request_block.timer.timeout_value()} '
-                f'{get_formatted_call_sequence(latest=3, depth=1)}')
+            targets_to_use = 'eligible per request'
+        log_msg_body = (
+            f'requestor: {threading.current_thread().name} '
+            f'targets: {targets_to_use} '
+            f'timeout value: {request_block.timer.timeout_value()} '
+            f'{get_formatted_call_sequence(latest=3, depth=1)}')
+
         if log_msg:
             log_msg_body += f' {log_msg}'
 
