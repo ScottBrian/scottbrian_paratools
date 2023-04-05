@@ -14081,12 +14081,12 @@ class ConfigVerifier:
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_wait(
-                        remotes=resumers,
+                        resumers=resumers,
                         wait_for=wait_for,
                         log_msg=log_msg)
                 else:
                     self.all_threads[cmd_runner].smart_wait(
-                        remotes=resumers,
+                        resumers=resumers,
                         wait_for=wait_for,
                         timeout=timeout,
                         log_msg=log_msg)
@@ -14106,12 +14106,12 @@ class ConfigVerifier:
             with pytest.raises(st.SmartThreadConflictDeadlockDetected):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_wait(
-                        remotes=resumers,
+                        resumers=resumers,
                         wait_for=wait_for,
                         log_msg=log_msg)
                 else:
                     self.all_threads[cmd_runner].smart_wait(
-                        remotes=resumers,
+                        resumers=resumers,
                         wait_for=wait_for,
                         timeout=timeout,
                         log_msg=log_msg)
@@ -14131,12 +14131,12 @@ class ConfigVerifier:
             with pytest.raises(st.SmartThreadWaitDeadlockDetected):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_wait(
-                        remotes=resumers,
+                        resumers=resumers,
                         wait_for=wait_for,
                         log_msg=log_msg)
                 else:
                     self.all_threads[cmd_runner].smart_wait(
-                        remotes=resumers,
+                        resumers=resumers,
                         wait_for=wait_for,
                         timeout=timeout,
                         log_msg=log_msg)
@@ -14153,13 +14153,13 @@ class ConfigVerifier:
                 log_level=logging.ERROR)
         elif timeout_type == TimeoutType.TimeoutNone:
             self.all_threads[cmd_runner].smart_wait(
-                remotes=resumers,
+                resumers=resumers,
                 wait_for=wait_for,
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutFalse:
             self.all_threads[cmd_runner].smart_wait(
-                remotes=resumers,
+                resumers=resumers,
                 wait_for=wait_for,
                 timeout=timeout,
                 log_msg=log_msg)
@@ -14168,7 +14168,7 @@ class ConfigVerifier:
             enter_exit = ('entry',)
             with pytest.raises(st.SmartThreadRequestTimedOut):
                 self.all_threads[cmd_runner].smart_wait(
-                    remotes=resumers,
+                    resumers=resumers,
                     wait_for=wait_for,
                     timeout=timeout,
                     log_msg=log_msg)
@@ -18190,7 +18190,7 @@ class TestSmartThreadScenarios:
 
             f1_st.smart_recv(remote='alpha')
 
-            f1_st.smart_wait(remotes='alpha')
+            f1_st.smart_wait(resumers='alpha')
 
             f1_st.smart_sync(targets='alpha')
 
@@ -20158,7 +20158,7 @@ class TestSmartThreadErrors:
             beta_thread.smart_sync(targets='alpha')
 
         with pytest.raises(st.SmartThreadDetectedOpFromForeignThread):
-            beta_thread.smart_wait(remotes='alpha')
+            beta_thread.smart_wait(resumers='alpha')
 
         charlie_thread = st.SmartThread(name='charlie',
                                         auto_start=False,
@@ -20338,7 +20338,7 @@ class TestSmartThreadExamples:
                wait_for: Optional[str] = None,
                resume_target: Optional[str] = None) -> None:
             if wait_for:
-                smart_thread.smart_wait(remotes=wait_for)
+                smart_thread.smart_wait(resumers=wait_for)
             print(f'f1 {smart_thread.name} entered')
             my_msg = smart_thread.smart_recv(senders='alpha')
             print(my_msg)
@@ -20363,7 +20363,7 @@ class TestSmartThreadExamples:
                                          kwargs={'wait_for': 'charlie',
                                                  'resume_target': 'alpha'})
         alpha_smart_thread.smart_send(msg='hello remotes')
-        alpha_smart_thread.smart_wait(remotes='delta')
+        alpha_smart_thread.smart_wait(resumers='delta')
         alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
         print('mainline alpha exiting')
 
@@ -20446,7 +20446,7 @@ class TestSmartThreadExamples:
                wait_for: Optional[str] = None,
                resume_target: Optional[str] = None) -> None:
             if wait_for:
-                smart_thread.smart_wait(remotes=wait_for)
+                smart_thread.smart_wait(resumers=wait_for)
             print(f'f1 {smart_thread.name} entered')
             my_msg = smart_thread.smart_recv(senders='alpha')
             print(my_msg)
@@ -20473,7 +20473,7 @@ class TestSmartThreadExamples:
         alpha_smart_thread.smart_send(msg=['hello remotes',
                                            'have a great day', 42],
                                       receivers=['beta', 'charlie', 'delta'])
-        alpha_smart_thread.smart_wait(remotes='delta')
+        alpha_smart_thread.smart_wait(resumers='delta')
         alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
         print('mainline alpha exiting')
 
@@ -20517,7 +20517,7 @@ class TestSmartThreadExamples:
                wait_for: Optional[str] = None,
                resume_target: Optional[str] = None) -> None:
             if wait_for:
-                smart_thread.smart_wait(remotes=wait_for)
+                smart_thread.smart_wait(resumers=wait_for)
             print(f'f1 {smart_thread.name} entered')
             my_msg = smart_thread.smart_recv(senders='alpha')
             print(my_msg)
@@ -20546,7 +20546,7 @@ class TestSmartThreadExamples:
             'charlie': ('hi charlie', 'have a great day'),
             'delta': [42, 'hi delta', {'nums': (1, 2, 3)}]})
         alpha_smart_thread.smart_send(msg=msgs_to_send)
-        alpha_smart_thread.smart_wait(remotes='delta')
+        alpha_smart_thread.smart_wait(resumers='delta')
         alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
         print('mainline alpha exiting')
 
@@ -20798,7 +20798,7 @@ class TestSmartThreadExamples:
                wait_for: Optional[str] = None,
                resume_target: Optional[str] = None) -> None:
             if wait_for:
-                smart_thread.smart_wait(remotes=wait_for)
+                smart_thread.smart_wait(resumers=wait_for)
             print(f'f1 {smart_thread.name} entered')
             smart_thread.smart_send(msg=f'{greeting}', receivers='alpha')
             if smart_thread.name in ('charlie', 'delta'):
@@ -20830,7 +20830,7 @@ class TestSmartThreadExamples:
                                          args=('aloha',),
                                          kwargs={'wait_for': 'charlie',
                                                  'resume_target': 'alpha'})
-        alpha_smart_thread.smart_wait(remotes='delta')
+        alpha_smart_thread.smart_wait(resumers='delta')
         my_msg = alpha_smart_thread.smart_recv(senders={'beta', 'delta'})
         print(my_msg['beta'])
         print(my_msg['delta'])
