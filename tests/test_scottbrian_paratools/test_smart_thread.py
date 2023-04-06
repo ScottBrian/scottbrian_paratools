@@ -13336,11 +13336,11 @@ class ConfigVerifier:
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_resume(
-                        targets=targets,
+                        waiters=targets,
                         log_msg=log_msg)
                 else:
                     self.all_threads[cmd_runner].smart_resume(
-                        targets=targets,
+                        waiters=targets,
                         timeout=timeout,
                         log_msg=log_msg)
 
@@ -13356,13 +13356,13 @@ class ConfigVerifier:
         elif timeout_type == TimeoutType.TimeoutNone:
             self.inc_ops_count(targets.copy(), cmd_runner)
             self.all_threads[cmd_runner].smart_resume(
-                targets=targets,
+                waiters=targets,
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutFalse:
             self.inc_ops_count(targets.copy(), cmd_runner)
             self.all_threads[cmd_runner].smart_resume(
-                targets=targets,
+                waiters=targets,
                 timeout=timeout,
                 log_msg=log_msg)
 
@@ -13372,7 +13372,7 @@ class ConfigVerifier:
             enter_exit = ('entry', )
             with pytest.raises(st.SmartThreadRequestTimedOut):
                 self.all_threads[cmd_runner].smart_resume(
-                    targets=targets,
+                    waiters=targets,
                     timeout=timeout,
                     log_msg=log_msg)
 
@@ -18251,7 +18251,7 @@ class TestSmartThreadScenarios:
 
         commander_thread.smart_send(receivers='beta', msg='alpha sends to beta')
 
-        commander_thread.smart_resume(targets='beta')
+        commander_thread.smart_resume(waiters='beta')
 
         commander_thread.smart_sync(targets='beta')
 
@@ -20152,7 +20152,7 @@ class TestSmartThreadErrors:
             beta_thread.smart_recv(remote='alpha')
 
         with pytest.raises(st.SmartThreadDetectedOpFromForeignThread):
-            beta_thread.smart_resume(targets='alpha')
+            beta_thread.smart_resume(waiters='alpha')
 
         with pytest.raises(st.SmartThreadDetectedOpFromForeignThread):
             beta_thread.smart_sync(targets='alpha')
@@ -20344,7 +20344,7 @@ class TestSmartThreadExamples:
             print(my_msg)
             print(f'f1 {smart_thread.name} exiting')
             if resume_target:
-                smart_thread.smart_resume(targets=resume_target)
+                smart_thread.smart_resume(waiters=resume_target)
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
@@ -20452,7 +20452,7 @@ class TestSmartThreadExamples:
             print(my_msg)
             print(f'f1 {smart_thread.name} exiting')
             if resume_target:
-                smart_thread.smart_resume(targets=resume_target)
+                smart_thread.smart_resume(waiters=resume_target)
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
@@ -20523,7 +20523,7 @@ class TestSmartThreadExamples:
             print(my_msg)
             print(f'f1 {smart_thread.name} exiting')
             if resume_target:
-                smart_thread.smart_resume(targets=resume_target)
+                smart_thread.smart_resume(waiters=resume_target)
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
@@ -20809,7 +20809,7 @@ class TestSmartThreadExamples:
                                         receivers='alpha')
             print(f'f1 {smart_thread.name} exiting')
             if resume_target:
-                smart_thread.smart_resume(targets=resume_target)
+                smart_thread.smart_resume(waiters=resume_target)
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
@@ -20853,6 +20853,146 @@ class TestSmartThreadExamples:
                             "{'forty_two': 42, 42: 42}]\n")
         expected_result += ("{'charlie': ['hello', "
                             "['miles to go', (1, 2, 3)]]}\n")
+        expected_result += 'mainline alpha exiting\n'
+
+        captured = capsys.readouterr().out
+
+        assert captured == expected_result
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_wait_example_1
+    ####################################################################
+    def test_smart_wait_example_1(self,
+                                  capsys: Any) -> None:
+        """Test smart_wait example 1.
+
+        smart_wait followed by smart_resume
+
+        Args:
+            capsys: pytest fixture to get the print output
+        """
+        from scottbrian_paratools.smart_thread import SmartThread
+        import time
+
+        def f1(smart_thread: SmartThread) -> None:
+            print(f'f1 {smart_thread.name} about to wait')
+            smart_thread.smart_wait(resumers='alpha')
+            print(f'f1 {smart_thread.name} back from wait')
+
+        print('mainline alpha entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        beta_smart_thread = SmartThread(name='beta',
+                                        target=f1,
+                                        thread_parm_name='smart_thread')
+        time.sleep(1)  # allow time for smart_wait to be issued
+        print('alpha about to resume beta')
+        alpha_smart_thread.smart_resume(waiters='beta')
+        alpha_smart_thread.smart_join(targets='beta')
+        print('mainline alpha exiting')
+
+        expected_result = 'mainline alpha entered\n'
+        expected_result += 'f1 beta about to wait\n'
+        expected_result += 'alpha about to resume beta\n'
+        expected_result += 'f1 beta back from wait\n'
+        expected_result += 'mainline alpha exiting\n'
+
+        captured = capsys.readouterr().out
+
+        assert captured == expected_result
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_wait_example_2
+    ####################################################################
+    def test_smart_wait_example_2(self,
+                                  capsys: Any) -> None:
+        """Test smart_wait example 2.
+
+        smart_wait followed by smart_resume
+
+        Args:
+            capsys: pytest fixture to get the print output
+        """
+        from scottbrian_paratools.smart_thread import SmartThread
+        import time
+
+        def f1(smart_thread: SmartThread) -> None:
+            time.sleep(1)  # allow time for smart_resume to be issued
+            print(f'f1 {smart_thread.name} about to wait')
+            smart_thread.smart_wait(resumers='alpha')
+            print(f'f1 {smart_thread.name} back from wait')
+
+        print('mainline alpha entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        beta_smart_thread = SmartThread(name='beta',
+                                        target=f1,
+                                        thread_parm_name='smart_thread')
+        print('alpha about to resume beta')
+        alpha_smart_thread.smart_resume(waiters='beta')
+
+        alpha_smart_thread.smart_join(targets='beta')
+        print('mainline alpha exiting')
+
+        expected_result = 'mainline alpha entered\n'
+        expected_result += 'alpha about to resume beta\n'
+        expected_result += 'f1 beta about to wait\n'
+        expected_result += 'f1 beta back from wait\n'
+        expected_result += 'mainline alpha exiting\n'
+
+        captured = capsys.readouterr().out
+
+        assert captured == expected_result
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_wait_example_3
+    ####################################################################
+    def test_smart_wait_example_3(self,
+                                  capsys: Any) -> None:
+        """Test smart_wait example 3.
+
+        smart_wait for multiple resumers with WaitFor.All
+
+        Args:
+            capsys: pytest fixture to get the print output
+        """
+        from scottbrian_paratools.smart_thread import SmartThread, WaitFor
+        import time
+
+        def f1(smart_thread: SmartThread) -> None:
+            print(f'f1 {smart_thread.name} about to resume alpha')
+            smart_thread.smart_resume(waiters='alpha')
+
+        print('mainline alpha entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        beta_smart_thread = SmartThread(name='beta',
+                                        target=f1,
+                                        thread_parm_name='smart_thread')
+        time.sleep(1)  # allow time for alpha to wait
+        charlie_smart_thread = SmartThread(name='charlie',
+                                           target=f1,
+                                           thread_parm_name='smart_thread')
+        time.sleep(1)  # allow time for alpha to wait
+        delta_smart_thread = SmartThread(name='delta',
+                                           target=f1,
+                                           thread_parm_name='smart_thread')
+        time.sleep(1)  # allow time for alpha to wait
+        print('alpha about to wait for all threads')
+        alpha_smart_thread.smart_wait(resumers=['beta', 'charlie', 'delta'],
+                                      wait_for=WaitFor.All)
+
+        alpha_smart_thread.smart_join(targets=['beta', 'charlie', 'delta'])
+        print('mainline alpha exiting')
+
+        expected_result = 'mainline alpha entered\n'
+        expected_result += 'f1 beta about to resume alpha\n'
+        expected_result += 'f1 charlie about to resume alpha\n'
+        expected_result += 'f1 delta about to resume alpha\n'
+        expected_result += 'alpha about to wait for all threads\n'
         expected_result += 'mainline alpha exiting\n'
 
         captured = capsys.readouterr().out
