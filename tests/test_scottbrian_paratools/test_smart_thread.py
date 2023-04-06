@@ -20878,8 +20878,8 @@ class TestSmartThreadExamples:
 
         def f1(smart_thread: SmartThread) -> None:
             print(f'f1 {smart_thread.name} about to wait')
-            smart_thread.smart_wait(resumers='alpha')
-            print(f'f1 {smart_thread.name} back from wait')
+            resumers = smart_thread.smart_wait(resumers='alpha')
+            print(f'f1 {smart_thread.name} back from wait by {resumers=}')
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
@@ -20922,8 +20922,8 @@ class TestSmartThreadExamples:
         def f1(smart_thread: SmartThread) -> None:
             time.sleep(1)  # allow time for smart_resume to be issued
             print(f'f1 {smart_thread.name} about to wait')
-            smart_thread.smart_wait(resumers='alpha')
-            print(f'f1 {smart_thread.name} back from wait')
+            resumers = smart_thread.smart_wait(resumers='alpha')
+            print(f'f1 {smart_thread.name} back from wait by {resumers=}')
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
@@ -20938,7 +20938,7 @@ class TestSmartThreadExamples:
 
         expected_result = 'mainline alpha entered\n'
         expected_result += 'alpha about to resume beta\n'
-        expected_result += 'f1 beta about to wait\n'
+        expected_result += "f1 beta about to wait by resumers=['alpha']\n"
         expected_result += 'f1 beta back from wait\n'
         expected_result += 'mainline alpha exiting\n'
 
@@ -20982,8 +20982,10 @@ class TestSmartThreadExamples:
                                            thread_parm_name='smart_thread')
         time.sleep(1)  # allow time for alpha to wait
         print('alpha about to wait for all threads')
-        alpha_smart_thread.smart_wait(resumers=['beta', 'charlie', 'delta'],
-                                      wait_for=WaitFor.All)
+        resumers = alpha_smart_thread.smart_wait(
+            resumers=['beta', 'charlie', 'delta'],
+            wait_for=WaitFor.All)
+        print(f'f1 alpha back from wait by {resumers=}')
 
         alpha_smart_thread.smart_join(targets=['beta', 'charlie', 'delta'])
         print('mainline alpha exiting')
@@ -20993,6 +20995,8 @@ class TestSmartThreadExamples:
         expected_result += 'f1 charlie about to resume alpha\n'
         expected_result += 'f1 delta about to resume alpha\n'
         expected_result += 'alpha about to wait for all threads\n'
+        expected_result += "alpha back from wait by " \
+                           "resumers=['beta', 'charlie', 'delta']\n"
         expected_result += 'mainline alpha exiting\n'
 
         captured = capsys.readouterr().out

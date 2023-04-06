@@ -2474,8 +2474,8 @@ class SmartThread:
         >>> import time
         >>> def f1(smart_thread: SmartThread) -> None:
         ...     print(f'f1 {smart_thread.name} about to wait')
-        ...     smart_thread.smart_wait(resumers='alpha')
-        ...     print(f'f1 {smart_thread.name} back from wait')
+        ...     resumers = smart_thread.smart_wait(resumers='alpha')
+        ...     print(f'f1 {smart_thread.name} back from wait by {resumers=}')
         >>> print('mainline alpha entered')
         >>> alpha_smart_thread = SmartThread(name='alpha')
         >>> beta_smart_thread = SmartThread(name='beta',
@@ -2489,7 +2489,7 @@ class SmartThread:
         mainline alpha entered
         f1 beta about to wait
         alpha about to resume beta
-        f1 beta back from wait
+        beta back from wait by resumers=['alpha']
         mainline alpha exiting
 
         :Example: case 2: smart_wait preceeded by smart_resume
@@ -2499,8 +2499,8 @@ class SmartThread:
         >>> def f1(smart_thread: SmartThread) -> None:
         ...     time.sleep(1)  # allow time for smart_resume to be issued
         ...     print(f'f1 {smart_thread.name} about to wait')
-        ...     smart_thread.smart_wait(resumers='alpha')
-        ...     print(f'f1 {smart_thread.name} back from wait')
+        ...     resumers = smart_thread.smart_wait(resumers='alpha')
+        ...     print(f'f1 {smart_thread.name} back from wait by {resumers=}')
         >>> print('mainline alpha entered')
         >>> alpha_smart_thread = SmartThread(name='alpha')
         >>> beta_smart_thread = SmartThread(name='beta',
@@ -2513,7 +2513,7 @@ class SmartThread:
         mainline alpha entered
         alpha about to resume beta
         f1 beta about to wait
-        f1 beta back from wait
+        f1 beta back from wait by resumers=['alpha']
         mainline alpha exiting
 
         :Example: case 3: smart_wait for multiple resumers with
@@ -2539,9 +2539,10 @@ class SmartThread:
         ...                                  thread_parm_name='smart_thread')
         >>> time.sleep(1)  # allow time for alpha to wait
         >>> print('alpha about to wait for all threads')
-        >>> alpha_smart_thread.smart_wait(
+        >>> resumers = alpha_smart_thread.smart_wait(
         ...     resumers=['beta', 'charlie', 'delta'],
         ...     wait_for=WaitFor.All)
+        >>> print(f'f1 alpha back from wait by {resumers=}')
         >>> alpha_smart_thread.smart_join(targets=['beta', 'charlie', 'delta'])
         >>> print('mainline alpha exiting')
         mainline alpha entered
@@ -2549,6 +2550,7 @@ class SmartThread:
         f1 charlie about to resume alpha
         f1 delta about to resume alpha
         alpha about to wait for all threads
+        alpha back from wait by resumers=['beta', 'charlie', 'delta']
         mainline alpha exiting
 
         :Example: case 4: smart_wait for multiple resumers with
