@@ -2392,7 +2392,7 @@ class SmartThread:
     # wait
     ####################################################################
     def smart_wait(self, *,
-                   resumers: Iterable,
+                   resumers: Optional[Iterable] = None,
                    wait_for: WaitFor = WaitFor.All,
                    log_msg: Optional[str] = None,
                    timeout: OptIntFloat = None) -> list[str]:
@@ -2408,7 +2408,7 @@ class SmartThread:
                resumers to issue a matching smart_resume.
                b) with *wait_for* specified as WaitFor.Any, wait until
                at least one resumer issues a matching smart_resume.
-            3) smart_wait can skip the specification of *resumers*. In
+            3) smart_wait can omit the specification of *resumers*. In
                this case, smart_wait will wait until at least one thread
                in the configuration does a matching smart_resume. The
                configuration can change with new threads becoming
@@ -2475,7 +2475,7 @@ class SmartThread:
         >>> def f1(smart_thread: SmartThread) -> None:
         ...     print(f'f1 {smart_thread.name} about to wait')
         ...     resumers = smart_thread.smart_wait(resumers='alpha')
-        ...     print(f'f1 {smart_thread.name} back from wait by {resumers=}')
+        ...     print(f'f1 {smart_thread.name} resumed by {resumers=}')
         >>> print('mainline alpha entered')
         >>> alpha_smart_thread = SmartThread(name='alpha')
         >>> beta_smart_thread = SmartThread(name='beta',
@@ -2489,7 +2489,7 @@ class SmartThread:
         mainline alpha entered
         f1 beta about to wait
         alpha about to resume beta
-        beta back from wait by resumers=['alpha']
+        f1 beta resumed by resumers=['alpha']
         mainline alpha exiting
 
         :Example: case 2: smart_wait preceeded by smart_resume
@@ -2500,7 +2500,7 @@ class SmartThread:
         ...     time.sleep(1)  # allow time for smart_resume to be issued
         ...     print(f'f1 {smart_thread.name} about to wait')
         ...     resumers = smart_thread.smart_wait(resumers='alpha')
-        ...     print(f'f1 {smart_thread.name} back from wait by {resumers=}')
+        ...     print(f'f1 {smart_thread.name} resumed by {resumers=}')
         >>> print('mainline alpha entered')
         >>> alpha_smart_thread = SmartThread(name='alpha')
         >>> beta_smart_thread = SmartThread(name='beta',
@@ -2513,7 +2513,7 @@ class SmartThread:
         mainline alpha entered
         alpha about to resume beta
         f1 beta about to wait
-        f1 beta back from wait by resumers=['alpha']
+        f1 beta resumed by resumers=['alpha']
         mainline alpha exiting
 
         :Example: case 3: smart_wait for multiple resumers with
@@ -2542,7 +2542,7 @@ class SmartThread:
         >>> resumers = alpha_smart_thread.smart_wait(
         ...     resumers=['beta', 'charlie', 'delta'],
         ...     wait_for=WaitFor.All)
-        >>> print(f'f1 alpha back from wait by {resumers=}')
+        >>> print(f'f1 alpha resumed by resumers={sorted(resumers)}')
         >>> alpha_smart_thread.smart_join(targets=['beta', 'charlie', 'delta'])
         >>> print('mainline alpha exiting')
         mainline alpha entered
@@ -2550,108 +2550,93 @@ class SmartThread:
         f1 charlie about to resume alpha
         f1 delta about to resume alpha
         alpha about to wait for all threads
-        alpha back from wait by resumers=['beta', 'charlie', 'delta']
+        alpha resumed by resumers=['beta', 'charlie', 'delta']
         mainline alpha exiting
 
         :Example: case 4: smart_wait for multiple resumers with
                   WaitFor.Any
 
-        >>> from scottbrian_paratools.smart_thread import SmartThread
+        >>> from scottbrian_paratools.smart_thread import SmartThread, WaitFor
+        >>> import time
         >>> def f1(smart_thread: SmartThread) -> None:
-        ...     print(f'f1 {smart_thread.name} entered')
-        ...     smart_thread.smart_wait(resumers='alpha')
-        ...     print(f'f1 {smart_thread.name} exiting')
+        ...     print(f'f1 {smart_thread.name} about to resume alpha')
+        ...     smart_thread.smart_resume(waiters='alpha')
         >>> print('mainline alpha entered')
         >>> alpha_smart_thread = SmartThread(name='alpha')
         >>> beta_smart_thread = SmartThread(name='beta',
         ...                                 target=f1,
-        ...                                 thread_parm_name='smart_thread',
-        ...                                 args=('hi',),
-        ...                                 kwargs={
-        ...                                     'resume_target':'charlie'})
+        ...                                 thread_parm_name='smart_thread')
+        >>> time.sleep(1)
         >>> charlie_smart_thread = SmartThread(name='charlie',
         ...                                    target=f1,
-        ...                                    thread_parm_name='smart_thread',
-        ...                                    args=('hello',),
-        ...                                    kwargs={'wait_for': 'beta',
-        ...                                           'resume_target':'delta'})
+        ...                                    thread_parm_name='smart_thread')
+        >>> time.sleep(1)
+        >>> print('alpha about to wait for any threads')
+        >>> resumers = alpha_smart_thread.smart_wait(
+        ...     resumers=['beta', 'charlie', 'delta'],
+        ...     wait_for=WaitFor.Any)
+        >>> print(f'alpha resumed by resumers={sorted(resumers)}')
         >>> delta_smart_thread = SmartThread(name='delta',
         ...                                  target=f1,
-        ...                                  thread_parm_name='smart_thread',
-        ...                                  args=('aloha',),
-        ...                                  kwargs={'wait_for': 'charlie',
-        ...                                          'resume_target': 'alpha'})
-        >>> alpha_smart_thread.smart_wait(resumers='delta')
-        >>> my_msg = alpha_smart_thread.smart_recv(senders={'beta', 'delta'})
-        >>> print(my_msg['beta'])
-        >>> print(my_msg['delta'])
-        >>> my_msg = alpha_smart_thread.smart_recv(senders={'charlie'})
-        >>> print(my_msg)
-        >>> alpha_smart_thread.smart_join(waiters=('beta',
-        ...                                        'charlie',
-        ...                                        'delta'))
+        ...                                  thread_parm_name='smart_thread')
+        >>> time.sleep(1)  # allow time for alpha to wait
+        >>> print('alpha about to wait for any threads')
+        >>> resumers = alpha_smart_thread.smart_wait(
+        ...     resumers=['beta', 'charlie', 'delta'],
+        ...     wait_for=WaitFor.Any)
+        >>> print(f'alpha resumed by resumers={sorted(resumers)}')
+        >>> alpha_smart_thread.smart_join(targets=['beta', 'charlie', 'delta'])
         >>> print('mainline alpha exiting')
+
         mainline alpha entered
-        f1 beta entered
-        f1 beta exiting
-        f1 charlie entered
-        f1 charlie exiting
-        f1 delta entered
-        f1 delta exiting
-        "['hi']\n"
-        "['aloha', ['miles to go', (1, 2, 3)], {'forty_two': 42, 42: 42}]\n"
-        {'charlie': ['hi'], ['miles to go', (1, 2, 3)]}
+        f1 beta about to resume alpha
+        f1 charlie about to resume alpha
+        alpha about to wait for any threads
+        alpha resumed by resumers=['beta', 'charlie']
+        f1 delta about to resume alpha
+        alpha about to wait for any threads
+        alpha resumed by resumers=['delta']
         mainline alpha exiting
 
         :Example: case 5: smart_wait for any resumers in configuration
 
-        >>> from scottbrian_paratools.smart_thread import SmartThread
+        >>> from scottbrian_paratools.smart_thread import SmartThread, WaitFor
+        >>> import time
         >>> def f1(smart_thread: SmartThread) -> None:
-        ...     print(f'f1 {smart_thread.name} entered')
-        ...     smart_thread.smart_wait(resumers='alpha')
-        ...     print(f'f1 {smart_thread.name} exiting')
+        ...     print(f'f1 {smart_thread.name} about to resume alpha')
+        ...     smart_thread.smart_resume(waiters='alpha')
         >>> print('mainline alpha entered')
         >>> alpha_smart_thread = SmartThread(name='alpha')
         >>> beta_smart_thread = SmartThread(name='beta',
         ...                                 target=f1,
-        ...                                 thread_parm_name='smart_thread',
-        ...                                 args=('hi',),
-        ...                                 kwargs={
-        ...                                     'resume_target':'charlie'})
+        ...                                 thread_parm_name='smart_thread')
+        >>> time.sleep(1)
         >>> charlie_smart_thread = SmartThread(name='charlie',
         ...                                    target=f1,
-        ...                                    thread_parm_name='smart_thread',
-        ...                                    args=('hello',),
-        ...                                    kwargs={'wait_for': 'beta',
-        ...                                           'resume_target':'delta'})
+        ...                                    thread_parm_name='smart_thread')
+        >>> time.sleep(1)
+        >>> print('alpha about to wait for any threads')
+        >>> resumers = alpha_smart_thread.smart_wait()
+        >>> print(f'alpha resumed by resumers={sorted(resumers)}')
         >>> delta_smart_thread = SmartThread(name='delta',
         ...                                  target=f1,
-        ...                                  thread_parm_name='smart_thread',
-        ...                                  args=('aloha',),
-        ...                                  kwargs={'wait_for': 'charlie',
-        ...                                          'resume_target': 'alpha'})
-        >>> alpha_smart_thread.smart_wait(resumers='delta')
-        >>> my_msg = alpha_smart_thread.smart_recv(senders={'beta', 'delta'})
-        >>> print(my_msg['beta'])
-        >>> print(my_msg['delta'])
-        >>> my_msg = alpha_smart_thread.smart_recv(senders={'charlie'})
-        >>> print(my_msg)
-        >>> alpha_smart_thread.smart_join(waiters=('beta',
-        ...                                        'charlie',
-        ...                                        'delta'))
+        ...                                  thread_parm_name='smart_thread')
+        >>> time.sleep(1)  # allow time for alpha to wait
+        >>> print('alpha about to wait for any threads')
+        >>> resumers = alpha_smart_thread.smart_wait()
+        >>> print(f'alpha resumed by resumers={sorted(resumers)}')
+        >>> alpha_smart_thread.smart_join(targets=['beta', 'charlie', 'delta'])
         >>> print('mainline alpha exiting')
-        mainline alpha entered
-        f1 beta entered
-        f1 beta exiting
-        f1 charlie entered
-        f1 charlie exiting
-        f1 delta entered
-        f1 delta exiting
-        "['hi']\n"
-        "['aloha', ['miles to go', (1, 2, 3)], {'forty_two': 42, 42: 42}]\n"
-        {'charlie': ['hi'], ['miles to go', (1, 2, 3)]}
-        mainline alpha exiting
 
+        mainline alpha entered
+        f1 beta about to resume alpha
+        f1 charlie about to resume alpha
+        alpha about to wait for any threads
+        alpha resumed by resumers=['beta', 'charlie']
+        f1 delta about to resume alpha
+        alpha about to wait for any threads
+        alpha resumed by resumers=['delta']
+        mainline alpha exiting
 
         """
         # get RequestBlock with targets in a set and a timer object
@@ -2669,9 +2654,13 @@ class SmartThread:
         if wait_for == WaitFor.Any:
             request_block.completion_count = len(request_block.remotes) - 1
 
+        request_block.ret_msg = []
+
         self._request_loop(request_block=request_block)
 
         logger.debug(request_block.exit_log_msg)
+
+        return request_block.ret_msg
 
     ####################################################################
     # _process_wait
@@ -2715,6 +2704,7 @@ class SmartThread:
                 logger.info(
                     f'{self.name} smart_wait resumed by '
                     f'{pk_remote.remote}')
+                request_block.ret_msg.append(pk_remote.remote)
                 return True
 
             with SmartThread._pair_array[pk_remote.pair_key].status_lock:
@@ -2778,6 +2768,15 @@ class SmartThread:
                      log_msg: Optional[str] = None,
                      timeout: OptIntFloat = None) -> None:
         """Resume a waiting or soon to be waiting thread.
+
+        smart_resume is used for the following cases:
+            1) to resume a thread that issued a smart_wait
+            2) to pre-resume a thread that will be issuing a smart_wait.
+               In this case, the smart_wait will simply see that it has
+               already been resumed and will return immediately.
+            3) to resume or pre-resume multiple threads as a combination
+               of zero or more of case #1 scenarios and zero or more of
+               case #2 scenarios.
 
         Args:
             waiters: names of threads that are to be resumed
@@ -3422,7 +3421,8 @@ class SmartThread:
                 if len(self.work_pk_remotes) <= request_block.completion_count:
                     continue_request_loop = False
             else:
-                if request_block.request == ReqType.Smart_recv:
+                if (request_block.request == ReqType.Smart_recv
+                        or request_block.request == ReqType.Smart_wait):
                     if request_block.ret_msg:
                         continue_request_loop = False
                     else:  # keep looking
@@ -3456,18 +3456,21 @@ class SmartThread:
         with sel.SELockShare(SmartThread._registry_lock):
             if not remotes:
                 remotes: set[str] = set()
-                if request == ReqType.Smart_recv:
-                    for pair_key, item in SmartThread._pair_array.items():
-                        if (self.name in pair_key
-                                and not SmartThread._pair_array[
-                                    pair_key].status_blocks[
-                                    self.name].msg_q.empty()):
-                            if self.name == pair_key[0]:
-                                remotes |= {pair_key[1]}
-                            else:
-                                remotes |= {pair_key[0]}
-                else:
-                    remotes = set(SmartThread._registry.keys()) - {self.name}
+                for pair_key, item in SmartThread._pair_array.items():
+                    if self.name not in pair_key:
+                        continue
+
+                    local_sb = SmartThread._pair_array[
+                            pair_key].status_blocks[self.name]
+                    if ((request == ReqType.Smart_recv
+                            and not local_sb.msg_q.empty())
+                            or (request == ReqType.Smart_wait
+                                and local_sb.wait_event.is_set())):
+                        if self.name == pair_key[0]:
+                            remotes |= {pair_key[1]}
+                        else:
+                            remotes |= {pair_key[0]}
+
             self.missing_remotes: set[str] = set()
             for remote in remotes:
                 if remote in SmartThread._registry:
@@ -3773,7 +3776,7 @@ class SmartThread:
         timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
 
         if not remotes:
-            if request not in (ReqType.Smart_recv):
+            if request not in (ReqType.Smart_recv, ReqType.Smart_wait):
                 raise SmartThreadInvalidInput(
                     f'{self.name} {request.value} '
                     'request with no receivers specified.')
