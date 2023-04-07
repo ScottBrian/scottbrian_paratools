@@ -1,28 +1,144 @@
-"""Module smart_thread.
+"""Module smart_thread."""
 
+"""
 ===========
 SmartThread
 ===========
 
 The SmartThread class makes it easy to create and use threads in a
-multithreaded application. It provides configuration, messaging,
+multi-threaded application. It provides configuration, messaging,
 and resume/wait/sync methods, and will also detect various error
-conditions, such as when a thread becomes unresponsive becasue it has
+conditions, such as when a thread becomes unresponsive because it has
 ended.
 
-:Example: Create a SmartThread configuration for threads named alpha and
-beta, send a message, and wait for a response.
+SmartThread is built on top of the Python threading module. There are
+three cases where SmartThread can be instantiated:
+    1) SmartThread is instantiated with no arguments for *target* nor
+       *thread*. Internal variable *thread* is set from
+       ''threading.current_thread()''.
+    2) SmartThread is instantiated with a *target* argument that
+       specifies a routine that is to get control in a new thread.
+       Internal variable *thread* is set from ''threading.Thread()''
+       with the *target* argument. The remote thread can be started
+       immediately when *auto_start* is True (the default), or later by
+       issuing ''smart_start()'' for the SmartThread object.
+    3) SmartThread is instantiated with a *thread* argument that
+       specifies an instance of threading.Thread that is to be bound to
+       the internal *thread* variable. This can be useful for a remote
+       thread that was created via ''threading.Thread()'' and now
+       wishes to use the SmartThread requests.
 
->>> import scottbrian_paratools.smart_thread as st
+Each SmartThread instance has a name as provided during instantiation
+with the *name* argument. The name is used on the various SmartThread
+methods to identify the specific instance.
+
+A SmartThread configuration is composed of class variables that include
+a dictionary for a registry, and another dictionary called a pair array
+for an array of status blocks. Each status block has a dictionary with
+two items, one for each of two SmartThread instances, and is used to
+coordinate the SmartThread requests between them. There is a status block
+for each combination of SmartThread instances.
+
+Each SmartThread is in a specific state an any one time. These states
+are described as a ThreadState as follows:
+    1) ThreadState.Unregistered: a SmartThread instance does not yet
+       exist in the registry, or its thread has ended and the
+       SmartThread was removed from the registry.
+    2) ThreadState.Registered: the SmartThread instance exists and is in
+       the registry, but the thread has not yet been stated.
+    3) ThreadState.Starting: the SmartThread instance exists and is in
+       the registry, and the thread is being started by
+       ''smart_start()''.    
+    3) ThreadState.Alive: the SmartThread instance exists and is in the
+       registry, and the thread has been started and is alive (threading
+       is_alive method returns True).
+    4) Threading.Stopped: the SmartThread instance exists and is in the
+       registry, but the thread has ended. Note that from the
+       perspective of some SmartThread requests, if the target of the
+       request was not in the Threading.Stopped state when the request
+       was initiated, and the thread then ends and a new SmartThread
+       instance of the same name is created and enters the
+       ThreadState.Registered or ThreadState.Alive state, it is still
+       considered to be in the Threading.Stopped state for the duration
+       of the request.
+
+The SmartThread requests can be divided into category's as follows:
+    1) SmartThread configuration commands: ''smart_start()'',
+       ''smart_unreg()'', and ''smart_join()''
+    2) SmartThread paired requests: ''smart_send()'' paired with
+       ''smart_recv()'' and ''smart_resume()'' paired with
+       ''smart_wait()''. These can be subdivided as follows:
+           a) throw requests: ''smart_send() and ''smart_resume()''
+           b) catch requests: ''smart_recv()'' and ''smart_wait()''
+    3) SmartThread handshake requests: ''smart_sync()''
+
+The SmartThread instantiation process and the configuration
+commands require various ThreadState states and affect the configuration
+and ThreadState transitions:
+    1) SmartThread instantiation:
+        a) requires ThreadState.Unregistered. An an error is raised
+           if a different SmartThread instance of the same name is
+           found in the registry.
+        b) creates a dictionary entry in the registry and, when other
+           SmartThread instances exist, builds pairs of status blocks in
+           the pair array.
+        c) moves the state ThreadState.Registered.
+        d) if the thread is already alive, moves the state to 
+           ThreadState.Alive.
+        e) If the thread is not yet alive and *auto_start* is True,
+           ''smart_start()'' is called.
+    2) ''smart_start()'':
+        a) requires ThreadState.Registered. An error is raised if the
+           SmartThread instance is in any other state.  
+        b) moves the state to ThreadState.Starting
+        c) invokes threading ''start()''
+        d) moves the state to ThreadState.Alive
+    3) ''smart_unreg()'':
+        a) requires ThreadState.Registered. An error is raised if the
+           SmartThread instance is in any other state.
+        b) removes the SmartThread instance from the registry and 
+           removes the status blocks from the pair array for any an all
+           combinations involving the unregistered SmartThread 
+        c) by virtue of being removed from the registry, the state
+           becomes ThreadState.Unregistered
+        d) the SmartThread instance may remain is scope, but it can 
+           not be started or enacted upon by any command at this point.
+           The name can be used again for a newly created instance.                    
+    4) ''smart_join()'':
+        a) requires ThreadState.Registered, ThreadState.Starting,
+           ThreadState.Alive, or ThreadState.Stopped. An error is raised
+           if the SmartThread instance is in any other state (i.ee., in
+           this case, ThreadState.Unregistered). For
+           ThreadState.Registered ThreadState.Starting, and
+           ThreadState.Alive, ''smart_join()'' will loop until the 
+           SmartThread instance enters ThreadState.Stopped or a timeout
+           is recognized.
+
+The SmartThread paired and handshake requests require that their targets
+be in state ThreadState.Alive before completing the request. Each of
+request will allow their targets to initially be in states
+ThreadState.Unregistered, ThreadState.Starting, or
+ThreadState.Registered and will loop until the SmartThread instance
+enters ThreadState.Alive or a timeout is recognized. An error is raised
+if the SmartThread instance is recognized to be in state
+ThreadState.Stopped, whether explicitly or by virtue of having
+transitioned to ThreadState.Stopped and then resurrected as a new
+instance with the same SmartThread name.    
+
+Example: Create a SmartThread configuration for threads named alpha and
+         beta, send and receive a message, and resume a wait.
+
+>>> from scottbrian_paratools.smart_thread import SmartThread
 >>> def f1() -> None:
 ...     print('f1 beta entered')
 ...     beta_thread.smart_send(receivers='alpha', msg='hi alpha, this is beta')
-...     beta_thread.smart_wait(targets='alpha')
+...     beta_thread.smart_wait(resumers='alpha')
 ...     print('f1 beta exiting')
->>> print('mainline entered')
->>> alpha_thread = st.SmartThread(name='alpha')
->>> beta_thread = st.SmartThread(name='beta', target=f1)
->>> msg_from_beta=alpha_thread.smart_recv(targets='beta')
+>>> print('mainline alpha entered')
+>>> alpha_thread = SmartThread(name='alpha')
+>>> beta_thread = SmartThread(name='beta', target=f1, auto_start=False)
+>>> beta_thread.smart_start()
+>>> msg_from_beta = alpha_thread.smart_recv(senders='beta')
 >>> print(msg_from_beta)
 >>> alpha_thread.smart_resume(waiters='beta')
 >>> alpha_thread.smart_join(targets='beta')
@@ -31,21 +147,7 @@ mainline entered
 f1 beta entered
 {'beta': ['hi alpha, this is beta']}
 f1 beta exiting
-mainline exiting
-
-
-The smart_thread module contains:
-
-    1) SmartThread class with methods:
-
-       a. smart_start
-       b. smart_join
-       c. smart_unreg
-       d. smart_send
-       e. smart_recv
-       f. smart_resume
-       g. start_wait
-       h. smart_sync
+mainline alpha exiting
 
 """
 
@@ -1127,7 +1229,7 @@ class SmartThread:
     # start
     ####################################################################
     def smart_start(self,
-                    targets: Iterable,
+                    targets: Optional[Iterable] = None,
                     log_msg: Optional[str] = None) -> None:
         """Start the thread.
 
@@ -1146,6 +1248,8 @@ class SmartThread:
 
         """
         # get RequestBlock with targets in a set and a timer object
+        if not targets:
+            targets = self.name
         request_block = self._request_setup(
             request=ReqType.Smart_start,
             remotes=targets,
@@ -2435,13 +2539,13 @@ class SmartThread:
                 resumed
 
         Returns:
-            list of resumers that did a resume
+            list of resumers that resumed this thread
 
         Raises:
             SmartThreadDeadlockDetected: a smart_wait specified a
                 resumer that issued a smart_recv, smart_wait, or
                 smart_sync.
-            SmartThreadRemoteThreadNotAlive: target thread was stopped.
+            SmartThreadRemoteThreadNotAlive: resumer thread was stopped.
             SmartThreadRequestTimedOut: request timed out before
                 being resumed.
 
@@ -2765,18 +2869,34 @@ class SmartThread:
     ####################################################################
     def smart_resume(self, *,
                      waiters: Iterable,
-                     log_msg: Optional[str] = None,
-                     timeout: OptIntFloat = None) -> None:
+                     timeout: OptIntFloat = None,
+                     log_msg: Optional[str] = None) -> None:
         """Resume a waiting or soon to be waiting thread.
 
         smart_resume is used for the following cases:
-            1) to resume a thread that issued a smart_wait
+            1) to resume a thread that is blocked after having issued a
+               smart_wait
             2) to pre-resume a thread that will be issuing a smart_wait.
                In this case, the smart_wait will simply see that it has
                already been resumed and will return immediately.
             3) to resume or pre-resume multiple threads as a combination
-               of zero or more of case #1 scenarios and zero or more of
-               case #2 scenarios.
+               of zero or more case #1 scenarios and zero or more case
+               #2 scenarios.
+
+        An error is raised if any of the specified waiter threads are
+        stopped.
+
+        A smart_resume may be issued for any number of waiters that are
+        in any combination of unregistered, registered, or alive states.
+        smart_resume will perform the resume only when a waiter is in
+        the alive state. If timeout is specified, a timeout error is
+        raised if one or more waiters fail to achieve the alive state
+        within the specified time.
+
+        Another case involving a timeout can occur when a previous
+        smart_wait has not yet completed after having been resumed,
+        and a new resume is issued. See the notes section below for a
+        a more thorough explanation.
 
         Args:
             waiters: names of threads that are to be resumed
@@ -2784,30 +2904,34 @@ class SmartThread:
             timeout: number of seconds to allow for ``resume()`` to complete
 
         Raises:
-            SmartThreadRemoteThreadNotAlive: resume() detected remote
-                thread is not alive.
-            SmartThreadRequestTimedOut: timed out waiting for remote
-                targets to become alive
+            SmartThreadRemoteThreadNotAlive: waiter thread was stopped.
+            SmartThreadRequestTimedOut: request timed out before
+                being resumed.
 
         Notes:
-            1) A ``resume()`` request can be done on an event that is not yet
-               being waited upon. This is referred as a **pre-resume**. The
-               remote thread doing a ``wait()`` request on a **pre-resume**
-               event will get back control immediately.
-            2) If the ``resume()`` request sees that the event has already
-               been resumed, it will loop and wait for the event to be cleared
-               under the assumption that the event was previously
-               **pre-resumed** and a wait is imminent. The ``wait()`` will
-               clear the event and the ``resume()`` request will simply resume
-               it again as a **pre-resume**.
-            3) If one thread makes a ``resume()`` request and the other thread
-               becomes not alive, the ``resume()`` request raises a
-               **SmartThreadRemoteThreadNotAlive** error, but only when
-               error_stopped_target is True.
-            4) The reason for allowing multiple receivers is in support of
-               a sync request among many threads. When one can also
-               resume many non-sync waiters at once, it does not seem to
-               be useful at this time.
+            1) The ''smart_wait()'' and ''smart_resume()'' processing
+               use a threading event to coordinate the wait and resume.
+               The ''smart_wait()'' will wait on the event and the
+               ''smart_resume()'' will set the event, not necessarily
+               in that order.
+            2) A ``smart_resume()`` request can set the event for a
+               waiter that has not yet issued a ''smart_wait()''. This
+               is referred to as a **pre-resume**. The remote thread
+               doing a ``smart_wait()`` request in this case will simply
+               clear its event and return immediately.
+            3) Once the ``smart_resume()`` request has set the waiter's
+               event, it is unpredictable when the waiter will clear
+               the event. If a subsequent ''smart_resume()'' is issued
+               before the event has been cleared, it will loop until the
+               waiter clears it or a timeout occurs.
+            4) ''smart_resume()`` will set the event only for a thread
+               that is in the alive state. Once the event is set, the
+               ''smart_resume()'' is considered complete. The waiter
+               thread may subsequently fail and move to the stopped
+               state before clearing the event. No error is raised by
+               ''smart_resume()'' nor ''smart_wait()'' in this case. A
+               debug log message is issued when a thread is removed
+               from the configuration with its wait event still set.
 
         :Example: instantiate SmartThread and ``resume()`` event that function
                     waits on

@@ -20225,6 +20225,51 @@ class TestSmartThreadErrors:
 ########################################################################
 class TestSmartThreadExamples:
     """Test class for SmartThread example tests."""
+
+    ####################################################################
+    # test_smart_thread_instantiation_example_1
+    ####################################################################
+    def test_smart_thread_instantiation_example_1(self,
+                                                  capsys: Any) -> None:
+        """Test smart_thread instantiation example 1.
+
+        Create a SmartThread configuration for threads named alpha and
+        beta, send and receive a message, and resume a wait.
+
+        Args:
+            capsys: pytest fixture to get the print output
+        """
+        from scottbrian_paratools.smart_thread import SmartThread
+
+        def f1() -> None:
+            print('f1 beta entered')
+            beta_thread.smart_send(receivers='alpha',
+                                   msg='hi alpha, this is beta')
+            beta_thread.smart_wait(resumers='alpha')
+            print('f1 beta exiting')
+
+        print('mainline alpha entered')
+        alpha_thread = SmartThread(name='alpha')
+        beta_thread = SmartThread(name='beta', target=f1, auto_start=False)
+        beta_thread.smart_start()
+        msg_from_beta = alpha_thread.smart_recv(senders='beta')
+        print(msg_from_beta)
+        alpha_thread.smart_resume(waiters='beta')
+        alpha_thread.smart_join(targets='beta')
+        print('mainline alpha exiting')
+
+        expected_result = 'mainline alpha entered\n'
+        expected_result += 'f1 beta entered\n'
+        expected_result += "{'beta': ['hi alpha, this is beta']}\n"
+        expected_result += 'f1 beta exiting\n'
+        expected_result += 'mainline alpha exiting\n'
+
+        captured = capsys.readouterr().out
+
+        assert captured == expected_result
+
+        logger.debug('mainline exiting')
+
     ####################################################################
     # test_smart_send_example_1
     ####################################################################
