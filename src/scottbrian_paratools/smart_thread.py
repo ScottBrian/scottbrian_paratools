@@ -1340,6 +1340,38 @@ class SmartThread:
         f1 beta entered
         f1 beta exiting
         mainline alpha exiting
+        
+        :Example2: Create and start two SmartThread threads.
+
+        >>> from scottbrian_paratools.smart_thread import SmartThread
+        >>> import time
+        >>> def f1_beta() -> None:
+        ...     print('f1_beta entered')
+        ...     print('f1_beta exiting')
+        >>> def f2_charlie() -> None:
+        ...     time.sleep(1)
+        ...     print('f2_charlie entered')
+        ...     print('f2_charlie exiting')
+        >>> print('mainline alpha entered')
+        >>> alpha_smart_thread = SmartThread(name='alpha')
+        >>> beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_beta,
+                                            auto_start=False)
+        >>> charlie_smart_thread = SmartThread(name='charlie',
+                                               target=f2_charlie,
+                                               auto_start=False)
+        >>> print('alpha about to start beta and charlie')
+        >>> alpha_smart_thread.smart_start(targets=['beta', 'charlie'])
+        >>> alpha_smart_thread.smart_join(targets=['beta', 'charlie'])
+        >>> print('mainline alpha exiting')
+
+        mainline alpha entered
+        alpha about to start beta and charlie
+        f1_beta entered
+        f1_beta exiting
+        f2_charlie entered
+        f2_charlie exiting
+        mainline alpha exiting
 
         """
         # get RequestBlock with targets in a set and a timer object
@@ -1412,76 +1444,6 @@ class SmartThread:
             request_block.not_registered_remotes |= {remote}
 
         return True  # there are no cases that need to allow more time
-        ################################################################
-        # if self._get_state(remote) != ThreadState.Registered:
-        #     request_block.not_registered_remotes |= {remote}
-        #     state = self._get_state(remote)
-        #     logger.debug(
-        #         f'TestDebug {threading.current_thread().name} smart_start '
-        #         f'found {remote=} has {state=} which is not registered ')
-        #     return False
-        #
-        # request_block.not_registered_remotes -= {remote}
-        #
-        # if self._get_state(remote) == ThreadState.Stopped:
-        #     request_block.stopped_remotes |= {remote}
-        #     return False
-        #
-        # # if (not SmartThread._registry[remote].thread.is_alive()
-        # #         and not SmartThread._registry[remote].start_issued):
-        # #     SmartThread._registry[remote].start_issued = True
-        # #     self._set_state(
-        # #         target_thread=SmartThread._registry[remote],
-        # #         new_state=ThreadState.Starting)
-        # #     # self.thread.start()
-        # #     threading.Thread.start(SmartThread._registry[remote].thread)
-        #
-        # logger.debug(
-        #     f'TestDebug {threading.current_thread().name} smart_start '
-        #     f'for {remote=} is about to check for thread.start with '
-        #     f'{SmartThread._registry[remote].thread=}'
-        #     f'{SmartThread._registry[remote].thread.is_alive()=}')
-        # if not SmartThread._registry[remote].thread.is_alive():
-        #     self._set_state(
-        #         target_thread=SmartThread._registry[remote],
-        #         new_state=ThreadState.Starting)
-        #     SmartThread._registry[remote].thread.start()
-        #     new_state = self._get_state(remote)
-        #     logger.debug(
-        #         f'TestDebug {threading.current_thread().name} smart_start '
-        #         f'for {remote=} is back from thread.start with {new_state=}, '
-        #         f'{SmartThread._registry[remote].thread=}'
-        #         f'{SmartThread._registry[remote].thread.is_alive()=}')
-        #     time.sleep(1)
-        #     logger.debug(
-        #         f'TestDebug {threading.current_thread().name} smart_start '
-        #         f'for {remote=} is back from thread.start with {new_state=}, '
-        #         f'{SmartThread._registry[remote].thread=}'
-        #         f'{SmartThread._registry[remote].thread.is_alive()=}')
-        #     if self._get_state(remote) == ThreadState.Stopped:
-        #         return True
-        #
-        # if SmartThread._registry[remote].thread.is_alive():
-        #     self._set_state(
-        #         target_thread=SmartThread._registry[remote],
-        #         new_state=ThreadState.Alive)
-        #
-        #     logger.debug(
-        #         f'{threading.current_thread().name} started thread '
-        #         f'{SmartThread._registry[remote].name}, '
-        #         'thread.is_alive(): '
-        #         f'{SmartThread._registry[remote].thread.is_alive()}, '
-        #         f'state: {SmartThread._registry[remote].st_state}')
-        #
-        #     logger.debug(
-        #         f'TestDebug {threading.current_thread().name} smart_start '
-        #         f'is returning True')
-        #     return True
-        #
-        # logger.debug(
-        #     f'TestDebug {threading.current_thread().name} smart_start '
-        #     f'is returning False')
-        # return False
 
     ####################################################################
     # smart_unreg
@@ -1502,20 +1464,25 @@ class SmartThread:
                registered state until it is started at which time it
                enters the active state
 
-        :Example: instantiate SmartThread without auto_start and then
-                      smart_unreg the thread
+        :Example: Create and unregister a SmartThread thread.
 
-        >>> import scottbrian_paratools.smart_event as st
-        >>> def f1() -> None:
-        ...     print('f1 beta entered')
-        ...     beta_smart_thread.wait()
-        ...     print('f1 beta exiting')
-
+        >>> from scottbrian_paratools.smart_thread import SmartThread
+        >>> def f1_beta() -> None:
+        ...     print('f1_beta entered')
+        ...     print('f1_beta exiting')
+        >>> print('mainline alpha entered')
         >>> alpha_smart_thread = SmartThread(name='alpha')
+        >>> print('alpha about to create beta')
         >>> beta_smart_thread = SmartThread(name='beta',
-        ...                                 target=f1,
-        ...                                 auto_start=False)
-        >>> beta_smart_thread.smart_unreg()
+                                            target=f1_beta,
+                                            auto_start=False)
+        >>> print('alpha about to unregister beta')
+        >>> alpha_smart_thread.smart_unreg(targets='beta')
+        >>> print('mainline alpha exiting')
+        mainline alpha entered
+        alpha about to create beta
+        alpha about to unregister beta
+        mainline alpha exiting
 
         """
         # get RequestBlock with targets in a set and a timer object

@@ -20374,7 +20374,7 @@ class TestSmartThreadExamples:
                                    capsys: Any) -> None:
         """Test smart_start example 1.
 
-        Create and start a SmartThread
+        Create and start a SmartThread.
 
         Args:
             capsys: pytest fixture to get the print output
@@ -20399,6 +20399,96 @@ class TestSmartThreadExamples:
         expected_result += 'alpha about to start beta\n'
         expected_result += 'f1 beta entered\n'
         expected_result += 'f1 beta exiting\n'
+        expected_result += 'mainline alpha exiting\n'
+
+        captured = capsys.readouterr().out
+
+        assert captured == expected_result
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_start_example_2
+    ####################################################################
+    def test_smart_start_example_2(self,
+                                   capsys: Any) -> None:
+        """Test smart_start example 2.
+
+        Create and start two SmartThread threads.
+
+        Args:
+            capsys: pytest fixture to get the print output
+        """
+        from scottbrian_paratools.smart_thread import SmartThread
+        import time
+
+        def f1_beta() -> None:
+            print('f1_beta entered')
+            print('f1_beta exiting')
+
+        def f2_charlie() -> None:
+            time.sleep(1)
+            print('f2_charlie entered')
+            print('f2_charlie exiting')
+
+        print('mainline alpha entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        beta_smart_thread = SmartThread(name='beta',
+                                        target=f1_beta,
+                                        auto_start=False)
+        charlie_smart_thread = SmartThread(name='charlie',
+                                           target=f2_charlie,
+                                           auto_start=False)
+        print('alpha about to start beta and charlie')
+        alpha_smart_thread.smart_start(targets=['beta', 'charlie'])
+        alpha_smart_thread.smart_join(targets=['beta', 'charlie'])
+        print('mainline alpha exiting')
+
+        expected_result = 'mainline alpha entered\n'
+        expected_result += 'alpha about to start beta and charlie\n'
+        expected_result += 'f1_beta entered\n'
+        expected_result += 'f1_beta exiting\n'
+        expected_result += 'f2_charlie entered\n'
+        expected_result += 'f2_charlie exiting\n'
+        expected_result += 'mainline alpha exiting\n'
+
+        captured = capsys.readouterr().out
+
+        assert captured == expected_result
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_unreg_example_1
+    ####################################################################
+    def test_smart_unreg_example_1(self,
+                                   capsys: Any) -> None:
+        """Test smart_unreg example 1.
+
+        Create and unregister a SmartThread thread.
+
+        Args:
+            capsys: pytest fixture to get the print output
+        """
+        from scottbrian_paratools.smart_thread import SmartThread
+
+        def f1_beta() -> None:
+            print('f1_beta entered')
+            print('f1_beta exiting')
+
+        print('mainline alpha entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        print('alpha about to create beta')
+        beta_smart_thread = SmartThread(name='beta',
+                                        target=f1_beta,
+                                        auto_start=False)
+        print('alpha about to unregister beta')
+        alpha_smart_thread.smart_unreg(targets='beta')
+        print('mainline alpha exiting')
+
+        expected_result = 'mainline alpha entered\n'
+        expected_result += 'alpha about to create beta\n'
+        expected_result += 'alpha about to unregister beta\n'
         expected_result += 'mainline alpha exiting\n'
 
         captured = capsys.readouterr().out
