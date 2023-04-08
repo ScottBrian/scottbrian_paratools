@@ -20368,6 +20368,46 @@ class TestSmartThreadExamples:
         logger.debug('mainline exiting')
 
     ####################################################################
+    # test_smart_start_example_1
+    ####################################################################
+    def test_smart_start_example_1(self,
+                                   capsys: Any) -> None:
+        """Test smart_start example 1.
+
+        Create and start a SmartThread
+
+        Args:
+            capsys: pytest fixture to get the print output
+        """
+        from scottbrian_paratools.smart_thread import SmartThread
+
+        def f1() -> None:
+            print('f1 beta entered')
+            print('f1 beta exiting')
+
+        print('mainline alpha entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        beta_smart_thread = SmartThread(name='beta',
+                                        target=f1,
+                                        auto_start=False)
+        print('alpha about to start beta')
+        beta_smart_thread.smart_start()
+        alpha_smart_thread.smart_join(targets='beta')
+        print('mainline alpha exiting')
+
+        expected_result = 'mainline alpha entered\n'
+        expected_result += 'alpha about to start beta\n'
+        expected_result += 'f1 beta entered\n'
+        expected_result += 'f1 beta exiting\n'
+        expected_result += 'mainline alpha exiting\n'
+
+        captured = capsys.readouterr().out
+
+        assert captured == expected_result
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
     # test_smart_send_example_1
     ####################################################################
     def test_smart_send_example_1(self,
@@ -21285,34 +21325,50 @@ class TestSmartThreadExamples:
         from scottbrian_paratools.smart_thread import SmartThread
         import time
 
-        def f1(smart_thread: SmartThread) -> None:
-            print(f'f1 {smart_thread.name} about to wait')
+        def f1_beta(smart_thread: SmartThread) -> None:
+            print(f'f1_beta about to wait')
             smart_thread.smart_wait(resumers='alpha')
+            print(f'f1_beta back from wait')
+
+        def f2_charlie(smart_thread: SmartThread) -> None:
+            time.sleep(1)
+            print(f'f2_charlie about to wait')
+            smart_thread.smart_wait(resumers='alpha')
+            time.sleep(1)
+            print(f'f2_charlie back from wait')
+
+        def f3_delta(smart_thread: SmartThread) -> None:
+            time.sleep(4)
+            print(f'f3_delta about to wait')
+            smart_thread.smart_wait(resumers='alpha')
+            print(f'f3_delta back from wait')
+
+        def f4_echo(smart_thread: SmartThread) -> None:
+            time.sleep(5)
+            print(f'f4_echo about to wait')
+            smart_thread.smart_wait(resumers='alpha')
+            print(f'f4_echo back from wait')
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
         beta_smart_thread = SmartThread(name='beta',
-                                        target=f1,
+                                        target=f1_beta,
                                         thread_parm_name='smart_thread')
-        time.sleep(1)
         charlie_smart_thread = SmartThread(name='charlie',
-                                           target=f1,
+                                           target=f2_charlie,
                                            thread_parm_name='smart_thread')
-        time.sleep(1)
         delta_smart_thread = SmartThread(name='delta',
-                                         target=f1,
+                                         target=f3_delta,
                                          thread_parm_name='smart_thread')
-        time.sleep(1)
-        echo_smart_thread = SmartThread(name='delta',
-                                        target=f1,
+        echo_smart_thread = SmartThread(name='echo',
+                                        target=f4_echo,
                                         thread_parm_name='smart_thread')
-        time.sleep(1)
+        time.sleep(2)
         print('alpha about to resume threads')
         alpha_smart_thread.smart_resume(waiters=('beta',
                                                  'charlie',
                                                  'delta',
                                                  'echo'))
-
         alpha_smart_thread.smart_join(targets=['beta',
                                                'charlie',
                                                'delta',
@@ -21320,13 +21376,15 @@ class TestSmartThreadExamples:
         print('mainline alpha exiting')
 
         expected_result = 'mainline alpha entered\n'
-        expected_result += 'f1 beta about to resume alpha\n'
-        expected_result += 'f1 charlie about to resume alpha\n'
-        expected_result += 'alpha about to wait for any threads\n'
-        expected_result += "alpha resumed by resumers=['beta', 'charlie']\n"
-        expected_result += 'f1 delta about to resume alpha\n'
-        expected_result += 'alpha about to wait for any threads\n'
-        expected_result += "alpha resumed by resumers=['delta']\n"
+        expected_result += 'f1_beta about to wait\n'
+        expected_result += 'f2_charlie about to wait\n'
+        expected_result += "alpha about to resume threads\n"
+        expected_result += 'f1_beta back from wait\n'
+        expected_result += 'f2_charlie back from wait\n'
+        expected_result += 'f3_delta about to wait\n'
+        expected_result += 'f3_delta back from wait\n'
+        expected_result += 'f4_echo about to wait\n'
+        expected_result += 'f4_echo back from wait\n'
         expected_result += 'mainline alpha exiting\n'
 
         captured = capsys.readouterr().out
@@ -21335,7 +21393,60 @@ class TestSmartThreadExamples:
 
         logger.debug('mainline exiting')
 
+    ####################################################################
+    # test_smart_sync_example_1
+    ####################################################################
+    def test_smart_sync_example_1(self,
+                                    capsys: Any) -> None:
+        """Test smart_sync example 1.
 
+        Invoke ''smart_sync()'' for three threads
 
+        Args:
+            capsys: pytest fixture to get the print output
+        """
+        from scottbrian_paratools.smart_thread import SmartThread
+        import time
 
+        def f1_beta(smart_thread: SmartThread) -> None:
+            print('f1_beta about to sync with alpha and charlie')
+            smart_thread.smart_sync(targets=['alpha', 'charlie'])
+            print('f1_beta back from sync')
 
+        def f2_charlie(smart_thread: SmartThread) -> None:
+            print('f2_charlie about to sync with alpha and beta')
+            smart_thread.smart_sync(targets=['alpha', 'beta'])
+            time.sleep(1)
+            print('f2_charlie back from sync')
+
+        print('mainline alpha entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        beta_smart_thread = SmartThread(name='beta',
+                                        target=f1_beta,
+                                        thread_parm_name='smart_thread')
+        time.sleep(1)
+        charlie_smart_thread = SmartThread(name='charlie',
+                                           target=f2_charlie,
+                                           thread_parm_name='smart_thread')
+        time.sleep(1)
+        print('alpha about to sync with beta and charlie')
+        alpha_smart_thread.smart_sync(targets=['beta', 'charlie'])
+        time.sleep(2)
+        print('alpha back from sync')
+        alpha_smart_thread.smart_join(targets=['beta', 'charlie'])
+        print('mainline alpha exiting')
+
+        expected_result = 'mainline alpha entered\n'
+        expected_result += 'f1_beta about to sync with alpha and charlie\n'
+        expected_result += 'f2_charlie about to sync with alpha and beta\n'
+        expected_result += "alpha about to sync with beta and charlie\n"
+        expected_result += 'f1_beta back from sync\n'
+        expected_result += 'f2_charlie back from sync\n'
+        expected_result += 'alpha back from sync\n'
+        expected_result += 'mainline alpha exiting\n'
+
+        captured = capsys.readouterr().out
+
+        assert captured == expected_result
+
+        logger.debug('mainline exiting')
