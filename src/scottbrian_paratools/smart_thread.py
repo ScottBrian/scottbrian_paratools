@@ -39,16 +39,22 @@ two items, one for each of two SmartThread instances, and is used to
 coordinate the SmartThread requests between them. There is a status block
 for each combination of SmartThread instances.
 
-Each SmartThread is in a specific state an any one time. These states
+Each SmartThread is in a specific state at any one time. These states
 are described as a ThreadState as follows:
     1) ThreadState.Unregistered: a SmartThread instance does not yet
        exist in the registry, or its thread has ended and the
        SmartThread was removed from the registry.
+    2) ThreadState.Initializing: the SmartThread instance is created and
+       is being initialized, but has not yet been registered. This state
+       occurs only while the SmartThread __init__ method is running.      
     2) ThreadState.Registered: the SmartThread instance exists and is in
        the registry, but the thread has not yet been stated.
     3) ThreadState.Starting: the SmartThread instance exists and is in
        the registry, and the thread is being started by
-       ''smart_start()''.    
+       ''smart_start()''. This state only applies when the SmartThread
+       is created with *target* and ''smart_start()'' is invoked. When
+       the SmartThread is created from the current thread, the state
+       moves from ThreadState.Initializing to ThreadState.Alive.      
     3) ThreadState.Alive: the SmartThread instance exists and is in the
        registry, and the thread has been started and is alive (threading
        is_alive method returns True).
@@ -78,27 +84,28 @@ and ThreadState transitions:
     1) SmartThread instantiation:
         a) requires ThreadState.Unregistered. An an error is raised
            if a different SmartThread instance of the same name is
-           found in the registry.
-        b) creates a dictionary entry in the registry and, when other
-           SmartThread instances exist, builds pairs of status blocks in
-           the pair array.
-        c) moves the state ThreadState.Registered.
-        d) if the thread is already alive, moves the state to 
-           ThreadState.Alive.
-        e) If the thread is not yet alive and *auto_start* is True,
+           found in the registry
+        b) moves the state to ThreadState.Initializing   
+        c) creates a dictionary entry in the registry and then invokes
+           the threading ''is_alive()'' method. If the thread is not yet
+           alive, moves the state to ThreadState.Registered. If the
+           thread is already alive, move the state to ThreadState.Alive 
+        d) when other SmartThread instances exist, builds pairs of
+           status blocks in the pair array
+        f) if the thread is not yet alive and *auto_start* is True,
            ''smart_start()'' is called.
     2) ''smart_start()'':
         a) requires ThreadState.Registered. An error is raised if the
-           SmartThread instance is in any other state.  
+           SmartThread instance is in any other state  
         b) moves the state to ThreadState.Starting
         c) invokes threading ''start()''
-        d) moves the state to ThreadState.Alive
+        d) moves the state to ThreadState.Alive.
     3) ''smart_unreg()'':
         a) requires ThreadState.Registered. An error is raised if the
-           SmartThread instance is in any other state.
+           SmartThread instance is in any other state
         b) removes the SmartThread instance from the registry and 
            removes the status blocks from the pair array for any an all
-           combinations involving the unregistered SmartThread 
+           combinations involving the SmartThread being unregistered 
         c) by virtue of being removed from the registry, the state
            becomes ThreadState.Unregistered
         d) the SmartThread instance may remain is scope, but it can 
@@ -107,12 +114,17 @@ and ThreadState transitions:
     4) ''smart_join()'':
         a) requires ThreadState.Registered, ThreadState.Starting,
            ThreadState.Alive, or ThreadState.Stopped. An error is raised
-           if the SmartThread instance is in any other state (i.ee., in
-           this case, ThreadState.Unregistered). For
-           ThreadState.Registered ThreadState.Starting, and
-           ThreadState.Alive, ''smart_join()'' will loop until the 
-           SmartThread instance enters ThreadState.Stopped or a timeout
-           is recognized.
+           if the SmartThread instance is in any other state. If needed,
+           ''smart_join()'' will loop until the SmartThread instance
+            enters ThreadState.Stopped or a timeout is recognized
+        b) removes the SmartThread instance from the registry and 
+           removes the status blocks from the pair array for any an all
+           combinations involving the SmartThread being unregistered 
+        c) by virtue of being removed from the registry, the state
+           becomes ThreadState.Unregistered
+        d) the SmartThread instance may remain is scope, but it can 
+           not be started or enacted upon by any command at this point.
+           The name can be used again for a newly created instance.     
 
 The SmartThread paired and handshake requests require that their targets
 be in state ThreadState.Alive before completing the request. Each of
@@ -125,24 +137,88 @@ ThreadState.Stopped, whether explicitly or by virtue of having
 transitioned to ThreadState.Stopped and then resurrected as a new
 instance with the same SmartThread name.    
 
-Example: Create a SmartThread configuration for threads named alpha and
-         beta, send and receive a message, and resume a wait.
+
+Example: Case 1: Create a SmartThread configuration for threads named
+         alpha and beta, send and receive a message, and resume a wait.
+         Note the use of auto_start=False and invoking
+         ''smart_start()''.
 
 >>> from scottbrian_paratools.smart_thread import SmartThread
 >>> def f1() -> None:
 ...     print('f1 beta entered')
-...     beta_thread.smart_send(receivers='alpha', msg='hi alpha, this is beta')
-...     beta_thread.smart_wait(resumers='alpha')
+...     beta_smart_thread.smart_send(receivers='alpha', msg='hi alpha, this is beta')
+...     beta_smart_thread.smart_wait(resumers='alpha')
 ...     print('f1 beta exiting')
 >>> print('mainline alpha entered')
->>> alpha_thread = SmartThread(name='alpha')
->>> beta_thread = SmartThread(name='beta', target=f1, auto_start=False)
->>> beta_thread.smart_start()
->>> msg_from_beta = alpha_thread.smart_recv(senders='beta')
+>>> alpha_smart_thread = SmartThread(name='alpha')
+>>> beta_smart_thread = SmartThread(name='beta', target=f1, auto_start=False)
+>>> beta_smart_thread.smart_start()
+>>> msg_from_beta = alpha_smart_thread.smart_recv(senders='beta')
 >>> print(msg_from_beta)
->>> alpha_thread.smart_resume(waiters='beta')
->>> alpha_thread.smart_join(targets='beta')
+>>> alpha_smart_thread.smart_resume(waiters='beta')
+>>> alpha_smart_thread.smart_join(targets='beta')
 >>> print('mainline exiting')
+mainline entered
+f1 beta entered
+{'beta': ['hi alpha, this is beta']}
+f1 beta exiting
+mainline alpha exiting
+
+
+Example: Case 2: Create a SmartThread configuration for threads named
+         alpha and beta, send and receive a message, and resume a wait.
+         Note the use of auto_start=True and passing the SmartThread
+         instance to the target via the thread_parm_name.
+
+>>> from scottbrian_paratools.smart_thread import SmartThread
+>>> def f1(smart_thread: SmartThread) -> None:
+...     print('f1 beta entered')
+...     smart_thread.smart_send(receivers='alpha',
+...                             msg='hi alpha, this is beta')
+...     smart_thread.smart_wait(resumers='alpha')
+...     print('f1 beta exiting')
+>>> print('mainline alpha entered')
+>>> alpha_smart_thread = SmartThread(name='alpha')
+>>> beta_smart_thread = SmartThread(name='beta',
+...                           target=f1,
+...                           auto_start=True,
+...                           thread_parm_name='smart_thread')
+>>> msg_from_beta = alpha_smart_thread.smart_recv(senders='beta')
+>>> print(msg_from_beta)
+>>> alpha_smart_thread.smart_resume(waiters='beta')
+>>> alpha_smart_thread.smart_join(targets='beta')
+>>> print('mainline exiting')
+mainline entered
+f1 beta entered
+{'beta': ['hi alpha, this is beta']}
+f1 beta exiting
+mainline alpha exiting
+
+
+Example: Case 3: Create a SmartThread configuration for threads named
+         alpha and beta, send and receive a message, and resume a wait.
+         Note the use of threading.Thread to create and start the beta 
+         thread and having the target thread instantiate the
+         SmartThread.
+
+>>> from scottbrian_paratools.smart_thread import SmartThread
+>>> import threading
+>>> def f1() -> None:
+...     print('f1 beta entered')
+...     beta_smart_thread = SmartThread(name='beta')
+...     beta_smart_thread.smart_send(receivers='alpha',
+...                                  msg='hi alpha, this is beta')
+...     beta_smart_thread.smart_wait(resumers='alpha')
+...     print('f1 beta exiting')
+>>> print('mainline alpha entered')
+>>> alpha_smart_thread = SmartThread(name='alpha')
+>>> beta_thread = threading.Thread(target=f1, name='beta')
+>>> beta_thread.start()
+>>> msg_from_beta = alpha_smart_thread.smart_recv(senders='beta')
+>>> print(msg_from_beta)
+>>> alpha_smart_thread.smart_resume(waiters='beta')
+>>> alpha_smart_thread.smart_join(targets='beta')
+>>> print('mainline alpha exiting')
 mainline entered
 f1 beta entered
 {'beta': ['hi alpha, this is beta']}
@@ -2918,7 +2994,8 @@ class SmartThread:
                waiter that has not yet issued a ''smart_wait()''. This
                is referred to as a **pre-resume**. The remote thread
                doing a ``smart_wait()`` request in this case will simply
-               clear its event and return immediately.
+               see that the event is already set, clear it, and return
+               immediately.
             3) Once the ``smart_resume()`` request has set the waiter's
                event, it is unpredictable when the waiter will clear
                the event. If a subsequent ''smart_resume()'' is issued
@@ -2933,16 +3010,20 @@ class SmartThread:
                debug log message is issued when a thread is removed
                from the configuration with its wait event still set.
 
-        :Example: instantiate SmartThread and ``resume()`` event that function
-                    waits on
+        Examples in this section cover the following cases:
+            1) smart_resume multiple waiters
+
+        :Example: Invoke ''smart_resume()'' for threads that invoke
+                  ''smart_wait()'' both before and after the
+                  ''smart_resume()''
 
         .. code-block:: python
 
-        import scottbrian_paratools.smart_thread as st
-        def f1(smart_thread: st.SmartThread) -> None:
-            print('f1 beta entered')
-            beta_smart_thread.smart_wait()
-            print('f1 beta exiting')
+        from scottbrian_paratools.smart_thread import SmartThread
+        def f1(smart_thread: SmartThread) -> None:
+            print('f1 {smart_thread.name} about to wait')
+            smart_thread.smart_wait(resumers='alpha')
+            print('f1 {smart_thread.name} back from wait')
 
         alpha_smart_thread = SmartThread(name='alpha')
         beta_smart_thread = SmartThread(name='beta', target=f1)
