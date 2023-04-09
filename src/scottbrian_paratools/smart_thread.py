@@ -241,6 +241,7 @@ Example4: Create a SmartThread configuration for threads named alpha and
 ...        self.smart_thread = SmartThread(name=name,
 ...                                        thread=self,
 ...                                        auto_start=False)
+...        self.smart_thread.smart_start()
 ...    def run(self) -> None:
 ...        print(f'{self.smart_thread.name} entry to run method')
 ...        self.smart_thread.smart_send(msg='hi alpha, this is beta',
@@ -252,7 +253,50 @@ Example4: Create a SmartThread configuration for threads named alpha and
 >>> print('mainline alpha entered')
 >>> alpha_smart_thread = SmartThread(name='alpha')
 >>> thread_app = ThreadApp(name='beta')
->>> thread_app.smart_thread.smart_start()
+>>> my_msg = alpha_smart_thread.smart_recv(senders='beta')
+>>> print(my_msg)
+>>> time.sleep(2)
+>>> print('alpha about to resume beta')
+>>> alpha_smart_thread.smart_resume(waiters='beta')
+>>> alpha_smart_thread.smart_join(targets='beta')
+>>> print('mainline alpha exiting')
+mainline alpha entered
+beta entry to run method
+{'beta': ['hi alpha, this is beta']}
+beta about to wait
+alpha about to resume beta
+beta exiting run method
+mainline alpha exiting
+
+
+Example4: Create a SmartThread configuration for threads named alpha and
+          beta, send and receive a message, and resume a wait. Note the
+          use of the SmartThreadApp class that multipli inherits
+          threading.Thread and SmartThread and uses a run method. This
+          example demonstrates the use of the *thread* argument on the
+          SmartThread instantiation.
+
+>>> from scottbrian_paratools.smart_thread import SmartThread
+>>> import threading
+>>> import time
+>>> class SmartThreadApp(threading.Thread, SmartThread):
+...     def __init__(self, name: str) -> None:
+...         threading.Thread.__init__(self, name=name)
+...         SmartThread.__init__(self,
+...                              name=name,
+...                              thread=self,
+...                              auto_start=True)
+...     def run(self) -> None:
+...         print(f'{self.name} entry to run method')
+...         self.smart_send(msg='hi alpha, this is beta',
+...                         receivers='alpha')
+...         time.sleep(1)
+...         print(f'{self.name} about to wait')
+...         self.smart_wait(resumers='alpha')
+...         print(f'{self.name} exiting run method')
+>>> print('mainline alpha entered')
+>>> alpha_smart_thread = SmartThread(name='alpha')
+>>> thread_app = SmartThreadApp(name='beta')
 >>> my_msg = alpha_smart_thread.smart_recv(senders='beta')
 >>> print(my_msg)
 >>> time.sleep(2)
@@ -510,34 +554,6 @@ class ThreadState(Flag):
 class WaitFor(Enum):
     All = auto()
     Any = auto()
-
-
-# class TargetThread(threading.Thread):
-#     def __init__(self,*,
-#                  smart_thread: "SmartThread",
-#                  target: Optional[Callable[..., Any]] = None,
-#                  args: Optional[tuple[Any, ...]] = (),
-#                  kwargs: Optional[dict[str, Any]] = {},
-#                  name: str,
-#                  ):
-#         super().__init__(target=target,
-#                          args=args,
-#                          kwargs=kwargs,
-#                          name=name)
-#         self.smart_thread = smart_thread
-#
-#     def run(self) -> None:
-#         try:
-#             self.smart_thread._set_state(target_thread=self.smart_thread,
-#                                          new_state=ThreadState.Alive)
-#             if self._target is not None:
-#                 self._target(*self._args, **self._kwargs)
-#         finally:
-#             # Avoid a refcycle if the thread is running a function with
-#             # an argument that has a member that points to the thread.
-#             del self._target, self._args, self._kwargs
-#             self.smart_thread._set_state(target_thread=self.smart_thread,
-#                                          new_state=ThreadState.Stopped)
 
 
 ########################################################################
@@ -1597,6 +1613,29 @@ class SmartThread:
         Raises:
             SmartThreadRequestTimedOut: join timed out waiting for
                 receivers.
+        
+        Example1: Create and join a SmartThread thread.
+
+        >>> from scottbrian_paratools.smart_thread import SmartThread
+        >>> import time
+        >>> def f1_beta() -> None:
+        ...     print('f1_beta entered')
+        ...     print('f1_beta exiting')
+        >>> print('mainline alpha entered')
+        >>> alpha_smart_thread = SmartThread(name='alpha')
+        >>> print('alpha about to create beta')
+        >>> beta_smart_thread = SmartThread(name='beta',
+        ...                                 target=f1_beta)
+        >>> time.sleep(1)
+        >>> print('alpha about to join beta')
+        >>> alpha_smart_thread.smart_join(targets='beta')
+        >>> print('mainline alpha exiting')
+        mainline alpha entered
+        alpha about to create beta
+        f1_beta entered
+        f1_beta exiting
+        alpha about to join beta
+        mainline alpha exiting
 
         """
         # get RequestBlock with targets in a set and a timer object
