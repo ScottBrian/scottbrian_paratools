@@ -1,6 +1,5 @@
-"""Module smart_thread."""
+"""Module smart_thread.
 
-"""
 ===========
 SmartThread
 ===========
@@ -188,7 +187,7 @@ Example2: Create a SmartThread configuration for threads named
 >>> alpha_smart_thread.smart_resume(waiters='beta')
 >>> alpha_smart_thread.smart_join(targets='beta')
 >>> print('mainline exiting')
-mainline entered
+mainline alpha entered
 f1 beta entered
 {'beta': ['hi alpha, this is beta']}
 f1 beta exiting
@@ -609,11 +608,13 @@ class SmartThread:
             finally:
                 # Avoid a refcycle if the thread is running a function with
                 # an argument that has a member that points to the thread.
-                del self._target, self._args, self._kwargs
+
                 with sel.SELockExcl(SmartThread._registry_lock):
                     self.smart_thread._set_state(
                         target_thread=self.smart_thread,
                         new_state=ThreadState.Stopped)
+                del self._target, self._args, self._kwargs
+
     ####################################################################
     # ConnectionStatusBlock
     # Coordinates the various actions involved in satisfying a
