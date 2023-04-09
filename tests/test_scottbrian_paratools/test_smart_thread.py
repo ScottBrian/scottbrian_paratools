@@ -20368,6 +20368,79 @@ class TestSmartThreadExamples:
         logger.debug('mainline exiting')
 
     ####################################################################
+    # test_smart_thread_instantiation_example_4
+    ####################################################################
+    def test_smart_thread_instantiation_example_4(self,
+                                                  capsys: Any) -> None:
+        """Test smart_thread instantiation example 4.
+
+        Create a SmartThread configuration for threads named alpha and
+        beta, send and receive a message, and resume a wait. Note the
+        use of the ThreadApp class that inherits threading.Thread as a
+        base and uses a run method. This example demonstrates the use of
+        the *thread* argument on the SmartThread instantiation.
+
+        Args:
+            capsys: pytest fixture to get the print output
+        """
+        from scottbrian_paratools.smart_thread import SmartThread
+        import threading
+        import time
+
+        class ThreadApp(threading.Thread):
+            """Example thread app."""
+
+            def __init__(self, name: str) -> None:
+                """Initialize the object.
+
+                Args:
+                    name: name of thread
+
+                """
+                super().__init__(name=name)
+                self.smart_thread = SmartThread(
+                    name=name,
+                    thread=self,
+                    auto_start=False)
+
+            def run(self) -> None:
+                """Run the test."""
+                print(f'{self.smart_thread.name} entry to run method')
+                self.smart_thread.smart_send(msg='hi alpha, this is beta',
+                                             receivers='alpha')
+                time.sleep(1)
+                print(f'{self.smart_thread.name} about to wait')
+                self.smart_thread.smart_wait(resumers='alpha')
+                print(f'{self.smart_thread.name} exiting run method')
+
+        print('mainline alpha entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        thread_app = ThreadApp(name='beta')
+        thread_app.smart_thread.smart_start()
+        my_msg = alpha_smart_thread.smart_recv(senders='beta')
+        print(my_msg)
+        time.sleep(2)
+        print('alpha about to resume beta')
+        alpha_smart_thread.smart_resume(waiters='beta')
+        alpha_smart_thread.smart_join(targets='beta')
+        print('mainline alpha exiting')
+
+        expected_result = 'mainline alpha entered\n'
+        expected_result += 'beta entry to run method\n'
+        expected_result += "{'beta': ['hi alpha, this is beta']}\n"
+        expected_result += 'beta about to wait\n'
+        expected_result += 'alpha about to resume beta\n'
+        expected_result += 'beta exiting run method\n'
+        expected_result += 'mainline alpha exiting\n'
+
+        captured = capsys.readouterr().out
+
+        assert captured == expected_result
+
+        logger.debug('mainline exiting')
+
+
+    ####################################################################
     # test_smart_start_example_1
     ####################################################################
     def test_smart_start_example_1(self,

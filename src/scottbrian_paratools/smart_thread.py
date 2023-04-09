@@ -138,10 +138,10 @@ transitioned to ThreadState.Stopped and then resurrected as a new
 instance with the same SmartThread name.    
 
 
-Example: Case 1: Create a SmartThread configuration for threads named
-         alpha and beta, send and receive a message, and resume a wait.
-         Note the use of auto_start=False and invoking
-         ''smart_start()''.
+Example1: Create a SmartThread configuration for threads named
+          alpha and beta, send and receive a message, and resume a wait.
+          Note the use of auto_start=False and invoking
+          ''smart_start()''.
 
 >>> from scottbrian_paratools.smart_thread import SmartThread
 >>> def f1() -> None:
@@ -165,10 +165,10 @@ f1 beta exiting
 mainline alpha exiting
 
 
-Example: Case 2: Create a SmartThread configuration for threads named
-         alpha and beta, send and receive a message, and resume a wait.
-         Note the use of auto_start=True and passing the SmartThread
-         instance to the target via the thread_parm_name.
+Example2: Create a SmartThread configuration for threads named
+          alpha and beta, send and receive a message, and resume a wait.
+          Note the use of auto_start=True and passing the SmartThread
+          instance to the target via the thread_parm_name.
 
 >>> from scottbrian_paratools.smart_thread import SmartThread
 >>> def f1(smart_thread: SmartThread) -> None:
@@ -195,11 +195,11 @@ f1 beta exiting
 mainline alpha exiting
 
 
-Example: Case 3: Create a SmartThread configuration for threads named
-         alpha and beta, send and receive a message, and resume a wait.
-         Note the use of threading.Thread to create and start the beta 
-         thread and having the target thread instantiate the
-         SmartThread.
+Example3: Create a SmartThread configuration for threads named
+          alpha and beta, send and receive a message, and resume a wait.
+          Note the use of threading.Thread to create and start the beta 
+          thread and having the target thread instantiate the
+          SmartThread.
 
 >>> from scottbrian_paratools.smart_thread import SmartThread
 >>> import threading
@@ -223,6 +223,49 @@ mainline entered
 f1 beta entered
 {'beta': ['hi alpha, this is beta']}
 f1 beta exiting
+mainline alpha exiting
+
+
+Example4: Create a SmartThread configuration for threads named alpha and
+          beta, send and receive a message, and resume a wait. Note the
+          use of the ThreadApp class that inherits threading.Thread as a
+          base and uses a run method. This example demonstrates the use of
+          the *thread* argument on the SmartThread instantiation.
+
+>>> from scottbrian_paratools.smart_thread import SmartThread
+>>> import threading
+>>> import time
+>>> class ThreadApp(threading.Thread):
+...    def __init__(self, name: str) -> None:
+...        super().__init__(name=name)
+...        self.smart_thread = SmartThread(name=name,
+...                                        thread=self,
+...                                        auto_start=False)
+...    def run(self) -> None:
+...        print(f'{self.smart_thread.name} entry to run method')
+...        self.smart_thread.smart_send(msg='hi alpha, this is beta',
+...                                     receivers='alpha')
+...        time.sleep(1)
+...        print(f'{self.smart_thread.name} about to wait')
+...        self.smart_thread.smart_wait(resumers='alpha')
+...        print(f'{self.smart_thread.name} exiting run method')
+>>> print('mainline alpha entered')
+>>> alpha_smart_thread = SmartThread(name='alpha')
+>>> thread_app = ThreadApp(name='beta')
+>>> thread_app.smart_thread.smart_start()
+>>> my_msg = alpha_smart_thread.smart_recv(senders='beta')
+>>> print(my_msg)
+>>> time.sleep(2)
+>>> print('alpha about to resume beta')
+>>> alpha_smart_thread.smart_resume(waiters='beta')
+>>> alpha_smart_thread.smart_join(targets='beta')
+>>> print('mainline alpha exiting')
+mainline alpha entered
+beta entry to run method
+{'beta': ['hi alpha, this is beta']}
+beta about to wait
+alpha about to resume beta
+beta exiting run method
 mainline alpha exiting
 
 """
