@@ -47,7 +47,7 @@ are described as a ThreadState as follows:
        SmartThread was removed from the registry.
     2) ThreadState.Initializing: the SmartThread instance is created and
        is being initialized, but has not yet been registered. This state
-       occurs only while the SmartThread __init__ method is running.      
+       occurs only while the SmartThread __init__ method is running.
     3) ThreadState.Registered: the SmartThread instance exists and is in
        the registry, but the thread has not yet been stated.
     4) ThreadState.Starting: the SmartThread instance exists and is in
@@ -55,7 +55,7 @@ are described as a ThreadState as follows:
        ''smart_start()''. This state only applies when the SmartThread
        is created with *target* and ''smart_start()'' is invoked. When
        the SmartThread is created from the current thread, the state
-       moves from ThreadState.Initializing to ThreadState.Alive.      
+       moves from ThreadState.Initializing to ThreadState.Alive.
     5) ThreadState.Alive: the SmartThread instance exists and is in the
        registry, and the thread has been started and is alive (threading
        is_alive method returns True).
@@ -89,46 +89,46 @@ and ThreadState transitions:
         a) requires ThreadState.Unregistered. An an error is raised
            if a different SmartThread instance of the same name is
            found in the registry
-        b) moves the state to ThreadState.Initializing   
+        b) moves the state to ThreadState.Initializing
         c) creates a dictionary entry in the registry and then invokes
            the threading ''is_alive()'' method. If the thread is not yet
            alive, moves the state to ThreadState.Registered. If the
-           thread is already alive, move the state to ThreadState.Alive 
+           thread is already alive, move the state to ThreadState.Alive
         d) when other SmartThread instances exist, builds pairs of
            status blocks in the pair array
         e) if the thread is not yet alive and *auto_start* is True,
            ''smart_start()'' is called.
     2) ''smart_start()'':
         a) requires ThreadState.Registered. An error is raised if the
-           SmartThread instance is in any other state  
+           SmartThread instance is in any other state
         b) moves the state to ThreadState.Starting
         c) invokes threading ''start()''
         d) moves the state to ThreadState.Alive.
     3) ''smart_unreg()'':
         a) requires ThreadState.Registered. An error is raised if the
            SmartThread instance is in any other state
-        b) removes the SmartThread instance from the registry and 
+        b) removes the SmartThread instance from the registry and
            removes the status blocks from the pair array for any an all
-           combinations involving the SmartThread being unregistered 
+           combinations involving the SmartThread being unregistered
         c) by virtue of being removed from the registry, the state
            becomes ThreadState.Unregistered
-        d) the SmartThread instance may remain is scope, but it can 
+        d) the SmartThread instance may remain is scope, but it can
            not be started or enacted upon by any command at this point.
-           The name can be used again for a newly created instance.                    
+           The name can be used again for a newly created instance.
     4) ''smart_join()'':
         a) requires ThreadState.Registered, ThreadState.Starting,
            ThreadState.Alive, or ThreadState.Stopped. An error is raised
            if the SmartThread instance is in any other state. If needed,
            ''smart_join()'' will loop until the SmartThread instance
            enters ThreadState.Stopped or a timeout is recognized
-        b) removes the SmartThread instance from the registry and 
+        b) removes the SmartThread instance from the registry and
            removes the status blocks from the pair array for any an all
-           combinations involving the SmartThread being unregistered 
+           combinations involving the SmartThread being unregistered
         c) by virtue of being removed from the registry, the state
            becomes ThreadState.Unregistered
-        d) the SmartThread instance may remain is scope, but it can 
+        d) the SmartThread instance may remain is scope, but it can
            not be started or enacted upon by any command at this point.
-           The name can be used again for a newly created instance.     
+           The name can be used again for a newly created instance.
 
 The SmartThread paired and handshake requests require that their targets
 be in state ThreadState.Alive before completing the request. Each of
@@ -139,7 +139,7 @@ enters ThreadState.Alive or a timeout is recognized. An error is raised
 if the SmartThread instance is recognized to be in state
 ThreadState.Stopped, whether explicitly or by virtue of having
 transitioned to ThreadState.Stopped and then resurrected as a new
-instance with the same SmartThread name.    
+instance with the same SmartThread name.
 
 
 Example1: Create a SmartThread configuration for threads named
@@ -152,7 +152,8 @@ Example1: Create a SmartThread configuration for threads named
     from scottbrian_paratools.smart_thread import SmartThread
     def f1() -> None:
         print('f1 beta entered')
-        beta_smart_thread.smart_send(receivers='alpha', msg='hi alpha, this is beta')
+        beta_smart_thread.smart_send(receivers='alpha',
+                                     msg='hi alpha, this is beta')
         beta_smart_thread.smart_wait(resumers='alpha')
         print('f1 beta exiting')
     print('mainline alpha entered')
@@ -214,7 +215,7 @@ Expected output for Example2:
 
 Example3: Create a SmartThread configuration for threads named
           alpha and beta, send and receive a message, and resume a wait.
-          Note the use of threading.Thread to create and start the beta 
+          Note the use of threading.Thread to create and start the beta
           thread and having the target thread instantiate the
           SmartThread.
 
@@ -364,7 +365,6 @@ Example4: Create a SmartThread configuration for threads named alpha and
 # Standard Library
 ########################################################################
 from collections.abc import Iterable
-from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from enum import auto, Enum, Flag, StrEnum
@@ -409,8 +409,10 @@ ProcessRtn: TypeAlias = Union[ConfigCmdCallable, RequestCallable]
 
 # SendMsgs: TypeAlias = dict[str, list[Any]]
 
+
 @dataclass
 class SendMsgs:
+    """Class used for a set of messages to send."""
     send_msgs: dict[str, list[Any]]
 
 
@@ -493,6 +495,7 @@ class SmartThreadNoRemoteTargets(SmartThreadError):
 # contains the type of request
 ########################################################################
 class ReqType(StrEnum):
+    """Request for SmartThread."""
     NoReq = auto()
     Smart_start = auto()
     Smart_unreg = auto()
@@ -509,6 +512,7 @@ class ReqType(StrEnum):
 # contains the category of the request
 ########################################################################
 class ReqCategory(Enum):
+    """Category for SmartThread request."""
     Config = auto()
     Throw = auto()
     Catch = auto()
@@ -516,6 +520,7 @@ class ReqCategory(Enum):
 
 
 class PairKey(NamedTuple):
+    """Names the remote threads in a pair in teh pair array."""
     name0: str
     name1: str
 
@@ -598,6 +603,7 @@ class ThreadState(Flag):
 #     Any: any remote that does a resume will complete the wait
 ########################################################################
 class WaitFor(Enum):
+    """Choices for how many remote threads required for completion."""
     All = auto()
     Any = auto()
 
@@ -642,7 +648,19 @@ class SmartThread:
                      name: str,
                      args: Optional[tuple[Any, ...]] = None,
                      kwargs: Optional[dict[str, Any]] = None,
-                     ):
+                     ) -> None:
+            """Initialize the TargetThread instance.
+
+            Args:
+                smart_thread: the instance of SmartThread for this
+                    TargetThread
+                target: the target routine to be give control in a
+                    new thread
+                name: name of thread
+                args: arguments to pass to the target routine
+                kwargs: keyword arguments to pass to the target routine
+
+            """
             super().__init__(target=target,
                              args=args or (),
                              kwargs=kwargs or {},
@@ -650,6 +668,8 @@ class SmartThread:
             self.smart_thread = smart_thread
 
         def run(self) -> None:
+            """Invoke the target when teh thread is started."""
+
             try:
                 self._target(*self._args, **self._kwargs)
             finally:
@@ -775,6 +795,8 @@ class SmartThread:
             max_msgs: specifies the maximum number of messages that can
                 occupy the message queue. Zero (the default) specifies
                 no limit.
+            request_max_interval: used to control the sleep time when
+                waiting for a request to complete
 
         Raises:
             SmartThreadIncorrectNameSpecified: Attempted SmartThread
@@ -896,7 +918,6 @@ class SmartThread:
     def __repr__(self) -> str:
         """Return a representation of the class.
 
-
         Returns:
             The representation as how the class is instantiated
 
@@ -909,7 +930,7 @@ class SmartThread:
 
         """
         if TYPE_CHECKING:
-            __class__: Type[SmartThread]
+            __class__: Type[SmartThread]  # noqa: F842
         classname = self.__class__.__name__
         parms = f"name='{self.name}'"
 
@@ -1168,10 +1189,10 @@ class SmartThread:
             return PairKey(name1, name0)
 
     ########################################################################
-    # get_set
+    # _get_set
     ########################################################################
     @staticmethod
-    def get_set(item: Optional[Iterable] = None):
+    def _get_set(item: Optional[Iterable] = None):
         return set({item} if isinstance(item, str) else item or '')
 
     ###########################################################################
@@ -1456,7 +1477,7 @@ class SmartThread:
         f1 beta entered
         f1 beta exiting
         mainline alpha exiting
-        
+
         :Example2: Create and start two SmartThread threads.
 
         .. invisible-code-block: python
@@ -1675,8 +1696,8 @@ class SmartThread:
 
         Raises:
             SmartThreadRequestTimedOut: join timed out waiting for
-                receivers.
-        
+                receivers.  # noqa: DAR402
+
         Example1: Create and join a SmartThread thread.
 
         .. invisible-code-block: python
@@ -1844,9 +1865,13 @@ class SmartThread:
                      alive and ready to accept messages
 
         Raises:
-            SmartThreadRemoteThreadNotAlive: target thread was stopped
+            SmartThreadRemoteThreadNotAlive: target thread was
+                stopped  # noqa DAR402
             SmartThreadRequestTimedOut: request timed out before targets
-                became alive
+                became alive  # noqa DAR402
+            SmartThreadNoRemoteTargets: {self.name} issued a smart_send
+                request but there are no remote receivers in the
+                configuration to send to.
 
         Examples in this section cover the following cases:
             1) send a single message to a single remote thread
@@ -2133,7 +2158,7 @@ class SmartThread:
                                 self._get_state(remote) == ThreadState.Alive):
                             work_targets |= {remote}
         else:
-            work_targets = self.get_set(receivers)
+            work_targets = self._get_set(receivers)
 
         if not work_targets:
             raise SmartThreadNoRemoteTargets(
@@ -2257,9 +2282,9 @@ class SmartThread:
         sets, class objects). *smart_recv* can be used to receive a
         single message or multiple messages from a single remote
         thread, from multiple remote threads, or from every remote
-        thread in the configuration. *smart_recv* will return 
+        thread in the configuration. *smart_recv* will return
         messages in a dictionary indexed by sender thread name.
-        
+
         When *smart_recv* gets control, it will check its message
         queues for each of the specified senders. If one or more
         messages are found, it will immediately return them in the
@@ -2268,7 +2293,7 @@ class SmartThread:
         arrive, at which point it will return them. If timeout is
         specified, *smart_recv* will raise a timeout error if no
         messages appear within the specified time.
-        
+
         If no senders are specified, the *smart_recv* will check its
         message queues for all threads in the current configuration. If
         no messages are found, *smart_recv* will continue to check all
@@ -2277,16 +2302,16 @@ class SmartThread:
         *smart_recv* to simply park itself on the message queues of all
         threads and return with any request messages as soon as they
         arrive.
-        
+
         If senders are specified, *smart_recv* will look for messages
         only on its message queues for the specified senders. Unlike
         the "no senders specified" case, *smart_recv* will raise an
         error if any of the specified senders become inactive.
-        
+
         Args:
-        senders: thread names whose sent messages are to be received
-        log_msg: log message to issue
-        timeout: number of seconds to wait for message
+            senders: thread names whose sent messages are to be received
+            log_msg: log message to issue
+            timeout: number of seconds to wait for message
 
         Returns:
             dictionary of received messages, indexed by thread name
@@ -2765,10 +2790,11 @@ class SmartThread:
         Raises:
             SmartThreadDeadlockDetected: a smart_wait specified a
                 resumer that issued a smart_recv, smart_wait, or
-                smart_sync.
-            SmartThreadRemoteThreadNotAlive: resumer thread was stopped.
+                smart_sync.  # noqa DAR402
+            SmartThreadRemoteThreadNotAlive: resumer thread was
+                stopped.  # noqa DAR402
             SmartThreadRequestTimedOut: request timed out before
-                being resumed.
+                being resumed.  # noqa DAR402# noqa DAR402
 
         Notes:
             1) A deadlock will occur between two threads when they both
@@ -3125,9 +3151,10 @@ class SmartThread:
             timeout: number of seconds to allow for ``resume()`` to complete
 
         Raises:
-            SmartThreadRemoteThreadNotAlive: waiter thread was stopped.
+            SmartThreadRemoteThreadNotAlive: waiter thread was
+                stopped.  # noqa DAR402
             SmartThreadRequestTimedOut: request timed out before
-                being resumed.
+                being resumed.  # noqa DAR402
 
         Notes:
             1) The ''smart_wait()'' and ''smart_resume()'' processing
@@ -3166,31 +3193,31 @@ class SmartThread:
 
             from scottbrian_paratools.smart_thread import SmartThread
             import time
-    
+
             def f1_beta(smart_thread: SmartThread) -> None:
                 print(f'f1_beta about to wait')
                 smart_thread.smart_wait(resumers='alpha')
                 print(f'f1_beta back from wait')
-    
+
             def f2_charlie(smart_thread: SmartThread) -> None:
                 time.sleep(1)
                 print(f'f2_charlie about to wait')
                 smart_thread.smart_wait(resumers='alpha')
                 time.sleep(1)
                 print(f'f2_charlie back from wait')
-    
+
             def f3_delta(smart_thread: SmartThread) -> None:
                 time.sleep(4)
                 print(f'f3_delta about to wait')
                 smart_thread.smart_wait(resumers='alpha')
                 print(f'f3_delta back from wait')
-    
+
             def f4_echo(smart_thread: SmartThread) -> None:
                 time.sleep(5)
                 print(f'f4_echo about to wait')
                 smart_thread.smart_wait(resumers='alpha')
                 print(f'f4_echo back from wait')
-    
+
             print('mainline alpha entered')
             alpha_smart_thread = SmartThread(name='alpha')
             beta_smart_thread = SmartThread(name='beta',
@@ -3370,9 +3397,9 @@ class SmartThread:
         there.
 
         Args:
-         targets: remote threads we will sync with
-         log_msg: log msg for the log
-         timeout: number of seconds to allow for sync to happen
+            targets: remote threads we will sync with
+            log_msg: log msg for the log
+            timeout: number of seconds to allow for sync to happen
 
         Notes:
             1) A deadlock will occur between two threads when they both
@@ -3659,11 +3686,11 @@ class SmartThread:
 
         Raises:
             SmartThreadRequestTimedOut: request processing timed out
-                waiting for the remote.
+                waiting for the remote.  # noqa DAR402
             SmartThreadRemoteThreadNotAlive: request detected remote
-                thread is not alive.
+                thread is not alive.  # noqa DAR402
             SmartThreadDeadlockDetected: a deadlock was detected
-                between two requests.
+                between two requests.  # noqa DAR402
 
         """
         with self.cmd_lock:
@@ -3706,11 +3733,11 @@ class SmartThread:
 
         Raises:
             SmartThreadRequestTimedOut: request processing timed out
-                waiting for the remote.
+                waiting for the remote.  # noqa DAR402
             SmartThreadRemoteThreadNotAlive: request detected remote
-                thread is not alive.
+                thread is not alive.  # noqa DAR402
             SmartThreadDeadlockDetected: a deadlock was detected
-                between two requests.
+                between two requests.  # noqa DAR402
 
         Notes:
             1) request_pending is used to keep the cmd_runner pair_array
@@ -3721,9 +3748,9 @@ class SmartThread:
         if request_block.request == ReqType.Smart_recv:
             logger.debug(f'TestDebug {self.name} entered _request_loop '
                          f'with {self.work_pk_remotes=}')
+        # while len(self.work_pk_remotes) > request_block.completion_count:
         continue_request_loop = True
         while continue_request_loop:
-        # while len(self.work_pk_remotes) > request_block.completion_count:
             # num_start_loop_work_remotes = len(self.work_pk_remotes)
             work_pk_remotes_copy = self.work_pk_remotes.copy()
             for pk_remote in work_pk_remotes_copy:
@@ -3946,6 +3973,12 @@ class SmartThread:
             the input pk_remote is returned either as is, or updated
             with a non-zero create_time serial if it is among the
             found pk_remotes
+
+        Raises:
+            SmartThreadWorkDataException: _handle_found_pk_remotes
+                failed to find an entry for {found_pk_remote=} in
+                {self.work_pk_remotes=}.
+
         """
         ret_pk_remote = pk_remote
         for found_pk_remote in self.found_pk_remotes:
@@ -4004,6 +4037,8 @@ class SmartThread:
 
         Args:
             request_block: contains receivers, timeout, etc
+            pending_remotes: remotes that have not either not responded
+                or were found to be in an incorrect state
 
         Raises:
             SmartThreadRequestTimedOut: request processing timed out
@@ -4012,6 +4047,8 @@ class SmartThread:
                 thread is not alive.
             SmartThreadDeadlockDetected: a deadlock was detected
                 between two requests.
+            SmartThreadRemoteThreadNotRegistered: the remote thread is
+                not in the ThreadState.Registered state as required.
 
         """
         targets_msg = (f'while processing a '
@@ -4100,8 +4137,8 @@ class SmartThread:
         Args:
             local_sb: connection block for this thread
             remote_sb: connection block for remote thread
-        """
 
+        """
         # if the deadlock has already been detected by
         # the remote, no need to analyse this side. Just
         # drop down to the code below to return with the
@@ -4178,6 +4215,7 @@ class SmartThread:
             error_not_registered_target: request will raise an error if
                 any one of the receivers is in any state other than
                 registered.
+            completion_count: how many request need to succeed
             timeout: number of seconds to allow for request completion
             log_msg: caller log message to issue
             msg_to_send: smart_send message to send
@@ -4186,6 +4224,10 @@ class SmartThread:
         Returns:
             A RequestBlock is returned that contains the timer and the
             set of threads to be processed
+
+        Raises:
+            SmartThreadInvalidInput: {name} {request.value} request with
+                no receivers specified.
 
         """
         timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
@@ -4367,28 +4409,28 @@ class SmartThread:
     ####################################################################
     # verify_thread_is_current
     ####################################################################
-    @contextmanager
-    def _connection_block_lock(*args, **kwds) -> None:
-        """Obtain the connection_block lock.
-
-        This method is called from _request_loop to obtain the
-        connection_block lock for those requests that need it
-        (smart_resume, smart_wait, and smart_sync) and to not obtain
-        it for those requests that do not need it (smart_send, smart_recv).
-        This allows the code in _request_loop to use the with statement
-        for the lock obtain with having to code around it.
-
-        Args:
-            lock: the lock to obtain
-            obtain_tf: specifies whether to obtain the lock
-
-        """
-        # is request needs the lock
-        if kwds['obtain_tf']:
-            kwds['lock'].acquire()
-        try:
-            yield
-        finally:
-            # release the lock if it was obtained
-            if kwds['obtain_tf']:
-                kwds['lock'].release()
+    # @contextmanager
+    # def _connection_block_lock(*args, **kwds) -> None:
+    #     """Obtain the connection_block lock.
+    #
+    #     This method is called from _request_loop to obtain the
+    #     connection_block lock for those requests that need it
+    #     (smart_resume, smart_wait, and smart_sync) and to not obtain
+    #     it for those requests that do not need it (smart_send, smart_recv).
+    #     This allows the code in _request_loop to use the with statement
+    #     for the lock obtain with having to code around it.
+    #
+    #     Args:
+    #         args: the lock to obtain
+    #         kwds: whether to obtain the lock
+    #
+    #     """
+    #     # is request needs the lock
+    #     if kwds['obtain_tf']:
+    #         kwds['lock'].acquire()
+    #     try:
+    #         yield
+    #     finally:
+    #         # release the lock if it was obtained
+    #         if kwds['obtain_tf']:
+    #             kwds['lock'].release()
