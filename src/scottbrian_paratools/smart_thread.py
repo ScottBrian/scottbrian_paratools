@@ -520,7 +520,7 @@ class ReqCategory(Enum):
 
 
 class PairKey(NamedTuple):
-    """Names the remote threads in a pair in teh pair array."""
+    """Names the remote threads in a pair in the pair array."""
     name0: str
     name1: str
 
@@ -1446,75 +1446,76 @@ class SmartThread:
             targets: names of smart threads to be started
             log_msg: log message to issue for request
 
-        :Example1: Create and start a SmartThread
-
-        .. invisible-code-block: python
-
-            del SmartThread._registry['alpha']
-
-        >>> from scottbrian_paratools.smart_thread import SmartThread
-        >>> def f1() -> None:
-        ...     print('f1 beta entered')
-        ...     print('f1 beta exiting')
-        >>> print('mainline alpha entered')
-        mainline alpha entered
-
-        >>> alpha_smart_thread = SmartThread(name='alpha')
-        >>> beta_smart_thread = SmartThread(name='beta',
-        ...                                 target=f1,
-        ...                                 auto_start=False)
-        >>> print('alpha about to start beta')
-        alpha about to start beta
-
-        >>> beta_smart_thread.smart_start()
-        >>> alpha_smart_thread.smart_join(targets='beta')
-        >>> print('mainline alpha exiting')
-        mainline alpha exiting
-
-
-        mainline alpha entered
-        alpha about to start beta
-        f1 beta entered
-        f1 beta exiting
-        mainline alpha exiting
-
-        :Example2: Create and start two SmartThread threads.
-
-        .. invisible-code-block: python
-
-            del SmartThread._registry['alpha']
-
-        >>> from scottbrian_paratools.smart_thread import SmartThread
-        >>> import time
-        >>> def f1_beta() -> None:
-        ...     print('f1_beta entered')
-        ...     print('f1_beta exiting')
-        >>> def f2_charlie() -> None:
-        ...     time.sleep(1)
-        ...     print('f2_charlie entered')
-        ...     print('f2_charlie exiting')
-        >>> print('mainline alpha entered')
-        >>> alpha_smart_thread = SmartThread(name='alpha')
-        >>> beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_beta,
-                                            auto_start=False)
-        >>> charlie_smart_thread = SmartThread(name='charlie',
-                                               target=f2_charlie,
-                                               auto_start=False)
-        >>> print('alpha about to start beta and charlie')
-        >>> alpha_smart_thread.smart_start(targets=['beta', 'charlie'])
-        >>> alpha_smart_thread.smart_join(targets=['beta', 'charlie'])
-        >>> print('mainline alpha exiting')
-
-        mainline alpha entered
-        alpha about to start beta and charlie
-        f1_beta entered
-        f1_beta exiting
-        f2_charlie entered
-        f2_charlie exiting
-        mainline alpha exiting
-
         """
+        # :Example1: Create and start a SmartThread
+        #
+        # .. invisible-code-block: python
+        #
+        #     del SmartThread._registry['alpha']
+        #
+        # >>> from scottbrian_paratools.smart_thread import SmartThread
+        # >>> def f1() -> None:
+        # ...     print('f1 beta entered')
+        # ...     print('f1 beta exiting')
+        # >>> print('mainline alpha entered')
+        # mainline alpha entered
+        #
+        # >>> alpha_smart_thread = SmartThread(name='alpha')
+        # >>> beta_smart_thread = SmartThread(name='beta',
+        # ...                                 target=f1,
+        # ...                                 auto_start=False)
+        # >>> print('alpha about to start beta')
+        # alpha about to start beta
+        #
+        # >>> beta_smart_thread.smart_start()
+        # >>> alpha_smart_thread.smart_join(targets='beta')
+        # >>> print('mainline alpha exiting')
+        # mainline alpha exiting
+        #
+        #
+        # mainline alpha entered
+        # alpha about to start beta
+        # f1 beta entered
+        # f1 beta exiting
+        # mainline alpha exiting
+        #
+        # :Example2: Create and start two SmartThread threads.
+        #
+        # .. invisible-code-block: python
+        #
+        #     del SmartThread._registry['alpha']
+        #
+        # >>> from scottbrian_paratools.smart_thread import SmartThread
+        # >>> import time
+        # >>> def f1_beta() -> None:
+        # ...     print('f1_beta entered')
+        # ...     print('f1_beta exiting')
+        # >>> def f2_charlie() -> None:
+        # ...     time.sleep(1)
+        # ...     print('f2_charlie entered')
+        # ...     print('f2_charlie exiting')
+        # >>> print('mainline alpha entered')
+        # >>> alpha_smart_thread = SmartThread(name='alpha')
+        # >>> beta_smart_thread = SmartThread(name='beta',
+        #                                     target=f1_beta,
+        #                                     auto_start=False)
+        # >>> charlie_smart_thread = SmartThread(name='charlie',
+        #                                        target=f2_charlie,
+        #                                        auto_start=False)
+        # >>> print('alpha about to start beta and charlie')
+        # >>> alpha_smart_thread.smart_start(targets=['beta', 'charlie'])
+        # >>> alpha_smart_thread.smart_join(targets=['beta', 'charlie'])
+        # >>> print('mainline alpha exiting')
+        #
+        # mainline alpha entered
+        # alpha about to start beta and charlie
+        # f1_beta entered
+        # f1_beta exiting
+        # f2_charlie entered
+        # f2_charlie exiting
+        # mainline alpha exiting
+        #
+        # """
         # get RequestBlock with targets in a set and a timer object
         if not targets:
             targets = self.name
@@ -1598,38 +1599,37 @@ class SmartThread:
             targets: thread names that are to be unregistered
             log_msg: log message to issue
 
-
         Notes:
             1) A thread that is created but not started remains in the
                registered state until it is started at which time it
                enters the active state
 
-        :Example: Create and unregister a SmartThread thread.
-
-        .. invisible-code-block: python
-
-            del SmartThread._registry['alpha']
-
-        >>> from scottbrian_paratools.smart_thread import SmartThread
-        >>> def f1_beta() -> None:
-        ...     print('f1_beta entered')
-        ...     print('f1_beta exiting')
-        >>> print('mainline alpha entered')
-        >>> alpha_smart_thread = SmartThread(name='alpha')
-        >>> print('alpha about to create beta')
-        >>> beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_beta,
-                                            auto_start=False)
-        >>> print('alpha about to unregister beta')
-        >>> alpha_smart_thread.smart_unreg(targets='beta')
-        >>> print('mainline alpha exiting')
-        mainline alpha entered
-        alpha about to create beta
-        alpha about to unregister beta
-        mainline alpha exiting
-
         """
-        # get RequestBlock with targets in a set and a timer object
+        # :Example: Create and unregister a SmartThread thread.
+        #
+        # .. invisible-code-block: python
+        #
+        #     del SmartThread._registry['alpha']
+        #
+        # >>> from scottbrian_paratools.smart_thread import SmartThread
+        # >>> def f1_beta() -> None:
+        # ...     print('f1_beta entered')
+        # ...     print('f1_beta exiting')
+        # >>> print('mainline alpha entered')
+        # >>> alpha_smart_thread = SmartThread(name='alpha')
+        # >>> print('alpha about to create beta')
+        # >>> beta_smart_thread = SmartThread(name='beta',
+        #                                     target=f1_beta,
+        #                                     auto_start=False)
+        # >>> print('alpha about to unregister beta')
+        # >>> alpha_smart_thread.smart_unreg(targets='beta')
+        # >>> print('mainline alpha exiting')
+        # mainline alpha entered
+        # alpha about to create beta
+        # alpha about to unregister beta
+        # mainline alpha exiting
+
+        # """
         request_block = self._request_setup(
             request=ReqType.Smart_unreg,
             remotes=targets,
@@ -1696,7 +1696,8 @@ class SmartThread:
 
         Raises:
             SmartThreadRequestTimedOut: join timed out waiting for
-                receivers.  # noqa: DAR402
+                receivers.
+        .. # noqa DAR402
 
         Example1: Create and join a SmartThread thread.
 
@@ -1819,333 +1820,342 @@ class SmartThread:
                    timeout: OptIntFloat = None) -> None:
         """Send one or more messages to remote threads.
 
-        *smart_send* can be used to send a single message or multiple
-        messages to a single remote thread, to multiple remote threads,
-        or to every active remote thread in the configuration. A message
-        is any type (e.g., text, int, float, list, set, or
-        class object).
-
-        The *msg* arg species the message or messages to be sent. A
-        special case exists where the message can be specified as an
-        instance of the SendMsgs class where the messages for one or
-        more targets are placed into a dictionary indexed by the target
-        names. The *receiver* arg must be omitted when a SendMsgs object
-        is specified.
-
-        The *receivers* arg specifies the names of remote threads that
-        the message is to be sent to. There are two cases where
-        *receivers* is not specified:
-            1) when a SendMsgs object is specified for the *msgs* arg.
-            2) when a broadcast message is to be sent to all remote
-               threads in the configuration that are currently active
-               when the *smart_send* is issued.
-
-        The thread names specified for *receivers* or in a SendMsgs
-        object may be in states unregistered, registered, or alive.
-        *smart_send* will complete the send for any *receivers* that are
-        in the unregistered or registered state as soon as they go to
-        the alive state. If timeout is specified, a timeout error will
-        be raised if any threads did not become alive with the
-        specified amount of time.
-
-        An error will be raised if any receivers are stopped before the
-        message can be sent to them. This is true for receivers that are
-        specified as an argument for *receivers*, specified in the
-        SendMsgs object, or chosen for a broadcast message because they
-        were alive at the time of the *send_msg*.
-
         Args:
             msg: the msg to be sent. This may be a single item or a
-                 collection of items in any type of data structure.
+                collection of items in any type of data structure.
             receivers: names of remote threads to send the message to.
-                       If None, the message will be sent to all remote
-                       threads that are alive.
+                If None, the message will be sent to all remote
+                threads that are alive.
             log_msg: log message to issue
             timeout: number of seconds to wait for the targets to become
-                     alive and ready to accept messages
+                alive and ready to accept messages
 
         Raises:
             SmartThreadRemoteThreadNotAlive: target thread was
-                stopped  # noqa DAR402
+                stopped.
             SmartThreadRequestTimedOut: request timed out before targets
-                became alive  # noqa DAR402
+                became alive.
             SmartThreadNoRemoteTargets: {self.name} issued a smart_send
                 request but there are no remote receivers in the
                 configuration to send to.
-
-        Examples in this section cover the following cases:
-            1) send a single message to a single remote thread
-            2) send a single message to multiple remote threads
-            3) send a single message to all remote threads in the
-               configuration
-            4) send multiple messages to a single remote thread
-            5) send multiple messages to multiple remote threads
-            6) send any mixture of single and multiple messages
-               individually to each remote thread
-
-        :Example: case 1: send a single message to a single remote
-                  thread
-
-        .. invisible-code-block: python
-
-            del SmartThread._registry['alpha']
-
-        >>> from scottbrian_paratools.smart_thread import SmartThread
-        >>> def f1(smart_thread: SmartThread) -> None:
-        ...     print('f1 beta entered')
-        ...     my_msg = smart_thread.smart_recv(senders='alpha')
-        ...     print(my_msg)
-        ...     print('f1 beta exiting')
-        >>> print('mainline alpha entered')
-        >>> alpha_smart_thread = SmartThread(name='alpha')
-        >>> beta_smart_thread = SmartThread(name='beta',
-        ...                                 target=f1,
-        ...                                 thread_parm_name='smart_thread')
-        >>> alpha_smart_thread.smart_send(msg='hello beta', receivers='beta')
-        >>> alpha_smart_thread.smart_join(targets='beta')
-        >>> print('mainline alpha exiting')
-        mainline alpha entered
-        f1 beta entered
-        {'alpha': 'hello beta'}
-        f1 beta exiting
-        mainline alpha exiting
-
-        :Example: case 2: send a single message to multiple remote
-                  threads
-
-        .. invisible-code-block: python
-
-            del SmartThread._registry['alpha']
-
-        >>> from scottbrian_paratools.smart_thread import SmartThread
-        >>> import time
-        >>> def f1(smart_thread: SmartThread) -> None:
-        ...     if smart_thread.name == 'charlie':
-        ...         time.sleep(0.5)  # delay for non-interleaved msgs
-        ...     print(f'f1 {smart_thread.name} entered')
-        ...     my_msg = smart_thread.smart_recv(senders='alpha')
-        ...     print(my_msg)
-        ...     print(f'f1 {smart_thread.name} exiting')
-        >>> print('mainline alpha entered')
-        >>> alpha_smart_thread = SmartThread(name='alpha')
-        >>> beta_smart_thread = SmartThread(name='beta',
-        ...                                 target=f1,
-        ...                                 thread_parm_name='smart_thread')
-        >>> charlie_smart_thread = SmartThread(name='charlie',
-        ...                                    target=f1,
-        ...                                    thread_parm_name='smart_thread')
-        >>> alpha_smart_thread.smart_send(msg='hello remotes',
-        ...                               receivers=('beta', 'charlie'))
-        >>> alpha_smart_thread.smart_join(targets=('beta', 'charlie'))
-        >>> print('mainline alpha exiting')
-        mainline alpha entered
-        f1 beta entered
-        {'alpha': ['hello remotes']}
-        f1 beta exiting
-        f1 charlie entered
-        {'alpha': ['hello remotes']}
-        f1 charlie exiting
-        mainline alpha exiting
-
-
-        :Example: case 3: send a single message to all alive remote
-                  threads in the configuration as a broadcast (by simply
-                  omitting the *receivers* argument). Note the use of
-                  smart_wait and smart_resume to coordinate the actions
-                  for ordered and consistent print output.
-
-        .. invisible-code-block: python
-
-            del SmartThread._registry['alpha']
-
-        >>> from scottbrian_paratools.smart_thread import SmartThread
-        >>> def f1(smart_thread: SmartThread,
-        ...        wait_for: Optional[str] = None,
-        ...        resume_target: Optional[str] = None) -> None:
-        ...     if wait_for:
-        ...         smart_thread.smart_wait(resumers=wait_for)
-        ...     print(f'f1 {smart_thread.name} entered')
-        ...     my_msg = smart_thread.smart_recv(senders='alpha')
-        ...     print(my_msg)
-        ...     print(f'f1 {smart_thread.name} exiting')
-        ...     if resume_target:
-        ...         smart_thread.smart_resume(waiters=resume_target)
-        >>> print('mainline alpha entered')
-        >>> alpha_smart_thread = SmartThread(name='alpha')
-        >>> beta_smart_thread = SmartThread(name='beta',
-        ...                                 target=f1,
-        ...                                 thread_parm_name='smart_thread',
-        ...                                 kwargs={
-        ...                                     'resume_target':'charlie'})
-        >>> charlie_smart_thread = SmartThread(name='charlie',
-        ...                                    target=f1,
-        ...                                    thread_parm_name='smart_thread',
-        ...                                    kwargs={
-        ...                                        'wait_for': 'beta',
-        ...                                        'resume_target': 'delta'})
-        >>> delta_smart_thread = SmartThread(name='delta',
-        ...                                  target=f1,
-        ...                                  thread_parm_name='smart_thread',
-        ...                                  kwargs={
-        ...                                      'wait_for': 'charlie',
-        ...                                      'resume_target': 'alpha'})
-        >>> alpha_smart_thread.smart_send(msg='hello remotes')
-        >>> alpha_smart_thread.smart_wait(resumers='delta')
-        >>> alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
-        print('mainline alpha exiting')
-        mainline alpha entered
-        f1 beta entered
-        {'alpha': ['hello remotes']}
-        f1 beta exiting
-        f1 charlie entered
-        {'alpha': ['hello remotes']}
-        f1 charlie exiting
-        f1 delta entered
-        {'alpha': ['hello remotes']}
-        f1 delta exiting
-        mainline alpha exiting
-
-        :Example: case 4: send multiple messages to a single remote
-                  thread
-
-        >>> from scottbrian_paratools.smart_thread import SmartThread
-        >>> def f1(smart_thread: SmartThread) -> None:
-        ...     print(f'f1 {smart_thread.name} entered')
-        ...     my_msg = smart_thread.smart_recv(senders='alpha')
-        ...     print(my_msg)
-        ...     print(f'f1 {smart_thread.name} exiting')
-        >>> print('mainline alpha entered')
-        >>> alpha_smart_thread = SmartThread(name='alpha')
-        >>> beta_smart_thread = SmartThread(name='beta',
-        ...                                 target=f1,
-        ...                                 thread_parm_name='smart_thread')
-        >>> alpha_smart_thread.smart_send(msg=('hello beta',
-        ...                                    'have a great day', 42))
-        >>> alpha_smart_thread.smart_join(targets='beta')
-        >>> print('mainline alpha exiting')
-        mainline alpha entered
-        f1 beta entered
-        {'alpha': [('hello beta', 'have a great day', 42)]}
-        f1 beta exiting
-        mainline alpha exiting
-
-        :Example: case 5: send multiple messages to multiple remote
-                  threads
-
-        .. invisible-code-block: python
-
-            del SmartThread._registry['alpha']
-
-        >>> from scottbrian_paratools.smart_thread import SmartThread
-        >>> def f1(smart_thread: SmartThread,
-        ...        wait_for: Optional[str] = None,
-        ...        resume_target: Optional[str] = None) -> None:
-        ...     if wait_for:
-        ...         smart_thread.smart_wait(resumers=wait_for)
-        ...     print(f'f1 {smart_thread.name} entered')
-        ...     my_msg = smart_thread.smart_recv(senders='alpha')
-        ...     print(my_msg)
-        ...     print(f'f1 {smart_thread.name} exiting')
-        ...     if resume_target:
-        ...         smart_thread.smart_resume(waiters=resume_target)
-        >>> print('mainline alpha entered')
-        >>> alpha_smart_thread = SmartThread(name='alpha')
-        >>> beta_smart_thread = SmartThread(name='beta',
-        ...                                 target=f1,
-        ...                                 thread_parm_name='smart_thread',
-        ...                                 kwargs={
-        ...                                     'resume_target':'charlie'})
-        >>> charlie_smart_thread = SmartThread(name='charlie',
-        ...                                    target=f1,
-        ...                                    thread_parm_name='smart_thread',
-        ...                                    kwargs={
-        ...                                        'wait_for': 'beta',
-        ...                                        'resume_target': 'delta'})
-        >>> delta_smart_thread = SmartThread(name='delta',
-        ...                                  target=f1,
-        ...                                  thread_parm_name='smart_thread',
-        ...                                  kwargs={
-        ...                                      'wait_for': 'charlie',
-        ...                                      'resume_target': 'alpha'})
-        >>> alpha_smart_thread.smart_send(msg=['hello remotes',
-        ...                                    'have a great day', 42],
-        ...                               receivers=['beta',
-        ...                                          'charlie',
-        ...                                           'delta'])
-        >>> alpha_smart_thread.smart_wait(resumers='delta')
-        >>> alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
-        >>> print('mainline alpha exiting')
-        mainline alpha entered
-        f1 beta entered
-        {'alpha': [['hello remotes', 'have a great day', 42]]}
-        f1 beta exiting
-        f1 charlie entered
-        {'alpha': [['hello remotes', 'have a great day', 42]]}
-        f1 charlie exiting
-        f1 delta entered
-        {'alpha': [['hello remotes', 'have a great day', 42]]}
-        f1 delta exiting
-        mainline alpha exiting
-
-        :Example: case 6: send any mixture of single and multiple
-                  messages individually to each remote thread
-
-        .. invisible-code-block: python
-
-            del SmartThread._registry['alpha']
-
-        >>> from scottbrian_paratools.smart_thread import SmartThread
-        >>> def f1(smart_thread: SmartThread,
-        ...        wait_for: Optional[str] = None,
-        ...        resume_target: Optional[str] = None) -> None:
-        ...     if wait_for:
-        ...         smart_thread.smart_wait(resumers=wait_for)
-        ...     print(f'f1 {smart_thread.name} entered')
-        ...     my_msg = smart_thread.smart_recv(senders='alpha')
-        ...     print(my_msg)
-        ...     print(f'f1 {smart_thread.name} exiting')
-        ...     if resume_target:
-        ...         smart_thread.smart_resume(waiters=resume_target)
-        >>> print('mainline alpha entered')
-        >>> alpha_smart_thread = SmartThread(name='alpha')
-        >>> beta_smart_thread = SmartThread(name='beta',
-        ...                                 target=f1,
-        ...                                 thread_parm_name='smart_thread',
-        ...                                 kwargs={
-        ...                                     'resume_target':'charlie'})
-        >>> charlie_smart_thread = SmartThread(name='charlie',
-        ...                                    target=f1,
-        ...                                    thread_parm_name='smart_thread',
-        ...                                    kwargs={
-        ...                                        'wait_for': 'beta',
-        ...                                        'resume_target': 'delta'})
-        >>> delta_smart_thread = SmartThread(name='delta',
-        ...                                  target=f1,
-        ...                                  thread_parm_name='smart_thread',
-        ...                                  kwargs={
-        ...                                      'wait_for': 'charlie',
-        ...                                      'resume_target': 'alpha'})
-        >>> msgs_to_send = SendMsgs(send_msgs= {
-        ...     'beta': 'hi beta',
-        ...     'charlie': ('hi charlie', 'have a great day'),
-        ...     'delta': [42, 'hi delta', {'nums': (1, 2, 3)}]})
-        >>> alpha_smart_thread.smart_send(msg=msgs_to_send)
-        >>> alpha_smart_thread.smart_wait(resumers='delta')
-        >>> alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
-        >>> print('mainline alpha exiting')
-        mainline alpha entered
-        f1 beta entered
-        {'alpha': 'hi beta'}
-        f1 beta exiting
-        f1 charlie entered
-        {'alpha': [('hi charlie', 'have a great day')]}
-        f1 charlie exiting
-        f1 delta entered
-        {'alpha': [[42, 'hi delta', {'nums': (1, 2, 3)}]]}
-        f1 delta exiting
-        mainline alpha exiting
+        .. # noqa DAR402
 
         """
+        # *smart_send* can be used to send a single message or multiple
+        # messages to a single remote thread, to multiple remote threads,
+        # or to every active remote thread in the configuration. A message
+        # is any type (e.g., text, int, float, list, set, or
+        # class object).
+        #
+        # The *msg* arg species the message or messages to be sent. A
+        # special case exists where the message can be specified as an
+        # instance of the SendMsgs class where the messages for one or
+        # more targets are placed into a dictionary indexed by the target
+        # names. The *receiver* arg must be omitted when a SendMsgs object
+        # is specified.
+        #
+        # The *receivers* arg specifies the names of remote threads that
+        # the message is to be sent to. There are two cases where
+        # *receivers* is not specified:
+        #
+        #     1) when a SendMsgs object is specified for the *msgs* arg.
+        #     2) when a broadcast message is to be sent to all remote
+        #        threads in the configuration that are currently active
+        #        when the *smart_send* is issued.
+        #
+        # The thread names specified for *receivers* or in a SendMsgs
+        # object may be in states unregistered, registered, or alive.
+        # *smart_send* will complete the send for any *receivers* that are
+        # in the unregistered or registered state as soon as they go to
+        # the alive state. If timeout is specified, a timeout error will
+        # be raised if any threads did not become alive with the
+        # specified amount of time.
+        #
+        # An error will be raised if any receivers are stopped before the
+        # message can be sent to them. This is true for receivers that are
+        # specified as an argument for *receivers*, specified in the
+        # SendMsgs object, or chosen for a broadcast message because they
+        # were alive at the time of the *send_msg*.
+        #
+
+        #
+        # Examples in this section cover the following cases:
+        #
+        #     1) send a single message to a single remote thread
+        #     2) send a single message to multiple remote threads
+        #     3) send a single message to all remote threads in the
+        #        configuration
+        #     4) send multiple messages to a single remote thread
+        #     5) send multiple messages to multiple remote threads
+        #     6) send any mixture of single and multiple messages
+        #        individually to each remote thread
+        #
+        # :Example: case 1: send a single message to a single remote
+        #           thread
+        #
+        # .. invisible-code-block: python
+        #
+        #     del SmartThread._registry['alpha']
+        #
+        # >>> from scottbrian_paratools.smart_thread import SmartThread
+        # >>> def f1(smart_thread: SmartThread) -> None:
+        # ...     print('f1 beta entered')
+        # ...     my_msg = smart_thread.smart_recv(senders='alpha')
+        # ...     print(my_msg)
+        # ...     print('f1 beta exiting')
+        # >>> print('mainline alpha entered')
+        # >>> alpha_smart_thread = SmartThread(name='alpha')
+        # >>> beta_smart_thread = SmartThread(name='beta',
+        # ...                                 target=f1,
+        # ...                                 thread_parm_name='smart_thread')
+        # >>> alpha_smart_thread.smart_send(msg='hello beta', receivers='beta')
+        # >>> alpha_smart_thread.smart_join(targets='beta')
+        # >>> print('mainline alpha exiting')
+        # mainline alpha entered
+        # f1 beta entered
+        # {'alpha': 'hello beta'}
+        # f1 beta exiting
+        # mainline alpha exiting
+        #
+        # :Example: case 2: send a single message to multiple remote
+        #           threads
+        #
+        # .. invisible-code-block: python
+        #
+        #     del SmartThread._registry['alpha']
+        #
+        # >>> from scottbrian_paratools.smart_thread import SmartThread
+        # >>> import time
+        # >>> def f1(smart_thread: SmartThread) -> None:
+        # ...     if smart_thread.name == 'charlie':
+        # ...         time.sleep(0.5)  # delay for non-interleaved msgs
+        # ...     print(f'f1 {smart_thread.name} entered')
+        # ...     my_msg = smart_thread.smart_recv(senders='alpha')
+        # ...     print(my_msg)
+        # ...     print(f'f1 {smart_thread.name} exiting')
+        # >>> print('mainline alpha entered')
+        # >>> alpha_smart_thread = SmartThread(name='alpha')
+        # >>> beta_smart_thread = SmartThread(name='beta',
+        # ...                                 target=f1,
+        # ...                                 thread_parm_name='smart_thread')
+        # >>> charlie_smart_thread = SmartThread(name='charlie',
+        # ...                                    target=f1,
+        # ...                                  thread_parm_name='smart_thread')
+        # >>> alpha_smart_thread.smart_send(msg='hello remotes',
+        # ...                               receivers=('beta', 'charlie'))
+        # >>> alpha_smart_thread.smart_join(targets=('beta', 'charlie'))
+        # >>> print('mainline alpha exiting')
+        # mainline alpha entered
+        # f1 beta entered
+        # {'alpha': ['hello remotes']}
+        # f1 beta exiting
+        # f1 charlie entered
+        # {'alpha': ['hello remotes']}
+        # f1 charlie exiting
+        # mainline alpha exiting
+        #
+        #
+        # :Example: case 3: send a single message to all alive remote
+        #           threads in the configuration as a broadcast (by simply
+        #           omitting the *receivers* argument). Note the use of
+        #           smart_wait and smart_resume to coordinate the actions
+        #           for ordered and consistent print output.
+        #
+        # .. invisible-code-block: python
+        #
+        #     del SmartThread._registry['alpha']
+        #
+        # >>> from scottbrian_paratools.smart_thread import SmartThread
+        # >>> def f1(smart_thread: SmartThread,
+        # ...        wait_for: Optional[str] = None,
+        # ...        resume_target: Optional[str] = None) -> None:
+        # ...     if wait_for:
+        # ...         smart_thread.smart_wait(resumers=wait_for)
+        # ...     print(f'f1 {smart_thread.name} entered')
+        # ...     my_msg = smart_thread.smart_recv(senders='alpha')
+        # ...     print(my_msg)
+        # ...     print(f'f1 {smart_thread.name} exiting')
+        # ...     if resume_target:
+        # ...         smart_thread.smart_resume(waiters=resume_target)
+        # >>> print('mainline alpha entered')
+        # >>> alpha_smart_thread = SmartThread(name='alpha')
+        # >>> beta_smart_thread = SmartThread(name='beta',
+        # ...                                 target=f1,
+        # ...                                 thread_parm_name='smart_thread',
+        # ...                                 kwargs={
+        # ...                                     'resume_target':'charlie'})
+        # >>> charlie_smart_thread = SmartThread(name='charlie',
+        # ...                                    target=f1,
+        # ...                                  thread_parm_name='smart_thread',
+        # ...                                    kwargs={
+        # ...                                        'wait_for': 'beta',
+        # ...                                        'resume_target': 'delta'})
+        # >>> delta_smart_thread = SmartThread(name='delta',
+        # ...                                  target=f1,
+        # ...                                  thread_parm_name='smart_thread',
+        # ...                                  kwargs={
+        # ...                                      'wait_for': 'charlie',
+        # ...                                      'resume_target': 'alpha'})
+        # >>> alpha_smart_thread.smart_send(msg='hello remotes')
+        # >>> alpha_smart_thread.smart_wait(resumers='delta')
+        # >>> alpha_smart_thread.smart_join(targets=('beta', 'charlie',
+        # 'delta'))
+        # print('mainline alpha exiting')
+        # mainline alpha entered
+        # f1 beta entered
+        # {'alpha': ['hello remotes']}
+        # f1 beta exiting
+        # f1 charlie entered
+        # {'alpha': ['hello remotes']}
+        # f1 charlie exiting
+        # f1 delta entered
+        # {'alpha': ['hello remotes']}
+        # f1 delta exiting
+        # mainline alpha exiting
+        #
+        # :Example: case 4: send multiple messages to a single remote
+        #           thread
+        #
+        # >>> from scottbrian_paratools.smart_thread import SmartThread
+        # >>> def f1(smart_thread: SmartThread) -> None:
+        # ...     print(f'f1 {smart_thread.name} entered')
+        # ...     my_msg = smart_thread.smart_recv(senders='alpha')
+        # ...     print(my_msg)
+        # ...     print(f'f1 {smart_thread.name} exiting')
+        # >>> print('mainline alpha entered')
+        # >>> alpha_smart_thread = SmartThread(name='alpha')
+        # >>> beta_smart_thread = SmartThread(name='beta',
+        # ...                                 target=f1,
+        # ...                                 thread_parm_name='smart_thread')
+        # >>> alpha_smart_thread.smart_send(msg=('hello beta',
+        # ...                                    'have a great day', 42))
+        # >>> alpha_smart_thread.smart_join(targets='beta')
+        # >>> print('mainline alpha exiting')
+        # mainline alpha entered
+        # f1 beta entered
+        # {'alpha': [('hello beta', 'have a great day', 42)]}
+        # f1 beta exiting
+        # mainline alpha exiting
+        #
+        # :Example: case 5: send multiple messages to multiple remote
+        #           threads
+        #
+        # .. invisible-code-block: python
+        #
+        #     del SmartThread._registry['alpha']
+        #
+        # >>> from scottbrian_paratools.smart_thread import SmartThread
+        # >>> def f1(smart_thread: SmartThread,
+        # ...        wait_for: Optional[str] = None,
+        # ...        resume_target: Optional[str] = None) -> None:
+        # ...     if wait_for:
+        # ...         smart_thread.smart_wait(resumers=wait_for)
+        # ...     print(f'f1 {smart_thread.name} entered')
+        # ...     my_msg = smart_thread.smart_recv(senders='alpha')
+        # ...     print(my_msg)
+        # ...     print(f'f1 {smart_thread.name} exiting')
+        # ...     if resume_target:
+        # ...         smart_thread.smart_resume(waiters=resume_target)
+        # >>> print('mainline alpha entered')
+        # >>> alpha_smart_thread = SmartThread(name='alpha')
+        # >>> beta_smart_thread = SmartThread(name='beta',
+        # ...                                 target=f1,
+        # ...                                 thread_parm_name='smart_thread',
+        # ...                                 kwargs={
+        # ...                                     'resume_target':'charlie'})
+        # >>> charlie_smart_thread = SmartThread(name='charlie',
+        # ...                                    target=f1,
+        # ...                                  thread_parm_name='smart_thread',
+        # ...                                    kwargs={
+        # ...                                        'wait_for': 'beta',
+        # ...                                        'resume_target': 'delta'})
+        # >>> delta_smart_thread = SmartThread(name='delta',
+        # ...                                  target=f1,
+        # ...                                  thread_parm_name='smart_thread',
+        # ...                                  kwargs={
+        # ...                                      'wait_for': 'charlie',
+        # ...                                      'resume_target': 'alpha'})
+        # >>> alpha_smart_thread.smart_send(msg=['hello remotes',
+        # ...                                    'have a great day', 42],
+        # ...                               receivers=['beta',
+        # ...                                          'charlie',
+        # ...                                           'delta'])
+        # >>> alpha_smart_thread.smart_wait(resumers='delta')
+        # >>> alpha_smart_thread.smart_join(targets=('beta', 'charlie',
+        # 'delta'))
+        # >>> print('mainline alpha exiting')
+        # mainline alpha entered
+        # f1 beta entered
+        # {'alpha': [['hello remotes', 'have a great day', 42]]}
+        # f1 beta exiting
+        # f1 charlie entered
+        # {'alpha': [['hello remotes', 'have a great day', 42]]}
+        # f1 charlie exiting
+        # f1 delta entered
+        # {'alpha': [['hello remotes', 'have a great day', 42]]}
+        # f1 delta exiting
+        # mainline alpha exiting
+        #
+        # :Example: case 6: send any mixture of single and multiple
+        #           messages individually to each remote thread
+        #
+        # .. invisible-code-block: python
+        #
+        #     del SmartThread._registry['alpha']
+        #
+        # >>> from scottbrian_paratools.smart_thread import SmartThread
+        # >>> def f1(smart_thread: SmartThread,
+        # ...        wait_for: Optional[str] = None,
+        # ...        resume_target: Optional[str] = None) -> None:
+        # ...     if wait_for:
+        # ...         smart_thread.smart_wait(resumers=wait_for)
+        # ...     print(f'f1 {smart_thread.name} entered')
+        # ...     my_msg = smart_thread.smart_recv(senders='alpha')
+        # ...     print(my_msg)
+        # ...     print(f'f1 {smart_thread.name} exiting')
+        # ...     if resume_target:
+        # ...         smart_thread.smart_resume(waiters=resume_target)
+        # >>> print('mainline alpha entered')
+        # >>> alpha_smart_thread = SmartThread(name='alpha')
+        # >>> beta_smart_thread = SmartThread(name='beta',
+        # ...                                 target=f1,
+        # ...                                 thread_parm_name='smart_thread',
+        # ...                                 kwargs={
+        # ...                                     'resume_target':'charlie'})
+        # >>> charlie_smart_thread = SmartThread(name='charlie',
+        # ...                                    target=f1,
+        # ...                                  thread_parm_name='smart_thread',
+        # ...                                    kwargs={
+        # ...                                        'wait_for': 'beta',
+        # ...                                      'resume_target': 'delta'})
+        # >>> delta_smart_thread = SmartThread(name='delta',
+        # ...                                  target=f1,
+        # ...                                  thread_parm_name='smart_thread',
+        # ...                                  kwargs={
+        # ...                                      'wait_for': 'charlie',
+        # ...                                      'resume_target': 'alpha'})
+        # >>> msgs_to_send = SendMsgs(send_msgs= {
+        # ...     'beta': 'hi beta',
+        # ...     'charlie': ('hi charlie', 'have a great day'),
+        # ...     'delta': [42, 'hi delta', {'nums': (1, 2, 3)}]})
+        # >>> alpha_smart_thread.smart_send(msg=msgs_to_send)
+        # >>> alpha_smart_thread.smart_wait(resumers='delta')
+        # >>> alpha_smart_thread.smart_join(targets=('beta', 'charlie',
+        # 'delta'))
+        # >>> print('mainline alpha exiting')
+        # mainline alpha entered
+        # f1 beta entered
+        # {'alpha': 'hi beta'}
+        # f1 beta exiting
+        # f1 charlie entered
+        # {'alpha': [('hi charlie', 'have a great day')]}
+        # f1 charlie exiting
+        # f1 delta entered
+        # {'alpha': [[42, 'hi delta', {'nums': (1, 2, 3)}]]}
+        # f1 delta exiting
+        # mainline alpha exiting
+        #
+        # """
         work_targets: set[str]
         if receivers is None:
             if isinstance(msg, SendMsgs):
@@ -2318,12 +2328,13 @@ class SmartThread:
 
         Raises:
             SmartThreadRemoteThreadNotAlive: target thread was
-                stopped.  # noqa DAR402
+                stopped.
             SmartThreadRequestTimedOut: request timed out before
-                message was received.  # noqa DAR402
+                message was received.
             SmartThreadDeadlockDetected: a smart_recv specified a sender
                 that issued a smart_recv, smart_wait, or
-                smart_sync.  # noqa DAR402
+                smart_sync.
+        .. # noqa DAR402
 
         Notes:
             1) A deadlock will occur between two threads when they both
@@ -2343,6 +2354,7 @@ class SmartThread:
                already delivered earlier by a smart_send.
 
         Examples in this section cover the following cases:
+
             1) receive a single message from a single remote thread
             2) receive a single message from multiple remote threads
             3) receive a single message from all remote threads in the
@@ -2752,6 +2764,7 @@ class SmartThread:
         """Wait until resumed.
 
         smart_wait waits until it is resumed. These are the cases:
+
             1) smart_wait can provide one remote thread name as an
                argument for the *resumers* parameter and will then wait
                until that resumer issues a matching smart_resume.
@@ -2793,22 +2806,25 @@ class SmartThread:
         Raises:
             SmartThreadDeadlockDetected: a smart_wait specified a
                 resumer that issued a smart_recv, smart_wait, or
-                smart_sync.  # noqa DAR402
+                smart_sync.
             SmartThreadRemoteThreadNotAlive: resumer thread was
-                stopped.  # noqa DAR402
+                stopped.
             SmartThreadRequestTimedOut: request timed out before
-                being resumed.  # noqa DAR402# noqa DAR402
+                being resumed.
+        .. # noqa DAR402
 
         Notes:
+
             1) A deadlock will occur between two threads when they both
                issue a request that waits for the other thread to
                respond. The following combinations can lead to a
                deadlock:
-                   a) smart_wait vs smart_wait
-                   b) smart_wait vs smart_recv
-                   c) smart_wait vs smart_sync
-                   d) smart_recv vs smart_recv
-                   e) smart_recv vs smart_sync
+
+                 a) smart_wait vs smart_wait
+                 b) smart_wait vs smart_recv
+                 c) smart_wait vs smart_sync
+                 d) smart_recv vs smart_recv
+                 e) smart_recv vs smart_sync
 
                Note that a smart_wait will not deadlock if the
                wait_event was already resumed earlier by a smart_resume,
@@ -2816,6 +2832,7 @@ class SmartThread:
                already delivered earlier by a smart_send.
 
         Examples in this section cover the following cases:
+
             1) smart_wait followed by smart_resume
             2) smart_wait preceded by smart_resume
             3) smart_wait for multiple resumers with WaitFor.All
@@ -3123,146 +3140,198 @@ class SmartThread:
                      log_msg: Optional[str] = None) -> None:
         """Resume a waiting or soon to be waiting thread.
 
-        smart_resume is used for the following cases:
-            1) to resume a thread that is blocked after having issued a
-               smart_wait
-            2) to pre-resume a thread that will be issuing a smart_wait.
-               In this case, the smart_wait will simply see that it has
-               already been resumed and will return immediately.
-            3) to resume or pre-resume multiple threads as a combination
-               of zero or more case #1 scenarios and zero or more case
-               #2 scenarios.
-
-        An error is raised if any of the specified waiter threads are
-        stopped.
-
-        A smart_resume may be issued for any number of waiters that are
-        in any combination of unregistered, registered, or alive states.
-        smart_resume will perform the resume only when a waiter is in
-        the alive state. If timeout is specified, a timeout error is
-        raised if one or more waiters fail to achieve the alive state
-        within the specified time.
-
-        Another case involving a timeout can occur when a previous
-        smart_wait has not yet completed after having been resumed,
-        and a new resume is issued. See the notes section below for a
-        a more thorough explanation.
-
         Args:
             waiters: names of threads that are to be resumed
+            timeout: number of seconds to allow for ``resume()`` to
+                complete
             log_msg: log msg to log
-            timeout: number of seconds to allow for ``resume()`` to complete
+
+        Returns:
+            list of resumers that resumed this thread
 
         Raises:
             SmartThreadRemoteThreadNotAlive: waiter thread was
-                stopped.  # noqa DAR402
+                stopped.
             SmartThreadRequestTimedOut: request timed out before
-                being resumed.  # noqa DAR402
+                being resumed.
+        .. # noqa DAR402
 
         Notes:
-            1) The ''smart_wait()'' and ''smart_resume()'' processing
+
+            1) The ``smart_wait()`` and ``smart_resume()`` processing
                use a threading event to coordinate the wait and resume.
-               The ''smart_wait()'' will wait on the event and the
-               ''smart_resume()'' will set the event, not necessarily
+               The ``smart_wait()`` will wait on the event and the
+               ``smart_resume()`` will set the event, not necessarily
                in that order.
             2) A ``smart_resume()`` request can set the event for a
-               waiter that has not yet issued a ''smart_wait()''. This
+               waiter that has not yet issued a ``smart_wait()``. This
                is referred to as a **pre-resume**. The remote thread
                doing a ``smart_wait()`` request in this case will simply
                see that the event is already set, clear it, and return
                immediately.
             3) Once the ``smart_resume()`` request has set the waiter's
                event, it is unpredictable when the waiter will clear
-               the event. If a subsequent ''smart_resume()'' is issued
+               the event. If a subsequent ``smart_resume()`` is issued
                before the event has been cleared, it will loop until the
                waiter clears it or a timeout occurs.
-            4) ''smart_resume()`` will set the event only for a thread
+            4) ``smart_resume()`` will set the event only for a thread
                that is in the alive state. Once the event is set, the
-               ''smart_resume()'' is considered complete. The waiter
+               ``smart_resume()`` is considered complete. The waiter
                thread may subsequently fail and move to the stopped
                state before clearing the event. No error is raised by
-               ''smart_resume()'' nor ''smart_wait()'' in this case. A
+               ``smart_resume()`` nor ``smart_wait()`` in this case. A
                debug log message is issued when a thread is removed
                from the configuration with its wait event still set.
 
-        Examples in this section cover the following cases:
-            1) smart_resume multiple waiters
-
-        :Example1: Invoke ''smart_resume()'' for threads that invoke
-                   ''smart_wait()'' both before and after the
-                   ''smart_resume()''
-
-        .. code-block:: python
-
-            from scottbrian_paratools.smart_thread import SmartThread
-            import time
-
-            def f1_beta(smart_thread: SmartThread) -> None:
-                print(f'f1_beta about to wait')
-                smart_thread.smart_wait(resumers='alpha')
-                print(f'f1_beta back from wait')
-
-            def f2_charlie(smart_thread: SmartThread) -> None:
-                time.sleep(1)
-                print(f'f2_charlie about to wait')
-                smart_thread.smart_wait(resumers='alpha')
-                time.sleep(1)
-                print(f'f2_charlie back from wait')
-
-            def f3_delta(smart_thread: SmartThread) -> None:
-                time.sleep(4)
-                print(f'f3_delta about to wait')
-                smart_thread.smart_wait(resumers='alpha')
-                print(f'f3_delta back from wait')
-
-            def f4_echo(smart_thread: SmartThread) -> None:
-                time.sleep(5)
-                print(f'f4_echo about to wait')
-                smart_thread.smart_wait(resumers='alpha')
-                print(f'f4_echo back from wait')
-
-            print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(name='alpha')
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_beta,
-                                            thread_parm_name='smart_thread')
-            charlie_smart_thread = SmartThread(name='charlie',
-                                               target=f2_charlie,
-                                               thread_parm_name='smart_thread')
-            delta_smart_thread = SmartThread(name='delta',
-                                             target=f3_delta,
-                                             thread_parm_name='smart_thread')
-            echo_smart_thread = SmartThread(name='echo',
-                                            target=f4_echo,
-                                            thread_parm_name='smart_thread')
-            time.sleep(2)
-            print('alpha about to resume threads')
-            alpha_smart_thread.smart_resume(waiters=('beta',
-                                                     'charlie',
-                                                     'delta',
-                                                     'echo'))
-            alpha_smart_thread.smart_join(targets=['beta',
-                                                   'charlie',
-                                                   'delta',
-                                                   'echo'])
-            print('mainline alpha exiting')
-
-
-        Expected output for Example1:
-
-            mainline alpha entered
-            f1_beta about to wait
-            f2_charlie about to wait
-            alpha about to resume threads
-            f1_beta back from wait
-            f2_charlie back from wait
-            f3_delta about to wait
-            f3_delta back from wait
-            f4_echo about to wait
-            f4_echo back from wait
-            mainline alpha exiting
-
         """
+
+        # Args:
+        #     waiters: names of threads that are to be resumed
+        #     timeout: number of seconds to allow for ``resume()`` to
+        #         complete
+        #     log_msg: log msg to log
+        #
+        # Raises:
+        #     SmartThreadRemoteThreadNotAlive: waiter thread was
+        #         stopped.
+        #     SmartThreadRequestTimedOut: request timed out before
+        #         being resumed.
+        #.. # noqa DAR402
+        # Notes:
+        #
+        #     1) The ``smart_wait()`` and ``smart_resume()`` processing
+        #        use a threading event to coordinate the wait and resume.
+        #        The ``smart_wait()`` will wait on the event and the
+        #        ``smart_resume()`` will set the event, not necessarily
+        #        in that order.
+        #     2) A ``smart_resume()`` request can set the event for a
+        #        waiter that has not yet issued a ``smart_wait()``. This
+        #        is referred to as a **pre-resume**. The remote thread
+        #        doing a ``smart_wait()`` request in this case will simply
+        #        see that the event is already set, clear it, and return
+        #        immediately.
+        #     3) Once the ``smart_resume()`` request has set the waiter's
+        #        event, it is unpredictable when the waiter will clear
+        #        the event. If a subsequent ``smart_resume()`` is issued
+        #        before the event has been cleared, it will loop until the
+        #        waiter clears it or a timeout occurs.
+        #     4) ``smart_resume()`` will set the event only for a thread
+        #        that is in the alive state. Once the event is set, the
+        #        ``smart_resume()`` is considered complete. The waiter
+        #        thread may subsequently fail and move to the stopped
+        #        state before clearing the event. No error is raised by
+        #        ``smart_resume()`` nor ``smart_wait()`` in this case. A
+        #        debug log message is issued when a thread is removed
+        #        from the configuration with its wait event still set.
+
+        # """
+        # smart_resume is used for the following cases:
+        #
+        #     1) to resume a thread that is blocked after having issued a
+        #        smart_wait
+        #     2) to pre-resume a thread that will be issuing a smart_wait.
+        #        In this case, the smart_wait will simply see that it has
+        #        already been resumed and will return immediately.
+        #     3) to resume or pre-resume multiple threads as a combination
+        #        of zero or more case #1 scenarios and zero or more case
+        #        #2 scenarios.
+        #
+        # An error is raised if any of the specified waiter threads are
+        # stopped.
+        #
+        # A smart_resume may be issued for any number of waiters that are
+        # in any combination of unregistered, registered, or alive states.
+        # smart_resume will perform the resume only when a waiter is in
+        # the alive state. If timeout is specified, a timeout error is
+        # raised if one or more waiters fail to achieve the alive state
+        # within the specified time.
+        #
+        # Another case involving a timeout can occur when a previous
+        # smart_wait has not yet completed after having been resumed,
+        # and a new resume is issued. See the notes section below for a
+        # a more thorough explanation.
+        #
+
+        #
+        # Examples in this section cover the following cases:
+        #
+        #     1) smart_resume multiple waiters
+        #
+        # :Example1: Invoke ''smart_resume()'' for threads that invoke
+        #            ''smart_wait()'' both before and after the
+        #            ''smart_resume()''
+        #
+        # .. code-block:: python
+        #
+        #     from scottbrian_paratools.smart_thread import SmartThread
+        #     import time
+        #
+        #     def f1_beta(smart_thread: SmartThread) -> None:
+        #         print(f'f1_beta about to wait')
+        #         smart_thread.smart_wait(resumers='alpha')
+        #         print(f'f1_beta back from wait')
+        #
+        #     def f2_charlie(smart_thread: SmartThread) -> None:
+        #         time.sleep(1)
+        #         print(f'f2_charlie about to wait')
+        #         smart_thread.smart_wait(resumers='alpha')
+        #         time.sleep(1)
+        #         print(f'f2_charlie back from wait')
+        #
+        #     def f3_delta(smart_thread: SmartThread) -> None:
+        #         time.sleep(4)
+        #         print(f'f3_delta about to wait')
+        #         smart_thread.smart_wait(resumers='alpha')
+        #         print(f'f3_delta back from wait')
+        #
+        #     def f4_echo(smart_thread: SmartThread) -> None:
+        #         time.sleep(5)
+        #         print(f'f4_echo about to wait')
+        #         smart_thread.smart_wait(resumers='alpha')
+        #         print(f'f4_echo back from wait')
+        #
+        #     print('mainline alpha entered')
+        #     alpha_smart_thread = SmartThread(name='alpha')
+        #     beta_smart_thread = SmartThread(name='beta',
+        #                                     target=f1_beta,
+        #                                     thread_parm_name='smart_thread')
+        #     charlie_smart_thread = SmartThread(name='charlie',
+        #                                        target=f2_charlie,
+        #                                        thread_parm_name='smart_thread')
+        #     delta_smart_thread = SmartThread(name='delta',
+        #                                      target=f3_delta,
+        #                                      thread_parm_name='smart_thread')
+        #     echo_smart_thread = SmartThread(name='echo',
+        #                                     target=f4_echo,
+        #                                     thread_parm_name='smart_thread')
+        #     time.sleep(2)
+        #     print('alpha about to resume threads')
+        #     alpha_smart_thread.smart_resume(waiters=('beta',
+        #                                              'charlie',
+        #                                              'delta',
+        #                                              'echo'))
+        #     alpha_smart_thread.smart_join(targets=['beta',
+        #                                            'charlie',
+        #                                            'delta',
+        #                                            'echo'])
+        #     print('mainline alpha exiting')
+        #
+        #
+        # Expected output for Example1:
+        #
+        #     mainline alpha entered
+        #     f1_beta about to wait
+        #     f2_charlie about to wait
+        #     alpha about to resume threads
+        #     f1_beta back from wait
+        #     f2_charlie back from wait
+        #     f3_delta about to wait
+        #     f3_delta back from wait
+        #     f4_echo about to wait
+        #     f4_echo back from wait
+        #     mainline alpha exiting
+        #
+        # """
         ################################################################
         # Cases where we loop until remote is ready:
         # 1) Remote waiting and event already resumed. This is a case
@@ -3409,11 +3478,12 @@ class SmartThread:
                issue a request that waits for the other thread to
                respond. The following combinations can lead to a
                deadlock:
-                   a) smart_wait vs smart_wait
-                   b) smart_wait vs smart_recv
-                   c) smart_wait vs smart_sync
-                   d) smart_recv vs smart_recv
-                   e) smart_recv vs smart_sync
+
+                 a) smart_wait vs smart_wait
+                 b) smart_wait vs smart_recv
+                 c) smart_wait vs smart_sync
+                 d) smart_recv vs smart_recv
+                 e) smart_recv vs smart_sync
 
                Note that a smart_wait will not deadlock if the
                wait_event was already resumed earlier by a smart_resume,
@@ -3689,11 +3759,12 @@ class SmartThread:
 
         Raises:
             SmartThreadRequestTimedOut: request processing timed out
-                waiting for the remote.  # noqa DAR402
+                waiting for the remote.
             SmartThreadRemoteThreadNotAlive: request detected remote
-                thread is not alive.  # noqa DAR402
+                thread is not alive.
             SmartThreadDeadlockDetected: a deadlock was detected
-                between two requests.  # noqa DAR402
+                between two requests.
+        .. # noqa DAR402
 
         """
         with self.cmd_lock:
@@ -3736,17 +3807,20 @@ class SmartThread:
 
         Raises:
             SmartThreadRequestTimedOut: request processing timed out
-                waiting for the remote.  # noqa DAR402
+                waiting for the remote.
             SmartThreadRemoteThreadNotAlive: request detected remote
-                thread is not alive.  # noqa DAR402
+                thread is not alive.
             SmartThreadDeadlockDetected: a deadlock was detected
-                between two requests.  # noqa DAR402
+                between two requests.
+        .. # noqa DAR402
 
         Notes:
+
             1) request_pending is used to keep the cmd_runner pair_array
                entry from being removed between the times the lock is
                dropped until we have completed the request and any
                cleanup that is needed for a failed request
+
         """
         if request_block.request == ReqType.Smart_recv:
             logger.debug(f'TestDebug {self.name} entered _request_loop '
@@ -4363,6 +4437,7 @@ class SmartThread:
 
         Returns:
             the log message to use for the exit call
+
         """
         if request_block.remotes:
             targets_to_use = sorted(request_block.remotes)
