@@ -1,4 +1,4 @@
-"""Module smart_thread.
+"""Module smart_thread.py.
 
 ===========
 SmartThread
@@ -12,6 +12,7 @@ ended.
 
 SmartThread is built on top of the Python threading module. There are
 three cases where SmartThread can be instantiated:
+
     1) SmartThread is instantiated with no arguments for *target* nor
        *thread*. Internal variable *thread* is set from
        ''threading.current_thread()''.
@@ -40,24 +41,25 @@ for each combination of SmartThread instances.
 
 Each SmartThread is in a specific state at any one time. These states
 are described as a ThreadState as follows:
+
     1) ThreadState.Unregistered: a SmartThread instance does not yet
        exist in the registry, or its thread has ended and the
        SmartThread was removed from the registry.
     2) ThreadState.Initializing: the SmartThread instance is created and
        is being initialized, but has not yet been registered. This state
        occurs only while the SmartThread __init__ method is running.      
-    2) ThreadState.Registered: the SmartThread instance exists and is in
+    3) ThreadState.Registered: the SmartThread instance exists and is in
        the registry, but the thread has not yet been stated.
-    3) ThreadState.Starting: the SmartThread instance exists and is in
+    4) ThreadState.Starting: the SmartThread instance exists and is in
        the registry, and the thread is being started by
        ''smart_start()''. This state only applies when the SmartThread
        is created with *target* and ''smart_start()'' is invoked. When
        the SmartThread is created from the current thread, the state
        moves from ThreadState.Initializing to ThreadState.Alive.      
-    3) ThreadState.Alive: the SmartThread instance exists and is in the
+    5) ThreadState.Alive: the SmartThread instance exists and is in the
        registry, and the thread has been started and is alive (threading
        is_alive method returns True).
-    4) Threading.Stopped: the SmartThread instance exists and is in the
+    6) Threading.Stopped: the SmartThread instance exists and is in the
        registry, but the thread has ended. Note that from the
        perspective of some SmartThread requests, if the target of the
        request was not in the Threading.Stopped state when the request
@@ -68,11 +70,13 @@ are described as a ThreadState as follows:
        of the request.
 
 The SmartThread requests can be divided into category's as follows:
+
     1) SmartThread configuration commands: ''smart_start()'',
        ''smart_unreg()'', and ''smart_join()''
     2) SmartThread paired requests: ''smart_send()'' paired with
        ''smart_recv()'' and ''smart_resume()'' paired with
        ''smart_wait()''. These can be subdivided as follows:
+
            a) throw requests: ''smart_send() and ''smart_resume()''
            b) catch requests: ''smart_recv()'' and ''smart_wait()''
     3) SmartThread handshake requests: ''smart_sync()''
@@ -80,6 +84,7 @@ The SmartThread requests can be divided into category's as follows:
 The SmartThread instantiation process and the configuration
 commands require various ThreadState states and affect the configuration
 and ThreadState transitions:
+
     1) SmartThread instantiation:
         a) requires ThreadState.Unregistered. An an error is raised
            if a different SmartThread instance of the same name is
@@ -91,7 +96,7 @@ and ThreadState transitions:
            thread is already alive, move the state to ThreadState.Alive 
         d) when other SmartThread instances exist, builds pairs of
            status blocks in the pair array
-        f) if the thread is not yet alive and *auto_start* is True,
+        e) if the thread is not yet alive and *auto_start* is True,
            ''smart_start()'' is called.
     2) ''smart_start()'':
         a) requires ThreadState.Registered. An error is raised if the
@@ -115,7 +120,7 @@ and ThreadState transitions:
            ThreadState.Alive, or ThreadState.Stopped. An error is raised
            if the SmartThread instance is in any other state. If needed,
            ''smart_join()'' will loop until the SmartThread instance
-            enters ThreadState.Stopped or a timeout is recognized
+           enters ThreadState.Stopped or a timeout is recognized
         b) removes the SmartThread instance from the registry and 
            removes the status blocks from the pair array for any an all
            combinations involving the SmartThread being unregistered 
@@ -142,26 +147,30 @@ Example1: Create a SmartThread configuration for threads named
           Note the use of auto_start=False and invoking
           ''smart_start()''.
 
->>> from scottbrian_paratools.smart_thread import SmartThread
->>> def f1() -> None:
-...     print('f1 beta entered')
-...     beta_smart_thread.smart_send(receivers='alpha', msg='hi alpha, this is beta')
-...     beta_smart_thread.smart_wait(resumers='alpha')
-...     print('f1 beta exiting')
->>> print('mainline alpha entered')
->>> alpha_smart_thread = SmartThread(name='alpha')
->>> beta_smart_thread = SmartThread(name='beta', target=f1, auto_start=False)
->>> beta_smart_thread.smart_start()
->>> msg_from_beta = alpha_smart_thread.smart_recv(senders='beta')
->>> print(msg_from_beta)
->>> alpha_smart_thread.smart_resume(waiters='beta')
->>> alpha_smart_thread.smart_join(targets='beta')
->>> print('mainline exiting')
-mainline entered
-f1 beta entered
-{'beta': ['hi alpha, this is beta']}
-f1 beta exiting
-mainline alpha exiting
+.. code-block:: python
+
+    from scottbrian_paratools.smart_thread import SmartThread
+    def f1() -> None:
+        print('f1 beta entered')
+        beta_smart_thread.smart_send(receivers='alpha', msg='hi alpha, this is beta')
+        beta_smart_thread.smart_wait(resumers='alpha')
+        print('f1 beta exiting')
+    print('mainline alpha entered')
+    alpha_smart_thread = SmartThread(name='alpha')
+    beta_smart_thread = SmartThread(name='beta', target=f1, auto_start=False)
+    beta_smart_thread.smart_start()
+    msg_from_beta = alpha_smart_thread.smart_recv(senders='beta')
+    print(msg_from_beta)
+    alpha_smart_thread.smart_resume(waiters='beta')
+    alpha_smart_thread.smart_join(targets='beta')
+    print('mainline exiting')
+
+Expected output for Example1:
+    mainline entered
+    f1 beta entered
+    {'beta': ['hi alpha, this is beta']}
+    f1 beta exiting
+    mainline alpha exiting
 
 
 Example2: Create a SmartThread configuration for threads named
@@ -169,29 +178,38 @@ Example2: Create a SmartThread configuration for threads named
           Note the use of auto_start=True and passing the SmartThread
           instance to the target via the thread_parm_name.
 
->>> from scottbrian_paratools.smart_thread import SmartThread
->>> def f1(smart_thread: SmartThread) -> None:
-...     print('f1 beta entered')
-...     smart_thread.smart_send(receivers='alpha',
-...                             msg='hi alpha, this is beta')
-...     smart_thread.smart_wait(resumers='alpha')
-...     print('f1 beta exiting')
->>> print('mainline alpha entered')
->>> alpha_smart_thread = SmartThread(name='alpha')
->>> beta_smart_thread = SmartThread(name='beta',
-...                           target=f1,
-...                           auto_start=True,
-...                           thread_parm_name='smart_thread')
->>> msg_from_beta = alpha_smart_thread.smart_recv(senders='beta')
->>> print(msg_from_beta)
->>> alpha_smart_thread.smart_resume(waiters='beta')
->>> alpha_smart_thread.smart_join(targets='beta')
->>> print('mainline exiting')
-mainline alpha entered
-f1 beta entered
-{'beta': ['hi alpha, this is beta']}
-f1 beta exiting
-mainline alpha exiting
+.. invisible-code-block: python
+
+    del SmartThread._registry['alpha']
+
+.. code-block:: python
+
+    from scottbrian_paratools.smart_thread import SmartThread
+    def f1(smart_thread: SmartThread) -> None:
+        print('f1 beta entered')
+        smart_thread.smart_send(receivers='alpha',
+                                msg='hi alpha, this is beta')
+        smart_thread.smart_wait(resumers='alpha')
+        print('f1 beta exiting')
+    print('mainline alpha entered')
+    alpha_smart_thread = SmartThread(name='alpha')
+    beta_smart_thread = SmartThread(name='beta',
+                              target=f1,
+                              auto_start=True,
+                              thread_parm_name='smart_thread')
+    msg_from_beta = alpha_smart_thread.smart_recv(senders='beta')
+    print(msg_from_beta)
+    alpha_smart_thread.smart_resume(waiters='beta')
+    alpha_smart_thread.smart_join(targets='beta')
+    print('mainline exiting')
+
+Expected output for Example2:
+
+    mainline alpha entered
+    f1 beta entered
+    {'beta': ['hi alpha, this is beta']}
+    f1 beta exiting
+    mainline alpha exiting
 
 
 Example3: Create a SmartThread configuration for threads named
@@ -200,29 +218,38 @@ Example3: Create a SmartThread configuration for threads named
           thread and having the target thread instantiate the
           SmartThread.
 
->>> from scottbrian_paratools.smart_thread import SmartThread
->>> import threading
->>> def f1() -> None:
-...     print('f1 beta entered')
-...     beta_smart_thread = SmartThread(name='beta')
-...     beta_smart_thread.smart_send(receivers='alpha',
-...                                  msg='hi alpha, this is beta')
-...     beta_smart_thread.smart_wait(resumers='alpha')
-...     print('f1 beta exiting')
->>> print('mainline alpha entered')
->>> alpha_smart_thread = SmartThread(name='alpha')
->>> beta_thread = threading.Thread(target=f1, name='beta')
->>> beta_thread.start()
->>> msg_from_beta = alpha_smart_thread.smart_recv(senders='beta')
->>> print(msg_from_beta)
->>> alpha_smart_thread.smart_resume(waiters='beta')
->>> alpha_smart_thread.smart_join(targets='beta')
->>> print('mainline alpha exiting')
-mainline entered
-f1 beta entered
-{'beta': ['hi alpha, this is beta']}
-f1 beta exiting
-mainline alpha exiting
+.. invisible-code-block: python
+
+    del SmartThread._registry['alpha']
+
+.. code-block:: python
+
+    from scottbrian_paratools.smart_thread import SmartThread
+    import threading
+    def f1() -> None:
+        print('f1 beta entered')
+        beta_smart_thread = SmartThread(name='beta')
+        beta_smart_thread.smart_send(receivers='alpha',
+                                     msg='hi alpha, this is beta')
+        beta_smart_thread.smart_wait(resumers='alpha')
+        print('f1 beta exiting')
+    print('mainline alpha entered')
+    alpha_smart_thread = SmartThread(name='alpha')
+    beta_thread = threading.Thread(target=f1, name='beta')
+    beta_thread.start()
+    msg_from_beta = alpha_smart_thread.smart_recv(senders='beta')
+    print(msg_from_beta)
+    alpha_smart_thread.smart_resume(waiters='beta')
+    alpha_smart_thread.smart_join(targets='beta')
+    print('mainline alpha exiting')
+
+Expected output for Example3:
+
+    mainline entered
+    f1 beta entered
+    {'beta': ['hi alpha, this is beta']}
+    f1 beta exiting
+    mainline alpha exiting
 
 
 Example4: Create a SmartThread configuration for threads named alpha and
@@ -230,6 +257,10 @@ Example4: Create a SmartThread configuration for threads named alpha and
           use of the ThreadApp class that inherits threading.Thread as a
           base and uses a run method. This example demonstrates the use of
           the *thread* argument on the SmartThread instantiation.
+
+.. invisible-code-block: python
+
+    del SmartThread._registry['alpha']
 
 >>> from scottbrian_paratools.smart_thread import SmartThread
 >>> import threading
@@ -250,15 +281,27 @@ Example4: Create a SmartThread configuration for threads named alpha and
 ...        self.smart_thread.smart_wait(resumers='alpha')
 ...        print(f'{self.smart_thread.name} exiting run method')
 >>> print('mainline alpha entered')
+mainline alpha entered
+
 >>> alpha_smart_thread = SmartThread(name='alpha')
 >>> thread_app = ThreadApp(name='beta')
 >>> my_msg = alpha_smart_thread.smart_recv(senders='beta')
 >>> print(my_msg)
+{'beta': ['hi alpha, this is beta']}
+
 >>> time.sleep(2)
+beta about to wait
+
 >>> print('alpha about to resume beta')
+alpha about to resume beta
+
 >>> alpha_smart_thread.smart_resume(waiters='beta')
 >>> alpha_smart_thread.smart_join(targets='beta')
 >>> print('mainline alpha exiting')
+mainline alpha exiting
+
+
+
 mainline alpha entered
 beta entry to run method
 {'beta': ['hi alpha, this is beta']}
@@ -275,41 +318,45 @@ Example4: Create a SmartThread configuration for threads named alpha and
           example demonstrates the use of the *thread* argument on the
           SmartThread instantiation.
 
->>> from scottbrian_paratools.smart_thread import SmartThread
->>> import threading
->>> import time
->>> class SmartThreadApp(threading.Thread, SmartThread):
-...     def __init__(self, name: str) -> None:
-...         threading.Thread.__init__(self, name=name)
-...         SmartThread.__init__(self,
-...                              name=name,
-...                              thread=self,
-...                              auto_start=True)
-...     def run(self) -> None:
-...         print(f'{self.name} entry to run method')
-...         self.smart_send(msg='hi alpha, this is beta',
-...                         receivers='alpha')
-...         time.sleep(1)
-...         print(f'{self.name} about to wait')
-...         self.smart_wait(resumers='alpha')
-...         print(f'{self.name} exiting run method')
->>> print('mainline alpha entered')
->>> alpha_smart_thread = SmartThread(name='alpha')
->>> thread_app = SmartThreadApp(name='beta')
->>> my_msg = alpha_smart_thread.smart_recv(senders='beta')
->>> print(my_msg)
->>> time.sleep(2)
->>> print('alpha about to resume beta')
->>> alpha_smart_thread.smart_resume(waiters='beta')
->>> alpha_smart_thread.smart_join(targets='beta')
->>> print('mainline alpha exiting')
-mainline alpha entered
-beta entry to run method
-{'beta': ['hi alpha, this is beta']}
-beta about to wait
-alpha about to resume beta
-beta exiting run method
-mainline alpha exiting
+.. invisible-code-block: python
+
+    del SmartThread._registry['alpha']
+
+# >>> from scottbrian_paratools.smart_thread import SmartThread
+# >>> import threading
+# >>> import time
+# >>> class SmartThreadApp(threading.Thread, SmartThread):
+# ...     def __init__(self, name: str) -> None:
+# ...         threading.Thread.__init__(self, name=name)
+# ...         SmartThread.__init__(self,
+# ...                              name=name,
+# ...                              thread=self,
+# ...                              auto_start=True)
+# ...     def run(self) -> None:
+# ...         print(f'{self.name} entry to run method')
+# ...         self.smart_send(msg='hi alpha, this is beta',
+# ...                         receivers='alpha')
+# ...         time.sleep(1)
+# ...         print(f'{self.name} about to wait')
+# ...         self.smart_wait(resumers='alpha')
+# ...         print(f'{self.name} exiting run method')
+# >>> print('mainline alpha entered')
+# >>> alpha_smart_thread = SmartThread(name='alpha')
+# >>> thread_app = SmartThreadApp(name='beta')
+# >>> my_msg = alpha_smart_thread.smart_recv(senders='beta')
+# >>> print(my_msg)
+# >>> time.sleep(2)
+# >>> print('alpha about to resume beta')
+# >>> alpha_smart_thread.smart_resume(waiters='beta')
+# >>> alpha_smart_thread.smart_join(targets='beta')
+# >>> print('mainline alpha exiting')
+# mainline alpha entered
+# beta entry to run method
+# {'beta': ['hi alpha, this is beta']}
+# beta about to wait
+# alpha about to resume beta
+# beta exiting run method
+# mainline alpha exiting
 
 """
 
@@ -620,21 +667,24 @@ class SmartThread:
     # Coordinates the various actions involved in satisfying a
     # smart_send, smart_recv, smart_wait, smart_resume, or smart_sync
     # request.
+    #
     # Notes:
-    # 1) target_create_timee is used to ensure that a catch type request
-    # (smart_recv or wait) or handshake request (sync) are satisfied by
-    # the remote that was in the configuration when thee request was
-    # initiated. Normally, each request will periodically check the
-    # remote state and will raise an error if the remote has stopped.
-    # There is, however, the possibility that the remote will be started
-    # again (resurrected) and could potentially complete the request
-    # before the current thread notices that the remote had been
-    # stopped. We don't want a resurrected remote to complete the
-    # request, so the remote will check to ensure its create time is
-    # equal target_create_time before completing the request.
-    # 2) request_pending is used to prevent the pair array item from
-    # being removed, and this is needed to ensure that the
-    # target_create_time remains valid.
+    #     1) target_create_timee is used to ensure that a catch type
+    #        request (smart_recv or wait) or handshake request (sync)
+    #        are satisfied by the remote that was in the configuration
+    #        when the request was initiated. Normally, each request will
+    #        periodically check the remote state and will raise an error
+    #        if the remote has stopped. There is, however, the
+    #        possibility that the remote will be started again
+    #        (resurrected) and could potentially complete the request
+    #        before the current thread notices that the remote had been
+    #        stopped. We don't want a resurrected remote to complete the
+    #        request, so the remote will check to ensure its create time
+    #        is equal target_create_time before completing the request.
+    #     2) request_pending is used to prevent the pair array item from
+    #        being removed, and this is needed to ensure that the
+    #        target_create_time remains valid.
+    #
     ####################################################################
     @dataclass
     class ConnectionStatusBlock:
@@ -691,13 +741,12 @@ class SmartThread:
                  max_msgs: int = 0,
                  request_max_interval: IntFloat = K_REQUEST_MAX_INTERVAL
                  ) -> None:
-        """Initialize an instance of the SmartThread class."""
+        """Initialize an instance of the SmartThread class.
 
-        """
         Args:
             name: name to be used to refer to this SmartThread. The name
-                      may be the same as the threading.Thread name, but
-                      it is not required that they be the same.
+                may be the same as the threading.Thread name, but
+                it is not required that they be the same.
             target: specifies that a thread is to be created and started
                         with the given target. Mutually exclusive with
                         the *thread* specification. Note that the
@@ -738,23 +787,24 @@ class SmartThread:
                   target specified.
 
         Notes:
-              There are five possible timeout cases at the time a
-              request is made:
-              a. default_timeout = None, zero or less
-                 request timeout = None, zero or less
-                 result: the request will not timeout
-              b. default_timeout = None, zero or less
-                 request timeout = value above zero
-                 result: request timeout value will be used
-              c. default_timeout = above zero
-                 request_timeout = None
-                 result: default_timeout value will be used
-              d. default_timeout = above zero
-                 request_timeout = zero or less
-                 result: the request will not time out
-              e. default_timeout = value above zero
-                 request_timeout = value above zero
-                 result: request timeout value will be used
+            There are five possible timeout cases at the time a
+            request is made:
+
+                a. default_timeout = None, zero or less
+                   request timeout = None, zero or less
+                   result: the request will not timeout
+                b. default_timeout = None, zero or less
+                   request timeout = value above zero
+                   result: request timeout value will be used
+                c. default_timeout = above zero
+                   request_timeout = None
+                   result: default_timeout value will be used
+                d. default_timeout = above zero
+                   request_timeout = zero or less
+                   result: the request will not time out
+                e. default_timeout = value above zero
+                   request_timeout = value above zero
+                   result: request timeout value will be used
 
         """
         self.specified_args = locals()  # used for __repr__, see below
@@ -844,18 +894,18 @@ class SmartThread:
     # repr
     ####################################################################
     def __repr__(self) -> str:
-        """Return a representation of the class."""
+        """Return a representation of the class.
 
-        """
+
         Returns:
             The representation as how the class is instantiated
 
         :Example: instantiate a SmartThread and call repr
 
-        >>> import scottbrian_paratools.smart_event as st
+        >>> from scottbrian_paratools.smart_thread import SmartThread
         >>> smart_thread = SmartThread(name='alpha')
         >>> repr(smart_thread)
-        SmartThread(name='alpha')
+        "SmartThread(name='alpha')"
 
         """
         if TYPE_CHECKING:
@@ -879,9 +929,8 @@ class SmartThread:
     ####################################################################
     @staticmethod
     def _get_state(name: str) -> ThreadState:
-        """Get the status of a thread."""
+        """Get the status of a thread.
 
-        """
         Args:
             name: name of thread to get status for
 
@@ -911,9 +960,8 @@ class SmartThread:
     ####################################################################
     @staticmethod
     def _get_target_state(pk_remote: PairKeyRemote) -> ThreadState:
-        """Get status of thread that is target of a request."""
+        """Get status of thread that is target of a request.
 
-        """
         Args:
             pk_remote: contains target thread info
 
@@ -951,9 +999,8 @@ class SmartThread:
     @staticmethod
     def _set_state(target_thread: "SmartThread",
                    new_state: ThreadState) -> bool:
-        """Set the state for a thread."""
+        """Set the state for a thread.
 
-        """
         Args:
             target_thread: thread to set status for
             new_state: the new status to be set
@@ -976,9 +1023,8 @@ class SmartThread:
     # _register
     ####################################################################
     def _register(self) -> None:
-        """Register SmartThread in the class registry."""
+        """Register SmartThread in the class registry.
 
-        """
         Raises:
             SmartThreadIncorrectNameSpecified: The name for SmartThread
                 must be of type str.
@@ -1373,28 +1419,38 @@ class SmartThread:
     def smart_start(self,
                     targets: Optional[Iterable] = None,
                     log_msg: Optional[str] = None) -> None:
-        """Start the smart thread."""
+        """Start the smart thread.
 
-        """
         Args:
             targets: names of smart threads to be started
             log_msg: log message to issue for request
 
         :Example1: Create and start a SmartThread
 
+        .. invisible-code-block: python
+
+            del SmartThread._registry['alpha']
+
         >>> from scottbrian_paratools.smart_thread import SmartThread
         >>> def f1() -> None:
         ...     print('f1 beta entered')
         ...     print('f1 beta exiting')
         >>> print('mainline alpha entered')
+        mainline alpha entered
+
         >>> alpha_smart_thread = SmartThread(name='alpha')
         >>> beta_smart_thread = SmartThread(name='beta',
         ...                                 target=f1,
         ...                                 auto_start=False)
         >>> print('alpha about to start beta')
+        alpha about to start beta
+
         >>> beta_smart_thread.smart_start()
         >>> alpha_smart_thread.smart_join(targets='beta')
         >>> print('mainline alpha exiting')
+        mainline alpha exiting
+
+
         mainline alpha entered
         alpha about to start beta
         f1 beta entered
@@ -1402,6 +1458,10 @@ class SmartThread:
         mainline alpha exiting
         
         :Example2: Create and start two SmartThread threads.
+
+        .. invisible-code-block: python
+
+            del SmartThread._registry['alpha']
 
         >>> from scottbrian_paratools.smart_thread import SmartThread
         >>> import time
@@ -1511,9 +1571,8 @@ class SmartThread:
     def smart_unreg(self, *,
                     targets: Iterable,
                     log_msg: Optional[str] = None) -> None:
-        """Unregister threads that were never started."""
+        """Unregister threads that were never started.
 
-        """
         Args:
             targets: thread names that are to be unregistered
             log_msg: log message to issue
@@ -1525,6 +1584,10 @@ class SmartThread:
                enters the active state
 
         :Example: Create and unregister a SmartThread thread.
+
+        .. invisible-code-block: python
+
+            del SmartThread._registry['alpha']
 
         >>> from scottbrian_paratools.smart_thread import SmartThread
         >>> def f1_beta() -> None:
@@ -1603,9 +1666,8 @@ class SmartThread:
                    targets: Iterable,
                    timeout: OptIntFloat = None,
                    log_msg: Optional[str] = None) -> None:
-        """Join with remote receivers."""
+        """Join with remote receivers.
 
-        """
         Args:
             targets: thread names that are to be joined
             timeout: timeout to use instead of default timeout
@@ -1616,6 +1678,10 @@ class SmartThread:
                 receivers.
         
         Example1: Create and join a SmartThread thread.
+
+        .. invisible-code-block: python
+
+            del SmartThread._registry['alpha']
 
         >>> from scottbrian_paratools.smart_thread import SmartThread
         >>> import time
@@ -1730,9 +1796,8 @@ class SmartThread:
                    receivers: Optional[Iterable] = None,
                    log_msg: Optional[str] = None,
                    timeout: OptIntFloat = None) -> None:
-        """Send one or more messages to remote threads."""
+        """Send one or more messages to remote threads.
 
-        """
         *smart_send* can be used to send a single message or multiple
         messages to a single remote thread, to multiple remote threads,
         or to every active remote thread in the configuration. A message
@@ -1796,6 +1861,10 @@ class SmartThread:
         :Example: case 1: send a single message to a single remote
                   thread
 
+        .. invisible-code-block: python
+
+            del SmartThread._registry['alpha']
+
         >>> from scottbrian_paratools.smart_thread import SmartThread
         >>> def f1(smart_thread: SmartThread) -> None:
         ...     print('f1 beta entered')
@@ -1818,6 +1887,10 @@ class SmartThread:
 
         :Example: case 2: send a single message to multiple remote
                   threads
+
+        .. invisible-code-block: python
+
+            del SmartThread._registry['alpha']
 
         >>> from scottbrian_paratools.smart_thread import SmartThread
         >>> import time
@@ -1855,6 +1928,10 @@ class SmartThread:
                   omitting the *receivers* argument). Note the use of
                   smart_wait and smart_resume to coordinate the actions
                   for ordered and consistent print output.
+
+        .. invisible-code-block: python
+
+            del SmartThread._registry['alpha']
 
         >>> from scottbrian_paratools.smart_thread import SmartThread
         >>> def f1(smart_thread: SmartThread,
@@ -1930,6 +2007,10 @@ class SmartThread:
         :Example: case 5: send multiple messages to multiple remote
                   threads
 
+        .. invisible-code-block: python
+
+            del SmartThread._registry['alpha']
+
         >>> from scottbrian_paratools.smart_thread import SmartThread
         >>> def f1(smart_thread: SmartThread,
         ...        wait_for: Optional[str] = None,
@@ -1984,6 +2065,10 @@ class SmartThread:
         :Example: case 6: send any mixture of single and multiple
                   messages individually to each remote thread
 
+        .. invisible-code-block: python
+
+            del SmartThread._registry['alpha']
+
         >>> from scottbrian_paratools.smart_thread import SmartThread
         >>> def f1(smart_thread: SmartThread,
         ...        wait_for: Optional[str] = None,
@@ -2015,7 +2100,7 @@ class SmartThread:
         ...                                  kwargs={
         ...                                      'wait_for': 'charlie',
         ...                                      'resume_target': 'alpha'})
-        >>> msgs_to_send = st.SendMsgs(send_msgs= {
+        >>> msgs_to_send = SendMsgs(send_msgs= {
         ...     'beta': 'hi beta',
         ...     'charlie': ('hi charlie', 'have a great day'),
         ...     'delta': [42, 'hi delta', {'nums': (1, 2, 3)}]})
@@ -2166,9 +2251,8 @@ class SmartThread:
                    senders: Optional[Iterable] = None,
                    log_msg: Optional[str] = None,
                    timeout: OptIntFloat = None) -> dict[str, Any]:
-        """Receive one or more messages from remote threads."""
+        """Receive one or more messages from remote threads.
 
-        """
         For *smart_recv*, a message is any type (e.g., text, lists,
         sets, class objects). *smart_recv* can be used to receive a
         single message or multiple messages from a single remote
@@ -2395,7 +2479,7 @@ class SmartThread:
         ...     if resume_target:
         ...         smart_thread.smart_resume(waiters=resume_target)
         >>> print('mainline alpha entered')
-        >>> alpha_smart_thread = SmartThread(name='alpha')
+        >>> # alpha_smart_thread = SmartThread(name='alpha')
         >>> beta_smart_thread = SmartThread(name='beta',
         ...                                 target=f1,
         ...                                 thread_parm_name='smart_thread',
@@ -2637,9 +2721,8 @@ class SmartThread:
                    wait_for: WaitFor = WaitFor.All,
                    log_msg: Optional[str] = None,
                    timeout: OptIntFloat = None) -> list[str]:
-        """Wait until resumed."""
+        """Wait until resumed.
 
-        """
         smart_wait waits until it is resumed. These are the cases:
             1) smart_wait can provide one remote thread name as an
                argument for the *resumers* parameter and will then wait
@@ -3009,9 +3092,8 @@ class SmartThread:
                      waiters: Iterable,
                      timeout: OptIntFloat = None,
                      log_msg: Optional[str] = None) -> None:
-        """Resume a waiting or soon to be waiting thread."""
+        """Resume a waiting or soon to be waiting thread.
 
-        """
         smart_resume is used for the following cases:
             1) to resume a thread that is blocked after having issued a
                smart_wait
@@ -3279,9 +3361,8 @@ class SmartThread:
                    targets: Iterable,
                    log_msg: Optional[str] = None,
                    timeout: OptIntFloat = None):
-        """Sync up with remote threads."""
+        """Sync up with remote threads.
 
-        """ 
         Each thread that invokes ''smart_sync()'' first sets the sync
         event for each target, and the waits on its corresponding sync
         event for each target. This ensures that every thread has

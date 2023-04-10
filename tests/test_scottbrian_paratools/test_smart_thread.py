@@ -21000,7 +21000,7 @@ class TestSmartThreadExamples:
                                          thread_parm_name='smart_thread',
                                          kwargs={'wait_for': 'charlie',
                                                  'resume_target': 'alpha'})
-        msgs_to_send = st.SendMsgs(send_msgs={
+        msgs_to_send = SendMsgs(send_msgs={
             'beta': 'hi beta',
             'charlie': ('hi charlie', 'have a great day'),
             'delta': [42, 'hi delta', {'nums': (1, 2, 3)}]})

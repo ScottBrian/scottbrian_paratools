@@ -10,7 +10,7 @@
    :maxdepth: 4
    :caption: API Reference:
 
-   smart_event <smart_event_link>
+   smart_thread <smart_thread_link>
 
 
 Indices and tables

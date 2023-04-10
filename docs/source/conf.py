@@ -24,7 +24,7 @@ sys.path.insert(0, fspath(proj_dir / 'src/scottbrian_paratools'))
 # -- Project information -----------------------------------------------------
 
 project = 'scottbrian_paratools'
-copyright = '2021, Scott Tuttle'
+copyright = '2023, Scott Tuttle'
 author = 'Scott Tuttle'
 
 # The full version, including alpha/beta/rc tags
