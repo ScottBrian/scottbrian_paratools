@@ -36,8 +36,8 @@ A SmartThread configuration is composed of class variables that include
 a dictionary for a registry, and another dictionary called a pair array
 for an array of status blocks. Each status block has a dictionary with
 two items, one for each of two SmartThread instances, and is used to
-coordinate the SmartThread requests between them. There is a status block
-for each combination of SmartThread instances.
+coordinate the SmartThread requests between them. There is a status
+block for each combination of SmartThread instances.
 
 Each SmartThread is in a specific state at any one time. These states
 are described as a ThreadState as follows:
@@ -323,41 +323,41 @@ Example4: Create a SmartThread configuration for threads named alpha and
 
     del SmartThread._registry['alpha']
 
-# >>> from scottbrian_paratools.smart_thread import SmartThread
-# >>> import threading
-# >>> import time
-# >>> class SmartThreadApp(threading.Thread, SmartThread):
-# ...     def __init__(self, name: str) -> None:
-# ...         threading.Thread.__init__(self, name=name)
-# ...         SmartThread.__init__(self,
-# ...                              name=name,
-# ...                              thread=self,
-# ...                              auto_start=True)
-# ...     def run(self) -> None:
-# ...         print(f'{self.name} entry to run method')
-# ...         self.smart_send(msg='hi alpha, this is beta',
-# ...                         receivers='alpha')
-# ...         time.sleep(1)
-# ...         print(f'{self.name} about to wait')
-# ...         self.smart_wait(resumers='alpha')
-# ...         print(f'{self.name} exiting run method')
-# >>> print('mainline alpha entered')
-# >>> alpha_smart_thread = SmartThread(name='alpha')
-# >>> thread_app = SmartThreadApp(name='beta')
-# >>> my_msg = alpha_smart_thread.smart_recv(senders='beta')
-# >>> print(my_msg)
-# >>> time.sleep(2)
-# >>> print('alpha about to resume beta')
-# >>> alpha_smart_thread.smart_resume(waiters='beta')
-# >>> alpha_smart_thread.smart_join(targets='beta')
-# >>> print('mainline alpha exiting')
-# mainline alpha entered
-# beta entry to run method
-# {'beta': ['hi alpha, this is beta']}
-# beta about to wait
-# alpha about to resume beta
-# beta exiting run method
-# mainline alpha exiting
+>>> from scottbrian_paratools.smart_thread import SmartThread
+>>> import threading
+>>> import time
+>>> class SmartThreadApp(threading.Thread, SmartThread):
+...     def __init__(self, name: str) -> None:
+...         threading.Thread.__init__(self, name=name)
+...         SmartThread.__init__(self,
+...                              name=name,
+...                              thread=self,
+...                              auto_start=True)
+...     def run(self) -> None:
+...         print(f'{self.name} entry to run method')
+...         self.smart_send(msg='hi alpha, this is beta',
+...                         receivers='alpha')
+...         time.sleep(1)
+...         print(f'{self.name} about to wait')
+...         self.smart_wait(resumers='alpha')
+...         print(f'{self.name} exiting run method')
+>>> print('mainline alpha entered')
+>>> alpha_smart_thread = SmartThread(name='alpha')
+>>> thread_app = SmartThreadApp(name='beta')
+>>> my_msg = alpha_smart_thread.smart_recv(senders='beta')
+>>> print(my_msg)
+>>> time.sleep(2)
+>>> print('alpha about to resume beta')
+>>> alpha_smart_thread.smart_resume(waiters='beta')
+>>> alpha_smart_thread.smart_join(targets='beta')
+>>> print('mainline alpha exiting')
+mainline alpha entered
+beta entry to run method
+{'beta': ['hi alpha, this is beta']}
+beta about to wait
+alpha about to resume beta
+beta exiting run method
+mainline alpha exiting
 
 """
 
@@ -642,6 +642,7 @@ class SmartThread:
     # finish before we can set the state from Starting to Alive
     ####################################################################
     class TargetThread(threading.Thread):
+        """Thread class used for SmartThread target."""
         def __init__(self, *,
                      smart_thread: "SmartThread",
                      target: Callable[..., Any],
@@ -669,7 +670,6 @@ class SmartThread:
 
         def run(self) -> None:
             """Invoke the target when teh thread is started."""
-
             try:
                 self._target(*self._args, **self._kwargs)
             finally:
@@ -2317,22 +2317,25 @@ class SmartThread:
             dictionary of received messages, indexed by thread name
 
         Raises:
-            SmartThreadRemoteThreadNotAlive: target thread was stopped.
+            SmartThreadRemoteThreadNotAlive: target thread was
+                stopped.  # noqa DAR402
             SmartThreadRequestTimedOut: request timed out before
-                message was received.
+                message was received.  # noqa DAR402
             SmartThreadDeadlockDetected: a smart_recv specified a sender
-                that issued a smart_recv, smart_wait, or smart_sync.
+                that issued a smart_recv, smart_wait, or
+                smart_sync.  # noqa DAR402
 
         Notes:
             1) A deadlock will occur between two threads when they both
                issue a request that waits for the other thread to
                respond. The following combinations can lead to a
                deadlock:
-                   a) smart_wait vs smart_wait
-                   b) smart_wait vs smart_recv
-                   c) smart_wait vs smart_sync
-                   d) smart_recv vs smart_recv
-                   e) smart_recv vs smart_sync
+
+                 a) smart_wait vs smart_wait
+                 b) smart_wait vs smart_recv
+                 c) smart_wait vs smart_sync
+                 d) smart_recv vs smart_recv
+                 e) smart_recv vs smart_sync
 
                Note that a smart_wait will not deadlock if the
                wait_event was already resumed earlier by a smart_resume,
@@ -2540,8 +2543,8 @@ class SmartThread:
         f1 charlie exiting
         f1 delta entered
         f1 delta exiting
-        "['hi']\n"
-        "['aloha', ['miles to go', (1, 2, 3)], {'forty_two': 42, 42: 42}]\n"
+        ['hi']
+        ['aloha', ['miles to go', (1, 2, 3)], {'forty_two': 42, 42: 42}]
         {'charlie': ['hi'], ['miles to go', (1, 2, 3)]}
         mainline alpha exiting
 

@@ -21628,18 +21628,18 @@ class TestSmartThreadExamples:
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
-        beta_smart_thread = SmartThread(name='beta',
-                                        target=f1_beta,
-                                        thread_parm_name='smart_thread')
-        charlie_smart_thread = SmartThread(name='charlie',
-                                           target=f2_charlie,
-                                           thread_parm_name='smart_thread')
-        delta_smart_thread = SmartThread(name='delta',
-                                         target=f3_delta,
-                                         thread_parm_name='smart_thread')
-        echo_smart_thread = SmartThread(name='echo',
-                                        target=f4_echo,
-                                        thread_parm_name='smart_thread')
+        SmartThread(name='beta',
+                    target=f1_beta,
+                    thread_parm_name='smart_thread')
+        SmartThread(name='charlie',
+                    target=f2_charlie,
+                    thread_parm_name='smart_thread')
+        SmartThread(name='delta',
+                    target=f3_delta,
+                    thread_parm_name='smart_thread')
+        SmartThread(name='echo',
+                    target=f4_echo,
+                    thread_parm_name='smart_thread')
         time.sleep(2)
         print('alpha about to resume threads')
         alpha_smart_thread.smart_resume(waiters=('beta',
@@ -21674,7 +21674,7 @@ class TestSmartThreadExamples:
     # test_smart_sync_example_1
     ####################################################################
     def test_smart_sync_example_1(self,
-                                    capsys: Any) -> None:
+                                  capsys: Any) -> None:
         """Test smart_sync example 1.
 
         Invoke ''smart_sync()'' for three threads
@@ -21698,13 +21698,13 @@ class TestSmartThreadExamples:
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
-        beta_smart_thread = SmartThread(name='beta',
-                                        target=f1_beta,
-                                        thread_parm_name='smart_thread')
+        SmartThread(name='beta',
+                    target=f1_beta,
+                    thread_parm_name='smart_thread')
         time.sleep(1)
-        charlie_smart_thread = SmartThread(name='charlie',
-                                           target=f2_charlie,
-                                           thread_parm_name='smart_thread')
+        SmartThread(name='charlie',
+                    target=f2_charlie,
+                    thread_parm_name='smart_thread')
         time.sleep(1)
         print('alpha about to sync with beta and charlie')
         alpha_smart_thread.smart_sync(targets=['beta', 'charlie'])
