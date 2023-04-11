@@ -10,7 +10,8 @@ from sybil.example import Example  # sbt
 # from sybil.parsers.doctest import DocTestParser
 # from sybil.parsers.doctest import DocTest  # sbt
 
-from sybil.parsers.rest import DocTestParser, PythonCodeBlockParser
+# from sybil.parsers.rest import DocTestParser
+from sybil.parsers.rest import PythonCodeBlockParser, ClearNamespaceParser
 from sybil.parsers.abstract import DocTestStringParser
 from sybil.evaluators.doctest import DocTestEvaluator, DocTest
 from sybil.document import Document
@@ -141,6 +142,7 @@ pytest_collect_file = Sybil(
         # DocTestParser(optionflags=ELLIPSIS),
         SbtDocTestParser(optionflags=ELLIPSIS),
         PythonCodeBlockParser(),
+        ClearNamespaceParser()
     ],
     patterns=['*.py'],
     # patterns=['*.rst', '*.py'],

@@ -7,7 +7,7 @@
 .. include:: ../../README.rst
 
 .. toctree::
-   :maxdepth: 4
+   :maxdepth: 2
    :caption: API Reference:
 
    smart_thread <smart_thread_link>
