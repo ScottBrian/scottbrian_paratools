@@ -81,7 +81,7 @@ class AppConfig(Enum):
     RemoteThreadApp = auto()
     RemoteSmartThreadApp = auto()
     RemoteSmartThreadApp2 = auto()
-    
+
 
 ########################################################################
 # ResumeStyles
@@ -6432,10 +6432,10 @@ class ConfigVerifier:
         num_adders = 1
 
         num_lockers = 5
-        
-        num_active_needed = (num_receivers 
-                             + num_senders 
-                             + num_waiters 
+
+        num_active_needed = (num_receivers
+                             + num_senders
+                             + num_waiters
                              + num_resumers
                              + num_syncers
                              + num_dels
@@ -12950,7 +12950,6 @@ class ConfigVerifier:
                         timeout: IntOrFloat,
                         timeout_names: set[str],
                         log_msg: str) -> None:
-
         """Handle the send_recv_cmd execution and log msgs.
 
         Args:
@@ -13018,7 +13017,6 @@ class ConfigVerifier:
                          timeout: IntOrFloat,
                          timeout_names: set[str],
                          log_msg: str) -> None:
-
         """Handle the send_recv_cmd execution and log msgs.
 
         Args:
@@ -13034,7 +13032,7 @@ class ConfigVerifier:
                 as the remote
             log_msg: log message to isee on smart_recv
 
-            """
+        """
         self.log_test_msg(f'handle_recv_msg2 entry: {cmd_runner=}, '
                           f'{remote=}, {stopped_remotes=}')
 
@@ -13121,7 +13119,6 @@ class ConfigVerifier:
     def handle_request_entry_log_msg(self,
                                      cmd_runner: str,
                                      targets: list[str]) -> None:
-
         """Handle the send_cmd execution and log msgs.
 
         Args:
@@ -13146,7 +13143,6 @@ class ConfigVerifier:
                                     cmd_runner: str,
                                     targets: Optional[list[str]] = None
                                     ) -> None:
-
         """Handle the send_cmd execution and log msgs.
 
         Args:
@@ -13178,7 +13174,6 @@ class ConfigVerifier:
     ####################################################################
     def handle_cmd_waiting_log_msg(self,
                                    cmd_runner: str) -> None:
-
         """Handle the send_cmd execution and log msgs.
 
         Args:
@@ -13197,7 +13192,6 @@ class ConfigVerifier:
                           process: str,
                           reg_rem_log_idx: int
                           ) -> None:
-
         """Handle the send_cmd execution and log msgs.
 
         Args:
@@ -13220,7 +13214,8 @@ class ConfigVerifier:
                 from_status = st.ThreadState.Registered
 
             self.expected_registered[del_name].is_alive = False
-            self.expected_registered[del_name].st_state = st.ThreadState.Stopped
+            self.expected_registered[
+                del_name].st_state = st.ThreadState.Stopped
             self.add_log_msg(
                 f'{cmd_runner} set state for thread '
                 f'{del_name} '
@@ -13251,7 +13246,6 @@ class ConfigVerifier:
                           new_name: str,
                           reg_update_msg: str,
                           reg_update_msg_log_idx) -> None:
-
         """Handle the reg update log msg.
 
         Args:
@@ -13412,7 +13406,6 @@ class ConfigVerifier:
                         unreg_timeout_names: Optional[set[str]] = None,
                         fullq_timeout_names: Optional[set[str]] = None,
                         stopped_remotes: Optional[set[str]] = None) -> None:
-
         """Handle the send_cmd execution and log msgs.
 
         Args:
@@ -13856,7 +13849,7 @@ class ConfigVerifier:
         if timeout > 0 and timeout_type != TimeoutType.TimeoutNone:
             log_msg_body += f'timeout value: {timeout} '
         else:
-            log_msg_body += f'timeout value: None '
+            log_msg_body += 'timeout value: None '
 
         # do not use re.escape for call sequence - it has regex
         log_msg_body += f'{self.log_ver.get_call_seq(smart_request)}'
@@ -13918,7 +13911,7 @@ class ConfigVerifier:
         #     f'{sorted(pending_remotes)}.')
 
         pending_msg = (
-            f" Remotes that are pending: \[([a-z]*|,|'| )*\].")
+            r" Remotes that are pending: \[([a-z]*|,|'| )*\].")
 
         # if stopped_remotes:
         #     stopped_msg = re.escape(
@@ -13928,7 +13921,7 @@ class ConfigVerifier:
         #     stopped_msg = ''
 
         stopped_msg = (
-            f" Remotes that are stopped: \[([a-z]*|,|'| )*\].")
+            r" Remotes that are stopped: \[([a-z]*|,|'| )*\].")
 
         if unreg_remotes:
             unreg_msg = re.escape(
@@ -13942,10 +13935,10 @@ class ConfigVerifier:
                 remote_request = 'smart_wait'
             else:
                 remote_request = 'smart_sync'
-            cr_search = "\[(,| "
+            cr_search = r"\[(,| "
             for name in conflict_remotes:
                 cr_search += "|'" + name + "'"
-            cr_search += ")+\]"
+            cr_search += r")+\]"
             conflict_msg = (f' Remotes doing a {remote_request} '
                             'request that are deadlocked: '
                             f'{cr_search}.')
@@ -13953,10 +13946,10 @@ class ConfigVerifier:
             conflict_msg = ''
 
         if deadlock_remotes:
-            dr_search = "\[(,| "
+            dr_search = r"\[(,| "
             for name in deadlock_remotes:
                 dr_search += "|'" + name + "'"
-            dr_search += ")+\]"
+            dr_search += r")+\]"
             deadlock_msg = (f' Remotes doing a smart_wait '
                             'request that are deadlocked: '
                             f'{dr_search}.')
@@ -14322,6 +14315,13 @@ class ConfigVerifier:
             cmd_runner: name of thread that will get the lock
             exp_positions: the expected positions on the lock queue
             line_num: the line number where the cmd was issued
+
+        Raises:
+            FailedLockVerify: lock_verify from {line_num=} timed out
+                after {timeout_value} seconds waiting for the
+                {exp_positions=} to match
+                {st.SmartThread._registry_lock.owner_wait_q=}.
+
         """
         # self.log_test_msg(f'lock_verify entry: {cmd_runner=}, '
         #                   f'{exp_positions=}, {line_num=}')
@@ -14422,6 +14422,12 @@ class ConfigVerifier:
     # set_recv_timeout
     ####################################################################
     def set_recv_timeout(self, num_timeouts: int):
+        """Set the expected number of receive timeouts.
+
+        Args:
+            num_timeouts: number or expected timeouts to set
+
+        """
         with self.ops_lock:
             self.expected_num_recv_timeouts = num_timeouts
 
@@ -14494,6 +14500,12 @@ class ConfigVerifier:
         Args:
             cmd_runner: name of thread doing the update
             upa_item: describes what the update is for
+
+        Raises:
+            InvalidConfigurationDetected: Attempt to add thread to
+                existing pair array that has an empty ThreadPairStatus
+                dict, or that already has the thread in the pair array,
+                or that did not have the other name in the pair array.
 
         """
         self.log_test_msg(f'update_pair_array_add entry: {cmd_runner=}, '
@@ -14606,6 +14618,11 @@ class ConfigVerifier:
         Args:
             cmd_runner: name of thread doing the update
             upa_item: describes what the update is for
+
+        Raises:
+            InvalidConfigurationDetected: The expected_pairs for
+            pair_key contains an entry of which does not include the
+            name being deleted.
 
         """
         del_name = upa_item.upa_target
@@ -14752,7 +14769,13 @@ class ConfigVerifier:
     # validate_config
     ####################################################################
     def validate_config(self):
-        """Validate that the SmartThread config is correct."""
+        """Validate that the SmartThread config is correct.
+
+        Raises:
+            InvalidConfigurationDetected: validate_config has found a
+            mismatch between the real and mock configuration
+
+        """
         # verify real registry matches expected_registered
         for name, thread in st.SmartThread._registry.items():
             if name not in self.expected_registered:
@@ -14796,7 +14819,7 @@ class ConfigVerifier:
                     f'in SmartThread._pair_array that is '
                     f'not found in expected_pairs: ')
             for name in st.SmartThread._pair_array[
-                pair_key].status_blocks.keys():
+                    pair_key].status_blocks.keys():
                 if name not in self.expected_pairs[pair_key].keys():
                     self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
@@ -14820,8 +14843,8 @@ class ConfigVerifier:
                             raise InvalidConfigurationDetected(
                                 f'ConfigVerifier found name {name} in '
                                 f'SmartThread._pair_array status_blocks for '
-                                f'pair_key {pair_key}, but it is a single name '
-                                f'that has a pending_ops_count of zero')
+                                f'pair_key {pair_key}, but it is a single'
+                                f' name that has a pending_ops_count of zero')
 
                 if (self.expected_pairs[pair_key][
                     name].pending_ops_count == 0
@@ -14972,6 +14995,13 @@ class ConfigVerifier:
             deleter_names: names that do the delete
             adder_names: names that do the add
 
+        Raises:
+            FailedDefDelVerify: verify_def_del found neither smart_recv
+                nor wait initial config_cmd log messages - one and only
+                one is expected.
+            InvalidConfigurationDetected: verify_def_del found pair_key
+                is in real or mock pair array but is not in both
+
         """
         ################################################################
         # start by gathering log messages, both expected and not
@@ -14979,7 +15009,7 @@ class ConfigVerifier:
         ################################################################
         # get first config_cmd smart_recv log msg
         ################################################################
-        search_msg = ("config_cmd: RecvMsg\(serial=[0-9]+, line=[0-9]+, "
+        search_msg = (r"config_cmd: RecvMsg\(serial=[0-9]+, line=[0-9]+, "
                       f"cmd_runners='{receiver_names[0]}', "
                       f"senders='{sender_names[0]}'")
 
@@ -14993,7 +15023,7 @@ class ConfigVerifier:
         ################################################################
         # get first wait config_cmd log msg
         ################################################################
-        search_msg = ("config_cmd: Wait\(serial=[0-9]+, line=[0-9]+, "
+        search_msg = (r"config_cmd: Wait\(serial=[0-9]+, line=[0-9]+, "
                       f"cmd_runners='{waiter_names[0]}', "
                       f"resumers=")
 
@@ -15024,7 +15054,7 @@ class ConfigVerifier:
         ################################################################
         # get config_cmd log msg for VerifyDefDel
         ################################################################
-        search_msg = ("config_cmd: VerifyDefDel\(serial=[0-9]+, line=[0-9]+, "
+        search_msg = (r"config_cmd: VerifyDefDel\(serial=[0-9]+, line=[0-9]+, "
                       f"cmd_runners='{self.commander_name}', "
                       f"def_del_scenario=")
 
@@ -15211,9 +15241,9 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.updated_pa=}, '
                     f'{wait_1_pa_msgs_found.entered_rpa=}, '
                     f'{wait_1_pa_msgs_found.updated_pa=}, '
-                    f'{del_pa_msgs_found.entered_rpa=}, ' 
-                    f'{del_pa_msgs_found.updated_pa=}, ' 
-                    f'{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'{del_pa_msgs_found.entered_rpa=}, '
+                    f'{del_pa_msgs_found.updated_pa=}, '
+                    f'{add_pa_msgs_found.entered_rpa=}, '
                     f'{add_pa_msgs_found.updated_pa=}')
             if (len(recv_0_pa_msgs_found.removed_sb_entry)
                     or len(recv_0_pa_msgs_found.removed_pa_entry)
@@ -15355,9 +15385,9 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.updated_pa=}, '
                     f'\n{wait_1_pa_msgs_found.entered_rpa=}, '
                     f'{wait_1_pa_msgs_found.updated_pa=}, '
-                    f'\n{del_pa_msgs_found.entered_rpa=}, ' 
-                    f'{del_pa_msgs_found.updated_pa=}, ' 
-                    f'\n{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'\n{del_pa_msgs_found.entered_rpa=}, '
+                    f'{del_pa_msgs_found.updated_pa=}, '
+                    f'\n{add_pa_msgs_found.entered_rpa=}, '
                     f'{add_pa_msgs_found.updated_pa=}')
             if ((len(recv_0_pa_msgs_found.removed_sb_entry) == 0)
                     or (len(recv_0_pa_msgs_found.removed_pa_entry) == 0)
@@ -15458,9 +15488,9 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.updated_pa=}, '
                     f'\n{wait_1_pa_msgs_found.entered_rpa=}, '
                     f'{wait_1_pa_msgs_found.updated_pa=}, '
-                    f'\n{del_pa_msgs_found.entered_rpa=}, ' 
-                    f'{del_pa_msgs_found.updated_pa=}, ' 
-                    f'\n{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'\n{del_pa_msgs_found.entered_rpa=}, '
+                    f'{del_pa_msgs_found.updated_pa=}, '
+                    f'\n{add_pa_msgs_found.entered_rpa=}, '
                     f'{add_pa_msgs_found.updated_pa=}')
             if (len(recv_0_pa_msgs_found.removed_sb_entry)
                     or len(recv_0_pa_msgs_found.removed_pa_entry)
@@ -15560,9 +15590,9 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.updated_pa=}, '
                     f'{wait_1_pa_msgs_found.entered_rpa=}, '
                     f'{wait_1_pa_msgs_found.updated_pa=}, '
-                    f'{del_pa_msgs_found.entered_rpa=}, ' 
-                    f'{del_pa_msgs_found.updated_pa=}, ' 
-                    f'{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'{del_pa_msgs_found.entered_rpa=}, '
+                    f'{del_pa_msgs_found.updated_pa=}, '
+                    f'{add_pa_msgs_found.entered_rpa=}, '
                     f'{add_pa_msgs_found.updated_pa=}')
             if (len(recv_0_pa_msgs_found.removed_sb_entry)
                     or len(recv_0_pa_msgs_found.removed_pa_entry)
@@ -15662,9 +15692,9 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.updated_pa=}, '
                     f'{wait_1_pa_msgs_found.entered_rpa=}, '
                     f'{wait_1_pa_msgs_found.updated_pa=}, '
-                    f'{del_pa_msgs_found.entered_rpa=}, ' 
-                    f'{del_pa_msgs_found.updated_pa=}, ' 
-                    f'{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'{del_pa_msgs_found.entered_rpa=}, '
+                    f'{del_pa_msgs_found.updated_pa=}, '
+                    f'{add_pa_msgs_found.entered_rpa=}, '
                     f'{add_pa_msgs_found.updated_pa=}')
             if (len(recv_0_pa_msgs_found.removed_sb_entry)
                     or len(recv_0_pa_msgs_found.removed_pa_entry)
@@ -15764,9 +15794,9 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.updated_pa=}, '
                     f'{wait_1_pa_msgs_found.entered_rpa=}, '
                     f'{wait_1_pa_msgs_found.updated_pa=}, '
-                    f'{del_pa_msgs_found.entered_rpa=}, ' 
-                    f'{del_pa_msgs_found.updated_pa=}, ' 
-                    f'{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'{del_pa_msgs_found.entered_rpa=}, '
+                    f'{del_pa_msgs_found.updated_pa=}, '
+                    f'{add_pa_msgs_found.entered_rpa=}, '
                     f'{add_pa_msgs_found.updated_pa=}')
             if ((len(recv_0_pa_msgs_found.removed_sb_entry) == 0)
                     or (len(recv_0_pa_msgs_found.removed_pa_entry) == 0)
@@ -15866,9 +15896,9 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.updated_pa=}, '
                     f'{wait_1_pa_msgs_found.entered_rpa=}, '
                     f'{wait_1_pa_msgs_found.updated_pa=}, '
-                    f'{del_pa_msgs_found.entered_rpa=}, ' 
-                    f'{del_pa_msgs_found.updated_pa=}, ' 
-                    f'{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'{del_pa_msgs_found.entered_rpa=}, '
+                    f'{del_pa_msgs_found.updated_pa=}, '
+                    f'{add_pa_msgs_found.entered_rpa=}, '
                     f'{add_pa_msgs_found.updated_pa=}')
             if (len(recv_0_pa_msgs_found.removed_sb_entry)
                     or len(recv_0_pa_msgs_found.removed_pa_entry)
@@ -15969,9 +15999,9 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.updated_pa=}, '
                     f'\n{wait_1_pa_msgs_found.entered_rpa=}, '
                     f'{wait_1_pa_msgs_found.updated_pa=}, '
-                    f'\n{del_pa_msgs_found.entered_rpa=}, ' 
-                    f'{del_pa_msgs_found.updated_pa=}, ' 
-                    f'\n{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'\n{del_pa_msgs_found.entered_rpa=}, '
+                    f'{del_pa_msgs_found.updated_pa=}, '
+                    f'\n{add_pa_msgs_found.entered_rpa=}, '
                     f'{add_pa_msgs_found.updated_pa=}')
             if (len(recv_0_pa_msgs_found.removed_sb_entry)
                     or len(recv_0_pa_msgs_found.removed_pa_entry)
@@ -16070,9 +16100,9 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.updated_pa=}, '
                     f'\n{wait_1_pa_msgs_found.entered_rpa=}, '
                     f'{wait_1_pa_msgs_found.updated_pa=}, '
-                    f'\n{del_pa_msgs_found.entered_rpa=}, ' 
-                    f'{del_pa_msgs_found.updated_pa=}, ' 
-                    f'\n{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'\n{del_pa_msgs_found.entered_rpa=}, '
+                    f'{del_pa_msgs_found.updated_pa=}, '
+                    f'\n{add_pa_msgs_found.entered_rpa=}, '
                     f'{add_pa_msgs_found.updated_pa=}')
             if (len(recv_0_pa_msgs_found.removed_sb_entry)
                     or len(recv_0_pa_msgs_found.removed_pa_entry)
@@ -16170,9 +16200,9 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.updated_pa=}, '
                     f'{wait_1_pa_msgs_found.entered_rpa=}, '
                     f'{wait_1_pa_msgs_found.updated_pa=}, '
-                    f'{del_pa_msgs_found.entered_rpa=}, ' 
-                    f'{del_pa_msgs_found.updated_pa=}, ' 
-                    f'{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'{del_pa_msgs_found.entered_rpa=}, '
+                    f'{del_pa_msgs_found.updated_pa=}, '
+                    f'{add_pa_msgs_found.entered_rpa=}, '
                     f'{add_pa_msgs_found.updated_pa=}')
             if (len(recv_0_pa_msgs_found.removed_sb_entry)
                     or len(recv_0_pa_msgs_found.removed_pa_entry)
@@ -16271,9 +16301,9 @@ class ConfigVerifier:
                     f'{wait_0_pa_msgs_found.updated_pa=}, '
                     f'\n{wait_1_pa_msgs_found.entered_rpa=}, '
                     f'{wait_1_pa_msgs_found.updated_pa=}, '
-                    f'\n{del_pa_msgs_found.entered_rpa=}, ' 
-                    f'{del_pa_msgs_found.updated_pa=}, ' 
-                    f'\n{add_pa_msgs_found.entered_rpa=}, ' 
+                    f'\n{del_pa_msgs_found.entered_rpa=}, '
+                    f'{del_pa_msgs_found.updated_pa=}, '
+                    f'\n{add_pa_msgs_found.entered_rpa=}, '
                     f'{add_pa_msgs_found.updated_pa=}')
             if (len(recv_0_pa_msgs_found.removed_sb_entry)
                     or len(recv_0_pa_msgs_found.removed_pa_entry)
@@ -16383,11 +16413,11 @@ class ConfigVerifier:
                                                         name1=def_del_name)
                 search_msg1 = (f"{cmd_runner} removed status_blocks entry "
                                f"for pair_key = "
-                               f"\('{pair_key[0]}', '{pair_key[1]}'\), "
+                               fr"\('{pair_key[0]}', '{pair_key[1]}'\), "
                                f"name = {def_del_name}")
                 search_msg2 = (f"{cmd_runner} removed _pair_array entry "
                                f"for pair_key = "
-                               f"\('{pair_key[0]}', '{pair_key[1]}'\)")
+                               fr"\('{pair_key[0]}', '{pair_key[1]}'\)")
 
                 log_msg1, log_pos1 = self.get_log_msg(
                     search_msg=search_msg1,
@@ -16446,6 +16476,10 @@ class ConfigVerifier:
             exp_in_registry_names: names of the threads to check for
                 being in the registry
 
+        Raises:
+            InvalidConfigurationDetected:  verify_in_registry found
+                name is not in the real or mock registry
+
         """
         for exp_in_registry_name in exp_in_registry_names:
             if exp_in_registry_name not in st.SmartThread._registry:
@@ -16474,6 +16508,10 @@ class ConfigVerifier:
             cmd_runner: name of thread doing the verify
             exp_not_in_registry_names: names of the threads to check for
                 not being in the registry
+
+        Raises:
+            InvalidConfigurationDetected: verify_in_registry_not found
+                name is in the real or mock registry
 
         """
         with self.monitor_condition:
@@ -16533,6 +16571,10 @@ class ConfigVerifier:
         Args:
             names: names of the threads to check for being alive
 
+        Raises:
+            InvalidConfigurationDetected: verify_is_alive found {name}
+                has real or mock is_alive that is not True
+
         """
         with self.monitor_condition:
             self.monitor_event.set()
@@ -16562,6 +16604,10 @@ class ConfigVerifier:
 
         Args:
             names: names of the threads to check for being not alive
+
+        Raises:
+            InvalidConfigurationDetected: verify_is_alive_not found
+            {name} has real or mock is_alive that is not False
 
         """
         for name in names:
@@ -16616,6 +16662,10 @@ class ConfigVerifier:
             exp_paired_names: names of the threads to check for being
                 paired
 
+        Raises:
+            InvalidConfigurationDetected: verify_paired found
+                pair_key or status block is not in the real pair_array
+
         """
         pair_keys = combinations(sorted(exp_paired_names), 2)
         for pair_key in pair_keys:
@@ -16666,6 +16716,12 @@ class ConfigVerifier:
             cmd_runner: thread doing the verify
             removed_names: names of the threads that were removed
             exp_half_paired_names: the names that should be in pair array
+
+        Raises:
+            InvalidConfigurationDetected: verify_paired_half found
+            {exp_remaining_name} does not have a status block in the
+            real pair_array
+
         """
         for removed_name in removed_names:
             for exp_remaining_name in exp_half_paired_names:
@@ -16724,6 +16780,10 @@ class ConfigVerifier:
             exp_not_paired_names: names of the threads to check for
                 being not paired
 
+        Raises:
+            InvalidConfigurationDetected: verify_paired_not found
+             pair_key in the real or mock pair_array
+
         """
         pair_keys = combinations(sorted(exp_not_paired_names), 2)
         for pair_key in pair_keys:
@@ -16753,6 +16813,10 @@ class ConfigVerifier:
             check_status_names: names of the threads to check for the
                 given status
             expected_status: the status each thread is expected to have
+
+        Raises:
+            InvalidConfigurationDetected: verify_status found mock
+            status not equal to the expected status
 
         """
         for name in check_status_names:
@@ -16802,6 +16866,9 @@ class ConfigVerifier:
             timeout_names: threads that cause timeout by being
                 unregistered
 
+        Raises:
+            CmdTimedOut: wait_for_request_timeouts timed out
+
         """
         timeouts: set[str] = set()
         if timeout_names:
@@ -16824,6 +16891,7 @@ class ConfigVerifier:
                 raise CmdTimedOut('wait_for_request_timeouts timed out '
                                   f'with {work_actors=}, '
                                   f'{timeouts=}, {sorted(test_timeouts)=}')
+
 
 ########################################################################
 # expand_cmds
@@ -17035,37 +17103,6 @@ class OuterSmartThreadApp2(threading.Thread, st.SmartThread):
 
     def run(self) -> None:
         """Run the test."""
-        # self._set_state(
-        #     target_thread=self,
-        #     new_state=st.ThreadState.Alive)
-        # self.config_ver.main_driver()
-
-        # name = self.name
-        #
-        # self.smart_start(name)
-        #
-        # self.config_ver.log_ver.add_call_seq(
-        #     name='smart_start',
-        #     seq='test_smart_thread.py::OuterSmartThreadApp2.run')
-        #
-        # self.config_ver.add_request_log_msg(
-        #     cmd_runner=name,
-        #     smart_request='smart_start',
-        #     targets={name},
-        #     timeout=0,
-        #     timeout_type=TimeoutType.TimeoutNone,
-        #     enter_exit=('entry', 'exit'),
-        #     log_msg=None)
-
-        # self.config_ver.add_log_msg(
-        #     f'{name} set state for thread {name} from '
-        #     'ThreadState.Registered to ThreadState.Alive'
-        # )
-        # self.config_ver.add_log_msg(re.escape(
-        #     f'{name} started thread {name}, '
-        #     'thread.is_alive(): True, state: ThreadState.Alive'))
-        #
-        # self.config_ver.monitor_event.set()
         self.config_ver.main_driver()
 
 
@@ -17106,14 +17143,6 @@ class OuterF1ThreadApp(threading.Thread):
         logger.debug(log_msg_f1)
 
         self.config_ver.f1_driver(f1_name=self.smart_thread.name)
-        # stopped_by = self.config_ver.expected_registered[
-        #     self.smart_thread.name].stopped_by
-        #
-        # log_msg_f1 = (f'{self.smart_thread.name} has been '
-        #               f'stopped by {stopped_by}')
-        # self.config_ver.log_ver.add_msg(log_msg=log_msg_f1)
-        # logger.debug(log_msg_f1)
-        # self.config_ver.monitor_event.set()
 
         ####################################################################
         # exit
@@ -17121,53 +17150,19 @@ class OuterF1ThreadApp(threading.Thread):
         log_msg_f1 = f'OuterF1ThreadApp.run() exit: {self.smart_thread.name=}'
         self.config_ver.log_ver.add_msg(log_msg=re.escape(log_msg_f1))
         logger.debug(log_msg_f1)
-        # self.config_ver.set_is_alive(target=self.smart_thread.name,
-        #                              value=False,
-        #                              exiting=True)
-
-# ###############################################################################
-# # OuterThreadEventApp class
-# ###############################################################################
-# class OuterThreadEventApp(threading.Thread, SmartThread):
-#     """Outer thread event app for test."""
-#     def __init__(self,
-#                  cmds: Cmds,
-#                  descs: SmartThreadDescs) -> None:
-#         """Initialize the object.
-#
-#         Args:
-#             cmds: used to send cmds between threads
-#             descs: tracks set of SmartThreadDesc items
-#
-#         """
-#         threading.Thread.__init__(self)
-#         SmartThread.__init__(self, group_name='group1', name='beta', thread=self)
-#         self.cmds = cmds
-#         self.descs = descs
-#
-#     def run(self):
-#         """Run the test."""
-#         print('beta run started')
-#
-#         # normally, the add_desc is done just after the instantiation, but
-#         # in this case the thread is not made alive until now, and the
-#         # add_desc checks that the thread is alive
-#         self.descs.add_desc(SmartThreadDesc(smart_thread=self))
-#
-#         self.cmds.queue_cmd('alpha')
-#
-#         self.pair_with(remote_name='alpha', timeout=3)
-#         self.descs.paired('alpha', 'beta')
-#
-#         self.cmds.get_cmd('beta')
-#
-#         logger.debug('beta run exiting')
 
 
 ########################################################################
 # outer_f1
 ########################################################################
 def outer_f1(f1_name: str, f1_config_ver: ConfigVerifier):
+    """Target routine in the outer scope.
+
+    Args:
+        f1_name: thread name
+        f1_config_ver: configuration verifier instance
+
+    """
     log_msg_f1 = f'outer_f1 entered for {f1_name}'
     f1_config_ver.log_ver.add_msg(log_msg=log_msg_f1)
     logger.debug(log_msg_f1)
@@ -17180,9 +17175,6 @@ def outer_f1(f1_name: str, f1_config_ver: ConfigVerifier):
     log_msg_f1 = f'outer_f1 exiting for {f1_name}'
     f1_config_ver.log_ver.add_msg(log_msg=log_msg_f1)
     logger.debug(log_msg_f1)
-    # f1_config_ver.set_is_alive(target=f1_name,
-    #                            value=False,
-    #                            exiting=True)
 
 
 ########################################################################
@@ -17281,6 +17273,38 @@ class TestSmartThreadScenarios:
         """Test error cases in the _regref remote array method.
 
         Args:
+            timeout_type_arg: specifies whether the smart_join should
+                be coded with timeout and whether the smart_join should
+                succeed or fail with a timeout
+            num_active_no_target_arg: number of threads that should be
+                active and stay active during the join as non-targets
+            num_no_delay_exit_arg: number of threads that should be
+                active and targeted for join, and then exited
+                immediately to allow the join to succeed
+            num_delay_exit_arg: number of threads that should be active
+                and targeted for join, and then be exited after a short
+                delay to allow a TimeoutFalse join to succeed, and a
+                long delay to cause a TimeoutTrue join to
+                timeout and a TimeoutNone to eventually succeed
+            num_no_delay_unreg_arg: number of threads that should be
+                unregistered and targeted for join, and then be
+                be immediately created, started, exited to allow the
+                join to succeed
+            num_delay_unreg_arg: number of threads that should be
+                unregistered and targeted for join, and then be
+                be created, started, exited after a short delay to allow
+                a TimeoutFalse join to succeed, and a long delay to
+                cause a TimeoutTrue join to timeout and a TimeoutNone to
+                eventually succeed
+            num_no_delay_reg_arg: number of threads that should be
+                registered and targeted for join, and then be
+                be immediately started and exited to allow the
+                join to succeed
+            num_delay_reg_arg: number of threads that should be
+                registered and targeted for join, and then be started
+                and exited after a short delay to allow a TimeoutFalse
+                join to succeed, and a long delay to cause a TimeoutTrue
+                join to timeout and a TimeoutNone to eventually succeed
             caplog: pytest fixture to capture log output
 
         """
@@ -17505,6 +17529,9 @@ class TestSmartThreadScenarios:
         """Test meta configuration scenarios.
 
         Args:
+            timeout_type_arg: specifies whether the smart_send should
+                be coded with timeout and whether the smart_send should
+                succeed or fail with a timeout
             num_senders_arg: number of threads to send msgs
             num_active_targets_arg: number of active threads to recv
             num_registered_targets_arg: number registered thread to
@@ -17607,8 +17634,8 @@ class TestSmartThreadScenarios:
             num_unreg_delay_arg: number threads unregistered before the
                 resume is done, and are then created and started after
                 the allowed timeout
-            num_stopped_no_delay_arg: number of threads stopped before the resume
-                and cause a timeout
+            num_stopped_no_delay_arg: number of threads stopped before
+                the resume and cause a timeout
             num_stopped_delay_arg: number of threads stopped
                 before the resume and are then joined, created, and
                 started within the allowed timeout
@@ -18171,6 +18198,7 @@ class TestSmartThreadScenarios:
                     log_ver.add_msg(log_level=log_level,
                                     log_msg=log_msg,
                                     log_name=log_name)
+
         ################################################################
         # f1
         ################################################################
@@ -18249,7 +18277,8 @@ class TestSmartThreadScenarios:
             args=(f1_name, ),
             max_msgs=10)
 
-        commander_thread.smart_send(receivers='beta', msg='alpha sends to beta')
+        commander_thread.smart_send(receivers='beta',
+                                    msg='alpha sends to beta')
 
         commander_thread.smart_resume(waiters='beta')
 
@@ -18276,99 +18305,99 @@ class TestSmartThreadScenarios:
              'ThreadState.Initializing to ThreadState.Alive'),
             'alpha added alpha to SmartThread registry at UTC',
             'alpha entered _refresh_pair_array',
-            (f"smart_send entry: requestor: alpha receivers: "
-             "\['beta'\] timeout value: None "
+            ("smart_send entry: requestor: alpha receivers: "
+             r"\['beta'\] timeout value: None "
              "test_smart_thread.py::TestSmartThreadScenarios."
              "test_smart_thread_log_msg:"),
-            (f"smart_send exit: requestor: alpha receivers: "
-             "\['beta'\] timeout value: None "
+            ("smart_send exit: requestor: alpha receivers: "
+             r"\['beta'\] timeout value: None "
              "test_smart_thread.py::TestSmartThreadScenarios."
              "test_smart_thread_log_msg:"),
-            (f"smart_join entry: requestor: alpha targets: "
-             "\['beta'\] timeout value: None "
+            ("smart_join entry: requestor: alpha targets: "
+             r"\['beta'\] timeout value: None "
              "test_smart_thread.py::TestSmartThreadScenarios."
              "test_smart_thread_log_msg:"),
-            (f"smart_join exit: requestor: alpha targets: "
-             "\['beta'\] timeout value: None "
+            ("smart_join exit: requestor: alpha targets: "
+             r"\['beta'\] timeout value: None "
              "test_smart_thread.py::TestSmartThreadScenarios."
              "test_smart_thread_log_msg:"),
             ('alpha set state for thread beta from '
              'ThreadState.Alive to '
              'ThreadState.Stopped'),
-            ("name=alpha, smart_thread=SmartThread\(name='alpha'\), "
-             "s_alive\(\)=True, "
+            (r"name=alpha, smart_thread=SmartThread\(name='alpha'\), "
+             r"s_alive\(\)=True, "
              "state=<ThreadState.Alive: 16>"),
-            ("name=beta, smart_thread=SmartThread\(name='beta', "
-             "target=f1, args=\('beta',\)\), "
-             "is_alive\(\)=False, "
+            (r"name=beta, smart_thread=SmartThread\(name='beta', "
+             r"target=f1, args=\('beta',\)\), "
+             r"is_alive\(\)=False, "
              "state=<ThreadState.Stopped: 32>"),
             ("alpha removed beta from registry for "
              "process='join'"),
             'alpha entered _refresh_pair_array',
             ("alpha removed status_blocks entry for pair_key = "
-             "\('alpha', 'beta'\), name = beta"),
+             r"\('alpha', 'beta'\), name = beta"),
             ("alpha removed status_blocks entry for pair_key = "
-             "\('alpha', 'beta'\), name = alpha"),
+             r"\('alpha', 'beta'\), name = alpha"),
             ("alpha removed _pair_array entry for pair_key = "
-             "\('alpha', 'beta'\)"),
+             r"\('alpha', 'beta'\)"),
             'alpha updated _pair_array at UTC',
             "alpha did cleanup of registry at UTC",
             'alpha did successful join of beta.',
-            ("smart_resume entry: requestor: alpha targets: \['beta'\] "
+            (r"smart_resume entry: requestor: alpha targets: \['beta'\] "
              "timeout value: None "
              "test_smart_thread.py::TestSmartThreadScenarios"
              ".test_smart_thread_log_msg:"),
-            ("smart_resume exit: requestor: alpha targets: \['beta'\] "
+            (r"smart_resume exit: requestor: alpha targets: \['beta'\] "
              "timeout value: None "
              "test_smart_thread.py::TestSmartThreadScenarios"
              ".test_smart_thread_log_msg:"),
-            ("smart_sync entry: requestor: alpha targets: \['beta'\] timeout "
+            (r"smart_sync entry: requestor: alpha targets: \['beta'\] timeout "
              "value: None test_smart_thread.py::TestSmartThreadScenarios."
              "test_smart_thread_log_msg:"),
-            ("smart_sync exit: requestor: alpha targets: \['beta'\] timeout "
+            (r"smart_sync exit: requestor: alpha targets: \['beta'\] timeout "
              "value: None test_smart_thread.py::TestSmartThreadScenarios."
              "test_smart_thread_log_msg:"),
             ('alpha set state for thread beta from ThreadState.Unregistered '
              'to ThreadState.Initializing'),
             'alpha obtained _registry_lock, class name = SmartThread',
-            ("name=alpha, smart_thread=SmartThread\(name='alpha'\), "
-             "is_alive\(\)=True, "
+            (r"name=alpha, smart_thread=SmartThread\(name='alpha'\), "
+             r"is_alive\(\)=True, "
              "state=<ThreadState.Alive: 16>"),
             ('alpha set state for thread beta from ThreadState.Initializing '
              'to ThreadState.Registered'),
             'alpha added beta to SmartThread registry at UTC',
             'alpha entered _refresh_pair_array',
             ("alpha created _refresh_pair_array with pair_key = "
-             "\('alpha', 'beta'\)"),
+             r"\('alpha', 'beta'\)"),
             ("alpha added status_blocks entry for pair_key = "
-             "\('alpha', 'beta'\), name = alpha"),
+             r"\('alpha', 'beta'\), name = alpha"),
             ("alpha added status_blocks entry for pair_key = "
-             "\('alpha', 'beta'\), name = beta"),
+             r"\('alpha', 'beta'\), name = beta"),
             'alpha updated _pair_array at UTC',
-            ("smart_unreg entry: requestor: alpha targets: \['beta'\] "
+            (r"smart_unreg entry: requestor: alpha targets: \['beta'\] "
              "timeout value: None "
              "test_smart_thread.py::TestSmartThreadScenarios."
              "test_smart_thread_log_msg:"),
-            ("smart_unreg exit: requestor: alpha targets: \['beta'\] "
+            (r"smart_unreg exit: requestor: alpha targets: \['beta'\] "
              "timeout value: None "
              "test_smart_thread.py::TestSmartThreadScenarios."
              "test_smart_thread_log_msg:"),
             ('alpha set state for thread beta from ThreadState.Registered to '
              'ThreadState.Stopped'),
-            ("name=alpha, smart_thread=SmartThread\(name='alpha'\), "
-             "is_alive\(\)=True, "
+            (r"name=alpha, smart_thread=SmartThread\(name='alpha'\), "
+             r"is_alive\(\)=True, "
              "state=<ThreadState.Alive: 16>"),
-            ("name=beta, smart_thread=SmartThread\(name='beta', target=f1, "
-             "args=\('beta',\)\), is_alive\(\)=False, "
+            (r"name=beta, smart_thread=SmartThread\(name='beta', target=f1, "
+             r"args=\('beta',\)\), is_alive\(\)=False, "
              "state=<ThreadState.Stopped: 32>"),
             "alpha removed beta from registry for process='smart_unreg'",
             'alpha entered _refresh_pair_array',
             ("alpha removed status_blocks entry for pair_key = "
-             "\('alpha', 'beta'\), name = beta"),
+             r"\('alpha', 'beta'\), name = beta"),
             ("alpha removed status_blocks entry for pair_key = "
-             "\('alpha', 'beta'\), name = alpha"),
+             r"\('alpha', 'beta'\), name = alpha"),
             ("alpha removed _pair_array entry for pair_key = "
-             "\('alpha', 'beta'\)"),
+             r"\('alpha', 'beta'\)"),
             'alpha updated _pair_array at UTC',
             "alpha did cleanup of registry at UTC",
             'alpha did successful smart_unreg of beta.',
@@ -18398,8 +18427,8 @@ class TestSmartThreadScenarios:
              'ThreadState.Initializing'),
             ('alpha obtained _registry_lock, class name = '
              'SmartThread'),
-            ("name=alpha, smart_thread=SmartThread\(name='alpha'\), "
-             "is_alive\(\)=True, "
+            (r"name=alpha, smart_thread=SmartThread\(name='alpha'\), "
+             r"is_alive\(\)=True, "
              "state=<ThreadState.Alive: 16>"),
             ('alpha set state for thread beta from '
              'ThreadState.Initializing to '
@@ -18407,14 +18436,14 @@ class TestSmartThreadScenarios:
             'alpha added beta to SmartThread registry at UTC',
             'alpha entered _refresh_pair_array',
             ("alpha created _refresh_pair_array with pair_key "
-             "= \('alpha', 'beta'\)"),
+             r"= \('alpha', 'beta'\)"),
             ("alpha added status_blocks entry for pair_key "
-             "= \('alpha', 'beta'\), name = alpha"),
+             r"= \('alpha', 'beta'\), name = alpha"),
             ("alpha added status_blocks entry for pair_key "
-             "= \('alpha', 'beta'\), name = beta"),
+             r"= \('alpha', 'beta'\), name = beta"),
             'alpha updated _pair_array at UTC',
             ("smart_start entry: requestor: alpha targets: "
-             "\['beta'\] timeout value: None "
+             r"\['beta'\] timeout value: None "
              "smart_thread.py::SmartThread.__init__:"),
             ('alpha set state for thread beta from '
              'ThreadState.Registered to '
@@ -18422,24 +18451,24 @@ class TestSmartThreadScenarios:
             ('alpha set state for thread beta from '
              'ThreadState.Starting to '
              'ThreadState.Alive'),
-            ('alpha started thread beta, thread.is_alive\(\): '
+            (r'alpha started thread beta, thread.is_alive\(\): '
              'True, state: ThreadState.Alive'),
             ("smart_start exit: requestor: alpha targets: "
-             "\['beta'\] timeout value: None "
+             r"\['beta'\] timeout value: None "
              "smart_thread.py::SmartThread.__init__:"),
             ("smart_recv entry: requestor: beta targets: "
-             "\['alpha'\] timeout value: None "
+             r"\['alpha'\] timeout value: None "
              "test_smart_thread.py::f1:"),
             ("smart_recv exit: requestor: beta targets: "
-             "\['alpha'\] timeout value: None "
+             r"\['alpha'\] timeout value: None "
              "test_smart_thread.py::f1:"),
-            ("smart_wait entry: requestor: beta targets: \['alpha'\] "
+            (r"smart_wait entry: requestor: beta targets: \['alpha'\] "
              "timeout value: None test_smart_thread.py::f1:"),
-            ("smart_wait exit: requestor: beta targets: \['alpha'\] "
+            (r"smart_wait exit: requestor: beta targets: \['alpha'\] "
              "timeout value: None test_smart_thread.py::f1:"),
-            ("smart_sync entry: requestor: beta targets: \['alpha'\] timeout "
+            (r"smart_sync entry: requestor: beta targets: \['alpha'\] timeout "
              "value: None test_smart_thread.py::f1:"),
-            ("smart_sync exit: requestor: beta targets: \['alpha'\] timeout "
+            (r"smart_sync exit: requestor: beta targets: \['alpha'\] timeout "
              "value: None test_smart_thread.py::f1:"),
         ]
 
@@ -21064,9 +21093,9 @@ class TestSmartThreadExamples:
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
-        beta_smart_thread = SmartThread(name='beta',
-                                        target=f1,
-                                        thread_parm_name='smart_thread')
+        SmartThread(name='beta',
+                    target=f1,
+                    thread_parm_name='smart_thread')
         my_msg = alpha_smart_thread.smart_recv(senders='beta')
         print(my_msg)
         alpha_smart_thread.smart_join(targets='beta')
@@ -21617,7 +21646,7 @@ class TestSmartThreadExamples:
         import time
 
         def f1_beta(smart_thread: SmartThread) -> None:
-            print(f'f1_beta about to wait')
+            print('f1_beta about to wait')
             smart_thread.smart_wait(resumers='alpha')
             print('f1_beta back from wait')
 
