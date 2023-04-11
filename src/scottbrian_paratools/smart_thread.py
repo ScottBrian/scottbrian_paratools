@@ -486,7 +486,7 @@ class SmartThreadWorkDataException(SmartThreadError):
 
 
 class SmartThreadNoRemoteTargets(SmartThreadError):
-    """SmartThread exception for no remote receivers."""
+    """SmartThread exception for no remote requestors."""
     pass
 
 
@@ -1687,7 +1687,7 @@ class SmartThread:
                    targets: Iterable,
                    timeout: OptIntFloat = None,
                    log_msg: Optional[str] = None) -> None:
-        """Join with remote receivers.
+        """Wait for target thread to end.
 
         Args:
             targets: thread names that are to be joined
@@ -1696,37 +1696,42 @@ class SmartThread:
 
         Raises:
             SmartThreadRequestTimedOut: join timed out waiting for
-                receivers.
+                targets to end.
         .. # noqa DAR402
 
-        Example1: Create and join a SmartThread thread.
-
-        .. invisible-code-block: python
-
-            del SmartThread._registry['alpha']
-
-        >>> from scottbrian_paratools.smart_thread import SmartThread
-        >>> import time
-        >>> def f1_beta() -> None:
-        ...     print('f1_beta entered')
-        ...     print('f1_beta exiting')
-        >>> print('mainline alpha entered')
-        >>> alpha_smart_thread = SmartThread(name='alpha')
-        >>> print('alpha about to create beta')
-        >>> beta_smart_thread = SmartThread(name='beta',
-        ...                                 target=f1_beta)
-        >>> time.sleep(1)
-        >>> print('alpha about to join beta')
-        >>> alpha_smart_thread.smart_join(targets='beta')
-        >>> print('mainline alpha exiting')
-        mainline alpha entered
-        alpha about to create beta
-        f1_beta entered
-        f1_beta exiting
-        alpha about to join beta
-        mainline alpha exiting
 
         """
+        #
+        # .. # noqa DAR402
+        #
+        # Example1: Create and join a SmartThread thread.
+        #
+        # .. invisible-code-block: python
+        #
+        #     del SmartThread._registry['alpha']
+        #
+        # >>> from scottbrian_paratools.smart_thread import SmartThread
+        # >>> import time
+        # >>> def f1_beta() -> None:
+        # ...     print('f1_beta entered')
+        # ...     print('f1_beta exiting')
+        # >>> print('mainline alpha entered')
+        # >>> alpha_smart_thread = SmartThread(name='alpha')
+        # >>> print('alpha about to create beta')
+        # >>> beta_smart_thread = SmartThread(name='beta',
+        # ...                                 target=f1_beta)
+        # >>> time.sleep(1)
+        # >>> print('alpha about to join beta')
+        # >>> alpha_smart_thread.smart_join(targets='beta')
+        # >>> print('mainline alpha exiting')
+        # mainline alpha entered
+        # alpha about to create beta
+        # f1_beta entered
+        # f1_beta exiting
+        # alpha about to join beta
+        # mainline alpha exiting
+        #
+        # """
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
             request=ReqType.Smart_join,
@@ -2288,36 +2293,6 @@ class SmartThread:
                    timeout: OptIntFloat = None) -> dict[str, Any]:
         """Receive one or more messages from remote threads.
 
-        For *smart_recv*, a message is any type (e.g., text, lists,
-        sets, class objects). *smart_recv* can be used to receive a
-        single message or multiple messages from a single remote
-        thread, from multiple remote threads, or from every remote
-        thread in the configuration. *smart_recv* will return
-        messages in a dictionary indexed by sender thread name.
-
-        When *smart_recv* gets control, it will check its message
-        queues for each of the specified senders. If one or more
-        messages are found, it will immediately return them in the
-        RecvMsgs dictionary. If no messages were initially found,
-        *smart_recv* will continue to check until one or more messages
-        arrive, at which point it will return them. If timeout is
-        specified, *smart_recv* will raise a timeout error if no
-        messages appear within the specified time.
-
-        If no senders are specified, the *smart_recv* will check its
-        message queues for all threads in the current configuration. If
-        no messages are found, *smart_recv* will continue to check all
-        threads in the current configuration, even as the configuration
-        changes. In this way, a thread acting as a server can issue the
-        *smart_recv* to simply park itself on the message queues of all
-        threads and return with any request messages as soon as they
-        arrive.
-
-        If senders are specified, *smart_recv* will look for messages
-        only on its message queues for the specified senders. Unlike
-        the "no senders specified" case, *smart_recv* will raise an
-        error if any of the specified senders become inactive.
-
         Args:
             senders: thread names whose sent messages are to be received
             log_msg: log message to issue
@@ -2352,6 +2327,36 @@ class SmartThread:
                wait_event was already resumed earlier by a smart_resume,
                and a smart_recv will not deadlock is a message was
                already delivered earlier by a smart_send.
+
+        For *smart_recv*, a message is any type (e.g., text, lists,
+        sets, class objects). *smart_recv* can be used to receive a
+        single message or multiple messages from a single remote
+        thread, from multiple remote threads, or from every remote
+        thread in the configuration. *smart_recv* will return
+        messages in a dictionary indexed by sender thread name.
+
+        When *smart_recv* gets control, it will check its message
+        queues for each of the specified senders. If one or more
+        messages are found, it will immediately return them in the
+        RecvMsgs dictionary. If no messages were initially found,
+        *smart_recv* will continue to check until one or more messages
+        arrive, at which point it will return them. If timeout is
+        specified, *smart_recv* will raise a timeout error if no
+        messages appear within the specified time.
+
+        If no senders are specified, the *smart_recv* will check its
+        message queues for all threads in the current configuration. If
+        no messages are found, *smart_recv* will continue to check all
+        threads in the current configuration, even as the configuration
+        changes. In this way, a thread acting as a server can issue the
+        *smart_recv* to simply park itself on the message queues of all
+        threads and return with any request messages as soon as they
+        arrive.
+
+        If senders are specified, *smart_recv* will look for messages
+        only on its message queues for the specified senders. Unlike
+        the "no senders specified" case, *smart_recv* will raise an
+        error if any of the specified senders become inactive.
 
         Examples in this section cover the following cases:
 
@@ -2763,35 +2768,6 @@ class SmartThread:
                    timeout: OptIntFloat = None) -> list[str]:
         """Wait until resumed.
 
-        smart_wait waits until it is resumed. These are the cases:
-
-            1) smart_wait can provide one remote thread name as an
-               argument for the *resumers* parameter and will then wait
-               until that resumer issues a matching smart_resume.
-            2) smart_wait can provide multiple remote thread names as an
-               argument for the *resumers* parameter and:
-               a) with *wait_for* specified as WaitFor.All, wait for all
-               resumers to issue a matching smart_resume.
-               b) with *wait_for* specified as WaitFor.Any, wait until
-               at least one resumer issues a matching smart_resume.
-            3) smart_wait can omit the specification of *resumers*. In
-               this case, smart_wait will wait until at least one thread
-               in the configuration does a matching smart_resume. The
-               configuration can change with new threads becoming
-               active and other threads being stopped while smart_wait
-               continues to wait.
-
-        For cases 1 and 2: an error is raised if any of the specified
-        resumer threads is stopped before it issues the smart_resume.
-
-        For cases 1, 2, and 3: if timeout is specified, a timeout error
-        is raised if the smart_wait is not resumed within the specified
-        time.
-
-        Note that a smart_resume can be issued before the smart_wait is
-        issued, in which case the smart_wait will return immediately
-        if any and all expected resumes were already issued.
-
         Args:
             resumers: names of threads that we expect to resume us
             wait_for: specifies whether to wait for only one remote or
@@ -2830,6 +2806,35 @@ class SmartThread:
                wait_event was already resumed earlier by a smart_resume,
                and a smart_recv will not deadlock is a message was
                already delivered earlier by a smart_send.
+
+        smart_wait waits until it is resumed. These are the cases:
+
+            1) smart_wait can provide one remote thread name as an
+               argument for the *resumers* parameter and will then wait
+               until that resumer issues a matching smart_resume.
+            2) smart_wait can provide multiple remote thread names as an
+               argument for the *resumers* parameter and:
+               a) with *wait_for* specified as WaitFor.All, wait for all
+               resumers to issue a matching smart_resume.
+               b) with *wait_for* specified as WaitFor.Any, wait until
+               at least one resumer issues a matching smart_resume.
+            3) smart_wait can omit the specification of *resumers*. In
+               this case, smart_wait will wait until at least one thread
+               in the configuration does a matching smart_resume. The
+               configuration can change with new threads becoming
+               active and other threads being stopped while smart_wait
+               continues to wait.
+
+        For cases 1 and 2: an error is raised if any of the specified
+        resumer threads is stopped before it issues the smart_resume.
+
+        For cases 1, 2, and 3: if timeout is specified, a timeout error
+        is raised if the smart_wait is not resumed within the specified
+        time.
+
+        Note that a smart_resume can be issued before the smart_wait is
+        issued, in which case the smart_wait will return immediately
+        if any and all expected resumes were already issued.
 
         Examples in this section cover the following cases:
 
@@ -3462,12 +3467,6 @@ class SmartThread:
                    timeout: OptIntFloat = None):
         """Sync up with remote threads.
 
-        Each thread that invokes ''smart_sync()'' first sets the sync
-        event for each target, and the waits on its corresponding sync
-        event for each target. This ensures that every thread has
-        reached the sync point before any thread moves forward from
-        there.
-
         Args:
             targets: remote threads we will sync with
             log_msg: log msg for the log
@@ -3489,6 +3488,12 @@ class SmartThread:
                wait_event was already resumed earlier by a smart_resume,
                and a smart_recv will not deadlock is a message was
                already delivered earlier by a smart_send.
+
+        Each thread that invokes ''smart_sync()'' first sets the sync
+        event for each target, and the waits on its corresponding sync
+        event for each target. This ensures that every thread has
+        reached the sync point before any thread moves forward from
+        there.
 
         :Example: Invoke ''smart_sync()'' for three threads
 
@@ -3751,11 +3756,8 @@ class SmartThread:
                          ) -> None:
         """Main loop for each config command.
 
-        Each of the requests calls this method to perform the loop of
-        the receivers.
-
         Args:
-            request_block: contains receivers, timeout, etc
+            request_block: contains requestors, timeout, etc
 
         Raises:
             SmartThreadRequestTimedOut: request processing timed out
@@ -3799,11 +3801,8 @@ class SmartThread:
                       ) -> None:
         """Main loop for each request.
 
-        Each of the requests calls this method to perform the loop of
-        the receivers.
-
         Args:
-            request_block: contains receivers, timeout, etc
+            request_block: contains requestors, timeout, etc
 
         Raises:
             SmartThreadRequestTimedOut: request processing timed out
@@ -3966,7 +3965,7 @@ class SmartThread:
 
         Args:
             request: type of request being performed
-            remotes: names of threads that are receivers for the
+            remotes: names of threads that are targets for the
                 request
 
         """
@@ -4109,11 +4108,8 @@ class SmartThread:
                             ) -> None:
         """Raise an error if needed.
 
-        Each of the requests calls this method to perform the loop of
-        the receivers.
-
         Args:
-            request_block: contains receivers, timeout, etc
+            request_block: contains targets, timeout, etc
             pending_remotes: remotes that have not either not responded
                 or were found to be in an incorrect state
 
@@ -4288,9 +4284,9 @@ class SmartThread:
             get_block_lock: True or False
             remotes: remote threads for the request
             error_stopped_target: request will raise an error if any
-                one of the receivers is in a stopped state.
+                one of the targets is in a stopped state.
             error_not_registered_target: request will raise an error if
-                any one of the receivers is in any state other than
+                any one of the targets is in any state other than
                 registered.
             completion_count: how many request need to succeed
             timeout: number of seconds to allow for request completion
@@ -4304,7 +4300,7 @@ class SmartThread:
 
         Raises:
             SmartThreadInvalidInput: {name} {request.value} request with
-                no receivers specified.
+                no targets specified.
 
         """
         timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
@@ -4313,7 +4309,7 @@ class SmartThread:
             if request not in (ReqType.Smart_recv, ReqType.Smart_wait):
                 raise SmartThreadInvalidInput(
                     f'{self.name} {request.value} '
-                    'request with no receivers specified.')
+                    'request with no targets specified.')
 
         else:
             if isinstance(remotes, str):

@@ -18487,7 +18487,6 @@ class TestSmartThreadScenarios:
             commander_config: specifies how the commander will run
 
         """
-
         ################################################################
         # f1
         ################################################################
@@ -18656,7 +18655,11 @@ class TestSmartThreadInterface:
     def test_smart_thread_interface_1(self,
                                       num_f1_args: tuple[int, int, int]
                                       ) -> None:
-        """Test smart_send example 1 with no parms."""
+        """Test smart_send example 1 with no parms.
+
+        Args:
+            num_f1_args: number of arguments to specify
+        """
         from scottbrian_paratools.smart_thread import SmartThread, ThreadState
 
         def f1_0_0_0() -> None:
@@ -19244,7 +19247,11 @@ class TestSmartThreadInterface:
     def test_smart_thread_interface_2(self,
                                       num_f1_args: tuple[int, int, int]
                                       ) -> None:
-        """Test smart_send example 2 with no parms."""
+        """Test smart_send example 2 with no parms.
+
+        Args:
+            num_f1_args: number of arguments to specify
+        """
         from scottbrian_paratools.smart_thread import SmartThread, ThreadState
 
         def f1_0_0_0() -> None:
@@ -19727,7 +19734,11 @@ class TestSmartThreadInterface:
     def test_smart_thread_interface_3(self,
                                       num_f1_args: tuple[int, int, int]
                                       ) -> None:
-        """Test smart_send example 3 with no parms."""
+        """Test smart_send example 3 with no parms.
+
+        Args:
+            num_f1_args: number of arguments to specify
+        """
         from scottbrian_paratools.smart_thread import SmartThread, ThreadState
 
         def f1(*args, **kwargs) -> None:
@@ -19737,7 +19748,7 @@ class TestSmartThreadInterface:
             exp_kwargs = {'kwarg1': 13,
                           'kwarg2': "second kwarg",
                           'kwarg3': [11, 22, 33]
-                         }
+                          }
             args_str = ''
             comma = ''
             for idx, arg in enumerate(args, 1):
@@ -19975,7 +19986,11 @@ class TestSmartThreadInterface:
     def test_smart_thread_interface_4(self,
                                       num_f1_args: tuple[int, int, int]
                                       ) -> None:
-        """Test smart_send example 4 with no parms."""
+        """Test smart_send example 4 with no parms.
+
+        Args:
+            num_f1_args: number of arguments to specify
+        """
         from scottbrian_paratools.smart_thread import SmartThread, ThreadState
 
         def f1(*args,
@@ -19989,7 +20004,7 @@ class TestSmartThreadInterface:
             exp_kwargs = {'kwarg1': 13,
                           'kwarg2': "second kwarg",
                           'kwarg3': [11, 22, 33]
-                         }
+                          }
             args_str = ''
             comma = ''
             for idx, arg in enumerate(args, 1):
@@ -20127,7 +20142,6 @@ class TestSmartThreadErrors:
             caplog: pytest fixture to capture log output
 
         """
-
         ################################################################
         # f1
         ################################################################
@@ -20160,10 +20174,10 @@ class TestSmartThreadErrors:
         with pytest.raises(st.SmartThreadDetectedOpFromForeignThread):
             beta_thread.smart_wait(resumers='alpha')
 
-        charlie_thread = st.SmartThread(name='charlie',
-                                        auto_start=False,
-                                        target=f1,
-                                        kwargs={'f1_name': 'charlie'})
+        st.SmartThread(name='charlie',
+                       auto_start=False,
+                       target=f1,
+                       kwargs={'f1_name': 'charlie'})
 
         beta_thread.smart_start(targets='charlie')
 
@@ -20192,7 +20206,6 @@ class TestSmartThreadErrors:
             caplog: pytest fixture to capture log output
 
         """
-
         ################################################################
         # f1
         ################################################################
@@ -20245,13 +20258,15 @@ class TestSmartThreadExamples:
         def f1() -> None:
             print('f1 beta entered')
             beta_smart_thread.smart_send(receivers='alpha',
-                                   msg='hi alpha, this is beta')
+                                         msg='hi alpha, this is beta')
             beta_smart_thread.smart_wait(resumers='alpha')
             print('f1 beta exiting')
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
-        beta_smart_thread = SmartThread(name='beta', target=f1, auto_start=False)
+        beta_smart_thread = SmartThread(name='beta',
+                                        target=f1,
+                                        auto_start=False)
         beta_smart_thread.smart_start()
         msg_from_beta = alpha_smart_thread.smart_recv(senders='beta')
         print(msg_from_beta)
@@ -20297,10 +20312,10 @@ class TestSmartThreadExamples:
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
-        beta_smart_thread = SmartThread(name='beta',
-                                  target=f1,
-                                  auto_start=True,
-                                  thread_parm_name='smart_thread')
+        SmartThread(name='beta',
+                    target=f1,
+                    auto_start=True,
+                    thread_parm_name='smart_thread')
         msg_from_beta = alpha_smart_thread.smart_recv(senders='beta')
         print(msg_from_beta)
         alpha_smart_thread.smart_resume(waiters='beta')
@@ -20341,7 +20356,7 @@ class TestSmartThreadExamples:
             print('f1 beta entered')
             beta_smart_thread = SmartThread(name='beta')
             beta_smart_thread.smart_send(receivers='alpha',
-                                    msg='hi alpha, this is beta')
+                                         msg='hi alpha, this is beta')
             beta_smart_thread.smart_wait(resumers='alpha')
             print('f1 beta exiting')
 
@@ -20416,7 +20431,7 @@ class TestSmartThreadExamples:
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
-        thread_app = ThreadApp(name='beta')
+        ThreadApp(name='beta')
         my_msg = alpha_smart_thread.smart_recv(senders='beta')
         print(my_msg)
         time.sleep(2)
@@ -20488,7 +20503,7 @@ class TestSmartThreadExamples:
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
-        thread_app = SmartThreadApp(name='beta')
+        SmartThreadApp(name='beta')
         my_msg = alpha_smart_thread.smart_recv(senders='beta')
         print(my_msg)
         time.sleep(2)
@@ -20510,7 +20525,6 @@ class TestSmartThreadExamples:
         assert captured == expected_result
 
         logger.debug('mainline exiting')
-
 
     ####################################################################
     # test_smart_start_example_1
@@ -20578,12 +20592,12 @@ class TestSmartThreadExamples:
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
-        beta_smart_thread = SmartThread(name='beta',
-                                        target=f1_beta,
-                                        auto_start=False)
-        charlie_smart_thread = SmartThread(name='charlie',
-                                           target=f2_charlie,
-                                           auto_start=False)
+        SmartThread(name='beta',
+                    target=f1_beta,
+                    auto_start=False)
+        SmartThread(name='charlie',
+                    target=f2_charlie,
+                    auto_start=False)
         print('alpha about to start beta and charlie')
         alpha_smart_thread.smart_start(targets=['beta', 'charlie'])
         alpha_smart_thread.smart_join(targets=['beta', 'charlie'])
@@ -20624,9 +20638,9 @@ class TestSmartThreadExamples:
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
         print('alpha about to create beta')
-        beta_smart_thread = SmartThread(name='beta',
-                                        target=f1_beta,
-                                        auto_start=False)
+        SmartThread(name='beta',
+                    target=f1_beta,
+                    auto_start=False)
         print('alpha about to unregister beta')
         alpha_smart_thread.smart_unreg(targets='beta')
         print('mainline alpha exiting')
@@ -20646,7 +20660,7 @@ class TestSmartThreadExamples:
     # test_smart_join_example_1
     ####################################################################
     def test_smart_join_example_1(self,
-                                   capsys: Any) -> None:
+                                  capsys: Any) -> None:
         """Test smart_join example 1.
 
         Create and join a SmartThread thread.
@@ -20664,8 +20678,8 @@ class TestSmartThreadExamples:
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
         print('alpha about to create beta')
-        beta_smart_thread = SmartThread(name='beta',
-                                        target=f1_beta)
+        SmartThread(name='beta',
+                    target=f1_beta)
         time.sleep(1)
         print('alpha about to join beta')
         alpha_smart_thread.smart_join(targets='beta')
@@ -20707,9 +20721,9 @@ class TestSmartThreadExamples:
         print('mainline alpha entered')
         logger.debug('mainline entered')
         alpha_smart_thread = SmartThread(name='alpha')
-        beta_smart_thread = SmartThread(name='beta',
-                                        target=f1,
-                                        thread_parm_name='smart_thread')
+        SmartThread(name='beta',
+                    target=f1,
+                    thread_parm_name='smart_thread')
         alpha_smart_thread.smart_send(msg='hello beta', receivers='beta')
         alpha_smart_thread.smart_join(targets='beta')
         print('mainline alpha exiting')
@@ -20750,12 +20764,12 @@ class TestSmartThreadExamples:
             print(f'f1 {smart_thread.name} exiting')
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
-        beta_smart_thread = SmartThread(name='beta',
-                                        target=f1,
-                                        thread_parm_name='smart_thread')
-        charlie_smart_thread = SmartThread(name='charlie',
-                                           target=f1,
-                                           thread_parm_name='smart_thread')
+        SmartThread(name='beta',
+                    target=f1,
+                    thread_parm_name='smart_thread')
+        SmartThread(name='charlie',
+                    target=f1,
+                    thread_parm_name='smart_thread')
         alpha_smart_thread.smart_send(msg='hello remotes',
                                       receivers=('beta', 'charlie'))
         alpha_smart_thread.smart_join(targets=('beta', 'charlie'))
@@ -20807,20 +20821,20 @@ class TestSmartThreadExamples:
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
-        beta_smart_thread = SmartThread(name='beta',
-                                        target=f1,
-                                        thread_parm_name='smart_thread',
-                                        kwargs={'resume_target': 'charlie'})
-        charlie_smart_thread = SmartThread(name='charlie',
-                                           target=f1,
-                                           thread_parm_name='smart_thread',
-                                           kwargs={'wait_for': 'beta',
-                                                   'resume_target': 'delta'})
-        delta_smart_thread = SmartThread(name='delta',
-                                         target=f1,
-                                         thread_parm_name='smart_thread',
-                                         kwargs={'wait_for': 'charlie',
-                                                 'resume_target': 'alpha'})
+        SmartThread(name='beta',
+                    target=f1,
+                    thread_parm_name='smart_thread',
+                    kwargs={'resume_target': 'charlie'})
+        SmartThread(name='charlie',
+                    target=f1,
+                    thread_parm_name='smart_thread',
+                    kwargs={'wait_for': 'beta',
+                            'resume_target': 'delta'})
+        SmartThread(name='delta',
+                    target=f1,
+                    thread_parm_name='smart_thread',
+                    kwargs={'wait_for': 'charlie',
+                            'resume_target': 'alpha'})
         alpha_smart_thread.smart_send(msg='hello remotes')
         alpha_smart_thread.smart_wait(resumers='delta')
         alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
@@ -20866,9 +20880,9 @@ class TestSmartThreadExamples:
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
-        beta_smart_thread = SmartThread(name='beta',
-                                        target=f1,
-                                        thread_parm_name='smart_thread')
+        SmartThread(name='beta',
+                    target=f1,
+                    thread_parm_name='smart_thread')
         alpha_smart_thread.smart_send(msg=('hello beta',
                                       'have a great day', 42))
         alpha_smart_thread.smart_join(targets='beta')
@@ -20915,20 +20929,20 @@ class TestSmartThreadExamples:
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
-        beta_smart_thread = SmartThread(name='beta',
-                                        target=f1,
-                                        thread_parm_name='smart_thread',
-                                        kwargs={'resume_target': 'charlie'})
-        charlie_smart_thread = SmartThread(name='charlie',
-                                           target=f1,
-                                           thread_parm_name='smart_thread',
-                                           kwargs={'wait_for': 'beta',
-                                                   'resume_target': 'delta'})
-        delta_smart_thread = SmartThread(name='delta',
-                                         target=f1,
-                                         thread_parm_name='smart_thread',
-                                         kwargs={'wait_for': 'charlie',
-                                                 'resume_target': 'alpha'})
+        SmartThread(name='beta',
+                    target=f1,
+                    thread_parm_name='smart_thread',
+                    kwargs={'resume_target': 'charlie'})
+        SmartThread(name='charlie',
+                    target=f1,
+                    thread_parm_name='smart_thread',
+                    kwargs={'wait_for': 'beta',
+                            'resume_target': 'delta'})
+        SmartThread(name='delta',
+                    target=f1,
+                    thread_parm_name='smart_thread',
+                    kwargs={'wait_for': 'charlie',
+                            'resume_target': 'alpha'})
         alpha_smart_thread.smart_send(msg=['hello remotes',
                                            'have a great day', 42],
                                       receivers=['beta', 'charlie', 'delta'])
@@ -20970,7 +20984,7 @@ class TestSmartThreadExamples:
         Args:
             capsys: pytest fixture to get the print output
         """
-        from scottbrian_paratools.smart_thread import SmartThread
+        from scottbrian_paratools.smart_thread import SmartThread, SendMsgs
 
         def f1(smart_thread: SmartThread,
                wait_for: Optional[str] = None,
@@ -20986,20 +21000,20 @@ class TestSmartThreadExamples:
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
-        beta_smart_thread = SmartThread(name='beta',
-                                        target=f1,
-                                        thread_parm_name='smart_thread',
-                                        kwargs={'resume_target': 'charlie'})
-        charlie_smart_thread = SmartThread(name='charlie',
-                                           target=f1,
-                                           thread_parm_name='smart_thread',
-                                           kwargs={'wait_for': 'beta',
-                                                   'resume_target': 'delta'})
-        delta_smart_thread = SmartThread(name='delta',
-                                         target=f1,
-                                         thread_parm_name='smart_thread',
-                                         kwargs={'wait_for': 'charlie',
-                                                 'resume_target': 'alpha'})
+        SmartThread(name='beta',
+                    target=f1,
+                    thread_parm_name='smart_thread',
+                    kwargs={'resume_target': 'charlie'})
+        SmartThread(name='charlie',
+                    target=f1,
+                    thread_parm_name='smart_thread',
+                    kwargs={'wait_for': 'beta',
+                            'resume_target': 'delta'})
+        SmartThread(name='delta',
+                    target=f1,
+                    thread_parm_name='smart_thread',
+                    kwargs={'wait_for': 'charlie',
+                            'resume_target': 'alpha'})
         msgs_to_send = SendMsgs(send_msgs={
             'beta': 'hi beta',
             'charlie': ('hi charlie', 'have a great day'),
@@ -21093,13 +21107,13 @@ class TestSmartThreadExamples:
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
-        beta_smart_thread = SmartThread(name='beta',
-                                        target=f1,
-                                        thread_parm_name='smart_thread')
+        SmartThread(name='beta',
+                    target=f1,
+                    thread_parm_name='smart_thread')
         time.sleep(0.2)
-        charlie_smart_thread = SmartThread(name='charlie',
-                                           target=f1,
-                                           thread_parm_name='smart_thread')
+        SmartThread(name='charlie',
+                    target=f1,
+                    thread_parm_name='smart_thread')
         time.sleep(0.2)
         my_msg = alpha_smart_thread.smart_recv(senders=('beta', 'charlie'))
         print(my_msg['beta'])
@@ -21146,20 +21160,20 @@ class TestSmartThreadExamples:
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
-        beta_smart_thread = SmartThread(name='beta',
-                                        target=f1,
-                                        thread_parm_name='smart_thread',
-                                        args=('hi',))
+        SmartThread(name='beta',
+                    target=f1,
+                    thread_parm_name='smart_thread',
+                    args=('hi',))
         time.sleep(0.2)
-        charlie_smart_thread = SmartThread(name='charlie',
-                                           target=f1,
-                                           thread_parm_name='smart_thread',
-                                           args=('hello',))
+        SmartThread(name='charlie',
+                    target=f1,
+                    thread_parm_name='smart_thread',
+                    args=('hello',))
         time.sleep(0.2)
-        delta_smart_thread = SmartThread(name='delta',
-                                         target=f1,
-                                         thread_parm_name='smart_thread',
-                                         args=('aloha',))
+        SmartThread(name='delta',
+                    target=f1,
+                    thread_parm_name='smart_thread',
+                    args=('aloha',))
         time.sleep(1.5)
         my_msg = alpha_smart_thread.smart_recv()
         print(my_msg['beta'])
@@ -21213,10 +21227,10 @@ class TestSmartThreadExamples:
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
-        beta_smart_thread = SmartThread(name='beta',
-                                        target=f1,
-                                        thread_parm_name='smart_thread',
-                                        args=('hi',))
+        SmartThread(name='beta',
+                    target=f1,
+                    thread_parm_name='smart_thread',
+                    args=('hi',))
         my_msg = alpha_smart_thread.smart_recv(senders='beta')
         print(my_msg['beta'])
         alpha_smart_thread.smart_join(targets='beta')
@@ -21272,23 +21286,23 @@ class TestSmartThreadExamples:
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
-        beta_smart_thread = SmartThread(name='beta',
-                                        target=f1,
-                                        thread_parm_name='smart_thread',
-                                        args=('hi',),
-                                        kwargs={'resume_target': 'charlie'})
-        charlie_smart_thread = SmartThread(name='charlie',
-                                           target=f1,
-                                           thread_parm_name='smart_thread',
-                                           args=('hello',),
-                                           kwargs={'wait_for': 'beta',
-                                                   'resume_target': 'delta'})
-        delta_smart_thread = SmartThread(name='delta',
-                                         target=f1,
-                                         thread_parm_name='smart_thread',
-                                         args=('aloha',),
-                                         kwargs={'wait_for': 'charlie',
-                                                 'resume_target': 'alpha'})
+        SmartThread(name='beta',
+                    target=f1,
+                    thread_parm_name='smart_thread',
+                    args=('hi',),
+                    kwargs={'resume_target': 'charlie'})
+        SmartThread(name='charlie',
+                    target=f1,
+                    thread_parm_name='smart_thread',
+                    args=('hello',),
+                    kwargs={'wait_for': 'beta',
+                            'resume_target': 'delta'})
+        SmartThread(name='delta',
+                    target=f1,
+                    thread_parm_name='smart_thread',
+                    args=('aloha',),
+                    kwargs={'wait_for': 'charlie',
+                            'resume_target': 'alpha'})
         alpha_smart_thread.smart_wait(resumers='delta')
         my_msg = alpha_smart_thread.smart_recv(senders={'beta', 'delta'})
         print(my_msg['beta'])
@@ -21342,9 +21356,9 @@ class TestSmartThreadExamples:
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
-        beta_smart_thread = SmartThread(name='beta',
-                                        target=f1,
-                                        thread_parm_name='smart_thread')
+        SmartThread(name='beta',
+                    target=f1,
+                    thread_parm_name='smart_thread')
         time.sleep(1)  # allow time for smart_wait to be issued
         print('alpha about to resume beta')
         alpha_smart_thread.smart_resume(waiters='beta')
@@ -21386,9 +21400,9 @@ class TestSmartThreadExamples:
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
-        beta_smart_thread = SmartThread(name='beta',
-                                        target=f1,
-                                        thread_parm_name='smart_thread')
+        SmartThread(name='beta',
+                    target=f1,
+                    thread_parm_name='smart_thread')
         print('alpha about to resume beta')
         alpha_smart_thread.smart_resume(waiters='beta')
 
@@ -21428,17 +21442,17 @@ class TestSmartThreadExamples:
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
-        beta_smart_thread = SmartThread(name='beta',
-                                        target=f1,
-                                        thread_parm_name='smart_thread')
+        SmartThread(name='beta',
+                    target=f1,
+                    thread_parm_name='smart_thread')
         time.sleep(1)  # allow time for alpha to wait
-        charlie_smart_thread = SmartThread(name='charlie',
-                                           target=f1,
-                                           thread_parm_name='smart_thread')
+        SmartThread(name='charlie',
+                    target=f1,
+                    thread_parm_name='smart_thread')
         time.sleep(1)  # allow time for alpha to wait
-        delta_smart_thread = SmartThread(name='delta',
-                                           target=f1,
-                                           thread_parm_name='smart_thread')
+        SmartThread(name='delta',
+                    target=f1,
+                    thread_parm_name='smart_thread')
         time.sleep(1)  # allow time for alpha to wait
         print('alpha about to wait for all threads')
         resumers = alpha_smart_thread.smart_wait(
@@ -21485,22 +21499,22 @@ class TestSmartThreadExamples:
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
-        beta_smart_thread = SmartThread(name='beta',
-                                        target=f1,
-                                        thread_parm_name='smart_thread')
+        SmartThread(name='beta',
+                    target=f1,
+                    thread_parm_name='smart_thread')
         time.sleep(1)
-        charlie_smart_thread = SmartThread(name='charlie',
-                                           target=f1,
-                                           thread_parm_name='smart_thread')
+        SmartThread(name='charlie',
+                    target=f1,
+                    thread_parm_name='smart_thread')
         time.sleep(1)
         print('alpha about to wait for any threads')
         resumers = alpha_smart_thread.smart_wait(
             resumers=['beta', 'charlie', 'delta'],
             wait_for=WaitFor.Any)
         print(f'alpha resumed by resumers={sorted(resumers)}')
-        delta_smart_thread = SmartThread(name='delta',
-                                         target=f1,
-                                         thread_parm_name='smart_thread')
+        SmartThread(name='delta',
+                    target=f1,
+                    thread_parm_name='smart_thread')
         time.sleep(1)  # allow time for alpha to wait
         print('alpha about to wait for any threads')
         resumers = alpha_smart_thread.smart_wait(
@@ -21539,7 +21553,7 @@ class TestSmartThreadExamples:
         Args:
             capsys: pytest fixture to get the print output
         """
-        from scottbrian_paratools.smart_thread import SmartThread, WaitFor
+        from scottbrian_paratools.smart_thread import SmartThread
         import time
 
         def f1(smart_thread: SmartThread) -> None:
@@ -21548,20 +21562,20 @@ class TestSmartThreadExamples:
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
-        beta_smart_thread = SmartThread(name='beta',
-                                        target=f1,
-                                        thread_parm_name='smart_thread')
+        SmartThread(name='beta',
+                    target=f1,
+                    thread_parm_name='smart_thread')
         time.sleep(1)
-        charlie_smart_thread = SmartThread(name='charlie',
-                                           target=f1,
-                                           thread_parm_name='smart_thread')
+        SmartThread(name='charlie',
+                    target=f1,
+                    thread_parm_name='smart_thread')
         time.sleep(1)
         print('alpha about to wait for any threads')
         resumers = alpha_smart_thread.smart_wait()
         print(f'alpha resumed by resumers={sorted(resumers)}')
-        delta_smart_thread = SmartThread(name='delta',
-                                         target=f1,
-                                         thread_parm_name='smart_thread')
+        SmartThread(name='delta',
+                    target=f1,
+                    thread_parm_name='smart_thread')
         time.sleep(1)  # allow time for alpha to wait
         print('alpha about to wait for any threads')
         resumers = alpha_smart_thread.smart_wait()
@@ -21605,26 +21619,26 @@ class TestSmartThreadExamples:
         def f1_beta(smart_thread: SmartThread) -> None:
             print(f'f1_beta about to wait')
             smart_thread.smart_wait(resumers='alpha')
-            print(f'f1_beta back from wait')
+            print('f1_beta back from wait')
 
         def f2_charlie(smart_thread: SmartThread) -> None:
             time.sleep(1)
-            print(f'f2_charlie about to wait')
+            print('f2_charlie about to wait')
             smart_thread.smart_wait(resumers='alpha')
             time.sleep(1)
-            print(f'f2_charlie back from wait')
+            print('f2_charlie back from wait')
 
         def f3_delta(smart_thread: SmartThread) -> None:
             time.sleep(4)
-            print(f'f3_delta about to wait')
+            print('f3_delta about to wait')
             smart_thread.smart_wait(resumers='alpha')
-            print(f'f3_delta back from wait')
+            print('f3_delta back from wait')
 
         def f4_echo(smart_thread: SmartThread) -> None:
             time.sleep(5)
-            print(f'f4_echo about to wait')
+            print('f4_echo about to wait')
             smart_thread.smart_wait(resumers='alpha')
-            print(f'f4_echo back from wait')
+            print('f4_echo back from wait')
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
