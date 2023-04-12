@@ -11605,8 +11605,8 @@ class ConfigVerifier:
                              F1CreateItem(name='george',
                                           auto_start=False,
                                           target_rtn=outer_f1,
-                                          app_config
-                                          =AppConfig.RemoteThreadApp)
+                                          app_config=
+                                          AppConfig.RemoteThreadApp)
                              ]))
         self.add_cmd(VerifyInRegistry(
             cmd_runners='alpha',
@@ -12113,7 +12113,7 @@ class ConfigVerifier:
 
         Args:
             names: thread name to be unregistered
-
+            validate_config: specifies whether to verify the config
         """
         names = get_set(names)
         if not names.issubset(self.registered_names):
@@ -12282,10 +12282,10 @@ class ConfigVerifier:
 
         self.all_threads[name] = f1_thread
 
-        if auto_start:
-            exp_status = st.ThreadState.Alive
-        else:
-            exp_status = st.ThreadState.Registered
+        # if auto_start:
+        #     exp_status = st.ThreadState.Alive
+        # else:
+        #     exp_status = st.ThreadState.Registered
 
         with self.ops_lock:
             self.monitor_add_items[cmd_runner] = MonitorAddItem(
@@ -12383,6 +12383,7 @@ class ConfigVerifier:
     # dec_recv_timeout
     ####################################################################
     def dec_recv_timeout(self):
+        """Decrement the receive timeout count."""
         with self.ops_lock:
             self.expected_num_recv_timeouts -= 1
 
@@ -12459,6 +12460,13 @@ class ConfigVerifier:
     def find_log_msgs(self,
                       search_msgs: StrOrList,
                       num_instances: int = 1) -> bool:
+        """Find the requested log message in the log.
+
+        Args:
+            search_msgs: list of message to be found
+            num_instances: number of instances to be found
+
+        """
         if isinstance(search_msgs, str):
             search_msgs = [search_msgs]
         work_msgs: list[re.Pattern] = []
@@ -12614,7 +12622,7 @@ class ConfigVerifier:
     ####################################################################
     def handle_deferred_deletes(self,
                                 cmd_runner: str) -> bool:
-        """Delete deferred deletes and issue log messages
+        """Delete deferred deletes and issue log messages.
 
         Args:
             cmd_runner: thread doing the delete
@@ -12652,7 +12660,7 @@ class ConfigVerifier:
                 self.log_test_msg(f'handle_deferred_deletes {cmd_runner=} '
                                   f'_refresh_pair_array rem_pair_key 1'
                                   f' {pair_key}, {def_del_name}')
-                rem_msg_1 = f"[a-z]+ "
+                rem_msg_1 = "[a-z]+ "
                 rem_msg_2 = re.escape(
                     f"removed status_blocks entry for pair_key = {pair_key}, "
                     f"name = {def_del_name}")
@@ -12811,7 +12819,6 @@ class ConfigVerifier:
                     timeout: Optional[IntOrFloat] = None,
                     timeout_names: Optional[set[str]] = None
                     ) -> None:
-
         """Handle the join execution and log msgs.
 
         Args:

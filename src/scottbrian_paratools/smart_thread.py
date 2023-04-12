@@ -359,6 +359,7 @@ Expected output for Example4::
     del SmartThread._registry['alpha']
 
 Expected output for Example5::
+
     mainline alpha entered
     beta entry to run method
     {'beta': ['hi alpha, this is beta']}
@@ -1470,79 +1471,78 @@ class SmartThread:
             targets: names of smart threads to be started
             log_msg: log message to issue for request
 
-        """
-        # :Example1: Create and start a SmartThread
-        #
-        # .. code-block: python
-        #
-        #     from scottbrian_paratools.smart_thread import SmartThread
-        #     def f1() -> None:
-        #         print('f1 beta entered')
-        #         print('f1 beta exiting')
-        #
-        #     print('mainline alpha entered')
-        #     alpha_smart_thread = SmartThread(name='alpha')
-        #     beta_smart_thread = SmartThread(name='beta',
-        #                                     target=f1,
-        #                                     auto_start=False)
-        #     print('alpha about to start beta')
-        #     beta_smart_thread.smart_start()
-        #     alpha_smart_thread.smart_join(targets='beta')
-        #     print('mainline alpha exiting')
-        #
-        # .. invisible-code-block: python
-        #
-        #     del SmartThread._registry['alpha']
-        #
-        # Expected output for Example1::
-        #
-        #     mainline alpha entered
-        #     alpha about to start beta
-        #     f1 beta entered
-        #     f1 beta exiting
-        #     mainline alpha exiting
-        #
-        # :Example2: Create and start two SmartThread threads.
-        #
-        # .. code-block: python
-        #
-        #     from scottbrian_paratools.smart_thread import SmartThread
-        #     import time
-        #     def f1_beta() -> None:
-        #         print('f1_beta entered')
-        #         print('f1_beta exiting')
-        #     def f2_charlie() -> None:
-        #         time.sleep(1)
-        #         print('f2_charlie entered')
-        #         print('f2_charlie exiting')
-        #     print('mainline alpha entered')
-        #     alpha_smart_thread = SmartThread(name='alpha')
-        #     beta_smart_thread = SmartThread(name='beta',
-        #                                     target=f1_beta,
-        #                                     auto_start=False)
-        #     charlie_smart_thread = SmartThread(name='charlie',
-        #                                        target=f2_charlie,
-        #                                        auto_start=False)
-        #     print('alpha about to start beta and charlie')
-        #     alpha_smart_thread.smart_start(targets=['beta', 'charlie'])
-        #     alpha_smart_thread.smart_join(targets=['beta', 'charlie'])
-        #     print('mainline alpha exiting')
-        #
-        # .. invisible-code-block: python
-        #
-        #     del SmartThread._registry['alpha']
-        #
-        # Expected output for Example2::
-        #
-        #     mainline alpha entered
-        #     alpha about to start beta and charlie
-        #     f1_beta entered
-        #     f1_beta exiting
-        #     f2_charlie entered
-        #     f2_charlie exiting
-        #     mainline alpha exiting
+        **Example1:** Create and start a SmartThread
 
-        # """
+        .. code-block:: python
+
+            from scottbrian_paratools.smart_thread import SmartThread
+            def f1() -> None:
+                print('f1 beta entered')
+                print('f1 beta exiting')
+
+            print('mainline alpha entered')
+            alpha_smart_thread = SmartThread(name='alpha')
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            auto_start=False)
+            print('alpha about to start beta')
+            beta_smart_thread.smart_start()
+            alpha_smart_thread.smart_join(targets='beta')
+            print('mainline alpha exiting')
+
+        .. invisible-code-block: python
+
+            del SmartThread._registry['alpha']
+
+        Expected output for Example1::
+
+            mainline alpha entered
+            alpha about to start beta
+            f1 beta entered
+            f1 beta exiting
+            mainline alpha exiting
+
+        **Example2:** Create and start two SmartThread threads.
+
+        .. code-block:: python
+
+            from scottbrian_paratools.smart_thread import SmartThread
+            import time
+            def f1_beta() -> None:
+                print('f1_beta entered')
+                print('f1_beta exiting')
+            def f2_charlie() -> None:
+                time.sleep(1)
+                print('f2_charlie entered')
+                print('f2_charlie exiting')
+            print('mainline alpha entered')
+            alpha_smart_thread = SmartThread(name='alpha')
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_beta,
+                                            auto_start=False)
+            charlie_smart_thread = SmartThread(name='charlie',
+                                               target=f2_charlie,
+                                               auto_start=False)
+            print('alpha about to start beta and charlie')
+            alpha_smart_thread.smart_start(targets=['beta', 'charlie'])
+            alpha_smart_thread.smart_join(targets=['beta', 'charlie'])
+            print('mainline alpha exiting')
+
+        .. invisible-code-block: python
+
+            del SmartThread._registry['alpha']
+
+        Expected output for Example2::
+
+            mainline alpha entered
+            alpha about to start beta and charlie
+            f1_beta entered
+            f1_beta exiting
+            f2_charlie entered
+            f2_charlie exiting
+            mainline alpha exiting
+
+        """
         # get RequestBlock with targets in a set and a timer object
         if not targets:
             targets = self.name
@@ -1631,32 +1631,38 @@ class SmartThread:
                registered state until it is started at which time it
                enters the active state
 
-        """
-        # :Example: Create and unregister a SmartThread thread.
-        #
-        # .. invisible-code-block: python
-        #
-        #     del SmartThread._registry['alpha']
-        #
-        # >>> from scottbrian_paratools.smart_thread import SmartThread
-        # >>> def f1_beta() -> None:
-        # ...     print('f1_beta entered')
-        # ...     print('f1_beta exiting')
-        # >>> print('mainline alpha entered')
-        # >>> alpha_smart_thread = SmartThread(name='alpha')
-        # >>> print('alpha about to create beta')
-        # >>> beta_smart_thread = SmartThread(name='beta',
-        #                                     target=f1_beta,
-        #                                     auto_start=False)
-        # >>> print('alpha about to unregister beta')
-        # >>> alpha_smart_thread.smart_unreg(targets='beta')
-        # >>> print('mainline alpha exiting')
-        # mainline alpha entered
-        # alpha about to create beta
-        # alpha about to unregister beta
-        # mainline alpha exiting
+        **Example1:** Create and unregister a SmartThread thread.
 
-        # """
+        .. code-block:: python
+
+            from scottbrian_paratools.smart_thread import SmartThread
+
+            def f1_beta() -> None:
+                print('f1_beta entered')
+                print('f1_beta exiting')
+
+            print('mainline alpha entered')
+            alpha_smart_thread = SmartThread(name='alpha')
+            print('alpha about to create beta')
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_beta,
+                                            auto_start=False)
+            print('alpha about to unregister beta')
+            alpha_smart_thread.smart_unreg(targets='beta')
+            print('mainline alpha exiting')
+
+        .. invisible-code-block: python
+
+            del SmartThread._registry['alpha']
+
+        Expected output for Example1::
+
+            mainline alpha entered
+            alpha about to create beta
+            alpha about to unregister beta
+            mainline alpha exiting
+
+        """
         request_block = self._request_setup(
             request=ReqType.Smart_unreg,
             remotes=targets,
@@ -1724,41 +1730,46 @@ class SmartThread:
         Raises:
             SmartThreadRequestTimedOut: join timed out waiting for
                 targets to end.
-        .. # noqa DAR402
+
+        **Example1:** Create and join a SmartThread thread.
+
+        .. # noqa: DAR402
+
+        .. code-block:: python
+
+            from scottbrian_paratools.smart_thread import SmartThread
+            import time
+
+            def f1_beta() -> None:
+                print('f1_beta entered')
+                print('f1_beta exiting')
+
+            print('mainline alpha entered')
+            alpha_smart_thread = SmartThread(name='alpha')
+            print('alpha about to create beta')
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_beta)
+            time.sleep(1)
+            print('alpha about to join beta')
+            alpha_smart_thread.smart_join(targets='beta')
+            print('mainline alpha exiting')
+
+
+        .. invisible-code-block: python
+
+            del SmartThread._registry['alpha']
+
+        Expected output for Example1::
+
+            mainline alpha entered
+            alpha about to create beta
+            f1_beta entered
+            f1_beta exiting
+            alpha about to join beta
+            mainline alpha exiting
 
 
         """
-        #
-        # .. # noqa DAR402
-        #
-        # Example1: Create and join a SmartThread thread.
-        #
-        # .. invisible-code-block: python
-        #
-        #     del SmartThread._registry['alpha']
-        #
-        # >>> from scottbrian_paratools.smart_thread import SmartThread
-        # >>> import time
-        # >>> def f1_beta() -> None:
-        # ...     print('f1_beta entered')
-        # ...     print('f1_beta exiting')
-        # >>> print('mainline alpha entered')
-        # >>> alpha_smart_thread = SmartThread(name='alpha')
-        # >>> print('alpha about to create beta')
-        # >>> beta_smart_thread = SmartThread(name='beta',
-        # ...                                 target=f1_beta)
-        # >>> time.sleep(1)
-        # >>> print('alpha about to join beta')
-        # >>> alpha_smart_thread.smart_join(targets='beta')
-        # >>> print('mainline alpha exiting')
-        # mainline alpha entered
-        # alpha about to create beta
-        # f1_beta entered
-        # f1_beta exiting
-        # alpha about to join beta
-        # mainline alpha exiting
-        #
-        # """
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
             request=ReqType.Smart_join,
@@ -1870,7 +1881,9 @@ class SmartThread:
             SmartThreadNoRemoteTargets: {self.name} issued a smart_send
                 request but there are no remote receivers in the
                 configuration to send to.
-        .. # noqa DAR402
+
+        .. # noqa: DAR402
+
 
         """
         # *smart_send* can be used to send a single message or multiple
@@ -2318,25 +2331,29 @@ class SmartThread:
                    senders: Optional[Iterable] = None,
                    log_msg: Optional[str] = None,
                    timeout: OptIntFloat = None) -> dict[str, Any]:
-        """Receive one or more messages from remote threads."""
-        # Args:
-        #     senders: thread names whose sent messages are to be received
-        #     log_msg: log message to issue
-        #     timeout: number of seconds to wait for message
-        #
-        # Returns:
-        #     dictionary of received messages, indexed by thread name
-        #
-        # Raises:
-        #     SmartThreadRemoteThreadNotAlive: target thread was
-        #         stopped.
-        #     SmartThreadRequestTimedOut: request timed out before
-        #         message was received.
-        #     SmartThreadDeadlockDetected: a smart_recv specified a sender
-        #         that issued a smart_recv, smart_wait, or
-        #         smart_sync.
-        # .. # noqa DAR402
-        #
+        """Receive one or more messages from remote threads.
+
+        Args:
+            senders: thread names whose sent messages are to be received
+            log_msg: log message to issue
+            timeout: number of seconds to wait for message
+
+        Returns:
+            dictionary of received messages, indexed by thread name
+
+        Raises:
+            SmartThreadRemoteThreadNotAlive: target thread was
+                stopped.
+            SmartThreadRequestTimedOut: request timed out before
+                message was received.
+            SmartThreadDeadlockDetected: a smart_recv specified a sender
+                that issued a smart_recv, smart_wait, or
+                smart_sync.
+
+        .. # noqa: DAR402
+
+
+        """
         # Notes:
         #     1) A deadlock will occur between two threads when they both
         #        issue a request that waits for the other thread to
@@ -2444,9 +2461,10 @@ class SmartThread:
         # >>> time.sleep(0.2)
         # >>> charlie_smart_thread = SmartThread(name='charlie',
         # ...                                    target=f1,
-        # ...                                    thread_parm_name='smart_thread')
+        # ...                                 thread_parm_name='smart_thread')
         # >>> time.sleep(0.2)
-        # >>> my_msg = alpha_smart_thread.smart_recv(senders=('beta', 'charlie'))
+        # >>> my_msg = alpha_smart_thread.smart_recv(
+        # senders=('beta', 'charlie'))
         # >>> print(my_msg['beta'])
         # >>> print(my_msg['charlie'])
         # >>> alpha_smart_thread.smart_join(targets=('beta', 'charlie'))
@@ -2479,7 +2497,7 @@ class SmartThread:
         # >>> time.sleep(0.2)
         # >>> charlie_smart_thread = SmartThread(name='charlie',
         # ...                                    target=f1,
-        # ...                                    thread_parm_name='smart_thread',
+        # ...                                 thread_parm_name='smart_thread',
         # ...                                    args=('hello',))
         # >>> time.sleep(0.2)
         # >>> delta_smart_thread = SmartThread(name='delta',
@@ -2569,16 +2587,16 @@ class SmartThread:
         # ...                                     'resume_target':'charlie'})
         # >>> charlie_smart_thread = SmartThread(name='charlie',
         # ...                                    target=f1,
-        # ...                                    thread_parm_name='smart_thread',
+        # ...                                 thread_parm_name='smart_thread',
         # ...                                    args=('hello',),
         # ...                                    kwargs={'wait_for': 'beta',
-        # ...                                           'resume_target':'delta'})
+        # ...                                        'resume_target':'delta'})
         # >>> delta_smart_thread = SmartThread(name='delta',
         # ...                                  target=f1,
         # ...                                  thread_parm_name='smart_thread',
         # ...                                  args=('aloha',),
         # ...                                  kwargs={'wait_for': 'charlie',
-        # ...                                          'resume_target': 'alpha'})
+        # ...                                       'resume_target': 'alpha'})
         # >>> alpha_smart_thread.smart_wait(resumers='delta')
         # >>> my_msg = alpha_smart_thread.smart_recv(senders={'beta', 'delta'})
         # >>> print(my_msg['beta'])
@@ -3188,17 +3206,17 @@ class SmartThread:
                 complete
             log_msg: log msg to log
 
-        Returns:
-            list of resumers that resumed this thread
-
         Raises:
             SmartThreadRemoteThreadNotAlive: waiter thread was
                 stopped.
             SmartThreadRequestTimedOut: request timed out before
                 being resumed.
-        .. # noqa DAR402
 
-        Notes:
+        .. # noqa: DAR402
+
+        :rtype: None
+
+        **Notes:**
 
             1) The ``smart_wait()`` and ``smart_resume()`` processing
                use a threading event to coordinate the wait and resume.
@@ -3226,7 +3244,6 @@ class SmartThread:
                from the configuration with its wait event still set.
 
         """
-
         # Args:
         #     waiters: names of threads that are to be resumed
         #     timeout: number of seconds to allow for ``resume()`` to
@@ -3553,7 +3570,7 @@ class SmartThread:
         # >>> time.sleep(1)
         # >>> charlie_smart_thread = SmartThread(name='charlie',
         # ...                                    target=f2_charlie,
-        # ...                                    thread_parm_name='smart_thread')
+        # ...                                 thread_parm_name='smart_thread')
         # >>> time.sleep(1)
         # >>> print('alpha about to sync with beta and charlie')
         # >>> alpha_smart_thread.smart_sync(targets=['beta', 'charlie'])
@@ -3803,7 +3820,8 @@ class SmartThread:
                 thread is not alive.
             SmartThreadDeadlockDetected: a deadlock was detected
                 between two requests.
-        .. # noqa DAR402
+
+        .. # noqa: DAR402
 
         """
         with self.cmd_lock:
@@ -3848,9 +3866,10 @@ class SmartThread:
                 thread is not alive.
             SmartThreadDeadlockDetected: a deadlock was detected
                 between two requests.
-        .. # noqa DAR402
 
-        Notes:
+        .. # noqa: DAR402
+
+        Note(s):
 
             1) request_pending is used to keep the cmd_runner pair_array
                entry from being removed between the times the lock is
