@@ -53,11 +53,14 @@ StrOrSet: TypeAlias = Union[str, set[str]]
 # SendRecvMsgs
 ########################################################################
 class SrKey(NamedTuple):
+    """Key for SendRecvMsgs."""
     sender: str
     receiver: str
 
+
 @dataclass
 class SendRecvMsgs:
+    """Messages to send and verify."""
     send_msgs: dict[SrKey, list[Any]]
 
 
@@ -76,6 +79,7 @@ log_level_arg_list = [logging.DEBUG,
 # CommanderConfig
 ########################################################################
 class AppConfig(Enum):
+    """Commander configuration choices."""
     ScriptStyle = auto()
     CurrentThreadApp = auto()
     RemoteThreadApp = auto()
@@ -87,6 +91,7 @@ class AppConfig(Enum):
 # ResumeStyles
 ########################################################################
 class Actors(Enum):
+    """Resume scenario cases."""
     ActiveBeforeActor = auto()
     ActiveAfterActor = auto()
     ActionExitActor = auto()
@@ -99,6 +104,7 @@ class Actors(Enum):
 # ConflictDeadlockScenario
 ########################################################################
 class ConflictDeadlockScenario(Enum):
+    """Deadlock scenario cases to test."""
     NormalSync = auto()
     NormalResumeWait = auto()
     ResumeSyncSyncWait = auto()
@@ -110,6 +116,7 @@ class ConflictDeadlockScenario(Enum):
 # DefDelScenario
 ########################################################################
 class DefDelScenario(Enum):
+    """Deferred delete scenario cases."""
     NormalRecv = auto()
     NormalWait = auto()
     ResurrectionRecv = auto()
@@ -131,6 +138,7 @@ class DefDelScenario(Enum):
 ########################################################################
 @dataclass()
 class RequestConfirmParms:
+    """Request confirm parms."""
     request_name: str
     serial_number: int
 
@@ -186,6 +194,7 @@ commander_config_arg_list = [AppConfig.ScriptStyle,
 # timeout_type used to specify whether to use timeout on various cmds
 ########################################################################
 class TimeoutType(Enum):
+    """Timeout type for test."""
     TimeoutNone = auto()
     TimeoutFalse = auto()
     TimeoutTrue = auto()
@@ -289,6 +298,7 @@ resume_lap_arg_list = [0, 1]
 # Test settings for test_rotate_state_scenarios
 ########################################################################
 class SmartRequestType(Enum):
+    """SmartThread requests."""
     Start = auto()
     Unreg = auto()
     Join = auto()
@@ -297,6 +307,7 @@ class SmartRequestType(Enum):
     Resume = auto()
     Sync = auto()
     Wait = auto()
+
 
 req0_arg_list = [
     SmartRequestType.SendMsg,
@@ -411,7 +422,6 @@ num_delay_reg_arg_list = [0, 1, 2]
 # num_stopped_delay_arg_list = [0, 1, 2]
 
 
-
 ########################################################################
 # Test settings for test_wait_timeout_scenarios
 ########################################################################
@@ -521,6 +531,15 @@ class FailedDefDelVerify(ErrorTstSmartThread):
 # get_set
 ########################################################################
 def get_set(item: Optional[Iterable] = None):
+    """Return a set given the iterable input.
+
+    Args:
+        item: iterable to be returned as a set
+
+    Returns:
+        A set created from the input iterable item. Note that the set
+        will be empty if None was passed in.
+    """
     return set({item} if isinstance(item, str) else item or '')
 
 
@@ -528,6 +547,7 @@ def get_set(item: Optional[Iterable] = None):
 # ConfigCmd
 ########################################################################
 class ConfigCmd(ABC):
+    """Configuration command base class."""
     def __init__(self,
                  cmd_runners: Iterable):
         """Initialize the instance.
@@ -536,7 +556,6 @@ class ConfigCmd(ABC):
             cmd_runners: thread names that will execute the command
 
         """
-
         # The serial number, line_num, and config_ver are filled in
         # by the ConfigVerifier add_cmd method just before queueing
         # the command.
@@ -554,8 +573,9 @@ class ConfigCmd(ABC):
                                     'line_num']
 
     def __repr__(self):
+        """Method to provide repr."""
         if TYPE_CHECKING:
-            __class__: Type[ConfigVerifier]
+            __class__: Type[ConfigVerifier]  # noqa: F842
         classname = self.__class__.__name__
         parms = (f'serial={self.serial_num}, '
                  f'line={self.line_num}')
@@ -590,6 +610,7 @@ class ConfigCmd(ABC):
 # ConfirmResponse
 ########################################################################
 class ConfirmResponse(ConfigCmd):
+    """Confirm that an earlier command has completed."""
     def __init__(self,
                  cmd_runners: Iterable,
                  confirm_cmd: str,
@@ -650,6 +671,7 @@ class ConfirmResponse(ConfigCmd):
 # ConfirmResponseNot
 ########################################################################
 class ConfirmResponseNot(ConfirmResponse):
+    """Confirm that an earlier command has not yet completed."""
     def __init__(self,
                  cmd_runners: Iterable,
                  confirm_cmd: str,
@@ -692,6 +714,7 @@ class ConfirmResponseNot(ConfirmResponse):
 # CreateCommanderAutoStart
 ########################################################################
 class CreateCommanderAutoStart(ConfigCmd):
+    """Create a commander thread with autostart."""
     def __init__(self,
                  cmd_runners: Iterable,
                  commander_name: str,
@@ -730,6 +753,7 @@ class CreateCommanderAutoStart(ConfigCmd):
 # CreateCommanderNoStart
 ########################################################################
 class CreateCommanderNoStart(CreateCommanderAutoStart):
+    """Create a commander thread with no autostart."""
     def __init__(self,
                  cmd_runners: Iterable,
                  commander_name: str,
@@ -765,6 +789,7 @@ class CreateCommanderNoStart(CreateCommanderAutoStart):
 # CreateF1AutoStart
 ########################################################################
 class CreateF1AutoStart(ConfigCmd):
+    """Create an f1 thread with autostart."""
     def __init__(self,
                  cmd_runners: Iterable,
                  f1_create_items: list["F1CreateItem"],
@@ -802,6 +827,7 @@ class CreateF1AutoStart(ConfigCmd):
 # CreateF1NoStart
 ########################################################################
 class CreateF1NoStart(CreateF1AutoStart):
+    """Create an f1 thread with no autostart."""
     def __init__(self,
                  cmd_runners: Iterable,
                  f1_create_items: list["F1CreateItem"],
@@ -836,6 +862,7 @@ class CreateF1NoStart(CreateF1AutoStart):
 # ExitThread
 ########################################################################
 class ExitThread(ConfigCmd):
+    """Cause thread to exit its command loop."""
     def __init__(self,
                  cmd_runners: Iterable,
                  stopped_by: str) -> None:
@@ -865,6 +892,7 @@ class ExitThread(ConfigCmd):
 # Join
 ########################################################################
 class Join(ConfigCmd):
+    """Do smart_join."""
     def __init__(self,
                  cmd_runners: Iterable,
                  join_names: Iterable,
@@ -900,6 +928,7 @@ class Join(ConfigCmd):
 # JoinTimeoutFalse
 ########################################################################
 class JoinTimeoutFalse(Join):
+    """Do smart_join with timeout false."""
     def __init__(self,
                  cmd_runners: Iterable,
                  join_names: Iterable,
@@ -938,6 +967,7 @@ class JoinTimeoutFalse(Join):
 # JoinTimeoutTrue
 ########################################################################
 class JoinTimeoutTrue(JoinTimeoutFalse):
+    """Do smart_join with timeout true."""
     def __init__(self,
                  cmd_runners: Iterable,
                  join_names: Iterable,
@@ -987,6 +1017,7 @@ class JoinTimeoutTrue(JoinTimeoutFalse):
 # LockObtain
 ########################################################################
 class LockObtain(ConfigCmd):
+    """Obtain the registry lock."""
     def __init__(self,
                  cmd_runners: Iterable) -> None:
         """Initialize the instance.
@@ -1011,6 +1042,7 @@ class LockObtain(ConfigCmd):
 # LockRelease
 ########################################################################
 class LockRelease(ConfigCmd):
+    """Release the registry lock."""
     def __init__(self,
                  cmd_runners: Iterable) -> None:
         """Initialize the instance.
@@ -1035,6 +1067,7 @@ class LockRelease(ConfigCmd):
 # LockSwap
 ########################################################################
 class LockSwap(ConfigCmd):
+    """Swap the lock positions."""
     def __init__(self,
                  cmd_runners: Iterable,
                  new_positions: list[str]) -> None:
@@ -1064,6 +1097,7 @@ class LockSwap(ConfigCmd):
 # LockSwap
 ########################################################################
 class LockVerify(ConfigCmd):
+    """Verify the registry lock has the expected owners and waiters."""
     def __init__(self,
                  cmd_runners: Iterable,
                  exp_positions: list[str]) -> None:
@@ -1094,6 +1128,7 @@ class LockVerify(ConfigCmd):
 # Pause
 ########################################################################
 class Pause(ConfigCmd):
+    """Pause the commands."""
     def __init__(self,
                  cmd_runners: Iterable,
                  pause_seconds: IntOrFloat) -> None:
@@ -1123,6 +1158,7 @@ class Pause(ConfigCmd):
 # RecvMsg
 ########################################################################
 class RecvMsg(ConfigCmd):
+    """Do smart_recv."""
     def __init__(self,
                  cmd_runners: Iterable,
                  senders: Iterable,
@@ -1173,6 +1209,7 @@ class RecvMsg(ConfigCmd):
 # RecvMsgTimeoutFalse
 ########################################################################
 class RecvMsgTimeoutFalse(RecvMsg):
+    """Do smart_recv with timeout false."""
     def __init__(self,
                  cmd_runners: Iterable,
                  senders: Iterable,
@@ -1222,6 +1259,7 @@ class RecvMsgTimeoutFalse(RecvMsg):
 # RecvMsgTimeoutTrue
 ########################################################################
 class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
+    """Do smart_recv with timeout true."""
     def __init__(self,
                  cmd_runners: Iterable,
                  senders: Iterable,
@@ -1275,6 +1313,7 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
 # Resume
 ########################################################################
 class Resume(ConfigCmd):
+    """Do smart_resume."""
     def __init__(self,
                  cmd_runners: Iterable,
                  targets: Iterable,
@@ -1320,6 +1359,7 @@ class Resume(ConfigCmd):
 # ResumeTimeoutFalse
 ########################################################################
 class ResumeTimeoutFalse(Resume):
+    """Do smart_resume with timeout false."""
     def __init__(self,
                  cmd_runners: Iterable,
                  targets: Iterable,
@@ -1365,13 +1405,13 @@ class ResumeTimeoutFalse(Resume):
 # ResumeTimeoutFalse
 ########################################################################
 class ResumeTimeoutTrue(ResumeTimeoutFalse):
+    """Do smart_resume with timeout true."""
     def __init__(self,
                  cmd_runners: Iterable,
                  targets: Iterable,
                  stopped_remotes: Iterable,
                  timeout: IntOrFloat,
                  timeout_names: Iterable,
-                 code: Optional[Any] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
@@ -1414,6 +1454,7 @@ class ResumeTimeoutTrue(ResumeTimeoutFalse):
 # SendMsg
 ########################################################################
 class SendMsg(ConfigCmd):
+    """Do smart_send."""
     def __init__(self,
                  cmd_runners: Iterable,
                  receivers: Iterable,
@@ -1464,6 +1505,7 @@ class SendMsg(ConfigCmd):
 # SendMsgTimeoutFalse
 ########################################################################
 class SendMsgTimeoutFalse(SendMsg):
+    """Do smart_send with timeout false."""
     def __init__(self,
                  cmd_runners: Iterable,
                  receivers: Iterable,
@@ -1515,6 +1557,7 @@ class SendMsgTimeoutFalse(SendMsg):
 # SendMsgTimeoutTrue
 ########################################################################
 class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
+    """Do smart_send with timeout true."""
     def __init__(self,
                  cmd_runners: Iterable,
                  receivers: Iterable,
@@ -1574,6 +1617,7 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
 # StartThread
 ########################################################################
 class StartThread(ConfigCmd):
+    """Start a thread with smart_start."""
     def __init__(self,
                  cmd_runners: Iterable,
                  start_names: Iterable,
@@ -1616,6 +1660,7 @@ class StartThread(ConfigCmd):
 # StopThread
 ########################################################################
 class StopThread(ConfigCmd):
+    """Stop a thread."""
     def __init__(self,
                  cmd_runners: Iterable,
                  stop_names: Iterable,
@@ -1653,6 +1698,7 @@ class StopThread(ConfigCmd):
 # Sync
 ########################################################################
 class Sync(ConfigCmd):
+    """Do smart_sync."""
     def __init__(self,
                  cmd_runners: Iterable,
                  targets: Iterable,
@@ -1715,6 +1761,7 @@ class Sync(ConfigCmd):
 # SyncTimeoutFalse
 ########################################################################
 class SyncTimeoutFalse(Sync):
+    """Do smart_sync with timeout of false."""
     def __init__(self,
                  cmd_runners: Iterable,
                  targets: Iterable,
@@ -1767,6 +1814,7 @@ class SyncTimeoutFalse(Sync):
 # SyncTimeoutFalse
 ########################################################################
 class SyncTimeoutTrue(SyncTimeoutFalse):
+    """Do smart_sync with timeout of true."""
     def __init__(self,
                  cmd_runners: Iterable,
                  targets: Iterable,
@@ -1817,6 +1865,7 @@ class SyncTimeoutTrue(SyncTimeoutFalse):
 # Unregister
 ########################################################################
 class Unregister(ConfigCmd):
+    """Do the smart_unreg."""
     def __init__(self,
                  cmd_runners: Iterable,
                  unregister_targets: Iterable,
@@ -1853,6 +1902,7 @@ class Unregister(ConfigCmd):
 # ValidateConfig
 ########################################################################
 class ValidateConfig(ConfigCmd):
+    """Validate the configuration."""
     def __init__(self,
                  cmd_runners: Iterable) -> None:
         """Initialize the instance.
@@ -1876,6 +1926,7 @@ class ValidateConfig(ConfigCmd):
 # VerifyAlive
 ########################################################################
 class VerifyAlive(ConfigCmd):
+    """Verify that the threads are alive."""
     def __init__(self,
                  cmd_runners: Iterable,
                  exp_alive_names: Iterable) -> None:
@@ -1905,6 +1956,7 @@ class VerifyAlive(ConfigCmd):
 # VerifyAliveNot
 ########################################################################
 class VerifyAliveNot(ConfigCmd):
+    """Verify that the threads are not alive."""
     def __init__(self,
                  cmd_runners: Iterable,
                  exp_not_alive_names: Iterable) -> None:
@@ -1934,6 +1986,7 @@ class VerifyAliveNot(ConfigCmd):
 # VerifyActive
 ########################################################################
 class VerifyActive(ConfigCmd):
+    """Verify that the threads are in the alive state."""
     def __init__(self,
                  cmd_runners: Iterable,
                  exp_active_names: Iterable) -> None:
@@ -1965,6 +2018,7 @@ class VerifyActive(ConfigCmd):
 # VerifyCounts
 ########################################################################
 class VerifyCounts(ConfigCmd):
+    """Verify the number of threads at various states in the config."""
     def __init__(self,
                  cmd_runners: Iterable,
                  exp_num_registered: int,
@@ -2005,6 +2059,7 @@ class VerifyCounts(ConfigCmd):
 # VerifyDefDel
 ########################################################################
 class VerifyDefDel(ConfigCmd):
+    """Verify deferred deletes."""
     def __init__(self,
                  cmd_runners: Iterable,
                  def_del_scenario: DefDelScenario,
@@ -2070,6 +2125,7 @@ class VerifyDefDel(ConfigCmd):
 # VerifyInRegistry
 ########################################################################
 class VerifyInRegistry(ConfigCmd):
+    """Verify that threads are in the registry."""
     def __init__(self,
                  cmd_runners: Iterable,
                  exp_in_registry_names: Iterable) -> None:
@@ -2102,6 +2158,7 @@ class VerifyInRegistry(ConfigCmd):
 # VerifyInRegistryNot
 ########################################################################
 class VerifyInRegistryNot(ConfigCmd):
+    """Verify that threads are not in the registry."""
     def __init__(self,
                  cmd_runners: Iterable,
                  exp_not_in_registry_names: Iterable) -> None:
@@ -2134,6 +2191,7 @@ class VerifyInRegistryNot(ConfigCmd):
 # VerifyRegistered
 ########################################################################
 class VerifyRegistered(ConfigCmd):
+    """Verify that threads are in the registered state."""
     def __init__(self,
                  cmd_runners: Iterable,
                  exp_registered_names: Iterable) -> None:
@@ -2166,6 +2224,7 @@ class VerifyRegistered(ConfigCmd):
 # VerifyPaired
 ########################################################################
 class VerifyPaired(ConfigCmd):
+    """Verify that threads are paired."""
     def __init__(self,
                  cmd_runners: Iterable,
                  exp_paired_names: Iterable) -> None:
@@ -2197,6 +2256,7 @@ class VerifyPaired(ConfigCmd):
 # VerifyPairedHalf
 ########################################################################
 class VerifyPairedHalf(ConfigCmd):
+    """Verify that only one thread is in a pair array status block."""
     def __init__(self,
                  cmd_runners: Iterable,
                  removed_names: Iterable,
@@ -2205,6 +2265,7 @@ class VerifyPairedHalf(ConfigCmd):
 
         Args:
             cmd_runners: thread names that will execute the command
+            removed_names: threads names that are no longer in the pair
             exp_half_paired_names: thread names expected to be a single
                 entry in the pair array
         """
@@ -2234,6 +2295,7 @@ class VerifyPairedHalf(ConfigCmd):
 # VerifyPairedNot
 ########################################################################
 class VerifyPairedNot(ConfigCmd):
+    """Verify that threads are not paired."""
     def __init__(self,
                  cmd_runners: Iterable,
                  exp_not_paired_names: Iterable) -> None:
@@ -2265,6 +2327,7 @@ class VerifyPairedNot(ConfigCmd):
 # VerifyState
 ########################################################################
 class VerifyState(ConfigCmd):
+    """Verify the thread state."""
     def __init__(self,
                  cmd_runners: Iterable,
                  check_state_names: Iterable,
@@ -2303,6 +2366,7 @@ class VerifyState(ConfigCmd):
 # Wait
 ########################################################################
 class Wait(ConfigCmd):
+    """Do smart_wait."""
     def __init__(self,
                  cmd_runners: Iterable,
                  resumers: Iterable,
@@ -2364,6 +2428,7 @@ class Wait(ConfigCmd):
 # WaitTimeoutFalse
 ########################################################################
 class WaitTimeoutFalse(Wait):
+    """Do smart_wait with timeout false."""
     def __init__(self,
                  cmd_runners: Iterable,
                  resumers: Iterable,
@@ -2377,10 +2442,13 @@ class WaitTimeoutFalse(Wait):
 
         Args:
             cmd_runners: thread names that will execute the command
-            actor_names: thread names that are cmd runners waiting for a
-                timeout or timeout condition
-            timeout_names: thread names that are expected to cause
-                timeout by not responding or by not being alive
+            resumers: thread names that will do the smart_resume
+            timeout: value for smart_wait
+            wait_for: WaitFor specification for smart_wait
+            stopped_remotes: thread names that are stopped
+            conflict_remotes: thread names that are deadlocked
+            deadlock_remotes: thread names that are deadlocked
+            log_msg: log message for smart_wait
         """
         super().__init__(cmd_runners=cmd_runners,
                          resumers=resumers,
@@ -2418,6 +2486,7 @@ class WaitTimeoutFalse(Wait):
 # WaitTimeoutTrue
 ########################################################################
 class WaitTimeoutTrue(WaitTimeoutFalse):
+    """Do smart_wait with timeout true."""
     def __init__(self,
                  cmd_runners: Iterable,
                  resumers: Iterable,
@@ -2433,10 +2502,14 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
 
         Args:
             cmd_runners: thread names that will execute the command
-            actor_names: thread names that are cmd runners waiting for a
-                timeout or timeout condition
-            timeout_names: thread names that are expected to cause
-                timeout by not responding or by not being alive
+            resumers: thread names that will do the smart_resume
+            timeout: value for smart_wait
+            timeout_remotes: thread names that cause a timeout
+            wait_for: WaitFor specification for smart_wait
+            stopped_remotes: thread names that are stopped
+            conflict_remotes: thread names that are deadlocked
+            deadlock_remotes: thread names that are deadlocked
+            log_msg: log message for smart_wait
         """
         super().__init__(cmd_runners=cmd_runners,
                          resumers=resumers,
@@ -2475,6 +2548,7 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
 # WaitForRecvTimeouts
 ########################################################################
 class WaitForRecvTimeouts(ConfigCmd):
+    """Wait for receive message timeouts."""
     def __init__(self,
                  cmd_runners: Iterable) -> None:
         """Initialize the instance.
@@ -2502,6 +2576,7 @@ class WaitForRecvTimeouts(ConfigCmd):
 # WaitForRequestTimeouts
 ########################################################################
 class WaitForRequestTimeouts(ConfigCmd):
+    """Wait for request timeouts command."""
     def __init__(self,
                  cmd_runners: Iterable,
                  actor_names: Iterable,
@@ -14332,24 +14407,9 @@ class ConfigVerifier:
         else:
             unreg_msg = ''
 
-        if conflict_remotes:
-            if smart_request == 'smart_sync':
-                remote_request = 'smart_wait'
-            else:
-                remote_request = 'smart_sync'
-            cr_search = r"\[(,| "
-            for name in conflict_remotes:
-                cr_search += "|'" + name + "'"
-            cr_search += r")+\]"
-            conflict_msg = (f' Remotes doing a {remote_request} '
-                            'request that are deadlocked: '
-                            f'{cr_search}.')
-        else:
-            conflict_msg = ''
-
-        if deadlock_remotes:
+        if deadlock_remotes or conflict_remotes:
             dr_search = r"\[(,| "
-            for name in deadlock_remotes:
+            for name in deadlock_remotes | conflict_remotes:
                 dr_search += "|'" + name + "'"
             dr_search += r")+\]"
             deadlock_msg = (f' Remotes doing a smart_wait '
@@ -14367,7 +14427,7 @@ class ConfigVerifier:
 
         return (
             f'{cmd_runner} raising {error_str} {targets_msg}'
-            f'{pending_msg}{stopped_msg}{unreg_msg}{conflict_msg}'
+            f'{pending_msg}{stopped_msg}{unreg_msg}'
             f'{deadlock_msg}{full_send_q_msg}')
 
     ####################################################################
@@ -14496,9 +14556,9 @@ class ConfigVerifier:
                     conflict_remotes=conflict_remotes),
                 log_level=logging.ERROR)
 
-        elif conflict_remotes:
+        elif conflict_remotes or deadlock_remotes:
             enter_exit = ('entry',)
-            with pytest.raises(st.SmartThreadConflictDeadlockDetected):
+            with pytest.raises(st.SmartThreadDeadlockDetected):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_wait(
                         resumers=resumers,
@@ -14521,31 +14581,7 @@ class ConfigVerifier:
                     conflict_remotes=conflict_remotes,
                     deadlock_remotes=deadlock_remotes),
                 log_level=logging.ERROR)
-        elif deadlock_remotes:
-            enter_exit = ('entry',)
-            with pytest.raises(st.SmartThreadWaitDeadlockDetected):
-                if timeout_type == TimeoutType.TimeoutNone:
-                    self.all_threads[cmd_runner].smart_wait(
-                        resumers=resumers,
-                        wait_for=wait_for,
-                        log_msg=log_msg)
-                else:
-                    self.all_threads[cmd_runner].smart_wait(
-                        resumers=resumers,
-                        wait_for=wait_for,
-                        timeout=timeout,
-                        log_msg=log_msg)
 
-            self.add_log_msg(
-                self.get_error_msg(
-                    cmd_runner=cmd_runner,
-                    smart_request='smart_wait',
-                    targets=resumers,
-                    error_str='SmartThreadWaitDeadlockDetected',
-                    stopped_remotes=stopped_remotes,
-                    conflict_remotes=conflict_remotes,
-                    deadlock_remotes=deadlock_remotes),
-                log_level=logging.ERROR)
         elif timeout_type == TimeoutType.TimeoutNone:
             self.all_threads[cmd_runner].smart_wait(
                 resumers=resumers,
@@ -17205,9 +17241,9 @@ class ConfigVerifier:
     # verify_state
     ####################################################################
     def verify_state(self,
-                      cmd_runner: str,
-                      check_state_names: set[str],
-                      expected_state: st.ThreadState) -> None:
+                     cmd_runner: str,
+                     check_state_names: set[str],
+                     expected_state: st.ThreadState) -> None:
         """Verify that the given names have the given status.
 
         Args:
