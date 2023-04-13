@@ -6,7 +6,7 @@ SmartThread
 
 The SmartThread class makes it easy to create and use threads in a
 multithreaded application. It provides configuration, messaging,
-and resume/wait/sync methods, and will also detect various error
+and resume/wait/sync methods It will also detect various error
 conditions, such as when a thread becomes unresponsive because it has
 ended.
 
@@ -678,7 +678,7 @@ class SmartThread:
             self.smart_thread = smart_thread
 
         def run(self) -> None:
-            """Invoke the target when teh thread is started."""
+            """Invoke the target when the thread is started."""
             try:
                 self._target(*self._args, **self._kwargs)
             finally:
@@ -1844,8 +1844,7 @@ class SmartThread:
                     target_thread=SmartThread._registry[remote],
                     new_state=ThreadState.Stopped)
                 # remove this thread from the registry
-                self._clean_up_registry(
-                    process='join')
+                self._clean_up_registry(process='join')
 
                 logger.debug(
                     f'{self.name} did successful join of '
@@ -4602,7 +4601,7 @@ class SmartThread:
             targets_to_use = 'eligible per request'
         log_msg_body = (
             f'requestor: {threading.current_thread().name} '
-            f'waiters: {targets_to_use} '
+            f'targets: {targets_to_use} '
             f'timeout value: {request_block.timer.timeout_value()} '
             f'{get_formatted_call_sequence(latest=3, depth=1)}')
 
