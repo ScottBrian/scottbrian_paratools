@@ -1871,6 +1871,7 @@ class Unregister(ConfigCmd):
     def __init__(self,
                  cmd_runners: Iterable,
                  unregister_targets: Iterable,
+                 not_registered_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
@@ -1884,9 +1885,12 @@ class Unregister(ConfigCmd):
 
         self.unregister_targets = get_set(unregister_targets)
 
+        self.not_registered_remotes = get_set(not_registered_remotes)
+
         self.log_msg = log_msg
 
-        self.arg_list += ['unregister_targets']
+        self.arg_list += ['unregister_targets',
+                          'not_registered_remotes']
 
     def run_process(self, cmd_runner: str) -> None:
         """Run the command.
@@ -1897,6 +1901,7 @@ class Unregister(ConfigCmd):
         self.config_ver.handle_unregister(
             cmd_runner=cmd_runner,
             unregister_targets=self.unregister_targets,
+            not_registered_remotes=self.not_registered_remotes,
             log_msg=self.log_msg)
 
 
@@ -4565,8 +4570,10 @@ class CleanRegLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
+            # search_str=(f"[a-z]+ did cleanup of registry at UTC {time_match}, "
+            #             r"deleted \[[a-z',]+\]"),
             search_str=(f"[a-z]+ did cleanup of registry at UTC {time_match}, "
-                        r"deleted \['[a-z]+'\]"),
+                        r"deleted "),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -4757,19 +4764,21 @@ class SetStateLogSearchItem(LogSearchItem):
         from_state = split_msg[7]
         to_state = split_msg[9]
 
-        if target_name in self.config_ver.pending_transitions:
-            ps = self.config_ver.pending_transitions[target_name]
-            f_state = eval('st.' + from_state)
-            t_state = eval('st.' + to_state)
-            set_state_key: SetStateKey = (cmd_runner,
-                                          target_name,
-                                          f_state,
-                                          t_state)
-            if set_state_key in ps.exp_set_state_msgs:
-                ps.exp_set_state_msgs[set_state_key] -= 1
-                self.config_ver.add_log_msg(self.found_log_msg,
-                                            log_level=logging.DEBUG)
-            self.config_ver.clear_pending_transitions()
+        ps = self.config_ver.pending_transitions[target_name]
+        f_state = eval('st.' + from_state)
+        t_state = eval('st.' + to_state)
+        set_state_key: SetStateKey = (cmd_runner,
+                                      target_name,
+                                      f_state,
+                                      t_state)
+        # self.config_ver.log_test_msg(f'SetStateLogSearchItem looking for '
+        #                              f'{set_state_key=}')
+        if set_state_key in ps.exp_set_state_msgs:
+            ps.exp_set_state_msgs[set_state_key] -= 1
+            self.config_ver.add_log_msg(self.found_log_msg,
+                                        log_level=logging.DEBUG)
+            # self.config_ver.log_test_msg(f'SetStateLogSearchItem found '
+            #                              f'{set_state_key=}')
 
         if (from_state == 'ThreadState.Starting'
                 and to_state == 'ThreadState.Alive'):
@@ -5419,7 +5428,8 @@ class MockGetTargetState:
                     ret_state = MockGetTargetState.targets[
                         self.name][pk_remote.remote][1]
                     MockGetTargetState.config_ver.log_test_msg(
-                        f'mock {self.name} set state for {pk_remote.remote=} '
+                        f'mock {self.name} changed state for '
+                        f'{pk_remote.remote=} '
                         f'from {old_ret_state= } to {ret_state=}')
 
         # MockGetTargetState.config_ver.log_test_msg(
@@ -5572,6 +5582,12 @@ class ConfigVerifier:
         self.log_found_items: deque[LogSearchItem] = deque()
 
         self.pending_transitions: dict[str, PendingTransition] = {}
+        for name in self.thread_names:
+            self.pending_transitions[name] = PendingTransition(
+                trans_from=TransitionType.Unreg,
+                trans_to=TransitionType.Unreg,
+                cmd_runner='',
+                exp_set_state_msgs=defaultdict(int))
 
         self.allow_log_test_msg = True
 
@@ -6894,20 +6910,25 @@ class ConfigVerifier:
                     exp_msgs=msgs_to_send))
 
     ####################################################################
-    # clear_pending_transitions
+    # check_pending_transitions
     ####################################################################
-    def clear_pending_transitions(self):
-        keys_to_delete: list[str] = []
+    def check_pending_transitions(self):
+        incomplete_item = False
         for key, item in self.pending_transitions.items():
             incomplete_item = False
             if item.exp_set_state_msgs:
                 for key2, item2 in item.exp_set_state_msgs.items():
                     if item2 != 0:
                         incomplete_item = True
-            if not incomplete_item:
-                keys_to_delete.append(key)
-        for key in keys_to_delete:
-            del self.pending_transitions[key]
+                        break
+            if incomplete_item:
+                break
+
+        if incomplete_item:
+            raise InvalidConfigurationDetected(
+                'check_pending_transitions detected that there are remaining '
+                f'pending items: {self.pending_transitions=}')
+
 
     ####################################################################
     # create_msgs
@@ -13766,7 +13787,8 @@ class ConfigVerifier:
             self.expected_registered[del_name].is_alive = False
             self.expected_registered[
                 del_name].st_state = st.ThreadState.Stopped
-            if not self.expected_registered[del_name].is_TargetThread:
+            if (not self.expected_registered[del_name].is_TargetThread
+                    and process == 'join'):
                 self.add_log_msg(
                     f'{cmd_runner} set state for thread '
                     f'{del_name} '
@@ -14507,12 +14529,15 @@ class ConfigVerifier:
     def handle_unregister(self,
                           cmd_runner: str,
                           unregister_targets: set[str],
+                          not_registered_remotes: set[str],
                           log_msg: Optional[str] = None) -> None:
         """Unregister the named threads.
 
         Args:
             cmd_runner: name of thread doing the smart_unreg
             unregister_targets: names of threads to be unregistered
+            not_registered_remotes: thread names that are not is registered
+                state
             log_msg: log msg for the smart_unreg request
 
         """
@@ -14523,9 +14548,35 @@ class ConfigVerifier:
             name='smart_unreg',
             seq='test_smart_thread.py::ConfigVerifier.handle_unregister')
 
-        self.all_threads[cmd_runner].smart_unreg(
-            targets=unregister_targets,
-            log_msg=log_msg)
+        eligible_targets = unregister_targets.copy() - not_registered_remotes
+        for name in eligible_targets:
+            key: SetStateKey = (cmd_runner,
+                                name,
+                                st.ThreadState.Registered,
+                                st.ThreadState.Stopped)
+            self.pending_transitions[name].exp_set_state_msgs[key] += 1
+
+        enter_exit = ('entry', 'exit')
+        if not_registered_remotes:
+            enter_exit = ('entry',)
+            with pytest.raises(st.SmartThreadRemoteThreadNotRegistered):
+                self.all_threads[cmd_runner].smart_unreg(
+                    targets=unregister_targets,
+                    log_msg=log_msg)
+
+            self.add_log_msg(
+                self.get_error_msg(
+                    cmd_runner=cmd_runner,
+                    smart_request='smart_unreg',
+                    targets=unregister_targets,
+                    error_str='SmartThreadRemoteThreadNotRegistered',
+                    unreg_remotes=not_registered_remotes),
+                log_level=logging.ERROR)
+
+        else:
+            self.all_threads[cmd_runner].smart_unreg(
+                targets=unregister_targets,
+                log_msg=log_msg)
 
         self.monitor_event.set()
 
@@ -14540,7 +14591,7 @@ class ConfigVerifier:
                                  targets=unregister_targets,
                                  timeout=0,
                                  timeout_type=TimeoutType.TimeoutNone,
-                                 enter_exit=('entry', 'exit'),
+                                 enter_exit=enter_exit,
                                  log_msg=log_msg)
 
         self.cmd_waiting_event_items[cmd_runner].wait()
@@ -14964,10 +15015,10 @@ class ConfigVerifier:
 
         for stop_name in stop_names:
             self.stopping_names.append(stop_name)
-            if stop_name in self.pending_transitions:
+            if stop_name not in self.pending_transitions:
                 raise InvalidConfigurationDetected(
-                    'stop_thread detected outstanding pending transition '
-                    f'for {stop_name}: {self.pending_transitions[stop_name]=}')
+                    'stop_thread detected missing pending transition '
+                    f'for {stop_name}: {self.pending_transitions=}')
             if stop_name not in self.expected_registered:
                 raise InvalidConfigurationDetected(
                     f'stop_thread attempting to stop {stop_name} which is '
@@ -14977,14 +15028,9 @@ class ConfigVerifier:
                                  stop_name,
                                  st.ThreadState.Alive,
                                  st.ThreadState.Stopped)
-                exp_state_msg = {set_state_key: 1}
-            else:
-                exp_state_msg = {}
-            self.pending_transitions[stop_name] = PendingTransition(
-                trans_from=TransitionType.Alive,
-                trans_to=TransitionType.Stop,
-                cmd_runner=cmd_runner,
-                exp_set_state_msgs=exp_state_msg)
+                self.pending_transitions[stop_name].exp_set_state_msgs[
+                    set_state_key] += 1
+
             self.monitor_event.set()
             exit_cmd = ExitThread(cmd_runners=stop_name,
                                   stopped_by=cmd_runner)
@@ -20664,10 +20710,7 @@ class TestSmartThreadScenarios:
         ################################################################
         # check that transitions are complete
         ################################################################
-        if config_ver.pending_transitions:
-            raise InvalidConfigurationDetected(
-                'scenario_driver detected that there are remaining pending '
-                f'transitions: {config_ver.pending_transitions=}')
+        config_ver.check_pending_transitions()
 
         ################################################################
         # check log results

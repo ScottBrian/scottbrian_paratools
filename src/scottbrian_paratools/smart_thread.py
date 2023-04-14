@@ -1633,7 +1633,14 @@ class SmartThread:
                registered state until it is started at which time it
                enters the active state
 
+        Raises:
+            SmartThreadRemoteThreadNotRegistered: smart_unreg detected
+                one or more target threads that were not in the
+                registered state.
+
         **Example 1:** Create and unregister a SmartThread thread.
+
+        .. # noqa: DAR402
 
         .. code-block:: python
 
