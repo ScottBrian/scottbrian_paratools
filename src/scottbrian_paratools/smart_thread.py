@@ -1806,11 +1806,12 @@ class SmartThread:
             True when request completed, False otherwise
 
         """
-        # if the remote is not in the registry then a smart thread for
-        # it was never, or it ended and set its state to stopped and was
-        # removed from the registry by some other command that saw it
-        # was stopped. In either case, we have nothing to do and can
-        # simply return True to move on to the next target
+        # if the remote is not in the registry then either it was never
+        # created, or it was created as a ThreadTarget which ended and
+        # set its state to stopped and then got removed by a command
+        # that called _clean_up_registry. In either case, we have
+        # nothing to do and can simply return True to move on to the
+        # next target.
         if remote in SmartThread._registry:
             # Note that if the remote thread was never
             # started, the following join will raise an
@@ -1839,19 +1840,18 @@ class SmartThread:
             if SmartThread._registry[remote].thread.is_alive():
                 return False  # give thread more time to end
             else:
-                # indicate remove from registry
+                # set state to stopped
                 self._set_state(
                     target_thread=SmartThread._registry[remote],
                     new_state=ThreadState.Stopped)
                 # remove this thread from the registry
                 self._clean_up_registry(process='join')
 
-                logger.debug(
-                    f'{self.name} did successful join of '
-                    f'{remote}.')
+        logger.debug(
+            f'{self.name} did successful join of '
+            f'{remote}.')
 
-                # restart while loop with one less remote
-                return True
+        # restart while loop with one less remote
 
         return True
 

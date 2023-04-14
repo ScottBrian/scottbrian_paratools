@@ -48,6 +48,8 @@ IntOrFloat: TypeAlias = Union[int, float]
 StrOrList: TypeAlias = Union[str, list[str]]
 StrOrSet: TypeAlias = Union[str, set[str]]
 
+SetStateKey: TypeAlias = tuple[str, str, st.ThreadState, st.ThreadState]
+
 
 ########################################################################
 # SendRecvMsgs
@@ -4698,9 +4700,9 @@ class WaitResumedLogSearchItem(LogSearchItem):
 
 
 ########################################################################
-# StartedLogSearchItem
+# SetStateLogSearchItem
 ########################################################################
-class StartedLogSearchItem(LogSearchItem):
+class SetStateLogSearchItem(LogSearchItem):
     """Input to search log msgs."""
 
     def __init__(self,
@@ -4722,9 +4724,6 @@ class StartedLogSearchItem(LogSearchItem):
                                  '|ThreadState.Alive'
                                  '|ThreadState.Stopped)')
         super().__init__(
-            # search_str=('[a-z]+ started thread [a-z]+, '
-            #             r'thread.is_alive\(\): True, '
-            #             'state: ThreadState.Alive'),
             search_str=('[a-z]+ set state for thread [a-z]+ from '
                         f'{list_of_thread_states} to {list_of_thread_states}'),
             config_ver=config_ver,
@@ -4734,7 +4733,7 @@ class StartedLogSearchItem(LogSearchItem):
 
     def get_found_log_item(self,
                            found_log_msg: str,
-                           found_log_idx: int) -> "StartedLogSearchItem":
+                           found_log_idx: int) -> "SetStateLogSearchItem":
         """Return a found log item.
 
         Args:
@@ -4742,9 +4741,9 @@ class StartedLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
 
         Returns:
-            StartedLogSearchItem containing found message and index
+            SetStateLogSearchItem containing found message and index
         """
-        return StartedLogSearchItem(
+        return SetStateLogSearchItem(
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
@@ -4758,6 +4757,20 @@ class StartedLogSearchItem(LogSearchItem):
         from_state = split_msg[7]
         to_state = split_msg[9]
 
+        if target_name in self.config_ver.pending_transitions:
+            ps = self.config_ver.pending_transitions[target_name]
+            f_state = eval('st.' + from_state)
+            t_state = eval('st.' + to_state)
+            set_state_key: SetStateKey = (cmd_runner,
+                                          target_name,
+                                          f_state,
+                                          t_state)
+            if set_state_key in ps.exp_set_state_msgs:
+                ps.exp_set_state_msgs[set_state_key] -= 1
+                self.config_ver.add_log_msg(self.found_log_msg,
+                                            log_level=logging.DEBUG)
+            self.config_ver.clear_pending_transitions()
+
         if (from_state == 'ThreadState.Starting'
                 and to_state == 'ThreadState.Alive'):
             self.config_ver.handle_started_log_msg(
@@ -4767,10 +4780,6 @@ class StartedLogSearchItem(LogSearchItem):
                 and to_state == 'ThreadState.Stopped'):
             self.config_ver.expected_registered[
                 target_name].st_state = st.ThreadState.Stopped
-            if self.config_ver.expected_registered[
-                    target_name].is_TargetThread:
-                self.config_ver.add_log_msg(self.found_log_msg,
-                                            log_level=logging.DEBUG)
 
 
 ########################################################################
@@ -5307,7 +5316,7 @@ LogSearchItems: TypeAlias = Union[
     CleanRegLogSearchItem,
     RecvMsgLogSearchItem,
     WaitResumedLogSearchItem,
-    StartedLogSearchItem,
+    SetStateLogSearchItem,
     StoppedLogSearchItem,
     CmdWaitingLogSearchItem,
     SyncResumedLogSearchItem,
@@ -5427,6 +5436,25 @@ class PaLogMsgsFound:
     removed_pa_entry: list[tuple[str, str]]
     updated_pa: bool
 
+class TransitionType(Enum):
+    Unreg = auto()
+    Init = auto()
+    Start = auto()
+    Reg = auto()
+    Alive = auto()
+    Stop = auto()
+
+
+@dataclass
+class PendingTransition:
+    """Pending transition class."""
+    trans_from: TransitionType
+    trans_to: TransitionType
+    cmd_runner: str
+    exp_set_state_msgs: dict[SetStateKey, int]
+    exp_not_registry_join_log_msg: int = 0
+    exp_join_successful_log_msg: int = 0
+
 
 class ConfigVerifier:
     """Class that tracks and verifies the SmartThread configuration."""
@@ -5525,7 +5553,7 @@ class ConfigVerifier:
             CleanRegLogSearchItem(config_ver=self),
             RecvMsgLogSearchItem(config_ver=self),
             WaitResumedLogSearchItem(config_ver=self),
-            StartedLogSearchItem(config_ver=self),
+            SetStateLogSearchItem(config_ver=self),
             StoppedLogSearchItem(config_ver=self),
             CmdWaitingLogSearchItem(config_ver=self),
             SyncResumedLogSearchItem(config_ver=self),
@@ -5542,6 +5570,8 @@ class ConfigVerifier:
         self.last_clean_reg_log_msg: str = ''
 
         self.log_found_items: deque[LogSearchItem] = deque()
+
+        self.pending_transitions: dict[str, PendingTransition] = {}
 
         self.allow_log_test_msg = True
 
@@ -5796,11 +5826,6 @@ class ConfigVerifier:
                 self.add_log_msg(
                     f'{cmd_runner} set state for thread {new_name} '
                     f'from ThreadState.Starting to ThreadState.Alive')
-
-                self.add_log_msg(re.escape(
-                    f'{cmd_runner} started thread {new_name}, '
-                    'thread.is_alive(): True, '
-                    'state: ThreadState.Alive'))
 
                 self.add_log_msg(
                     f"smart_start entry: requestor: {cmd_runner} targets: "
@@ -6867,6 +6892,22 @@ class ConfigVerifier:
             RecvMsg(cmd_runners=to_names,
                     senders=from_names,
                     exp_msgs=msgs_to_send))
+
+    ####################################################################
+    # clear_pending_transitions
+    ####################################################################
+    def clear_pending_transitions(self):
+        keys_to_delete: list[str] = []
+        for key, item in self.pending_transitions.items():
+            incomplete_item = False
+            if item.exp_set_state_msgs:
+                for key2, item2 in item.exp_set_state_msgs.items():
+                    if item2 != 0:
+                        incomplete_item = True
+            if not incomplete_item:
+                keys_to_delete.append(key)
+        for key in keys_to_delete:
+            del self.pending_transitions[key]
 
     ####################################################################
     # create_msgs
@@ -14111,9 +14152,6 @@ class ConfigVerifier:
             self.add_log_msg(
                 f'{cmd_runner} set state for thread {start_name} '
                 f'from ThreadState.Starting to ThreadState.Alive')
-            self.add_log_msg(re.escape(
-                f'{cmd_runner} started thread {start_name}, '
-                'thread.is_alive(): True, state: ThreadState.Alive'))
 
         self.add_request_log_msg(cmd_runner=cmd_runner,
                                  smart_request='smart_start',
@@ -14926,6 +14964,27 @@ class ConfigVerifier:
 
         for stop_name in stop_names:
             self.stopping_names.append(stop_name)
+            if stop_name in self.pending_transitions:
+                raise InvalidConfigurationDetected(
+                    'stop_thread detected outstanding pending transition '
+                    f'for {stop_name}: {self.pending_transitions[stop_name]=}')
+            if stop_name not in self.expected_registered:
+                raise InvalidConfigurationDetected(
+                    f'stop_thread attempting to stop {stop_name} which is '
+                    f'not in the registry: {self.expected_registered=}')
+            if self.expected_registered[stop_name].is_TargetThread:
+                set_state_key = (stop_name,
+                                 stop_name,
+                                 st.ThreadState.Alive,
+                                 st.ThreadState.Stopped)
+                exp_state_msg = {set_state_key: 1}
+            else:
+                exp_state_msg = {}
+            self.pending_transitions[stop_name] = PendingTransition(
+                trans_from=TransitionType.Alive,
+                trans_to=TransitionType.Stop,
+                cmd_runner=cmd_runner,
+                exp_set_state_msgs=exp_state_msg)
             self.monitor_event.set()
             exit_cmd = ExitThread(cmd_runners=stop_name,
                                   stopped_by=cmd_runner)
@@ -17469,9 +17528,6 @@ class OuterThreadApp(threading.Thread):
             f'{name} set state for thread {name} from '
             'ThreadState.Registered to ThreadState.Alive'
         )
-        self.config_ver.add_log_msg(re.escape(
-            f'{name} started thread {name}, '
-            'thread.is_alive(): True, state: ThreadState.Alive'))
 
         self.config_ver.monitor_event.set()
 
@@ -17534,9 +17590,7 @@ class OuterSmartThreadApp(st.SmartThread, threading.Thread):
         #     f'{name} set state for thread {name} from '
         #     'ThreadState.Registered to ThreadState.Alive'
         # )
-        # self.config_ver.add_log_msg(re.escape(
-        #     f'{name} started thread {name}, '
-        #     'thread.is_alive(): True, state: ThreadState.Alive'))
+
 
         # self.config_ver.monitor_event.set()
         self.config_ver.main_driver()
@@ -20432,8 +20486,6 @@ class TestSmartThreadScenarios:
             ('alpha set state for thread beta from '
              'ThreadState.Starting to '
              'ThreadState.Alive'),
-            # (r'alpha started thread beta, thread.is_alive\(\): '
-            #  'True, state: ThreadState.Alive'),
             ("smart_start exit: requestor: alpha targets: "
              r"\['beta'\] timeout value: None "
              "smart_thread.py::SmartThread.__init__:"),
@@ -20608,6 +20660,14 @@ class TestSmartThreadScenarios:
             config_ver.monitor_exit = True
             config_ver.monitor_event.set()
             config_ver.monitor_thread.join()
+
+        ################################################################
+        # check that transitions are complete
+        ################################################################
+        if config_ver.pending_transitions:
+            raise InvalidConfigurationDetected(
+                'scenario_driver detected that there are remaining pending '
+                f'transitions: {config_ver.pending_transitions=}')
 
         ################################################################
         # check log results
