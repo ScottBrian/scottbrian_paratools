@@ -1087,15 +1087,9 @@ class SmartThread:
                starts with.
 
         """
-        # Make sure name is valid
-        if not isinstance(self.name, str):
-            raise SmartThreadIncorrectNameSpecified(
-                'The name for SmartThread must be of type str.')
-
         with sel.SELockExcl(SmartThread._registry_lock):
-            logger.debug(f'{threading.current_thread().name} obtained '
-                         '_registry_lock, class name = '
-                         f'{self.__class__.__name__}')
+            logger.debug(f'{threading.current_thread().name} starting '
+                         f'register of {self.name}')
 
             # Remove any old entries
             self._clean_up_registry(process='register')

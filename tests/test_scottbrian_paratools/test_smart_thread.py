@@ -489,6 +489,11 @@ class IncorrectDataDetected(ErrorTstSmartThread):
     pass
 
 
+class UnexpectedEvent(ErrorTstSmartThread):
+    """Unexpected action encountered exception class."""
+    pass
+
+
 class UnrecognizedCmd(ErrorTstSmartThread):
     """UnrecognizedCmd exception class."""
     pass
@@ -4346,6 +4351,58 @@ class LogSearchItem(ABC):
 
 
 ########################################################################
+# StartRegisterLogSearchItem
+########################################################################
+class StartRegisterLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+        """
+        super().__init__(
+            search_str='[a-z]+ starting register of [a-z]+',
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int) -> "StartRegisterLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            StartRegisterLogSearchItem containing found message and index
+        """
+        return StartRegisterLogSearchItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+    def run_process(self):
+        """Run the process to handle the log message."""
+        split_msg = self.found_log_msg.split()
+
+        self.config_ver.handle_start_reg_log_msg(
+            cmd_runner=split_msg[0],
+            target=split_msg[4],
+            log_msg=self.found_log_msg)
+
+
+########################################################################
 # EnterRpaLogSearchItem
 ########################################################################
 class EnterRpaLogSearchItem(LogSearchItem):
@@ -4571,9 +4628,9 @@ class CleanRegLogSearchItem(LogSearchItem):
         """
         super().__init__(
             # search_str=(f"[a-z]+ did cleanup of registry at UTC {time_match}, "
-            #             r"deleted \[[a-z',]+\]"),
+            #             r"deleted \[[a-z', ]+\]"),
             search_str=(f"[a-z]+ did cleanup of registry at UTC {time_match}, "
-                        r"deleted "),
+                        r"deleted \[('[a-z]+'|, )+\]"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -4764,7 +4821,7 @@ class SetStateLogSearchItem(LogSearchItem):
         from_state = split_msg[7]
         to_state = split_msg[9]
 
-        ps = self.config_ver.pending_transitions[target_name]
+        ps = self.config_ver.pending_events[cmd_runner]
         f_state = eval('st.' + from_state)
         t_state = eval('st.' + to_state)
         set_state_key: SetStateKey = (cmd_runner,
@@ -5318,6 +5375,7 @@ class MonDelLogSearchItem(LogSearchItem):
 
 
 LogSearchItems: TypeAlias = Union[
+StartRegisterLogSearchItem,
     EnterRpaLogSearchItem,
     UpdatePaLogSearchItem,
     RegUpdateLogSearchItem,
@@ -5456,12 +5514,13 @@ class TransitionType(Enum):
 
 
 @dataclass
-class PendingTransition:
+class PendingEvent:
     """Pending transition class."""
     trans_from: TransitionType
     trans_to: TransitionType
     cmd_runner: str
     exp_set_state_msgs: dict[SetStateKey, int]
+    start_reg_msg: dict[str, int]
     exp_not_registry_join_log_msg: int = 0
     exp_join_successful_log_msg: int = 0
 
@@ -5556,6 +5615,7 @@ class ConfigVerifier:
 
         self.log_start_idx: int = 0
         self.log_search_items: tuple[LogSearchItems, ...] = (
+            StartRegisterLogSearchItem(config_ver=self),
             EnterRpaLogSearchItem(config_ver=self),
             UpdatePaLogSearchItem(config_ver=self),
             RegUpdateLogSearchItem(config_ver=self),
@@ -5581,13 +5641,14 @@ class ConfigVerifier:
 
         self.log_found_items: deque[LogSearchItem] = deque()
 
-        self.pending_transitions: dict[str, PendingTransition] = {}
+        self.pending_events: dict[str, PendingEvent] = {}
         for name in self.thread_names:
-            self.pending_transitions[name] = PendingTransition(
+            self.pending_events[name] = PendingEvent(
                 trans_from=TransitionType.Unreg,
                 trans_to=TransitionType.Unreg,
                 cmd_runner='',
-                exp_set_state_msgs=defaultdict(int))
+                exp_set_state_msgs=defaultdict(int),
+                start_reg_msg=defaultdict(int))
 
         self.allow_log_test_msg = True
 
@@ -5816,10 +5877,10 @@ class ConfigVerifier:
             f'{cmd_runner} set state for thread {new_name} '
             'from ThreadState.Unregistered to ThreadState.Initializing')
 
-        class_name = self.all_threads[new_name].__class__.__name__
-        self.add_log_msg(
-            f'{cmd_runner} obtained _registry_lock, '
-            f'class name = {class_name}')
+        # class_name = self.all_threads[new_name].__class__.__name__
+        # self.add_log_msg(
+        #     f'{cmd_runner} obtained _registry_lock, '
+        #     f'class name = {class_name}')
 
         self.handle_exp_status_log_msgs(log_idx=reg_idx,
                                         name=new_name)
@@ -6910,11 +6971,11 @@ class ConfigVerifier:
                     exp_msgs=msgs_to_send))
 
     ####################################################################
-    # check_pending_transitions
+    # check_pending_events
     ####################################################################
-    def check_pending_transitions(self):
+    def check_pending_events(self):
         incomplete_item = False
-        for key, item in self.pending_transitions.items():
+        for key, item in self.pending_events.items():
             incomplete_item = False
             if item.exp_set_state_msgs:
                 for key2, item2 in item.exp_set_state_msgs.items():
@@ -6926,8 +6987,8 @@ class ConfigVerifier:
 
         if incomplete_item:
             raise InvalidConfigurationDetected(
-                'check_pending_transitions detected that there are remaining '
-                f'pending items: {self.pending_transitions=}')
+                'check_pending_events detected that there are remaining '
+                f'pending items: {self.pending_events=}')
 
 
     ####################################################################
@@ -12827,6 +12888,8 @@ class ConfigVerifier:
                           f'{name=}')
         self.f1_process_cmds[name] = True
 
+        self.pending_events[cmd_runner].got_lock_msg += 1
+
         is_thread_target = False
         if app_config == AppConfig.ScriptStyle:
             f1_thread = st.SmartThread(name=name,
@@ -14192,6 +14255,29 @@ class ConfigVerifier:
                           f'for {start_names=}')
 
     ####################################################################
+    # handle_start_reg_log_msg
+    ####################################################################
+    def handle_start_reg_log_msg(self,
+                                 cmd_runner: str,
+                                 target: str,
+                                 log_msg: str) -> None:
+        """Process the start register event.
+
+        Args:
+            cmd_runner: thread name doing the register
+            target: thread name that is being registered
+            log_msg: start register log message
+
+        """
+        if self.pending_events[
+                cmd_runner].start_reg_msg[target] <= 0:
+            raise UnexpectedEvent('StartRegisterLogSearchItem run_process '
+                                  'encountered unexpected start register '
+                                  f'log msg: {log_msg}')
+        self.config_ver.pending_events[
+            cmd_runner].start_reg_msg[target] -= 1
+        self.config_ver.add_log_msg(self.found_log_msg)
+    ####################################################################
     # wait_for_monitor
     ####################################################################
     def wait_for_monitor(self,
@@ -14554,7 +14640,7 @@ class ConfigVerifier:
                                 name,
                                 st.ThreadState.Registered,
                                 st.ThreadState.Stopped)
-            self.pending_transitions[name].exp_set_state_msgs[key] += 1
+            self.pending_events[cmd_runner].exp_set_state_msgs[key] += 1
 
         enter_exit = ('entry', 'exit')
         if not_registered_remotes:
@@ -15015,10 +15101,10 @@ class ConfigVerifier:
 
         for stop_name in stop_names:
             self.stopping_names.append(stop_name)
-            if stop_name not in self.pending_transitions:
+            if stop_name not in self.pending_events:
                 raise InvalidConfigurationDetected(
                     'stop_thread detected missing pending transition '
-                    f'for {stop_name}: {self.pending_transitions=}')
+                    f'for {stop_name}: {self.pending_events=}')
             if stop_name not in self.expected_registered:
                 raise InvalidConfigurationDetected(
                     f'stop_thread attempting to stop {stop_name} which is '
@@ -15028,7 +15114,7 @@ class ConfigVerifier:
                                  stop_name,
                                  st.ThreadState.Alive,
                                  st.ThreadState.Stopped)
-                self.pending_transitions[stop_name].exp_set_state_msgs[
+                self.pending_events[stop_name].exp_set_state_msgs[
                     set_state_key] += 1
 
             self.monitor_event.set()
@@ -20710,7 +20796,7 @@ class TestSmartThreadScenarios:
         ################################################################
         # check that transitions are complete
         ################################################################
-        config_ver.check_pending_transitions()
+        config_ver.check_pending_events()
 
         ################################################################
         # check log results
