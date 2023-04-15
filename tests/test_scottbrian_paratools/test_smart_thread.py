@@ -4304,6 +4304,13 @@ micro_sec_match = '[0-9]{6,6}'
 time_match = (fr'{hour_match}:{min_sec_match}:{min_sec_match}\.'
               f'{micro_sec_match}')
 
+list_of_thread_states = ('(ThreadState.Unregistered'
+                         '|ThreadState.Initializing'
+                         '|ThreadState.Registered'
+                         '|ThreadState.Starting'
+                         '|ThreadState.Alive'
+                         '|ThreadState.Stopped)')
+
 
 ########################################################################
 # LogSearchItem
@@ -4400,6 +4407,69 @@ class StartRegisterLogSearchItem(LogSearchItem):
             cmd_runner=split_msg[0],
             target=split_msg[4],
             log_msg=self.found_log_msg)
+
+
+########################################################################
+# RegistryStatusLogSearchItem
+########################################################################
+class RegistryStatusLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+        """
+        super().__init__(
+            search_str=('name=[a-z]+, is_alive=(True|False), '
+                        f'state={list_of_thread_states}, smart_thread='),
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int
+                           ) -> "RegistryStatusLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            RegistryStatusLogSearchItem containing found message and index
+        """
+        return RegistryStatusLogSearchItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+    def run_process(self):
+        """Run the process to handle the log message."""
+        split_msg = self.found_log_msg.split()
+        target = split_msg[0][5:-1]
+        is_alive = eval(split_msg[1][9:-1])
+        state = eval('st.' + split_msg[2][6:-1])
+
+        if self.config_ver.pending_events[
+                target].status_msg[(is_alive, state)] <= 0:
+            raise UnexpectedEvent(
+                'RegistryStatusLogSearchItem encountered unexpected '
+                f'log message: {self.found_log_msg}')
+
+        self.config_ver.pending_events[
+            target].status_msg[(is_alive, state)] -= 1
+
+        self.config_ver.add_log_msg(self.found_log_msg)
 
 
 ########################################################################
@@ -4781,12 +4851,6 @@ class SetStateLogSearchItem(LogSearchItem):
             found_log_msg: log msg that was found
             found_log_idx: index in the log where message was found
         """
-        list_of_thread_states = ('(ThreadState.Unregistered'
-                                 '|ThreadState.Initializing'
-                                 '|ThreadState.Registered'
-                                 '|ThreadState.Starting'
-                                 '|ThreadState.Alive'
-                                 '|ThreadState.Stopped)')
         super().__init__(
             search_str=('[a-z]+ set state for thread [a-z]+ from '
                         f'{list_of_thread_states} to {list_of_thread_states}'),
@@ -5132,7 +5196,10 @@ class RequestEntryLogSearchItem(LogSearchItem):
             found_log_msg: log msg that was found
             found_log_idx: index in the log where message was found
         """
-        list_of_requests = ('(smart_send'
+        list_of_requests = ('(smart_start'
+                            '|smart_unreg'
+                            '|smart_join'
+                            '|smart_send'
                             '|smart_recv'
                             '|smart_resume'
                             '|smart_sync'
@@ -5166,7 +5233,7 @@ class RequestEntryLogSearchItem(LogSearchItem):
     def run_process(self):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
-        # request_name = split_msg[0]
+        request_name = split_msg[0]
         entry_exit = split_msg[1]
         cmd_runner = split_msg[3]
         target_msg = self.found_log_msg.split('[')[1].split(']')[0].split(', ')
@@ -5180,6 +5247,20 @@ class RequestEntryLogSearchItem(LogSearchItem):
         #                              f'{targets=}')
 
         if entry_exit == 'entry:':
+            if request_name in ('smart_unreg', 'smart_join'):
+                try:
+                    req_start_item = self.config_ver.pending_events[
+                        cmd_runner].start_request.pop()
+                except IndexError:
+                    raise UnexpectedEvent(
+                        'RequestEntryLogSearchItem encountered unexpected '
+                        f'start request log msg: {self.found_log_msg}')
+
+                self.config_ver.handle_start_request_log_msg(
+                    cmd_runner=cmd_runner,
+                    req_start_item=req_start_item)
+
+
             self.config_ver.handle_request_entry_log_msg(
                 cmd_runner=cmd_runner,
                 targets=targets)
@@ -5375,7 +5456,8 @@ class MonDelLogSearchItem(LogSearchItem):
 
 
 LogSearchItems: TypeAlias = Union[
-StartRegisterLogSearchItem,
+    StartRegisterLogSearchItem,
+    RegistryStatusLogSearchItem,
     EnterRpaLogSearchItem,
     UpdatePaLogSearchItem,
     RegUpdateLogSearchItem,
@@ -5504,23 +5586,31 @@ class PaLogMsgsFound:
     removed_pa_entry: list[tuple[str, str]]
     updated_pa: bool
 
-class TransitionType(Enum):
-    Unreg = auto()
-    Init = auto()
-    Start = auto()
-    Reg = auto()
-    Alive = auto()
-    Stop = auto()
+# class TransitionType(Enum):
+#     Unreg = auto()
+#     Init = auto()
+#     Start = auto()
+#     Reg = auto()
+#     Alive = auto()
+#     Stop = auto()
+
+@dataclass
+class StartRequest:
+    req_type: st.ReqType = st.ReqType.NoReq
+    targets: set[str]
+    not_registered_remotes: set[str]
+    timeout_remotes: set[str]
+    stopped_remotes: set[str]
+    deadlock_remotes: set[str]
 
 
 @dataclass
 class PendingEvent:
     """Pending transition class."""
-    trans_from: TransitionType
-    trans_to: TransitionType
-    cmd_runner: str
     exp_set_state_msgs: dict[SetStateKey, int]
     start_reg_msg: dict[str, int]
+    status_msg: dict[tuple[bool, st.ThreadState], int]
+    start_request: deque[StartRequest] = deque()
     exp_not_registry_join_log_msg: int = 0
     exp_join_successful_log_msg: int = 0
 
@@ -5616,6 +5706,7 @@ class ConfigVerifier:
         self.log_start_idx: int = 0
         self.log_search_items: tuple[LogSearchItems, ...] = (
             StartRegisterLogSearchItem(config_ver=self),
+            RegistryStatusLogSearchItem(config_ver=self),
             EnterRpaLogSearchItem(config_ver=self),
             UpdatePaLogSearchItem(config_ver=self),
             RegUpdateLogSearchItem(config_ver=self),
@@ -5644,11 +5735,9 @@ class ConfigVerifier:
         self.pending_events: dict[str, PendingEvent] = {}
         for name in self.thread_names:
             self.pending_events[name] = PendingEvent(
-                trans_from=TransitionType.Unreg,
-                trans_to=TransitionType.Unreg,
-                cmd_runner='',
                 exp_set_state_msgs=defaultdict(int),
-                start_reg_msg=defaultdict(int))
+                start_reg_msg=defaultdict(int),
+                status_msg=defaultdict(int))
 
         self.allow_log_test_msg = True
 
@@ -5877,13 +5966,10 @@ class ConfigVerifier:
             f'{cmd_runner} set state for thread {new_name} '
             'from ThreadState.Unregistered to ThreadState.Initializing')
 
-        # class_name = self.all_threads[new_name].__class__.__name__
-        # self.add_log_msg(
-        #     f'{cmd_runner} obtained _registry_lock, '
-        #     f'class name = {class_name}')
+        class_name = self.all_threads[new_name].__class__.__name__
 
-        self.handle_exp_status_log_msgs(log_idx=reg_idx,
-                                        name=new_name)
+        # self.handle_exp_status_log_msgs(log_idx=reg_idx,
+        #                                 name=new_name)
 
         if thread_alive:
             self.add_log_msg(
@@ -12837,6 +12923,8 @@ class ConfigVerifier:
                 name=name, auto_start=auto_start, max_msgs=self.max_msgs)
         self.all_threads[name] = self.commander_thread
 
+        self.pending_events[cmd_runner].start_reg_msg[name] += 1
+
         if auto_start:
             exp_status = st.ThreadState.Alive
         else:
@@ -12888,7 +12976,7 @@ class ConfigVerifier:
                           f'{name=}')
         self.f1_process_cmds[name] = True
 
-        self.pending_events[cmd_runner].got_lock_msg += 1
+        self.pending_events[cmd_runner].start_reg_msg[name] += 1
 
         is_thread_target = False
         if app_config == AppConfig.ScriptStyle:
@@ -13463,6 +13551,20 @@ class ConfigVerifier:
             seq='test_smart_thread.py::ConfigVerifier.handle_join')
 
         start_time = time.time()
+
+        if timeout_names:
+            timeout_remotes = timeout_names.copy()
+        else:
+            timeout_remotes = set()
+
+        self.pending_events[cmd_runner].start_request.append(
+            StartRequest(req_type=st.ReqType.Smart_join,
+                         targets=join_names.copy(),
+                         not_registered_remotes=set(),
+                         timeout_remotes=timeout_remotes,
+                         stopped_remotes=set(),
+                         deadlock_remotes=set()))
+
         enter_exit = ('entry', 'exit')
         if timeout_type == TimeoutType.TimeoutNone:
             self.all_threads[cmd_runner].smart_join(
@@ -13858,7 +13960,7 @@ class ConfigVerifier:
                     f'from {from_status} to '
                     f'{st.ThreadState.Stopped}')
 
-            self.handle_exp_status_log_msgs(log_idx=reg_rem_log_idx)
+            # self.handle_exp_status_log_msgs(log_idx=reg_rem_log_idx)
 
             del self.expected_registered[del_name]
 
@@ -14269,14 +14371,55 @@ class ConfigVerifier:
             log_msg: start register log message
 
         """
-        if self.pending_events[
-                cmd_runner].start_reg_msg[target] <= 0:
-            raise UnexpectedEvent('StartRegisterLogSearchItem run_process '
-                                  'encountered unexpected start register '
-                                  f'log msg: {log_msg}')
-        self.config_ver.pending_events[
-            cmd_runner].start_reg_msg[target] -= 1
-        self.config_ver.add_log_msg(self.found_log_msg)
+        if self.pending_events[cmd_runner].start_reg_msg[target] <= 0:
+            raise UnexpectedEvent(
+                'StartRegisterLogSearchItem run_process encountered '
+                f'unexpected log msg: {log_msg}')
+        self.pending_events[cmd_runner].start_reg_msg[target] -= 1
+        self.add_log_msg(log_msg)
+
+        for name, item in self.expected_registered.items():
+            is_alive = self.expected_registered[name]
+            self.pending_events[name].status_msg[
+                (item.is_alive, item.st_state)] += 1
+
+    ####################################################################
+    # handle_start_request_log_msg
+    ####################################################################
+    def handle_start_request_log_msg(self,
+                                     cmd_runner: str,
+                                     req_start_item: StartRequest) -> None:
+        """Process the start request event.
+
+        Args:
+            cmd_runner: thread name doing the request
+            req_start_item: contains the request specifics
+
+        """
+        eligible_targets: set[str] = set()
+        if req_start_item.req_type == st.ReqType.Smart_unreg:
+            eligible_targets = (req_start_item.targets.copy()
+                                - req_start_item.not_registered_remotes.copy())
+            for name in eligible_targets:
+                key: SetStateKey = (cmd_runner,
+                                    name,
+                                    st.ThreadState.Registered,
+                                    st.ThreadState.Stopped)
+                self.pending_events[cmd_runner].exp_set_state_msgs[key] += 1
+        elif req_start_item.req_type == st.ReqType.Smart_join:
+            eligible_targets = (req_start_item.targets.copy()
+                                - req_start_item.timeout_remotes.copy())
+            for name in eligible_targets:
+                if (name in self.expected_registered
+                        and not self.expected_registered[
+                            name].is_TargetThread):
+                    key: SetStateKey = (cmd_runner,
+                                        name,
+                                        st.ThreadState.Alive,
+                                        st.ThreadState.Stopped)
+                    self.pending_events[cmd_runner].exp_set_state_msgs[
+                        key] += 1
+
     ####################################################################
     # wait_for_monitor
     ####################################################################
@@ -14635,6 +14778,15 @@ class ConfigVerifier:
             seq='test_smart_thread.py::ConfigVerifier.handle_unregister')
 
         eligible_targets = unregister_targets.copy() - not_registered_remotes
+
+        self.pending_events[cmd_runner].start_request.append(
+            StartRequest(req_type=st.ReqType.Smart_unreg,
+                         targets=unregister_targets.copy(),
+                         not_registered_remotes=not_registered_remotes.copy(),
+                         timeout_remotes=set(),
+                         stopped_remotes=set(),
+                         deadlock_remotes=set()))
+
         for name in eligible_targets:
             key: SetStateKey = (cmd_runner,
                                 name,

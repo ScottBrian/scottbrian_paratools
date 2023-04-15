@@ -1154,7 +1154,8 @@ class SmartThread:
             is_alive = item.thread.is_alive()
             state = self._get_state(name=key)
             logger.debug(
-                f'name={key}, smart_thread={item}, {is_alive=}, {state=}')
+                f'name={key}, {is_alive=}, state={state}, '
+                f'smart_thread={item}')
             if ((not item.thread.is_alive())
                     and (item.st_state & ThreadState.Stopped)):
                 keys_to_del.append(key)
