@@ -4460,6 +4460,9 @@ class RegistryStatusLogSearchItem(LogSearchItem):
         is_alive = eval(split_msg[1][9:-1])
         state = eval('st.' + split_msg[2][6:-1])
 
+        if target == self.config_ver.commander_name:
+            self.config_ver.set_pending_status_msgs()
+
         if self.config_ver.pending_events[
                 target].status_msg[(is_alive, state)] <= 0:
             raise UnexpectedEvent(
@@ -4880,7 +4883,6 @@ class SetStateLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
-        # target_name = split_msg[3][0:-1], # get rid of comma
         target_name = split_msg[5]
         from_state = split_msg[7]
         to_state = split_msg[9]
@@ -4894,10 +4896,14 @@ class SetStateLogSearchItem(LogSearchItem):
                                       t_state)
         # self.config_ver.log_test_msg(f'SetStateLogSearchItem looking for '
         #                              f'{set_state_key=}')
-        if set_state_key in ps.exp_set_state_msgs:
-            ps.exp_set_state_msgs[set_state_key] -= 1
+        # if set_state_key not in ps.set_state_msg:
+        #     raise UnexpectedEvent(f'SetStateLogSearchItem encountered '
+        #                           f'unexpected log msg: {self.found_log_msg=}')
+        if set_state_key in ps.set_state_msg:
+            ps.set_state_msg[set_state_key] -= 1
             self.config_ver.add_log_msg(self.found_log_msg,
                                         log_level=logging.DEBUG)
+
             # self.config_ver.log_test_msg(f'SetStateLogSearchItem found '
             #                              f'{set_state_key=}')
 
@@ -4906,10 +4912,25 @@ class SetStateLogSearchItem(LogSearchItem):
             self.config_ver.handle_started_log_msg(
                 cmd_runner=cmd_runner,
                 started_name=target_name)
-        elif (from_state == 'ThreadState.Alive'
-                and to_state == 'ThreadState.Stopped'):
-            self.config_ver.expected_registered[
-                target_name].st_state = st.ThreadState.Stopped
+        # elif (from_state == 'ThreadState.Alive'
+        #         and to_state == 'ThreadState.Stopped'):
+
+        if target_name not in self.config_ver.expected_registered:
+            raise IncorrectDataDetected(
+                f'SetStateLogSearchItem detected {target_name=} is '
+                'missing from expected_registered: '
+                f'{self.config_ver.expected_registered}')
+
+        current_state = self.config_ver.expected_registered[
+            target_name].st_state
+        if current_state != f_state:
+            raise IncorrectDataDetected(
+                'SetStateLogSearchItem detected current state for '
+                f'{target_name} of {current_state} does not match '
+                f'from state in log msg of {f_state}')
+
+        self.config_ver.expected_registered[
+            target_name].st_state = t_state
 
 
 ########################################################################
@@ -5246,6 +5267,8 @@ class RequestEntryLogSearchItem(LogSearchItem):
         #                              f'{cmd_runner=}, '
         #                              f'{targets=}')
 
+        self.config_ver.log_test_msg(f'RequestEntryLogSearchItem entered '
+                                     f'for {request_name=}')
         if entry_exit == 'entry:':
             if request_name in ('smart_unreg', 'smart_join'):
                 try:
@@ -5259,7 +5282,6 @@ class RequestEntryLogSearchItem(LogSearchItem):
                 self.config_ver.handle_start_request_log_msg(
                     cmd_runner=cmd_runner,
                     req_start_item=req_start_item)
-
 
             self.config_ver.handle_request_entry_log_msg(
                 cmd_runner=cmd_runner,
@@ -5594,23 +5616,26 @@ class PaLogMsgsFound:
 #     Alive = auto()
 #     Stop = auto()
 
+
 @dataclass
 class StartRequest:
-    req_type: st.ReqType = st.ReqType.NoReq
     targets: set[str]
     not_registered_remotes: set[str]
     timeout_remotes: set[str]
     stopped_remotes: set[str]
     deadlock_remotes: set[str]
+    req_type: st.ReqType = st.ReqType.NoReq
 
 
 @dataclass
 class PendingEvent:
-    """Pending transition class."""
-    exp_set_state_msgs: dict[SetStateKey, int]
+    """Pending event class."""
+    current_request: StartRequest
+    set_state_msg: dict[SetStateKey, int]
     start_reg_msg: dict[str, int]
     status_msg: dict[tuple[bool, st.ThreadState], int]
-    start_request: deque[StartRequest] = deque()
+    start_request: deque[StartRequest]
+
     exp_not_registry_join_log_msg: int = 0
     exp_join_successful_log_msg: int = 0
 
@@ -5735,9 +5760,16 @@ class ConfigVerifier:
         self.pending_events: dict[str, PendingEvent] = {}
         for name in self.thread_names:
             self.pending_events[name] = PendingEvent(
-                exp_set_state_msgs=defaultdict(int),
+                current_request=StartRequest(req_type=st.ReqType.NoReq,
+                                             targets=set(),
+                                             not_registered_remotes=set(),
+                                             timeout_remotes=set(),
+                                             stopped_remotes=set(),
+                                             deadlock_remotes=set()),
+                set_state_msg=defaultdict(int),
                 start_reg_msg=defaultdict(int),
-                status_msg=defaultdict(int))
+                status_msg=defaultdict(int),
+                start_request=deque())
 
         self.allow_log_test_msg = True
 
@@ -7063,8 +7095,8 @@ class ConfigVerifier:
         incomplete_item = False
         for key, item in self.pending_events.items():
             incomplete_item = False
-            if item.exp_set_state_msgs:
-                for key2, item2 in item.exp_set_state_msgs.items():
+            if item.set_state_msg:
+                for key2, item2 in item.set_state_msg.items():
                     if item2 != 0:
                         incomplete_item = True
                         break
@@ -14378,11 +14410,6 @@ class ConfigVerifier:
         self.pending_events[cmd_runner].start_reg_msg[target] -= 1
         self.add_log_msg(log_msg)
 
-        for name, item in self.expected_registered.items():
-            is_alive = self.expected_registered[name]
-            self.pending_events[name].status_msg[
-                (item.is_alive, item.st_state)] += 1
-
     ####################################################################
     # handle_start_request_log_msg
     ####################################################################
@@ -14396,7 +14423,10 @@ class ConfigVerifier:
             req_start_item: contains the request specifics
 
         """
+        self.log_test_msg(f'handle_start_request_log_msg entered, '
+                          f'{cmd_runner=}, {req_start_item=}')
         eligible_targets: set[str] = set()
+        self.pending_events[cmd_runner].current_request = req_start_item
         if req_start_item.req_type == st.ReqType.Smart_unreg:
             eligible_targets = (req_start_item.targets.copy()
                                 - req_start_item.not_registered_remotes.copy())
@@ -14405,10 +14435,12 @@ class ConfigVerifier:
                                     name,
                                     st.ThreadState.Registered,
                                     st.ThreadState.Stopped)
-                self.pending_events[cmd_runner].exp_set_state_msgs[key] += 1
+                self.pending_events[cmd_runner].set_state_msg[key] += 1
         elif req_start_item.req_type == st.ReqType.Smart_join:
             eligible_targets = (req_start_item.targets.copy()
                                 - req_start_item.timeout_remotes.copy())
+            self.log_test_msg(f'handle_start_request_log_msg '
+                              f'{eligible_targets=}')
             for name in eligible_targets:
                 if (name in self.expected_registered
                         and not self.expected_registered[
@@ -14417,7 +14449,7 @@ class ConfigVerifier:
                                         name,
                                         st.ThreadState.Alive,
                                         st.ThreadState.Stopped)
-                    self.pending_events[cmd_runner].exp_set_state_msgs[
+                    self.pending_events[cmd_runner].set_state_msg[
                         key] += 1
 
     ####################################################################
@@ -14792,7 +14824,7 @@ class ConfigVerifier:
                                 name,
                                 st.ThreadState.Registered,
                                 st.ThreadState.Stopped)
-            self.pending_events[cmd_runner].exp_set_state_msgs[key] += 1
+            self.pending_events[cmd_runner].set_state_msg[key] += 1
 
         enter_exit = ('entry', 'exit')
         if not_registered_remotes:
@@ -15217,6 +15249,21 @@ class ConfigVerifier:
         self.monitor_thread.join()
 
     ####################################################################
+    # set_pending_status_msgs
+    ####################################################################
+    def set_pending_status_msgs(self) -> None:
+        """Set the expected status msgs displayed from reg cleanup."""
+        self.log_test_msg('set_pending_status_msgs entered with '
+                          f'{self.expected_registered=}')
+        for name, item in self.expected_registered.items():
+            if not item.is_alive and item.st_state == st.ThreadState.Alive:
+                state_to_use = st.ThreadState.Stopped
+            else:
+                state_to_use = item.st_state
+            self.pending_events[name].status_msg[
+                (item.is_alive, state_to_use)] += 1
+
+    ####################################################################
     # set_recv_timeout
     ####################################################################
     def set_recv_timeout(self, num_timeouts: int):
@@ -15266,7 +15313,7 @@ class ConfigVerifier:
                                  stop_name,
                                  st.ThreadState.Alive,
                                  st.ThreadState.Stopped)
-                self.pending_events[stop_name].exp_set_state_msgs[
+                self.pending_events[stop_name].set_state_msg[
                     set_state_key] += 1
 
             self.monitor_event.set()
