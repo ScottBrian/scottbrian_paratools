@@ -1105,13 +1105,15 @@ class SmartThread:
                 SmartThread._create_pair_array_entry_time = create_time
                 self.create_time = create_time
                 SmartThread._registry[self.name] = self
-                if self.thread.is_alive():
-                    new_state = ThreadState.Alive
-                else:
-                    new_state = ThreadState.Registered
+
                 self._set_state(
                     target_thread=self,
-                    new_state=new_state)
+                    new_state=ThreadState.Registered)
+                if self.thread.is_alive():
+                    self._set_state(
+                        target_thread=self,
+                        new_state=ThreadState.Alive)
+
                 SmartThread._registry_last_update = datetime.utcnow()
                 print_time = (SmartThread._registry_last_update
                               .strftime("%H:%M:%S.%f"))
