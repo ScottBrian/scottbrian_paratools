@@ -13742,7 +13742,18 @@ class ConfigVerifier:
             target = list(pe.current_request.targets)[0]
             self.add_to_pair_array(cmd_runner=cmd_runner,
                                    target=target)
-
+        elif pe.current_request.req_type == st.ReqType.Smart_unreg:
+            eligible_targets = (pe.current_request.targets
+                                - pe.current_request.not_registered_remotes)
+            for target in eligible_targets:
+                self.sub_from_pair_array(cmd_runner=cmd_runner,
+                                         target=target)
+        elif pe.current_request.req_type == st.ReqType.Smart_join:
+            eligible_targets = (pe.current_request.targets
+                                - pe.current_request.timeout_remotes)
+            for target in eligible_targets:
+                self.sub_from_pair_array(cmd_runner=cmd_runner,
+                                         target=target)
 
         # There could be zero, one, or several threads that have
         # received a message and have the potential to update the
@@ -15941,7 +15952,7 @@ class ConfigVerifier:
     def add_to_pair_array(self,
                           cmd_runner: str,
                           target: str) -> None:
-        """Unregister the named threads.
+        """Add target to pair array.
 
         Args:
             cmd_runner: thread name doin the update
@@ -16040,6 +16051,203 @@ class ConfigVerifier:
         self.log_test_msg(f'add_to_pair_array entry: {cmd_runner=}, '
                           f'{target=}')
 
+    ####################################################################
+    # add_to_pair_array
+    ####################################################################
+    def sub_from_pair_array(self,
+                            cmd_runner: str,
+                            target: str) -> None:
+        """Remove target from pair_array.
+
+        Args:
+            cmd_runner: thread name doin the update
+            target: thread name to add
+
+        Raises:
+            InvalidConfigurationDetected: Attempt to add thread to
+                existing pair array that has an empty ThreadPairStatus
+                dict, or that already has the thread in the pair array,
+                or that did not have the other name in the pair array.
+
+        """
+        self.log_test_msg(f'add_to_pair_array entry: {cmd_runner=}, '
+                          f'{target=}')
+
+        pe = self.pending_events[cmd_runner]
+
+        if target not in self.expected_registered:
+            raise IncorrectDataDetected(
+                f'handle_enter_rpa_log_msg detected {target=} not '
+                f'found in {self.expected_registered=}'
+            )
+        for other_name in self.expected_registered.keys():
+            if other_name == target:
+                continue
+            pair_key = st.SmartThread._get_pair_key(target, other_name)
+
+            target_poc = 0
+            other_poc = 0
+            if pair_key in self.pending_ops_counts:
+                if target in self.pending_ops_counts[pair_key]:
+                    target_poc = self.pending_ops_counts[pair_key][target]
+                    self.pending_ops_counts[pair_key][target] = 0
+                if other_name in self.pending_ops_counts[pair_key]:
+                    other_poc = self.pending_ops_counts[pair_key][other_name]
+                    self.pending_ops_counts[pair_key][other_name] = 0
+
+            if pair_key not in self.expected_pairs:
+                self.expected_pairs[pair_key] = {
+                    target: ThreadPairStatus(
+                        pending_ops_count=target_poc,
+                        reset_ops_count=False),
+                    other_name: ThreadPairStatus(
+                        pending_ops_count=other_poc,
+                        reset_ops_count=False)}
+                add_key: AddPaKey = (cmd_runner,
+                                     pair_key)
+                pe.add_pair_array[add_key] += 1
+
+                for pair_name in pair_key:
+                    add_status_key: AddStatusBlockKey = (cmd_runner,
+                                                         pair_key,
+                                                         pair_name)
+                    pe.add_status_block_msg[add_status_key] += 1
+
+            # if pair_key already exists, we need to add name
+            # as a resurrected thread
+            else:  # we already have a pair_key, need to add name
+                if not self.expected_pairs[pair_key]:
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        'Attempt to add thread to existing pair array '
+                        'that has an empty ThreadPairStatus dict')
+                if target in self.expected_pairs[pair_key].keys():
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'{cmd_runner} attempted to add {target} to '
+                        f'pair array for {pair_key=} that already '
+                        'has the thread in the pair array')
+
+                if other_name not in self.expected_pairs[pair_key].keys():
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        'Attempt to add thread to pair array that did '
+                        'not have the other name in the pair array')
+
+                # looks OK, just add in the new name
+                self.expected_pairs[pair_key][target] = ThreadPairStatus(
+                    pending_ops_count=target_poc,
+                    reset_ops_count=False)
+
+                # self.log_test_msg('update_pair_array_add '
+                #                   '_refresh_pair_array add_pair_key 2 '
+                #                   f'{pair_key}, {target}')
+
+                add_status_key: AddStatusBlockKey = (cmd_runner,
+                                                     pair_key,
+                                                     target)
+                pe.add_status_block_msg[add_status_key] += 1
+
+                # self.log_test_msg(f'{cmd_runner} '
+                #                   'resurrected expected_pairs '
+                #                   f'for {pair_key=}, {target=} with '
+                #                   f'{target_poc=}')
+
+        self.log_test_msg(f'add_to_pair_array entry: {cmd_runner=}, '
+                          f'{target=}')
+
+    del_name = upa_item.upa_target
+    process = upa_item.upa_process
+    pair_keys_to_delete = []
+    for pair_key in self.expected_pairs:
+        if del_name not in pair_key:
+            continue
+        if del_name == pair_key[0]:
+            other_name = pair_key[1]
+        else:
+            other_name = pair_key[0]
+
+        if del_name not in self.expected_pairs[pair_key].keys():
+            self.abort_all_f1_threads()
+            raise InvalidConfigurationDetected(
+                f'The expected_pairs for pair_key {pair_key} '
+                'contains an entry of '
+                f'{self.expected_pairs[pair_key]}  which does not '
+                f'include the {del_name=} being deleted')
+
+        if other_name not in self.expected_pairs[pair_key].keys():
+            pair_keys_to_delete.append(pair_key)
+        else:
+            request_is_pending = False
+            if (other_name in self.request_pending_pair_keys
+                    and pair_key in self.request_pending_pair_keys[
+                        other_name]):
+                request_is_pending = True
+                self.log_test_msg('found request_pending for '
+                                  f'{other_name=}, {pair_key=}')
+            if (self.expected_pairs[pair_key][
+                other_name].pending_ops_count == 0
+                    and not request_is_pending):
+                pair_keys_to_delete.append(pair_key)
+                self.log_test_msg(
+                    f'update_pair_array_del rem_pair_key 2 {pair_key}, '
+                    f'{other_name}')
+                self.add_log_msg(re.escape(
+                    f"{cmd_runner} removed status_blocks entry "
+                    f"for pair_key = {pair_key}, "
+                    f"name = {other_name}"))
+                # we are assuming that the remote will be started
+                # while smart_send or resume is running and that the
+                # msg will be delivered or the resume will be done
+                # (otherwise we should not have called
+                # inc_ops_count)
+                # if ((pend_ops_cnt := self.expected_pairs[pair_key][
+                #         del_name].pending_ops_count) > 0
+                #         and not self.expected_pairs[pair_key][
+                #         del_name].reset_ops_count):
+                #     if pair_key not in self.pending_ops_counts:
+                #         self.pending_ops_counts[pair_key] = {}
+                #     self.pending_ops_counts[pair_key][
+                #         del_name] = pend_ops_cnt
+                #     self.log_test_msg(
+                #         f'update_pair_array_del for {pair_key=}, '
+                #         f'{del_name=} set pending {pend_ops_cnt=}')
+            else:
+                # remember for next update by smart_recv or wait
+                del_def_key = (pair_key, other_name)
+                self.del_deferred_list.append(del_def_key)
+
+                # best we can do is delete the del_name for now
+                del self.expected_pairs[pair_key][del_name]
+
+        self.log_test_msg(
+            f'update_pair_array_del 2 rem_pair_key 3 {pair_key}, '
+            f'{del_name}')
+        self.add_log_msg(re.escape(
+            f"{cmd_runner} removed status_blocks entry "
+            f"for pair_key = {pair_key}, "
+            f"name = {del_name}"))
+
+    for pair_key in pair_keys_to_delete:
+        self.log_test_msg(f'update_pair_array_del for {cmd_runner=}, '
+                          f'{del_name=}, {process=} deleted '
+                          f'{pair_key=}')
+
+        del self.expected_pairs[pair_key]
+        self.add_log_msg(re.escape(
+            f'{cmd_runner} removed _pair_array entry'
+            f' for pair_key = {pair_key}'))
+
+        # split_msg = self.last_clean_reg_log_msg.split()
+        # if (split_msg[0] != cmd_runner
+        #         or split_msg[9] != f"['{del_name}']"):
+        #     raise FailedToFindLogMsg(f'del_thread {cmd_runner=}, '
+        #                              f'{del_name} did not match '
+        #                              f'{self.last_clean_reg_log_msg=} ')
+        # self.add_log_msg(re.escape(self.last_clean_reg_log_msg))
+
+    self.add_log_msg(f'{cmd_runner} did successful '
+                     f'{process} of {del_name}.')
     ####################################################################
     # update_pair_array_del
     ####################################################################
