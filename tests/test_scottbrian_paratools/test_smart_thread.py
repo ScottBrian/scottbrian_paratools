@@ -4525,8 +4525,63 @@ class EnterRpaLogSearchItem(LogSearchItem):
 
     def run_process(self):
         """Run the process to handle the log message."""
+        cmd_runner = self.found_log_msg.split(maxsplit=1)[0]
+
         self.config_ver.handle_enter_rpa_log_msg(
+            cmd_runner=cmd_runner,
+            log_msg=self.found_log_msg)
+
+        self.config_ver.add_log_msg(self.found_log_msg)
+
+
+########################################################################
+# ExitRpaLogSearchItem
+########################################################################
+class ExitRpaLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+        """
+        super().__init__(
+            search_str='[a-z]+ exiting _refresh_pair_array',
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int) -> "ExitRpaLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            ExitRpaLogSearchItem containing found message and index
+        """
+        return ExitRpaLogSearchItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+    def run_process(self):
+        """Run the process to handle the log message."""
+        self.config_ver.handle_exit_rpa_log_msg(
             cmd_runner=self.found_log_msg.split(maxsplit=1)[0])
+
+        self.config_ver.add_log_msg(self.found_log_msg)
 
 
 ########################################################################
@@ -4625,9 +4680,9 @@ class AddRegLogSearchItem(LogSearchItem):
     def run_process(self):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
-        self.config_ver.handle_reg_update(
+        self.config_ver.handle_add_reg_log_msg(
             cmd_runner=split_msg[0],
-            new_name=split_msg[2],
+            target=split_msg[2],
             reg_update_msg=self.found_log_msg,
             reg_update_msg_log_idx=self.found_log_idx)
         self.config_ver.add_log_msg(re.escape(self.found_log_msg))
@@ -4902,9 +4957,6 @@ class SetStateLogSearchItem(LogSearchItem):
                                                  from_state=from_state,
                                                  to_state=to_state,
                                                  log_msg=self.found_log_msg)
-
-        self.config_ver.add_log_msg(self.found_log_msg,
-                                    log_level=logging.DEBUG)
 
 
 ########################################################################
@@ -5504,6 +5556,7 @@ LogSearchItems: TypeAlias = Union[
     StartRegisterLogSearchItem,
     RegistryStatusLogSearchItem,
     EnterRpaLogSearchItem,
+    ExitRpaLogSearchItem,
     UpdatePaLogSearchItem,
     AddRegLogSearchItem,
     RegRemoveLogSearchItem,
@@ -5659,6 +5712,8 @@ class PendingEvent:
     start_reg_msg: dict[str, int]
     status_msg: dict[tuple[bool, st.ThreadState], int]
     add_reg_msg: dict[AddRegKey, int]
+    enter_rpa_msg: int
+    exit_rpa_msg: int
     start_request: deque[StartRequest]
 
     exp_not_registry_join_log_msg: int = 0
@@ -5758,6 +5813,7 @@ class ConfigVerifier:
             StartRegisterLogSearchItem(config_ver=self),
             RegistryStatusLogSearchItem(config_ver=self),
             EnterRpaLogSearchItem(config_ver=self),
+            ExitRpaLogSearchItem(config_ver=self),
             UpdatePaLogSearchItem(config_ver=self),
             AddRegLogSearchItem(config_ver=self),
             RegRemoveLogSearchItem(config_ver=self),
@@ -5796,6 +5852,8 @@ class ConfigVerifier:
                 start_reg_msg=defaultdict(int),
                 status_msg=defaultdict(int),
                 add_reg_msg=defaultdict(int),
+                enter_rpa_msg=0,
+                exit_rpa_msg=0,
                 start_request=deque())
 
         self.allow_log_test_msg = True
@@ -6026,9 +6084,9 @@ class ConfigVerifier:
         ################################################################
         # add log msgs
         ################################################################
-        self.add_log_msg(
-            f'{cmd_runner} set state for thread {new_name} '
-            'from ThreadState.Unregistered to ThreadState.Initializing')
+        # self.add_log_msg(
+        #     f'{cmd_runner} set state for thread {new_name} '
+        #     'from ThreadState.Unregistered to ThreadState.Initializing')
 
         class_name = self.all_threads[new_name].__class__.__name__
 
@@ -13075,7 +13133,12 @@ class ConfigVerifier:
 
         self.monitor_pause = True
 
-        self.pending_events[cmd_runner].start_reg_msg[name] += 1
+        key: SetStateKey = (cmd_runner,
+                            name,
+                            st.ThreadState.Unregistered,
+                            st.ThreadState.Initializing)
+        self.pending_events[cmd_runner].set_state_msg[key] += 1
+
 
         if auto_start:
             self.pending_events[cmd_runner].start_request.append(StartRequest(
@@ -13522,13 +13585,28 @@ class ConfigVerifier:
     # handle_enter_rpa_log_msg
     ####################################################################
     def handle_enter_rpa_log_msg(self,
-                                 cmd_runner: str) -> None:
+                                 cmd_runner: str,
+                                 log_msg: str) -> None:
         """Drive the commands received on the command queue.
 
         Args:
-            cmd_runner: name of thread doing the pair array refresh
+            cmd_runner: thread name doing the pair array refresh
 
         """
+        pe = self.pending_events[cmd_runner]
+
+        if pe.enter_rpa_msg <= 0:
+            raise UnexpectedEvent(f'handle_enter_rpa_log_msg encountered '
+                                  f'unexpected log msg: {log_msg}')
+
+        pe.enter_rpa_msg -= 1
+        self.add_log_msg(log_msg)
+
+        if target not in self.expected_registered:
+            raise IncorrectDataDetected(
+                f'handle_add_reg_log_msg detected {target=} is '
+                'missing from expected_registered: '
+                f'{self.expected_registered}')
         # There could be zero, one, or several threads that have
         # received a message and have the potential to update the
         # pair array in the case where a deferred delete was done.
@@ -13542,8 +13620,10 @@ class ConfigVerifier:
         # remain pending until the third step occurs, the pair array
         # updated log message is issued. Any other case will cause us to
         # reset the pending_recv_msg_par to empty.
-        self.add_log_msg(re.escape(
-            f'{cmd_runner} entered _refresh_pair_array'))
+
+        # self.add_log_msg(re.escape(
+        #     f'{cmd_runner} entered _refresh_pair_array'))
+
         # with self.ops_lock:
         #     if self.pending_recv_msg_par[cmd_runner]:
         #         self.pending_recv_msg_par = defaultdict(bool)
@@ -13570,6 +13650,17 @@ class ConfigVerifier:
                     self.handle_request_exit_log_msg(cmd_runner=key,
                                                      targets=del_list)
 
+    ####################################################################
+    # handle_exit_rpa_log_msg
+    ####################################################################
+    def handle_exit_rpa_log_msg(self,
+                                cmd_runner: str) -> None:
+        """Drive the commands received on the command queue.
+
+        Args:
+            cmd_runner: thread name doing the pair array refresh
+
+        """
     ####################################################################
     # handle_exp_status_log_msgs
     ####################################################################
@@ -14100,36 +14191,42 @@ class ConfigVerifier:
                 upa_process=process))
 
     ####################################################################
-    # handle_reg_update
+    # handle_add_reg_log_msg
     ####################################################################
-    def handle_reg_update(self,
-                          cmd_runner: str,
-                          new_name: str,
-                          reg_update_msg: str,
-                          reg_update_msg_log_idx) -> None:
+    def handle_add_reg_log_msg(self,
+                               cmd_runner: str,
+                               target: str,
+                               reg_update_msg: str,
+                               reg_update_msg_log_idx) -> None:
         """Handle the reg update log msg.
 
         Args:
             cmd_runner: name of thread doing the cmd
-            new_name: name of thread added to the registry
+            target: name of thread added to the registry
             reg_update_msg: register update log message
             reg_update_msg_log_idx: index in the log for the message
 
         """
         pe = self.pending_events[cmd_runner]
-        add_key: AddRegKey = (cmd_runner, new_name)
+        add_key: AddRegKey = (cmd_runner, target)
 
-        if add_key not in pe.add_reg_msg:
-            raise UnexpectedEvent(f'handle_set_state_log_msg encountered '
+        if (add_key not in pe.add_reg_msg
+                or pe.add_reg_msg[add_key] <= 0):
+            raise UnexpectedEvent(f'handle_add_reg_log_msg encountered '
                                   f'unexpected log msg: {reg_update_msg}')
 
         pe.add_reg_msg[add_key] -= 1
 
         if target not in self.expected_registered:
             raise IncorrectDataDetected(
-                f'handle_set_state_log_msg detected {target=} is '
+                f'handle_add_reg_log_msg detected {target=} is '
                 'missing from expected_registered: '
                 f'{self.expected_registered}')
+
+        ################################################################
+        # determine next step
+        ################################################################
+        self.pending_events[cmd_runner].enter_rpa_msg += 1
 
         found_add_item = False
         while not found_add_item:
@@ -14140,7 +14237,7 @@ class ConfigVerifier:
                     item = self.monitor_add_items[cmd_runner]
                     self.add_thread(
                         cmd_runner=cmd_runner,
-                        new_name=new_name,
+                        new_name=target,
                         thread_alive=item.thread_alive,
                         auto_start=item.auto_start,
                         is_ThreadTarget=item.is_ThreadTarget,
@@ -14151,11 +14248,11 @@ class ConfigVerifier:
                     # item.add_event.set()
                     # self.monitor_add_items.remove(item)
 
-                    if new_name != self.commander_name:
+                    if target != self.commander_name:
                         self.update_pair_array_items.append(UpaItem(
                             upa_cmd_runner=cmd_runner,
                             upa_type='add',
-                            upa_target=new_name,
+                            upa_target=target,
                             upa_def_del_name='',
                             upa_process=''))
                     break
@@ -14445,20 +14542,17 @@ class ConfigVerifier:
                 state does not match
         """
         pe = self.pending_events[cmd_runner]
-        set_state_key: SetStateKey = (cmd_runner,
-                                      target,
-                                      from_state,
-                                      to_state)
-        self.log_test_msg(f'handle_set_state_log_msg looking for '
-                                     f'{set_state_key=}')
-        if set_state_key not in pe.set_state_msg:
+        state_key: SetStateKey = (cmd_runner,
+                                  target,
+                                  from_state,
+                                  to_state)
+        if (state_key not in pe.set_state_msg
+                or pe.set_state_msg[state_key] <= 0):
             raise UnexpectedEvent(f'handle_set_state_log_msg encountered '
                                   f'unexpected log msg: {log_msg}')
 
-        self.log_test_msg(f'handle_set_state_log_msg found {set_state_key=}, '
-                          f'{pe.set_state_msg[set_state_key]=}')
-
-        pe.set_state_msg[set_state_key] -= 1
+        pe.set_state_msg[state_key] -= 1
+        self.add_log_msg(log_msg)
 
         if target not in self.expected_registered:
             raise IncorrectDataDetected(
@@ -14481,7 +14575,7 @@ class ConfigVerifier:
         if (from_state == st.ThreadState.Unregistered
                 and to_state == st.ThreadState.Initializing):
             # next step is register
-            self.pending_events[cmd_runner].start_reg_msg[target] += 1
+            pe.start_reg_msg[target] += 1
 
         elif (from_state == st.ThreadState.Initializing
               and to_state == st.ThreadState.Registered):
@@ -14490,12 +14584,16 @@ class ConfigVerifier:
                                     target,
                                     st.ThreadState.Registered,
                                     st.ThreadState.Alive)
-                self.pending_events[cmd_runner].set_state_msg[key] += 1
+                pe.set_state_msg[key] += 1
+            else:  # skip the reg to alive msg, proceed to reg add
+                add_key: AddRegKey = (cmd_runner, target)
+                pe.add_reg_msg[add_key] += 1
 
         elif (from_state == st.ThreadState.Registered
               and to_state == st.ThreadState.Alive):
-            add_key: AddRegKey = (cmd_runner,target)
-            self.pending_events[cmd_runner].added_to_reg_msg[add_key] += 1
+            # going from Registered to Alive only happens during init
+            add_key: AddRegKey = (cmd_runner, target)
+            pe.add_reg_msg[add_key] += 1
 
         elif (from_state == st.ThreadState.Starting
                 and to_state == st.ThreadState.Alive):
@@ -14587,13 +14685,26 @@ class ConfigVerifier:
             log_msg: start register log message
 
         """
-        if self.pending_events[cmd_runner].start_reg_msg[target] <= 0:
+        pe = self.pending_events[cmd_runner]
+        if target not in pe.start_reg_msg or pe.start_reg_msg[target] <= 0:
             raise UnexpectedEvent(
                 'StartRegisterLogSearchItem run_process encountered '
                 f'unexpected log msg: {log_msg}')
-        self.pending_events[cmd_runner].start_reg_msg[target] -= 1
+
+        pe.start_reg_msg[target] -= 1
         self.add_log_msg(log_msg)
-        if target != self.commander_name:
+
+        ################################################################
+        # determine next step
+        ################################################################
+        # if commander, first thread to register - no status msgs
+        if target == self.commander_name:
+            state_key: SetStateKey = (target,
+                                      target,
+                                      st.ThreadState.Initializing,
+                                      st.ThreadState.Registered)
+            pe.set_state_msg[state_key] += 1
+        else:  # expect to see status message, starting with commander
             self.pending_events[self.commander_name].status_msg[
                 (True, st.ThreadState.Alive)] += 1
 
@@ -15475,12 +15586,11 @@ class ConfigVerifier:
                     f'stop_thread attempting to stop {stop_name} which is '
                     f'not in the registry: {self.expected_registered=}')
             if self.expected_registered[stop_name].is_TargetThread:
-                set_state_key = (stop_name,
-                                 stop_name,
-                                 st.ThreadState.Alive,
-                                 st.ThreadState.Stopped)
-                self.pending_events[stop_name].set_state_msg[
-                    set_state_key] += 1
+                state_key = (stop_name,
+                             stop_name,
+                             st.ThreadState.Alive,
+                             st.ThreadState.Stopped)
+                self.pending_events[stop_name].set_state_msg[state_key] += 1
 
             self.monitor_event.set()
             exit_cmd = ExitThread(cmd_runners=stop_name,
@@ -21113,8 +21223,6 @@ class TestSmartThreadScenarios:
                                 st.ThreadState.Unregistered,
                                 st.ThreadState.Initializing)
             config_ver.pending_events[commander_name].set_state_msg[key] += 1
-            config_ver.pending_events[commander_name].start_reg_msg[
-                commander_name] += 1
 
             if (config_ver.cmd_thread_auto_start
                     and not config_ver.cmd_thread_alive):

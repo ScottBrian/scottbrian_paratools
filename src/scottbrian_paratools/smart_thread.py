@@ -1456,6 +1456,8 @@ class SmartThread:
                 f'{current_thread_name} updated _pair_array'
                 f' at UTC {print_time}')
 
+        logger.debug(f'{current_thread_name} exiting _refresh_pair_array')
+
     ####################################################################
     # start
     ####################################################################
