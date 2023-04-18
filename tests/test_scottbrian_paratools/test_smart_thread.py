@@ -13133,6 +13133,14 @@ class ConfigVerifier:
 
         self.monitor_pause = True
 
+        self.pending_events[cmd_runner].current_request = StartRequest(
+            req_type=st.ReqType.Smart_init,
+            targets={name},
+            not_registered_remotes=set(),
+            timeout_remotes=set(),
+            stopped_remotes=set(),
+            deadlock_remotes=set())
+
         key: SetStateKey = (cmd_runner,
                             name,
                             st.ThreadState.Unregistered,
@@ -13591,6 +13599,7 @@ class ConfigVerifier:
 
         Args:
             cmd_runner: thread name doing the pair array refresh
+            log_msg: refresh pair array log message
 
         """
         pe = self.pending_events[cmd_runner]
@@ -13602,11 +13611,17 @@ class ConfigVerifier:
         pe.enter_rpa_msg -= 1
         self.add_log_msg(log_msg)
 
-        if target not in self.expected_registered:
-            raise IncorrectDataDetected(
-                f'handle_add_reg_log_msg detected {target=} is '
-                'missing from expected_registered: '
-                f'{self.expected_registered}')
+        ################################################################
+        # add and/or delete entries from the mock pair array
+        ################################################################
+        # determine what cmd_runner is doing
+        if pe.current_request.req_type == st.ReqType.Smart_init:
+            target = list(pe.current_request.targets)[0]
+            for name in self.expected_registered.keys():
+                if name == target:
+                    continue
+
+
         # There could be zero, one, or several threads that have
         # received a message and have the potential to update the
         # pair array in the case where a deferred delete was done.
@@ -21218,6 +21233,15 @@ class TestSmartThreadScenarios:
                 st_state=st.ThreadState.Unregistered,
                 found_del_pairs=defaultdict(int)
             )
+            config_ver.pending_events[
+                commander_name].current_request = StartRequest(
+                req_type=st.ReqType.Smart_init,
+                targets={commander_name},
+                not_registered_remotes=set(),
+                timeout_remotes=set(),
+                stopped_remotes=set(),
+                deadlock_remotes=set())
+
             key: SetStateKey = (commander_name,
                                 commander_name,
                                 st.ThreadState.Unregistered,

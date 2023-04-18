@@ -506,6 +506,7 @@ class SmartThreadNoRemoteTargets(SmartThreadError):
 class ReqType(StrEnum):
     """Request for SmartThread."""
     NoReq = auto()
+    Smart_init = auto()
     Smart_start = auto()
     Smart_unreg = auto()
     Smart_join = auto()
