@@ -52,6 +52,8 @@ ThreadStatePair: TypeAlias = tuple[st.ThreadState, st.ThreadState]
 
 SetStateKey: TypeAlias = tuple[str, str, st.ThreadState, st.ThreadState]
 
+AddRegKey: TypeAlias = tuple[str, str]
+
 
 ########################################################################
 # SendRecvMsgs
@@ -4578,9 +4580,9 @@ class UpdatePaLogSearchItem(LogSearchItem):
 
 
 ########################################################################
-# RegUpdateLogSearchItem
+# AddRegLogSearchItem
 ########################################################################
-class RegUpdateLogSearchItem(LogSearchItem):
+class AddRegLogSearchItem(LogSearchItem):
     """Input to search log msgs."""
 
     def __init__(self,
@@ -4605,7 +4607,7 @@ class RegUpdateLogSearchItem(LogSearchItem):
 
     def get_found_log_item(self,
                            found_log_msg: str,
-                           found_log_idx: int) -> "RegUpdateLogSearchItem":
+                           found_log_idx: int) -> "AddRegLogSearchItem":
         """Return a found log item.
 
         Args:
@@ -4613,9 +4615,9 @@ class RegUpdateLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
 
         Returns:
-            RegUpdateLogSearchItem containing found message and index
+            AddRegLogSearchItem containing found message and index
         """
-        return RegUpdateLogSearchItem(
+        return AddRegLogSearchItem(
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
@@ -4628,6 +4630,7 @@ class RegUpdateLogSearchItem(LogSearchItem):
             new_name=split_msg[2],
             reg_update_msg=self.found_log_msg,
             reg_update_msg_log_idx=self.found_log_idx)
+        self.config_ver.add_log_msg(re.escape(self.found_log_msg))
 
 
 ########################################################################
@@ -5502,7 +5505,7 @@ LogSearchItems: TypeAlias = Union[
     RegistryStatusLogSearchItem,
     EnterRpaLogSearchItem,
     UpdatePaLogSearchItem,
-    RegUpdateLogSearchItem,
+    AddRegLogSearchItem,
     RegRemoveLogSearchItem,
     CleanRegLogSearchItem,
     RecvMsgLogSearchItem,
@@ -5655,6 +5658,7 @@ class PendingEvent:
     set_state_msg: dict[SetStateKey, int]
     start_reg_msg: dict[str, int]
     status_msg: dict[tuple[bool, st.ThreadState], int]
+    add_reg_msg: dict[AddRegKey, int]
     start_request: deque[StartRequest]
 
     exp_not_registry_join_log_msg: int = 0
@@ -5755,7 +5759,7 @@ class ConfigVerifier:
             RegistryStatusLogSearchItem(config_ver=self),
             EnterRpaLogSearchItem(config_ver=self),
             UpdatePaLogSearchItem(config_ver=self),
-            RegUpdateLogSearchItem(config_ver=self),
+            AddRegLogSearchItem(config_ver=self),
             RegRemoveLogSearchItem(config_ver=self),
             CleanRegLogSearchItem(config_ver=self),
             RecvMsgLogSearchItem(config_ver=self),
@@ -5791,6 +5795,7 @@ class ConfigVerifier:
                 set_state_msg=defaultdict(int),
                 start_reg_msg=defaultdict(int),
                 status_msg=defaultdict(int),
+                add_reg_msg=defaultdict(int),
                 start_request=deque())
 
         self.allow_log_test_msg = True
@@ -6062,7 +6067,7 @@ class ConfigVerifier:
         # self.handle_deferred_delete_log_msgs(cmd_runner=cmd_runner)
         # handle any deferred deletes
         # self.handle_deferred_deletes(cmd_runner=cmd_runner)
-        self.add_log_msg(re.escape(reg_update_msg))
+        # self.add_log_msg(re.escape(reg_update_msg))
 
     ####################################################################
     # build_cd_normal_sync_suite
@@ -12329,11 +12334,7 @@ class ConfigVerifier:
 
     def build_simple_scenario(self) -> None:
         """Add config cmds to the scenario queue."""
-        self.add_cmd(CreateCommanderAutoStart(
-            cmd_runners='alpha',
-            commander_name='alpha'))
 
-        # if log_active:
         self.add_cmd(ValidateConfig(
             cmd_runners='alpha'))
         self.add_cmd(CreateF1AutoStart(
@@ -12963,7 +12964,6 @@ class ConfigVerifier:
                                 commander_name: str,
                                 thread_alive: bool,
                                 auto_start: bool,
-                                commander_config: AppConfig = AppConfig.ScriptStyle
                                 ) -> None:
         """Create the commander thread.
 
@@ -13005,93 +13005,34 @@ class ConfigVerifier:
         ################################################################
         # start commander
         ################################################################
-        if commander_config == AppConfig.ScriptStyle:
-            commander_thread = st.SmartThread(name=commander_name)
-            self.commander_thread = commander_thread
-            self.cmd_thread_alive = True
-            self.cmd_thread_auto_start = True
-            initialize_config_ver()
-            self.monitor_pause = False
+        if not self.commander_thread:
+            self.commander_thread = st.SmartThread(
+                name=name, auto_start=auto_start, max_msgs=self.max_msgs)
+        self.all_threads[name] = self.commander_thread
 
-        elif commander_config == AppConfig.CurrentThreadApp:
-            commander_current_app = CommanderCurrentApp(
-                config_ver=self,
-                name=commander_name,
-                max_msgs=10)
-            self.commander_thread = commander_current_app.smart_thread
-            self.cmd_thread_alive = True
-            self.cmd_thread_auto_start = False
-            initialize_config_ver()
-            self.monitor_pause = False
-            commander_current_app.run()
+        self.pending_events[cmd_runner].start_reg_msg[name] += 1
 
-        elif commander_config == AppConfig.RemoteThreadApp:
-            outer_thread_app = OuterThreadApp(
-                config_ver=self,
-                name=commander_name,
-                max_msgs=10)
-            self.commander_thread = outer_thread_app.smart_thread
-            self.cmd_thread_alive = False
-            self.cmd_thread_auto_start = False
-            initialize_config_ver()
-            self.monitor_pause = False
-            outer_thread_app.smart_thread.smart_start()
-            outer_thread_app.join()
+        if auto_start and not self.commander_thread.thread.is_alive():
+            self.pending_events[cmd_runner].start_request.append(StartRequest(
+                req_type=st.ReqType.Smart_start,
+                targets={name},
+                not_registered_remotes=set(),
+                timeout_remotes=set(),
+                stopped_remotes=set(),
+                deadlock_remotes=set()))
 
-        elif commander_config == AppConfig.RemoteSmartThreadApp:
-            outer_thread_app = OuterSmartThreadApp(
-                config_ver=self,
-                name=commander_name,
-                max_msgs=10)
-            self.commander_thread = outer_thread_app
-            self.cmd_thread_alive = False
-            self.cmd_thread_auto_start = False
-            initialize_config_ver()
-            self.monitor_pause = False
-            outer_thread_app.smart_start(commander_name)
-            threading.Thread.join(outer_thread_app)
-
-        elif commander_config == AppConfig.RemoteSmartThreadApp2:
-            outer_thread_app = OuterSmartThreadApp2(
-                config_ver=self,
-                name=commander_name,
-                max_msgs=10)
-            self.commander_thread = outer_thread_app
-            self.cmd_thread_alive = False
-            self.cmd_thread_auto_start = False
-            initialize_config_ver()
-            self.monitor_pause = False
-            outer_thread_app.smart_start(commander_name)
-            threading.Thread.join(outer_thread_app)
-
-        # if not self.commander_thread:
-        #     self.commander_thread = st.SmartThread(
-        #         name=name, auto_start=auto_start, max_msgs=self.max_msgs)
-        # self.all_threads[name] = self.commander_thread
-        #
-        # self.pending_events[cmd_runner].start_reg_msg[name] += 1
-        #
-        # if auto_start and not self.commander_thread.thread.is_alive():
-        #     self.pending_events[cmd_runner].start_request.append(StartRequest(
-        #         req_type=st.ReqType.Smart_start,
-        #         targets={name},
-        #         not_registered_remotes=set(),
-        #         timeout_remotes=set(),
-        #         stopped_remotes=set(),
-        #         deadlock_remotes=set()))
-        #
-        # if auto_start:
-        #     exp_status = st.ThreadState.Alive
-        # else:
-        #     exp_status = st.ThreadState.Registered
-        # with self.ops_lock:
-        #     self.monitor_add_items[cmd_runner] = MonitorAddItem(
-        #         cmd_runner=cmd_runner,
-        #         thread_alive=self.cmd_thread_alive,
-        #         auto_start=self.cmd_thread_auto_start,
-        #         is_ThreadTarget=False,
-        #         expected_state=exp_status)
-        #     self.cmd_waiting_event_items[cmd_runner] = threading.Event()
+        if auto_start:
+            exp_status = st.ThreadState.Alive
+        else:
+            exp_status = st.ThreadState.Registered
+        with self.ops_lock:
+            self.monitor_add_items[cmd_runner] = MonitorAddItem(
+                cmd_runner=cmd_runner,
+                thread_alive=self.cmd_thread_alive,
+                auto_start=self.cmd_thread_auto_start,
+                is_ThreadTarget=False,
+                expected_state=exp_status)
+            self.cmd_waiting_event_items[cmd_runner] = threading.Event()
 
         self.monitor_event.set()
 
@@ -14175,9 +14116,20 @@ class ConfigVerifier:
             reg_update_msg_log_idx: index in the log for the message
 
         """
-        # with self.ops_lock:
-        #     # reg update means that recv_msgs are no longer pending
-        #     self.pending_recv_msg_par = defaultdict(bool)
+        pe = self.pending_events[cmd_runner]
+        add_key: AddRegKey = (cmd_runner, new_name)
+
+        if add_key not in pe.add_reg_msg:
+            raise UnexpectedEvent(f'handle_set_state_log_msg encountered '
+                                  f'unexpected log msg: {reg_update_msg}')
+
+        pe.add_reg_msg[add_key] -= 1
+
+        if target not in self.expected_registered:
+            raise IncorrectDataDetected(
+                f'handle_set_state_log_msg detected {target=} is '
+                'missing from expected_registered: '
+                f'{self.expected_registered}')
 
         found_add_item = False
         while not found_add_item:
@@ -14523,10 +14475,27 @@ class ConfigVerifier:
         # looks good, set new state
         self.expected_registered[target].st_state = to_state
 
+        ################################################################
+        # Determine next action
+        ################################################################
         if (from_state == st.ThreadState.Unregistered
                 and to_state == st.ThreadState.Initializing):
             # next step is register
             self.pending_events[cmd_runner].start_reg_msg[target] += 1
+
+        elif (from_state == st.ThreadState.Initializing
+              and to_state == st.ThreadState.Registered):
+            if self.expected_registered[target].is_alive:
+                key: SetStateKey = (cmd_runner,
+                                    target,
+                                    st.ThreadState.Registered,
+                                    st.ThreadState.Alive)
+                self.pending_events[cmd_runner].set_state_msg[key] += 1
+
+        elif (from_state == st.ThreadState.Registered
+              and to_state == st.ThreadState.Alive):
+            add_key: AddRegKey = (cmd_runner,target)
+            self.pending_events[cmd_runner].added_to_reg_msg[add_key] += 1
 
         elif (from_state == st.ThreadState.Starting
                 and to_state == st.ThreadState.Alive):
@@ -21128,116 +21097,111 @@ class TestSmartThreadScenarios:
             cmd_runners=[config_ver.commander_name],
             join_target_names=names)
 
-        # def initialize_config_ver() -> None:
-        #     """Set up the mock registry for the commander."""
-        #     config_ver.expected_registered[commander_name] = ThreadTracker(
-        #         thread=config_ver.commander_thread,
-        #         is_alive=config_ver.cmd_thread_alive,
-        #         exiting=False,
-        #         is_auto_started=config_ver.cmd_thread_auto_start,
-        #         is_TargetThread=False,
-        #         st_state=st.ThreadState.Unregistered,
-        #         found_del_pairs=defaultdict(int)
-        #     )
-        #     config_ver.pending_events[commander_name].start_reg_msg[
-        #         commander_name] += 1
-        #
-        #     if auto_start and not self.commander_thread.thread.is_alive():
-        #         self.pending_events[cmd_runner].start_request.append(
-        #             StartRequest(
-        #                 req_type=st.ReqType.Smart_start,
-        #                 targets={name},
-        #                 not_registered_remotes=set(),
-        #                 timeout_remotes=set(),
-        #                 stopped_remotes=set(),
-        #                 deadlock_remotes=set()))
+        def initialize_config_ver() -> None:
+            """Set up the mock registry for the commander."""
+            config_ver.expected_registered[commander_name] = ThreadTracker(
+                thread=config_ver.commander_thread,
+                is_alive=config_ver.cmd_thread_alive,
+                exiting=False,
+                is_auto_started=config_ver.cmd_thread_auto_start,
+                is_TargetThread=False,
+                st_state=st.ThreadState.Unregistered,
+                found_del_pairs=defaultdict(int)
+            )
+            key: SetStateKey = (commander_name,
+                                commander_name,
+                                st.ThreadState.Unregistered,
+                                st.ThreadState.Initializing)
+            config_ver.pending_events[commander_name].set_state_msg[key] += 1
+            config_ver.pending_events[commander_name].start_reg_msg[
+                commander_name] += 1
 
-        # ################################################################
-        # # start commander
-        # ################################################################
-        # if commander_config == AppConfig.ScriptStyle:
-        #     commander_thread = st.SmartThread(
-        #         name=commander_name)
-        #     config_ver.commander_thread = commander_thread
-        #     config_ver.cmd_thread_alive = True
-        #     config_ver.cmd_thread_auto_start = True
-        #     initialize_config_ver()
-        #     config_ver.monitor_thread.start()
-        #     config_ver.main_driver()
-        # elif commander_config == AppConfig.CurrentThreadApp:
-        #     commander_current_app = CommanderCurrentApp(
-        #         config_ver=config_ver,
-        #         name=commander_name,
-        #         max_msgs=10)
-        #     config_ver.commander_thread = commander_current_app.smart_thread
-        #     config_ver.cmd_thread_alive = True
-        #     config_ver.cmd_thread_auto_start = False
-        #     initialize_config_ver()
-        #     config_ver.monitor_thread.start()
-        #     commander_current_app.run()
-        # elif commander_config == AppConfig.RemoteThreadApp:
-        #     outer_thread_app = OuterThreadApp(
-        #         config_ver=config_ver,
-        #         name=commander_name,
-        #         max_msgs=10)
-        #     config_ver.commander_thread = outer_thread_app.smart_thread
-        #     config_ver.cmd_thread_alive = False
-        #     config_ver.cmd_thread_auto_start = False
-        #     initialize_config_ver()
-        #     config_ver.monitor_thread.start()
-        #     outer_thread_app.smart_thread.smart_start()
-        #     outer_thread_app.join()
-        #     # config_ver.monitor_bail = True
-        #     # config_ver.monitor_exit = True
-        #     # config_ver.monitor_event.set()
-        #     # config_ver.monitor_thread.join()
-        # elif commander_config == AppConfig.RemoteSmartThreadApp:
-        #     outer_thread_app = OuterSmartThreadApp(
-        #         config_ver=config_ver,
-        #         name=commander_name,
-        #         max_msgs=10)
-        #     config_ver.commander_thread = outer_thread_app
-        #     config_ver.cmd_thread_alive = False
-        #     config_ver.cmd_thread_auto_start = False
-        #     initialize_config_ver()
-        #     config_ver.monitor_thread.start()
-        #     outer_thread_app.smart_start(commander_name)
-        #     threading.Thread.join(outer_thread_app)
-        #     # config_ver.monitor_bail = True
-        #     # config_ver.monitor_exit = True
-        #     # config_ver.monitor_event.set()
-        #     # config_ver.monitor_thread.join()
-        # elif commander_config == AppConfig.RemoteSmartThreadApp2:
-        #     outer_thread_app = OuterSmartThreadApp2(
-        #         config_ver=config_ver,
-        #         name=commander_name,
-        #         max_msgs=10)
-        #     config_ver.commander_thread = outer_thread_app
-        #     config_ver.cmd_thread_alive = False
-        #     config_ver.cmd_thread_auto_start = False
-        #     initialize_config_ver()
-        #     config_ver.monitor_thread.start()
-        #     outer_thread_app.smart_start(commander_name)
-        #     threading.Thread.join(outer_thread_app)
+            if (config_ver.cmd_thread_auto_start
+                    and not config_ver.cmd_thread_alive):
+                config_ver.pending_events[
+                    commander_name].start_request.append(
+                    StartRequest(
+                        req_type=st.ReqType.Smart_start,
+                        targets={commander_name},
+                        not_registered_remotes=set(),
+                        timeout_remotes=set(),
+                        stopped_remotes=set(),
+                        deadlock_remotes=set()))
+
+        ################################################################
+        # start commander
+        ################################################################
+        if commander_config == AppConfig.ScriptStyle:
+            commander_thread = st.SmartThread(
+                name=commander_name)
+            config_ver.commander_thread = commander_thread
+            config_ver.cmd_thread_alive = True
+            config_ver.cmd_thread_auto_start = True
+            initialize_config_ver()
+            config_ver.monitor_thread.start()
+            config_ver.main_driver()
+        elif commander_config == AppConfig.CurrentThreadApp:
+            commander_current_app = CommanderCurrentApp(
+                config_ver=config_ver,
+                name=commander_name,
+                max_msgs=10)
+            config_ver.commander_thread = commander_current_app.smart_thread
+            config_ver.cmd_thread_alive = True
+            config_ver.cmd_thread_auto_start = False
+            initialize_config_ver()
+            config_ver.monitor_thread.start()
+            commander_current_app.run()
+        elif commander_config == AppConfig.RemoteThreadApp:
+            outer_thread_app = OuterThreadApp(
+                config_ver=config_ver,
+                name=commander_name,
+                max_msgs=10)
+            config_ver.commander_thread = outer_thread_app.smart_thread
+            config_ver.cmd_thread_alive = False
+            config_ver.cmd_thread_auto_start = False
+            initialize_config_ver()
+            config_ver.monitor_thread.start()
+            outer_thread_app.smart_thread.smart_start()
+            outer_thread_app.join()
             # config_ver.monitor_bail = True
             # config_ver.monitor_exit = True
             # config_ver.monitor_event.set()
             # config_ver.monitor_thread.join()
-
-        ################################################################
-        # start the tests
-        ################################################################
-        # config_ver.monitor_thread.start()
-
-        if commander_config == AppConfig.ScriptStyle:
-            config_ver.main_driver()
+        elif commander_config == AppConfig.RemoteSmartThreadApp:
+            outer_thread_app = OuterSmartThreadApp(
+                config_ver=config_ver,
+                name=commander_name,
+                max_msgs=10)
+            config_ver.commander_thread = outer_thread_app
+            config_ver.cmd_thread_alive = False
+            config_ver.cmd_thread_auto_start = False
+            initialize_config_ver()
+            config_ver.monitor_thread.start()
+            outer_thread_app.smart_start(commander_name)
+            threading.Thread.join(outer_thread_app)
+            # config_ver.monitor_bail = True
+            # config_ver.monitor_exit = True
+            # config_ver.monitor_event.set()
+            # config_ver.monitor_thread.join()
+        elif commander_config == AppConfig.RemoteSmartThreadApp2:
+            outer_thread_app = OuterSmartThreadApp2(
+                config_ver=config_ver,
+                name=commander_name,
+                max_msgs=10)
+            config_ver.commander_thread = outer_thread_app
+            config_ver.cmd_thread_alive = False
+            config_ver.cmd_thread_auto_start = False
+            initialize_config_ver()
+            config_ver.monitor_thread.start()
+            outer_thread_app.smart_start(commander_name)
+            threading.Thread.join(outer_thread_app)
         else:
-            config_ver.create_commander_thread(
-                cmd_runner=commander_name,
-                commander_name=commander_name,
-                thread_alive=False,
-                auto_start=False,
-                commander_config=commander_config)
+            raise UnrecognizedCmd('scenario_driver does not recognize '
+                                  f'{commander_config=}')
+            # config_ver.monitor_bail = True
+            # config_ver.monitor_exit = True
+            # config_ver.monitor_event.set()
+            # config_ver.monitor_thread.join()
 
         ################################################################
         # check that pending events are complete
