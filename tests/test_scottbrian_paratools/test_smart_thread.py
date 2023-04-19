@@ -4319,6 +4319,16 @@ list_of_thread_states = ('(ThreadState.Unregistered'
                          '|ThreadState.Alive'
                          '|ThreadState.Stopped)')
 
+list_of_smart_requests = ('(smart_init'
+                          '|smart_start'
+                          '|smart_unreg'
+                          '|smart_join'
+                          '|smart_send'
+                          '|smart_recv'
+                          '|smart_wait'
+                          '|smart_resume'
+                          '|smart_sync)')
+
 
 ########################################################################
 # LogSearchItem
@@ -4414,6 +4424,60 @@ class StartRegisterLogSearchItem(LogSearchItem):
         self.config_ver.handle_start_reg_log_msg(
             cmd_runner=split_msg[0],
             target=split_msg[4],
+            log_msg=self.found_log_msg)
+
+logger.debug(f'{current_thread_name} entered _clean_up_registry '
+                     f'for request {self.request}')
+########################################################################
+# EnterCleanUpRegLogSearchItem
+########################################################################
+class EnterCleanUpRegLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+        """
+        super().__init__(
+            search_str=('[a-z]+ entered _clean_up_registry '
+                        f'for request {list_of_smart_requests}'),
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int) -> "EnterCleanUpRegLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            EnterCleanUpRegLogSearchItem containing found message and index
+        """
+        return EnterCleanUpRegLogSearchItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+    def run_process(self):
+        """Run the process to handle the log message."""
+        split_msg = self.found_log_msg.split()
+
+        self.config_ver.handle_enter_clean_up_reg_log_msg(
+            cmd_runner=split_msg[0],
+            request=split_msg[5],
             log_msg=self.found_log_msg)
 
 
@@ -5669,6 +5733,7 @@ class CheckPendingEventsLogSearchItem(LogSearchItem):
 
 LogSearchItems: TypeAlias = Union[
     StartRegisterLogSearchItem,
+    EnterCleanUpRegLogSearchItem,
     RegistryStatusLogSearchItem,
     EnterRpaLogSearchItem,
     AddPaLogSearchItem,
@@ -5831,6 +5896,7 @@ class PendingEvent:
     add_reg_msg: dict[AddRegKey, int]
     add_pair_array: dict[AddPaKey, int]
     add_status_block_msg: dict[AddStatusBlockKey, int]
+    enter_clean_up_reg_msg: dict[str, int]
     enter_rpa_msg: int
     exit_rpa_msg: int
     start_request: deque[StartRequest]
@@ -5930,6 +5996,7 @@ class ConfigVerifier:
         self.log_start_idx: int = 0
         self.log_search_items: tuple[LogSearchItems, ...] = (
             StartRegisterLogSearchItem(config_ver=self),
+            EnterCleanUpRegLogSearchItem(config_ver=self),
             RegistryStatusLogSearchItem(config_ver=self),
             EnterRpaLogSearchItem(config_ver=self),
             ExitRpaLogSearchItem(config_ver=self),
@@ -5975,6 +6042,7 @@ class ConfigVerifier:
                 add_reg_msg=defaultdict(int),
                 add_pair_array=defaultdict(int),
                 add_status_block_msg=defaultdict(int),
+                enter_clean_up_reg_msg=defaultdict(int),
                 enter_rpa_msg=0,
                 exit_rpa_msg=0,
                 start_request=deque())
@@ -13713,6 +13781,29 @@ class ConfigVerifier:
         return update_pair_array_msg_needed
 
     ####################################################################
+    # handle_enter_clean_up_reg_log_msg
+    ####################################################################
+    def handle_enter_clean_up_reg_log_msg(self,
+                                          cmd_runner: str,
+                                          request: str,
+                                          log_msg: str) -> None:
+        """Determine next steps for enter _clean_up_registry.
+
+        Args:
+            cmd_runner: thread name doing the pair array refresh
+            request: name of request
+            log_msg: refresh pair array log message
+
+        """
+        pe = self.pending_events[cmd_runner]
+
+        if pe.enter_clean_up_reg_msg <= 0:
+            raise UnexpectedEvent(f'handle_enter_clean_up_reg_log_msg '
+                                  f'encountered unexpected log msg: {log_msg}')
+
+        pe.enter_clean_up_reg_msg -= 1
+        self.add_log_msg(log_msg)
+    ####################################################################
     # handle_enter_rpa_log_msg
     ####################################################################
     def handle_enter_rpa_log_msg(self,
@@ -14776,7 +14867,22 @@ class ConfigVerifier:
         ################################################################
         if (from_state == st.ThreadState.Unregistered
                 and to_state == st.ThreadState.Initializing):
+
+            ############################################################
+            # set current command as init
+            ############################################################
+            self.pending_events[
+                cmd_runner].current_request = StartRequest(
+                req_type=st.ReqType.Smart_init,
+                targets={target},
+                not_registered_remotes=set(),
+                timeout_remotes=set(),
+                stopped_remotes=set(),
+                deadlock_remotes=set())
+
+            ############################################################
             # next step is register
+            ############################################################
             pe.start_reg_msg[target] += 1
 
         elif (from_state == st.ThreadState.Initializing
@@ -21719,14 +21825,6 @@ class TestSmartThreadScenarios:
                 st_state=st.ThreadState.Unregistered,
                 found_del_pairs=defaultdict(int)
             )
-            config_ver.pending_events[
-                commander_name].current_request = StartRequest(
-                req_type=st.ReqType.Smart_init,
-                targets={commander_name},
-                not_registered_remotes=set(),
-                timeout_remotes=set(),
-                stopped_remotes=set(),
-                deadlock_remotes=set())
 
             key: SetStateKey = (commander_name,
                                 commander_name,
@@ -21734,17 +21832,17 @@ class TestSmartThreadScenarios:
                                 st.ThreadState.Initializing)
             config_ver.pending_events[commander_name].set_state_msg[key] += 1
 
-            if (config_ver.cmd_thread_auto_start
-                    and not config_ver.cmd_thread_alive):
-                config_ver.pending_events[
-                    commander_name].start_request.append(
-                    StartRequest(
-                        req_type=st.ReqType.Smart_start,
-                        targets={commander_name},
-                        not_registered_remotes=set(),
-                        timeout_remotes=set(),
-                        stopped_remotes=set(),
-                        deadlock_remotes=set()))
+            # if (config_ver.cmd_thread_auto_start
+            #         and not config_ver.cmd_thread_alive):
+            #     config_ver.pending_events[
+            #         commander_name].start_request.append(
+            #         StartRequest(
+            #             req_type=st.ReqType.Smart_start,
+            #             targets={commander_name},
+            #             not_registered_remotes=set(),
+            #             timeout_remotes=set(),
+            #             stopped_remotes=set(),
+            #             deadlock_remotes=set()))
 
         ################################################################
         # start commander
