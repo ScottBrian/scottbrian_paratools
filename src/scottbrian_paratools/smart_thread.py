@@ -499,6 +499,11 @@ class SmartThreadNoRemoteTargets(SmartThreadError):
     pass
 
 
+class SmartThreadIncorrectData(SmartThreadError):
+    """SmartThread exception for incorrect data."""
+    pass
+
+
 ########################################################################
 # ReqType
 # contains the type of request
@@ -636,11 +641,7 @@ class SmartThread:
     _registry_lock: ClassVar[sel.SELock] = sel.SELock()
     _registry: ClassVar[dict[str, "SmartThread"]] = {}
 
-    # time_last_pair_array_update is initially set to
-    # datetime(2000, 1, 1, 12, 0, 0) and the _registry_last_update is
-    # initially set to datetime(2000, 1, 1, 12, 0, 1) which will ensure
-    # that each thread will initially refresh their remote_array when
-    # instantiated.
+    # init update time used in log messages when registry is changed
     _registry_last_update: datetime = datetime(2000, 1, 1, 12, 0, 1)
 
     _create_pair_array_entry_time: float = 0.0
@@ -1175,12 +1176,7 @@ class SmartThread:
             logger.debug(f'{threading.current_thread().name} removed '
                          f'{key} from registry for {process=}')
 
-        # update time only when we made a change, otherwise we can
-        # get into an update loop where each remote sees that
-        # _registry_last_update is later and calls _clean_up_registry
-        # and sets _registry_last_update, and then this thread sees a
-        # later time in _registry_last_update and calls _clean_up_registry
-        # which leads to a forever ping pong...
+        # update time only when we made a change
         if changed:
             self._refresh_pair_array()
             SmartThread._registry_last_update = datetime.utcnow()
@@ -1217,6 +1213,155 @@ class SmartThread:
     @staticmethod
     def _get_set(item: Optional[Iterable] = None):
         return set({item} if isinstance(item, str) else item or '')
+
+    ###########################################################################
+    # _refresh_pair_array
+    ###########################################################################
+    def _add_to_pair_array(self) -> None:
+        """Add a new thread to the pair array.
+
+        Notes:
+            1) A thread is registered during initialization and will
+               initially not be alive until started.
+            2) If a request is made that includes a yet to be registered
+               thread, or one that is not yet alive, the request will
+               loop until the remote thread becomes registered and
+               alive and its state becomes ThreadState.Alive.
+            3) After a thread is registered and is alive, if it fails
+               and become not alive, it will remain in the registry
+               until its state is changed to Stopped to indicate it was
+               once alive. Its state is set to Stopped when a
+               TargetThread ends, when a smart_unreg is done, or when a
+               smart_join is done. This will allow a request to know
+               whether to wait for the thread to become alive, or to
+               raise an error for an attempted request on a thread that
+               is no longer alive.
+
+        """
+        current_thread_name = threading.current_thread().name
+        logger.debug(f'{current_thread_name} entered _add_to_pair_array '
+                     f'to add {self.name}')
+
+        for existing_name in SmartThread._registry:
+            if existing_name == self.name:
+                continue
+            pair_key: PairKey = self._get_pair_key(self.name, existing_name)
+            if pair_key in SmartThread._pair_array:
+                if not SmartThread._pair_array[pair_key].status_blocks:
+                    raise SmartThreadIncorrectData(
+                        f'{current_thread_name} detected in '
+                        f'_add_to_pair_array while adding {self.name} that '
+                        f'pair_key {pair_key} is already in the pair array '
+                        f'with an empty status_blocks.')
+
+                if self.name in SmartThread._pair_array[
+                        pair_key].status_blocks:
+                    raise SmartThreadIncorrectData(
+                        f'{current_thread_name} detected in '
+                        f'_add_to_pair_array while adding {self.name} that '
+                        f'pair_key {pair_key} is already in the pair array '
+                        f'with an existing status_blocks entry for '
+                        f'{self.name}.')
+                if (existing_name in SmartThread._pair_array[
+                        pair_key].status_blocks
+                             and not SmartThread._pair_array[
+                        pair_key].status_blocks[existing_name].del_deferred):
+                    raise SmartThreadIncorrectData(
+                        f'{current_thread_name} detected in '
+                        f'_add_to_pair_array while adding {self.name} that '
+                        f'pair_key {pair_key} is already in the pair array '
+                        f'with an existing status_blocks entry for '
+                        f'{existing_name} that is not del_deferred.')
+                if len(SmartThread._pair_array[pair_key].status_blocks) > 1:
+                    raise SmartThreadIncorrectData(
+                        f'{current_thread_name} detected in '
+                        f'_add_to_pair_array while adding {self.name} that '
+                        f'pair_key {pair_key} is already in the pair array '
+                        f'with an existing status_blocks entry for two or '
+                        f'more entries.')
+
+            # proceed with valid pair_array
+            else:  # pair_key not in SmartThread._pair_array:
+                SmartThread._pair_array[pair_key] = (
+                    SmartThread.ConnectionPair(
+                        status_lock=threading.Lock(),
+                        status_blocks={}
+                    ))
+                logger.debug(
+                    f'{current_thread_name} added {pair_key=} to the '
+                    f'_pair_array')
+
+            # add status block for name0 and name1 if needed
+            for name in pair_key:
+                if (name not in SmartThread._pair_array[
+                        pair_key].status_blocks):
+
+                    # add an entry for this thread
+                    create_time = SmartThread._registry[name].create_time
+                    SmartThread._pair_array[
+                        pair_key].status_blocks[
+                        name] = SmartThread.ConnectionStatusBlock(
+                                name=name,
+                                create_time=create_time,
+                                target_create_time=0.0,
+                                wait_event=threading.Event(),
+                                sync_event=threading.Event(),
+                                msg_q=queue.Queue(maxsize=self.max_msgs))
+                    logger.debug(
+                        f'{current_thread_name} added status_blocks entry '
+                        f'for pair_key = {pair_key}, name = {name}')
+
+                else:  # entry already exists
+                    # reset del_deferred in case it is ON and the
+                    # other name is a resurrected thread
+                    SmartThread._pair_array[
+                        pair_key].status_blocks[
+                        name].del_deferred = False
+
+            # Find and update a zero create time in work_pk_remotes.
+            # Check for existing_name doing a request and is
+            # waiting for the new thread to be added as
+            # indicated by being in the missing_remotes set
+            if self.name in SmartThread._registry[
+                    existing_name].missing_remotes:
+                # we need to erase the name from the missing
+                # list in case the new thread becomes stopped,
+                # and then is started again with a new create
+                # time, and then we add it again to the
+                # found_pk_remotes as another entry with the
+                # same pair_key and name, but a different
+                # create time which would likely lead to an
+                # error
+                SmartThread._registry[
+                    existing_name].missing_remotes.remove(self.name)
+
+                # update the found_pk_remotes so that other_name
+                # will see that we have a new entry and add
+                # it to its work_pk_remotes
+                create_time = SmartThread._registry[self.name].create_time
+                SmartThread._registry[
+                    existing_name].found_pk_remotes.append(
+                    PairKeyRemote(pair_key,
+                                  self.name,
+                                  create_time))
+
+                SmartThread._pair_array[pair_key].status_blocks[
+                    existing_name].request_pending = True
+                SmartThread._pair_array[pair_key].status_blocks[
+                    existing_name].request = SmartThread._registry[
+                            existing_name].request
+                logger.debug(
+                    f'TestDebug {current_thread_name} set request_pending in '
+                    f'refresh for {pair_key=}, {existing_name=}')
+
+        SmartThread._pair_array_last_update = datetime.utcnow()
+        print_time = (SmartThread._pair_array_last_update
+                      .strftime("%H:%M:%S.%f"))
+        logger.debug(
+            f'{current_thread_name} updated _pair_array'
+            f' at UTC {print_time}')
+
+        logger.debug(f'{current_thread_name} exiting _add_to_pair_array')
 
     ###########################################################################
     # _refresh_pair_array
@@ -1458,6 +1603,8 @@ class SmartThread:
                 f' at UTC {print_time}')
 
         logger.debug(f'{current_thread_name} exiting _refresh_pair_array')
+
+
 
     ####################################################################
     # start
