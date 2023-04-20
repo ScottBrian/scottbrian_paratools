@@ -60,6 +60,8 @@ AddStatusBlockKey: TypeAlias = tuple[str, st.PairKey, str]
 
 CleanRegKey: TypeAlias = tuple[str, str, str, str]
 
+SubProcessKey: TypeAlias = tuple[str, str, str, str, str]
+
 
 ########################################################################
 # SendRecvMsgs
@@ -4527,8 +4529,8 @@ class SubProcessEntryExitLogSearchItem(LogSearchItem):
         split_msg = self.found_log_msg.split()
         request_name = split_msg[0]
         subprocess_name = split_msg[1]
-        entry_exit = split_msg[2]
-        cmd_runner = split_msg[4][0:-1]  # remove comma
+        entry_exit = split_msg[2][0:-1]  # remove trailing colon
+        cmd_runner = split_msg[4][0:-1]  # remove trailing comma
         target = split_msg[6]
 
         self.config_ver.handle_subprocess_entry_exit_log_msg(
@@ -4537,57 +4539,6 @@ class SubProcessEntryExitLogSearchItem(LogSearchItem):
             subprocess_name=subprocess_name,
             entry_exit=entry_exit,
             target=target,
-            log_msg=self.found_log_msg)
-
-########################################################################
-# StartRegisterLogSearchItem
-########################################################################
-class StartRegisterLogSearchItem(LogSearchItem):
-    """Input to search log msgs."""
-
-    def __init__(self,
-                 config_ver: "ConfigVerifier",
-                 found_log_msg: str = '',
-                 found_log_idx: int = 0,
-                 ) -> None:
-        """Initialize the LogItem.
-
-        Args:
-            config_ver: configuration verifier
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-        """
-        super().__init__(
-            search_str='[a-z]+ starting register of [a-z]+',
-            config_ver=config_ver,
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx
-        )
-
-    def get_found_log_item(self,
-                           found_log_msg: str,
-                           found_log_idx: int) -> "StartRegisterLogSearchItem":
-        """Return a found log item.
-
-        Args:
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-
-        Returns:
-            StartRegisterLogSearchItem containing found message and index
-        """
-        return StartRegisterLogSearchItem(
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx,
-            config_ver=self.config_ver)
-
-    def run_process(self):
-        """Run the process to handle the log message."""
-        split_msg = self.found_log_msg.split()
-
-        self.config_ver.handle_start_reg_log_msg(
-            cmd_runner=split_msg[0],
-            target=split_msg[4],
             log_msg=self.found_log_msg)
 
 
@@ -6021,9 +5972,10 @@ class StartRequest:
 @dataclass
 class PendingEvent:
     """Pending event class."""
+    start_request: deque[StartRequest]
     current_request: StartRequest
+    subprocess_msg: dict[SubProcessKey, int]
     set_state_msg: dict[SetStateKey, int]
-    start_reg_msg: dict[str, int]
     status_msg: dict[tuple[bool, st.ThreadState], int]
     add_reg_msg: dict[AddRegKey, int]
     add_pair_array: dict[AddPaKey, int]
@@ -6032,7 +5984,7 @@ class PendingEvent:
     clean_up_reg_msg: dict[CleanRegKey, int]
     enter_rpa_msg: int
     exit_rpa_msg: int
-    start_request: deque[StartRequest]
+
 
     exp_not_registry_join_log_msg: int = 0
     exp_join_successful_log_msg: int = 0
@@ -6165,14 +6117,15 @@ class ConfigVerifier:
         self.pending_events: dict[str, PendingEvent] = {}
         for name in self.thread_names:
             self.pending_events[name] = PendingEvent(
+                start_request=deque(),
                 current_request=StartRequest(req_type=st.ReqType.NoReq,
                                              targets=set(),
                                              not_registered_remotes=set(),
                                              timeout_remotes=set(),
                                              stopped_remotes=set(),
                                              deadlock_remotes=set()),
+                subprocess_msg=defaultdict(int),
                 set_state_msg=defaultdict(int),
-                start_reg_msg=defaultdict(int),
                 status_msg=defaultdict(int),
                 add_reg_msg=defaultdict(int),
                 add_pair_array=defaultdict(int),
@@ -6180,8 +6133,7 @@ class ConfigVerifier:
                 exit_request_msg=defaultdict(int),
                 clean_up_reg_msg=defaultdict(int),
                 enter_rpa_msg=0,
-                exit_rpa_msg=0,
-                start_request=deque())
+                exit_rpa_msg=0)
 
         self.allow_log_test_msg = True
 
@@ -13344,95 +13296,105 @@ class ConfigVerifier:
     ####################################################################
     # create_commander_thread
     ####################################################################
-    def create_commander_thread(self,
-                                cmd_runner: str,
-                                commander_name: str,
-                                thread_alive: bool,
-                                auto_start: bool,
-                                ) -> None:
-        """Create the commander thread.
-
-        Args:
-            cmd_runner: name of thread doing the create
-            commander_name: name of new commander thread
-            thread_alive: specifies whether the thread is already
-                started
-            auto_start: specifies whether to start the thread
-            commander_config: specifies the style of commander thread
-        """
-        self.log_test_msg(f'create_commander_thread entry: {cmd_runner=}')
-        self.monitor_pause = True
-
-        def initialize_config_ver() -> None:
-            """Set up the mock registry for the commander."""
-            self.expected_registered[commander_name] = ThreadTracker(
-                thread=self.commander_thread,
-                is_alive=self.cmd_thread_alive,
-                exiting=False,
-                is_auto_started=self.cmd_thread_auto_start,
-                is_TargetThread=False,
-                st_state=st.ThreadState.Unregistered,
-                found_del_pairs=defaultdict(int)
-            )
-            self.pending_events[commander_name].start_reg_msg[
-                commander_name] += 1
-
-            if self.cmd_thread_auto_start and not self.cmd_thread_alive:
-                self.pending_events[cmd_runner].start_request.append(
-                    StartRequest(
-                        req_type=st.ReqType.Smart_start,
-                        targets={commander_name},
-                        not_registered_remotes=set(),
-                        timeout_remotes=set(),
-                        stopped_remotes=set(),
-                        deadlock_remotes=set()))
-
-        ################################################################
-        # start commander
-        ################################################################
-        if not self.commander_thread:
-            self.commander_thread = st.SmartThread(
-                name=name, auto_start=auto_start, max_msgs=self.max_msgs)
-        self.all_threads[name] = self.commander_thread
-
-        self.pending_events[cmd_runner].start_reg_msg[name] += 1
-
-        if auto_start and not self.commander_thread.thread.is_alive():
-            self.pending_events[cmd_runner].start_request.append(StartRequest(
-                req_type=st.ReqType.Smart_start,
-                targets={name},
-                not_registered_remotes=set(),
-                timeout_remotes=set(),
-                stopped_remotes=set(),
-                deadlock_remotes=set()))
-
-        if auto_start:
-            exp_status = st.ThreadState.Alive
-        else:
-            exp_status = st.ThreadState.Registered
-        with self.ops_lock:
-            self.monitor_add_items[cmd_runner] = MonitorAddItem(
-                cmd_runner=cmd_runner,
-                thread_alive=self.cmd_thread_alive,
-                auto_start=self.cmd_thread_auto_start,
-                is_ThreadTarget=False,
-                expected_state=exp_status)
-            self.cmd_waiting_event_items[cmd_runner] = threading.Event()
-
-        self.monitor_event.set()
-
-        self.log_test_msg(f'{cmd_runner=} create_commander_thread waiting '
-                          f'for monitor')
-
-        self.cmd_waiting_event_items[cmd_runner].wait()
-        # with self.ops_lock:
-        #     del self.monitor_add_items[cmd_runner]
-        #     del self.cmd_waiting_event_items[cmd_runner]
-        #     self.expected_registered[commander_name].is_alive = True
-        #     self.expected_registered[
-        #         commander_name].st_state = st.ThreadState.Alive
-
-        self.log_test_msg(f'create_commander_thread exit: {cmd_runner=}')
+    # def create_commander_thread(self,
+    #                             cmd_runner: str,
+    #                             commander_name: str,
+    #                             thread_alive: bool,
+    #                             auto_start: bool,
+    #                             ) -> None:
+    #     """Create the commander thread.
+    #
+    #     Args:
+    #         cmd_runner: name of thread doing the create
+    #         commander_name: name of new commander thread
+    #         thread_alive: specifies whether the thread is already
+    #             started
+    #         auto_start: specifies whether to start the thread
+    #         commander_config: specifies the style of commander thread
+    #     """
+    #     self.log_test_msg(f'create_commander_thread entry: {cmd_runner=}')
+    #     self.monitor_pause = True
+    #
+    #     def initialize_config_ver() -> None:
+    #         """Set up the mock registry for the commander."""
+    #
+    #
+    #         # if self.cmd_thread_auto_start and not self.cmd_thread_alive:
+    #         #     self.pending_events[cmd_runner].start_request.append(
+    #         #         StartRequest(
+    #         #             req_type=st.ReqType.Smart_start,
+    #         #             targets={commander_name},
+    #         #             not_registered_remotes=set(),
+    #         #             timeout_remotes=set(),
+    #         #             stopped_remotes=set(),
+    #         #             deadlock_remotes=set()))
+    #
+    #     ################################################################
+    #     # start commander
+    #     ################################################################
+    #     if not self.commander_thread:
+    #         self.commander_thread = st.SmartThread(
+    #             name=commander_name,
+    #             auto_start=auto_start,
+    #             max_msgs=self.max_msgs)
+    #     self.all_threads[commander_name] = self.commander_thread
+    #
+    #     # self.pending_events[cmd_runner].start_reg_msg[name] += 1
+    #
+    #     # if auto_start and not self.commander_thread.thread.is_alive():
+    #     #     self.pending_events[cmd_runner].start_request.append(StartRequest(
+    #     #         req_type=st.ReqType.Smart_start,
+    #     #         targets={name},
+    #     #         not_registered_remotes=set(),
+    #     #         timeout_remotes=set(),
+    #     #         stopped_remotes=set(),
+    #     #         deadlock_remotes=set()))
+    #
+    #     if auto_start:
+    #         exp_status = st.ThreadState.Alive
+    #     else:
+    #         exp_status = st.ThreadState.Registered
+    #
+    #     self.expected_registered[commander_name] = ThreadTracker(
+    #         thread=self.commander_thread,
+    #         is_alive=self.cmd_thread_alive,
+    #         exiting=False,
+    #         is_auto_started=self.cmd_thread_auto_start,
+    #         is_TargetThread=False,
+    #         st_state=st.ThreadState.Unregistered,
+    #         found_del_pairs=defaultdict(int)
+    #     )
+    #     self.pending_events[commander_name].start_request.append(
+    #         StartRequest(req_type=st.ReqType.Smart_init,
+    #                      targets={commander_name},
+    #                      not_registered_remotes=set(),
+    #                      timeout_remotes=set(),
+    #                      stopped_remotes=set(),
+    #                      deadlock_remotes=set()))
+    #
+    #     with self.ops_lock:
+    #         self.monitor_add_items[cmd_runner] = MonitorAddItem(
+    #             cmd_runner=cmd_runner,
+    #             thread_alive=self.cmd_thread_alive,
+    #             auto_start=self.cmd_thread_auto_start,
+    #             is_ThreadTarget=False,
+    #             expected_state=exp_status)
+    #         self.cmd_waiting_event_items[cmd_runner] = threading.Event()
+    #
+    #     self.monitor_event.set()
+    #
+    #     self.log_test_msg(f'{cmd_runner=} create_commander_thread waiting '
+    #                       f'for monitor')
+    #
+    #     self.cmd_waiting_event_items[cmd_runner].wait()
+    #     # with self.ops_lock:
+    #     #     del self.monitor_add_items[cmd_runner]
+    #     #     del self.cmd_waiting_event_items[cmd_runner]
+    #     #     self.expected_registered[commander_name].is_alive = True
+    #     #     self.expected_registered[
+    #     #         commander_name].st_state = st.ThreadState.Alive
+    #
+    #     self.log_test_msg(f'create_commander_thread exit: {cmd_runner=}')
 
     ####################################################################
     # create_f1_thread
@@ -13460,29 +13422,14 @@ class ConfigVerifier:
 
         self.monitor_pause = True
 
-        self.pending_events[cmd_runner].current_request = StartRequest(
-            req_type=st.ReqType.Smart_init,
-            targets={name},
-            not_registered_remotes=set(),
-            timeout_remotes=set(),
-            stopped_remotes=set(),
-            deadlock_remotes=set())
-
-        key: SetStateKey = (cmd_runner,
-                            name,
-                            st.ThreadState.Unregistered,
-                            st.ThreadState.Initializing)
-        self.pending_events[cmd_runner].set_state_msg[key] += 1
-
-
-        if auto_start:
-            self.pending_events[cmd_runner].start_request.append(StartRequest(
-                req_type=st.ReqType.Smart_start,
-                targets={name},
-                not_registered_remotes=set(),
-                timeout_remotes=set(),
-                stopped_remotes=set(),
-                deadlock_remotes=set()))
+        # if auto_start:
+        #     self.pending_events[cmd_runner].start_request.append(StartRequest(
+        #         req_type=st.ReqType.Smart_start,
+        #         targets={name},
+        #         not_registered_remotes=set(),
+        #         timeout_remotes=set(),
+        #         stopped_remotes=set(),
+        #         deadlock_remotes=set()))
 
         is_thread_target = False
         if app_config == AppConfig.ScriptStyle:
@@ -13512,6 +13459,14 @@ class ConfigVerifier:
             st_state=st.ThreadState.Unregistered,
             found_del_pairs=defaultdict(int)
         )
+
+        self.pending_events[cmd_runner].current_request = StartRequest(
+            req_type=st.ReqType.Smart_init,
+            targets={name},
+            not_registered_remotes=set(),
+            timeout_remotes=set(),
+            stopped_remotes=set(),
+            deadlock_remotes=set())
 
         self.all_threads[name] = f1_thread
 
@@ -15110,7 +15065,12 @@ class ConfigVerifier:
             ############################################################
             # next step is register
             ############################################################
-            pe.start_reg_msg[target] += 1
+            sub_key: SubProcessKey = (cmd_runner,
+                                      req_start_item.req_type.value(),
+                                      '_register',
+                                      'entry',
+                                      target)
+            pe.subprocess_msg[sub_key] += 1
 
         elif (from_state == st.ThreadState.Initializing
               and to_state == st.ThreadState.Registered):
@@ -15206,41 +15166,6 @@ class ConfigVerifier:
                           f'for {start_names=}')
 
     ####################################################################
-    # handle_start_reg_log_msg
-    ####################################################################
-    def handle_start_reg_log_msg(self,
-                                 cmd_runner: str,
-                                 target: str,
-                                 log_msg: str) -> None:
-        """Process the start register event.
-
-        Args:
-            cmd_runner: thread name doing the register
-            target: thread name that is being registered
-            log_msg: start register log message
-
-        """
-        pe = self.pending_events[cmd_runner]
-        if pe.start_reg_msg[target] <= 0:
-            raise UnexpectedEvent(
-                'StartRegisterLogSearchItem run_process encountered '
-                f'unexpected log msg: {log_msg}')
-
-        pe.start_reg_msg[target] -= 1
-        self.add_log_msg(log_msg)
-
-        ################################################################
-        # determine next step
-        ################################################################
-        clean_key: CleanRegKey = (cmd_runner,
-                                  'entered',
-                                  target,
-                                  'smart_init')
-        pe.clean_up_reg_msg[clean_key] += 1
-
-
-
-    ####################################################################
     # handle_start_request_log_msg
     ####################################################################
     def handle_start_request_log_msg(self,
@@ -15307,9 +15232,215 @@ class ConfigVerifier:
             subprocess_name: subprocess being done
             entry_exit: specifies whether entry or exit of subprocess
             target: thread name of smart_thread
-            log_msg: entry or exit log message forr subprocess
+            log_msg: entry or exit log message for subprocess
 
         """
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request_name,
+                                  subprocess_name,
+                                  entry_exit,
+                                  target)
+        if pe.subprocess_msg[sub_key] <= 0:
+            raise UnexpectedEvent(
+                'handle_subprocess_entry_exit_log_msg encountered '
+                f'unexpected log msg: {log_msg}')
+
+        pe.subprocess_msg[sub_key] -= 1
+        self.add_log_msg(log_msg)
+
+        ################################################################
+        # call handler for subprocess
+        ################################################################
+        actions: dict[tuple[str, str], Callable[..., None]] = {
+            ('_register', 'entry'):
+                self.handle_subprocess_register_entry,
+            ('_register', 'exit'):
+                self.handle_subprocess_register_exit,
+            ('_refresh_registry', 'entry'):
+                self.handle_subprocess_refresh_registry_entry,
+            ('_refresh_registry', 'exit'):
+                self.handle_subprocess_refresh_registry_exit,
+            ('_refresh_pair_array', 'entry'):
+                self.handle_subprocess_refresh_pair_array_entry,
+            ('__refresh_pair_array', 'exit'):
+                self.handle_subprocess_refresh_pair_array_exit,
+            ('_add_to_pair_array', 'entry'):
+                self.handle_subprocess_add_to_pair_array_entry,
+            ('_add_to_pair_array', 'exit'):
+                self.handle_subprocess_add_to_pair_array_exit,
+        }
+
+        actions[(subprocess_name, entry_exit)](cmd_runner=cmd_runner,
+                                               request_name=request_name,
+                                               target=target)
+
+    ####################################################################
+    # handle_subprocess_register_entry
+    ####################################################################
+    def handle_subprocess_register_entry(self,
+                                         cmd_runner: str,
+                                         request_name: str,
+                                         target: str) -> None:
+        """Handle the subprocess entry for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+            request_name: request that is calling subprocess
+            target: thread name of smart_thread
+
+        """
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request_name,
+                                  '_refresh_registry',
+                                  'entry',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
+
+    ####################################################################
+    # handle_subprocess_register_exit
+    ####################################################################
+    def handle_subprocess_register_exit(self,
+                                        cmd_runner: str,
+                                        request_name: str,
+                                        target: str) -> None:
+        """Handle the subprocess exit for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+            request_name: request that is calling subprocess
+            target: thread name of smart_thread
+
+        """
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request_name,
+                                  '_refresh_registry',
+                                  'entry',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
+
+    ####################################################################
+    # handle_subprocess_refresh_registry_entry
+    ####################################################################
+    def handle_subprocess_refresh_registry_entry(self,
+                                                 cmd_runner: str,
+                                                 request_name: str,
+                                                 target: str) -> None:
+        """Handle the subprocess entry for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+            request_name: request that is calling subprocess
+            target: thread name of smart_thread
+
+        """
+        pass
+
+    ####################################################################
+    # handle_subprocess_refresh_registry_exit
+    ####################################################################
+    def handle_subprocess_refresh_registry_exit(self,
+                                                cmd_runner: str,
+                                                request_name: str,
+                                                target: str) -> None:
+        """Handle the subprocess exit for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+            request_name: request that is calling subprocess
+            target: thread name of smart_thread
+
+        """
+        pass
+
+    ####################################################################
+    # handle_subprocess_refresh_pair_array_entry
+    ####################################################################
+    def handle_subprocess_refresh_pair_array_entry(self,
+                                                   cmd_runner: str,
+                                                   request_name: str,
+                                                   target: str) -> None:
+        """Handle the subprocess entry for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+            request_name: request that is calling subprocess
+            target: thread name of smart_thread
+
+        """
+        pass
+
+    ####################################################################
+    # handle_subprocess_refresh_pair_array_exit
+    ####################################################################
+    def handle_subprocess_refresh_pair_array_exit(self,
+                                                  cmd_runner: str,
+                                                  request_name: str,
+                                                  target: str) -> None:
+        """Handle the subprocess exit for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+            request_name: request that is calling subprocess
+            target: thread name of smart_thread
+
+        """
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+        state_key: SetStateKey = (cmd_runner,
+                                  target,
+                                  st.ThreadState.Unregistered,
+                                  st.ThreadState.Initializing)
+        pe.set_state_msg[state_key] += 1
+
+    ####################################################################
+    # handle_subprocess_add_to_pair_array_entry
+    ####################################################################
+    def handle_subprocess_add_to_pair_array_entry(self,
+                                                  cmd_runner: str,
+                                                  request_name: str,
+                                                  target: str) -> None:
+        """Handle the subprocess entry for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+            request_name: request that is calling subprocess
+            target: thread name of smart_thread
+
+        """
+        pass
+
+    ####################################################################
+    # handle_subprocess_add_to_pair_array_exit
+    ####################################################################
+    def handle_subprocess_add_to_pair_array_exit(self,
+                                                 cmd_runner: str,
+                                                 request_name: str,
+                                                 target: str) -> None:
+        """Handle the subprocess exit for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+            request_name: request that is calling subprocess
+            target: thread name of smart_thread
+
+        """
+        pass
+
+
+
+
+
     ####################################################################
     # wait_for_monitor
     ####################################################################
