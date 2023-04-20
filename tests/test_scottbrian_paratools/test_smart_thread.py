@@ -60,6 +60,8 @@ AddStatusBlockKey: TypeAlias = tuple[str, st.PairKey, str]
 
 CleanRegKey: TypeAlias = tuple[str, str, str, str]
 
+RequestKey: TypeAlias = tuple[str, str, str]
+
 SubProcessKey: TypeAlias = tuple[str, str, str, str, str]
 
 
@@ -5868,6 +5870,7 @@ class PendingEvent:
     """Pending event class."""
     start_request: deque[StartRequest]
     current_request: StartRequest
+    request_msg: dict[RequestKey, int]
     subprocess_msg: dict[SubProcessKey, int]
     set_state_msg: dict[SetStateKey, int]
     status_msg: dict[tuple[bool, st.ThreadState], int]
@@ -6014,6 +6017,7 @@ class ConfigVerifier:
                                              timeout_remotes=set(),
                                              stopped_remotes=set(),
                                              deadlock_remotes=set()),
+                request_msg=defaultdict(int),
                 subprocess_msg=defaultdict(int),
                 set_state_msg=defaultdict(int),
                 status_msg=defaultdict(int),
@@ -14314,17 +14318,30 @@ class ConfigVerifier:
             request_name: smart request name
             entry_exit: specifies whether entry or exit message
             targets: targets of the request
+            log_msg: log message for the request
 
         """
         pe = self.pending_events[cmd_runner]
+
+        req_key: RequestKey = (cmd_runner,
+                               request_name,
+                               entry_exit)
+
+        if pe.request_msg[req_key] <= 0:
+            raise UnexpectedEvent(
+                f'handle_request_entry_exit_log_msg encountered '
+                f'unexpected log msg: {log_msg}')
+
+        pe.request_msg[req_key] -= 1
+        self.add_log_msg(re.escape(log_msg))
 
         if entry_exit == 'entry:':
             try:
                 req_start_item = pe.start_request.pop()
             except IndexError:
                 raise UnexpectedEvent(
-                    'handle_request_entry_exit_log_msg encountered unexpected '
-                    f'start request log msg: {log_msg}')
+                    'handle_request_entry_exit_log_msg missing start_request '
+                    f'for log msg: {log_msg}')
 
             if req_start_item.req_type.value != request_name:
                 raise UnexpectedEvent(
@@ -14332,46 +14349,24 @@ class ConfigVerifier:
                     f'{req_start_item.req_type.value=} but instead received '
                     f'log msg: {log_msg}')
 
-            self.add_log_msg(re.escape(log_msg))
+            if sorted(req_start_item.targets) != sorted(targets):
+                raise InvalidInputDetected(
+                    'handle_request_entry_exit_log_msg expected '
+                    f'{req_start_item.targets=} but instead received '
+                    f'log msg: {log_msg}')
 
             pe.current_request = req_start_item
 
-            ############################################################
-            # determine next step
-            ############################################################
-            if req_start_item.req_type == st.ReqType.Smart_init:
-                state_key: SetStateKey = (cmd_runner,
-                                          targets[0],
-                                          st.ThreadState.Unregistered,
-                                          st.ThreadState.Initializing)
-                pe.set_state_msg[state_key] += 1
-
-            # build list of pair_keys and place in dict
-            if req_start_item.req_type != st.ReqType.Smart_init:
-                pair_keys: list[st.PairKey] = []
-                for target in targets:
-                    pair_key = st.SmartThread._get_pair_key(cmd_runner, target)
-                    pair_keys.append(pair_key)
-                self.request_pending_pair_keys[cmd_runner] = pair_keys
-                self.log_test_msg(
-                    f'request_pending added for {cmd_runner=}, '
-                    f'{pair_keys=}')
-
         elif entry_exit == 'exit:':
-            if pe.exit_request_msg[request_name] <= 0:
-                raise UnexpectedEvent(
-                    f'handle_request_entry_exit_log_msg encountered '
-                    f'unexpected log msg: {log_msg}')
-
             pe.current_request = StartRequest(req_type=st.ReqType.NoReq,
                                               targets=set(),
                                               not_registered_remotes=set(),
                                               timeout_remotes=set(),
                                               stopped_remotes=set(),
                                               deadlock_remotes=set())
-            self.add_log_msg(re.escape(log_msg))
 
-            if request_name != 'smart_init':
+            if request_name in ('smart_send', 'smart_recv', 'smart_wait',
+                                'smart_resume', 'smart_sync'):
                 if cmd_runner in self.request_pending_pair_keys:
                     if targets:
                         for remote in targets:
@@ -14397,6 +14392,448 @@ class ConfigVerifier:
             raise InvalidInputDetected(
                 'handle_request_entry_exit_log_msg does not recognize '
                 f'{entry_exit=}')
+
+        ################################################################
+        # call handler for request
+        ################################################################
+        actions: dict[tuple[str, str], Callable[..., None]] = {
+            ('smart_init', 'entry'):
+                self.handle_request_smart_init_entry,
+            ('smart_init', 'exit'):
+                self.handle_request_smart_init_exit,
+            ('smart_start', 'entry'):
+                self.handle_request_smart_start_entry,
+            ('smart_start', 'exit'):
+                self.handle_request_smart_start_exit,
+            ('smart_unreg', 'entry'):
+                self.handle_request_smart_unreg_entry,
+            ('smart_unreg', 'exit'):
+                self.handle_request_smart_unreg_exit,
+            ('smart_join', 'entry'):
+                self.handle_request_smart_join_entry,
+            ('smart_join', 'exit'):
+                self.handle_request_smart_join_exit,
+            ('smart_send', 'entry'):
+                self.handle_request_smart_send_entry,
+            ('smart_send', 'exit'):
+                self.handle_request_smart_send_exit,
+            ('smart_recv', 'entry'):
+                self.handle_request_smart_recv_entry,
+            ('smart_recv', 'exit'):
+                self.handle_request_smart_recv_exit,
+            ('smart_wait', 'entry'):
+                self.handle_request_smart_wait_entry,
+            ('smart_wait', 'exit'):
+                self.handle_request_smart_wait_exit,
+            ('smart_resume', 'entry'):
+                self.handle_request_smart_resume_entry,
+            ('smart_resume', 'exit'):
+                self.handle_request_smart_resume_exit,
+            ('smart_sync', 'entry'):
+                self.handle_request_smart_sync_entry,
+            ('smart_sync', 'exit'):
+                self.handle_request_smart_sync_exit,
+        }
+
+        actions[(request_name, entry_exit)](cmd_runner=cmd_runner)
+
+    ####################################################################
+    # handle_request_smart_init_entry
+    ####################################################################
+    def handle_request_smart_init_entry(self,
+                                        cmd_runner: str) -> None:
+        """Handle the request entry for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+
+        """
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+
+        target = pe.current_request.targets[0]
+
+        state_key: SetStateKey = (cmd_runner,
+                                  target,
+                                  st.ThreadState.Unregistered,
+                                  st.ThreadState.Initializing)
+        pe.set_state_msg[state_key] += 1
+
+    ####################################################################
+    # handle_request_smart_init_exit
+    ####################################################################
+    def handle_request_smart_init_exit(self,
+                                       cmd_runner: str) -> None:
+        """Handle the request exit for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+
+        """
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request_name,
+                                  '_refresh_registry',
+                                  'entry',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
+
+    ####################################################################
+    # handle_request_smart_start_entry
+    ####################################################################
+    def handle_request_smart_start_entry(self,
+                                         cmd_runner: str) -> None:
+        """Handle the request entry for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+
+        """
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request_name,
+                                  '_refresh_registry',
+                                  'entry',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
+
+    ####################################################################
+    # handle_request_smart_start_exit
+    ####################################################################
+    def handle_request_smart_start_exit(self,
+                                        cmd_runner: str) -> None:
+        """Handle the request exit for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+
+        """
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request_name,
+                                  '_refresh_registry',
+                                  'entry',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
+
+    ####################################################################
+    # handle_request_smart_unreg_entry
+    ####################################################################
+    def handle_request_smart_unreg_entry(self,
+                                         cmd_runner: str) -> None:
+        """Handle the request entry for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+
+        """
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request_name,
+                                  '_refresh_registry',
+                                  'entry',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
+
+    ####################################################################
+    # handle_request_smart_unreg_exit
+    ####################################################################
+    def handle_request_smart_unreg_exit(self,
+                                        cmd_runner: str) -> None:
+        """Handle the request exit for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+
+        """
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request_name,
+                                  '_refresh_registry',
+                                  'entry',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
+
+    ####################################################################
+    # handle_request_smart_join_entry
+    ####################################################################
+    def handle_request_smart_join_entry(self,
+                                        cmd_runner: str) -> None:
+        """Handle the request entry for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+
+        """
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request_name,
+                                  '_refresh_registry',
+                                  'entry',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
+
+    ####################################################################
+    # handle_request_smart_join_exit
+    ####################################################################
+    def handle_request_smart_join_exit(self,
+                                       cmd_runner: str) -> None:
+        """Handle the request exit for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+
+        """
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request_name,
+                                  '_refresh_registry',
+                                  'entry',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
+
+    ####################################################################
+    # handle_request_smart_send_entry
+    ####################################################################
+    def handle_request_smart_send_entry(self,
+                                        cmd_runner: str) -> None:
+        """Handle the request entry for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+
+        """
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request_name,
+                                  '_refresh_registry',
+                                  'entry',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
+
+    ####################################################################
+    # handle_request_smart_send_exit
+    ####################################################################
+    def handle_request_smart_send_exit(self,
+                                       cmd_runner: str) -> None:
+        """Handle the request exit for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+
+        """
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request_name,
+                                  '_refresh_registry',
+                                  'entry',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
+
+    ####################################################################
+    # handle_request_smart_recv_entry
+    ####################################################################
+    def handle_request_smart_recv_entry(self,
+                                        cmd_runner: str) -> None:
+        """Handle the request entry for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+
+        """
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request_name,
+                                  '_refresh_registry',
+                                  'entry',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
+
+    ####################################################################
+    # handle_request_smart_recv_exit
+    ####################################################################
+    def handle_request_smart_recv_exit(self,
+                                       cmd_runner: str) -> None:
+        """Handle the request exit for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+
+        """
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request_name,
+                                  '_refresh_registry',
+                                  'entry',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
+
+    ####################################################################
+    # handle_request_smart_wait_entry
+    ####################################################################
+    def handle_request_smart_wait_entry(self,
+                                        cmd_runner: str) -> None:
+        """Handle the request entry for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+
+        """
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request_name,
+                                  '_refresh_registry',
+                                  'entry',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
+
+    ####################################################################
+    # handle_request_smart_wait_exit
+    ####################################################################
+    def handle_request_smart_wait_exit(self,
+                                       cmd_runner: str) -> None:
+        """Handle the request exit for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+
+        """
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request_name,
+                                  '_refresh_registry',
+                                  'entry',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
+
+    ####################################################################
+    # handle_request_smart_resume_entry
+    ####################################################################
+    def handle_request_smart_resume_entry(self,
+                                          cmd_runner: str) -> None:
+        """Handle the request entry for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+
+        """
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request_name,
+                                  '_refresh_registry',
+                                  'entry',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
+
+    ####################################################################
+    # handle_request_smart_start_exit
+    ####################################################################
+    def handle_request_smart_resume_exit(self,
+                                         cmd_runner: str) -> None:
+        """Handle the request exit for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+
+        """
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request_name,
+                                  '_refresh_registry',
+                                  'entry',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
+
+    ####################################################################
+    # handle_request_smart_sync_entry
+    ####################################################################
+    def handle_request_smart_sync_entry(self,
+                                        cmd_runner: str) -> None:
+        """Handle the request entry for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+
+        """
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request_name,
+                                  '_refresh_registry',
+                                  'entry',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
+
+    ####################################################################
+    # handle_request_smart_sync_exit
+    ####################################################################
+    def handle_request_smart_sync_exit(self,
+                                       cmd_runner: str) -> None:
+        """Handle the request exit for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+
+        """
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request_name,
+                                  '_refresh_registry',
+                                  'entry',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
 
     ####################################################################
     # handle_request_exit_log_msg
@@ -22141,6 +22578,12 @@ class TestSmartThreadScenarios:
                 st_state=st.ThreadState.Unregistered,
                 found_del_pairs=defaultdict(int)
             )
+            req_key: RequestKey = (commander_name,
+                                   'smart_init',
+                                   'entry')
+
+            config_ver.pending_events[commander_name].request_msg[req_key] += 1
+
             config_ver.pending_events[commander_name].start_request.append(
                 StartRequest(req_type=st.ReqType.Smart_init,
                              targets={commander_name},
