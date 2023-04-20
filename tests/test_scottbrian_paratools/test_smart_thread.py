@@ -58,7 +58,7 @@ AddPaKey: TypeAlias = tuple[str, st.PairKey]
 
 AddStatusBlockKey: TypeAlias = tuple[str, st.PairKey, str]
 
-CleanRegKey: TypeAlias = tuple[str, str]
+CleanRegKey: TypeAlias = tuple[str, str, str, str]
 
 
 ########################################################################
@@ -4331,6 +4331,11 @@ list_of_smart_requests = ('(smart_init'
                           '|smart_resume'
                           '|smart_sync)')
 
+list_of_sub_processes = ('(_register'
+                         '|_refresh_registry'
+                         '|_refresh_pair_array'
+                         '|_add_to_pair_array)')
+
 
 ########################################################################
 # LogSearchItem
@@ -4376,6 +4381,163 @@ class LogSearchItem(ABC):
         """Run the process to handle the log message."""
         pass
 
+
+########################################################################
+# RequestEntryExitLogSearchItem
+########################################################################
+class RequestEntryExitLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+        """
+        super().__init__(
+            search_str=(f"{list_of_smart_requests} (entry|exit): "
+                        r"requestor: [a-z]+, targets: \[([a-z]*|,|'| )*\]"),
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int
+                           ) -> "RequestEntryExitLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            SyncResumedLogSearchItem containing found message and index
+        """
+        return RequestEntryExitLogSearchItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+    def run_process(self):
+        """Run the process to handle the log message."""
+        split_msg = self.found_log_msg.split()
+        request_name = split_msg[0]
+        entry_exit = split_msg[1]
+        cmd_runner = split_msg[3][0:-1]  # remove comma
+        target_msg = self.found_log_msg.split('[')[1].split(']')[0].split(', ')
+
+        targets: list[str] = []
+        for item in target_msg:
+            targets.append(item[1:-1])
+
+        self.config_ver.handle_request_entry_exit_log_msg(
+            cmd_runner=cmd_runner,
+            request_name=request_name,
+            entry_exit=entry_exit,
+            targets=targets,
+            log_msg=self.found_log_msg)
+
+        # if entry_exit == 'entry:':
+        #     self.config_ver.handle_request_entry_log_msg(
+        #         cmd_runner=cmd_runner,
+        #         targets=targets)
+        #     if request_name in ('smart_unreg', 'smart_join',
+        #     'smart_start'):
+        #         try:
+        #             req_start_item = self.config_ver.pending_events[
+        #                 cmd_runner].start_request.pop()
+        #         except IndexError:
+        #             raise UnexpectedEvent(
+        #                 'RequestEntryExitLogSearchItem encountered
+        #                 unexpected '
+        #                 f'start request log msg:
+        #                 {self.found_log_msg}')
+        #
+        #         self.config_ver.handle_start_request_log_msg(
+        #             cmd_runner=cmd_runner,
+        #             req_start_item=req_start_item)
+        #
+        #     self.config_ver.handle_request_entry_log_msg(
+        #         cmd_runner=cmd_runner,
+        #         targets=targets)
+        #     self.config_ver.log_test_msg('request_pending set for '
+        #                                  f'{cmd_runner=}, {targets=}')
+        # else:
+        #     self.config_ver.handle_request_exit_log_msg(
+        #         cmd_runner=cmd_runner)
+        #     self.config_ver.log_test_msg('request_pending reset for '
+        #                                  f'{cmd_runner=}
+        #                                  via request exit')
+
+
+########################################################################
+# SubProcessEntryExitLogSearchItem
+########################################################################
+class SubProcessEntryExitLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+        """
+        super().__init__(
+            search_str=(f"{list_of_smart_requests} {list_of_sub_processes} "
+                        "(entry|exit): requestor: [a-z]+, target: [a-z]+"),
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int
+                           ) -> "SubProcessEntryExitLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            SyncResumedLogSearchItem containing found message and index
+        """
+        return SubProcessEntryExitLogSearchItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+    def run_process(self):
+        """Run the process to handle the log message."""
+        split_msg = self.found_log_msg.split()
+        request_name = split_msg[0]
+        subprocess_name = split_msg[1]
+        entry_exit = split_msg[2]
+        cmd_runner = split_msg[4][0:-1]  # remove comma
+        target = split_msg[6]
+
+        self.config_ver.handle_subprocess_entry_exit_log_msg(
+            cmd_runner=cmd_runner,
+            request_name=request_name,
+            subprocess_name=subprocess_name,
+            entry_exit=entry_exit,
+            target=target,
+            log_msg=self.found_log_msg)
 
 ########################################################################
 # StartRegisterLogSearchItem
@@ -4430,9 +4592,9 @@ class StartRegisterLogSearchItem(LogSearchItem):
 
 
 ########################################################################
-# EnterCleanUpRegLogSearchItem
+# CleanUpRegLogSearchItem
 ########################################################################
-class EnterCleanUpRegLogSearchItem(LogSearchItem):
+class CleanUpRegLogSearchItem(LogSearchItem):
     """Input to search log msgs."""
 
     def __init__(self,
@@ -4448,8 +4610,8 @@ class EnterCleanUpRegLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str=('[a-z]+ entered _clean_up_registry '
-                        f'for request {list_of_smart_requests}'),
+            search_str=('[a-z]+ (entered|exiting) _refresh_registry '
+                        f'for [a-z]+ for request {list_of_smart_requests}'),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -4457,7 +4619,7 @@ class EnterCleanUpRegLogSearchItem(LogSearchItem):
 
     def get_found_log_item(self,
                            found_log_msg: str,
-                           found_log_idx: int) -> "EnterCleanUpRegLogSearchItem":
+                           found_log_idx: int) -> "CleanUpRegLogSearchItem":
         """Return a found log item.
 
         Args:
@@ -4465,9 +4627,9 @@ class EnterCleanUpRegLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
 
         Returns:
-            EnterCleanUpRegLogSearchItem containing found message and index
+            CleanUpRegLogSearchItem containing found message and index
         """
-        return EnterCleanUpRegLogSearchItem(
+        return CleanUpRegLogSearchItem(
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
@@ -4475,12 +4637,76 @@ class EnterCleanUpRegLogSearchItem(LogSearchItem):
     def run_process(self):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
+        cmd_runner = split_msg[0]
+        entry_exit = split_msg[1]
+        target = split_msg[4]
+        request = split_msg[7]
 
-        self.config_ver.handle_enter_clean_up_reg_log_msg(
-            cmd_runner=split_msg[0],
-            request=split_msg[5],
+        self.config_ver.handle_clean_up_reg_log_msg(
+            cmd_runner=cmd_runner,
+            entry_exit=entry_exit,
+            target=target,
+            request=request,
             log_msg=self.found_log_msg)
 
+
+########################################################################
+# CleanUpPairArrayLogSearchItem
+########################################################################
+class CleanUpPairArrayLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+        """
+        super().__init__(
+            search_str=('[a-z]+ (entered|exiting) _refresh_pair_array '
+                        f'for [a-z]+ for request {list_of_smart_requests}'),
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int) -> "CleanUpPairArrayLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            CleanUpPairArrayLogSearchItem containing found message and index
+        """
+        return CleanUpPairArrayLogSearchItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+    def run_process(self):
+        """Run the process to handle the log message."""
+        split_msg = self.found_log_msg.split()
+        cmd_runner = split_msg[0]
+        entry_exit = split_msg[1]
+        target = split_msg[4]
+        request = split_msg[7]
+
+        self.config_ver.handle_clean_up_reg_log_msg(
+            cmd_runner=cmd_runner,
+            entry_exit=entry_exit,
+            target=target,
+            request=request,
+            log_msg=self.found_log_msg)
 
 ########################################################################
 # RegistryStatusLogSearchItem
@@ -5406,98 +5632,6 @@ class DeferredRemovalLogSearchItem(LogSearchItem):
 
 
 ########################################################################
-# RequestEntryExitLogSearchItem
-########################################################################
-class RequestEntryExitLogSearchItem(LogSearchItem):
-    """Input to search log msgs."""
-
-    def __init__(self,
-                 config_ver: "ConfigVerifier",
-                 found_log_msg: str = '',
-                 found_log_idx: int = 0,
-                 ) -> None:
-        """Initialize the LogItem.
-
-        Args:
-            config_ver: configuration verifier
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-        """
-        super().__init__(
-            search_str=(f"{list_of_smart_requests} (entry|exit): "
-                        r"requestor: [a-z]+ targets: \[([a-z]*|,|'| )*\]"),
-            config_ver=config_ver,
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx
-        )
-
-    def get_found_log_item(self,
-                           found_log_msg: str,
-                           found_log_idx: int
-                           ) -> "RequestEntryExitLogSearchItem":
-        """Return a found log item.
-
-        Args:
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-
-        Returns:
-            SyncResumedLogSearchItem containing found message and index
-        """
-        return RequestEntryExitLogSearchItem(
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx,
-            config_ver=self.config_ver)
-
-    def run_process(self):
-        """Run the process to handle the log message."""
-        split_msg = self.found_log_msg.split()
-        request_name = split_msg[0]
-        entry_exit = split_msg[1]
-        cmd_runner = split_msg[3]
-        target_msg = self.found_log_msg.split('[')[1].split(']')[0].split(', ')
-
-        targets: list[str] = []
-        for item in target_msg:
-            targets.append(item[1:-1])
-
-        self.config_ver.handle_request_entry_exit_log_msg(
-            cmd_runner=cmd_runner,
-            request_name=request_name,
-            entry_exit=entry_exit,
-            targets=targets,
-            log_msg=self.found_log_msg)
-
-        if entry_exit == 'entry:':
-            self.config_ver.handle_request_entry_log_msg(
-                cmd_runner=cmd_runner,
-                targets=targets)
-            if request_name in ('smart_unreg', 'smart_join', 'smart_start'):
-                try:
-                    req_start_item = self.config_ver.pending_events[
-                        cmd_runner].start_request.pop()
-                except IndexError:
-                    raise UnexpectedEvent(
-                        'RequestEntryExitLogSearchItem encountered unexpected '
-                        f'start request log msg: {self.found_log_msg}')
-
-                self.config_ver.handle_start_request_log_msg(
-                    cmd_runner=cmd_runner,
-                    req_start_item=req_start_item)
-
-            self.config_ver.handle_request_entry_log_msg(
-                cmd_runner=cmd_runner,
-                targets=targets)
-            self.config_ver.log_test_msg('request_pending set for '
-                                         f'{cmd_runner=}, {targets=}')
-        else:
-            self.config_ver.handle_request_exit_log_msg(
-                cmd_runner=cmd_runner)
-            self.config_ver.log_test_msg('request_pending reset for '
-                                         f'{cmd_runner=} via request exit')
-
-
-########################################################################
 # CRunnerRaisesLogSearchItem
 ########################################################################
 class CRunnerRaisesLogSearchItem(LogSearchItem):
@@ -5728,8 +5862,11 @@ class CheckPendingEventsLogSearchItem(LogSearchItem):
 
 
 LogSearchItems: TypeAlias = Union[
+    RequestEntryExitLogSearchItem,
+    SubProcessEntryExitLogSearchItem,
     StartRegisterLogSearchItem,
-    EnterCleanUpRegLogSearchItem,
+    CleanUpRegLogSearchItem,
+    CleanUpPairArrayLogSearchItem,
     RegistryStatusLogSearchItem,
     EnterRpaLogSearchItem,
     AddPaLogSearchItem,
@@ -5747,7 +5884,6 @@ LogSearchItems: TypeAlias = Union[
     SyncResumedLogSearchItem,
     TestDebugLogSearchItem,
     DeferredRemovalLogSearchItem,
-    RequestEntryExitLogSearchItem,
     CRunnerRaisesLogSearchItem,
     RequestAckLogSearchItem,
     MonDelLogSearchItem,
@@ -5893,7 +6029,7 @@ class PendingEvent:
     add_pair_array: dict[AddPaKey, int]
     add_status_block_msg: dict[AddStatusBlockKey, int]
     exit_request_msg: dict[str, int]
-    enter_clean_up_reg_msg: dict[CleanRegKey, int]
+    clean_up_reg_msg: dict[CleanRegKey, int]
     enter_rpa_msg: int
     exit_rpa_msg: int
     start_request: deque[StartRequest]
@@ -5992,8 +6128,11 @@ class ConfigVerifier:
 
         self.log_start_idx: int = 0
         self.log_search_items: tuple[LogSearchItems, ...] = (
+            RequestEntryExitLogSearchItem(config_ver=self),
+            SubProcessEntryExitLogSearchItem(config_ver=self),
             StartRegisterLogSearchItem(config_ver=self),
-            EnterCleanUpRegLogSearchItem(config_ver=self),
+            CleanUpRegLogSearchItem(config_ver=self),
+            CleanUpPairArrayLogSearchItem(config_ver=self),
             RegistryStatusLogSearchItem(config_ver=self),
             EnterRpaLogSearchItem(config_ver=self),
             ExitRpaLogSearchItem(config_ver=self),
@@ -6011,7 +6150,6 @@ class ConfigVerifier:
             SyncResumedLogSearchItem(config_ver=self),
             TestDebugLogSearchItem(config_ver=self),
             DeferredRemovalLogSearchItem(config_ver=self),
-            RequestEntryExitLogSearchItem(config_ver=self),
             CRunnerRaisesLogSearchItem(config_ver=self),
             RequestAckLogSearchItem(config_ver=self),
             MonDelLogSearchItem(config_ver=self),
@@ -6040,7 +6178,7 @@ class ConfigVerifier:
                 add_pair_array=defaultdict(int),
                 add_status_block_msg=defaultdict(int),
                 exit_request_msg=defaultdict(int),
-                enter_clean_up_reg_msg=defaultdict(int),
+                clean_up_reg_msg=defaultdict(int),
                 enter_rpa_msg=0,
                 exit_rpa_msg=0,
                 start_request=deque())
@@ -13779,34 +13917,54 @@ class ConfigVerifier:
         return update_pair_array_msg_needed
 
     ####################################################################
-    # handle_enter_clean_up_reg_log_msg
+    # handle_clean_up_reg_log_msg
     ####################################################################
-    def handle_enter_clean_up_reg_log_msg(self,
-                                          cmd_runner: str,
-                                          request: str,
-                                          log_msg: str) -> None:
-        """Determine next steps for enter _clean_up_registry.
+    def handle_clean_up_reg_log_msg(self,
+                                    cmd_runner: str,
+                                    entry_exit: str,
+                                    target: str,
+                                    request: str,
+                                    log_msg: str) -> None:
+        """Determine next steps for enter _refresh_registry.
 
         Args:
             cmd_runner: thread name doing the pair array refresh
+            entry_exit: specifies whether this is entry or exit msg
+            target: thread name that is the target of the request
             request: name of request
             log_msg: refresh pair array log message
 
         """
         pe = self.pending_events[cmd_runner]
 
-        clean_key: CleanRegKey = (cmd_runner, request)
+        clean_key: CleanRegKey = (cmd_runner,
+                                  entry_exit,
+                                  target,
+                                  request)
 
-        if pe.enter_clean_up_reg_msg[clean_key] <= 0:
-            raise UnexpectedEvent(f'handle_enter_clean_up_reg_log_msg '
+        if pe.clean_up_reg_msg[clean_key] <= 0:
+            raise UnexpectedEvent(f'handle_clean_up_reg_log_msg '
                                   f'encountered unexpected log msg: {log_msg}')
 
-        pe.enter_clean_up_reg_msg -= 1
+        pe.clean_up_reg_msg -= 1
         self.add_log_msg(log_msg)
 
         ################################################################
         # determine next step
         ################################################################
+        if entry_exit == 'entered':
+            # if commander is initializing, no status msgs yet
+            if target == self.commander_name:
+                state_key: SetStateKey = (target,
+                                          target,
+                                          st.ThreadState.Initializing,
+                                          st.ThreadState.Registered)
+                pe.set_state_msg[state_key] += 1
+            else:  # expect to see status message, starting with commander
+                self.pending_events[self.commander_name].status_msg[
+                    (True, st.ThreadState.Alive)] += 1
+        elif entry_exit == 'exiting':
+
 
     ####################################################################
     # handle_enter_rpa_log_msg
@@ -15074,18 +15232,11 @@ class ConfigVerifier:
         ################################################################
         # determine next step
         ################################################################
-        clean_key: CleanRegKey = (cmd_runner, 'smart_init')
-        pe.enter_clean_up_reg_msg[clean_key] += 1
-        # if commander, first thread to register - no status msgs
-        # if target == self.commander_name:
-        #     state_key: SetStateKey = (target,
-        #                               target,
-        #                               st.ThreadState.Initializing,
-        #                               st.ThreadState.Registered)
-        #     pe.set_state_msg[state_key] += 1
-        # else:  # expect to see status message, starting with commander
-        #     self.pending_events[self.commander_name].status_msg[
-        #         (True, st.ThreadState.Alive)] += 1
+        clean_key: CleanRegKey = (cmd_runner,
+                                  'entered',
+                                  target,
+                                  'smart_init')
+        pe.clean_up_reg_msg[clean_key] += 1
 
 
 
@@ -15137,6 +15288,28 @@ class ConfigVerifier:
                                 from_state,
                                 to_state)
             self.pending_events[cmd_runner].set_state_msg[key] += 1
+
+    ####################################################################
+    # handle_subprocess_entry_exit_log_msg
+    ####################################################################
+    def handle_subprocess_entry_exit_log_msg(self,
+                                             cmd_runner: str,
+                                             request_name: str,
+                                             subprocess_name: str,
+                                             entry_exit: str,
+                                             target: str,
+                                             log_msg: str) -> None:
+        """Handle the subprocess message for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+            request_name: request that is calling subprocess
+            subprocess_name: subprocess being done
+            entry_exit: specifies whether entry or exit of subprocess
+            target: thread name of smart_thread
+            log_msg: entry or exit log message forr subprocess
+
+        """
     ####################################################################
     # wait_for_monitor
     ####################################################################
