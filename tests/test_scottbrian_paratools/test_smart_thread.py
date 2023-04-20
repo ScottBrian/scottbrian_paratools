@@ -4726,109 +4726,6 @@ class RegistryStatusLogSearchItem(LogSearchItem):
 
 
 ########################################################################
-# EnterRpaLogSearchItem
-########################################################################
-class EnterRpaLogSearchItem(LogSearchItem):
-    """Input to search log msgs."""
-
-    def __init__(self,
-                 config_ver: "ConfigVerifier",
-                 found_log_msg: str = '',
-                 found_log_idx: int = 0,
-                 ) -> None:
-        """Initialize the LogItem.
-
-        Args:
-            config_ver: configuration verifier
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-        """
-        super().__init__(
-            search_str='[a-z]+ entered _refresh_pair_array',
-            config_ver=config_ver,
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx
-        )
-
-    def get_found_log_item(self,
-                           found_log_msg: str,
-                           found_log_idx: int) -> "EnterRpaLogSearchItem":
-        """Return a found log item.
-
-        Args:
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-
-        Returns:
-            EnterRpaLogSearchItem containing found message and index
-        """
-        return EnterRpaLogSearchItem(
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx,
-            config_ver=self.config_ver)
-
-    def run_process(self):
-        """Run the process to handle the log message."""
-        cmd_runner = self.found_log_msg.split(maxsplit=1)[0]
-
-        self.config_ver.handle_enter_rpa_log_msg(
-            cmd_runner=cmd_runner,
-            log_msg=self.found_log_msg)
-
-        self.config_ver.add_log_msg(self.found_log_msg)
-
-
-########################################################################
-# ExitRpaLogSearchItem
-########################################################################
-class ExitRpaLogSearchItem(LogSearchItem):
-    """Input to search log msgs."""
-
-    def __init__(self,
-                 config_ver: "ConfigVerifier",
-                 found_log_msg: str = '',
-                 found_log_idx: int = 0,
-                 ) -> None:
-        """Initialize the LogItem.
-
-        Args:
-            config_ver: configuration verifier
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-        """
-        super().__init__(
-            search_str='[a-z]+ exiting _refresh_pair_array',
-            config_ver=config_ver,
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx
-        )
-
-    def get_found_log_item(self,
-                           found_log_msg: str,
-                           found_log_idx: int) -> "ExitRpaLogSearchItem":
-        """Return a found log item.
-
-        Args:
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-
-        Returns:
-            ExitRpaLogSearchItem containing found message and index
-        """
-        return ExitRpaLogSearchItem(
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx,
-            config_ver=self.config_ver)
-
-    def run_process(self):
-        """Run the process to handle the log message."""
-        self.config_ver.handle_exit_rpa_log_msg(
-            cmd_runner=self.found_log_msg.split(maxsplit=1)[0])
-
-        self.config_ver.add_log_msg(self.found_log_msg)
-
-
-########################################################################
 # AddPaLogSearchItem
 ########################################################################
 class AddPaLogSearchItem(LogSearchItem):
@@ -5815,14 +5712,11 @@ class CheckPendingEventsLogSearchItem(LogSearchItem):
 LogSearchItems: TypeAlias = Union[
     RequestEntryExitLogSearchItem,
     SubProcessEntryExitLogSearchItem,
-    StartRegisterLogSearchItem,
     CleanUpRegLogSearchItem,
     CleanUpPairArrayLogSearchItem,
     RegistryStatusLogSearchItem,
-    EnterRpaLogSearchItem,
     AddPaLogSearchItem,
     AddStatusBlockLogSearchItem,
-    ExitRpaLogSearchItem,
     UpdatePaLogSearchItem,
     AddRegLogSearchItem,
     RegRemoveLogSearchItem,
@@ -5982,7 +5876,6 @@ class PendingEvent:
     add_status_block_msg: dict[AddStatusBlockKey, int]
     exit_request_msg: dict[str, int]
     clean_up_reg_msg: dict[CleanRegKey, int]
-    enter_rpa_msg: int
     exit_rpa_msg: int
 
 
@@ -6082,12 +5975,9 @@ class ConfigVerifier:
         self.log_search_items: tuple[LogSearchItems, ...] = (
             RequestEntryExitLogSearchItem(config_ver=self),
             SubProcessEntryExitLogSearchItem(config_ver=self),
-            StartRegisterLogSearchItem(config_ver=self),
             CleanUpRegLogSearchItem(config_ver=self),
             CleanUpPairArrayLogSearchItem(config_ver=self),
             RegistryStatusLogSearchItem(config_ver=self),
-            EnterRpaLogSearchItem(config_ver=self),
-            ExitRpaLogSearchItem(config_ver=self),
             AddPaLogSearchItem(config_ver=self),
             AddStatusBlockLogSearchItem(config_ver=self),
             UpdatePaLogSearchItem(config_ver=self),
@@ -6132,7 +6022,6 @@ class ConfigVerifier:
                 add_status_block_msg=defaultdict(int),
                 exit_request_msg=defaultdict(int),
                 clean_up_reg_msg=defaultdict(int),
-                enter_rpa_msg=0,
                 exit_rpa_msg=0)
 
         self.allow_log_test_msg = True
@@ -14008,17 +13897,6 @@ class ConfigVerifier:
                                                      targets=del_list)
 
     ####################################################################
-    # handle_exit_rpa_log_msg
-    ####################################################################
-    def handle_exit_rpa_log_msg(self,
-                                cmd_runner: str) -> None:
-        """Drive the commands received on the command queue.
-
-        Args:
-            cmd_runner: thread name doing the pair array refresh
-
-        """
-    ####################################################################
     # handle_exp_status_log_msgs
     ####################################################################
     def handle_exp_status_log_msgs(self,
@@ -14669,12 +14547,12 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         add_key: AddRegKey = (cmd_runner, target)
 
-        if (add_key not in pe.add_reg_msg
-                or pe.add_reg_msg[add_key] <= 0):
+        if pe.add_reg_msg[add_key] <= 0:
             raise UnexpectedEvent(f'handle_add_reg_log_msg encountered '
                                   f'unexpected log msg: {reg_update_msg}')
 
         pe.add_reg_msg[add_key] -= 1
+        self.add_log_msg(re.escape(reg_update_msg))
 
         if target not in self.expected_registered:
             raise IncorrectDataDetected(
@@ -14685,38 +14563,43 @@ class ConfigVerifier:
         ################################################################
         # determine next step
         ################################################################
-        self.pending_events[cmd_runner].enter_rpa_msg += 1
+        pe = self.pending_events[cmd_runner]
+        state_key: SetStateKey = (cmd_runner,
+                                  target,
+                                  st.ThreadState.Initializing,
+                                  st.ThreadState.Registered)
+        pe.set_state_msg[state_key] += 1
 
-        found_add_item = False
-        while not found_add_item:
-            with self.ops_lock:
-                # for item in self.monitor_add_items:
-                if cmd_runner in self.monitor_add_items:
-                    found_add_item = True
-                    item = self.monitor_add_items[cmd_runner]
-                    self.add_thread(
-                        cmd_runner=cmd_runner,
-                        new_name=target,
-                        thread_alive=item.thread_alive,
-                        auto_start=item.auto_start,
-                        is_ThreadTarget=item.is_ThreadTarget,
-                        expected_state=item.expected_state,
-                        reg_update_msg=reg_update_msg,
-                        reg_idx=reg_update_msg_log_idx
-                    )
-                    # item.add_event.set()
-                    # self.monitor_add_items.remove(item)
-
-                    if target != self.commander_name:
-                        self.update_pair_array_items.append(UpaItem(
-                            upa_cmd_runner=cmd_runner,
-                            upa_type='add',
-                            upa_target=target,
-                            upa_def_del_name='',
-                            upa_process=''))
-                    break
-            if not found_add_item:
-                time.sleep(0.1)
+        # found_add_item = False
+        # while not found_add_item:
+        #     with self.ops_lock:
+        #         # for item in self.monitor_add_items:
+        #         if cmd_runner in self.monitor_add_items:
+        #             found_add_item = True
+        #             item = self.monitor_add_items[cmd_runner]
+        #             self.add_thread(
+        #                 cmd_runner=cmd_runner,
+        #                 new_name=target,
+        #                 thread_alive=item.thread_alive,
+        #                 auto_start=item.auto_start,
+        #                 is_ThreadTarget=item.is_ThreadTarget,
+        #                 expected_state=item.expected_state,
+        #                 reg_update_msg=reg_update_msg,
+        #                 reg_idx=reg_update_msg_log_idx
+        #             )
+        #             # item.add_event.set()
+        #             # self.monitor_add_items.remove(item)
+        #
+        #             if target != self.commander_name:
+        #                 self.update_pair_array_items.append(UpaItem(
+        #                     upa_cmd_runner=cmd_runner,
+        #                     upa_type='add',
+        #                     upa_target=target,
+        #                     upa_def_del_name='',
+        #                     upa_process=''))
+        #             break
+        #     if not found_add_item:
+        #         time.sleep(0.1)
 
     ####################################################################
     # handle_add_status_block_log_msg
@@ -15066,7 +14949,7 @@ class ConfigVerifier:
             # next step is register
             ############################################################
             sub_key: SubProcessKey = (cmd_runner,
-                                      req_start_item.req_type.value(),
+                                      'smart_init',
                                       '_register',
                                       'entry',
                                       target)
@@ -15081,14 +14964,22 @@ class ConfigVerifier:
                                     st.ThreadState.Alive)
                 pe.set_state_msg[key] += 1
             else:  # skip the reg to alive msg, proceed to reg add
-                add_key: AddRegKey = (cmd_runner, target)
-                pe.add_reg_msg[add_key] += 1
+                sub_key: SubProcessKey = (cmd_runner,
+                                          'smart_init',
+                                          '_add_to_pair_array',
+                                          'entry',
+                                          target)
+                pe.subprocess_msg[sub_key] += 1
 
         elif (from_state == st.ThreadState.Registered
               and to_state == st.ThreadState.Alive):
             # going from Registered to Alive only happens during init
-            add_key: AddRegKey = (cmd_runner, target)
-            pe.add_reg_msg[add_key] += 1
+            sub_key: SubProcessKey = (cmd_runner,
+                                      'smart_init',
+                                      '_add_to_pair_array',
+                                      'entry',
+                                      target)
+            pe.subprocess_msg[sub_key] += 1
 
         elif (from_state == st.ThreadState.Starting
                 and to_state == st.ThreadState.Alive):
@@ -15342,7 +15233,22 @@ class ConfigVerifier:
             target: thread name of smart_thread
 
         """
-        pass
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+        # if commander is initializing, registry is empty
+        if request_name == 'smart_init' and target == self.commander_name:
+            sub_key: SubProcessKey = (cmd_runner,
+                                      request_name,
+                                      '_refresh_registry',
+                                      'exit',
+                                      target)
+            pe.subprocess_msg[sub_key] += 1
+        else:  # expect to see status message, starting with commander
+            self.pending_events[self.commander_name].status_msg[
+                (True, st.ThreadState.Alive)] += 1
+
 
     ####################################################################
     # handle_subprocess_refresh_registry_exit
@@ -15359,7 +15265,16 @@ class ConfigVerifier:
             target: thread name of smart_thread
 
         """
-        pass
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request_name,
+                                  '_refresh_pair_array',
+                                  'entry',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
 
     ####################################################################
     # handle_subprocess_refresh_pair_array_entry
@@ -15376,7 +15291,20 @@ class ConfigVerifier:
             target: thread name of smart_thread
 
         """
-        pass
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+        # if commander is initializing, pair array is empty
+        if request_name == 'smart_init' and target == self.commander_name:
+            sub_key: SubProcessKey = (cmd_runner,
+                                      request_name,
+                                      '_refresh_pair_array',
+                                      'exit',
+                                      target)
+            pe.subprocess_msg[sub_key] += 1
+        else:  # remove any old entries
+            pass
 
     ####################################################################
     # handle_subprocess_refresh_pair_array_exit
@@ -15397,11 +15325,8 @@ class ConfigVerifier:
         # determine next step
         ################################################################
         pe = self.pending_events[cmd_runner]
-        state_key: SetStateKey = (cmd_runner,
-                                  target,
-                                  st.ThreadState.Unregistered,
-                                  st.ThreadState.Initializing)
-        pe.set_state_msg[state_key] += 1
+        add_key: AddRegKey = (cmd_runner, target)
+        pe.add_reg_msg[add_key] += 1
 
     ####################################################################
     # handle_subprocess_add_to_pair_array_entry
@@ -15418,7 +15343,18 @@ class ConfigVerifier:
             target: thread name of smart_thread
 
         """
-        pass
+        self.add_to_pair_array(cmd_runner=cmd_runner,
+                               add_name=target)
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request_name,
+                                  '_add_to_pair_array',
+                                  'exit',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
 
     ####################################################################
     # handle_subprocess_add_to_pair_array_exit
@@ -15435,11 +15371,16 @@ class ConfigVerifier:
             target: thread name of smart_thread
 
         """
-        pass
-
-
-
-
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request_name,
+                                  '_register',
+                                  'exit',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
 
     ####################################################################
     # wait_for_monitor
@@ -16436,7 +16377,7 @@ class ConfigVerifier:
         """Add thread to pair array.
 
         Args:
-            cmd_runner: thread name doin the update
+            cmd_runner: thread name doing the update
             add_name: thread name to add
 
         Raises:
@@ -16533,7 +16474,7 @@ class ConfigVerifier:
                           f'{add_name=}')
 
     ####################################################################
-    # add_to_pair_array
+    # del_from_pair_array
     ####################################################################
     def del_from_pair_array(self,
                             cmd_runner: str,
@@ -22207,6 +22148,8 @@ class TestSmartThreadScenarios:
                              timeout_remotes=set(),
                              stopped_remotes=set(),
                              deadlock_remotes=set()))
+
+            config_ver.commander_thread_config_built = True
 
             # if (config_ver.cmd_thread_auto_start
             #         and not config_ver.cmd_thread_alive):

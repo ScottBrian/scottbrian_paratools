@@ -929,13 +929,13 @@ class SmartThread:
         # register this new SmartThread so others can find us
         self._register()
 
-        self.start_issued = False
         self.auto_started = False
+
+        logger.debug(exit_log_msg)
+
         if self.auto_start and not self.thread.is_alive():
             self.smart_start(self.name)
             self.auto_started = True
-
-        logger.debug(exit_log_msg)
 
     ####################################################################
     # repr
@@ -1120,6 +1120,13 @@ class SmartThread:
                 self.create_time = create_time
                 SmartThread._registry[self.name] = self
 
+                SmartThread._registry_last_update = datetime.utcnow()
+                print_time = (SmartThread._registry_last_update
+                              .strftime("%H:%M:%S.%f"))
+                logger.debug(
+                    f'{self.cmd_runner} added {self.name} '
+                    f'to SmartThread registry at UTC {print_time}')
+
                 self._set_state(
                     target_thread=self,
                     new_state=ThreadState.Registered)
@@ -1127,13 +1134,6 @@ class SmartThread:
                     self._set_state(
                         target_thread=self,
                         new_state=ThreadState.Alive)
-
-                SmartThread._registry_last_update = datetime.utcnow()
-                print_time = (SmartThread._registry_last_update
-                              .strftime("%H:%M:%S.%f"))
-                logger.debug(
-                    f'{self.cmd_runner} added {self.name} '
-                    f'to SmartThread registry at UTC {print_time}')
 
                 ########################################################
                 # add new name to the pair array
