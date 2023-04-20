@@ -851,6 +851,10 @@ class SmartThread:
 
         self.debug_logging_enabled = logger.isEnabledFor(logging.DEBUG)
 
+        exit_log_msg = self._issue_entry_log_msg(
+            request=ReqType.Smart_init,
+            remotes={name})
+
         if not isinstance(name, str):
             raise SmartThreadIncorrectNameSpecified(
                 'Attempted SmartThread instantiation with incorrect name of '
@@ -929,6 +933,8 @@ class SmartThread:
         if self.auto_start and not self.thread.is_alive():
             self.smart_start(self.name)
             self.auto_started = True
+
+        logger.debug(exit_log_msg)
 
     ####################################################################
     # repr
@@ -1329,7 +1335,7 @@ class SmartThread:
         """
         current_thread_name = threading.current_thread().name
         logger.debug(f'{current_thread_name} entered _clean_up_registry '
-                     f'for request {self.request}')
+                     f'for request {self.request.value}')
         # Remove any old entries
         keys_to_del = []
         for key, item in SmartThread._registry.items():
@@ -1369,7 +1375,7 @@ class SmartThread:
                          f'{keys_to_del}')
 
         logger.debug(f'{current_thread_name} exiting _clean_up_registry '
-                     f'for request {self.request}')
+                     f'for request {self.request.value}')
 
     ###########################################################################
     # _clean_up_pair_array
@@ -4769,12 +4775,17 @@ class SmartThread:
                 raise SmartThreadInvalidInput(
                     f'{self.name} {request.value} '
                     'request with no targets specified.')
-
         else:
             if isinstance(remotes, str):
                 remotes = {remotes}
             else:
                 remotes = set(remotes)
+
+        exit_log_msg = self._issue_entry_log_msg(
+            request=request,
+            remotes=remotes,
+            timeout_value=timer.timeout_value(),
+            log_msg=log_msg)
 
         request_category: ReqCategory
         if request in (ReqType.Smart_start,
@@ -4861,18 +4872,13 @@ class SmartThread:
             pk_remotes=pk_remotes,
             timer=timer,
             do_refresh=False,
-            exit_log_msg=None,
+            exit_log_msg=exit_log_msg,
             msg_to_send=msg_to_send,
             ret_msg=None,
             stopped_remotes=set(),
             not_registered_remotes=set(),
             deadlock_remotes=set(),
             full_send_q_remotes=set())
-
-        if self.debug_logging_enabled:
-            request_block.exit_log_msg = self._issue_entry_log_msg(
-                request_block=request_block,
-                log_msg=log_msg)
 
         return request_block
 
@@ -4881,37 +4887,41 @@ class SmartThread:
     ####################################################################
     @staticmethod
     def _issue_entry_log_msg(
-            request_block: RequestBlock,
+            request: ReqType,
+            remotes: set[str],
+            timeout_value: Optional[IntFloat] = None,
             log_msg: Optional[str] = None,
             ) -> str:
         """Issue an entry log message.
 
         Args:
-            request_block: contains the request specifications
-            log_msg: log message to issue
+            request: request being processed
+            remotes: thread names of the request targets
+            timeout_value: value that will be used for request timeout
+            log_msg: log message to append to the log msg
 
         Returns:
             the log message to use for the exit call
 
         """
-        if request_block.remotes:
-            targets_to_use = sorted(request_block.remotes)
+        if remotes:
+            targets_to_use = sorted(remotes)
         else:
             targets_to_use = 'eligible per request'
         log_msg_body = (
             f'requestor: {threading.current_thread().name} '
             f'targets: {targets_to_use} '
-            f'timeout value: {request_block.timer.timeout_value()} '
+            f'timeout value: {timeout_value} '
             f'{get_formatted_call_sequence(latest=3, depth=1)}')
 
         if log_msg:
             log_msg_body += f' {log_msg}'
 
         entry_log_msg = (
-            f'{request_block.request.value} entry: {log_msg_body}')
+            f'{request.value} entry: {log_msg_body}')
 
         exit_log_msg = (
-            f'{request_block.request.value} exit: {log_msg_body}')
+            f'{request.value} exit: {log_msg_body}')
 
         logger.debug(entry_log_msg, stacklevel=3)
         return exit_log_msg
