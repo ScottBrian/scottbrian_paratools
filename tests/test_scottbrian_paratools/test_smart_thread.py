@@ -5799,6 +5799,7 @@ class PendingEvent:
     add_pair_array_msg: dict[AddPaKey, int]
     add_status_block_msg: dict[AddStatusBlockKey, int]
     rem_status_block_msg: dict[RemSbKey, int]
+    rem_defer_status_block_msg: dict[RemSbKey, int]
     exit_request_msg: dict[str, int]
     clean_up_reg_msg: dict[CleanRegKey, int]
     exit_rpa_msg: int
@@ -5948,6 +5949,7 @@ class ConfigVerifier:
                 add_pair_array_msg=defaultdict(int),
                 add_status_block_msg=defaultdict(int),
                 rem_status_block_msg=defaultdict(int),
+                rem_defer_status_block_msg=defaultdict(int),
                 exit_request_msg=defaultdict(int),
                 clean_up_reg_msg=defaultdict(int),
                 exit_rpa_msg=0)
@@ -17061,31 +17063,41 @@ class ConfigVerifier:
 
         pair_keys_to_delete = []
         for pair_key in self.expected_pairs:
-            pae = self.expected_pairs[pair_key]
-            del_count: int = 0
-            for name in pair_key:
-                if name in pae and name not in self.expected_registered:
-                    del_count += 1
-            if del_count == 0:
+            if (pair_key[0] in self.expected_registered
+                    and pair_key[1] in self.expected_registered):
                 continue
 
             # one or both need to be removed from pair_array
+            pae = self.expected_pairs[pair_key]
+
             for name in pair_key:
                 def_del_reasons = DefDelReasons()
+                defer = False
                 if name in pae:
-                    def_del_reasons.pending_request = pae[name].pending_request
+                    if pae[name].pending_request:
+                        def_del_reasons.pending_request = True
+                        defer = True
                     if pae[name].pending_msg_count:
                         def_del_reasons.pending_msg = True
-                    def_del_reasons.pending_wait = pae[name].pending_wait
-                    def_del_reasons.pending_sync = pae[name].pending_sync
-                    if name not in self.expected_registered:
+                        defer = True
+                    if pae[name].pending_wait:
+                        def_del_reasons.pending_wait = True
+                        defer = True
+                    if pae[name].pending_sync:
+                        def_del_reasons.pending_sync = True
+                        defer = True
+
+                    rem_sb_key: RemSbKey = (
+                        name,
+                        def_del_reasons.pending_request,
+                        def_del_reasons.pending_msg,
+                        def_del_reasons.pending_wait,
+                        def_del_reasons.pending_sync)
+
+                    if name in self.expected_registered and defer:
+                        pe.rem_defer_status_block_msg[rem_sb_key] += 1
+                    else:
                         del pae[name]
-                        rem_sb_key: RemSbKey = (
-                            name,
-                            def_del_reasons.pending_request,
-                            def_del_reasons.pending_msg,
-                            def_del_reasons.pending_wait,
-                            def_del_reasons.pending_sync)
                         pe.rem_status_block_msg[rem_sb_key] += 1
 
             if other_name not in self.expected_pairs[pair_key].keys():
