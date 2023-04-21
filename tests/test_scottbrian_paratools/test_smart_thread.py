@@ -13326,7 +13326,7 @@ class ConfigVerifier:
 
         self.expected_registered[name] = ThreadTracker(
             thread=f1_thread,
-            is_alive=auto_start,
+            is_alive=False,
             exiting=False,
             is_auto_started=auto_start,
             is_TargetThread=is_thread_target,
@@ -15372,38 +15372,78 @@ class ConfigVerifier:
         ################################################################
         # Determine next action
         ################################################################
-        if (from_state == st.ThreadState.Unregistered
-                and to_state == st.ThreadState.Initializing):
+        ################################################################
+        # call handler for request
+        ################################################################
+        actions: dict[tuple[st.ThreadState, st.ThreadState],
+                      Callable[..., None]] = {
+            (st.ThreadState.Unregistered, st.ThreadState.Initializing):
+                self.handle_set_state_unreg_to_init,
+            (st.ThreadState.Initializing, st.ThreadState.Registered):
+                self.handle_set_state_init_to_reg,
+            (st.ThreadState.Registered, st.ThreadState.Starting):
+                self.handle_set_state_reg_to_start,
+            (st.ThreadState.Registered, st.ThreadState.Alive):
+                self.handle_set_state_reg_to_alive,
+            (st.ThreadState.Starting, st.ThreadState.Alive):
+                self.handle_set_state_start_to_alive,
+            (st.ThreadState.Registered, st.ThreadState.Stopped):
+                self.handle_set_state_reg_to_stop,
+            (st.ThreadState.Alive, st.ThreadState.Stopped):
+                self.handle_set_state_alive_to_stop,
+        }
 
-            ############################################################
-            # next step is register
-            ############################################################
-            sub_key: SubProcessKey = (cmd_runner,
-                                      'smart_init',
-                                      '_register',
-                                      'entry',
-                                      target)
-            pe.subprocess_msg[sub_key] += 1
+        actions[(from_state, to_state)](cmd_runner=cmd_runner,
+                                        target=target)
 
-        elif (from_state == st.ThreadState.Initializing
-              and to_state == st.ThreadState.Registered):
-            if self.expected_registered[target].is_alive:
-                key: SetStateKey = (cmd_runner,
-                                    target,
-                                    st.ThreadState.Registered,
-                                    st.ThreadState.Alive)
-                pe.set_state_msg[key] += 1
-            else:  # skip the reg to alive msg, proceed to reg add
-                sub_key: SubProcessKey = (cmd_runner,
-                                          'smart_init',
-                                          '_add_to_pair_array',
-                                          'entry',
-                                          target)
-                pe.subprocess_msg[sub_key] += 1
+    ####################################################################
+    # handle_set_state_unreg_to_init
+    ####################################################################
+    def handle_set_state_unreg_to_init(self,
+                                       cmd_runner: str,
+                                       target: str) -> None:
+        """Determine next step for set state.
 
-        elif (from_state == st.ThreadState.Registered
-              and to_state == st.ThreadState.Alive):
-            # going from Registered to Alive only happens during init
+        Args:
+            cmd_runner: thread name doing the state change
+            target: thread name getting its state changed
+
+        """
+        ############################################################
+        # next step is register
+        ############################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  'smart_init',
+                                  '_register',
+                                  'entry',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
+
+    ####################################################################
+    # handle_set_state_init_to_reg
+    ####################################################################
+    def handle_set_state_init_to_reg(self,
+                                     cmd_runner: str,
+                                     target: str) -> None:
+        """Determine next step for set state.
+
+        Args:
+            cmd_runner: thread name doing the state change
+            target: thread name getting its state changed
+
+        """
+        ############################################################
+        # determine next step
+        ############################################################
+        pe = self.pending_events[cmd_runner]
+        if self.expected_registered[target].is_alive:
+            key: SetStateKey = (cmd_runner,
+                                target,
+                                st.ThreadState.Registered,
+                                st.ThreadState.Alive)
+            pe.set_state_msg[key] += 1
+        else:  # skip the reg to alive msg, proceed to reg add
             sub_key: SubProcessKey = (cmd_runner,
                                       'smart_init',
                                       '_add_to_pair_array',
@@ -15411,9 +15451,131 @@ class ConfigVerifier:
                                       target)
             pe.subprocess_msg[sub_key] += 1
 
-        elif (from_state == st.ThreadState.Starting
-                and to_state == st.ThreadState.Alive):
-            self.expected_registered[target].is_alive = True
+    ####################################################################
+    # handle_set_state_reg_to_start
+    ####################################################################
+    def handle_set_state_reg_to_start(self,
+                                      cmd_runner: str,
+                                      target: str) -> None:
+        """Determine next step for set state.
+
+        Args:
+            cmd_runner: thread name doing the state change
+            target: thread name getting its state changed
+
+        """
+        ############################################################
+        # determine next step
+        ############################################################
+        pe = self.pending_events[cmd_runner]
+
+        if self.expected_registered[target].is_alive == True:
+            sub_key: SubProcessKey = (cmd_runner,
+                                      'smart_init',
+                                      '_register',
+                                      'entry',
+                                      target)
+            pe.subprocess_msg[sub_key] += 1
+
+    ####################################################################
+    # handle_set_state_reg_to_alive
+    ####################################################################
+    def handle_set_state_reg_to_alive(self,
+                                      cmd_runner: str,
+                                      target: str) -> None:
+        """Determine next step for set state.
+
+        Args:
+            cmd_runner: thread name doing the state change
+            target: thread name getting its state changed
+
+        """
+        ############################################################
+        # next step is to add entry to pair array
+        ############################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  'smart_init',
+                                  '_add_to_pair_array',
+                                  'entry',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
+
+    ####################################################################
+    # handle_set_state_start_to_alive
+    ####################################################################
+    def handle_set_state_start_to_alive(self,
+                                        cmd_runner: str,
+                                        target: str) -> None:
+        """Determine next step for set state.
+
+        Args:
+            cmd_runner: thread name doing the state change
+            target: thread name getting its state changed
+
+        """
+        self.expected_registered[target].is_alive = True
+
+        ############################################################
+        # next step is register
+        ############################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  'smart_init',
+                                  '_register',
+                                  'entry',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
+
+    ####################################################################
+    # handle_set_state_reg_to_stop
+    ####################################################################
+    def handle_set_state_reg_to_stop(self,
+                                     cmd_runner: str,
+                                     target: str) -> None:
+        """Determine next step for set state.
+
+        Args:
+            cmd_runner: thread name doing the state change
+            target: thread name getting its state changed
+
+        """
+        ############################################################
+        # next step is register
+        ############################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  'smart_init',
+                                  '_register',
+                                  'entry',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
+
+    ####################################################################
+    # handle_set_state_alive_to_stop
+    ####################################################################
+    def handle_set_state_alive_to_stop(self,
+                                       cmd_runner: str,
+                                       target: str) -> None:
+        """Determine next step for set state.
+
+        Args:
+            cmd_runner: thread name doing the state change
+            target: thread name getting its state changed
+
+        """
+        self.expected_registered[target].is_alive = False
+
+        ############################################################
+        # next step is register
+        ############################################################
+        pe = self.pending_events[cmd_runner]
+        sub_key: SubProcessKey = (cmd_runner,
+                                  'smart_init',
+                                  '_register',
+                                  'entry',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
 
     ####################################################################
     # handle_start
