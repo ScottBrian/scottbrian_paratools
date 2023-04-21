@@ -66,6 +66,8 @@ SubProcessKey: TypeAlias = tuple[str, str, str, str, str]
 
 RemKey: TypeAlias = tuple[str, str]
 
+RemSbKey: TypeAlias = tuple[str, bool, bool, bool, bool]
+
 
 ########################################################################
 # SendRecvMsgs
@@ -81,6 +83,13 @@ class SendRecvMsgs:
     """Messages to send and verify."""
     send_msgs: dict[SrKey, list[Any]]
 
+
+@dataclass
+class DefDelReasons:
+    pending_request: bool = False
+    pending_msg: bool = False
+    pending_wait: bool = False
+    pending_sync: bool = False
 
 ########################################################################
 # Log level arg list
@@ -4282,7 +4291,10 @@ class ThreadPairStatus:
     """Class that keeps pair status."""
     pending_ops_count: int
     reset_ops_count: bool
-    # expected_last_reg_updates: deque
+    pending_request: bool = False
+    pending_msg_count: int = 0
+    pending_wait: bool = False
+    pending_sync: bool = False
 
 
 @dataclass
@@ -4684,8 +4696,9 @@ class AddPaLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str=("[a-z]+ created _clean_pair_array with "
-                        r"pair_key = \('[a-z]+', '[a-z]+'\)"),
+            search_str=("[a-z]+ added "
+                        r"pair_key=\('[a-z]+', '[a-z]+'\) to the "
+                        "_pair_array"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -4779,9 +4792,9 @@ class AddStatusBlockLogSearchItem(LogSearchItem):
             target=target,log_msg=self.found_log_msg)
 
 ########################################################################
-# UpdatePaLogSearchItem
+# UpdatePaUtcLogSearchItem
 ########################################################################
-class UpdatePaLogSearchItem(LogSearchItem):
+class UpdatePaUtcLogSearchItem(LogSearchItem):
     """Input to search log msgs."""
 
     def __init__(self,
@@ -4805,7 +4818,7 @@ class UpdatePaLogSearchItem(LogSearchItem):
 
     def get_found_log_item(self,
                            found_log_msg: str,
-                           found_log_idx: int) -> "UpdatePaLogSearchItem":
+                           found_log_idx: int) -> "UpdatePaUtcLogSearchItem":
         """Return a found log item.
 
         Args:
@@ -4813,19 +4826,32 @@ class UpdatePaLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
 
         Returns:
-            UpdatePaLogSearchItem containing found message and index
+            UpdatePaUtcLogSearchItem containing found message and index
         """
-        return UpdatePaLogSearchItem(
+        return UpdatePaUtcLogSearchItem(
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
     def run_process(self):
         """Run the process to handle the log message."""
-        self.config_ver.handle_pair_array_update(
-            cmd_runner=self.found_log_msg.split(maxsplit=1)[0],
-            upa_msg=self.found_log_msg,
-            upa_msg_idx=self.found_log_idx)
+        cmd_runner = self.found_log_msg.split(maxsplit=1)[0]
+
+        if self.config_ver.pending_events[
+                cmd_runner].update_pair_array_UTC_msg <= 0:
+            raise UnexpectedEvent(
+                'UpdatePaUtcLogSearchItem encountered unexpected '
+                f'log message: {self.found_log_msg}')
+
+        self.config_ver.pending_events[
+            cmd_runner].update_pair_array_UTC_msg -= 1
+
+        self.config_ver.add_log_msg(re.escape(self.found_log_msg))
+
+        # self.config_ver.handle_pair_array_update(
+        #     cmd_runner=self.found_log_msg.split(maxsplit=1)[0],
+        #     upa_msg=self.found_log_msg,
+        #     upa_msg_idx=self.found_log_idx)
 
 
 ########################################################################
@@ -5609,7 +5635,7 @@ LogSearchItems: TypeAlias = Union[
     RegistryStatusLogSearchItem,
     AddPaLogSearchItem,
     AddStatusBlockLogSearchItem,
-    UpdatePaLogSearchItem,
+    UpdatePaUtcLogSearchItem,
     AddRegLogSearchItem,
     RegRemoveLogSearchItem,
     DidCleanRegLogSearchItem,
@@ -5767,10 +5793,12 @@ class PendingEvent:
     status_msg: dict[tuple[bool, st.ThreadState], int]
     rem_reg_msg: dict[RemKey, int]
     did_clean_reg_msg: int
+    update_pair_array_UTC_msg: int
     rem_reg_targets: deque[list[str]]
     add_reg_msg: dict[AddRegKey, int]
-    add_pair_array: dict[AddPaKey, int]
+    add_pair_array_msg: dict[AddPaKey, int]
     add_status_block_msg: dict[AddStatusBlockKey, int]
+    rem_status_block_msg: dict[RemSbKey, int]
     exit_request_msg: dict[str, int]
     clean_up_reg_msg: dict[CleanRegKey, int]
     exit_rpa_msg: int
@@ -5875,7 +5903,7 @@ class ConfigVerifier:
             RegistryStatusLogSearchItem(config_ver=self),
             AddPaLogSearchItem(config_ver=self),
             AddStatusBlockLogSearchItem(config_ver=self),
-            UpdatePaLogSearchItem(config_ver=self),
+            UpdatePaUtcLogSearchItem(config_ver=self),
             AddRegLogSearchItem(config_ver=self),
             RegRemoveLogSearchItem(config_ver=self),
             DidCleanRegLogSearchItem(config_ver=self),
@@ -5914,10 +5942,12 @@ class ConfigVerifier:
                 status_msg=defaultdict(int),
                 rem_reg_msg=defaultdict(int),
                 did_clean_reg_msg=0,
+                update_pair_array_UTC_msg=0,
                 rem_reg_targets=deque(),
                 add_reg_msg=defaultdict(int),
-                add_pair_array=defaultdict(int),
+                add_pair_array_msg=defaultdict(int),
                 add_status_block_msg=defaultdict(int),
+                rem_status_block_msg=defaultdict(int),
                 exit_request_msg=defaultdict(int),
                 clean_up_reg_msg=defaultdict(int),
                 exit_rpa_msg=0)
@@ -14863,11 +14893,11 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         add_key: AddPaKey = (cmd_runner, pair_key)
 
-        if pe.add_pair_array[add_key] <= 0:
+        if pe.add_pair_array_msg[add_key] <= 0:
             raise UnexpectedEvent(f'handle_add_pair_array_log_msg encountered '
                                   f'unexpected log msg: {log_msg}')
 
-        pe.add_pair_array[add_key] -= 1
+        pe.add_pair_array_msg[add_key] -= 1
         self.add_log_msg(re.escape(log_msg))
 
     ####################################################################
@@ -15874,12 +15904,16 @@ class ConfigVerifier:
             target: thread name of smart_thread
 
         """
+        pe = self.pending_events[cmd_runner]
         self.add_to_pair_array(cmd_runner=cmd_runner,
                                add_name=target)
+
+        pe.update_pair_array_UTC_msg += 1
+
         ################################################################
         # determine next step
         ################################################################
-        pe = self.pending_events[cmd_runner]
+
         sub_key: SubProcessKey = (cmd_runner,
                                   request_name,
                                   '_add_to_pair_array',
@@ -16953,7 +16987,7 @@ class ConfigVerifier:
                         reset_ops_count=False)}
                 add_key: AddPaKey = (cmd_runner,
                                      pair_key)
-                pe.add_pair_array[add_key] += 1
+                pe.add_pair_array_msg[add_key] += 1
 
                 for pair_name in pair_key:
                     add_status_key: AddStatusBlockKey = (cmd_runner,
@@ -17003,6 +17037,130 @@ class ConfigVerifier:
 
         self.log_test_msg(f'add_to_pair_array entry: {cmd_runner=}, '
                           f'{add_name=}')
+
+    ####################################################################
+    # clean_pair_array
+    ####################################################################
+    def clean_pair_array(self,
+                         cmd_runner: str) -> None:
+        """Remove entries from pair array as needed.
+
+        Args:
+            cmd_runner: thread name doing the _clean_pair_array
+
+        Raises:
+            InvalidConfigurationDetected: Attempt to add thread to
+                existing pair array that has an empty ThreadPairStatus
+                dict, or that already has the thread in the pair array,
+                or that did not have the other name in the pair array.
+
+        """
+        self.log_test_msg(f'clean_pair_array entry: {cmd_runner=} ')
+
+        pe = self.pending_events[cmd_runner]
+
+        pair_keys_to_delete = []
+        for pair_key in self.expected_pairs:
+            pae = self.expected_pairs[pair_key]
+            del_count: int = 0
+            for name in pair_key:
+                if name in pae and name not in self.expected_registered:
+                    del_count += 1
+            if del_count == 0:
+                continue
+
+            # one or both need to be removed from pair_array
+            for name in pair_key:
+                def_del_reasons = DefDelReasons()
+                if name in pae:
+                    def_del_reasons.pending_request = pae[name].pending_request
+                    if pae[name].pending_msg_count:
+                        def_del_reasons.pending_msg = True
+                    def_del_reasons.pending_wait = pae[name].pending_wait
+                    def_del_reasons.pending_sync = pae[name].pending_sync
+                    if name not in self.expected_registered:
+                        del pae[name]
+                        rem_sb_key: RemSbKey = (
+                            name,
+                            def_del_reasons.pending_request,
+                            def_del_reasons.pending_msg,
+                            def_del_reasons.pending_wait,
+                            def_del_reasons.pending_sync)
+                        pe.rem_status_block_msg[rem_sb_key] += 1
+
+            if other_name not in self.expected_pairs[pair_key].keys():
+                # check that del_name had reason to be in pair_array
+                pair_keys_to_delete.append(pair_key)
+            else:
+                request_is_pending = False
+                if (other_name in self.request_pending_pair_keys
+                        and pair_key in self.request_pending_pair_keys[
+                            other_name]):
+                    request_is_pending = True
+                    self.log_test_msg('found request_pending for '
+                                      f'{other_name=}, {pair_key=}')
+                if (self.expected_pairs[pair_key][
+                    other_name].pending_ops_count == 0
+                        and not request_is_pending):
+                    pair_keys_to_delete.append(pair_key)
+                    self.log_test_msg(
+                        f'update_pair_array_del rem_pair_key 2 {pair_key}, '
+                        f'{other_name}')
+                    self.add_log_msg(re.escape(
+                        f"{cmd_runner} removed status_blocks entry "
+                        f"for pair_key = {pair_key}, "
+                        f"name = {other_name}"))
+                    # we are assuming that the remote will be started
+                    # while smart_send or resume is running and that the
+                    # msg will be delivered or the resume will be done
+                    # (otherwise we should not have called
+                    # inc_ops_count)
+                    # if ((pend_ops_cnt := self.expected_pairs[pair_key][
+                    #         del_name].pending_ops_count) > 0
+                    #         and not self.expected_pairs[pair_key][
+                    #         del_name].reset_ops_count):
+                    #     if pair_key not in self.pending_ops_counts:
+                    #         self.pending_ops_counts[pair_key] = {}
+                    #     self.pending_ops_counts[pair_key][
+                    #         del_name] = pend_ops_cnt
+                    #     self.log_test_msg(
+                    #         f'update_pair_array_del for {pair_key=}, '
+                    #         f'{del_name=} set pending {pend_ops_cnt=}')
+                else:
+                    # remember for next update by smart_recv or wait
+                    del_def_key = (pair_key, other_name)
+                    self.del_deferred_list.append(del_def_key)
+
+                    # best we can do is delete the del_name for now
+                    del self.expected_pairs[pair_key][del_name]
+
+            self.log_test_msg(
+                f'update_pair_array_del 2 rem_pair_key 3 {pair_key}, '
+                f'{del_name}')
+            self.add_log_msg(re.escape(
+                f"{cmd_runner} removed status_blocks entry "
+                f"for pair_key = {pair_key}, "
+                f"name = {del_name}"))
+
+        for pair_key in pair_keys_to_delete:
+
+
+            del self.expected_pairs[pair_key]
+            self.add_log_msg(re.escape(
+                f'{cmd_runner} removed _pair_array entry'
+                f' for pair_key = {pair_key}'))
+
+            # split_msg = self.last_clean_reg_log_msg.split()
+            # if (split_msg[0] != cmd_runner
+            #         or split_msg[9] != f"['{del_name}']"):
+            #     raise FailedToFindLogMsg(f'del_thread {cmd_runner=}, '
+            #                              f'{del_name} did not match '
+            #                              f'{self.last_clean_reg_log_msg=} ')
+            # self.add_log_msg(re.escape(self.last_clean_reg_log_msg))
+
+        self.add_log_msg(f'{cmd_runner} did successful '
+                         f'{process} of {del_name}.')
+
 
     ####################################################################
     # del_from_pair_array

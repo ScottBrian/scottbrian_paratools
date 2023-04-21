@@ -1275,20 +1275,24 @@ class SmartThread:
                     SmartThread._pair_array[
                         pair_key].status_blocks[
                         thread_name].del_deferred = True
-                    extra_msg = ', reasons: '
+                    extra_msg = ''
+                    comma = ''
                     if remaining_sb.request_pending:
                         extra_msg += 'pending request'
+                        comma = ', '
                     if not remaining_sb.msg_q.empty():
-                        extra_msg += ', non-empty msg_q'
+                        extra_msg += f'{comma}non-empty msg_q'
+                        comma = ', '
                     if remaining_sb.wait_event.is_set():
-                        extra_msg += ', wait event set'
+                        extra_msg += f'{comma}wait event set'
+                        comma = ', '
                     if remaining_sb.sync_event.is_set():
-                        extra_msg += ', sync event set'
+                        extra_msg += f'{comma}sync event set'
 
                     logger.debug(
-                        f'{self.cmd_runner} deferred removal of status_blocks '
-                        f'entry for pair_key = {pair_key}, '
-                        f'name = {thread_name}{extra_msg}')
+                        f'{self.cmd_runner} removal deferred for '
+                        f'status_blocks entry, pair_key = {pair_key}, '
+                        f'name = {thread_name}, reasons: {extra_msg}')
 
             # remove _connection_pair if both names are gone
             if not SmartThread._pair_array[
