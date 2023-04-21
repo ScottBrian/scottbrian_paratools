@@ -597,7 +597,7 @@ class ThreadCreate(Flag):
 # the start method is called, the state is set to Starting, and after
 # the start is done and the thread is alive, the state is set to Alive.
 # When the join method is called and the thread becomes not alive,
-# the state is set to Stopped which then allows the _refresh_registry
+# the state is set to Stopped which then allows the _clean_registry
 # method to remove the SmartThread.
 ########################################################################
 class ThreadState(Flag):
@@ -1090,7 +1090,7 @@ class SmartThread:
         Notes:
             1) Any old entries for SmartThreads whose threads are not
                alive are removed when this method is called by calling
-               _refresh_registry().
+               _clean_registry().
             2) Once a thread become not alive, it can not be
                resurrected. The SmartThread is bound to the thread it
                starts with.
@@ -1103,8 +1103,8 @@ class SmartThread:
             ############################################################
             # Remove any old entries from registry and pair array
             ############################################################
-            self._refresh_registry()
-            self._refresh_pair_array()
+            self._clean_registry()
+            self._clean_pair_array()
 
             ############################################################
             # Add new name to registry
@@ -1150,9 +1150,9 @@ class SmartThread:
                      f'target: {self.name}')
 
     ####################################################################
-    # _refresh_registry
+    # _clean_registry
     ####################################################################
-    def _refresh_registry(self) -> None:
+    def _clean_registry(self) -> None:
         """Clean up any old not alive items in the registry.
 
         Raises:
@@ -1163,7 +1163,7 @@ class SmartThread:
             1) Must be called holding _registry_lock
 
         """
-        logger.debug(f'{self.request.value} _refresh_registry entry: '
+        logger.debug(f'{self.request.value} _clean_registry entry: '
                      f'requestor: {self.cmd_runner}, '
                      f'target: {self.name}')
         # Remove any old entries
@@ -1203,16 +1203,16 @@ class SmartThread:
             logger.debug(f'{self.cmd_runner} did cleanup of registry at UTC '
                          f'{print_time}, deleted {keys_to_del}')
 
-        logger.debug(f'{self.request.value} _refresh_registry exit: '
+        logger.debug(f'{self.request.value} _clean_registry exit: '
                      f'requestor: {self.cmd_runner}, '
                      f'target: {self.name}')
 
     ###########################################################################
-    # _refresh_pair_array
+    # _clean_pair_array
     ###########################################################################
-    def _refresh_pair_array(self) -> None:
+    def _clean_pair_array(self) -> None:
         """Remove pair array entries as needed."""
-        logger.debug(f'{self.request.value} _refresh_pair_array entry: '
+        logger.debug(f'{self.request.value} _clean_pair_array entry: '
                      f'requestor: {self.cmd_runner}, '
                      f'target: {self.name}')
         changed = False
@@ -1254,7 +1254,7 @@ class SmartThread:
             # or recognize the wait or complete the request. For this
             # case, we will set the del_pending flag to indicate in the
             # request methods that once the request is completed,
-            # _refresh_pair_array should be called to clean up this
+            # _clean_pair_array should be called to clean up this
             # entry.
             if len(SmartThread._pair_array[pair_key].status_blocks) == 1:
                 thread_name = list(SmartThread._pair_array[
@@ -1309,7 +1309,7 @@ class SmartThread:
             logger.debug(
                 f'{self.cmd_runner} updated _pair_array at UTC {print_time}')
 
-        logger.debug(f'{self.request.value} _refresh_pair_array exit: '
+        logger.debug(f'{self.request.value} _clean_pair_array exit: '
                      f'requestor: {self.cmd_runner}, '
                      f'target: {self.name}')
 
@@ -1518,9 +1518,9 @@ class SmartThread:
         return set({item} if isinstance(item, str) else item or '')
 
     ###########################################################################
-    # _refresh_pair_array
+    # _clean_pair_array
     ###########################################################################
-    # def _refresh_pair_array(self) -> None:
+    # def _clean_pair_array(self) -> None:
     #     """Update the connection pair array from the _registry.
     #
     #     Notes:
@@ -1556,7 +1556,7 @@ class SmartThread:
     #
     #     """
     #     current_thread_name = threading.current_thread().name
-    #     logger.debug(f'{current_thread_name} entered _refresh_pair_array')
+    #     logger.debug(f'{current_thread_name} entered _clean_pair_array')
     #     changed = False
     #     # scan registry and adjust status
     #
@@ -1578,7 +1578,7 @@ class SmartThread:
     #                     status_blocks={}
     #                 ))
     #             logger.debug(
-    #                 f'{current_thread_name} created _refresh_pair_array with '
+    #                 f'{current_thread_name} created _clean_pair_array with '
     #                 f'pair_key = {pair_key}')
     #             changed = True
     #
@@ -1699,7 +1699,7 @@ class SmartThread:
     #         # or recognize the wait or complete the request. For this
     #         # case, we will set the del_pending flag to indicate in the
     #         # request methods that once the request is completed,
-    #         # _refresh_pair_array should be called to clean up this
+    #         # _clean_pair_array should be called to clean up this
     #         # entry.
     #         if len(SmartThread._pair_array[pair_key].status_blocks) == 1:
     #             thread_name = list(SmartThread._pair_array[
@@ -1756,7 +1756,7 @@ class SmartThread:
     #             f'{current_thread_name} updated _pair_array'
     #             f' at UTC {print_time}')
     #
-    #     logger.debug(f'{current_thread_name} exiting _refresh_pair_array')
+    #     logger.debug(f'{current_thread_name} exiting _clean_pair_array')
 
     ####################################################################
     # start
@@ -1887,12 +1887,12 @@ class SmartThread:
             # At this point, the thread was started and the bootstrap
             # method received control and set the Event that start waits
             # on. The bootstrap method will call run and eventually the
-            # the thread will end. So, at this point, run has not yet
+            # thread will end. So, at this point, either run has not yet
             # been called, the thread is running, or the thread is
             # already stopped. The is_alive() method will return True
             # if the Event is set (it is) and will return False when
             # the thread is stopped. So, we can rely on is_alive here
-            # nd will set set the correct state. Since we are holding
+            # will set the correct state. Since we are holding
             # the registry lock exclusive, the configuration can not
             # change and a join will wait behind us. The only thing that
             # could happen is we get back True from is_alive and set
@@ -2012,8 +2012,8 @@ class SmartThread:
         self._set_state(
             target_thread=SmartThread._registry[remote],
             new_state=ThreadState.Stopped)
-        self._refresh_registry()
-        self._refresh_pair_array()
+        self._clean_registry()
+        self._clean_pair_array()
 
         logger.debug(
             f'{self.name} did successful smart_unreg of {remote}.')
@@ -2115,7 +2115,7 @@ class SmartThread:
         # if the remote is not in the registry then either it was never
         # created, or it was created as a ThreadTarget which ended and
         # set its state to stopped and then got removed by a command
-        # that called _refresh_registry. In either case, we have
+        # that called _clean_registry. In either case, we have
         # nothing to do and can simply return True to move on to the
         # next target.
         if remote in SmartThread._registry:
@@ -2151,8 +2151,8 @@ class SmartThread:
                     target_thread=SmartThread._registry[remote],
                     new_state=ThreadState.Stopped)
                 # remove this thread from the registry
-                self._refresh_registry()
-                self._refresh_pair_array()
+                self._clean_registry()
+                self._clean_pair_array()
 
         logger.debug(
             f'{self.name} did successful join of {remote}.')
@@ -4359,8 +4359,8 @@ class SmartThread:
 
                 if request_block.do_refresh:
                     with sel.SELockExcl(SmartThread._registry_lock):
-                        self._refresh_registry()
-                        self._refresh_pair_array()
+                        self._clean_registry()
+                        self._clean_pair_array()
                     request_block.do_refresh = False
 
             # handle any error or timeout cases - don't worry about any
@@ -4393,8 +4393,8 @@ class SmartThread:
                                        self.work_pk_remotes]
                     self.work_pk_remotes = []
                     self.missing_remotes = []
-                    self._refresh_registry()
-                    self._refresh_pair_array()
+                    self._clean_registry()
+                    self._clean_pair_array()
 
                 self._handle_loop_errors(request_block=request_block,
                                          pending_remotes=pending_remotes)
@@ -4483,7 +4483,7 @@ class SmartThread:
                 # if we just added a pk_remote that has not yet
                 # come into existence
                 if target_create_time == 0.0:
-                    # tell _refresh_pair_array that we are looking
+                    # tell _clean_pair_array that we are looking
                     # for this remote
                     self.missing_remotes |= {remote}
 
@@ -4848,7 +4848,7 @@ class SmartThread:
             #         # if we just added a pk_remote that has not yet
             #         # come into existence
             #         if target_create_time == 0.0:
-            #             # tell _refresh_pair_array that we are looking
+            #             # tell _clean_pair_array that we are looking
             #             # for this remote
             #             self.missing_remotes |= {remote}
             #

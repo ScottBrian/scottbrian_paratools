@@ -64,6 +64,8 @@ RequestKey: TypeAlias = tuple[str, str, str]
 
 SubProcessKey: TypeAlias = tuple[str, str, str, str, str]
 
+RemKey: TypeAlias = tuple[str, str]
+
 
 ########################################################################
 # SendRecvMsgs
@@ -4272,7 +4274,6 @@ class ThreadTracker:
     is_TargetThread: bool
     st_state: st.ThreadState
     found_del_pairs: dict[tuple[str, str, str], int]
-    num_refresh: int = 0
     stopped_by: str = ''
 
 
@@ -4336,8 +4337,8 @@ list_of_smart_requests = ('(smart_init'
                           '|smart_sync)')
 
 list_of_sub_processes = ('(_register'
-                         '|_refresh_registry'
-                         '|_refresh_pair_array'
+                         '|_clean_registry'
+                         '|_clean_pair_array'
                          '|_add_to_pair_array)')
 
 
@@ -4545,123 +4546,6 @@ class SubProcessEntryExitLogSearchItem(LogSearchItem):
 
 
 ########################################################################
-# CleanUpRegLogSearchItem
-########################################################################
-class CleanUpRegLogSearchItem(LogSearchItem):
-    """Input to search log msgs."""
-
-    def __init__(self,
-                 config_ver: "ConfigVerifier",
-                 found_log_msg: str = '',
-                 found_log_idx: int = 0,
-                 ) -> None:
-        """Initialize the LogItem.
-
-        Args:
-            config_ver: configuration verifier
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-        """
-        super().__init__(
-            search_str=('[a-z]+ (entered|exiting) _refresh_registry '
-                        f'for [a-z]+ for request {list_of_smart_requests}'),
-            config_ver=config_ver,
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx
-        )
-
-    def get_found_log_item(self,
-                           found_log_msg: str,
-                           found_log_idx: int) -> "CleanUpRegLogSearchItem":
-        """Return a found log item.
-
-        Args:
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-
-        Returns:
-            CleanUpRegLogSearchItem containing found message and index
-        """
-        return CleanUpRegLogSearchItem(
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx,
-            config_ver=self.config_ver)
-
-    def run_process(self):
-        """Run the process to handle the log message."""
-        split_msg = self.found_log_msg.split()
-        cmd_runner = split_msg[0]
-        entry_exit = split_msg[1]
-        target = split_msg[4]
-        request = split_msg[7]
-
-        self.config_ver.handle_clean_up_reg_log_msg(
-            cmd_runner=cmd_runner,
-            entry_exit=entry_exit,
-            target=target,
-            request=request,
-            log_msg=self.found_log_msg)
-
-
-########################################################################
-# CleanUpPairArrayLogSearchItem
-########################################################################
-class CleanUpPairArrayLogSearchItem(LogSearchItem):
-    """Input to search log msgs."""
-
-    def __init__(self,
-                 config_ver: "ConfigVerifier",
-                 found_log_msg: str = '',
-                 found_log_idx: int = 0,
-                 ) -> None:
-        """Initialize the LogItem.
-
-        Args:
-            config_ver: configuration verifier
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-        """
-        super().__init__(
-            search_str=('[a-z]+ (entered|exiting) _refresh_pair_array '
-                        f'for [a-z]+ for request {list_of_smart_requests}'),
-            config_ver=config_ver,
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx
-        )
-
-    def get_found_log_item(self,
-                           found_log_msg: str,
-                           found_log_idx: int) -> "CleanUpPairArrayLogSearchItem":
-        """Return a found log item.
-
-        Args:
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-
-        Returns:
-            CleanUpPairArrayLogSearchItem containing found message and index
-        """
-        return CleanUpPairArrayLogSearchItem(
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx,
-            config_ver=self.config_ver)
-
-    def run_process(self):
-        """Run the process to handle the log message."""
-        split_msg = self.found_log_msg.split()
-        cmd_runner = split_msg[0]
-        entry_exit = split_msg[1]
-        target = split_msg[4]
-        request = split_msg[7]
-
-        self.config_ver.handle_clean_up_reg_log_msg(
-            cmd_runner=cmd_runner,
-            entry_exit=entry_exit,
-            target=target,
-            request=request,
-            log_msg=self.found_log_msg)
-
-########################################################################
 # RegistryStatusLogSearchItem
 ########################################################################
 class RegistryStatusLogSearchItem(LogSearchItem):
@@ -4721,10 +4605,64 @@ class RegistryStatusLogSearchItem(LogSearchItem):
         self.config_ver.pending_events[
             target].status_msg[(is_alive, state)] -= 1
 
-        if target == self.config_ver.commander_name:
-            self.config_ver.set_pending_status_msgs()
-
         self.config_ver.add_log_msg(re.escape(self.found_log_msg))
+
+
+########################################################################
+# RegRemoveLogSearchItem
+########################################################################
+class RegRemoveLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+        """
+        super().__init__(
+            search_str=("[a-z]+ removed [a-z]+ from registry for "
+                        f"process={list_of_smart_requests}"),
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int) -> "RegRemoveLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            RegRemoveLogSearchItem containing found message and index
+        """
+        return RegRemoveLogSearchItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+    def run_process(self):
+        """Run the process to handle the log message."""
+        split_msg = self.found_log_msg.split()
+        cmd_runner = split_msg[0]
+        rem_name = split_msg[2]
+        process = split_msg[6].split(sep='=')[1]
+        process = process[1:-1]
+
+        self.config_ver.handle_rem_reg_log_msg(cmd_runner=cmd_runner,
+                                               rem_name=rem_name,
+                                               process=process,
+                                               log_msg=self.found_log_msg)
 
 
 ########################################################################
@@ -4746,7 +4684,7 @@ class AddPaLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str=("[a-z]+ created _refresh_pair_array with "
+            search_str=("[a-z]+ created _clean_pair_array with "
                         r"pair_key = \('[a-z]+', '[a-z]+'\)"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -4945,9 +4883,9 @@ class AddRegLogSearchItem(LogSearchItem):
 
 
 ########################################################################
-# RegRemoveLogSearchItem
+# DidCleanRegLogSearchItem
 ########################################################################
-class RegRemoveLogSearchItem(LogSearchItem):
+class DidCleanRegLogSearchItem(LogSearchItem):
     """Input to search log msgs."""
 
     def __init__(self,
@@ -4963,63 +4901,6 @@ class RegRemoveLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str=("[a-z]+ removed [a-z]+ from registry for "
-                        "process='(join|smart_unreg)'"),
-            config_ver=config_ver,
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx
-        )
-
-    def get_found_log_item(self,
-                           found_log_msg: str,
-                           found_log_idx: int) -> "RegRemoveLogSearchItem":
-        """Return a found log item.
-
-        Args:
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-
-        Returns:
-            RegRemoveLogSearchItem containing found message and index
-        """
-        return RegRemoveLogSearchItem(
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx,
-            config_ver=self.config_ver)
-
-    def run_process(self):
-        """Run the process to handle the log message."""
-        split_msg = self.found_log_msg.split()
-        process = split_msg[6].split(sep='=')[1]
-        process = process[1:-1]
-
-        self.config_ver.handle_reg_remove(cmd_runner=split_msg[0],
-                                          del_name=split_msg[2],
-                                          process=process,
-                                          reg_rem_log_idx=self.found_log_idx)
-
-
-########################################################################
-# CleanRegLogSearchItem
-########################################################################
-class CleanRegLogSearchItem(LogSearchItem):
-    """Input to search log msgs."""
-
-    def __init__(self,
-                 config_ver: "ConfigVerifier",
-                 found_log_msg: str = '',
-                 found_log_idx: int = 0,
-                 ) -> None:
-        """Initialize the LogItem.
-
-        Args:
-            config_ver: configuration verifier
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-        """
-        super().__init__(
-            # search_str=(f"[a-z]+ did cleanup of registry at UTC {time_match}, "
-            #             r"deleted \[[a-z', ]+\]"),
             search_str=(f"[a-z]+ did cleanup of registry at UTC {time_match}, "
                         r"deleted \[('[a-z]+'|, )+\]"),
             config_ver=config_ver,
@@ -5029,7 +4910,7 @@ class CleanRegLogSearchItem(LogSearchItem):
 
     def get_found_log_item(self,
                            found_log_msg: str,
-                           found_log_idx: int) -> "CleanRegLogSearchItem":
+                           found_log_idx: int) -> "DidCleanRegLogSearchItem":
         """Return a found log item.
 
         Args:
@@ -5037,17 +4918,28 @@ class CleanRegLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
 
         Returns:
-            CleanRegLogSearchItem containing found message and index
+            DidCleanRegLogSearchItem containing found message and index
         """
-        return CleanRegLogSearchItem(
+        return DidCleanRegLogSearchItem(
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
     def run_process(self):
         """Run the process to handle the log message."""
+        split_msg = self.found_log_msg.split()
+        cmd_runner = split_msg[0]
+        target_msg = self.found_log_msg.split('[')[1].split(']')[0].split(', ')
+
+        targets: list[str] = []
+        for item in target_msg:
+            targets.append(item[1:-1])
+
+        self.handle_did_clean_reg_log_msg(cmd_runner=cmd_runner,
+                                          targets=targets,
+                                          log_msg=self.found_log_msg)
+
         self.config_ver.add_log_msg(re.escape(self.found_log_msg))
-        self.config_ver.last_clean_reg_log_msg = self.found_log_msg
 
 
 ########################################################################
@@ -5714,15 +5606,13 @@ class CheckPendingEventsLogSearchItem(LogSearchItem):
 LogSearchItems: TypeAlias = Union[
     RequestEntryExitLogSearchItem,
     SubProcessEntryExitLogSearchItem,
-    CleanUpRegLogSearchItem,
-    CleanUpPairArrayLogSearchItem,
     RegistryStatusLogSearchItem,
     AddPaLogSearchItem,
     AddStatusBlockLogSearchItem,
     UpdatePaLogSearchItem,
     AddRegLogSearchItem,
     RegRemoveLogSearchItem,
-    CleanRegLogSearchItem,
+    DidCleanRegLogSearchItem,
     RecvMsgLogSearchItem,
     WaitResumedLogSearchItem,
     SetStateLogSearchItem,
@@ -5870,10 +5760,14 @@ class PendingEvent:
     """Pending event class."""
     start_request: deque[StartRequest]
     current_request: StartRequest
+    num_targets_remaining: int
     request_msg: dict[RequestKey, int]
     subprocess_msg: dict[SubProcessKey, int]
     set_state_msg: dict[SetStateKey, int]
     status_msg: dict[tuple[bool, st.ThreadState], int]
+    rem_reg_msg: dict[RemKey, int]
+    did_clean_reg_msg: int
+    rem_reg_targets: deque[list[str]]
     add_reg_msg: dict[AddRegKey, int]
     add_pair_array: dict[AddPaKey, int]
     add_status_block_msg: dict[AddStatusBlockKey, int]
@@ -5978,15 +5872,13 @@ class ConfigVerifier:
         self.log_search_items: tuple[LogSearchItems, ...] = (
             RequestEntryExitLogSearchItem(config_ver=self),
             SubProcessEntryExitLogSearchItem(config_ver=self),
-            CleanUpRegLogSearchItem(config_ver=self),
-            CleanUpPairArrayLogSearchItem(config_ver=self),
             RegistryStatusLogSearchItem(config_ver=self),
             AddPaLogSearchItem(config_ver=self),
             AddStatusBlockLogSearchItem(config_ver=self),
             UpdatePaLogSearchItem(config_ver=self),
             AddRegLogSearchItem(config_ver=self),
             RegRemoveLogSearchItem(config_ver=self),
-            CleanRegLogSearchItem(config_ver=self),
+            DidCleanRegLogSearchItem(config_ver=self),
             RecvMsgLogSearchItem(config_ver=self),
             WaitResumedLogSearchItem(config_ver=self),
             SetStateLogSearchItem(config_ver=self),
@@ -6003,8 +5895,6 @@ class ConfigVerifier:
         self.last_update_pair_array_log_msg: str = ''
         self.add_thread_cmd_runner_for_upa_msg: str = ''
 
-        self.last_clean_reg_log_msg: str = ''
-
         self.log_found_items: deque[LogSearchItem] = deque()
 
         self.pending_events: dict[str, PendingEvent] = {}
@@ -6017,10 +5907,14 @@ class ConfigVerifier:
                                              timeout_remotes=set(),
                                              stopped_remotes=set(),
                                              deadlock_remotes=set()),
+                num_targets_remaining=0,
                 request_msg=defaultdict(int),
                 subprocess_msg=defaultdict(int),
                 set_state_msg=defaultdict(int),
                 status_msg=defaultdict(int),
+                rem_reg_msg=defaultdict(int),
+                did_clean_reg_msg=0,
+                rem_reg_targets=deque(),
                 add_reg_msg=defaultdict(int),
                 add_pair_array=defaultdict(int),
                 add_status_block_msg=defaultdict(int),
@@ -6292,7 +6186,7 @@ class ConfigVerifier:
                     f"smart_start exit: requestor: {cmd_runner} targets: "
                     fr"\['{new_name}'\] timeout value:")
 
-        # self.add_log_msg(f'{cmd_runner} entered _refresh_pair_array')
+        # self.add_log_msg(f'{cmd_runner} entered _clean_pair_array')
 
         # self.handle_deferred_delete_log_msgs(cmd_runner=cmd_runner)
         # handle any deferred deletes
@@ -13727,7 +13621,7 @@ class ConfigVerifier:
                 self.del_deferred_list.remove(del_def_key)
                 update_pair_array_msg_needed = True
                 self.log_test_msg(f'handle_deferred_deletes {cmd_runner=} '
-                                  f'_refresh_pair_array rem_pair_key 1'
+                                  f'_clean_pair_array rem_pair_key 1'
                                   f' {pair_key}, {def_del_name}')
                 rem_msg_1 = "[a-z]+ "
                 rem_msg_2 = re.escape(
@@ -13750,54 +13644,39 @@ class ConfigVerifier:
         return update_pair_array_msg_needed
 
     ####################################################################
-    # handle_clean_up_reg_log_msg
+    # handle_deferred_deletes
     ####################################################################
-    def handle_clean_up_reg_log_msg(self,
-                                    cmd_runner: str,
-                                    entry_exit: str,
-                                    target: str,
-                                    request: str,
-                                    log_msg: str) -> None:
-        """Determine next steps for enter _refresh_registry.
+    def handle_did_clean_reg_log_msg(self,
+                                     cmd_runner: str,
+                                     targets: list[str],
+                                     log_msg: str) -> None:
+        """Handle the did cleanup of registry log message.
 
         Args:
-            cmd_runner: thread name doing the pair array refresh
-            entry_exit: specifies whether this is entry or exit msg
-            target: thread name that is the target of the request
-            request: name of request
-            log_msg: refresh pair array log message
+            cmd_runner: thread name that did the cleanup
+            targets: thread names that were removed
+            log_msg: did cleanup log message
 
         """
         pe = self.pending_events[cmd_runner]
 
-        clean_key: CleanRegKey = (cmd_runner,
-                                  entry_exit,
-                                  target,
-                                  request)
+        if pe.did_clean_reg_msg <= 0:
+            raise UnexpectedEvent(f'handle_did_clean_reg_log_msg encountered '
+                                  f'unexpected log msg: {log_msg}')
 
-        if pe.clean_up_reg_msg[clean_key] <= 0:
-            raise UnexpectedEvent(f'handle_clean_up_reg_log_msg '
-                                  f'encountered unexpected log msg: {log_msg}')
-
-        pe.clean_up_reg_msg -= 1
+        pe.did_clean_reg_msg -= 1
         self.add_log_msg(log_msg)
 
         ################################################################
-        # determine next step
+        # verify list of targets
         ################################################################
-        if entry_exit == 'entered':
-            # if commander is initializing, no status msgs yet
-            if target == self.commander_name:
-                state_key: SetStateKey = (target,
-                                          target,
-                                          st.ThreadState.Initializing,
-                                          st.ThreadState.Registered)
-                pe.set_state_msg[state_key] += 1
-            else:  # expect to see status message, starting with commander
-                self.pending_events[self.commander_name].status_msg[
-                    (True, st.ThreadState.Alive)] += 1
-        elif entry_exit == 'exiting':
+        rem_reg_list = pe.rem_reg_targets.pop()
 
+        if rem_reg_list != targets:
+            raise IncorrectDataDetected(
+                'handle_did_clean_reg_log_msg detected that the list of '
+                f'removed targets {rem_reg_list} did not match the '
+                f'log msg: {log_msg}')
 
     ####################################################################
     # handle_enter_rpa_log_msg
@@ -13857,7 +13736,7 @@ class ConfigVerifier:
         # reset the pending_recv_msg_par to empty.
 
         # self.add_log_msg(re.escape(
-        #     f'{cmd_runner} entered _refresh_pair_array'))
+        #     f'{cmd_runner} entered _clean_pair_array'))
 
         # with self.ops_lock:
         #     if self.pending_recv_msg_par[cmd_runner]:
@@ -14077,7 +13956,7 @@ class ConfigVerifier:
         self.log_test_msg(f'handle_pair_array_update entry for {cmd_runner=}')
 
         # self.add_log_msg(re.escape(
-        #     f'{cmd_runner} entered _refresh_pair_array'))
+        #     f'{cmd_runner} entered _clean_pair_array'))
         self.add_log_msg(re.escape(upa_msg))
 
         with self.ops_lock:
@@ -14493,7 +14372,7 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
                                   request_name,
-                                  '_refresh_registry',
+                                  '_clean_registry',
                                   'entry',
                                   target)
         pe.subprocess_msg[sub_key] += 1
@@ -14515,7 +14394,7 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
                                   request_name,
-                                  '_refresh_registry',
+                                  '_clean_registry',
                                   'entry',
                                   target)
         pe.subprocess_msg[sub_key] += 1
@@ -14537,7 +14416,7 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
                                   request_name,
-                                  '_refresh_registry',
+                                  '_clean_registry',
                                   'entry',
                                   target)
         pe.subprocess_msg[sub_key] += 1
@@ -14559,7 +14438,7 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
                                   request_name,
-                                  '_refresh_registry',
+                                  '_clean_registry',
                                   'entry',
                                   target)
         pe.subprocess_msg[sub_key] += 1
@@ -14581,7 +14460,7 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
                                   request_name,
-                                  '_refresh_registry',
+                                  '_clean_registry',
                                   'entry',
                                   target)
         pe.subprocess_msg[sub_key] += 1
@@ -14603,7 +14482,7 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
                                   request_name,
-                                  '_refresh_registry',
+                                  '_clean_registry',
                                   'entry',
                                   target)
         pe.subprocess_msg[sub_key] += 1
@@ -14625,7 +14504,7 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
                                   request_name,
-                                  '_refresh_registry',
+                                  '_clean_registry',
                                   'entry',
                                   target)
         pe.subprocess_msg[sub_key] += 1
@@ -14647,7 +14526,7 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
                                   request_name,
-                                  '_refresh_registry',
+                                  '_clean_registry',
                                   'entry',
                                   target)
         pe.subprocess_msg[sub_key] += 1
@@ -14669,7 +14548,7 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
                                   request_name,
-                                  '_refresh_registry',
+                                  '_clean_registry',
                                   'entry',
                                   target)
         pe.subprocess_msg[sub_key] += 1
@@ -14691,7 +14570,7 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
                                   request_name,
-                                  '_refresh_registry',
+                                  '_clean_registry',
                                   'entry',
                                   target)
         pe.subprocess_msg[sub_key] += 1
@@ -14713,7 +14592,7 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
                                   request_name,
-                                  '_refresh_registry',
+                                  '_clean_registry',
                                   'entry',
                                   target)
         pe.subprocess_msg[sub_key] += 1
@@ -14735,7 +14614,7 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
                                   request_name,
-                                  '_refresh_registry',
+                                  '_clean_registry',
                                   'entry',
                                   target)
         pe.subprocess_msg[sub_key] += 1
@@ -14757,7 +14636,7 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
                                   request_name,
-                                  '_refresh_registry',
+                                  '_clean_registry',
                                   'entry',
                                   target)
         pe.subprocess_msg[sub_key] += 1
@@ -14779,7 +14658,7 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
                                   request_name,
-                                  '_refresh_registry',
+                                  '_clean_registry',
                                   'entry',
                                   target)
         pe.subprocess_msg[sub_key] += 1
@@ -14801,7 +14680,7 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
                                   request_name,
-                                  '_refresh_registry',
+                                  '_clean_registry',
                                   'entry',
                                   target)
         pe.subprocess_msg[sub_key] += 1
@@ -14823,7 +14702,7 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
                                   request_name,
-                                  '_refresh_registry',
+                                  '_clean_registry',
                                   'entry',
                                   target)
         pe.subprocess_msg[sub_key] += 1
@@ -14876,61 +14755,95 @@ class ConfigVerifier:
         self.cmd_waiting_event_items[cmd_runner].set()
 
     ####################################################################
-    # handle_reg_remove
+    # handle_rem_reg_log_msg
     ####################################################################
-    def handle_reg_remove(self,
-                          cmd_runner: str,
-                          del_name: str,
-                          process: str,
-                          reg_rem_log_idx: int
+    def handle_rem_reg_log_msg(self,
+                               cmd_runner: str,
+                               rem_name: str,
+                               process: str,
+                               log_msg: str
                           ) -> None:
-        """Handle the send_cmd execution and log msgs.
+        """Handle the removed from registry log message.
 
         Args:
-            cmd_runner: name of thread doing the cmd
-            del_name: name of thread being removed
-            process: either join or smart_unreg
-            reg_rem_log_idx: index in log messages for reg remove msg
+            cmd_runner: thread name doing the cmd
+            rem_name: thread name that was removed
+            process: smart_thread request that was running
+            log_msg: removed from registry log message
+
         """
-        self.log_test_msg(f'handle_reg_remove entered: {cmd_runner=}, '
-                          f'{del_name=}, {process=}')
+        pe = self.pending_events[cmd_runner]
 
-        # with self.ops_lock:
-        #     # reg remove means that recv_msgs are no longer pending
-        #     self.pending_recv_msg_par = defaultdict(bool)
+        rem_key: RemKey = (rem_name,
+                           process)
+        pe.rem_reg_msg[rem_key] += 1
 
-        with self.ops_lock:
-            if process == 'join':
-                from_status = st.ThreadState.Alive
-            else:
-                from_status = st.ThreadState.Registered
+        if pe.rem_reg_msg[rem_key] <= 0:
+            raise UnexpectedEvent(f'handle_rem_reg_log_msg encountered '
+                                  f'unexpected log msg: {log_msg}')
 
-            self.expected_registered[del_name].is_alive = False
-            self.expected_registered[
-                del_name].st_state = st.ThreadState.Stopped
-            # if (not self.expected_registered[del_name].is_TargetThread
-            #         and process == 'join'):
-            #     self.add_log_msg(
-            #         f'{cmd_runner} set state for thread '
-            #         f'{del_name} '
-            #         f'from {from_status} to '
-            #         f'{st.ThreadState.Stopped}')
+        pe.rem_reg_msg[rem_key] -= 1
+        self.add_log_msg(re.escape(log_msg))
 
-            # self.handle_exp_status_log_msgs(log_idx=reg_rem_log_idx)
+        del self.expected_registered[rem_name]
 
-            del self.expected_registered[del_name]
-
-            self.add_log_msg(f'{cmd_runner} removed {del_name} from registry '
-                             f'for {process=}')
-
-            # self.add_log_msg(f'{cmd_runner} entered _refresh_pair_array')
-
-            self.update_pair_array_items.append(UpaItem(
-                upa_cmd_runner=cmd_runner,
-                upa_type='del',
-                upa_target=del_name,
-                upa_def_del_name='',
-                upa_process=process))
+    # ####################################################################
+    # # handle_reg_remove
+    # ####################################################################
+    # def handle_reg_remove(self,
+    #                       cmd_runner: str,
+    #                       del_name: str,
+    #                       process: str,
+    #                       reg_rem_log_idx: int
+    #                       ) -> None:
+    #     """Handle the removed from registry log message.
+    #
+    #     Args:
+    #         cmd_runner: name of thread doing the cmd
+    #         del_name: name of thread being removed
+    #         process: smart_thread request that was running
+    #         reg_rem_log_idx: index in log messages for reg remove msg
+    #
+    #     """
+    #     self.log_test_msg(f'handle_reg_remove entered: {cmd_runner=}, '
+    #                       f'{del_name=}, {process=}')
+    #
+    #     # with self.ops_lock:
+    #     #     # reg remove means that recv_msgs are no longer pending
+    #     #     self.pending_recv_msg_par = defaultdict(bool)
+    #
+    #     with self.ops_lock:
+    #         if process == 'join':
+    #             from_status = st.ThreadState.Alive
+    #         else:
+    #             from_status = st.ThreadState.Registered
+    #
+    #         self.expected_registered[del_name].is_alive = False
+    #         self.expected_registered[
+    #             del_name].st_state = st.ThreadState.Stopped
+    #         # if (not self.expected_registered[del_name].is_TargetThread
+    #         #         and process == 'join'):
+    #         #     self.add_log_msg(
+    #         #         f'{cmd_runner} set state for thread '
+    #         #         f'{del_name} '
+    #         #         f'from {from_status} to '
+    #         #         f'{st.ThreadState.Stopped}')
+    #
+    #         # self.handle_exp_status_log_msgs(log_idx=reg_rem_log_idx)
+    #
+    #         del self.expected_registered[del_name]
+    #
+    #         self.add_log_msg(f'{cmd_runner} removed {del_name} from registry '
+    #                          f'for {process=}')
+    #
+    #         # self.add_log_msg(f'{cmd_runner} entered _clean_pair_array')
+    #
+    #         self.update_pair_array_items.append(UpaItem(
+    #             upa_cmd_runner=cmd_runner,
+    #             upa_type='del',
+    #             upa_target=del_name,
+    #             upa_def_del_name='',
+    #             upa_process=process))
 
     ####################################################################
     # handle_add_pair_array_log_msg
@@ -15409,9 +15322,9 @@ class ConfigVerifier:
             target: thread name getting its state changed
 
         """
-        ############################################################
+        ################################################################
         # next step is register
-        ############################################################
+        ################################################################
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
                                   'smart_init',
@@ -15433,9 +15346,9 @@ class ConfigVerifier:
             target: thread name getting its state changed
 
         """
-        ############################################################
+        ################################################################
         # determine next step
-        ############################################################
+        ################################################################
         pe = self.pending_events[cmd_runner]
         if self.expected_registered[target].is_alive:
             key: SetStateKey = (cmd_runner,
@@ -15464,18 +15377,19 @@ class ConfigVerifier:
             target: thread name getting its state changed
 
         """
-        ############################################################
+        ################################################################
         # determine next step
-        ############################################################
+        ################################################################
+        # @sbt - need to think about non-ThreadTarget cases ending
+        # before we get back control from the threading start method,
+        # in which case we will need to expected a set state from
+        # starting to stopped
         pe = self.pending_events[cmd_runner]
-
-        if self.expected_registered[target].is_alive == True:
-            sub_key: SubProcessKey = (cmd_runner,
-                                      'smart_init',
-                                      '_register',
-                                      'entry',
-                                      target)
-            pe.subprocess_msg[sub_key] += 1
+        key: SetStateKey = (cmd_runner,
+                            target,
+                            st.ThreadState.Starting,
+                            st.ThreadState.Alive)
+        pe.set_state_msg[key] += 1
 
     ####################################################################
     # handle_set_state_reg_to_alive
@@ -15490,9 +15404,9 @@ class ConfigVerifier:
             target: thread name getting its state changed
 
         """
-        ############################################################
+        ################################################################
         # next step is to add entry to pair array
-        ############################################################
+        ################################################################
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
                                   'smart_init',
@@ -15516,16 +15430,17 @@ class ConfigVerifier:
         """
         self.expected_registered[target].is_alive = True
 
-        ############################################################
-        # next step is register
-        ############################################################
+        ################################################################
+        # determine next step
+        ################################################################
         pe = self.pending_events[cmd_runner]
-        sub_key: SubProcessKey = (cmd_runner,
-                                  'smart_init',
-                                  '_register',
-                                  'entry',
-                                  target)
-        pe.subprocess_msg[sub_key] += 1
+        pe.num_targets_remaining -= 1
+        if pe.num_targets_remaining == 0:
+            req_key: RequestKey = (cmd_runner,
+                                   'smart_start',
+                                   'exit')
+
+            pe.request_msg[req_key] += 1
 
     ####################################################################
     # handle_set_state_reg_to_stop
@@ -15540,13 +15455,13 @@ class ConfigVerifier:
             target: thread name getting its state changed
 
         """
-        ############################################################
+        ################################################################
         # next step is register
-        ############################################################
+        ################################################################
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
-                                  'smart_init',
-                                  '_register',
+                                  'smart_unreg',
+                                  '_clean_registry',
                                   'entry',
                                   target)
         pe.subprocess_msg[sub_key] += 1
@@ -15566,16 +15481,17 @@ class ConfigVerifier:
         """
         self.expected_registered[target].is_alive = False
 
-        ############################################################
+        ################################################################
         # next step is register
-        ############################################################
+        ################################################################
         pe = self.pending_events[cmd_runner]
-        sub_key: SubProcessKey = (cmd_runner,
-                                  'smart_init',
-                                  '_register',
-                                  'entry',
-                                  target)
-        pe.subprocess_msg[sub_key] += 1
+        if pe.current_request.req_type == st.ReqType.Smart_join:
+            sub_key: SubProcessKey = (cmd_runner,
+                                      'smart_init',
+                                      '_clean_registry',
+                                      'entry',
+                                      target)
+            pe.subprocess_msg[sub_key] += 1
 
     ####################################################################
     # handle_start
@@ -15740,14 +15656,14 @@ class ConfigVerifier:
                 self.handle_subprocess_register_entry,
             ('_register', 'exit'):
                 self.handle_subprocess_register_exit,
-            ('_refresh_registry', 'entry'):
-                self.handle_subprocess_refresh_registry_entry,
-            ('_refresh_registry', 'exit'):
-                self.handle_subprocess_refresh_registry_exit,
-            ('_refresh_pair_array', 'entry'):
-                self.handle_subprocess_refresh_pair_array_entry,
-            ('__refresh_pair_array', 'exit'):
-                self.handle_subprocess_refresh_pair_array_exit,
+            ('_clean_registry', 'entry'):
+                self.handle_subprocess_clean_registry_entry,
+            ('_clean_registry', 'exit'):
+                self.handle_subprocess_clean_registry_exit,
+            ('_clean_pair_array', 'entry'):
+                self.handle_subprocess_clean_pair_array_entry,
+            ('_clean_pair_array', 'exit'):
+                self.handle_subprocess_clean_pair_array_exit,
             ('_add_to_pair_array', 'entry'):
                 self.handle_subprocess_add_to_pair_array_entry,
             ('_add_to_pair_array', 'exit'):
@@ -15779,7 +15695,7 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
                                   request_name,
-                                  '_refresh_registry',
+                                  '_clean_registry',
                                   'entry',
                                   target)
         pe.subprocess_msg[sub_key] += 1
@@ -15811,12 +15727,12 @@ class ConfigVerifier:
         pe.request_msg[req_key] += 1
 
     ####################################################################
-    # handle_subprocess_refresh_registry_entry
+    # handle_subprocess_clean_registry_entry
     ####################################################################
-    def handle_subprocess_refresh_registry_entry(self,
-                                                 cmd_runner: str,
-                                                 request_name: str,
-                                                 target: str) -> None:
+    def handle_subprocess_clean_registry_entry(self,
+                                               cmd_runner: str,
+                                               request_name: str,
+                                               target: str) -> None:
         """Handle the subprocess entry for a request.
 
         Args:
@@ -15833,22 +15749,45 @@ class ConfigVerifier:
         if request_name == 'smart_init' and target == self.commander_name:
             sub_key: SubProcessKey = (cmd_runner,
                                       request_name,
-                                      '_refresh_registry',
+                                      '_clean_registry',
                                       'exit',
                                       target)
             pe.subprocess_msg[sub_key] += 1
         else:  # expect to see status message, starting with commander
-            self.pending_events[self.commander_name].status_msg[
-                (True, st.ThreadState.Alive)] += 1
+            rem_targets: list[str] = []
+            with self.ops_lock:
+                for key, item in self.expected_registered.items():
+                    if (not item.is_alive
+                            and item.st_state == st.ThreadState.Alive):
+                        state_to_use = st.ThreadState.Stopped
+                    else:
+                        state_to_use = item.st_state
+                    self.pending_events[key].status_msg[
+                        (item.is_alive, state_to_use)] += 1
+                    if (not item.is_alive
+                            and item.st_state == st.ThreadState.Stopped):
+                        rem_key: RemKey = (key,
+                                           pe.current_request.req_type.value())
+                        pe.rem_reg_msg[rem_key] += 1
+                        rem_targets.append(key)
+                if rem_targets:
+                    pe.did_clean_reg_msg += 1
+                    pe.rem_reg_targets.append(rem_targets)
 
+            sub_key: SubProcessKey = (cmd_runner,
+                                      request_name,
+                                      '_clean_registry',
+                                      'exit',
+                                      target)
+            pe.subprocess_msg[sub_key] += 1
 
     ####################################################################
-    # handle_subprocess_refresh_registry_exit
+    # handle_subprocess_clean_registry_exit
     ####################################################################
-    def handle_subprocess_refresh_registry_exit(self,
-                                                cmd_runner: str,
-                                                request_name: str,
-                                                target: str) -> None:
+    def handle_subprocess_clean_registry_exit(self,
+                                              cmd_runner: str,
+                                              request_name: str,
+                                              target: str) -> None:
         """Handle the subprocess exit for a request.
 
         Args:
@@ -15863,18 +15802,18 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
                                   request_name,
-                                  '_refresh_pair_array',
+                                  '_clean_pair_array',
                                   'entry',
                                   target)
         pe.subprocess_msg[sub_key] += 1
 
     ####################################################################
-    # handle_subprocess_refresh_pair_array_entry
+    # handle_subprocess_clean_pair_array_entry
     ####################################################################
-    def handle_subprocess_refresh_pair_array_entry(self,
-                                                   cmd_runner: str,
-                                                   request_name: str,
-                                                   target: str) -> None:
+    def handle_subprocess_clean_pair_array_entry(self,
+                                                 cmd_runner: str,
+                                                 request_name: str,
+                                                 target: str) -> None:
         """Handle the subprocess entry for a request.
 
         Args:
@@ -15891,7 +15830,7 @@ class ConfigVerifier:
         if request_name == 'smart_init' and target == self.commander_name:
             sub_key: SubProcessKey = (cmd_runner,
                                       request_name,
-                                      '_refresh_pair_array',
+                                      '_clean_pair_array',
                                       'exit',
                                       target)
             pe.subprocess_msg[sub_key] += 1
@@ -15899,12 +15838,12 @@ class ConfigVerifier:
             pass
 
     ####################################################################
-    # handle_subprocess_refresh_pair_array_exit
+    # handle_subprocess_clean_pair_array_exit
     ####################################################################
-    def handle_subprocess_refresh_pair_array_exit(self,
-                                                  cmd_runner: str,
-                                                  request_name: str,
-                                                  target: str) -> None:
+    def handle_subprocess_clean_pair_array_exit(self,
+                                                cmd_runner: str,
+                                                request_name: str,
+                                                target: str) -> None:
         """Handle the subprocess exit for a request.
 
         Args:
@@ -16739,22 +16678,22 @@ class ConfigVerifier:
                 cmd.run_process(cmd_runner=self.commander_name)
                 self.completed_cmds[self.commander_name].append(cmd.serial_num)
 
-    ####################################################################
-    # set_pending_status_msgs
-    ####################################################################
-    def set_pending_status_msgs(self) -> None:
-        """Set the expected status msgs displayed from reg cleanup."""
-        self.log_test_msg('set_pending_status_msgs entered with '
-                          f'{self.expected_registered=}')
-        for name, item in self.expected_registered.items():
-            if name == self.commander_name:
-                continue
-            if not item.is_alive and item.st_state == st.ThreadState.Alive:
-                state_to_use = st.ThreadState.Stopped
-            else:
-                state_to_use = item.st_state
-            self.pending_events[name].status_msg[
-                (item.is_alive, state_to_use)] += 1
+    # ####################################################################
+    # # set_pending_status_msgs
+    # ####################################################################
+    # def set_pending_status_msgs(self) -> None:
+    #     """Set the expected status msgs displayed from reg cleanup."""
+    #     self.log_test_msg('set_pending_status_msgs entered with '
+    #                       f'{self.expected_registered=}')
+    #     for name, item in self.expected_registered.items():
+    #         if name == self.commander_name:
+    #             continue
+    #         if not item.is_alive and item.st_state == st.ThreadState.Alive:
+    #             state_to_use = st.ThreadState.Stopped
+    #         else:
+    #             state_to_use = item.st_state
+    #         self.pending_events[name].status_msg[
+    #             (item.is_alive, state_to_use)] += 1
 
     ####################################################################
     # set_recv_timeout
@@ -16901,7 +16840,7 @@ class ConfigVerifier:
                             reset_ops_count=False)}
                     self.add_log_msg(re.escape(
                         f"{cmd_runner} created "
-                        "_refresh_pair_array with "
+                        "_clean_pair_array with "
                         f"pair_key = {pair_key}"))
 
                     self.log_test_msg(f'{cmd_runner} update_pair_array_add '
@@ -16912,7 +16851,7 @@ class ConfigVerifier:
 
                     for pair_name in pair_key:
                         self.log_test_msg('update_pair_array_add '
-                                          '_refresh_pair_array add_pair_key 1 '
+                                          '_clean_pair_array add_pair_key 1 '
                                           f'{pair_key}, {pair_name}')
                         self.add_log_msg(re.escape(
                             f"{cmd_runner} added status_blocks entry "
@@ -16948,7 +16887,7 @@ class ConfigVerifier:
                         pending_ops_count=name_poc,
                         reset_ops_count=False)
                     self.log_test_msg('update_pair_array_add '
-                                      '_refresh_pair_array add_pair_key 2 '
+                                      '_clean_pair_array add_pair_key 2 '
                                       f'{pair_key}, {new_name}')
                     self.add_log_msg(re.escape(
                         f"{cmd_runner} added status_blocks entry "
@@ -17049,7 +16988,7 @@ class ConfigVerifier:
                     reset_ops_count=False)
 
                 # self.log_test_msg('update_pair_array_add '
-                #                   '_refresh_pair_array add_pair_key 2 '
+                #                   '_clean_pair_array add_pair_key 2 '
                 #                   f'{pair_key}, {add_name}')
 
                 add_status_key: AddStatusBlockKey = (cmd_runner,
@@ -17154,7 +17093,7 @@ class ConfigVerifier:
                     reset_ops_count=False)
 
                 # self.log_test_msg('update_pair_array_add '
-                #                   '_refresh_pair_array add_pair_key 2 '
+                #                   '_clean_pair_array add_pair_key 2 '
                 #                   f'{pair_key}, {target}')
 
                 add_status_key: AddStatusBlockKey = (cmd_runner,
@@ -19040,7 +18979,7 @@ class ConfigVerifier:
         ################################################################
         # find entered refresh pair array log msg
         ################################################################
-        search_msg = f'{cmd_runner} entered _refresh_pair_array'
+        search_msg = f'{cmd_runner} entered _clean_pair_array'
 
         log_msg, log_pos = self.get_log_msg(
             search_msg=search_msg,
@@ -22458,7 +22397,7 @@ class TestSmartThreadScenarios:
             ('alpha set state for thread alpha from '
              'ThreadState.Initializing to ThreadState.Alive'),
             'alpha added alpha to SmartThread registry at UTC',
-            'alpha entered _refresh_pair_array',
+            'alpha entered _clean_pair_array',
             ("smart_send entry: requestor: alpha receivers: "
              r"\['beta'\] timeout value: None "
              "test_smart_thread.py::TestSmartThreadScenarios."
@@ -22487,7 +22426,7 @@ class TestSmartThreadScenarios:
              "state=<ThreadState.Stopped: 32>"),
             ("alpha removed beta from registry for "
              "process='join'"),
-            'alpha entered _refresh_pair_array',
+            'alpha entered _clean_pair_array',
             ("alpha removed status_blocks entry for pair_key = "
              r"\('alpha', 'beta'\), name = beta"),
             ("alpha removed status_blocks entry for pair_key = "
@@ -22520,8 +22459,8 @@ class TestSmartThreadScenarios:
             ('alpha set state for thread beta from ThreadState.Initializing '
              'to ThreadState.Registered'),
             'alpha added beta to SmartThread registry at UTC',
-            'alpha entered _refresh_pair_array',
-            ("alpha created _refresh_pair_array with pair_key = "
+            'alpha entered _clean_pair_array',
+            ("alpha created _clean_pair_array with pair_key = "
              r"\('alpha', 'beta'\)"),
             ("alpha added status_blocks entry for pair_key = "
              r"\('alpha', 'beta'\), name = alpha"),
@@ -22545,7 +22484,7 @@ class TestSmartThreadScenarios:
              r"args=\('beta',\)\), is_alive\(\)=False, "
              "state=<ThreadState.Stopped: 32>"),
             "alpha removed beta from registry for process='smart_unreg'",
-            'alpha entered _refresh_pair_array',
+            'alpha entered _clean_pair_array',
             ("alpha removed status_blocks entry for pair_key = "
              r"\('alpha', 'beta'\), name = beta"),
             ("alpha removed status_blocks entry for pair_key = "
@@ -22588,8 +22527,8 @@ class TestSmartThreadScenarios:
              'ThreadState.Initializing to '
              'ThreadState.Registered'),
             'alpha added beta to SmartThread registry at UTC',
-            'alpha entered _refresh_pair_array',
-            ("alpha created _refresh_pair_array with pair_key "
+            'alpha entered _clean_pair_array',
+            ("alpha created _clean_pair_array with pair_key "
              r"= \('alpha', 'beta'\)"),
             ("alpha added status_blocks entry for pair_key "
              r"= \('alpha', 'beta'\), name = alpha"),
