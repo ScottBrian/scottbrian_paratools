@@ -6151,7 +6151,7 @@ class ConfigVerifier:
         # self.del_def_pairs_msg_ind_count: dict[
         #     tuple[str, str, str, str], int] = defaultdict(int)
 
-        self.del_deferred_list: list[tuple(tuple[str, str], str)] = []
+        self.del_deferred_list: list[tuple[tuple[str, str], str]] = []
 
         # self.found_utc_log_msgs: dict[tuple[str, str], int]= defaultdict(int)
         self.found_update_pair_array_log_msgs: dict[str, int] = defaultdict(
@@ -6332,71 +6332,151 @@ class ConfigVerifier:
                 self.monitor_condition.notify_all()
 
     ####################################################################
-    # set_pending_flags
+    # set_request_pending_flag
     ####################################################################
-    def set_pending_flags(self,
-                          cmd_runner: str,
-                          pair_key: st.PairKey,
-                          target: str,
-                          pending_request_flag: Optional[bool] = None,
-                          pending_msg_count: Optional[int] = None,
-                          pending_wait_flag: Optional[bool] = None,
-                          pending_sync_flag: Optional[bool] = None) -> None:
-        """Set or reset one or more pending flags.
+    def set_request_pending_flag(self,
+                                 cmd_runner: str,
+                                 targets: list[str],
+                                 pending_request_flag: bool) -> None:
+        """Set or reset request pending flags.
 
         Args:
             cmd_runner: thread name doing the set or reset
-            pair_key: pair key for the target
-            target: thread name of target whose flags are to be set
+            targets: thread names that are targets of request
             pending_request_flag: specifies value to set for request
-            pending_msg_count: specifies value to set for msg count
-            pending_wait_flag: specifies value to set for wait
-            pending_sync_flag: specifies value to set for sync
 
         """
-        if pair_key not in self.expected_pairs:
-            raise InvalidConfigurationDetected(
-                f'set_pending_flags detected {pair_key=} for {target=} is '
-                f'not in {self.expected_pairs=}.'
-            )
-        pae = self.expected_pairs[pair_key]
+        for target in targets:
+            pair_key = st.SmartThread._get_pair_key(cmd_runner, target)
+            if pair_key not in self.expected_pairs:
+                continue
 
-        if target not in pae:
-            raise InvalidConfigurationDetected(
-                f'set_pending_flags detected {pair_key=}, {target=} is '
-                f'not in {pae=}.'
-            )
+            pae = self.expected_pairs[pair_key]
 
-        cb = pae[target]
-
-        if pending_request_flag is not None:
-            self.log_test_msg(f'set_pending_flags {cmd_runner=}, '
+            cb = pae[cmd_runner]
+            self.log_test_msg(f'set_request_pending_flag {cmd_runner=}, '
                               f'{pair_key=}, {target=}, updating from '
                               f'{cb.pending_request=} to '
                               f'{pending_request_flag=}')
             cb.pending_request = pending_request_flag
 
-        if pending_msg_count is not None:
-            self.log_test_msg(f'set_pending_flags {cmd_runner=}, '
-                              f'{pair_key=}, {target=}, updating from '
-                              f'{cb.pending_msg_count=} to '
-                              f'{pending_msg_count=}')
-            cb.pending_msg_count = pending_msg_count
+    ####################################################################
+    # set_msg_pending_count
+    ####################################################################
+    def set_msg_pending_count(self,
+                              cmd_runner: str,
+                              target: str,
+                              pending_msg_adj: int) -> None:
+        """Set or reset one or more pending flags.
 
-        if pending_wait_flag is not None:
-            self.log_test_msg(f'set_pending_flags {cmd_runner=}, '
-                              f'{pair_key=}, {target=}, updating from '
-                              f'{cb.pending_wait=} to '
-                              f'{pending_wait_flag=}')
-            cb.pending_wait = pending_wait_flag
+        Args:
+            cmd_runner: thread name doing the set or reset
+            target: thread name whose msg count is to be set
+            pending_msg_adj: specifies value to add or subtract for msg
+                count
 
-        if pending_sync_flag is not None:
-            self.log_test_msg(f'set_pending_flags {cmd_runner=}, '
-                              f'{pair_key=}, {target=}, updating from '
-                              f'{cb.pending_sync=} to '
-                              f'{pending_sync_flag=}')
-            cb.pending_sync = pending_sync_flag
+        """
+        pair_key = st.SmartThread._get_pair_key(cmd_runner, target)
+        if pair_key not in self.expected_pairs:
+            raise InvalidConfigurationDetected(
+                f'set_msg_pending_count detected that for {cmd_runner=}, '
+                f'{target=}: {pair_key=} is not in the '
+                f'{self.expected_pairs=}'
+            )
 
+        pae = self.expected_pairs[pair_key]
+
+        if target not in pae:
+            raise InvalidConfigurationDetected(
+                f'set_msg_pending_count detected that for {cmd_runner=}, '
+                f'{pair_key=}: {target=} in not in the {pae=}'
+            )
+
+        cb = pae[target]
+        new_msg_count = cb.pending_msg_count + pending_msg_adj
+        self.log_test_msg(f'set_msg_pending_count {cmd_runner=}, '
+                          f'{pair_key=}, {target=}, updating from '
+                          f'{cb.pending_msg_count=} to '
+                          f'{new_msg_count=}')
+        cb.pending_msg_count = new_msg_count
+
+    ####################################################################
+    # set_wait_pending_flag
+    ####################################################################
+    def set_wait_pending_flag(self,
+                              cmd_runner: str,
+                              target: str,
+                              pending_wait_flag: bool) -> None:
+        """Set or reset one or more pending flags.
+
+        Args:
+            cmd_runner: thread name doing the set or reset
+            target: thread name whose msg count is to be set
+            pending_wait_flag: specifies True or False to set the flag
+
+        """
+        pair_key = st.SmartThread._get_pair_key(cmd_runner, target)
+        if pair_key not in self.expected_pairs:
+            raise InvalidConfigurationDetected(
+                f'set_wait_pending_flag detected that for {cmd_runner=}, '
+                f'{target=}: {pair_key=} is not in the '
+                f'{self.expected_pairs=}'
+            )
+
+        pae = self.expected_pairs[pair_key]
+
+        if target not in pae:
+            raise InvalidConfigurationDetected(
+                f'set_wait_pending_flag detected that for {cmd_runner=}, '
+                f'{pair_key=}: {target=} in not in the {pae=}'
+            )
+
+        cb = pae[target]
+
+        self.log_test_msg(f'set_wait_pending_flag {cmd_runner=}, '
+                          f'{pair_key=}, {target=}, updating from '
+                          f'{cb.pending_wait=} to '
+                          f'{pending_wait_flag=}')
+        cb.pending_wait = pending_wait_flag
+
+    ####################################################################
+    # set_sync_pending_flag
+    ####################################################################
+    def set_sync_pending_flag(self,
+                              cmd_runner: str,
+                              target: str,
+                              pending_sync_flag: bool) -> None:
+        """Set or reset one or more pending flags.
+
+        Args:
+            cmd_runner: thread name doing the set or reset
+            target: thread name whose msg count is to be set
+            pending_sync_flag: specifies True or False to set the flag
+
+        """
+        pair_key = st.SmartThread._get_pair_key(cmd_runner, target)
+        if pair_key not in self.expected_pairs:
+            raise InvalidConfigurationDetected(
+                f'set_sync_pending_flag detected that for {cmd_runner=}, '
+                f'{target=}: {pair_key=} is not in the '
+                f'{self.expected_pairs=}'
+            )
+
+        pae = self.expected_pairs[pair_key]
+
+        if target not in pae:
+            raise InvalidConfigurationDetected(
+                f'set_sync_pending_flag detected that for {cmd_runner=}, '
+                f'{pair_key=}: {target=} in not in the {pae=}'
+            )
+
+        cb = pae[target]
+
+        self.log_test_msg(f'set_sync_pending_flag {cmd_runner=}, '
+                          f'{pair_key=}, {target=}, updating from '
+                          f'{cb.pending_sync=} to '
+                          f'{pending_sync_flag=}')
+        cb.pending_sync = pending_sync_flag
 
     ####################################################################
     # abort_all_f1_threads
@@ -15147,6 +15227,15 @@ class ConfigVerifier:
 
             pe.current_request = req_start_item
 
+            if req_start_item.req_type.name in ('smart_send',
+                                                'smart_recv',
+                                                'smart_wait',
+                                                'smart_resume',
+                                                'smart_sync'):
+                self.set_request_pending_flag(cmd_runner=cmd_runner,
+                                              targets=targets,
+                                              pending_request_flag=True)
+
         ################################################################
         # call handler for request
         ################################################################
@@ -15192,35 +15281,44 @@ class ConfigVerifier:
         actions[(request_name, entry_exit)](cmd_runner=cmd_runner)
 
         if entry_exit == 'exit:':
+
+            if pe.current_request.req_type.name in ('smart_send',
+                                                    'smart_recv',
+                                                    'smart_wait',
+                                                    'smart_resume',
+                                                    'smart_sync'):
+                self.set_request_pending_flag(cmd_runner=cmd_runner,
+                                              targets=targets,
+                                              pending_request_flag=True)
+
             pe.current_request = StartRequest(req_type=st.ReqType.NoReq,
                                               targets=set(),
                                               not_registered_remotes=set(),
                                               timeout_remotes=set(),
                                               stopped_remotes=set(),
                                               deadlock_remotes=set())
-
-            if request_name in ('smart_send', 'smart_recv', 'smart_wait',
-                                'smart_resume', 'smart_sync'):
-                if cmd_runner in self.request_pending_pair_keys:
-                    if targets:
-                        for remote in targets:
-                            pair_key = st.SmartThread._get_pair_key(cmd_runner,
-                                                                    remote)
-                            if pair_key in self.request_pending_pair_keys[
-                                    cmd_runner]:
-                                self.request_pending_pair_keys[
-                                    cmd_runner].remove(pair_key)
-                                self.log_test_msg(
-                                    f'request_pending removed for '
-                                    f'{cmd_runner=}, {pair_key=}')
-                    else:
-                        removed_pair_keys = self.request_pending_pair_keys[
-                            cmd_runner]
-                        del self.request_pending_pair_keys[cmd_runner]
-                        self.log_test_msg(
-                            f'request_pending removed for {cmd_runner=}, '
-                            f'{removed_pair_keys=}')
-                self.handle_deferred_deletes(cmd_runner=cmd_runner)
+            # if request_name in ('smart_send', 'smart_recv', 'smart_wait',
+            #                     'smart_resume', 'smart_sync'):
+            #     if cmd_runner in self.request_pending_pair_keys:
+            #         if targets:
+            #             for remote in targets:
+            #                 pair_key = st.SmartThread._get_pair_key(cmd_runner,
+            #                                                         remote)
+            #                 if pair_key in self.request_pending_pair_keys[
+            #                         cmd_runner]:
+            #                     self.request_pending_pair_keys[
+            #                         cmd_runner].remove(pair_key)
+            #                     self.log_test_msg(
+            #                         f'request_pending removed for '
+            #                         f'{cmd_runner=}, {pair_key=}')
+            #         else:
+            #             removed_pair_keys = self.request_pending_pair_keys[
+            #                 cmd_runner]
+            #             del self.request_pending_pair_keys[cmd_runner]
+            #             self.log_test_msg(
+            #                 f'request_pending removed for {cmd_runner=}, '
+            #                 f'{removed_pair_keys=}')
+            #     self.handle_deferred_deletes(cmd_runner=cmd_runner)
 
     ####################################################################
     # handle_request_smart_init_entry
