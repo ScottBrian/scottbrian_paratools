@@ -5393,11 +5393,17 @@ class RecvMsgLogSearchItem(LogSearchItem):
     def run_process(self):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
+        cmd_runner = split_msg[0]
+        sender = split_msg[4]
 
-        self.config_ver.dec_ops_count(
-            cmd_runner=split_msg[0],
-            sender=split_msg[4],
-            dec_ops_type='smart_recv')
+        self.config_ver.set_msg_pending_count(receiver=cmd_runner,
+                                              sender=sender,
+                                              pending_msg_adj=-1)
+
+        # self.config_ver.dec_ops_count(
+        #     cmd_runner=split_msg[0],
+        #     sender=split_msg[4],
+        #     dec_ops_type='smart_recv')
 
 
 ########################################################################
@@ -5445,11 +5451,74 @@ class WaitResumedLogSearchItem(LogSearchItem):
     def run_process(self):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
+        cmd_runner = split_msg[0]
+        resumer = split_msg[4]
 
-        self.config_ver.dec_ops_count(
-            cmd_runner=split_msg[0],
-            sender=split_msg[4],
-            dec_ops_type='wait')
+        self.config_ver.set_wait_pending_flag(waiter=cmd_runner,
+                                              resumer=resumer,
+                                              pending_wait_flag=False)
+
+        # self.config_ver.dec_ops_count(
+        #     cmd_runner=split_msg[0],
+        #     sender=split_msg[4],
+        #     dec_ops_type='wait')
+
+
+########################################################################
+# SyncResumedLogSearchItem
+########################################################################
+class SyncResumedLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+        """
+        super().__init__(
+            search_str='[a-z]+ smart_sync resumed by [a-z]+',
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int
+                           ) -> "SyncResumedLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            SyncResumedLogSearchItem containing found message and index
+        """
+        return SyncResumedLogSearchItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+    def run_process(self):
+        """Run the process to handle the log message."""
+        split_msg = self.found_log_msg.split()
+        cmd_runner = split_msg[0]
+        resumer = split_msg[4]
+
+        self.config_ver.set_sync_pending_flag(waiter=cmd_runner,
+                                              resumer=resumer,
+                                              pending_sync_flag=False)
+
+        self.config_ver.add_log_msg(self.found_log_msg,
+                                    log_level=logging.INFO)
 
 
 ########################################################################
@@ -5570,55 +5639,6 @@ class CmdWaitingLogSearchItem(LogSearchItem):
 
 
 ########################################################################
-# SyncResumedLogSearchItem
-########################################################################
-class SyncResumedLogSearchItem(LogSearchItem):
-    """Input to search log msgs."""
-
-    def __init__(self,
-                 config_ver: "ConfigVerifier",
-                 found_log_msg: str = '',
-                 found_log_idx: int = 0,
-                 ) -> None:
-        """Initialize the LogItem.
-
-        Args:
-            config_ver: configuration verifier
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-        """
-        super().__init__(
-            search_str='[a-z]+ smart_sync resumed by [a-z]+',
-            config_ver=config_ver,
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx
-        )
-
-    def get_found_log_item(self,
-                           found_log_msg: str,
-                           found_log_idx: int
-                           ) -> "SyncResumedLogSearchItem":
-        """Return a found log item.
-
-        Args:
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-
-        Returns:
-            SyncResumedLogSearchItem containing found message and index
-        """
-        return SyncResumedLogSearchItem(
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx,
-            config_ver=self.config_ver)
-
-    def run_process(self):
-        """Run the process to handle the log message."""
-        self.config_ver.add_log_msg(self.found_log_msg,
-                                    log_level=logging.INFO)
-
-
-########################################################################
 # TestDebugLogSearchItem
 ########################################################################
 class TestDebugLogSearchItem(LogSearchItem):
@@ -5720,8 +5740,8 @@ class CRunnerRaisesLogSearchItem(LogSearchItem):
         # self.config_ver.log_test_msg(f'request msg parse {handle_name=}, '
         #                              f'{cmd_runner=}')
 
-        self.config_ver.handle_request_exit_log_msg(
-            cmd_runner=cmd_runner)
+        # self.config_ver.handle_request_exit_log_msg(
+        #     cmd_runner=cmd_runner)
         self.config_ver.log_test_msg('request_pending reset for '
                                      f'{cmd_runner=} raises error')
 
@@ -5778,8 +5798,8 @@ class RequestAckLogSearchItem(LogSearchItem):
         # self.config_ver.log_test_msg(f'request msg parse {cmd_runner=}, '
         #                              f'{target=}')
 
-        self.config_ver.handle_request_exit_log_msg(
-            cmd_runner=cmd_runner, targets=[target])
+        # self.config_ver.handle_request_exit_log_msg(
+        #     cmd_runner=cmd_runner, targets=[target])
         self.config_ver.log_test_msg('request_pending reset for '
                                      f'{cmd_runner=} via ack')
 
@@ -5840,9 +5860,9 @@ class MonDelLogSearchItem(LogSearchItem):
         # self.config_ver.log_test_msg(f'request msg parse {cmd_runner=}, '
         #                              f'{target=}')
 
-        self.config_ver.handle_request_exit_log_msg(
-            cmd_runner=cmd_runner,
-            targets=targets)
+        # self.config_ver.handle_request_exit_log_msg(
+        #     cmd_runner=cmd_runner,
+        #     targets=targets)
 
         self.config_ver.log_test_msg('request_pending reset for '
                                      f'{cmd_runner=} via mon del '
@@ -6364,38 +6384,38 @@ class ConfigVerifier:
     # set_msg_pending_count
     ####################################################################
     def set_msg_pending_count(self,
-                              cmd_runner: str,
-                              target: str,
+                              receiver: str,
+                              sender: str,
                               pending_msg_adj: int) -> None:
         """Set or reset one or more pending flags.
 
         Args:
-            cmd_runner: thread name doing the set or reset
-            target: thread name whose msg count is to be set
+            receiver: thread name whose msg count is to be adj
+            sender: thread name that sent the msg
             pending_msg_adj: specifies value to add or subtract for msg
                 count
 
         """
-        pair_key = st.SmartThread._get_pair_key(cmd_runner, target)
+        pair_key = st.SmartThread._get_pair_key(receiver, sender)
         if pair_key not in self.expected_pairs:
             raise InvalidConfigurationDetected(
-                f'set_msg_pending_count detected that for {cmd_runner=}, '
-                f'{target=}: {pair_key=} is not in the '
+                f'set_msg_pending_count detected that for {receiver=}, '
+                f'{sender=}: {pair_key=} is not in the '
                 f'{self.expected_pairs=}'
             )
 
         pae = self.expected_pairs[pair_key]
 
-        if target not in pae:
+        if receiver not in pae:
             raise InvalidConfigurationDetected(
-                f'set_msg_pending_count detected that for {cmd_runner=}, '
-                f'{pair_key=}: {target=} in not in the {pae=}'
+                f'set_msg_pending_count detected that for {sender=}, '
+                f'{pair_key=}: {receiver=} is not in the {pae=}'
             )
 
-        cb = pae[target]
+        cb = pae[receiver]
         new_msg_count = cb.pending_msg_count + pending_msg_adj
-        self.log_test_msg(f'set_msg_pending_count {cmd_runner=}, '
-                          f'{pair_key=}, {target=}, updating from '
+        self.log_test_msg(f'set_msg_pending_count {receiver=}, '
+                          f'{pair_key=}, {sender=}, updating from '
                           f'{cb.pending_msg_count=} to '
                           f'{new_msg_count=}')
         cb.pending_msg_count = new_msg_count
@@ -6404,37 +6424,37 @@ class ConfigVerifier:
     # set_wait_pending_flag
     ####################################################################
     def set_wait_pending_flag(self,
-                              cmd_runner: str,
-                              target: str,
+                              waiter: str,
+                              resumer: str,
                               pending_wait_flag: bool) -> None:
         """Set or reset one or more pending flags.
 
         Args:
-            cmd_runner: thread name doing the set or reset
-            target: thread name whose msg count is to be set
+            waiter: thread name whose wait flag is to be set
+            resumer: thread name that set the wait event
             pending_wait_flag: specifies True or False to set the flag
 
         """
-        pair_key = st.SmartThread._get_pair_key(cmd_runner, target)
+        pair_key = st.SmartThread._get_pair_key(waiter, resumer)
         if pair_key not in self.expected_pairs:
             raise InvalidConfigurationDetected(
-                f'set_wait_pending_flag detected that for {cmd_runner=}, '
-                f'{target=}: {pair_key=} is not in the '
+                f'set_wait_pending_flag detected that for {waiter=}, '
+                f'{resumer=}: {pair_key=} is not in the '
                 f'{self.expected_pairs=}'
             )
 
         pae = self.expected_pairs[pair_key]
 
-        if target not in pae:
+        if waiter not in pae:
             raise InvalidConfigurationDetected(
-                f'set_wait_pending_flag detected that for {cmd_runner=}, '
-                f'{pair_key=}: {target=} in not in the {pae=}'
+                f'set_wait_pending_flag detected that for {resumer=}, '
+                f'{pair_key=}: {waiter=} is not in the {pae=}'
             )
 
-        cb = pae[target]
+        cb = pae[waiter]
 
-        self.log_test_msg(f'set_wait_pending_flag {cmd_runner=}, '
-                          f'{pair_key=}, {target=}, updating from '
+        self.log_test_msg(f'set_wait_pending_flag {waiter=}, '
+                          f'{pair_key=}, {resumer=}, updating from '
                           f'{cb.pending_wait=} to '
                           f'{pending_wait_flag=}')
         cb.pending_wait = pending_wait_flag
@@ -6443,37 +6463,37 @@ class ConfigVerifier:
     # set_sync_pending_flag
     ####################################################################
     def set_sync_pending_flag(self,
-                              cmd_runner: str,
-                              target: str,
+                              waiter: str,
+                              resumer: str,
                               pending_sync_flag: bool) -> None:
         """Set or reset one or more pending flags.
 
         Args:
-            cmd_runner: thread name doing the set or reset
-            target: thread name whose msg count is to be set
+            waiter: thread name whose wait flag is to be set
+            resumer: thread name that set the wait event
             pending_sync_flag: specifies True or False to set the flag
 
         """
-        pair_key = st.SmartThread._get_pair_key(cmd_runner, target)
+        pair_key = st.SmartThread._get_pair_key(waiter, resumer)
         if pair_key not in self.expected_pairs:
             raise InvalidConfigurationDetected(
-                f'set_sync_pending_flag detected that for {cmd_runner=}, '
-                f'{target=}: {pair_key=} is not in the '
+                f'set_sync_pending_flag detected that for {waiter=}, '
+                f'{resumer=}: {pair_key=} is not in the '
                 f'{self.expected_pairs=}'
             )
 
         pae = self.expected_pairs[pair_key]
 
-        if target not in pae:
+        if waiter not in pae:
             raise InvalidConfigurationDetected(
-                f'set_sync_pending_flag detected that for {cmd_runner=}, '
-                f'{pair_key=}: {target=} in not in the {pae=}'
+                f'set_sync_pending_flag detected that for {resumer=}, '
+                f'{pair_key=}: {waiter=} is not in the {pae=}'
             )
 
-        cb = pae[target]
+        cb = pae[waiter]
 
-        self.log_test_msg(f'set_sync_pending_flag {cmd_runner=}, '
-                          f'{pair_key=}, {target=}, updating from '
+        self.log_test_msg(f'set_sync_pending_flag {waiter=}, '
+                          f'{pair_key=}, {resumer=}, updating from '
                           f'{cb.pending_sync=} to '
                           f'{pending_sync_flag=}')
         cb.pending_sync = pending_sync_flag
@@ -14687,88 +14707,88 @@ class ConfigVerifier:
     ####################################################################
     # handle_enter_rpa_log_msg
     ####################################################################
-    def handle_enter_rpa_log_msg(self,
-                                 cmd_runner: str,
-                                 log_msg: str) -> None:
-        """Drive the commands received on the command queue.
-
-        Args:
-            cmd_runner: thread name doing the pair array refresh
-            log_msg: refresh pair array log message
-
-        """
-        pe = self.pending_events[cmd_runner]
-
-        if pe.enter_rpa_msg <= 0:
-            raise UnexpectedEvent(f'handle_enter_rpa_log_msg encountered '
-                                  f'unexpected log msg: {log_msg}')
-
-        pe.enter_rpa_msg -= 1
-        self.add_log_msg(log_msg)
-
-        ################################################################
-        # add and/or delete entries from the mock pair array
-        ################################################################
-        # determine what cmd_runner is doing
-        if pe.current_request.req_type == st.ReqType.Smart_init:
-            target = list(pe.current_request.targets)[0]
-            self.add_to_pair_array(cmd_runner=cmd_runner,
-                                   add_name=target)
-        elif pe.current_request.req_type == st.ReqType.Smart_unreg:
-            eligible_targets = (pe.current_request.targets
-                                - pe.current_request.not_registered_remotes)
-            for target in eligible_targets:
-                self.del_from_pair_array(cmd_runner=cmd_runner,
-                                         del_name=target)
-        elif pe.current_request.req_type == st.ReqType.Smart_join:
-            eligible_targets = (pe.current_request.targets
-                                - pe.current_request.timeout_remotes)
-            for target in eligible_targets:
-                self.del_from_pair_array(cmd_runner=cmd_runner,
-                                         del_name=target)
-
-        # There could be zero, one, or several threads that have
-        # received a message and have the potential to update the
-        # pair array in the case where a deferred delete was done.
-        # These thread names will have been added to the
-        # pending_recv_msg_par when they issued the smart_recv log msg.
-        # We are now handling the enter _pair_array_refresh log
-        # message that follows the smart_recv, but also follows a register
-        # update or delete. The race is on. If the issuer (cmd_runner)
-        # of the enter _pair_array_refresh message is indeed the pending
-        # smart_recv, then we will continue to allow that thread to
-        # remain pending until the third step occurs, the pair array
-        # updated log message is issued. Any other case will cause us to
-        # reset the pending_recv_msg_par to empty.
-
-        # self.add_log_msg(re.escape(
-        #     f'{cmd_runner} entered _clean_pair_array'))
-
-        # with self.ops_lock:
-        #     if self.pending_recv_msg_par[cmd_runner]:
-        #         self.pending_recv_msg_par = defaultdict(bool)
-        #         self.pending_recv_msg_par[cmd_runner] = True
-        #     else:  # anyone else is no longer eligible either
-        #         self.pending_recv_msg_par = defaultdict(bool)
-        for key, tracker in self.expected_registered.items():
-            if key == cmd_runner and key in self.request_pending_pair_keys:
-                del_list: list[str] = []
-                for pair_key in self.request_pending_pair_keys[key]:
-                    pair_key_exists = False
-                    for pair_key2, remote, _ in (
-                            tracker.thread.work_pk_remotes):
-                        if pair_key == pair_key2:
-                            pair_key_exists = True
-                            break
-                    if not pair_key_exists:
-                        if key == pair_key.name0:
-                            remote = pair_key.name1
-                        else:
-                            remote = pair_key.name0
-                        del_list.append(remote)
-                if del_list:
-                    self.handle_request_exit_log_msg(cmd_runner=key,
-                                                     targets=del_list)
+    # def handle_enter_rpa_log_msg(self,
+    #                              cmd_runner: str,
+    #                              log_msg: str) -> None:
+    #     """Drive the commands received on the command queue.
+    #
+    #     Args:
+    #         cmd_runner: thread name doing the pair array refresh
+    #         log_msg: refresh pair array log message
+    #
+    #     """
+    #     pe = self.pending_events[cmd_runner]
+    #
+    #     if pe.enter_rpa_msg <= 0:
+    #         raise UnexpectedEvent(f'handle_enter_rpa_log_msg encountered '
+    #                               f'unexpected log msg: {log_msg}')
+    #
+    #     pe.enter_rpa_msg -= 1
+    #     self.add_log_msg(log_msg)
+    #
+    #     ################################################################
+    #     # add and/or delete entries from the mock pair array
+    #     ################################################################
+    #     # determine what cmd_runner is doing
+    #     if pe.current_request.req_type == st.ReqType.Smart_init:
+    #         target = list(pe.current_request.targets)[0]
+    #         self.add_to_pair_array(cmd_runner=cmd_runner,
+    #                                add_name=target)
+    #     elif pe.current_request.req_type == st.ReqType.Smart_unreg:
+    #         eligible_targets = (pe.current_request.targets
+    #                             - pe.current_request.not_registered_remotes)
+    #         for target in eligible_targets:
+    #             self.del_from_pair_array(cmd_runner=cmd_runner,
+    #                                      del_name=target)
+    #     elif pe.current_request.req_type == st.ReqType.Smart_join:
+    #         eligible_targets = (pe.current_request.targets
+    #                             - pe.current_request.timeout_remotes)
+    #         for target in eligible_targets:
+    #             self.del_from_pair_array(cmd_runner=cmd_runner,
+    #                                      del_name=target)
+    #
+    #     # There could be zero, one, or several threads that have
+    #     # received a message and have the potential to update the
+    #     # pair array in the case where a deferred delete was done.
+    #     # These thread names will have been added to the
+    #     # pending_recv_msg_par when they issued the smart_recv log msg.
+    #     # We are now handling the enter _pair_array_refresh log
+    #     # message that follows the smart_recv, but also follows a register
+    #     # update or delete. The race is on. If the issuer (cmd_runner)
+    #     # of the enter _pair_array_refresh message is indeed the pending
+    #     # smart_recv, then we will continue to allow that thread to
+    #     # remain pending until the third step occurs, the pair array
+    #     # updated log message is issued. Any other case will cause us to
+    #     # reset the pending_recv_msg_par to empty.
+    #
+    #     # self.add_log_msg(re.escape(
+    #     #     f'{cmd_runner} entered _clean_pair_array'))
+    #
+    #     # with self.ops_lock:
+    #     #     if self.pending_recv_msg_par[cmd_runner]:
+    #     #         self.pending_recv_msg_par = defaultdict(bool)
+    #     #         self.pending_recv_msg_par[cmd_runner] = True
+    #     #     else:  # anyone else is no longer eligible either
+    #     #         self.pending_recv_msg_par = defaultdict(bool)
+    #     for key, tracker in self.expected_registered.items():
+    #         if key == cmd_runner and key in self.request_pending_pair_keys:
+    #             del_list: list[str] = []
+    #             for pair_key in self.request_pending_pair_keys[key]:
+    #                 pair_key_exists = False
+    #                 for pair_key2, remote, _ in (
+    #                         tracker.thread.work_pk_remotes):
+    #                     if pair_key == pair_key2:
+    #                         pair_key_exists = True
+    #                         break
+    #                 if not pair_key_exists:
+    #                     if key == pair_key.name0:
+    #                         remote = pair_key.name1
+    #                     else:
+    #                         remote = pair_key.name0
+    #                     del_list.append(remote)
+    #             if del_list:
+    #                 self.handle_request_exit_log_msg(cmd_runner=key,
+    #                                                  targets=del_list)
 
     ####################################################################
     # handle_exp_status_log_msgs
@@ -15734,35 +15754,35 @@ class ConfigVerifier:
     ####################################################################
     # handle_request_exit_log_msg
     ####################################################################
-    def handle_request_exit_log_msg(self,
-                                    cmd_runner: str,
-                                    targets: Optional[list[str]] = None
-                                    ) -> None:
-        """Handle the send_cmd execution and log msgs.
-
-        Args:
-            cmd_runner: name of thread doing the cmd
-            targets: targets of the request
-
-        """
-        if cmd_runner in self.request_pending_pair_keys:
-            if targets:
-                for remote in targets:
-                    pair_key = st.SmartThread._get_pair_key(cmd_runner,
-                                                            remote)
-                    if pair_key in self.request_pending_pair_keys[cmd_runner]:
-                        self.request_pending_pair_keys[cmd_runner].remove(
-                            pair_key)
-                        self.log_test_msg(
-                            f'request_pending removed for {cmd_runner=}, '
-                            f'{pair_key=}')
-            else:
-                removed_pair_keys = self.request_pending_pair_keys[cmd_runner]
-                del self.request_pending_pair_keys[cmd_runner]
-                self.log_test_msg(
-                    f'request_pending removed for {cmd_runner=}, '
-                    f'{removed_pair_keys=}')
-        self.handle_deferred_deletes(cmd_runner=cmd_runner)
+    # def handle_request_exit_log_msg(self,
+    #                                 cmd_runner: str,
+    #                                 targets: Optional[list[str]] = None
+    #                                 ) -> None:
+    #     """Handle the send_cmd execution and log msgs.
+    #
+    #     Args:
+    #         cmd_runner: name of thread doing the cmd
+    #         targets: targets of the request
+    #
+    #     """
+    #     if cmd_runner in self.request_pending_pair_keys:
+    #         if targets:
+    #             for remote in targets:
+    #                 pair_key = st.SmartThread._get_pair_key(cmd_runner,
+    #                                                         remote)
+    #                 if pair_key in self.request_pending_pair_keys[cmd_runner]:
+    #                     self.request_pending_pair_keys[cmd_runner].remove(
+    #                         pair_key)
+    #                     self.log_test_msg(
+    #                         f'request_pending removed for {cmd_runner=}, '
+    #                         f'{pair_key=}')
+    #         else:
+    #             removed_pair_keys = self.request_pending_pair_keys[cmd_runner]
+    #             del self.request_pending_pair_keys[cmd_runner]
+    #             self.log_test_msg(
+    #                 f'request_pending removed for {cmd_runner=}, '
+    #                 f'{removed_pair_keys=}')
+    #     self.handle_deferred_deletes(cmd_runner=cmd_runner)
 
     ####################################################################
     # handle_recv_waiting_log_msg
@@ -16859,7 +16879,7 @@ class ConfigVerifier:
                                       target)
             pe.subprocess_msg[sub_key] += 1
         else:  # remove any old entries
-            pass
+            self.clean_pair_array(cmd_runner=cmd_runner)
 
     ####################################################################
     # handle_subprocess_clean_pair_array_exit
@@ -18174,8 +18194,7 @@ class ConfigVerifier:
             #                              f'{self.last_clean_reg_log_msg=} ')
             # self.add_log_msg(re.escape(self.last_clean_reg_log_msg))
 
-        self.add_log_msg(f'{cmd_runner} did successful '
-                         f'{process} of {del_name}.')
+        self.log_test_msg(f'clean_pair_array exit: {cmd_runner=} ')
 
 
     ####################################################################
