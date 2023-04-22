@@ -1311,7 +1311,8 @@ class SmartThread:
             print_time = (SmartThread._pair_array_last_update
                           .strftime("%H:%M:%S.%f"))
             logger.debug(
-                f'{self.cmd_runner} updated _pair_array at UTC {print_time}')
+                f'{self.cmd_runner} did clean up of _pair_array at UTC'
+                f' {print_time}')
 
         logger.debug(f'{self.request.value} _clean_pair_array exit: '
                      f'requestor: {self.cmd_runner}, '
