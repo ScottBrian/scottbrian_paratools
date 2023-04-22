@@ -66,7 +66,15 @@ SubProcessKey: TypeAlias = tuple[str, str, str, str, str]
 
 RemRegKey: TypeAlias = tuple[str, str]
 
-RemSbKey: TypeAlias = tuple[str, bool, bool, bool, bool]
+
+class DefDelReasons(NamedTuple):
+    pending_request: bool
+    pending_msg: bool
+    pending_wait: bool
+    pending_sync: bool
+
+
+RemSbKey: TypeAlias = tuple[str, DefDelReasons]
 
 RemPaeKey: TypeAlias = tuple[str, tuple[str, str]]
 
@@ -85,13 +93,6 @@ class SendRecvMsgs:
     """Messages to send and verify."""
     send_msgs: dict[SrKey, list[Any]]
 
-
-@dataclass
-class DefDelReasons:
-    pending_request: bool = False
-    pending_msg: bool = False
-    pending_wait: bool = False
-    pending_sync: bool = False
 
 ########################################################################
 # Log level arg list
@@ -4680,6 +4681,71 @@ class RegRemoveLogSearchItem(LogSearchItem):
 
 
 ########################################################################
+# RemPairArrayEntryLogSearchItem
+########################################################################
+class RemPairArrayEntryLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+        """
+        super().__init__(
+            search_str=("[a-z]+ removed _pair_array entry for "
+                        "pair_key = \('[a-z]+', '[a-z]+'\)"),
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int
+                           ) -> "RemPairArrayEntryLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            RemPairArrayEntryLogSearchItem containing found message and index
+        """
+        return RemPairArrayEntryLogSearchItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+    def run_process(self):
+        """Run the process to handle the log message."""
+        split_msg = self.found_log_msg.split()
+        cmd_runner = split_msg[0]
+        name_0 = split_msg[7][2:-2]  # lose left paren, quotes, comma
+        name_1 = split_msg[8][1:-3]  # lose quotes, right paren, comma
+        pair_key: st.PairKey = st.PairKey(name_0, name_1)
+
+        pe = self.config_ver.pending_events[cmd_runner]
+        rem_pae_key: RemPaeKey = (cmd_runner, pair_key)
+
+        if pe.rem_pair_array_entry_msg[rem_pae_key] <= 0:
+            raise UnexpectedEvent(
+                'RemPairArrayEntryLogSearchItem encountered unexpected '
+                f'log message: {self.found_log_msg}')
+
+        pe.rem_pair_array_entry_msg[rem_pae_key] -= 1
+
+        self.config_ver.add_log_msg(re.escape(self.found_log_msg))
+
+
+########################################################################
 # AddPaLogSearchItem
 ########################################################################
 class AddPaLogSearchItem(LogSearchItem):
@@ -5405,27 +5471,39 @@ class DeferredRemovalLogSearchItem(LogSearchItem):
         pair_key_name_1 = split_msg[10][1:-4]
         rem_name = split_msg[13][0:-1]
 
-        def_del_reasons = DefDelReasons()
+        pending_request = pending_msg = pending_wait = pending_sync = False
         idx = -1
         while split_msg[idx] != 'reasons:':
             if split_msg[idx] in ('set', 'set,'):
                 if split_msg[idx-2] == 'sync':
-                    def_del_reasons.pending_sync = True
+                    pending_sync = True
                     idx -= 3
                 elif split_msg[idx-2] == 'wait':
-                    def_del_reasons.pending_wait = True
+                    pending_wait = True
                     idx -= 3
             elif split_msg[idx] in ('msg_q', 'msg_q,'):
-                def_del_reasons.pending_msg = True
+                pending_msg = True
                 idx -= 2
             elif split_msg[idx] in ('request', 'request,'):
-                def_del_reasons.pending_request = True
+                pending_request = True
                 idx -= 2
 
+        def_del_reasons: DefDelReasons = DefDelReasons(
+            pending_request=pending_request,
+            pending_msg=pending_msg,
+            pending_wait=pending_wait,
+            pending_sync=pending_sync)
+
+        rem_sb_key: RemSbKey = (rem_name,
+                                def_del_reasons)
         if self.config_ver.pending_events[
-            cmd_runner].rem_defer_status_block_msg[RemPaeKey] <= 0:
+                cmd_runner].rem_defer_status_block_msg[rem_sb_key] <= 0:
             raise UnexpectedEvent(
-                'DeferredRemovalLogSearchItem encountered ')
+                'DeferredRemovalLogSearchItem encountered unexpected '
+                f'log msg: {self.found_log_msg}')
+
+        self.config_ver.pending_events[
+            cmd_runner].rem_defer_status_block_msg[rem_sb_key] -= 1
 
         self.config_ver.add_log_msg(re.escape(self.found_log_msg),
                                     log_level=logging.DEBUG)
@@ -5670,6 +5748,7 @@ LogSearchItems: TypeAlias = Union[
     UpdatePaUtcLogSearchItem,
     AddRegLogSearchItem,
     RegRemoveLogSearchItem,
+    RemPairArrayEntryLogSearchItem,
     DidCleanRegLogSearchItem,
     RecvMsgLogSearchItem,
     WaitResumedLogSearchItem,
@@ -5940,6 +6019,7 @@ class ConfigVerifier:
             UpdatePaUtcLogSearchItem(config_ver=self),
             AddRegLogSearchItem(config_ver=self),
             RegRemoveLogSearchItem(config_ver=self),
+            RemPairArrayEntryLogSearchItem(config_ver=self),
             DidCleanRegLogSearchItem(config_ver=self),
             RecvMsgLogSearchItem(config_ver=self),
             WaitResumedLogSearchItem(config_ver=self),
@@ -7368,6 +7448,553 @@ class ConfigVerifier:
                 send_recv_msgs.send_msgs[sr_key] = msgs
 
         return send_recv_msgs
+
+    ####################################################################
+    # build_def_del_pending_scenario
+    ####################################################################
+    def build_def_del_pending_scenario(
+            self,
+            name_0_pend: DefDelReasons,
+            name_1_pend: DefDelReasons,
+            name_2_pend: DefDelReasons
+    ) -> None:
+        """Return a list of ConfigCmd items for a deferred delete.
+
+        Args:
+            name_0_pend: reasons for name 0
+            name_1_pend: reasons for name 1
+            name_2_pend: reasons for name 2
+
+        """
+        num_receivers = 2
+        num_senders = 1
+
+        num_waiters = 2
+        num_resumers = 1
+
+        num_syncers = 2
+
+        num_dels = 1
+        num_adds = 1
+
+        num_deleters = 1
+        num_adders = 1
+
+        num_lockers = 5
+
+        num_active_needed = (num_receivers
+                             + num_senders
+                             + num_waiters
+                             + num_resumers
+                             + num_syncers
+                             + num_dels
+                             + num_deleters
+                             + num_adders
+                             + num_lockers
+                             + 1)  # plus 1 for the commander
+        self.build_config(
+            cmd_runner=self.commander_name,
+            num_active=num_active_needed)
+
+        self.log_name_groups()
+
+        active_names_copy = self.active_names - {self.commander_name}
+
+        ################################################################
+        # choose receiver_names
+        ################################################################
+        receiver_names = self.choose_names(
+            name_collection=active_names_copy,
+            num_names_needed=num_receivers,
+            update_collection=True,
+            var_name_for_log='receiver_names')
+
+        ################################################################
+        # choose sender_names
+        ################################################################
+        sender_names = self.choose_names(
+            name_collection=active_names_copy,
+            num_names_needed=num_senders,
+            update_collection=True,
+            var_name_for_log='sender_names')
+
+        ################################################################
+        # choose waiter_names
+        ################################################################
+        waiter_names = self.choose_names(
+            name_collection=active_names_copy,
+            num_names_needed=num_waiters,
+            update_collection=True,
+            var_name_for_log='waiter_names')
+
+        ################################################################
+        # choose resumer_names
+        ################################################################
+        resumer_names = self.choose_names(
+            name_collection=active_names_copy,
+            num_names_needed=num_resumers,
+            update_collection=True,
+            var_name_for_log='resumer_names')
+
+        ################################################################
+        # choose syncer_names
+        ################################################################
+        # syncer_names = self.choose_names(
+        #     name_collection=active_names_copy,
+        #     num_names_needed=num_syncers,
+        #     update_collection=True,
+        #     var_name_for_log='syncer_names')
+
+        ################################################################
+        # choose del_names
+        ################################################################
+        del_names = self.choose_names(
+            name_collection=active_names_copy,
+            num_names_needed=num_dels,
+            update_collection=True,
+            var_name_for_log='del_names')
+
+        ################################################################
+        # choose add_names
+        ################################################################
+        unregistered_names_copy = self.unregistered_names.copy()
+        add_names = self.choose_names(
+            name_collection=unregistered_names_copy,
+            num_names_needed=num_adds,
+            update_collection=True,
+            var_name_for_log='add_names')
+
+        ################################################################
+        # choose deleter_names
+        ################################################################
+        deleter_names = self.choose_names(
+            name_collection=active_names_copy,
+            num_names_needed=num_deleters,
+            update_collection=True,
+            var_name_for_log='deleter_names')
+
+        ################################################################
+        # choose adder_names
+        ################################################################
+        adder_names = self.choose_names(
+            name_collection=active_names_copy,
+            num_names_needed=num_adders,
+            update_collection=True,
+            var_name_for_log='adder_names')
+
+        ################################################################
+        # choose locker_names
+        ################################################################
+        locker_names = self.choose_names(
+            name_collection=active_names_copy,
+            num_names_needed=num_lockers,
+            update_collection=True,
+            var_name_for_log='locker_names')
+
+        ################################################################
+        # msgs to send
+        ################################################################
+
+        ################################################################
+        # tracking vars for locks
+        ################################################################
+        lock_positions: list[str] = []
+        first_cmd_lock_pos: str = ''
+        second_cmd_lock_pos: str = ''
+
+        ################################################################
+        # Categorize the request types
+        ################################################################
+        single_request = False
+        double_request = False
+        del_add_request = False
+
+        cmd_0_name: str = ''
+        cmd_0_confirmer: str = ''
+        cmd_0_serial_num: int = 0
+        recv_0_name: str = ''
+        wait_0_name: str = ''
+
+        cmd_1_name: str = ''
+        cmd_1_confirmer: str = ''
+        cmd_1_serial_num: int = 0
+        recv_1_name: str = ''
+        wait_1_name: str = ''
+
+        receivers: list[str] = []
+        waiters: list[str] = []
+
+        if (def_del_scenario == DefDelScenario.NormalRecv
+                or def_del_scenario == DefDelScenario.ResurrectionRecv
+                or def_del_scenario == DefDelScenario.NormalWait
+                or def_del_scenario == DefDelScenario.ResurrectionWait):
+            single_request = True
+
+        if (def_del_scenario == DefDelScenario.Recv0Recv1
+                or def_del_scenario == DefDelScenario.Recv1Recv0
+                or def_del_scenario == DefDelScenario.WaitRecv
+                or def_del_scenario == DefDelScenario.Wait0Wait1
+                or def_del_scenario == DefDelScenario.Wait1Wait0
+                or def_del_scenario == DefDelScenario.RecvWait):
+            double_request = True
+
+        if (def_del_scenario == DefDelScenario.RecvDel
+                or def_del_scenario == DefDelScenario.WaitDel
+                or def_del_scenario == DefDelScenario.RecvAdd
+                or def_del_scenario == DefDelScenario.WaitAdd):
+            del_add_request = True
+
+        ################################################################
+        # Determine whether first request is smart_recv or wait
+        ################################################################
+        if (def_del_scenario == DefDelScenario.NormalRecv
+                or def_del_scenario == DefDelScenario.ResurrectionRecv
+                or def_del_scenario == DefDelScenario.Recv0Recv1
+                or def_del_scenario == DefDelScenario.Recv1Recv0
+                or def_del_scenario == DefDelScenario.RecvWait
+                # or def_del_scenario == DefDelScenario.WaitRecv
+                or def_del_scenario == DefDelScenario.RecvDel
+                or def_del_scenario == DefDelScenario.RecvAdd):
+            cmd_0_name = 'RecvMsg'
+            recv_0_name = receiver_names[0]
+            cmd_0_confirmer = recv_0_name
+            receivers.append(recv_0_name)
+
+        elif (def_del_scenario == DefDelScenario.NormalWait
+                or def_del_scenario == DefDelScenario.ResurrectionWait
+                or def_del_scenario == DefDelScenario.Wait0Wait1
+                or def_del_scenario == DefDelScenario.Wait1Wait0
+                # or def_del_scenario == DefDelScenario.RecvWait
+                or def_del_scenario == DefDelScenario.WaitRecv
+                or def_del_scenario == DefDelScenario.WaitDel
+                or def_del_scenario == DefDelScenario.WaitAdd):
+
+            cmd_0_name = 'Wait'
+            wait_0_name = waiter_names[0]
+            cmd_0_confirmer = wait_0_name
+            waiters.append(wait_0_name)
+
+        ################################################################
+        # Determine whether second request (if one) is smart_recv or wait
+        ################################################################
+        if (def_del_scenario == DefDelScenario.Recv0Recv1
+                or def_del_scenario == DefDelScenario.Recv1Recv0
+                or def_del_scenario == DefDelScenario.WaitRecv):
+            if def_del_scenario == DefDelScenario.WaitRecv:
+                recv_1_name = receiver_names[0]
+            else:
+                recv_1_name = receiver_names[1]
+            cmd_1_name = 'RecvMsg'
+            receivers.append(recv_1_name)
+
+        elif (def_del_scenario == DefDelScenario.Wait0Wait1
+                or def_del_scenario == DefDelScenario.Wait1Wait0
+                or def_del_scenario == DefDelScenario.RecvWait):
+
+            if def_del_scenario == DefDelScenario.RecvWait:
+                wait_1_name = waiter_names[0]
+            else:
+                wait_1_name = waiter_names[1]
+            cmd_1_name = 'Wait'
+            waiters.append(wait_1_name)
+
+        exiters: list[str] = []
+        if (def_del_scenario == DefDelScenario.RecvDel
+                or def_del_scenario == DefDelScenario.WaitDel):
+            exiters.append(del_names[0])
+
+        adders: list[str] = []
+        if (def_del_scenario == DefDelScenario.RecvAdd
+                or def_del_scenario == DefDelScenario.WaitAdd):
+            adders.append(add_names[0])
+
+        exit_names: list[str] = []
+        if receivers:
+            ############################################################
+            # send a msg that will sit on the smart_recv msg_q (1 or 2)
+            ############################################################
+            exit_names.append(sender_names[0])
+
+            sender_msgs = self.create_msgs(sender_names, receivers)
+            send_msg_serial_num_0 = self.add_cmd(
+                SendMsg(cmd_runners=sender_names[0],
+                        receivers=receivers,
+                        msgs_to_send=sender_msgs))
+            self.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=[self.commander_name],
+                    confirm_cmd='SendMsg',
+                    confirm_serial_num=send_msg_serial_num_0,
+                    confirmers=sender_names[0]))
+        if waiters:
+            ############################################################
+            # resume that will set wait bit
+            ############################################################
+            exit_names.append(resumer_names[0])
+            resume_serial_num_0 = self.add_cmd(
+                Resume(cmd_runners=resumer_names[0],
+                       targets=waiters,
+                       stopped_remotes=[]))
+            self.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=[self.commander_name],
+                    confirm_cmd='Resume',
+                    confirm_serial_num=resume_serial_num_0,
+                    confirmers=resumer_names[0]))
+
+        if (def_del_scenario != DefDelScenario.NormalRecv
+                and def_del_scenario != DefDelScenario.NormalWait):
+            ############################################################
+            # exit the sender to create a half paired case
+            ############################################################
+            self.build_exit_suite(
+                cmd_runner=self.commander_name,
+                names=exit_names,
+                validate_config=False)
+            self.build_join_suite(
+                cmd_runners=self.commander_name,
+                join_target_names=exit_names,
+                validate_config=False)
+
+            if (def_del_scenario == DefDelScenario.ResurrectionRecv
+                    or def_del_scenario == DefDelScenario.ResurrectionWait):
+                ########################################################
+                # resurrect the sender
+                ########################################################
+                f1_create_items: list[F1CreateItem] = []
+                for idx, name in enumerate(exit_names):
+                    if idx % 2:
+                        app_config = AppConfig.ScriptStyle
+                    else:
+                        app_config = AppConfig.RemoteThreadApp
+
+                    f1_create_items.append(F1CreateItem(name=name,
+                                                        auto_start=True,
+                                                        target_rtn=outer_f1,
+                                                        app_config=app_config))
+                self.build_create_suite(
+                    f1_create_items=f1_create_items,
+                    validate_config=False)
+
+        ################################################################
+        # For scenarios that have a second request, get lock 0 to keep
+        # the first smart_recv/wait progressing beyond the lock obtain in
+        # _request_setup where the pk_remotes list is built.
+        ################################################################
+        if not single_request:
+            obtain_lock_serial_num_0 = self.add_cmd(
+                LockObtain(cmd_runners=locker_names[0]))
+            lock_positions.append(locker_names[0])
+
+            # we can confirm only this first lock obtain
+            self.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=[self.commander_name],
+                    confirm_cmd='LockObtain',
+                    confirm_serial_num=obtain_lock_serial_num_0,
+                    confirmers=locker_names[0]))
+
+            ############################################################
+            # verify locks held: lock_0
+            ############################################################
+            self.add_cmd(
+                LockVerify(cmd_runners=self.commander_name,
+                           exp_positions=lock_positions.copy()))
+        ################################################################
+        # do the first recv or wait
+        ################################################################
+        if cmd_0_name == 'RecvMsg':
+            cmd_0_serial_num = self.add_cmd(
+                RecvMsg(cmd_runners=recv_0_name,
+                        senders=sender_names[0],
+                        exp_msgs=sender_msgs,
+                        log_msg='def_del_recv_test_0'))
+            if not single_request:
+                first_cmd_lock_pos = recv_0_name
+                lock_positions.append(recv_0_name)
+        else:  # must be wait
+            cmd_0_serial_num = self.add_cmd(
+                Wait(cmd_runners=wait_0_name,
+                     resumers=resumer_names[0],
+                     stopped_remotes=set(),
+                     wait_for=st.WaitFor.All,
+                     log_msg='def_del_wait_test_0'))
+            if not single_request:
+                first_cmd_lock_pos = wait_0_name
+                lock_positions.append(wait_0_name)
+
+        ################################################################
+        # Note: in the lock verify comments, the 'a', 'b', 'c', or 'd'
+        # chars appended to request_0 and request_1 indicate where the
+        # request is positioned along the path:
+        # 'a' means behind the lock in _request_setup where the
+        # pk_remotes list is built
+        # 'b' means behind the lock in _request_loop
+        # 'c' means behind the lock in _request_loop before doing a
+        # refresh pair_array
+        # 'd' means the lock in _cmd_loop (e.g., for del or add)
+        ################################################################
+        ############################################################
+        # verify locks held:
+        # For 1 request scenarios: no locks held
+        # For all others: lock_0|request_0a
+        ############################################################
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # Get lock 1 to keep the second smart_recv/wait progressing beyond
+        # the lock obtain in _request_setup where the pk_remotes list
+        # is built.
+        ################################################################
+        if not single_request:
+            self.add_cmd(
+                LockObtain(cmd_runners=locker_names[1]))
+            lock_positions.append(locker_names[1])
+
+        ################################################################
+        # verify locks held:
+        # For 1 request scenarios: no locks held
+        # For all others: lock_0|request_0a|lock_1
+        ################################################################
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+        ################################################################
+        # From this point on we will split the scenarios into separate
+        # build paths to simplify the lock manipulations
+        ################################################################
+        if double_request:
+            if cmd_1_name == 'RecvMsg':
+                cmd_1_confirmer = recv_1_name
+                cmd_1_serial_num = self.add_cmd(
+                    RecvMsg(cmd_runners=recv_1_name,
+                            senders=sender_names[0],
+                            exp_msgs=sender_msgs,
+                            log_msg='def_del_recv_test_1'))
+                second_cmd_lock_pos = recv_1_name
+                lock_positions.append(recv_1_name)
+            else:  # must be wait
+                cmd_1_confirmer = wait_1_name
+                cmd_1_serial_num = self.add_cmd(
+                    Wait(cmd_runners=wait_1_name,
+                         resumers=resumer_names[0],
+                         stopped_remotes=set(),
+                         wait_for=st.WaitFor.All,
+                         log_msg='def_del_wait_test_1'))
+                second_cmd_lock_pos = wait_1_name
+                lock_positions.append(wait_1_name)
+            ############################################################
+            # complete the build in part a
+            ############################################################
+            self.build_def_del_suite_part_a(
+                def_del_scenario=def_del_scenario,
+                lock_positions=lock_positions,
+                first_cmd_lock_pos=first_cmd_lock_pos,
+                second_cmd_lock_pos=second_cmd_lock_pos,
+                locker_names=locker_names)
+        elif del_add_request:
+            ############################################################
+            # for del and add, we need to progress request_0 from a to b
+            ############################################################
+            ############################################################
+            # release lock_0
+            ############################################################
+            self.add_cmd(
+                LockRelease(cmd_runners=locker_names[0]))
+            lock_positions.remove(locker_names[0])
+            # releasing lock 0 will allow the first recv/wait to go and
+            # then get behind lock 2
+            lock_positions.remove(first_cmd_lock_pos)
+            lock_positions.append(first_cmd_lock_pos)
+            ############################################################
+            # verify locks held: lock_1|request_0b
+            ############################################################
+            self.add_cmd(
+                LockVerify(cmd_runners=self.commander_name,
+                           exp_positions=lock_positions.copy()))
+
+            ############################################################
+            # do the del or add request
+            ############################################################
+            if (def_del_scenario == DefDelScenario.RecvDel
+                    or def_del_scenario == DefDelScenario.WaitDel):
+                self.build_exit_suite(
+                    cmd_runner=deleter_names[0],
+                    names=[del_names[0]],
+                    validate_config=False)
+                self.build_join_suite(
+                    cmd_runners=deleter_names[0],
+                    join_target_names=[del_names[0]],
+                    validate_config=False)
+                second_cmd_lock_pos = deleter_names[0]
+                lock_positions.append(deleter_names[0])
+            else:  # must be add
+                f1_create_items: list[F1CreateItem] = [
+                    F1CreateItem(
+                        name=add_names[0],
+                        auto_start=True,
+                        target_rtn=outer_f1,
+                        app_config=AppConfig.ScriptStyle)]
+                self.build_create_suite(
+                    cmd_runner=adder_names[0],
+                    f1_create_items=f1_create_items,
+                    validate_config=False)
+                second_cmd_lock_pos = adder_names[0]
+                lock_positions.append(adder_names[0])
+            ############################################################
+            # verify locks held: lock_1|request_0b|request_1b
+            ############################################################
+            self.add_cmd(
+                LockVerify(cmd_runners=self.commander_name,
+                           exp_positions=lock_positions.copy()))
+            ############################################################
+            # complete the build in part b
+            ############################################################
+            self.build_def_del_suite_part_b(
+                lock_positions=lock_positions,
+                first_cmd_lock_pos=first_cmd_lock_pos,
+                second_cmd_lock_pos=second_cmd_lock_pos,
+                locker_names=locker_names)
+
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd=cmd_0_name,
+                confirm_serial_num=cmd_0_serial_num,
+                confirmers=cmd_0_confirmer))
+
+        if cmd_1_name:
+            self.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=[self.commander_name],
+                    confirm_cmd=cmd_1_name,
+                    confirm_serial_num=cmd_1_serial_num,
+                    confirmers=cmd_1_confirmer))
+
+        ################################################################
+        # verify no locks held
+        ################################################################
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=[]))
+
+        ################################################################
+        # check results
+        ################################################################
+        self.add_cmd(
+            VerifyDefDel(
+                cmd_runners=self.commander_name,
+                def_del_scenario=def_del_scenario,
+                receiver_names=receiver_names,
+                sender_names=sender_names,
+                waiter_names=waiter_names,
+                resumer_names=resumer_names,
+                del_names=del_names,
+                add_names=add_names,
+                deleter_names=deleter_names,
+                adder_names=adder_names))
 
     ####################################################################
     # build_def_del_suite
@@ -17104,29 +17731,30 @@ class ConfigVerifier:
             # one or both need to be removed from pair_array
             pae = self.expected_pairs[pair_key]
 
+            pending_request = pending_msg = pending_wait = pending_sync = False
             for name in pair_key:
-                def_del_reasons = DefDelReasons()
                 defer = False
                 if name in pae:
                     if pae[name].pending_request:
-                        def_del_reasons.pending_request = True
+                        pending_request = True
                         defer = True
                     if pae[name].pending_msg_count:
-                        def_del_reasons.pending_msg = True
+                        pending_msg = True
                         defer = True
                     if pae[name].pending_wait:
-                        def_del_reasons.pending_wait = True
+                        pending_wait = True
                         defer = True
                     if pae[name].pending_sync:
-                        def_del_reasons.pending_sync = True
+                        pending_sync = True
                         defer = True
 
-                    rem_sb_key: RemSbKey = (
-                        name,
-                        def_del_reasons.pending_request,
-                        def_del_reasons.pending_msg,
-                        def_del_reasons.pending_wait,
-                        def_del_reasons.pending_sync)
+                    def_del_reasons: DefDelReasons = DefDelReasons(
+                        pending_request=pending_request,
+                        pending_msg=pending_msg,
+                        pending_wait=pending_wait,
+                        pending_sync=pending_sync)
+
+                    rem_sb_key: RemSbKey = (name, def_del_reasons)
 
                     if name in self.expected_registered and defer:
                         pe.rem_defer_status_block_msg[rem_sb_key] += 1
@@ -17135,8 +17763,15 @@ class ConfigVerifier:
                         pe.rem_status_block_msg[rem_sb_key] += 1
 
             if not pae:
-                del pae
-                pe.rem_pair_array_entry_msg[(cmd_runner, pair_key)] += 1
+                pair_keys_to_delete.append(pair_key)
+
+        if pair_keys_to_delete:
+            pe.update_pair_array_UTC_msg += 1
+            for pair_key in pair_keys_to_delete:
+                del self.expected_pairs[pair_key]
+                rem_pae_key: RemPaeKey = (cmd_runner, pair_key)
+                pe.rem_pair_array_entry_msg[rem_pae_key] += 1
+
 
         #     if other_name not in self.expected_pairs[pair_key].keys():
         #         # check that del_name had reason to be in pair_array
@@ -19972,6 +20607,19 @@ def outer_f1(f1_name: str, f1_config_ver: ConfigVerifier):
 
 
 ########################################################################
+# commander_config
+########################################################################
+commander_config: dict[int, AppConfig] = {
+    0: AppConfig.ScriptStyle,
+    1: AppConfig.CurrentThreadApp,
+    2: AppConfig.RemoteThreadApp,
+    3: AppConfig.RemoteSmartThreadApp,
+    4: AppConfig.RemoteSmartThreadApp2}
+
+num_commander_configs = len(commander_config)
+
+
+########################################################################
 # TestSmartThreadErrors class
 ########################################################################
 class TestSmartThreadExamples:
@@ -21676,6 +22324,115 @@ class TestSmartThreadScenarios:
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
             commander_config=commander_config
+        )
+
+    ####################################################################
+    # test_def_del_reasons
+    ####################################################################
+    def_del_reasons_0 = DefDelReasons(False, False, False, False)
+    def_del_reasons_1 = DefDelReasons(False, False, False, True)
+    def_del_reasons_2 = DefDelReasons(False, False, True, False)
+    def_del_reasons_3 = DefDelReasons(False, False, True, True)
+    def_del_reasons_4 = DefDelReasons(False, True, False, False)
+    def_del_reasons_5 = DefDelReasons(False, True, False, True)
+    def_del_reasons_6 = DefDelReasons(False, True, True, False)
+    def_del_reasons_7 = DefDelReasons(False, True, True, True)
+    def_del_reasons_8 = DefDelReasons(True, False, False, False)
+    def_del_reasons_9 = DefDelReasons(True, False, False, True)
+    def_del_reasons_a = DefDelReasons(True, False, True, False)
+    def_del_reasons_b = DefDelReasons(True, False, True, True)
+    def_del_reasons_c = DefDelReasons(True, True, False, True)
+    def_del_reasons_d = DefDelReasons(True, True, False, False)
+    def_del_reasons_e = DefDelReasons(True, True, True, True)
+    def_del_reasons_f = DefDelReasons(True, True, True, False)
+
+
+    @pytest.mark.parametrize("name_0_pend_arg", (def_del_reasons_0,
+                                                 def_del_reasons_1,
+                                                 def_del_reasons_2,
+                                                 def_del_reasons_3,
+                                                 def_del_reasons_4,
+                                                 def_del_reasons_5,
+                                                 def_del_reasons_6,
+                                                 def_del_reasons_7,
+                                                 def_del_reasons_8,
+                                                 def_del_reasons_9,
+                                                 def_del_reasons_a,
+                                                 def_del_reasons_b,
+                                                 def_del_reasons_c,
+                                                 def_del_reasons_d,
+                                                 def_del_reasons_e,
+                                                 def_del_reasons_f))
+    @pytest.mark.parametrize("name_1_pend_arg", (def_del_reasons_0,
+                                                 def_del_reasons_1,
+                                                 def_del_reasons_2,
+                                                 def_del_reasons_3,
+                                                 def_del_reasons_4,
+                                                 def_del_reasons_5,
+                                                 def_del_reasons_6,
+                                                 def_del_reasons_7,
+                                                 def_del_reasons_8,
+                                                 def_del_reasons_9,
+                                                 def_del_reasons_a,
+                                                 def_del_reasons_b,
+                                                 def_del_reasons_c,
+                                                 def_del_reasons_d,
+                                                 def_del_reasons_e,
+                                                 def_del_reasons_f))
+    @pytest.mark.parametrize("name_2_pend_arg", (def_del_reasons_0,
+                                                 def_del_reasons_1,
+                                                 def_del_reasons_2,
+                                                 def_del_reasons_3,
+                                                 def_del_reasons_4,
+                                                 def_del_reasons_5,
+                                                 def_del_reasons_6,
+                                                 def_del_reasons_7,
+                                                 def_del_reasons_8,
+                                                 def_del_reasons_9,
+                                                 def_del_reasons_a,
+                                                 def_del_reasons_b,
+                                                 def_del_reasons_c,
+                                                 def_del_reasons_d,
+                                                 def_del_reasons_e,
+                                                 def_del_reasons_f))
+
+    def test_def_del_reasons(
+            self,
+            name_0_pend_arg: DefDelReasons,
+            name_1_pend_arg: DefDelReasons,
+            name_2_pend_arg: DefDelReasons,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test pending reasons.
+
+        Args:
+            name_0_pend_arg: reasons for name 0
+            name_1_pend_arg: reasons for name 1
+            name_2_pend_arg: reasons for name 2
+            caplog: pytest fixture to capture log output
+
+        """
+        command_config_num = ((name_0_pend_arg.pending_request
+                               + name_0_pend_arg.pending_msg
+                               + name_0_pend_arg.pending_wait
+                               + name_0_pend_arg.pending_sync
+                               + name_1_pend_arg.pending_request
+                               + name_1_pend_arg.pending_msg
+                               + name_1_pend_arg.pending_wait
+                               + name_1_pend_arg.pending_sync)
+                              % num_commander_configs)
+
+        args_for_scenario_builder: dict[str, Any] = {
+            'name_0_pend': name_0_pend_arg,
+            'name_1_pend': name_1_pend_arg,
+            'name_2_pend': name_2_pend_arg,
+        }
+
+        self.scenario_driver(
+            scenario_builder=ConfigVerifier.build_def_del_pending_scenario,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog,
+            commander_config=commander_config[command_config_num]
         )
 
     ####################################################################
