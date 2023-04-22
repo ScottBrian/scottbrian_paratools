@@ -851,6 +851,9 @@ class SmartThread:
 
         self.debug_logging_enabled = logger.isEnabledFor(logging.DEBUG)
 
+        self.request: ReqType = ReqType.NoReq
+        self.cmd_runner: str = threading.current_thread().name
+
         exit_log_msg = self._issue_entry_log_msg(
             request=ReqType.Smart_init,
             remotes={name})
@@ -908,9 +911,6 @@ class SmartThread:
         self.auto_start = auto_start
 
         self.default_timeout = default_timeout
-
-        self.request: ReqType = ReqType.NoReq
-        self.cmd_runner: str = threading.current_thread().name
 
         self.code = None
 
@@ -1468,8 +1468,8 @@ class SmartThread:
     ###########################################################################
     # _add_status_block_entry
     ###########################################################################
-    @staticmethod
-    def _add_status_block_entry(cmd_runner: str,
+    def _add_status_block_entry(self,
+                                cmd_runner: str,
                                 pair_key: PairKey,
                                 add_name: str) -> None:
         """Add a status block entry.
@@ -4595,7 +4595,7 @@ class SmartThread:
         """
         targets_msg = (f'while processing a '
                        f'{request_block.request.value} '
-                       f'request with resumers '
+                       f'request with targets '
                        f'{sorted(request_block.remotes)}.')
 
         pending_msg = (f' Remotes that are pending: '
@@ -4890,8 +4890,8 @@ class SmartThread:
     ####################################################################
     # issue_entry_log_msg
     ####################################################################
-    @staticmethod
     def _issue_entry_log_msg(
+            self,
             request: ReqType,
             remotes: set[str],
             timeout_value: Optional[IntFloat] = None,
