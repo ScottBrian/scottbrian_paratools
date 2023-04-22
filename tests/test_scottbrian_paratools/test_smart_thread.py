@@ -64,9 +64,11 @@ RequestKey: TypeAlias = tuple[str, str, str]
 
 SubProcessKey: TypeAlias = tuple[str, str, str, str, str]
 
-RemKey: TypeAlias = tuple[str, str]
+RemRegKey: TypeAlias = tuple[str, str]
 
 RemSbKey: TypeAlias = tuple[str, bool, bool, bool, bool]
+
+RemPaeKey: TypeAlias = tuple[str, tuple[str, str]]
 
 
 ########################################################################
@@ -4791,6 +4793,7 @@ class AddStatusBlockLogSearchItem(LogSearchItem):
             pair_key=pair_key,
             target=target,log_msg=self.found_log_msg)
 
+
 ########################################################################
 # UpdatePaUtcLogSearchItem
 ########################################################################
@@ -4961,9 +4964,10 @@ class DidCleanRegLogSearchItem(LogSearchItem):
         for item in target_msg:
             targets.append(item[1:-1])
 
-        self.handle_did_clean_reg_log_msg(cmd_runner=cmd_runner,
-                                          targets=targets,
-                                          log_msg=self.found_log_msg)
+        self.config_ver.handle_did_clean_reg_log_msg(
+            cmd_runner=cmd_runner,
+            targets=targets,
+            log_msg=self.found_log_msg)
 
         self.config_ver.add_log_msg(re.escape(self.found_log_msg))
 
@@ -5367,7 +5371,7 @@ class DeferredRemovalLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str="[a-z]+ deferred removal of status_blocks entry "
+            search_str="[a-z]+ removal deferred for status_blocks entry "
                        r"for pair_key = \('[a-z]+', '[a-z]+'\), "
                        "name = [a-z]+, reasons: ",
             config_ver=config_ver,
@@ -5395,6 +5399,34 @@ class DeferredRemovalLogSearchItem(LogSearchItem):
 
     def run_process(self):
         """Run the process to handle the log message."""
+        split_msg = self.found_log_msg.split()
+        cmd_runner = split_msg[0]
+        pair_key_name_0 = split_msg[9][2:-3]
+        pair_key_name_1 = split_msg[10][1:-4]
+        rem_name = split_msg[13][0:-1]
+
+        def_del_reasons = DefDelReasons()
+        idx = -1
+        while split_msg[idx] != 'reasons:':
+            if split_msg[idx] in ('set', 'set,'):
+                if split_msg[idx-2] == 'sync':
+                    def_del_reasons.pending_sync = True
+                    idx -= 3
+                elif split_msg[idx-2] == 'wait':
+                    def_del_reasons.pending_wait = True
+                    idx -= 3
+            elif split_msg[idx] in ('msg_q', 'msg_q,'):
+                def_del_reasons.pending_msg = True
+                idx -= 2
+            elif split_msg[idx] in ('request', 'request,'):
+                def_del_reasons.pending_request = True
+                idx -= 2
+
+        if self.config_ver.pending_events[
+            cmd_runner].rem_defer_status_block_msg[RemPaeKey] <= 0:
+            raise UnexpectedEvent(
+                'DeferredRemovalLogSearchItem encountered ')
+
         self.config_ver.add_log_msg(re.escape(self.found_log_msg),
                                     log_level=logging.DEBUG)
 
@@ -5791,7 +5823,7 @@ class PendingEvent:
     subprocess_msg: dict[SubProcessKey, int]
     set_state_msg: dict[SetStateKey, int]
     status_msg: dict[tuple[bool, st.ThreadState], int]
-    rem_reg_msg: dict[RemKey, int]
+    rem_reg_msg: dict[RemRegKey, int]
     did_clean_reg_msg: int
     update_pair_array_UTC_msg: int
     rem_reg_targets: deque[list[str]]
@@ -5800,6 +5832,7 @@ class PendingEvent:
     add_status_block_msg: dict[AddStatusBlockKey, int]
     rem_status_block_msg: dict[RemSbKey, int]
     rem_defer_status_block_msg: dict[RemSbKey, int]
+    rem_pair_array_entry_msg: dict[RemPaeKey, int]
     exit_request_msg: dict[str, int]
     clean_up_reg_msg: dict[CleanRegKey, int]
     exit_rpa_msg: int
@@ -5950,6 +5983,7 @@ class ConfigVerifier:
                 add_status_block_msg=defaultdict(int),
                 rem_status_block_msg=defaultdict(int),
                 rem_defer_status_block_msg=defaultdict(int),
+                rem_pair_array_entry_msg=defaultdict(int),
                 exit_request_msg=defaultdict(int),
                 clean_up_reg_msg=defaultdict(int),
                 exit_rpa_msg=0)
@@ -14806,9 +14840,8 @@ class ConfigVerifier:
         """
         pe = self.pending_events[cmd_runner]
 
-        rem_key: RemKey = (rem_name,
-                           process)
-        pe.rem_reg_msg[rem_key] += 1
+        rem_key: RemRegKey = (rem_name,
+                              process)
 
         if pe.rem_reg_msg[rem_key] <= 0:
             raise UnexpectedEvent(f'handle_rem_reg_log_msg encountered '
@@ -15798,8 +15831,9 @@ class ConfigVerifier:
                         (item.is_alive, state_to_use)] += 1
                     if (not item.is_alive
                             and item.st_state == st.ThreadState.Stopped):
-                        rem_key: RemKey = (key,
-                                           pe.current_request.req_type.value())
+                        rem_key: RemRegKey = (
+                            key,
+                            pe.current_request.req_type.value())
                         pe.rem_reg_msg[rem_key] += 1
                         rem_targets.append(key)
                 if rem_targets:
@@ -17100,67 +17134,71 @@ class ConfigVerifier:
                         del pae[name]
                         pe.rem_status_block_msg[rem_sb_key] += 1
 
-            if other_name not in self.expected_pairs[pair_key].keys():
-                # check that del_name had reason to be in pair_array
-                pair_keys_to_delete.append(pair_key)
-            else:
-                request_is_pending = False
-                if (other_name in self.request_pending_pair_keys
-                        and pair_key in self.request_pending_pair_keys[
-                            other_name]):
-                    request_is_pending = True
-                    self.log_test_msg('found request_pending for '
-                                      f'{other_name=}, {pair_key=}')
-                if (self.expected_pairs[pair_key][
-                    other_name].pending_ops_count == 0
-                        and not request_is_pending):
-                    pair_keys_to_delete.append(pair_key)
-                    self.log_test_msg(
-                        f'update_pair_array_del rem_pair_key 2 {pair_key}, '
-                        f'{other_name}')
-                    self.add_log_msg(re.escape(
-                        f"{cmd_runner} removed status_blocks entry "
-                        f"for pair_key = {pair_key}, "
-                        f"name = {other_name}"))
-                    # we are assuming that the remote will be started
-                    # while smart_send or resume is running and that the
-                    # msg will be delivered or the resume will be done
-                    # (otherwise we should not have called
-                    # inc_ops_count)
-                    # if ((pend_ops_cnt := self.expected_pairs[pair_key][
-                    #         del_name].pending_ops_count) > 0
-                    #         and not self.expected_pairs[pair_key][
-                    #         del_name].reset_ops_count):
-                    #     if pair_key not in self.pending_ops_counts:
-                    #         self.pending_ops_counts[pair_key] = {}
-                    #     self.pending_ops_counts[pair_key][
-                    #         del_name] = pend_ops_cnt
-                    #     self.log_test_msg(
-                    #         f'update_pair_array_del for {pair_key=}, '
-                    #         f'{del_name=} set pending {pend_ops_cnt=}')
-                else:
-                    # remember for next update by smart_recv or wait
-                    del_def_key = (pair_key, other_name)
-                    self.del_deferred_list.append(del_def_key)
+            if not pae:
+                del pae
+                pe.rem_pair_array_entry_msg[(cmd_runner, pair_key)] += 1
 
-                    # best we can do is delete the del_name for now
-                    del self.expected_pairs[pair_key][del_name]
-
-            self.log_test_msg(
-                f'update_pair_array_del 2 rem_pair_key 3 {pair_key}, '
-                f'{del_name}')
-            self.add_log_msg(re.escape(
-                f"{cmd_runner} removed status_blocks entry "
-                f"for pair_key = {pair_key}, "
-                f"name = {del_name}"))
-
-        for pair_key in pair_keys_to_delete:
-
-
-            del self.expected_pairs[pair_key]
-            self.add_log_msg(re.escape(
-                f'{cmd_runner} removed _pair_array entry'
-                f' for pair_key = {pair_key}'))
+        #     if other_name not in self.expected_pairs[pair_key].keys():
+        #         # check that del_name had reason to be in pair_array
+        #         pair_keys_to_delete.append(pair_key)
+        #     else:
+        #         request_is_pending = False
+        #         if (other_name in self.request_pending_pair_keys
+        #                 and pair_key in self.request_pending_pair_keys[
+        #                     other_name]):
+        #             request_is_pending = True
+        #             self.log_test_msg('found request_pending for '
+        #                               f'{other_name=}, {pair_key=}')
+        #         if (self.expected_pairs[pair_key][
+        #             other_name].pending_ops_count == 0
+        #                 and not request_is_pending):
+        #             pair_keys_to_delete.append(pair_key)
+        #             self.log_test_msg(
+        #                 f'update_pair_array_del rem_pair_key 2 {pair_key}, '
+        #                 f'{other_name}')
+        #             self.add_log_msg(re.escape(
+        #                 f"{cmd_runner} removed status_blocks entry "
+        #                 f"for pair_key = {pair_key}, "
+        #                 f"name = {other_name}"))
+        #             # we are assuming that the remote will be started
+        #             # while smart_send or resume is running and that the
+        #             # msg will be delivered or the resume will be done
+        #             # (otherwise we should not have called
+        #             # inc_ops_count)
+        #             # if ((pend_ops_cnt := self.expected_pairs[pair_key][
+        #             #         del_name].pending_ops_count) > 0
+        #             #         and not self.expected_pairs[pair_key][
+        #             #         del_name].reset_ops_count):
+        #             #     if pair_key not in self.pending_ops_counts:
+        #             #         self.pending_ops_counts[pair_key] = {}
+        #             #     self.pending_ops_counts[pair_key][
+        #             #         del_name] = pend_ops_cnt
+        #             #     self.log_test_msg(
+        #             #         f'update_pair_array_del for {pair_key=}, '
+        #             #         f'{del_name=} set pending {pend_ops_cnt=}')
+        #         else:
+        #             # remember for next update by smart_recv or wait
+        #             del_def_key = (pair_key, other_name)
+        #             self.del_deferred_list.append(del_def_key)
+        #
+        #             # best we can do is delete the del_name for now
+        #             del self.expected_pairs[pair_key][del_name]
+        #
+        #     self.log_test_msg(
+        #         f'update_pair_array_del 2 rem_pair_key 3 {pair_key}, '
+        #         f'{del_name}')
+        #     self.add_log_msg(re.escape(
+        #         f"{cmd_runner} removed status_blocks entry "
+        #         f"for pair_key = {pair_key}, "
+        #         f"name = {del_name}"))
+        #
+        # for pair_key in pair_keys_to_delete:
+        #
+        #
+        #     del self.expected_pairs[pair_key]
+        #     self.add_log_msg(re.escape(
+        #         f'{cmd_runner} removed _pair_array entry'
+        #         f' for pair_key = {pair_key}'))
 
             # split_msg = self.last_clean_reg_log_msg.split()
             # if (split_msg[0] != cmd_runner

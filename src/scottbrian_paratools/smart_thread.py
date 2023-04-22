@@ -1279,15 +1279,15 @@ class SmartThread:
                     comma = ''
                     if remaining_sb.request_pending:
                         extra_msg += 'pending request'
-                        comma = ', '
+                        comma = ','
                     if not remaining_sb.msg_q.empty():
-                        extra_msg += f'{comma}non-empty msg_q'
-                        comma = ', '
+                        extra_msg += f'{comma} non-empty msg_q'
+                        comma = ','
                     if remaining_sb.wait_event.is_set():
-                        extra_msg += f'{comma}wait event set'
-                        comma = ', '
+                        extra_msg += f'{comma} wait event set'
+                        comma = ','
                     if remaining_sb.sync_event.is_set():
-                        extra_msg += f'{comma}sync event set'
+                        extra_msg += f'{comma} sync event set'
 
                     logger.debug(
                         f'{self.cmd_runner} removal deferred for '
