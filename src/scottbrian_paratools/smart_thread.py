@@ -2675,7 +2675,8 @@ class SmartThread:
                                             pk_remote.remote],
                                         timeout=0.01)
                     logger.info(
-                        f'{self.name} sent message to {pk_remote.remote}')
+                        f'{self.name} smart_send sent message to '
+                        f'{pk_remote.remote}')
 
                     return True
                 except queue.Full:
@@ -3125,7 +3126,8 @@ class SmartThread:
                     timeout=timeout_value)
                 received_msgs.append(recvd_msg)
                 logger.info(
-                    f'{self.name} received msg from {pk_remote.remote}')
+                    f'{self.name} smart_recv received msg from '
+                    f'{pk_remote.remote}')
                 while not local_sb.msg_q.empty():
                     recvd_msg = local_sb.msg_q.get()
                     received_msgs.append(recvd_msg)
@@ -3925,7 +3927,7 @@ class SmartThread:
                     # less remote
                     remote_sb.wait_event.set()
                     logger.info(
-                        f'{self.name} resumed smart_wait for '
+                        f'{self.name} smart_resume resumed '
                         f'{pk_remote.remote}')
                     return True
         else:
@@ -4131,7 +4133,7 @@ class SmartThread:
                         not local_sb.wait_event.is_set()):
                     request_block.do_refresh = True
                 logger.info(
-                    f'{self.name} smart_sync resumed by '
+                    f'{self.name} smart_sync achieved with '
                     f'{pk_remote.remote}')
 
                 # exit, we are done with this remote

@@ -5353,9 +5353,9 @@ class DidCleanPairArrayUtcLogSearchItem(LogSearchItem):
 
 
 ########################################################################
-# RecvMsgLogSearchItem
+# RequestAckLogSearchItem
 ########################################################################
-class RecvMsgLogSearchItem(LogSearchItem):
+class RequestAckLogSearchItem(LogSearchItem):
     """Input to search log msgs."""
 
     def __init__(self,
@@ -5370,8 +5370,20 @@ class RecvMsgLogSearchItem(LogSearchItem):
             found_log_msg: log msg that was found
             found_log_idx: index in the log where message was found
         """
+        phrases = {
+            'smart_send': 'smart_send sent message to',
+            'smart_recv': 'smart_recv received msg from',
+            'smart_wait': 'smart_wait resumed by',
+            'smart_resume': 'smart_resume resumed',
+            'smart_sync': 'smart_sync achieved with'
+        }
+        list_of_acks = ('(smart_send sent message to'
+                        '|smart_recv received msg from'
+                        '|smart_wait resumed by'
+                        '|smart_resume resumed'
+                        '|smart_sync achieved with)')
         super().__init__(
-            search_str='[a-z]+ received msg from [a-z]+',
+            search_str=f"[a-z]+ {list_of_acks} [a-z]+",
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -5379,7 +5391,8 @@ class RecvMsgLogSearchItem(LogSearchItem):
 
     def get_found_log_item(self,
                            found_log_msg: str,
-                           found_log_idx: int) -> "RecvMsgLogSearchItem":
+                           found_log_idx: int
+                           ) -> "RequestAckLogSearchItem":
         """Return a found log item.
 
         Args:
@@ -5387,9 +5400,9 @@ class RecvMsgLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
 
         Returns:
-            RecvMsgLogSearchItem containing found message and index
+            SyncResumedLogSearchItem containing found message and index
         """
-        return RecvMsgLogSearchItem(
+        return RequestAckLogSearchItem(
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
@@ -5398,11 +5411,85 @@ class RecvMsgLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
-        sender = split_msg[4]
+        request = split_msg[1]
+        remote = split_msg[-1]
 
-        self.config_ver.set_msg_pending_count(receiver=cmd_runner,
-                                              sender=sender,
-                                              pending_msg_adj=-1)
+        if request == 'smart_send':
+            pass
+        elif request == 'smart_recv':
+            self.config_ver.set_msg_pending_count(receiver=cmd_runner,
+                                                  sender=remote,
+                                                  pending_msg_adj=-1)
+        elif request == 'smart_wait':
+            self.config_ver.set_wait_pending_flag(waiter=cmd_runner,
+                                                  resumer=remote,
+                                                  pending_wait_flag=False)
+        elif request == 'smart_resume':
+            pass
+        elif request == 'smart_sync':
+            self.config_ver.set_sync_pending_flag(waiter=cmd_runner,
+                                                  resumer=remote,
+                                                  pending_sync_flag=False)
+
+        self.config_ver.set_request_pending_flag(
+            cmd_runner=cmd_runner,
+            targets=[remote],
+            pending_request_flag=False)
+
+        self.config_ver.add_log_msg(re.escape(self.found_log_msg),
+                                    log_level=logging.INFO)
+
+########################################################################
+# RecvMsgLogSearchItem
+########################################################################
+# class RecvMsgLogSearchItem(LogSearchItem):
+#     """Input to search log msgs."""
+#
+#     def __init__(self,
+#                  config_ver: "ConfigVerifier",
+#                  found_log_msg: str = '',
+#                  found_log_idx: int = 0,
+#                  ) -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             config_ver: configuration verifier
+#             found_log_msg: log msg that was found
+#             found_log_idx: index in the log where message was found
+#         """
+#         super().__init__(
+#             search_str='[a-z]+ received msg from [a-z]+',
+#             config_ver=config_ver,
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx
+#         )
+#
+#     def get_found_log_item(self,
+#                            found_log_msg: str,
+#                            found_log_idx: int) -> "RecvMsgLogSearchItem":
+#         """Return a found log item.
+#
+#         Args:
+#             found_log_msg: log msg that was found
+#             found_log_idx: index in the log where message was found
+#
+#         Returns:
+#             RecvMsgLogSearchItem containing found message and index
+#         """
+#         return RecvMsgLogSearchItem(
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx,
+#             config_ver=self.config_ver)
+#
+#     def run_process(self):
+#         """Run the process to handle the log message."""
+#         split_msg = self.found_log_msg.split()
+#         cmd_runner = split_msg[0]
+#         sender = split_msg[4]
+#
+#         self.config_ver.set_msg_pending_count(receiver=cmd_runner,
+#                                               sender=sender,
+#                                               pending_msg_adj=-1)
 
         # self.config_ver.dec_ops_count(
         #     cmd_runner=split_msg[0],
@@ -5413,54 +5500,54 @@ class RecvMsgLogSearchItem(LogSearchItem):
 ########################################################################
 # WaitResumedLogSearchItem
 ########################################################################
-class WaitResumedLogSearchItem(LogSearchItem):
-    """Input to search log msgs."""
-
-    def __init__(self,
-                 config_ver: "ConfigVerifier",
-                 found_log_msg: str = '',
-                 found_log_idx: int = 0,
-                 ) -> None:
-        """Initialize the LogItem.
-
-        Args:
-            config_ver: configuration verifier
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-        """
-        super().__init__(
-            search_str='[a-z]+ smart_wait resumed by [a-z]+',
-            config_ver=config_ver,
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx
-        )
-
-    def get_found_log_item(self,
-                           found_log_msg: str,
-                           found_log_idx: int) -> "WaitResumedLogSearchItem":
-        """Return a found log item.
-
-        Args:
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-
-        Returns:
-            WaitResumedLogSearchItem containing found message and index
-        """
-        return WaitResumedLogSearchItem(
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx,
-            config_ver=self.config_ver)
-
-    def run_process(self):
-        """Run the process to handle the log message."""
-        split_msg = self.found_log_msg.split()
-        cmd_runner = split_msg[0]
-        resumer = split_msg[4]
-
-        self.config_ver.set_wait_pending_flag(waiter=cmd_runner,
-                                              resumer=resumer,
-                                              pending_wait_flag=False)
+# class WaitResumedLogSearchItem(LogSearchItem):
+#     """Input to search log msgs."""
+#
+#     def __init__(self,
+#                  config_ver: "ConfigVerifier",
+#                  found_log_msg: str = '',
+#                  found_log_idx: int = 0,
+#                  ) -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             config_ver: configuration verifier
+#             found_log_msg: log msg that was found
+#             found_log_idx: index in the log where message was found
+#         """
+#         super().__init__(
+#             search_str='[a-z]+ smart_wait resumed by [a-z]+',
+#             config_ver=config_ver,
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx
+#         )
+#
+#     def get_found_log_item(self,
+#                            found_log_msg: str,
+#                            found_log_idx: int) -> "WaitResumedLogSearchItem":
+#         """Return a found log item.
+#
+#         Args:
+#             found_log_msg: log msg that was found
+#             found_log_idx: index in the log where message was found
+#
+#         Returns:
+#             WaitResumedLogSearchItem containing found message and index
+#         """
+#         return WaitResumedLogSearchItem(
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx,
+#             config_ver=self.config_ver)
+#
+#     def run_process(self):
+#         """Run the process to handle the log message."""
+#         split_msg = self.found_log_msg.split()
+#         cmd_runner = split_msg[0]
+#         resumer = split_msg[4]
+#
+#         self.config_ver.set_wait_pending_flag(waiter=cmd_runner,
+#                                               resumer=resumer,
+#                                               pending_wait_flag=False)
 
         # self.config_ver.dec_ops_count(
         #     cmd_runner=split_msg[0],
@@ -5471,58 +5558,58 @@ class WaitResumedLogSearchItem(LogSearchItem):
 ########################################################################
 # SyncResumedLogSearchItem
 ########################################################################
-class SyncResumedLogSearchItem(LogSearchItem):
-    """Input to search log msgs."""
-
-    def __init__(self,
-                 config_ver: "ConfigVerifier",
-                 found_log_msg: str = '',
-                 found_log_idx: int = 0,
-                 ) -> None:
-        """Initialize the LogItem.
-
-        Args:
-            config_ver: configuration verifier
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-        """
-        super().__init__(
-            search_str='[a-z]+ smart_sync resumed by [a-z]+',
-            config_ver=config_ver,
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx
-        )
-
-    def get_found_log_item(self,
-                           found_log_msg: str,
-                           found_log_idx: int
-                           ) -> "SyncResumedLogSearchItem":
-        """Return a found log item.
-
-        Args:
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-
-        Returns:
-            SyncResumedLogSearchItem containing found message and index
-        """
-        return SyncResumedLogSearchItem(
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx,
-            config_ver=self.config_ver)
-
-    def run_process(self):
-        """Run the process to handle the log message."""
-        split_msg = self.found_log_msg.split()
-        cmd_runner = split_msg[0]
-        resumer = split_msg[4]
-
-        self.config_ver.set_sync_pending_flag(waiter=cmd_runner,
-                                              resumer=resumer,
-                                              pending_sync_flag=False)
-
-        self.config_ver.add_log_msg(self.found_log_msg,
-                                    log_level=logging.INFO)
+# class SyncResumedLogSearchItem(LogSearchItem):
+#     """Input to search log msgs."""
+#
+#     def __init__(self,
+#                  config_ver: "ConfigVerifier",
+#                  found_log_msg: str = '',
+#                  found_log_idx: int = 0,
+#                  ) -> None:
+#         """Initialize the LogItem.
+#
+#         Args:
+#             config_ver: configuration verifier
+#             found_log_msg: log msg that was found
+#             found_log_idx: index in the log where message was found
+#         """
+#         super().__init__(
+#             search_str='[a-z]+ smart_sync resumed by [a-z]+',
+#             config_ver=config_ver,
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx
+#         )
+#
+#     def get_found_log_item(self,
+#                            found_log_msg: str,
+#                            found_log_idx: int
+#                            ) -> "SyncResumedLogSearchItem":
+#         """Return a found log item.
+#
+#         Args:
+#             found_log_msg: log msg that was found
+#             found_log_idx: index in the log where message was found
+#
+#         Returns:
+#             SyncResumedLogSearchItem containing found message and index
+#         """
+#         return SyncResumedLogSearchItem(
+#             found_log_msg=found_log_msg,
+#             found_log_idx=found_log_idx,
+#             config_ver=self.config_ver)
+#
+#     def run_process(self):
+#         """Run the process to handle the log message."""
+#         split_msg = self.found_log_msg.split()
+#         cmd_runner = split_msg[0]
+#         resumer = split_msg[4]
+#
+#         self.config_ver.set_sync_pending_flag(waiter=cmd_runner,
+#                                               resumer=resumer,
+#                                               pending_sync_flag=False)
+#
+#         self.config_ver.add_log_msg(self.found_log_msg,
+#                                     log_level=logging.INFO)
 
 
 ########################################################################
@@ -5764,68 +5851,6 @@ class CRunnerRaisesLogSearchItem(LogSearchItem):
         #                              f'{cmd_runner=} raises error')
 
 ########################################################################
-# RequestAckLogSearchItem
-########################################################################
-class RequestAckLogSearchItem(LogSearchItem):
-    """Input to search log msgs."""
-
-    def __init__(self,
-                 config_ver: "ConfigVerifier",
-                 found_log_msg: str = '',
-                 found_log_idx: int = 0,
-                 ) -> None:
-        """Initialize the LogItem.
-
-        Args:
-            config_ver: configuration verifier
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-        """
-        list_of_acks = ('(received msg from'
-                        '|smart_wait resumed by'
-                        '|resumed smart_wait for'
-                        '|sent message to)')
-        super().__init__(
-            search_str="[a-z]+ smart_wait resumed by [a-z]+",
-            config_ver=config_ver,
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx
-        )
-
-    def get_found_log_item(self,
-                           found_log_msg: str,
-                           found_log_idx: int
-                           ) -> "RequestAckLogSearchItem":
-        """Return a found log item.
-
-        Args:
-            found_log_msg: log msg that was found
-            found_log_idx: index in the log where message was found
-
-        Returns:
-            SyncResumedLogSearchItem containing found message and index
-        """
-        return RequestAckLogSearchItem(
-            found_log_msg=found_log_msg,
-            found_log_idx=found_log_idx,
-            config_ver=self.config_ver)
-
-    def run_process(self):
-        """Run the process to handle the log message."""
-        split_msg = self.found_log_msg.split()
-        cmd_runner = split_msg[0]
-        target = split_msg[4]
-
-        # self.config_ver.log_test_msg(f'request msg parse {cmd_runner=}, '
-        #                              f'{target=}')
-
-        # self.config_ver.handle_request_exit_log_msg(
-        #     cmd_runner=cmd_runner, targets=[target])
-        self.config_ver.log_test_msg('request_pending reset for '
-                                     f'{cmd_runner=} via ack')
-
-
-########################################################################
 # MonDelLogSearchItem
 ########################################################################
 # class MonDelLogSearchItem(LogSearchItem):
@@ -5961,12 +5986,10 @@ LogSearchItems: TypeAlias = Union[
     RemRegEntryLogSearchItem,
     RemPairArrayEntryLogSearchItem,
     DidCleanRegLogSearchItem,
-    RecvMsgLogSearchItem,
-    WaitResumedLogSearchItem,
     SetStateLogSearchItem,
+    RequestAckLogSearchItem,
     StoppedLogSearchItem,
     CmdWaitingLogSearchItem,
-    SyncResumedLogSearchItem,
     TestDebugLogSearchItem,
     RemStatusBlockEntryLogSearchItem,
     RemStatusBlockEntryDefLogSearchItem,
@@ -6234,12 +6257,10 @@ class ConfigVerifier:
             RemRegEntryLogSearchItem(config_ver=self),
             RemPairArrayEntryLogSearchItem(config_ver=self),
             DidCleanRegLogSearchItem(config_ver=self),
-            RecvMsgLogSearchItem(config_ver=self),
-            WaitResumedLogSearchItem(config_ver=self),
             SetStateLogSearchItem(config_ver=self),
+            RequestAckLogSearchItem(config_ver=self),
             StoppedLogSearchItem(config_ver=self),
             CmdWaitingLogSearchItem(config_ver=self),
-            SyncResumedLogSearchItem(config_ver=self),
             TestDebugLogSearchItem(config_ver=self),
             RemStatusBlockEntryLogSearchItem(config_ver=self),
             RemStatusBlockEntryDefLogSearchItem(config_ver=self),
@@ -15166,6 +15187,8 @@ class ConfigVerifier:
                                'smart_recv',
                                'entry')
 
+        pe.request_msg[req_key] += 1
+
         sr_key: SrKey = SrKey(sender=remote, receiver=cmd_runner)
         enter_exit = ('entry', 'exit')
         if stopped_remotes:
@@ -15593,6 +15616,11 @@ class ConfigVerifier:
         # determine next step
         ################################################################
         pe = self.pending_events[cmd_runner]
+
+        targets = pe.current_request.targets
+
+        eligible_targets
+
         sub_key: SubProcessKey = (cmd_runner,
                                   'smart_send',
                                   '_clean_registry',
@@ -16216,8 +16244,11 @@ class ConfigVerifier:
             name='smart_send',
             seq='test_smart_thread.py::ConfigVerifier.handle_send_msg')
 
-        timeout_remotes = (unreg_timeout_names.copy()
-                           | fullq_timeout_names.copy())
+        timeout_remotes = set()
+        if unreg_timeout_names:
+            timeout_remotes = unreg_timeout_names.copy()
+        if fullq_timeout_names:
+            timeout_remotes |= fullq_timeout_names.copy()
 
         pe = self.pending_events[cmd_runner]
         pe.start_request.append(
@@ -16233,8 +16264,6 @@ class ConfigVerifier:
                                'entry')
 
         pe.request_msg[req_key] += 1
-
-
 
         ops_count_names = receivers.copy()
 
@@ -16640,6 +16669,26 @@ class ConfigVerifier:
         self.log_ver.add_call_seq(
             name='smart_start',
             seq='test_smart_thread.py::ConfigVerifier.handle_start')
+
+        if unreg_remotes:
+            not_reg_remotes = unreg_remotes
+        else:
+            not_reg_remotes = set()
+
+        pe = self.pending_events[cmd_runner]
+        pe.start_request.append(
+            StartRequest(req_type=st.ReqType.Smart_start,
+                         targets=start_names,
+                         not_registered_remotes=not_reg_remotes,
+                         timeout_remotes=set(),
+                         stopped_remotes=set(),
+                         deadlock_remotes=set()))
+
+        req_key: RequestKey = (cmd_runner,
+                               'smart_start',
+                               'entry')
+
+        pe.request_msg[req_key] += 1
 
         exp_started_names = start_names
         enter_exit = ('entry', 'exit')
