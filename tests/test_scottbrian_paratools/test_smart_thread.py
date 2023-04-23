@@ -66,6 +66,8 @@ SubProcessKey: TypeAlias = tuple[str, str, str, str, str]
 
 RemRegKey: TypeAlias = tuple[str, str]
 
+AckKey: TypeAlias = tuple[str, str, str]
+
 
 class DefDelReasons(NamedTuple):
     pending_request: bool
@@ -5414,6 +5416,18 @@ class RequestAckLogSearchItem(LogSearchItem):
         request = split_msg[1]
         remote = split_msg[-1]
 
+        pe = self.config_ver.pending_events[cmd_runner]
+
+        ack_key: AckKey = (cmd_runner, remote, request)
+
+        if pe.ack_msg[ack_key] <= 0:
+            raise UnexpectedEvent(
+                f'RequestAckLogSearchItem using {ack_key} detected '
+                f'unexpected log msg: {self.found_log_msg}'
+            )
+
+        pe.ack_msg[ack_key] -= 1
+
         if request == 'smart_send':
             pass
         elif request == 'smart_recv':
@@ -6147,6 +6161,7 @@ class PendingEvent:
     rem_pair_array_entry_msg: dict[RemPaeKey, int]
     notify_rem_status_block_msg: dict[RemSbKey, int]
     notify_rem_status_block_def_msg: dict[RemSbKey, int]
+    ack_msg: dict[AckKey, int]
     exit_request_msg: dict[str, int]
     clean_up_reg_msg: dict[CleanRegKey, int]
     exit_rpa_msg: int
@@ -6299,6 +6314,7 @@ class ConfigVerifier:
                 rem_pair_array_entry_msg=defaultdict(int),
                 notify_rem_status_block_msg=defaultdict(int),
                 notify_rem_status_block_def_msg=defaultdict(int),
+                ack_msg=defaultdict(int),
                 exit_request_msg=defaultdict(int),
                 clean_up_reg_msg=defaultdict(int),
                 exit_rpa_msg=0)
@@ -15618,15 +15634,16 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
 
         targets = pe.current_request.targets
+        timeout_targets = pe.current_request.timeout_remotes
 
-        eligible_targets
+        eligible_targets = (pe.current_request.targets.copy()
+                            - pe.current_request.timeout_remotes
+                            - pe.current_request.stopped_remotes)
 
-        sub_key: SubProcessKey = (cmd_runner,
-                                  'smart_send',
-                                  '_clean_registry',
-                                  'entry',
-                                  target)
-        pe.subprocess_msg[sub_key] += 1
+        for target in eligible_targets:
+            ack_key: AckKey = (cmd_runner, target, 'smart_send')
+
+            pe.ack_msg[ack_key] += 1
 
     ####################################################################
     # handle_request_smart_send_exit
