@@ -852,7 +852,7 @@ class SmartThread:
 
         self.debug_logging_enabled = logger.isEnabledFor(logging.DEBUG)
 
-        if not thread:
+        if not thread and not target:
             self.cmd_runner = name
         else:
             self.cmd_runner = threading.current_thread().name
@@ -3924,6 +3924,9 @@ class SmartThread:
                     # the while loop again with one
                     # less remote
                     remote_sb.wait_event.set()
+                    logger.info(
+                        f'{self.name} resumed smart_wait for '
+                        f'{pk_remote.remote}')
                     return True
         else:
             if remote_state == ThreadState.Stopped:
@@ -4938,7 +4941,7 @@ class SmartThread:
             f'requestor: {self.cmd_runner}, '
             f'targets: {targets_to_use} '
             f'timeout value: {timeout_value} '
-            f'{get_formatted_call_sequence(latest=3, depth=1)}')
+            f'{get_formatted_call_sequence(latest=2, depth=1)}')
 
         if log_msg:
             log_msg_body += f' {log_msg}'

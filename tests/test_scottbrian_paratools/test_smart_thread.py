@@ -1959,7 +1959,12 @@ class ValidateConfig(ConfigCmd):
         Args:
             cmd_runner: name of thread running the command
         """
-        self.config_ver.validate_config()
+        self.config_ver.log_test_msg('Monitor Checkpoint: validate_config')
+
+        self.config_ver.validate_config_complete_event.wait()
+        self.config_ver.validate_config_complete_event.clear()
+
+        # self.config_ver.validate_config()
 
 
 ########################################################################
@@ -5758,63 +5763,66 @@ class CRunnerRaisesLogSearchItem(LogSearchItem):
         # self.config_ver.log_test_msg('request_pending reset for '
         #                              f'{cmd_runner=} raises error')
 
-
 ########################################################################
 # RequestAckLogSearchItem
 ########################################################################
-# class RequestAckLogSearchItem(LogSearchItem):
-#     """Input to search log msgs."""
-#
-#     def __init__(self,
-#                  config_ver: "ConfigVerifier",
-#                  found_log_msg: str = '',
-#                  found_log_idx: int = 0,
-#                  ) -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             config_ver: configuration verifier
-#             found_log_msg: log msg that was found
-#             found_log_idx: index in the log where message was found
-#         """
-#         super().__init__(
-#             search_str="[a-z]+ smart_wait resumed by [a-z]+",
-#             config_ver=config_ver,
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx
-#         )
-#
-#     def get_found_log_item(self,
-#                            found_log_msg: str,
-#                            found_log_idx: int
-#                            ) -> "RequestAckLogSearchItem":
-#         """Return a found log item.
-#
-#         Args:
-#             found_log_msg: log msg that was found
-#             found_log_idx: index in the log where message was found
-#
-#         Returns:
-#             SyncResumedLogSearchItem containing found message and index
-#         """
-#         return RequestAckLogSearchItem(
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx,
-#             config_ver=self.config_ver)
-#
-#     def run_process(self):
-#         """Run the process to handle the log message."""
-#         split_msg = self.found_log_msg.split()
-#         cmd_runner = split_msg[0]
-#         target = split_msg[4]
-#
-#         # self.config_ver.log_test_msg(f'request msg parse {cmd_runner=}, '
-#         #                              f'{target=}')
-#
-#         # self.config_ver.handle_request_exit_log_msg(
-#         #     cmd_runner=cmd_runner, targets=[target])
-#         self.config_ver.log_test_msg('request_pending reset for '
-#                                      f'{cmd_runner=} via ack')
+class RequestAckLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+        """
+        list_of_acks = ('(received msg from'
+                        '|smart_wait resumed by'
+                        '|resumed smart_wait for'
+                        '|sent message to)')
+        super().__init__(
+            search_str="[a-z]+ smart_wait resumed by [a-z]+",
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int
+                           ) -> "RequestAckLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            SyncResumedLogSearchItem containing found message and index
+        """
+        return RequestAckLogSearchItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+    def run_process(self):
+        """Run the process to handle the log message."""
+        split_msg = self.found_log_msg.split()
+        cmd_runner = split_msg[0]
+        target = split_msg[4]
+
+        # self.config_ver.log_test_msg(f'request msg parse {cmd_runner=}, '
+        #                              f'{target=}')
+
+        # self.config_ver.handle_request_exit_log_msg(
+        #     cmd_runner=cmd_runner, targets=[target])
+        self.config_ver.log_test_msg('request_pending reset for '
+                                     f'{cmd_runner=} via ack')
 
 
 ########################################################################
@@ -5883,9 +5891,9 @@ class CRunnerRaisesLogSearchItem(LogSearchItem):
 
 
 ########################################################################
-# CheckPendingEventsLogSearchItem
+# MonitorCheckpointLogSearchItem
 ########################################################################
-class CheckPendingEventsLogSearchItem(LogSearchItem):
+class MonitorCheckpointLogSearchItem(LogSearchItem):
     """Input to search log msgs."""
 
     def __init__(self,
@@ -5900,8 +5908,9 @@ class CheckPendingEventsLogSearchItem(LogSearchItem):
             found_log_msg: log msg that was found
             found_log_idx: index in the log where message was found
         """
+        'Monitor Checkpoint: validate_config'
         super().__init__(
-            search_str='ConfigVer monitor check pending events',
+            search_str='Monitor Checkpoint: [a-z_]+',
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -5910,7 +5919,7 @@ class CheckPendingEventsLogSearchItem(LogSearchItem):
     def get_found_log_item(self,
                            found_log_msg: str,
                            found_log_idx: int
-                           ) -> "CheckPendingEventsLogSearchItem":
+                           ) -> "MonitorCheckpointLogSearchItem":
         """Return a found log item.
 
         Args:
@@ -5920,14 +5929,24 @@ class CheckPendingEventsLogSearchItem(LogSearchItem):
         Returns:
             SyncResumedLogSearchItem containing found message and index
         """
-        return CheckPendingEventsLogSearchItem(
+        return MonitorCheckpointLogSearchItem(
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
     def run_process(self):
         """Run the process to handle the log message."""
-        self.config_ver.check_pending_events()
+        split_msg = self.found_log_msg.split()
+        checkpoint_item = split_msg[2]
+
+        if checkpoint_item == 'validate_config':
+            self.config_ver.validate_config()
+            self.config_ver.validate_config_complete_event.set()
+        elif checkpoint_item == 'check_pending_events':
+            self.config_ver.check_pending_events()
+            self.config_ver.check_pending_events_complete_event.set()
+
+
 
 
 LogSearchItems: TypeAlias = Union[
@@ -5952,7 +5971,7 @@ LogSearchItems: TypeAlias = Union[
     RemStatusBlockEntryLogSearchItem,
     RemStatusBlockEntryDefLogSearchItem,
     CRunnerRaisesLogSearchItem,
-    CheckPendingEventsLogSearchItem]
+    MonitorCheckpointLogSearchItem]
 
 
 ########################################################################
@@ -6225,7 +6244,7 @@ class ConfigVerifier:
             RemStatusBlockEntryLogSearchItem(config_ver=self),
             RemStatusBlockEntryDefLogSearchItem(config_ver=self),
             CRunnerRaisesLogSearchItem(config_ver=self),
-            CheckPendingEventsLogSearchItem(config_ver=self)
+            MonitorCheckpointLogSearchItem(config_ver=self)
         )
         self.last_update_pair_array_log_msg: str = ''
         self.add_thread_cmd_runner_for_upa_msg: str = ''
@@ -6269,6 +6288,8 @@ class ConfigVerifier:
         self.monitor_condition: threading.Condition = threading.Condition()
         self.monitor_pause: bool = False
         self.check_pending_events_complete_event: threading.Event = (
+            threading.Event())
+        self.validate_config_complete_event: threading.Event = (
             threading.Event())
         self.monitor_thread.start()
 
@@ -7751,8 +7772,6 @@ class ConfigVerifier:
             raise InvalidConfigurationDetected(
                 'check_pending_events detected that there are remaining '
                 f'pending items: {self.pending_events=}')
-
-        self.check_pending_events_complete_event.set()
 
 
     ####################################################################
@@ -14263,13 +14282,13 @@ class ConfigVerifier:
             found_del_pairs=defaultdict(int)
         )
 
-        self.pending_events[cmd_runner].current_request = StartRequest(
+        self.pending_events[cmd_runner].start_request.append(StartRequest(
             req_type=st.ReqType.Smart_init,
             targets={name},
             not_registered_remotes=set(),
             timeout_remotes=set(),
             stopped_remotes=set(),
-            deadlock_remotes=set())
+            deadlock_remotes=set()))
 
         req_key: RequestKey = (cmd_runner,
                                'smart_init',
@@ -15426,7 +15445,6 @@ class ConfigVerifier:
 
             pe.request_msg[req_key] += 1
 
-
     ####################################################################
     # handle_request_smart_start_entry
     ####################################################################
@@ -15442,12 +15460,19 @@ class ConfigVerifier:
         # determine next step
         ################################################################
         pe = self.pending_events[cmd_runner]
-        sub_key: SubProcessKey = (cmd_runner,
-                                  request_name,
-                                  '_clean_registry',
-                                  'entry',
-                                  target)
-        pe.subprocess_msg[sub_key] += 1
+
+        eligible_targets = (
+                pe.current_request.targets.copy()
+                - pe.current_request.not_registered_remotes.copy())
+
+        pe.num_targets_remaining = len(eligible_targets)
+
+        for target in eligible_targets:
+            state_key: SetStateKey = (cmd_runner,
+                                      target,
+                                      st.ThreadState.Registered,
+                                      st.ThreadState.Starting)
+            pe.set_state_msg[state_key] += 1
 
     ####################################################################
     # handle_request_smart_start_exit
@@ -15463,13 +15488,7 @@ class ConfigVerifier:
         ################################################################
         # determine next step
         ################################################################
-        pe = self.pending_events[cmd_runner]
-        sub_key: SubProcessKey = (cmd_runner,
-                                  request_name,
-                                  '_clean_registry',
-                                  'entry',
-                                  target)
-        pe.subprocess_msg[sub_key] += 1
+        pass
 
     ####################################################################
     # handle_request_smart_unreg_entry
@@ -15487,7 +15506,7 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
-                                  request_name,
+                                  'smart_unreg',
                                   '_clean_registry',
                                   'entry',
                                   target)
@@ -15509,7 +15528,7 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
-                                  request_name,
+                                  'smart_unreg',
                                   '_clean_registry',
                                   'entry',
                                   target)
@@ -15531,7 +15550,7 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
-                                  request_name,
+                                  'smart_join',
                                   '_clean_registry',
                                   'entry',
                                   target)
@@ -15553,7 +15572,7 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
-                                  request_name,
+                                  'smart_join',
                                   '_clean_registry',
                                   'entry',
                                   target)
@@ -15575,7 +15594,7 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
-                                  request_name,
+                                  'smart_send',
                                   '_clean_registry',
                                   'entry',
                                   target)
@@ -15597,7 +15616,7 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
-                                  request_name,
+                                  'smart_send',
                                   '_clean_registry',
                                   'entry',
                                   target)
@@ -15619,7 +15638,7 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
-                                  request_name,
+                                  'smart_recv',
                                   '_clean_registry',
                                   'entry',
                                   target)
@@ -15641,7 +15660,7 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
-                                  request_name,
+                                  'smart_recv',
                                   '_clean_registry',
                                   'entry',
                                   target)
@@ -15663,7 +15682,7 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
-                                  request_name,
+                                  'smart_wait',
                                   '_clean_registry',
                                   'entry',
                                   target)
@@ -15685,7 +15704,7 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
-                                  request_name,
+                                  'smart_wait',
                                   '_clean_registry',
                                   'entry',
                                   target)
@@ -15707,7 +15726,7 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
-                                  request_name,
+                                  'smart_resume',
                                   '_clean_registry',
                                   'entry',
                                   target)
@@ -15729,7 +15748,7 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
-                                  request_name,
+                                  'smart_resume',
                                   '_clean_registry',
                                   'entry',
                                   target)
@@ -15751,7 +15770,7 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
-                                  request_name,
+                                  'smart_sync',
                                   '_clean_registry',
                                   'entry',
                                   target)
@@ -15773,7 +15792,7 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
         sub_key: SubProcessKey = (cmd_runner,
-                                  request_name,
+                                  'smart_sync',
                                   '_clean_registry',
                                   'entry',
                                   target)
@@ -15966,7 +15985,7 @@ class ConfigVerifier:
                                   f'log msg: {log_msg}')
 
         pe.add_reg_msg[add_key] -= 1
-        self.add_log_msg(re.escape(reg_update_msg))
+        self.add_log_msg(re.escape(log_msg))
 
         if target not in self.expected_registered:
             raise IncorrectDataDetected(
@@ -16747,8 +16766,9 @@ class ConfigVerifier:
                                   target)
         if pe.subprocess_msg[sub_key] <= 0:
             raise UnexpectedEvent(
-                'handle_subprocess_entry_exit_log_msg encountered '
-                f'unexpected log msg: {log_msg}')
+                f'handle_subprocess_entry_exit_log_msg using {sub_key=}, '
+                f'{pe.subprocess_msg=}, '
+                f'encountered unexpected log msg: {log_msg}')
 
         pe.subprocess_msg[sub_key] -= 1
         self.add_log_msg(log_msg)
@@ -16933,15 +16953,16 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
         # if commander is initializing, pair array is empty
-        if request_name == 'smart_init' and target == self.commander_name:
-            sub_key: SubProcessKey = (cmd_runner,
-                                      request_name,
-                                      '_clean_pair_array',
-                                      'exit',
-                                      target)
-            pe.subprocess_msg[sub_key] += 1
-        else:  # remove any old entries
+        if not (request_name == 'smart_init'
+                and target == self.commander_name):
             self.clean_pair_array(cmd_runner=cmd_runner)
+
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request_name,
+                                  '_clean_pair_array',
+                                  'exit',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
 
     ####################################################################
     # handle_subprocess_clean_pair_array_exit
@@ -24102,18 +24123,6 @@ class TestSmartThreadScenarios:
 
             config_ver.commander_thread_config_built = True
 
-            # if (config_ver.cmd_thread_auto_start
-            #         and not config_ver.cmd_thread_alive):
-            #     config_ver.pending_events[
-            #         commander_name].start_request.append(
-            #         StartRequest(
-            #             req_type=st.ReqType.Smart_start,
-            #             targets={commander_name},
-            #             not_registered_remotes=set(),
-            #             timeout_remotes=set(),
-            #             stopped_remotes=set(),
-            #             deadlock_remotes=set()))
-
         ################################################################
         # start commander
         ################################################################
@@ -24194,7 +24203,7 @@ class TestSmartThreadScenarios:
         # check that pending events are complete
         ################################################################
 
-        config_ver.log_test_msg('ConfigVer monitor check pending events')
+        config_ver.log_test_msg('Monitor Checkpoint: check_pending_events')
         config_ver.monitor_event.set()
         config_ver.check_pending_events_complete_event.wait()
 
