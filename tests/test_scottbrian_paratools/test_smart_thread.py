@@ -4450,7 +4450,7 @@ class RequestEntryExitLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         request_name = split_msg[0]
-        entry_exit = split_msg[1]
+        entry_exit = split_msg[1][0:-1]  # remove colon
         cmd_runner = split_msg[3][0:-1]  # remove comma
         target_msg = self.found_log_msg.split('[')[1].split(']')[0].split(', ')
 
@@ -4670,8 +4670,7 @@ class AddRegEntryLogSearchItem(LogSearchItem):
         self.config_ver.handle_add_reg_log_msg(
             cmd_runner=split_msg[0],
             target=split_msg[2],
-            reg_update_msg=self.found_log_msg,
-            reg_update_msg_log_idx=self.found_log_idx)
+            log_msg=self.found_log_msg)
         self.config_ver.add_log_msg(re.escape(self.found_log_msg))
 
 
@@ -14910,13 +14909,19 @@ class ConfigVerifier:
         else:
             timeout_remotes = set()
 
-        self.pending_events[cmd_runner].start_request.append(
+        pe = self.pending_events[cmd_runner]
+
+        pe.start_request.append(
             StartRequest(req_type=st.ReqType.Smart_join,
                          targets=join_names.copy(),
                          not_registered_remotes=set(),
                          timeout_remotes=timeout_remotes,
                          stopped_remotes=set(),
                          deadlock_remotes=set()))
+
+        req_key: RequestKey = (cmd_runner,
+                               'smart_join',
+                               'entry')
 
         enter_exit = ('entry', 'exit')
         if timeout_type == TimeoutType.TimeoutNone:
@@ -15129,6 +15134,19 @@ class ConfigVerifier:
             name='smart_recv',
             seq='test_smart_thread.py::ConfigVerifier.handle_recv_msg2')
 
+        pe = self.pending_events[cmd_runner]
+        pe.start_request.append(
+            StartRequest(req_type=st.ReqType.Smart_recv,
+                         targets={remote},
+                         not_registered_remotes=set(),
+                         timeout_remotes=timeout_names,
+                         stopped_remotes=stopped_remotes.copy(),
+                         deadlock_remotes=set()))
+
+        req_key: RequestKey = (cmd_runner,
+                               'smart_recv',
+                               'entry')
+
         sr_key: SrKey = SrKey(sender=remote, receiver=cmd_runner)
         enter_exit = ('entry', 'exit')
         if stopped_remotes:
@@ -15229,13 +15247,13 @@ class ConfigVerifier:
 
         if pe.request_msg[req_key] <= 0:
             raise UnexpectedEvent(
-                f'handle_request_entry_exit_log_msg encountered '
-                f'unexpected log msg: {log_msg}')
+                f'handle_request_entry_exit_log_msg using {req_key=} '
+                f'encountered unexpected log msg: {log_msg}')
 
         pe.request_msg[req_key] -= 1
         self.add_log_msg(re.escape(log_msg))
 
-        if entry_exit == 'entry:':
+        if entry_exit == 'entry':
             try:
                 req_start_item = pe.start_request.pop()
             except IndexError:
@@ -15310,7 +15328,7 @@ class ConfigVerifier:
 
         actions[(request_name, entry_exit)](cmd_runner=cmd_runner)
 
-        if entry_exit == 'exit:':
+        if entry_exit == 'exit':
 
             if pe.current_request.req_type.name in ('smart_send',
                                                     'smart_recv',
@@ -15929,8 +15947,7 @@ class ConfigVerifier:
     def handle_add_reg_log_msg(self,
                                cmd_runner: str,
                                target: str,
-                               reg_update_msg: str,
-                               reg_update_msg_log_idx) -> None:
+                               log_msg: str) -> None:
         """Handle the reg update log msg.
 
         Args:
@@ -15944,8 +15961,9 @@ class ConfigVerifier:
         add_key: AddRegKey = (cmd_runner, target)
 
         if pe.add_reg_msg[add_key] <= 0:
-            raise UnexpectedEvent(f'handle_add_reg_log_msg encountered '
-                                  f'unexpected log msg: {reg_update_msg}')
+            raise UnexpectedEvent(f'handle_add_reg_log_msg using {add_key=} '
+                                  'encountered unexpected '
+                                  f'log msg: {log_msg}')
 
         pe.add_reg_msg[add_key] -= 1
         self.add_log_msg(re.escape(reg_update_msg))
@@ -16057,6 +16075,19 @@ class ConfigVerifier:
             name='smart_resume',
             seq='test_smart_thread.py::ConfigVerifier.handle_resume')
 
+        pe = self.pending_events[cmd_runner]
+        pe.start_request.append(
+            StartRequest(req_type=st.ReqType.Smart_resume,
+                         targets=targets,
+                         not_registered_remotes=set(),
+                         timeout_remotes=timeout_names,
+                         stopped_remotes=stopped_remotes.copy(),
+                         deadlock_remotes=set()))
+
+        req_key: RequestKey = (cmd_runner,
+                               'smart_resume',
+                               'entry')
+
         enter_exit = ('entry', 'exit')
         if stopped_remotes:
             inc_ops_names: set[str] = targets - stopped_remotes
@@ -16165,6 +16196,27 @@ class ConfigVerifier:
         self.log_ver.add_call_seq(
             name='smart_send',
             seq='test_smart_thread.py::ConfigVerifier.handle_send_msg')
+
+        timeout_remotes = (unreg_timeout_names.copy()
+                           | fullq_timeout_names.copy())
+
+        pe = self.pending_events[cmd_runner]
+        pe.start_request.append(
+            StartRequest(req_type=st.ReqType.Smart_send,
+                         targets=receivers,
+                         not_registered_remotes=set(),
+                         timeout_remotes=timeout_remotes,
+                         stopped_remotes=stopped_remotes.copy(),
+                         deadlock_remotes=set()))
+
+        req_key: RequestKey = (cmd_runner,
+                               'smart_send',
+                               'entry')
+
+        pe.request_msg[req_key] += 1
+
+
+
         ops_count_names = receivers.copy()
 
         if unreg_timeout_names:
@@ -17050,6 +17102,19 @@ class ConfigVerifier:
             name='smart_sync',
             seq='test_smart_thread.py::ConfigVerifier.handle_sync')
 
+        pe = self.pending_events[cmd_runner]
+        pe.start_request.append(
+            StartRequest(req_type=st.ReqType.Smart_sync,
+                         targets=targets,
+                         not_registered_remotes=set(),
+                         timeout_remotes=timeout_remotes,
+                         stopped_remotes=stopped_remotes.copy(),
+                         deadlock_remotes=conflict_remotes))
+
+        req_key: RequestKey = (cmd_runner,
+                               'smart_sync',
+                               'entry')
+
         assert targets
         exp_completed_syncs: set[str] = targets.copy()
         enter_exit = ('entry', 'exit')
@@ -17310,13 +17375,19 @@ class ConfigVerifier:
 
         eligible_targets = unregister_targets.copy() - not_registered_remotes
 
-        self.pending_events[cmd_runner].start_request.append(
+        pe = self.pending_events[cmd_runner]
+
+        pe.start_request.append(
             StartRequest(req_type=st.ReqType.Smart_unreg,
                          targets=unregister_targets.copy(),
                          not_registered_remotes=not_registered_remotes.copy(),
                          timeout_remotes=set(),
                          stopped_remotes=set(),
                          deadlock_remotes=set()))
+
+        req_key: RequestKey = (cmd_runner,
+                               'smart_unreg',
+                               'entry')
 
         enter_exit = ('entry', 'exit')
         if not_registered_remotes:
@@ -17399,6 +17470,20 @@ class ConfigVerifier:
         self.log_ver.add_call_seq(
             name='smart_wait',
             seq='test_smart_thread.py::ConfigVerifier.handle_wait')
+
+        pe = self.pending_events[cmd_runner]
+        pe.start_request.append(
+            StartRequest(req_type=st.ReqType.Smart_wait,
+                         targets=resumers,
+                         not_registered_remotes=set(),
+                         timeout_remotes=timeout_remotes.copy(),
+                         stopped_remotes=stopped_remotes.copy(),
+                         deadlock_remotes=(conflict_remotes.copy() |
+                                           deadlock_remotes.copy())))
+
+        req_key: RequestKey = (cmd_runner,
+                               'smart_wait',
+                               'entry')
 
         exp_completed_resumers: set[str] = resumers.copy()
 
@@ -24032,6 +24117,7 @@ class TestSmartThreadScenarios:
         ################################################################
         # start commander
         ################################################################
+        config_ver.monitor_pause = True
         if commander_config == AppConfig.ScriptStyle:
             commander_thread = st.SmartThread(
                 name=commander_name)
@@ -24039,7 +24125,7 @@ class TestSmartThreadScenarios:
             config_ver.cmd_thread_alive = True
             config_ver.cmd_thread_auto_start = True
             initialize_config_ver()
-            config_ver.monitor_thread.start()
+            config_ver.monitor_pause = False
             config_ver.main_driver()
         elif commander_config == AppConfig.CurrentThreadApp:
             commander_current_app = CommanderCurrentApp(
@@ -24050,7 +24136,7 @@ class TestSmartThreadScenarios:
             config_ver.cmd_thread_alive = True
             config_ver.cmd_thread_auto_start = False
             initialize_config_ver()
-            config_ver.monitor_thread.start()
+            config_ver.monitor_pause = False
             commander_current_app.run()
         elif commander_config == AppConfig.RemoteThreadApp:
             outer_thread_app = OuterThreadApp(
@@ -24061,7 +24147,7 @@ class TestSmartThreadScenarios:
             config_ver.cmd_thread_alive = False
             config_ver.cmd_thread_auto_start = False
             initialize_config_ver()
-            config_ver.monitor_thread.start()
+            config_ver.monitor_pause = False
             outer_thread_app.smart_thread.smart_start()
             outer_thread_app.join()
             # config_ver.monitor_bail = True
@@ -24077,7 +24163,7 @@ class TestSmartThreadScenarios:
             config_ver.cmd_thread_alive = False
             config_ver.cmd_thread_auto_start = False
             initialize_config_ver()
-            config_ver.monitor_thread.start()
+            config_ver.monitor_pause = False
             outer_thread_app.smart_start(commander_name)
             threading.Thread.join(outer_thread_app)
             # config_ver.monitor_bail = True
@@ -24093,7 +24179,7 @@ class TestSmartThreadScenarios:
             config_ver.cmd_thread_alive = False
             config_ver.cmd_thread_auto_start = False
             initialize_config_ver()
-            config_ver.monitor_thread.start()
+            config_ver.monitor_pause = False
             outer_thread_app.smart_start(commander_name)
             threading.Thread.join(outer_thread_app)
         else:
@@ -24107,6 +24193,7 @@ class TestSmartThreadScenarios:
         ################################################################
         # check that pending events are complete
         ################################################################
+
         config_ver.log_test_msg('ConfigVer monitor check pending events')
         config_ver.monitor_event.set()
         config_ver.check_pending_events_complete_event.wait()

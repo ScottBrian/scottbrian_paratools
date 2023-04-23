@@ -776,8 +776,9 @@ class SmartThread:
 
         Args:
             name: name to be used to refer to this SmartThread. The name
-                may be the same as the threading.Thread name, but
-                it is not required that they be the same.
+                will be used to set the threading.Thread name. If it is
+                desired that threading.Thread.name remain unchanged,
+                specify the threading.Thread name.
             target: specifies that a thread is to be created and started
                         with the given target. Mutually exclusive with
                         the *thread* specification. Note that the
@@ -851,8 +852,12 @@ class SmartThread:
 
         self.debug_logging_enabled = logger.isEnabledFor(logging.DEBUG)
 
-        self.request: ReqType = ReqType.NoReq
-        self.cmd_runner: str = threading.current_thread().name
+        if not thread:
+            self.cmd_runner = name
+        else:
+            self.cmd_runner = threading.current_thread().name
+
+        self.request: ReqType = ReqType.Smart_init
 
         exit_log_msg = self._issue_entry_log_msg(
             request=ReqType.Smart_init,
@@ -932,6 +937,8 @@ class SmartThread:
         self.auto_started = False
 
         logger.debug(exit_log_msg)
+
+        self.request: ReqType = ReqType.NoReq
 
         if self.auto_start and not self.thread.is_alive():
             self.smart_start(self.name)
@@ -1849,10 +1856,10 @@ class SmartThread:
 
         """
         # get RequestBlock with targets in a set and a timer object
+        self.request = ReqType.Smart_start
         if not targets:
             targets = self.name
         request_block = self._request_setup(
-            request=ReqType.Smart_start,
             remotes=targets,
             error_stopped_target=True,
             error_not_registered_target=True,
@@ -1864,6 +1871,8 @@ class SmartThread:
             log_msg=log_msg)
 
         self._config_cmd_loop(request_block=request_block)
+
+        self.request = ReqType.NoReq
 
         logger.debug(request_block.exit_log_msg)
 
@@ -1976,8 +1985,8 @@ class SmartThread:
             mainline alpha exiting
 
         """
+        self.request = ReqType.Smart_unreg
         request_block = self._request_setup(
-            request=ReqType.Smart_unreg,
             remotes=targets,
             error_stopped_target=False,
             error_not_registered_target=True,
@@ -1989,6 +1998,8 @@ class SmartThread:
             log_msg=log_msg)
 
         self._config_cmd_loop(request_block=request_block)
+
+        self.request = ReqType.NoReq
 
         logger.debug(request_block.exit_log_msg)
 
@@ -2084,9 +2095,9 @@ class SmartThread:
 
 
         """
+        self.request = ReqType.Smart_join
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
-            request=ReqType.Smart_join,
             remotes=targets,
             error_stopped_target=False,
             process_rtn=self._process_smart_join,
@@ -2097,6 +2108,8 @@ class SmartThread:
             log_msg=log_msg)
 
         self._config_cmd_loop(request_block=request_block)
+
+        self.request = ReqType.NoReq
 
         logger.debug(request_block.exit_log_msg)
 
@@ -2552,6 +2565,7 @@ class SmartThread:
             mainline alpha exiting
 
         """
+        self.request = ReqType.Smart_send
         work_targets: set[str]
         if receivers is None:
             if isinstance(msg, SendMsgs):
@@ -2581,7 +2595,6 @@ class SmartThread:
 
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
-            request=ReqType.Smart_send,
             remotes=work_targets,
             error_stopped_target=True,
             process_rtn=self._process_send_msg,
@@ -2593,6 +2606,8 @@ class SmartThread:
             log_msg=log_msg)
 
         self._request_loop(request_block=request_block)
+
+        self.request = ReqType.NoReq
 
         logger.debug(request_block.exit_log_msg)
 
@@ -3015,9 +3030,9 @@ class SmartThread:
             mainline alpha exiting
 
         """
+        self.request = ReqType.Smart_recv
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
-            request=ReqType.Smart_recv,
             remotes=senders,
             error_stopped_target=True,
             process_rtn=self._process_recv_msg,
@@ -3031,6 +3046,8 @@ class SmartThread:
         self._request_loop(request_block=request_block)
 
         logger.debug(request_block.exit_log_msg)
+
+        self.request = ReqType.NoReq
 
         return request_block.ret_msg
 
@@ -3516,9 +3533,9 @@ class SmartThread:
             mainline alpha exiting
 
         """
+        self.request = ReqType.Smart_wait
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
-            request=ReqType.Smart_wait,
             remotes=resumers,
             error_stopped_target=True,
             process_rtn=self._process_wait,
@@ -3536,6 +3553,8 @@ class SmartThread:
         self._request_loop(request_block=request_block)
 
         logger.debug(request_block.exit_log_msg)
+
+        self.request = ReqType.NoReq
 
         return request_block.ret_msg
 
@@ -3840,10 +3859,9 @@ class SmartThread:
         #              sync
         #                                           wait
         ###############################################################
-
+        self.request = ReqType.Smart_resume
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
-            request=ReqType.Smart_resume,
             remotes=waiters,
             error_stopped_target=True,
             process_rtn=self._process_resume,
@@ -3854,6 +3872,8 @@ class SmartThread:
             log_msg=log_msg)
 
         self._request_loop(request_block=request_block)
+
+        self.request = ReqType.NoReq
 
         logger.debug(request_block.exit_log_msg)
 
@@ -4003,9 +4023,9 @@ class SmartThread:
             mainline alpha exiting
 
         """
+        self.request = ReqType.Smart_sync
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
-            request=ReqType.Smart_sync,
             remotes=targets,
             error_stopped_target=True,
             process_rtn=self._process_sync,
@@ -4016,6 +4036,8 @@ class SmartThread:
             log_msg=log_msg)
 
         self._request_loop(request_block=request_block)
+
+        self.request = ReqType.NoReq
 
         logger.debug(request_block.exit_log_msg)
 
@@ -4727,7 +4749,6 @@ class SmartThread:
     # _request_setup
     ####################################################################
     def _request_setup(self, *,
-                       request: ReqType,
                        process_rtn: Callable[
                            ["RequestBlock",
                             PairKeyRemote,
@@ -4774,13 +4795,12 @@ class SmartThread:
         """
         timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
 
-        self.request = request
         self.cmd_runner = threading.current_thread().name
 
         if not remotes:
-            if request not in (ReqType.Smart_recv, ReqType.Smart_wait):
+            if self.request not in (ReqType.Smart_recv, ReqType.Smart_wait):
                 raise SmartThreadInvalidInput(
-                    f'{self.name} {request.value} '
+                    f'{self.name} {self.request.value} '
                     'request with no targets specified.')
         else:
             if isinstance(remotes, str):
@@ -4789,39 +4809,40 @@ class SmartThread:
                 remotes = set(remotes)
 
         exit_log_msg = self._issue_entry_log_msg(
-            request=request,
+            request=self.request,
             remotes=remotes,
             timeout_value=timer.timeout_value(),
             log_msg=log_msg)
 
         request_category: ReqCategory
-        if request in (ReqType.Smart_start,
+        if self.request in (ReqType.Smart_start,
                        ReqType.Smart_unreg,
                        ReqType.Smart_join):
             request_category = ReqCategory.Config
         else:
             self.verify_thread_is_current()
-            if request in (ReqType.Smart_send, ReqType.Smart_resume):
+            if self.request in (ReqType.Smart_send, ReqType.Smart_resume):
                 request_category = ReqCategory.Throw
-            elif request in (ReqType.Smart_recv, ReqType.Smart_wait):
+            elif self.request in (ReqType.Smart_recv, ReqType.Smart_wait):
                 request_category = ReqCategory.Catch
-            elif request == ReqType.Smart_sync:
+            elif self.request == ReqType.Smart_sync:
                 request_category = ReqCategory.Handshake
             else:
-                raise SmartThreadInvalidInput(f'{request=} is not recognized '
-                                              'as a valid request type')
+                raise SmartThreadInvalidInput(f'{self.request=} is not '
+                                              'recognized as a valid request '
+                                              'type')
 
-        if (remotes and request != ReqType.Smart_start
+        if (remotes and self.request != ReqType.Smart_start
                 and self.cmd_runner in remotes):
-            raise SmartThreadInvalidInput(f'{self.name} {request.value} is '
-                                          f'also a target: {remotes=}')
+            raise SmartThreadInvalidInput(f'{self.name} {self.request.value} '
+                                          f'is also a target: {remotes=}')
 
         pk_remotes: list[PairKeyRemote] = []
 
-        if request in (ReqType.Smart_send, ReqType.Smart_recv,
-                       ReqType.Smart_resume, ReqType.Smart_sync,
-                       ReqType.Smart_wait):
-            self._set_work_pk_remotes(request=request,
+        if self.request in (ReqType.Smart_send, ReqType.Smart_recv,
+                            ReqType.Smart_resume, ReqType.Smart_sync,
+                            ReqType.Smart_wait):
+            self._set_work_pk_remotes(request=self.request,
                                       remotes=remotes)
             # with sel.SELockShare(SmartThread._registry_lock):
             #     self.missing_remotes: set[str] = set()
@@ -4865,7 +4886,7 @@ class SmartThread:
             #     self.found_pk_remotes: list[PairKeyRemote] = []
 
         request_block = RequestBlock(
-            request=request,
+            request=self.request,
             request_category=request_category,
             process_rtn=process_rtn,
             cleanup_rtn=cleanup_rtn,
