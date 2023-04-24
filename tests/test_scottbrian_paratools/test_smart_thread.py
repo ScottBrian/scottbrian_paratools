@@ -4847,12 +4847,12 @@ class UpdatePairArrayUtcLogSearchItem(LogSearchItem):
 
         pe = self.config_ver.pending_events[
                 cmd_runner]
-        if pe.update_pair_array_UTC_msg <= 0:
+        if pe.update_pair_array_utc_msg <= 0:
             raise UnexpectedEvent(
                 'UpdatePairArrayUtcLogSearchItem encountered unexpected '
                 f'log message: {self.found_log_msg}')
 
-        pe.update_pair_array_UTC_msg -= 1
+        pe.update_pair_array_utc_msg -= 1
 
         self.config_ver.add_log_msg(re.escape(self.found_log_msg))
 
@@ -5339,12 +5339,15 @@ class DidCleanPairArrayUtcLogSearchItem(LogSearchItem):
         cmd_runner = self.found_log_msg.split(maxsplit=1)[0]
 
         pe = self.config_ver.pending_events[cmd_runner]
-        if pe.update_pair_array_UTC_msg <= 0:
+        self.config_ver.log_test_msg('DidCleanPairArrayUtcLogSearchItem for '
+                          f'{cmd_runner=} checking '
+                          f'{pe.did_cleanup_pair_array_utc_msg=}')
+        if pe.did_cleanup_pair_array_utc_msg <= 0:
             raise UnexpectedEvent(
                 'DidCleanPairArrayUtcLogSearchItem encountered unexpected '
                 f'log message: {self.found_log_msg}')
 
-        pe.update_pair_array_UTC_msg -= 1
+        pe.did_cleanup_pair_array_utc_msg -= 1
 
         self.config_ver.add_log_msg(re.escape(self.found_log_msg))
 
@@ -6152,7 +6155,8 @@ class PendingEvent:
     status_msg: dict[tuple[bool, st.ThreadState], int]
     rem_reg_msg: dict[RemRegKey, int]
     did_clean_reg_msg: int
-    update_pair_array_UTC_msg: int
+    update_pair_array_utc_msg: int
+    did_cleanup_pair_array_utc_msg: int
     rem_reg_targets: deque[list[str]]
     add_reg_msg: dict[AddRegKey, int]
     add_pair_array_msg: dict[AddPaKey, int]
@@ -6305,7 +6309,8 @@ class ConfigVerifier:
                 status_msg=defaultdict(int),
                 rem_reg_msg=defaultdict(int),
                 did_clean_reg_msg=0,
-                update_pair_array_UTC_msg=0,
+                update_pair_array_utc_msg=0,
+                did_cleanup_pair_array_utc_msg=0,
                 rem_reg_targets=deque(),
                 add_reg_msg=defaultdict(int),
                 add_pair_array_msg=defaultdict(int),
@@ -17066,6 +17071,8 @@ class ConfigVerifier:
                 and target == self.commander_name):
             self.clean_pair_array(cmd_runner=cmd_runner)
 
+
+
         sub_key: SubProcessKey = (cmd_runner,
                                   request_name,
                                   '_clean_pair_array',
@@ -17114,7 +17121,7 @@ class ConfigVerifier:
         self.add_to_pair_array(cmd_runner=cmd_runner,
                                add_name=target)
 
-        pe.update_pair_array_UTC_msg += 1
+        pe.update_pair_array_utc_msg += 1
 
         ################################################################
         # determine next step
@@ -18312,14 +18319,19 @@ class ConfigVerifier:
 
         pe = self.pending_events[cmd_runner]
 
+        changed = False
         pair_keys_to_delete = []
         for pair_key in self.expected_pairs:
             if (pair_key[0] in self.expected_registered
                     and pair_key[1] in self.expected_registered):
+                self.log_test_msg('clean_pair_array continue with '
+                                  f'{pair_key=}')
                 continue
 
             # one or both need to be removed from pair_array
             pae = self.expected_pairs[pair_key]
+            self.log_test_msg('clean_pair_array processing '
+                              f'{pair_key=}')
 
             pending_request = pending_msg = pending_wait = pending_sync = False
             for name in pair_key:
@@ -18351,17 +18363,22 @@ class ConfigVerifier:
                     else:
                         del pae[name]
                         pe.rem_status_block_msg[rem_sb_key] += 1
+                        changed = True
 
             if not pae:
                 pair_keys_to_delete.append(pair_key)
 
         if pair_keys_to_delete:
-            pe.update_pair_array_UTC_msg += 1
+            changed = True
             for pair_key in pair_keys_to_delete:
                 del self.expected_pairs[pair_key]
                 rem_pae_key: RemPaeKey = (cmd_runner, pair_key)
                 pe.rem_pair_array_entry_msg[rem_pae_key] += 1
 
+        if changed:
+            pe.did_cleanup_pair_array_utc_msg += 1
+            self.log_test_msg(f'clean_pair_array for {cmd_runner=} '
+                              f'{pe.did_cleanup_pair_array_utc_msg=}')
 
         #     if other_name not in self.expected_pairs[pair_key].keys():
         #         # check that del_name had reason to be in pair_array
