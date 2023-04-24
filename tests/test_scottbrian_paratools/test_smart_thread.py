@@ -60,13 +60,13 @@ AddStatusBlockKey: TypeAlias = tuple[str, st.PairKey, str]
 
 CleanRegKey: TypeAlias = tuple[str, str, str, str]
 
-RequestKey: TypeAlias = tuple[str, str, str]
+RequestKey: TypeAlias = tuple[str, str]
 
 SubProcessKey: TypeAlias = tuple[str, str, str, str, str]
 
 RemRegKey: TypeAlias = tuple[str, str]
 
-AckKey: TypeAlias = tuple[str, str, str]
+AckKey: TypeAlias = tuple[str, str]
 
 
 class DefDelReasons(NamedTuple):
@@ -5418,7 +5418,7 @@ class RequestAckLogSearchItem(LogSearchItem):
 
         pe = self.config_ver.pending_events[cmd_runner]
 
-        ack_key: AckKey = (cmd_runner, remote, request)
+        ack_key: AckKey = (remote, request)
 
         if pe.ack_msg[ack_key] <= 0:
             raise UnexpectedEvent(
@@ -6136,6 +6136,7 @@ class StartRequest:
     timeout_remotes: set[str]
     stopped_remotes: set[str]
     deadlock_remotes: set[str]
+    timeout_type: TimeoutType = TimeoutType.TimeoutNone
     req_type: st.ReqType = st.ReqType.NoReq
 
 
@@ -14203,17 +14204,6 @@ class ConfigVerifier:
                 max_msgs=self.max_msgs)
         self.all_threads[commander_name] = self.commander_thread
 
-        # self.pending_events[cmd_runner].start_reg_msg[name] += 1
-
-        # if auto_start and not self.commander_thread.thread.is_alive():
-        #     self.pending_events[cmd_runner].start_request.append(StartRequest(
-        #         req_type=st.ReqType.Smart_start,
-        #         targets={name},
-        #         not_registered_remotes=set(),
-        #         timeout_remotes=set(),
-        #         stopped_remotes=set(),
-        #         deadlock_remotes=set()))
-
         if auto_start:
             exp_status = st.ThreadState.Alive
         else:
@@ -14327,11 +14317,16 @@ class ConfigVerifier:
             stopped_remotes=set(),
             deadlock_remotes=set()))
 
-        req_key: RequestKey = (cmd_runner,
-                               'smart_init',
-                               'entry')
+        pe = self.pending_events[cmd_runner]
+        req_key_entry: RequestKey = ('smart_init',
+                                     'entry')
 
-        self.pending_events[cmd_runner].request_msg[req_key] += 1
+        pe.request_msg[req_key_entry] += 1
+
+        req_key_exit: RequestKey = ('smart_init',
+                                    'exit')
+
+        pe.request_msg[req_key_exit] += 1
 
         self.monitor_pause = False
 
@@ -14969,30 +14964,37 @@ class ConfigVerifier:
 
         pe.start_request.append(
             StartRequest(req_type=st.ReqType.Smart_join,
+                         timeout_type=timeout_type,
                          targets=join_names.copy(),
                          not_registered_remotes=set(),
                          timeout_remotes=timeout_remotes,
                          stopped_remotes=set(),
                          deadlock_remotes=set()))
 
-        req_key: RequestKey = (cmd_runner,
-                               'smart_join',
-                               'entry')
+        req_key_entry: RequestKey = ('smart_join',
+                                     'entry')
 
-        enter_exit = ('entry', 'exit')
+        pe.request_msg[req_key_entry] += 1
+
+        req_key_exit: RequestKey = ('smart_join',
+                                    'exit')
+
+        # enter_exit = ('entry', 'exit')
         if timeout_type == TimeoutType.TimeoutNone:
+            pe.request_msg[req_key_exit] += 1
             self.all_threads[cmd_runner].smart_join(
                 targets=join_names,
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutFalse:
+            pe.request_msg[req_key_exit] += 1
             self.all_threads[cmd_runner].smart_join(
                 targets=join_names,
                 timeout=timeout,
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutTrue:
-            enter_exit = ('entry', )
+            # enter_exit = ('entry', )
             error_msg = self.get_error_msg(
                     cmd_runner=cmd_runner,
                     smart_request='smart_join',
@@ -15017,13 +15019,13 @@ class ConfigVerifier:
                     error_str='SmartThreadRequestTimedOut'),
                 log_level=logging.ERROR)
 
-        self.add_request_log_msg(cmd_runner=cmd_runner,
-                                 smart_request='smart_join',
-                                 targets=join_names,
-                                 timeout=timeout,
-                                 timeout_type=timeout_type,
-                                 enter_exit=enter_exit,
-                                 log_msg=log_msg)
+        # self.add_request_log_msg(cmd_runner=cmd_runner,
+        #                          smart_request='smart_join',
+        #                          targets=join_names,
+        #                          timeout=timeout,
+        #                          timeout_type=timeout_type,
+        #                          enter_exit=enter_exit,
+        #                          log_msg=log_msg)
 
         elapsed_time: float = time.time() - start_time
         time_per_target: float = elapsed_time/len(join_names)
@@ -15193,22 +15195,25 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         pe.start_request.append(
             StartRequest(req_type=st.ReqType.Smart_recv,
+                         timeout_type=timeout_type,
                          targets={remote},
                          not_registered_remotes=set(),
                          timeout_remotes=timeout_names,
                          stopped_remotes=stopped_remotes.copy(),
                          deadlock_remotes=set()))
 
-        req_key: RequestKey = (cmd_runner,
-                               'smart_recv',
-                               'entry')
+        req_key_entry: RequestKey = ('smart_recv',
+                                     'entry')
 
-        pe.request_msg[req_key] += 1
+        pe.request_msg[req_key_entry] += 1
+
+        req_key_exit: RequestKey = ('smart_recv',
+                                    'exit')
 
         sr_key: SrKey = SrKey(sender=remote, receiver=cmd_runner)
-        enter_exit = ('entry', 'exit')
+        # enter_exit = ('entry', 'exit')
         if stopped_remotes:
-            enter_exit = ('entry', )
+            # enter_exit = ('entry', )
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
                     recvd_msg = self.all_threads[cmd_runner].smart_recv(
@@ -15230,6 +15235,7 @@ class ConfigVerifier:
                 log_level=logging.ERROR)
 
         elif timeout_type == TimeoutType.TimeoutNone:
+            pe.request_msg[req_key_exit] += 1
             recvd_msg = self.all_threads[cmd_runner].smart_recv(
                 senders=remote,
                 log_msg=log_msg)
@@ -15239,17 +15245,18 @@ class ConfigVerifier:
                 log_level=logging.INFO)
 
         elif timeout_type == TimeoutType.TimeoutFalse:
+            pe.request_msg[req_key_exit] += 1
             recvd_msg = self.all_threads[cmd_runner].smart_recv(
                 senders=remote,
                 timeout=timeout,
                 log_msg=log_msg)
             assert recvd_msg[remote] == [exp_msgs.send_msgs[sr_key]]
-            self.add_log_msg(
-                new_log_msg=f"{cmd_runner} received msg from {remote}",
-                log_level=logging.INFO)
+            # self.add_log_msg(
+            #     new_log_msg=f"{cmd_runner} received msg from {remote}",
+            #     log_level=logging.INFO)
 
         elif timeout_type == TimeoutType.TimeoutTrue:
-            enter_exit = ('entry', )
+            # enter_exit = ('entry', )
             with pytest.raises(st.SmartThreadRequestTimedOut):
                 recvd_msg = self.all_threads[cmd_runner].smart_recv(
                     senders=remote,
@@ -15299,8 +15306,7 @@ class ConfigVerifier:
         """
         pe = self.pending_events[cmd_runner]
 
-        req_key: RequestKey = (cmd_runner,
-                               request_name,
+        req_key: RequestKey = (request_name,
                                entry_exit)
 
         if pe.request_msg[req_key] <= 0:
@@ -15313,7 +15319,7 @@ class ConfigVerifier:
 
         if entry_exit == 'entry':
             try:
-                req_start_item = pe.start_request.pop()
+                req_start_item = pe.start_request.popleft()
             except IndexError:
                 raise UnexpectedEvent(
                     'handle_request_entry_exit_log_msg missing start_request '
@@ -15332,6 +15338,9 @@ class ConfigVerifier:
                     f'log msg: {log_msg}')
 
             pe.current_request = req_start_item
+
+            self.log_test_msg(f'handle_request_entry_exit_log_msg looking '
+                              f'for {req_start_item.req_type.name=}')
 
             if req_start_item.req_type.name in ('smart_send',
                                                 'smart_recv',
@@ -15478,11 +15487,15 @@ class ConfigVerifier:
                              stopped_remotes=set(),
                              deadlock_remotes=set()))
 
-            req_key: RequestKey = (cmd_runner,
-                                   'smart_start',
-                                   'entry')
+            req_key_entry: RequestKey = ('smart_start',
+                                         'entry')
 
-            pe.request_msg[req_key] += 1
+            pe.request_msg[req_key_entry] += 1
+
+            req_key_exit: RequestKey = ('smart_start',
+                                        'exit')
+
+            pe.request_msg[req_key_exit] += 1
 
     ####################################################################
     # handle_request_smart_start_entry
@@ -15544,12 +15557,17 @@ class ConfigVerifier:
         # determine next step
         ################################################################
         pe = self.pending_events[cmd_runner]
-        sub_key: SubProcessKey = (cmd_runner,
-                                  'smart_unreg',
-                                  '_clean_registry',
-                                  'entry',
-                                  target)
-        pe.subprocess_msg[sub_key] += 1
+
+        eligible_targets = (pe.current_request.targets.copy()
+                            - pe.current_request.not_registered_remotes)
+
+        for target in eligible_targets:
+            sub_key: SubProcessKey = (cmd_runner,
+                                      'smart_unreg',
+                                      '_clean_registry',
+                                      'entry',
+                                      target)
+            pe.subprocess_msg[sub_key] += 1
 
     ####################################################################
     # handle_request_smart_unreg_exit
@@ -15565,13 +15583,7 @@ class ConfigVerifier:
         ################################################################
         # determine next step
         ################################################################
-        pe = self.pending_events[cmd_runner]
-        sub_key: SubProcessKey = (cmd_runner,
-                                  'smart_unreg',
-                                  '_clean_registry',
-                                  'entry',
-                                  target)
-        pe.subprocess_msg[sub_key] += 1
+        pass
 
     ####################################################################
     # handle_request_smart_join_entry
@@ -15588,12 +15600,29 @@ class ConfigVerifier:
         # determine next step
         ################################################################
         pe = self.pending_events[cmd_runner]
-        sub_key: SubProcessKey = (cmd_runner,
-                                  'smart_join',
-                                  '_clean_registry',
-                                  'entry',
-                                  target)
-        pe.subprocess_msg[sub_key] += 1
+
+        if pe.current_request.timeout_type == TimeoutType.TimeoutTrue:
+            timeout_remotes = pe.current_request.timeout_remotes
+        else:
+            timeout_remotes = set()
+
+        eligible_targets = (pe.current_request.targets.copy()
+                            - timeout_remotes)
+
+        for target in eligible_targets:
+            state_key: SetStateKey = (cmd_runner,
+                                      target,
+                                      st.ThreadState.Alive,
+                                      st.ThreadState.Stopped)
+            pe.set_state_msg[state_key] += 1
+
+            # join runs with the cmd_runner smart_thread, not target
+            sub_key: SubProcessKey = (cmd_runner,
+                                      'smart_join',
+                                      '_clean_registry',
+                                      'entry',
+                                      cmd_runner)
+            pe.subprocess_msg[sub_key] += 1
 
     ####################################################################
     # handle_request_smart_join_exit
@@ -15609,13 +15638,7 @@ class ConfigVerifier:
         ################################################################
         # determine next step
         ################################################################
-        pe = self.pending_events[cmd_runner]
-        sub_key: SubProcessKey = (cmd_runner,
-                                  'smart_join',
-                                  '_clean_registry',
-                                  'entry',
-                                  target)
-        pe.subprocess_msg[sub_key] += 1
+        pass
 
     ####################################################################
     # handle_request_smart_send_entry
@@ -15633,15 +15656,17 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
 
-        targets = pe.current_request.targets
-        timeout_targets = pe.current_request.timeout_remotes
+        if pe.current_request.timeout_type == TimeoutType.TimeoutTrue:
+            timeout_remotes = pe.current_request.timeout_remotes
+        else:
+            timeout_remotes = set()
 
         eligible_targets = (pe.current_request.targets.copy()
-                            - pe.current_request.timeout_remotes
+                            - timeout_remotes
                             - pe.current_request.stopped_remotes)
 
         for target in eligible_targets:
-            ack_key: AckKey = (cmd_runner, target, 'smart_send')
+            ack_key: AckKey = (target, 'smart_send')
 
             pe.ack_msg[ack_key] += 1
 
@@ -15659,13 +15684,7 @@ class ConfigVerifier:
         ################################################################
         # determine next step
         ################################################################
-        pe = self.pending_events[cmd_runner]
-        sub_key: SubProcessKey = (cmd_runner,
-                                  'smart_send',
-                                  '_clean_registry',
-                                  'entry',
-                                  target)
-        pe.subprocess_msg[sub_key] += 1
+        pass
 
     ####################################################################
     # handle_request_smart_recv_entry
@@ -15682,12 +15701,20 @@ class ConfigVerifier:
         # determine next step
         ################################################################
         pe = self.pending_events[cmd_runner]
-        sub_key: SubProcessKey = (cmd_runner,
-                                  'smart_recv',
-                                  '_clean_registry',
-                                  'entry',
-                                  target)
-        pe.subprocess_msg[sub_key] += 1
+
+        if pe.current_request.timeout_type == TimeoutType.TimeoutTrue:
+            timeout_remotes = pe.current_request.timeout_remotes
+        else:
+            timeout_remotes = set()
+
+        eligible_targets = (pe.current_request.targets.copy()
+                            - timeout_remotes
+                            - pe.current_request.stopped_remotes)
+
+        for target in eligible_targets:
+            ack_key: AckKey = (target, 'smart_recv')
+
+            pe.ack_msg[ack_key] += 1
 
     ####################################################################
     # handle_request_smart_recv_exit
@@ -15703,13 +15730,7 @@ class ConfigVerifier:
         ################################################################
         # determine next step
         ################################################################
-        pe = self.pending_events[cmd_runner]
-        sub_key: SubProcessKey = (cmd_runner,
-                                  'smart_recv',
-                                  '_clean_registry',
-                                  'entry',
-                                  target)
-        pe.subprocess_msg[sub_key] += 1
+        pass
 
     ####################################################################
     # handle_request_smart_wait_entry
@@ -15726,12 +15747,21 @@ class ConfigVerifier:
         # determine next step
         ################################################################
         pe = self.pending_events[cmd_runner]
-        sub_key: SubProcessKey = (cmd_runner,
-                                  'smart_wait',
-                                  '_clean_registry',
-                                  'entry',
-                                  target)
-        pe.subprocess_msg[sub_key] += 1
+
+        if pe.current_request.timeout_type == TimeoutType.TimeoutTrue:
+            timeout_remotes = pe.current_request.timeout_remotes
+        else:
+            timeout_remotes = set()
+
+        eligible_targets = (pe.current_request.targets.copy()
+                            - timeout_remotes
+                            - pe.current_request.stopped_remotes
+                            - pe.current_request.deadlock_remotes)
+
+        for target in eligible_targets:
+            ack_key: AckKey = (target, 'smart_wait')
+
+            pe.ack_msg[ack_key] += 1
 
     ####################################################################
     # handle_request_smart_wait_exit
@@ -15747,13 +15777,7 @@ class ConfigVerifier:
         ################################################################
         # determine next step
         ################################################################
-        pe = self.pending_events[cmd_runner]
-        sub_key: SubProcessKey = (cmd_runner,
-                                  'smart_wait',
-                                  '_clean_registry',
-                                  'entry',
-                                  target)
-        pe.subprocess_msg[sub_key] += 1
+        pass
 
     ####################################################################
     # handle_request_smart_resume_entry
@@ -15770,12 +15794,20 @@ class ConfigVerifier:
         # determine next step
         ################################################################
         pe = self.pending_events[cmd_runner]
-        sub_key: SubProcessKey = (cmd_runner,
-                                  'smart_resume',
-                                  '_clean_registry',
-                                  'entry',
-                                  target)
-        pe.subprocess_msg[sub_key] += 1
+
+        if pe.current_request.timeout_type == TimeoutType.TimeoutTrue:
+            timeout_remotes = pe.current_request.timeout_remotes
+        else:
+            timeout_remotes = set()
+
+        eligible_targets = (pe.current_request.targets.copy()
+                            - timeout_remotes
+                            - pe.current_request.stopped_remotes)
+
+        for target in eligible_targets:
+            ack_key: AckKey = (target, 'smart_resume')
+
+            pe.ack_msg[ack_key] += 1
 
     ####################################################################
     # handle_request_smart_start_exit
@@ -15791,13 +15823,7 @@ class ConfigVerifier:
         ################################################################
         # determine next step
         ################################################################
-        pe = self.pending_events[cmd_runner]
-        sub_key: SubProcessKey = (cmd_runner,
-                                  'smart_resume',
-                                  '_clean_registry',
-                                  'entry',
-                                  target)
-        pe.subprocess_msg[sub_key] += 1
+        pass
 
     ####################################################################
     # handle_request_smart_sync_entry
@@ -15814,12 +15840,21 @@ class ConfigVerifier:
         # determine next step
         ################################################################
         pe = self.pending_events[cmd_runner]
-        sub_key: SubProcessKey = (cmd_runner,
-                                  'smart_sync',
-                                  '_clean_registry',
-                                  'entry',
-                                  target)
-        pe.subprocess_msg[sub_key] += 1
+
+        if pe.current_request.timeout_type == TimeoutType.TimeoutTrue:
+            timeout_remotes = pe.current_request.timeout_remotes
+        else:
+            timeout_remotes = set()
+
+        eligible_targets = (pe.current_request.targets.copy()
+                            - timeout_remotes
+                            - pe.current_request.stopped_remotes
+                            - pe.current_request.deadlock_remotes)
+
+        for target in eligible_targets:
+            ack_key: AckKey = (target, 'smart_sync')
+
+            pe.ack_msg[ack_key] += 1
 
     ####################################################################
     # handle_request_smart_sync_exit
@@ -15835,13 +15870,7 @@ class ConfigVerifier:
         ################################################################
         # determine next step
         ################################################################
-        pe = self.pending_events[cmd_runner]
-        sub_key: SubProcessKey = (cmd_runner,
-                                  'smart_sync',
-                                  '_clean_registry',
-                                  'entry',
-                                  target)
-        pe.subprocess_msg[sub_key] += 1
+        pass
 
     ####################################################################
     # handle_request_exit_log_msg
@@ -16142,21 +16171,26 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         pe.start_request.append(
             StartRequest(req_type=st.ReqType.Smart_resume,
+                         timeout_type=timeout_type,
                          targets=targets,
                          not_registered_remotes=set(),
                          timeout_remotes=timeout_names,
                          stopped_remotes=stopped_remotes.copy(),
                          deadlock_remotes=set()))
 
-        req_key: RequestKey = (cmd_runner,
-                               'smart_resume',
-                               'entry')
+        req_key_entry: RequestKey = ('smart_resume',
+                                     'entry')
 
-        enter_exit = ('entry', 'exit')
+        pe.request_msg[req_key_entry] += 1
+
+        req_key_exit: RequestKey = ('smart_resume',
+                                    'exit')
+
+        # enter_exit = ('entry', 'exit')
         if stopped_remotes:
             inc_ops_names: set[str] = targets - stopped_remotes
             self.inc_ops_count(inc_ops_names, cmd_runner)
-            enter_exit = ('entry', )
+            # enter_exit = ('entry', )
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_resume(
@@ -16178,12 +16212,14 @@ class ConfigVerifier:
                 log_level=logging.ERROR)
 
         elif timeout_type == TimeoutType.TimeoutNone:
+            pe.request_msg[req_key_exit] += 1
             self.inc_ops_count(targets.copy(), cmd_runner)
             self.all_threads[cmd_runner].smart_resume(
                 waiters=targets,
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutFalse:
+            pe.request_msg[req_key_exit] += 1
             self.inc_ops_count(targets.copy(), cmd_runner)
             self.all_threads[cmd_runner].smart_resume(
                 waiters=targets,
@@ -16193,7 +16229,7 @@ class ConfigVerifier:
         elif timeout_type == TimeoutType.TimeoutTrue:
             inc_ops_names: set[str] = targets - set(timeout_names)
             self.inc_ops_count(inc_ops_names, cmd_runner)
-            enter_exit = ('entry', )
+            # enter_exit = ('entry', )
             with pytest.raises(st.SmartThreadRequestTimedOut):
                 self.all_threads[cmd_runner].smart_resume(
                     waiters=targets,
@@ -16209,13 +16245,13 @@ class ConfigVerifier:
                     stopped_remotes=stopped_remotes),
                 log_level=logging.ERROR)
 
-        self.add_request_log_msg(cmd_runner=cmd_runner,
-                                 smart_request='smart_resume',
-                                 targets=targets,
-                                 timeout=timeout,
-                                 timeout_type=timeout_type,
-                                 enter_exit=enter_exit,
-                                 log_msg=log_msg)
+        # self.add_request_log_msg(cmd_runner=cmd_runner,
+        #                          smart_request='smart_resume',
+        #                          targets=targets,
+        #                          timeout=timeout,
+        #                          timeout_type=timeout_type,
+        #                          enter_exit=enter_exit,
+        #                          log_msg=log_msg)
 
         self.wait_for_monitor(cmd_runner=cmd_runner,
                               rtn_name='handle_resume')
@@ -16270,17 +16306,20 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         pe.start_request.append(
             StartRequest(req_type=st.ReqType.Smart_send,
+                         timeout_type=timeout_type,
                          targets=receivers,
                          not_registered_remotes=set(),
                          timeout_remotes=timeout_remotes,
                          stopped_remotes=stopped_remotes.copy(),
                          deadlock_remotes=set()))
 
-        req_key: RequestKey = (cmd_runner,
-                               'smart_send',
-                               'entry')
+        req_key_entry: RequestKey = ('smart_send',
+                                     'entry')
 
-        pe.request_msg[req_key] += 1
+        pe.request_msg[req_key_entry] += 1
+
+        req_key_exit: RequestKey = ('smart_send',
+                                    'exit')
 
         ops_count_names = receivers.copy()
 
@@ -16324,9 +16363,9 @@ class ConfigVerifier:
                     send_msgs.send_msgs[sr_key.receiver] = item
             send_msg = send_msgs
 
-        enter_exit = ('entry', 'exit')
+        # enter_exit = ('entry', 'exit')
         if stopped_remotes:
-            enter_exit = ('entry', )
+            # enter_exit = ('entry', )
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_send(
@@ -16350,12 +16389,14 @@ class ConfigVerifier:
                 log_level=logging.ERROR)
 
         elif timeout_type == TimeoutType.TimeoutNone:
+            pe.request_msg[req_key_exit] += 1
             self.all_threads[cmd_runner].smart_send(
                 receivers=receivers,
                 msg=send_msg,
                 log_msg=log_msg)
             elapsed_time += (time.time() - start_time)
         elif timeout_type == TimeoutType.TimeoutFalse:
+            pe.request_msg[req_key_exit] += 1
             self.all_threads[cmd_runner].smart_send(
                 receivers=receivers,
                 msg=send_msg,
@@ -16363,7 +16404,7 @@ class ConfigVerifier:
                 log_msg=log_msg)
             elapsed_time += (time.time() - start_time)
         elif timeout_type == TimeoutType.TimeoutTrue:
-            enter_exit = ('entry', )
+            # enter_exit = ('entry', )
             with pytest.raises(st.SmartThreadRequestTimedOut):
                 self.all_threads[cmd_runner].smart_send(
                     receivers=receivers,
@@ -16387,12 +16428,12 @@ class ConfigVerifier:
         #                          timeout_type=timeout_type,
         #                          enter_exit=enter_exit,
         #                          log_msg=log_msg)
-        for name in ops_count_names:
-            log_msg = f'{cmd_runner} sent message to {name}'
-            self.log_ver.add_msg(
-                log_name='scottbrian_paratools.smart_thread',
-                log_level=logging.INFO,
-                log_msg=log_msg)
+        # for name in ops_count_names:
+        #     log_msg = f'{cmd_runner} sent message to {name}'
+        #     self.log_ver.add_msg(
+        #         log_name='scottbrian_paratools.smart_thread',
+        #         log_level=logging.INFO,
+        #         log_msg=log_msg)
 
         mean_elapsed_time = elapsed_time / len(receivers)
         self.log_test_msg(f'handle_send exit: {cmd_runner=} '
@@ -16605,12 +16646,11 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
         pe.num_targets_remaining -= 1
-        if pe.num_targets_remaining == 0:
-            req_key: RequestKey = (cmd_runner,
-                                   'smart_start',
-                                   'exit')
-
-            pe.request_msg[req_key] += 1
+        # if pe.num_targets_remaining == 0:
+        #     req_key: RequestKey = ('smart_start',
+        #                            'exit')
+        #
+        #     pe.request_msg[req_key] += 1
 
     ####################################################################
     # handle_set_state_reg_to_stop
@@ -16701,17 +16741,19 @@ class ConfigVerifier:
                          stopped_remotes=set(),
                          deadlock_remotes=set()))
 
-        req_key: RequestKey = (cmd_runner,
-                               'smart_start',
-                               'entry')
+        req_key_entry: RequestKey = ('smart_start',
+                                     'entry')
 
-        pe.request_msg[req_key] += 1
+        pe.request_msg[req_key_entry] += 1
+
+        req_key_exit: RequestKey = ('smart_start',
+                                    'exit')
 
         exp_started_names = start_names
-        enter_exit = ('entry', 'exit')
+        # enter_exit = ('entry', 'exit')
         if unreg_remotes:
             exp_started_names -= unreg_remotes
-            enter_exit = ('entry',)
+            # enter_exit = ('entry',)
             with pytest.raises(st.SmartThreadRemoteThreadNotRegistered):
                 self.all_threads[cmd_runner].smart_start(
                     targets=start_names,
@@ -16726,25 +16768,26 @@ class ConfigVerifier:
                     unreg_remotes=unreg_remotes),
                 log_level=logging.ERROR)
         else:
+            pe.request_msg[req_key_exit] += 1
             self.all_threads[cmd_runner].smart_start(
                 targets=start_names,
                 log_msg=log_msg)
 
-        for start_name in exp_started_names:
-            self.add_log_msg(
-                f'{cmd_runner} set state for thread {start_name} '
-                'from ThreadState.Registered to ThreadState.Starting')
-            self.add_log_msg(
-                f'{cmd_runner} set state for thread {start_name} '
-                f'from ThreadState.Starting to ThreadState.Alive')
-
-        self.add_request_log_msg(cmd_runner=cmd_runner,
-                                 smart_request='smart_start',
-                                 targets=start_names,
-                                 timeout=0,
-                                 timeout_type=TimeoutType.TimeoutNone,
-                                 enter_exit=enter_exit,
-                                 log_msg=None)
+        # for start_name in exp_started_names:
+        #     self.add_log_msg(
+        #         f'{cmd_runner} set state for thread {start_name} '
+        #         'from ThreadState.Registered to ThreadState.Starting')
+        #     self.add_log_msg(
+        #         f'{cmd_runner} set state for thread {start_name} '
+        #         f'from ThreadState.Starting to ThreadState.Alive')
+        #
+        # self.add_request_log_msg(cmd_runner=cmd_runner,
+        #                          smart_request='smart_start',
+        #                          targets=start_names,
+        #                          timeout=0,
+        #                          timeout_type=TimeoutType.TimeoutNone,
+        #                          enter_exit=enter_exit,
+        #                          log_msg=None)
 
         self.monitor_event.set()
         if exp_started_names:
@@ -16909,13 +16952,13 @@ class ConfigVerifier:
         ################################################################
         # determine next step
         ################################################################
-        pe = self.pending_events[cmd_runner]
-
-        req_key: RequestKey = (cmd_runner,
-                               'smart_init',
-                               'exit')
-
-        pe.request_msg[req_key] += 1
+        pass
+        # pe = self.pending_events[cmd_runner]
+        #
+        # req_key: RequestKey = ('smart_init',
+        #                        'exit')
+        #
+        # pe.request_msg[req_key] += 1
 
     ####################################################################
     # handle_subprocess_clean_registry_entry
@@ -16959,7 +17002,7 @@ class ConfigVerifier:
                             and item.st_state == st.ThreadState.Stopped):
                         rem_key: RemRegKey = (
                             key,
-                            pe.current_request.req_type.value())
+                            pe.current_request.req_type.value)
                         pe.rem_reg_msg[rem_key] += 1
                         rem_targets.append(key)
                 if rem_targets:
@@ -17192,23 +17235,27 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         pe.start_request.append(
             StartRequest(req_type=st.ReqType.Smart_sync,
+                         timeout_type=timeout_type,
                          targets=targets,
                          not_registered_remotes=set(),
                          timeout_remotes=timeout_remotes,
                          stopped_remotes=stopped_remotes.copy(),
                          deadlock_remotes=conflict_remotes))
 
-        req_key: RequestKey = (cmd_runner,
-                               'smart_sync',
-                               'entry')
+        req_key_entry: RequestKey = ('smart_sync',
+                                     'entry')
+        pe.request_msg[req_key_entry] += 1
+
+        req_key_exit: RequestKey = ('smart_sync',
+                                    'exit')
 
         assert targets
         exp_completed_syncs: set[str] = targets.copy()
-        enter_exit = ('entry', 'exit')
+        # enter_exit = ('entry', 'exit')
         if stopped_remotes:
             exp_completed_syncs -= stopped_remotes
             exp_completed_syncs -= timeout_remotes
-            enter_exit = ('entry',)
+            # enter_exit = ('entry',)
             assert targets
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
@@ -17232,7 +17279,7 @@ class ConfigVerifier:
                 log_level=logging.ERROR)
 
         elif conflict_remotes:
-            enter_exit = ('entry',)
+            # enter_exit = ('entry',)
             with pytest.raises(st.SmartThreadConflictDeadlockDetected):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_sync(
@@ -17255,11 +17302,13 @@ class ConfigVerifier:
                 log_level=logging.ERROR)
 
         elif timeout_type == TimeoutType.TimeoutNone:
+            pe.request_msg[req_key_exit] += 1
             self.all_threads[cmd_runner].smart_sync(
                 targets=targets,
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutFalse:
+            pe.request_msg[req_key_exit] += 1
             self.all_threads[cmd_runner].smart_sync(
                 targets=targets,
                 timeout=timeout,
@@ -17268,7 +17317,7 @@ class ConfigVerifier:
         elif timeout_type == TimeoutType.TimeoutTrue:
             exp_completed_syncs -= stopped_remotes
             exp_completed_syncs -= timeout_remotes
-            enter_exit = ('entry',)
+            # enter_exit = ('entry',)
             with pytest.raises(st.SmartThreadRequestTimedOut):
                 self.all_threads[cmd_runner].smart_sync(
                     targets=targets,
@@ -17286,13 +17335,13 @@ class ConfigVerifier:
                     conflict_remotes=conflict_remotes),
                 log_level=logging.ERROR)
 
-        self.add_request_log_msg(cmd_runner=cmd_runner,
-                                 smart_request='smart_sync',
-                                 targets=targets,
-                                 timeout=timeout,
-                                 timeout_type=timeout_type,
-                                 enter_exit=enter_exit,
-                                 log_msg=log_msg)
+        # self.add_request_log_msg(cmd_runner=cmd_runner,
+        #                          smart_request='smart_sync',
+        #                          targets=targets,
+        #                          timeout=timeout,
+        #                          timeout_type=timeout_type,
+        #                          enter_exit=enter_exit,
+        #                          log_msg=log_msg)
 
         self.monitor_event.set()
 
@@ -17472,13 +17521,16 @@ class ConfigVerifier:
                          stopped_remotes=set(),
                          deadlock_remotes=set()))
 
-        req_key: RequestKey = (cmd_runner,
-                               'smart_unreg',
-                               'entry')
+        req_key_entry: RequestKey = ('smart_unreg',
+                                     'entry')
+        pe.request_msg[req_key_entry] += 1
 
-        enter_exit = ('entry', 'exit')
+        req_key_exit: RequestKey = ('smart_unreg',
+                                    'exit')
+
+        # enter_exit = ('entry', 'exit')
         if not_registered_remotes:
-            enter_exit = ('entry',)
+            # enter_exit = ('entry',)
             with pytest.raises(st.SmartThreadRemoteThreadNotRegistered):
                 self.all_threads[cmd_runner].smart_unreg(
                     targets=unregister_targets,
@@ -17494,6 +17546,7 @@ class ConfigVerifier:
                 log_level=logging.ERROR)
 
         else:
+            pe.request_msg[req_key_exit] += 1
             self.all_threads[cmd_runner].smart_unreg(
                 targets=unregister_targets,
                 log_msg=log_msg)
@@ -17506,13 +17559,13 @@ class ConfigVerifier:
         self.log_test_msg(f'{cmd_runner=} handle_unregister waiting for '
                           f'monitor')
 
-        self.add_request_log_msg(cmd_runner=cmd_runner,
-                                 smart_request='smart_unreg',
-                                 targets=unregister_targets,
-                                 timeout=0,
-                                 timeout_type=TimeoutType.TimeoutNone,
-                                 enter_exit=enter_exit,
-                                 log_msg=log_msg)
+        # self.add_request_log_msg(cmd_runner=cmd_runner,
+        #                          smart_request='smart_unreg',
+        #                          targets=unregister_targets,
+        #                          timeout=0,
+        #                          timeout_type=TimeoutType.TimeoutNone,
+        #                          enter_exit=enter_exit,
+        #                          log_msg=log_msg)
 
         self.cmd_waiting_event_items[cmd_runner].wait()
         with self.ops_lock:
@@ -17561,6 +17614,7 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         pe.start_request.append(
             StartRequest(req_type=st.ReqType.Smart_wait,
+                         timeout_type=timeout_type,
                          targets=resumers,
                          not_registered_remotes=set(),
                          timeout_remotes=timeout_remotes.copy(),
@@ -17568,9 +17622,12 @@ class ConfigVerifier:
                          deadlock_remotes=(conflict_remotes.copy() |
                                            deadlock_remotes.copy())))
 
-        req_key: RequestKey = (cmd_runner,
-                               'smart_wait',
-                               'entry')
+        req_key_entry: RequestKey = ('smart_wait',
+                                     'entry')
+        pe.request_msg[req_key_entry] += 1
+
+        req_key_exit: RequestKey = ('smart_wait',
+                                    'exit')
 
         exp_completed_resumers: set[str] = resumers.copy()
 
@@ -17586,9 +17643,9 @@ class ConfigVerifier:
         if stopped_remotes:
             exp_completed_resumers -= stopped_remotes
 
-        enter_exit = ('entry', 'exit')
+        # enter_exit = ('entry', 'exit')
         if stopped_remotes:
-            enter_exit = ('entry',)
+            # enter_exit = ('entry',)
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_wait(
@@ -17613,7 +17670,7 @@ class ConfigVerifier:
                 log_level=logging.ERROR)
 
         elif conflict_remotes or deadlock_remotes:
-            enter_exit = ('entry',)
+            # enter_exit = ('entry',)
             with pytest.raises(st.SmartThreadDeadlockDetected):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_wait(
@@ -17639,12 +17696,14 @@ class ConfigVerifier:
                 log_level=logging.ERROR)
 
         elif timeout_type == TimeoutType.TimeoutNone:
+            pe.request_msg[req_key_exit] += 1
             self.all_threads[cmd_runner].smart_wait(
                 resumers=resumers,
                 wait_for=wait_for,
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutFalse:
+            pe.request_msg[req_key_exit] += 1
             self.all_threads[cmd_runner].smart_wait(
                 resumers=resumers,
                 wait_for=wait_for,
@@ -17652,7 +17711,7 @@ class ConfigVerifier:
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutTrue:
-            enter_exit = ('entry',)
+            # enter_exit = ('entry',)
             with pytest.raises(st.SmartThreadRequestTimedOut):
                 self.all_threads[cmd_runner].smart_wait(
                     resumers=resumers,
@@ -17671,19 +17730,19 @@ class ConfigVerifier:
                     conflict_remotes=conflict_remotes),
                 log_level=logging.ERROR)
 
-        self.add_request_log_msg(cmd_runner=cmd_runner,
-                                 smart_request='smart_wait',
-                                 targets=resumers,
-                                 timeout=timeout,
-                                 timeout_type=timeout_type,
-                                 enter_exit=enter_exit,
-                                 log_msg=log_msg)
+        # self.add_request_log_msg(cmd_runner=cmd_runner,
+        #                          smart_request='smart_wait',
+        #                          targets=resumers,
+        #                          timeout=timeout,
+        #                          timeout_type=timeout_type,
+        #                          enter_exit=enter_exit,
+        #                          log_msg=log_msg)
 
-        for resumer in exp_completed_resumers:
-            self.monitor_event.set()
-            self.add_log_msg(
-                new_log_msg=f'{cmd_runner} smart_wait resumed by {resumer}',
-                log_level=logging.INFO)
+        # for resumer in exp_completed_resumers:
+        #     self.monitor_event.set()
+        #     self.add_log_msg(
+        #         new_log_msg=f'{cmd_runner} smart_wait resumed by {resumer}',
+        #         log_level=logging.INFO)
 
         if exp_completed_resumers:
             self.wait_for_monitor(cmd_runner=cmd_runner,
@@ -17894,9 +17953,7 @@ class ConfigVerifier:
 
         while self.cmd_suite:
             cmd: ConfigCmd = self.cmd_suite.popleft()
-            log_msg = f'config_cmd: {cmd}'
-            self.log_ver.add_msg(log_msg=re.escape(log_msg))
-            logger.debug(log_msg)
+            self.log_test_msg(f'config_cmd: {cmd}')
 
             for name in cmd.cmd_runners:
                 if name == self.commander_name:
@@ -24173,7 +24230,9 @@ class TestSmartThreadScenarios:
                 st_state=st.ThreadState.Unregistered,
                 found_del_pairs=defaultdict(int)
             )
-            config_ver.pending_events[commander_name].start_request.append(
+
+            pe = config_ver.pending_events[commander_name]
+            pe.start_request.append(
                 StartRequest(req_type=st.ReqType.Smart_init,
                              targets={commander_name},
                              not_registered_remotes=set(),
@@ -24181,11 +24240,13 @@ class TestSmartThreadScenarios:
                              stopped_remotes=set(),
                              deadlock_remotes=set()))
 
-            req_key: RequestKey = (commander_name,
-                                   'smart_init',
-                                   'entry')
+            req_key_entry: RequestKey = ('smart_init',
+                                         'entry')
+            pe.request_msg[req_key_entry] += 1
 
-            config_ver.pending_events[commander_name].request_msg[req_key] += 1
+            req_key_exit: RequestKey = ('smart_init',
+                                        'exit')
+            pe.request_msg[req_key_exit] += 1
 
             config_ver.commander_thread_config_built = True
 

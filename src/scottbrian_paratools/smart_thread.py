@@ -861,7 +861,8 @@ class SmartThread:
 
         exit_log_msg = self._issue_entry_log_msg(
             request=ReqType.Smart_init,
-            remotes={name})
+            remotes={name},
+            latest=2)
 
         if not isinstance(name, str):
             raise SmartThreadIncorrectNameSpecified(
@@ -4922,6 +4923,7 @@ class SmartThread:
             remotes: set[str],
             timeout_value: Optional[IntFloat] = None,
             log_msg: Optional[str] = None,
+            latest: int = 3
             ) -> str:
         """Issue an entry log message.
 
@@ -4943,7 +4945,7 @@ class SmartThread:
             f'requestor: {self.cmd_runner}, '
             f'targets: {targets_to_use} '
             f'timeout value: {timeout_value} '
-            f'{get_formatted_call_sequence(latest=2, depth=1)}')
+            f'{get_formatted_call_sequence(latest=latest, depth=1)}')
 
         if log_msg:
             log_msg_body += f' {log_msg}'
