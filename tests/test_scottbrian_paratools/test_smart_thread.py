@@ -5432,7 +5432,9 @@ class RequestAckLogSearchItem(LogSearchItem):
         pe.ack_msg[ack_key] -= 1
 
         if request == 'smart_send':
-            pass
+            self.config_ver.set_msg_pending_count(receiver=remote,
+                                                  sender=cmd_runner,
+                                                  pending_msg_adj=1)
         elif request == 'smart_recv':
             self.config_ver.set_msg_pending_count(receiver=cmd_runner,
                                                   sender=remote,
@@ -5442,7 +5444,9 @@ class RequestAckLogSearchItem(LogSearchItem):
                                                   resumer=remote,
                                                   pending_wait_flag=False)
         elif request == 'smart_resume':
-            pass
+            self.config_ver.set_wait_pending_flag(waiter=remote,
+                                                  resumer=cmd_runner,
+                                                  pending_wait_flag=True)
         elif request == 'smart_sync':
             self.config_ver.set_sync_pending_flag(waiter=cmd_runner,
                                                   resumer=remote,
@@ -7815,7 +7819,6 @@ class ConfigVerifier:
             raise InvalidConfigurationDetected(
                 'check_pending_events detected that there are remaining '
                 f'pending items: {self.pending_events=}')
-
 
     ####################################################################
     # create_msgs
@@ -15567,6 +15570,12 @@ class ConfigVerifier:
                             - pe.current_request.not_registered_remotes)
 
         for target in eligible_targets:
+            state_key: SetStateKey = (cmd_runner,
+                                      target,
+                                      st.ThreadState.Registered,
+                                      st.ThreadState.Stopped)
+            pe.set_state_msg[state_key] += 1
+
             sub_key: SubProcessKey = (cmd_runner,
                                       'smart_unreg',
                                       '_clean_registry',
@@ -15626,7 +15635,7 @@ class ConfigVerifier:
                                       'smart_join',
                                       '_clean_registry',
                                       'entry',
-                                      cmd_runner)
+                                      target)
             pe.subprocess_msg[sub_key] += 1
 
     ####################################################################
@@ -16477,7 +16486,8 @@ class ConfigVerifier:
                                   to_state)
         if (state_key not in pe.set_state_msg
                 or pe.set_state_msg[state_key] <= 0):
-            raise UnexpectedEvent(f'handle_set_state_log_msg encountered '
+            raise UnexpectedEvent('handle_set_state_log_msg using '
+                                  f'{state_key=} encountered '
                                   f'unexpected log msg: {log_msg}')
 
         pe.set_state_msg[state_key] -= 1
@@ -16985,41 +16995,16 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
         # if commander is initializing, registry is empty
-        if request_name == 'smart_init' and target == self.commander_name:
-            sub_key: SubProcessKey = (cmd_runner,
-                                      request_name,
-                                      '_clean_registry',
-                                      'exit',
-                                      target)
-            pe.subprocess_msg[sub_key] += 1
-        else:  # expect to see status message, starting with commander
-            rem_targets: list[str] = []
-            with self.ops_lock:
-                for key, item in self.expected_registered.items():
-                    if (not item.is_alive
-                            and item.st_state == st.ThreadState.Alive):
-                        state_to_use = st.ThreadState.Stopped
-                    else:
-                        state_to_use = item.st_state
-                    self.pending_events[key].status_msg[
-                        (item.is_alive, state_to_use)] += 1
-                    if (not item.is_alive
-                            and item.st_state == st.ThreadState.Stopped):
-                        rem_key: RemRegKey = (
-                            key,
-                            pe.current_request.req_type.value)
-                        pe.rem_reg_msg[rem_key] += 1
-                        rem_targets.append(key)
-                if rem_targets:
-                    pe.did_clean_reg_msg += 1
-                    pe.rem_reg_targets.append(rem_targets)
+        if not (request_name == 'smart_init'
+                and target == self.commander_name):
+            self.clean_registry(cmd_runner=cmd_runner)
 
-            sub_key: SubProcessKey = (cmd_runner,
-                                      request_name,
-                                      '_clean_registry',
-                                      'exit',
-                                      target)
-            pe.subprocess_msg[sub_key] += 1
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request_name,
+                                  '_clean_registry',
+                                  'exit',
+                                  target)
+        pe.subprocess_msg[sub_key] += 1
 
     ####################################################################
     # handle_subprocess_clean_registry_exit
@@ -18359,10 +18344,15 @@ class ConfigVerifier:
                     rem_sb_key: RemSbKey = (name, pair_key, def_del_reasons)
 
                     if name in self.expected_registered and defer:
+                        self.log_test_msg('clean_pair_array deferred '
+                                          f'{pair_key=}, {name=}'
+                                          f'{rem_sb_key=}')
                         pe.rem_status_block_def_msg[rem_sb_key] += 1
                     else:
                         del pae[name]
                         pe.rem_status_block_msg[rem_sb_key] += 1
+                        self.log_test_msg('clean_pair_array removed '
+                                          f'{pair_key=}, {name=}')
                         changed = True
 
             if not pae:
@@ -18452,6 +18442,46 @@ class ConfigVerifier:
 
         self.log_test_msg(f'clean_pair_array exit: {cmd_runner=} ')
 
+    ####################################################################
+    # clean_pair_array
+    ####################################################################
+    def clean_registry(self,
+                       cmd_runner: str) -> None:
+        """Remove entries from the registry as needed.
+
+        Args:
+            cmd_runner: thread name doing the _clean_pair_array
+
+        Raises:
+            InvalidConfigurationDetected: Attempt to add thread to
+                existing pair array that has an empty ThreadPairStatus
+                dict, or that already has the thread in the pair array,
+                or that did not have the other name in the pair array.
+
+        """
+        rem_targets: list[str] = []
+        pe = self.pending_events[cmd_runner]
+        with self.ops_lock:
+            for key, item in self.expected_registered.items():
+                if (not item.is_alive
+                        and item.st_state == st.ThreadState.Alive):
+                    state_to_use = st.ThreadState.Stopped
+                else:
+                    state_to_use = item.st_state
+                self.pending_events[key].status_msg[
+                    (item.is_alive, state_to_use)] += 1
+                if (not item.is_alive
+                        and item.st_state == st.ThreadState.Stopped):
+                    rem_key: RemRegKey = (
+                        key,
+                        pe.current_request.req_type.value)
+                    pe.rem_reg_msg[rem_key] += 1
+                    rem_targets.append(key)
+            if rem_targets:
+                pe.did_clean_reg_msg += 1
+                pe.rem_reg_targets.append(rem_targets)
+                for target in rem_targets:
+                    del self.expected_registered[target]
 
     ####################################################################
     # del_from_pair_array
@@ -18647,6 +18677,7 @@ class ConfigVerifier:
 
         self.add_log_msg(f'{cmd_runner} did successful '
                          f'{process} of {del_name}.')
+
     ####################################################################
     # update_pair_array_del
     ####################################################################

@@ -1160,8 +1160,13 @@ class SmartThread:
     ####################################################################
     # _clean_registry
     ####################################################################
-    def _clean_registry(self) -> None:
+    def _clean_registry(self,
+                        target: Optional[str] = None) -> None:
         """Clean up any old not alive items in the registry.
+
+        Args:
+            target: thread name that is the target of a command or
+                request
 
         Raises:
             SmartThreadErrorInRegistry: Registry item with key {key} has
@@ -1173,7 +1178,7 @@ class SmartThread:
         """
         logger.debug(f'{self.request.value} _clean_registry entry: '
                      f'requestor: {self.cmd_runner}, '
-                     f'target: {self.name}')
+                     f'target: {target or self.name}')
         # Remove any old entries
         keys_to_del = []
         for key, item in SmartThread._registry.items():
@@ -1213,16 +1218,22 @@ class SmartThread:
 
         logger.debug(f'{self.request.value} _clean_registry exit: '
                      f'requestor: {self.cmd_runner}, '
-                     f'target: {self.name}')
+                     f'target: {target or self.name}')
 
     ###########################################################################
     # _clean_pair_array
     ###########################################################################
-    def _clean_pair_array(self) -> None:
-        """Remove pair array entries as needed."""
+    def _clean_pair_array(self,
+                          target: Optional[str] = None) -> None:
+        """Remove pair array entries as needed.
+
+        Args:
+            target: thread name that is the target of a command or
+                request
+        """
         logger.debug(f'{self.request.value} _clean_pair_array entry: '
                      f'requestor: {self.cmd_runner}, '
-                     f'target: {self.name}')
+                     f'target: {target or self.name}')
         changed = False
 
         # find removable entries in connection pair array
@@ -1324,7 +1335,7 @@ class SmartThread:
 
         logger.debug(f'{self.request.value} _clean_pair_array exit: '
                      f'requestor: {self.cmd_runner}, '
-                     f'target: {self.name}')
+                     f'target: {target or self.name}')
 
     ###########################################################################
     # _add_to_pair_array
@@ -1944,8 +1955,8 @@ class SmartThread:
 
         Notes:
             1) A thread that is created but not started remains in the
-               registered state until it is started at which time it
-               enters the active state
+               registered state until it is either started or
+               unregistered.
 
         Raises:
             SmartThreadRemoteThreadNotRegistered: smart_unreg detected
@@ -2029,8 +2040,8 @@ class SmartThread:
         self._set_state(
             target_thread=SmartThread._registry[remote],
             new_state=ThreadState.Stopped)
-        self._clean_registry()
-        self._clean_pair_array()
+        self._clean_registry(target=remote)
+        self._clean_pair_array(target=remote)
 
         logger.debug(
             f'{self.name} did successful smart_unreg of {remote}.')
@@ -2170,8 +2181,8 @@ class SmartThread:
                     target_thread=SmartThread._registry[remote],
                     new_state=ThreadState.Stopped)
                 # remove this thread from the registry
-                self._clean_registry()
-                self._clean_pair_array()
+                self._clean_registry(target=remote)
+                self._clean_pair_array(target=remote)
 
         logger.debug(
             f'{self.name} did successful join of {remote}.')
