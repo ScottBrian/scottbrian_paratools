@@ -58,8 +58,6 @@ AddPaKey: TypeAlias = tuple[str, st.PairKey]
 
 AddStatusBlockKey: TypeAlias = tuple[str, st.PairKey, str]
 
-CleanRegKey: TypeAlias = tuple[str, str, str, str]
-
 RequestKey: TypeAlias = tuple[str, str]
 
 SubProcessKey: TypeAlias = tuple[str, str, str, str, str]
@@ -6171,13 +6169,6 @@ class PendingEvent:
     notify_rem_status_block_msg: dict[RemSbKey, int]
     notify_rem_status_block_def_msg: dict[RemSbKey, int]
     ack_msg: dict[AckKey, int]
-    exit_request_msg: dict[str, int]
-    clean_up_reg_msg: dict[CleanRegKey, int]
-    exit_rpa_msg: int
-
-
-    exp_not_registry_join_log_msg: int = 0
-    exp_join_successful_log_msg: int = 0
 
 
 class ConfigVerifier:
@@ -6324,10 +6315,7 @@ class ConfigVerifier:
                 rem_pair_array_entry_msg=defaultdict(int),
                 notify_rem_status_block_msg=defaultdict(int),
                 notify_rem_status_block_def_msg=defaultdict(int),
-                ack_msg=defaultdict(int),
-                exit_request_msg=defaultdict(int),
-                clean_up_reg_msg=defaultdict(int),
-                exit_rpa_msg=0)
+                ack_msg=defaultdict(int))
 
         self.allow_log_test_msg = True
 
@@ -7804,21 +7792,17 @@ class ConfigVerifier:
     # check_pending_events
     ####################################################################
     def check_pending_events(self):
-        incomplete_item = False
+        incomplete_items: dict[str, Any] = {}
         for key, item in self.pending_events.items():
-            incomplete_item = False
-            if item.set_state_msg:
-                for key2, item2 in item.set_state_msg.items():
-                    if item2 != 0:
-                        incomplete_item = True
-                        break
-            if incomplete_item:
-                break
+            for key2, item2 in item.set_state_msg.items():
+                if item2 != 0:
+                    item_id = (key, key2)
+                    incomplete_items['set_state_msg'] = item_id
 
-        if incomplete_item:
+        if incomplete_items:
             raise InvalidConfigurationDetected(
                 'check_pending_events detected that there are remaining '
-                f'pending items: {self.pending_events=}')
+                f'pending items: {incomplete_items=}')
 
     ####################################################################
     # create_msgs
