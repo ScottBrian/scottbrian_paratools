@@ -524,6 +524,11 @@ class UnexpectedEvent(ErrorTstSmartThread):
     pass
 
 
+class UnrecognizedEvent(ErrorTstSmartThread):
+    """Unrecognized event ws detected."""
+    pass
+
+
 class UnrecognizedCmd(ErrorTstSmartThread):
     """UnrecognizedCmd exception class."""
     pass
@@ -7859,12 +7864,7 @@ class ConfigVerifier:
         incomplete_items: dict[str, dict[PE, Any]] = {}
         for cmd_runner, pend_events in self.pending_events.items():
             for event_name, item in pend_events.items():
-                if isinstance(item, int):
-                    if item != 0:
-                        if cmd_runner not in incomplete_items:
-                            incomplete_items[cmd_runner] = {}
-                        incomplete_items[cmd_runner][event_name] = item
-                elif isinstance(item, defaultdict):
+                if isinstance(item, defaultdict):
                     for key, item2 in item.items():
                         if item2 != 0:
                             if cmd_runner not in incomplete_items:
@@ -7875,6 +7875,11 @@ class ConfigVerifier:
                                     event_name] = {}
                             incomplete_items[cmd_runner][event_name][
                                 key] = item2
+                elif isinstance(item, int):
+                    if item != 0:
+                        if cmd_runner not in incomplete_items:
+                            incomplete_items[cmd_runner] = {}
+                        incomplete_items[cmd_runner][event_name] = item
                 elif isinstance(item, deque):
                     if len(item) != 0:
                         if cmd_runner not in incomplete_items:
@@ -7885,11 +7890,19 @@ class ConfigVerifier:
                         if cmd_runner not in incomplete_items:
                             incomplete_items[cmd_runner] = {}
                         incomplete_items[cmd_runner][event_name] = item
+                else:
+                    self.abort_all_f1_threads()
+                    raise UnrecognizedEvent(
+                        'check_pending_events does not recognize'
+                        f'event {event_name=}, {item=}')
 
         if incomplete_items:
+            for cmd_runner, item in incomplete_items.items():
+                self.log_test_msg(f'incomplete_item: {cmd_runner=}, {item=}')
+            self.abort_all_f1_threads()
             raise InvalidConfigurationDetected(
                 'check_pending_events detected that there are remaining '
-                f'pending items: {incomplete_items=}')
+                f'pending items:\n {incomplete_items=}')
 
     # def check_pending_events(self):
     #     incomplete_items: dict[str, Any] = {}
@@ -15708,19 +15721,21 @@ class ConfigVerifier:
                             - timeout_remotes)
 
         for target in eligible_targets:
-            state_key: SetStateKey = (cmd_runner,
-                                      target,
-                                      st.ThreadState.Alive,
-                                      st.ThreadState.Stopped)
-            pe[PE.set_state_msg][state_key] += 1
+            if target in self.expected_registered:
+                if self.expected_registered[
+                        target].st_state != st.ThreadState.Stopped:
+                    state_key: SetStateKey = (cmd_runner,
+                                              target,
+                                              st.ThreadState.Alive,
+                                              st.ThreadState.Stopped)
+                    pe[PE.set_state_msg][state_key] += 1
 
-            # join runs with the cmd_runner smart_thread, not target
-            sub_key: SubProcessKey = (cmd_runner,
-                                      'smart_join',
-                                      '_clean_registry',
-                                      'entry',
-                                      target)
-            pe[PE.subprocess_msg][sub_key] += 1
+                sub_key: SubProcessKey = (cmd_runner,
+                                          'smart_join',
+                                          '_clean_registry',
+                                          'entry',
+                                          target)
+                pe[PE.subprocess_msg][sub_key] += 1
 
     ####################################################################
     # handle_request_smart_join_exit
@@ -16764,16 +16779,17 @@ class ConfigVerifier:
             target: thread name getting its state changed
 
         """
+        pass
         ################################################################
         # next step is register
         ################################################################
-        pe = self.pending_events[cmd_runner]
-        sub_key: SubProcessKey = (cmd_runner,
-                                  'smart_unreg',
-                                  '_clean_registry',
-                                  'entry',
-                                  target)
-        pe[PE.subprocess_msg][sub_key] += 1
+        # pe = self.pending_events[cmd_runner]
+        # sub_key: SubProcessKey = (cmd_runner,
+        #                           'smart_unreg',
+        #                           '_clean_registry',
+        #                           'entry',
+        #                           target)
+        # pe[PE.subprocess_msg][sub_key] += 1
 
     ####################################################################
     # handle_set_state_alive_to_stop
@@ -16793,14 +16809,14 @@ class ConfigVerifier:
         ################################################################
         # next step is register
         ################################################################
-        pe = self.pending_events[cmd_runner]
-        if pe[PE.current_request].req_type == st.ReqType.Smart_join:
-            sub_key: SubProcessKey = (cmd_runner,
-                                      'smart_init',
-                                      '_clean_registry',
-                                      'entry',
-                                      target)
-            pe[PE.subprocess_msg][sub_key] += 1
+        # pe = self.pending_events[cmd_runner]
+        # if pe[PE.current_request].req_type == st.ReqType.Smart_join:
+        #     sub_key: SubProcessKey = (cmd_runner,
+        #                               'smart_join',
+        #                               '_clean_registry',
+        #                               'entry',
+        #                               target)
+        #     pe[PE.subprocess_msg][sub_key] += 1
 
     ####################################################################
     # handle_start
@@ -17081,7 +17097,8 @@ class ConfigVerifier:
         # if commander is initializing, registry is empty
         if not (request_name == 'smart_init'
                 and target == self.commander_name):
-            self.clean_registry(cmd_runner=cmd_runner)
+            self.clean_registry(cmd_runner=cmd_runner,
+                                target=target)
 
         sub_key: SubProcessKey = (cmd_runner,
                                   request_name,
@@ -18531,11 +18548,13 @@ class ConfigVerifier:
     # clean_pair_array
     ####################################################################
     def clean_registry(self,
-                       cmd_runner: str) -> None:
+                       cmd_runner: str,
+                       target: str) -> None:
         """Remove entries from the registry as needed.
 
         Args:
             cmd_runner: thread name doing the _clean_pair_array
+            target: thread name that is being processed
 
         Raises:
             InvalidConfigurationDetected: Attempt to add thread to
@@ -18544,8 +18563,10 @@ class ConfigVerifier:
                 or that did not have the other name in the pair array.
 
         """
+        self.log_test_msg(f'clean_registry entry: {cmd_runner=}, {target=}')
         rem_targets: list[str] = []
         pe = self.pending_events[cmd_runner]
+        request = pe[PE.current_request].req_type.value
         with self.ops_lock:
             for key, item in self.expected_registered.items():
                 if (not item.is_alive
@@ -18559,15 +18580,29 @@ class ConfigVerifier:
                         and item.st_state == st.ThreadState.Stopped):
                     rem_key: RemRegKey = (
                         key,
-                        pe[PE.current_request].req_type.value)
+                        request)
                     pe[PE.rem_reg_msg][rem_key] += 1
                     rem_targets.append(key)
+                    self.log_test_msg(f'clean_registry deleting {key=}')
+                    if (key != target
+                            and request in ('smart_unreg', 'smart_join')):
+                        sub_key: SubProcessKey = (cmd_runner,
+                                                  request,
+                                                  '_clean_registry',
+                                                  'entry',
+                                                  target)
+                        if sub_key in pe[PE.subprocess_msg]:
+                            self.log_test_msg(
+                                f'clean_registry subtracting count for '
+                                f'{sub_key=}')
+                            pe[PE.subprocess_msg][sub_key] -= 1
             if rem_targets:
                 pe[PE.did_clean_reg_msg] += 1
                 pe[PE.rem_reg_targets].append(rem_targets)
                 for target in rem_targets:
                     del self.expected_registered[target]
 
+        self.log_test_msg(f'clean_registry entry: {cmd_runner=}, {target=}')
     ####################################################################
     # del_from_pair_array
     ####################################################################

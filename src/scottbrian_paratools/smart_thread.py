@@ -1207,6 +1207,10 @@ class SmartThread:
             changed = True
             logger.debug(f'{self.cmd_runner} removed {key} from registry for '
                          f'request {self.request.value}')
+            logger.debug(
+                f'{self.cmd_runner} set '
+                f'state for thread {key} from {ThreadState.Stopped} to '
+                f'{ThreadState.Unregistered}', stacklevel=1)
 
         # update time only when we made a change
         if changed:
@@ -2107,6 +2111,24 @@ class SmartThread:
 
 
         """
+        # self.request = ReqType.Smart_join
+        # # get RequestBlock with targets in a set and a timer object
+        # request_block = self._request_setup(
+        #     remotes=targets,
+        #     error_stopped_target=False,
+        #     process_rtn=self._process_smart_join,
+        #     cleanup_rtn=None,
+        #     get_block_lock=False,
+        #     completion_count=0,
+        #     timeout=timeout,
+        #     log_msg=log_msg)
+        #
+        # self._config_cmd_loop(request_block=request_block)
+        #
+        # self.request = ReqType.NoReq
+        #
+        # logger.debug(request_block.exit_log_msg)
+
         self.request = ReqType.Smart_join
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
@@ -2119,7 +2141,45 @@ class SmartThread:
             timeout=timeout,
             log_msg=log_msg)
 
-        self._config_cmd_loop(request_block=request_block)
+        # self._config_cmd_loop(request_block=request_block)
+
+        joined_remotes: set[str] = set()
+        with self.cmd_lock:
+            self.work_remotes: set[str] = request_block.remotes.copy()
+
+            while self.work_remotes:
+
+                num_start_loop_work_remotes = len(self.work_remotes)
+                with sel.SELockExcl(SmartThread._registry_lock):
+                    for remote in self.work_remotes.copy():
+                        if remote not in SmartThread._registry:
+                            logger.debug(f'target {remote} already in '
+                                         f'state {ThreadState.Unregistered}')
+                            self.work_remotes -= {remote}
+                            joined_remotes |= {remote}
+                            continue
+
+                        if request_block.process_rtn(request_block,
+                                                     remote):
+                            self.work_remotes -= {remote}
+                            joined_remotes |= {remote}
+
+                    # remove threads from the registry
+                    if len(self.work_remotes) != num_start_loop_work_remotes:
+                        self._clean_registry()
+                        self._clean_pair_array()
+                    else:  # no progress was made
+                        if request_block.timer.is_expired():
+                            self._handle_loop_errors(
+                                request_block=request_block,
+                                pending_remotes=list(self.work_remotes))
+
+                time.sleep(0.2)
+
+        if joined_remotes:
+            logger.debug(
+                f'{self.name} did successful join of '
+                f'{sorted(joined_remotes)}.')
 
         self.request = ReqType.NoReq
 
@@ -2148,48 +2208,111 @@ class SmartThread:
         # that called _clean_registry. In either case, we have
         # nothing to do and can simply return True to move on to the
         # next target.
-        if remote in SmartThread._registry:
-            # Note that if the remote thread was never
-            # started, the following join will raise an
-            # error. If the thread is eventually started,
-            # we currently have no way to detect that and
-            # react. We can only hope that a failed join
-            # here will help give us a clue that something
-            # went wrong.
-            # Note also that we timeout each join after a
-            # short 0.2 seconds so that we release and
-            # re-obtain the registry lock in between
-            # attempts. This is done to ensure we don't
-            # deadlock with any of the other services
-            # (e.g., smart_recv)
-            try:
-                SmartThread._registry[remote].thread.join(timeout=0.2)
-            except RuntimeError:
-                # We know the thread is registered, so
-                # we will skip it for now and come back to it
-                # later. If it never starts and exits then
-                # we will timeout (if timeout was specified)
-                return False
 
-            # we need to check to make sure the thread is
-            # not alive in case we timed out
-            if SmartThread._registry[remote].thread.is_alive():
-                return False  # give thread more time to end
+        # Note that if the remote thread was never
+        # started, the following join will raise an
+        # error. If the thread is eventually started,
+        # we currently have no way to detect that and
+        # react. We can only hope that a failed join
+        # here will help give us a clue that something
+        # went wrong.
+        # Note also that we timeout each join after a
+        # short 0.2 seconds so that we release and
+        # re-obtain the registry lock in between
+        # attempts. This is done to ensure we don't
+        # deadlock with any of the other services
+        # (e.g., smart_recv)
+        try:
+            SmartThread._registry[remote].thread.join(timeout=0.2)
+        except RuntimeError:
+            # We know the thread is registered, so
+            # we will skip it for now and come back to it
+            # later. If it never starts and exits then
+            # we will timeout (if timeout was specified)
+            return False
+
+        # we need to check to make sure the thread is
+        # not alive in case we timed out
+        if SmartThread._registry[remote].thread.is_alive():
+            return False  # give thread more time to end
+        else:
+            # set state to stopped
+            if SmartThread._registry[remote].st_state == ThreadState.Stopped:
+                logger.debug(f'target {remote} already in '
+                             f'state {ThreadState.Stopped}')
             else:
-                # set state to stopped
                 self._set_state(
                     target_thread=SmartThread._registry[remote],
                     new_state=ThreadState.Stopped)
-                # remove this thread from the registry
-                self._clean_registry(target=remote)
-                self._clean_pair_array(target=remote)
-
-        logger.debug(
-            f'{self.name} did successful join of {remote}.')
 
         # restart while loop with one less remote
-
         return True
+
+    ####################################################################
+    # _process_smart_join
+    ####################################################################
+    # def _process_smart_join(self,
+    #                         request_block: RequestBlock,
+    #                         remote: str,
+    #                         ) -> bool:
+    #     """Process the smart_join request.
+    #
+    #     Args:
+    #         request_block: contains request related data
+    #         remote: remote name
+    #
+    #     Returns:
+    #         True when request completed, False otherwise
+    #
+    #     """
+    #     # if the remote is not in the registry then either it was never
+    #     # created, or it was created as a ThreadTarget which ended and
+    #     # set its state to stopped and then got removed by a command
+    #     # that called _clean_registry. In either case, we have
+    #     # nothing to do and can simply return True to move on to the
+    #     # next target.
+    #     if remote in SmartThread._registry:
+    #         # Note that if the remote thread was never
+    #         # started, the following join will raise an
+    #         # error. If the thread is eventually started,
+    #         # we currently have no way to detect that and
+    #         # react. We can only hope that a failed join
+    #         # here will help give us a clue that something
+    #         # went wrong.
+    #         # Note also that we timeout each join after a
+    #         # short 0.2 seconds so that we release and
+    #         # re-obtain the registry lock in between
+    #         # attempts. This is done to ensure we don't
+    #         # deadlock with any of the other services
+    #         # (e.g., smart_recv)
+    #         try:
+    #             SmartThread._registry[remote].thread.join(timeout=0.2)
+    #         except RuntimeError:
+    #             # We know the thread is registered, so
+    #             # we will skip it for now and come back to it
+    #             # later. If it never starts and exits then
+    #             # we will timeout (if timeout was specified)
+    #             return False
+    #
+    #         # we need to check to make sure the thread is
+    #         # not alive in case we timed out
+    #         if SmartThread._registry[remote].thread.is_alive():
+    #             return False  # give thread more time to end
+    #         else:
+    #             # set state to stopped
+    #             self._set_state(
+    #                 target_thread=SmartThread._registry[remote],
+    #                 new_state=ThreadState.Stopped)
+    #             # remove this thread from the registry
+    #             self._clean_registry(target=remote)
+    #             self._clean_pair_array(target=remote)
+    #
+    #     logger.debug(
+    #         f'{self.name} did successful join of {remote}.')
+    #
+    #     # restart while loop with one less remote
+    #
+    #     return True
 
     ####################################################################
     # smart_send
