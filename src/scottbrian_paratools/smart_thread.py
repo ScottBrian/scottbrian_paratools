@@ -1406,7 +1406,7 @@ class SmartThread:
                         status_blocks={}
                     ))
                 logger.debug(
-                    f'{self.cmd_runner} added {pair_key=} to the '
+                    f'{self.cmd_runner} added {pair_key} to the '
                     f'_pair_array')
 
             # add status block entries
@@ -1998,7 +1998,39 @@ class SmartThread:
             timeout=0,
             log_msg=log_msg)
 
-        self._config_cmd_loop(request_block=request_block)
+        # self._config_cmd_loop(request_block=request_block)
+
+        unreged_remotes: set[str] = set()
+        with self.cmd_lock:
+            self.work_remotes: set[str] = request_block.remotes.copy()
+            with sel.SELockExcl(SmartThread._registry_lock):
+                for remote in self.work_remotes.copy():
+                    if self._get_state(remote) != ThreadState.Registered:
+                        request_block.not_registered_remotes |= {remote}
+                        self.work_remotes -= {remote}
+                    else:
+                        self._set_state(
+                            target_thread=SmartThread._registry[remote],
+                            new_state=ThreadState.Stopped)
+
+                        self.work_remotes -= {remote}
+                        unreged_remotes |= {remote}
+
+                # remove threads from the registry
+                self._clean_registry()
+                self._clean_pair_array()
+
+                if unreged_remotes:
+                    logger.debug(
+                        f'{self.name} did successful smart_unreg of '
+                        f'{sorted(unreged_remotes)}.')
+
+                if (request_block.error_not_registered_target
+                        and request_block.not_registered_remotes):
+                    self._handle_loop_errors(
+                        request_block=request_block,
+                        pending_remotes=list(
+                            self.work_remotes))
 
         self.request = ReqType.NoReq
 
@@ -2029,11 +2061,11 @@ class SmartThread:
         self._set_state(
             target_thread=SmartThread._registry[remote],
             new_state=ThreadState.Stopped)
-        self._clean_registry()
-        self._clean_pair_array()
+        # self._clean_registry()
+        # self._clean_pair_array()
 
-        logger.debug(
-            f'{self.name} did successful smart_unreg of {remote}.')
+        # logger.debug(
+        #     f'{self.name} did successful smart_unreg of {remote}.')
 
         # restart while loop with one less remote
         return True
@@ -2163,7 +2195,7 @@ class SmartThread:
 
         if joined_remotes:
             logger.debug(
-                f'{self.name} did successful join of '
+                f'{self.name} did successful smart_join of '
                 f'{sorted(joined_remotes)}.')
 
         self.request = ReqType.NoReq

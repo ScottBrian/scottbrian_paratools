@@ -4708,7 +4708,7 @@ class AddPairArrayEntryLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=("[a-z]+ added "
-                        r"pair_key=\('[a-z]+', '[a-z]+'\) to the "
+                        r"PairKey\(name0='[a-z]+', name1='[a-z]+'\) to the "
                         "_pair_array"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -4737,8 +4737,8 @@ class AddPairArrayEntryLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
-        name_0 = split_msg[6][2:-2]  # lose left paren, comma, quotes
-        name_1 = split_msg[7][1:-2]  # lose right paren, quotes
+        name_0 = split_msg[2][15:-2]  # lose left paren, comma, quotes
+        name_1 = split_msg[3][7:-2]  # lose right paren, quotes
         pair_key: st.PairKey = st.PairKey(name_0, name_1)
         self.config_ver.handle_add_pair_array_log_msg(
             cmd_runner=cmd_runner,
@@ -4951,7 +4951,7 @@ class RemRegEntryLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=("[a-z]+ removed [a-z]+ from registry for "
-                        f"process={list_of_smart_requests}"),
+                        f"request {list_of_smart_requests}"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -4979,8 +4979,7 @@ class RemRegEntryLogSearchItem(LogSearchItem):
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
         rem_name = split_msg[2]
-        process = split_msg[6].split(sep='=')[1]
-        process = process[1:-1]
+        process = split_msg[7]
 
         self.config_ver.handle_rem_reg_log_msg(cmd_runner=cmd_runner,
                                                rem_name=rem_name,
@@ -15566,6 +15565,30 @@ class ConfigVerifier:
                                   st.ThreadState.Initializing)
         pe[PE.set_state_msg][state_key] += 1
 
+        add_key: AddRegKey = (cmd_runner, target)
+        pe[PE.add_reg_msg][add_key] += 1
+
+        sub_key: SubProcessKey = (cmd_runner,
+                                  'smart_init',
+                                  '_register',
+                                  'entry',
+                                  target)
+        pe[PE.subprocess_msg][sub_key] += 1
+
+        sub_key: SubProcessKey = (cmd_runner,
+                                  'smart_init',
+                                  '_clean_registry',
+                                  'entry',
+                                  cmd_runner)
+        pe[PE.subprocess_msg][sub_key] += 1
+
+        sub_key: SubProcessKey = (cmd_runner,
+                                  'smart_init',
+                                  '_clean_pair_array',
+                                  'entry',
+                                  cmd_runner)
+        pe[PE.subprocess_msg][sub_key] += 1
+
     ####################################################################
     # handle_request_smart_init_exit
     ####################################################################
@@ -15675,12 +15698,25 @@ class ConfigVerifier:
                                       st.ThreadState.Stopped)
             pe[PE.set_state_msg][state_key] += 1
 
-            sub_key: SubProcessKey = (cmd_runner,
-                                      'smart_unreg',
-                                      '_clean_registry',
-                                      'entry',
-                                      cmd_runner)
-            pe[PE.subprocess_msg][sub_key] += 1
+            state_key: SetStateKey = (cmd_runner,
+                                      target,
+                                      st.ThreadState.Stopped,
+                                      st.ThreadState.Unregistered)
+            pe[PE.set_state_msg][state_key] += 1
+
+        sub_key: SubProcessKey = (cmd_runner,
+                                  'smart_unreg',
+                                  '_clean_registry',
+                                  'entry',
+                                  cmd_runner)
+        pe[PE.subprocess_msg][sub_key] += 1
+
+        sub_key: SubProcessKey = (cmd_runner,
+                                  'smart_unreg',
+                                  '_clean_pair_array',
+                                  'entry',
+                                  cmd_runner)
+        pe[PE.subprocess_msg][sub_key] += 1
 
     ####################################################################
     # handle_request_smart_unreg_exit
@@ -15732,12 +15768,25 @@ class ConfigVerifier:
                                               st.ThreadState.Stopped)
                     pe[PE.set_state_msg][state_key] += 1
 
-                sub_key: SubProcessKey = (cmd_runner,
-                                          'smart_join',
-                                          '_clean_registry',
-                                          'entry',
-                                          cmd_runner)
-                pe[PE.subprocess_msg][sub_key] += 1
+                state_key: SetStateKey = (cmd_runner,
+                                          target,
+                                          st.ThreadState.Stopped,
+                                          st.ThreadState.Unregistered)
+                pe[PE.set_state_msg][state_key] += 1
+
+        sub_key: SubProcessKey = (cmd_runner,
+                                  'smart_join',
+                                  '_clean_registry',
+                                  'entry',
+                                  cmd_runner)
+        pe[PE.subprocess_msg][sub_key] += 1
+
+        sub_key: SubProcessKey = (cmd_runner,
+                                  'smart_join',
+                                  '_clean_pair_array',
+                                  'entry',
+                                  cmd_runner)
+        pe[PE.subprocess_msg][sub_key] += 1
 
     ####################################################################
     # handle_request_smart_join_exit
@@ -16064,7 +16113,7 @@ class ConfigVerifier:
         pe[PE.rem_reg_msg][rem_key] -= 1
         self.add_log_msg(re.escape(log_msg))
 
-        del self.expected_registered[rem_name]
+        # del self.expected_registered[rem_name]
 
     # ####################################################################
     # # handle_reg_remove
@@ -16594,20 +16643,21 @@ class ConfigVerifier:
         pe[PE.set_state_msg][state_key] -= 1
         self.add_log_msg(log_msg)
 
-        if target not in self.expected_registered:
-            raise IncorrectDataDetected(
-                f'handle_set_state_log_msg detected {target=} is '
-                'missing from expected_registered: '
-                f'{self.expected_registered}')
+        if to_state != st.ThreadState.Unregistered:
+            if target not in self.expected_registered:
+                raise IncorrectDataDetected(
+                    f'handle_set_state_log_msg detected {target=} is '
+                    'missing from expected_registered: '
+                    f'{self.expected_registered}')
 
-        if self.expected_registered[target].st_state != from_state:
-            raise IncorrectDataDetected(
-                'handle_set_state_log_msg detected current state '
-                f'{self.expected_registered[target].st_state=} '
-                f'does not match {from_state=} for {target=}')
+            if self.expected_registered[target].st_state != from_state:
+                raise IncorrectDataDetected(
+                    'handle_set_state_log_msg detected current state '
+                    f'{self.expected_registered[target].st_state=} '
+                    f'does not match {from_state=} for {target=}')
 
-        # looks good, set new state
-        self.expected_registered[target].st_state = to_state
+            # looks good, set new state
+            self.expected_registered[target].st_state = to_state
 
         ################################################################
         # Determine next action
@@ -16631,6 +16681,8 @@ class ConfigVerifier:
                 self.handle_set_state_reg_to_stop,
             (st.ThreadState.Alive, st.ThreadState.Stopped):
                 self.handle_set_state_alive_to_stop,
+            (st.ThreadState.Stopped, st.ThreadState.Unregistered):
+                self.handle_set_state_stop_to_unreg,
         }
 
         actions[(from_state, to_state)](cmd_runner=cmd_runner,
@@ -16652,13 +16704,7 @@ class ConfigVerifier:
         ################################################################
         # next step is register
         ################################################################
-        pe = self.pending_events[cmd_runner]
-        sub_key: SubProcessKey = (cmd_runner,
-                                  'smart_init',
-                                  '_register',
-                                  'entry',
-                                  target)
-        pe[PE.subprocess_msg][sub_key] += 1
+        pass
 
     ####################################################################
     # handle_set_state_init_to_reg
@@ -16819,6 +16865,21 @@ class ConfigVerifier:
         #                               'entry',
         #                               target)
         #     pe[PE.subprocess_msg][sub_key] += 1
+
+    ####################################################################
+    # handle_set_state_alive_to_stop
+    ####################################################################
+    def handle_set_state_stop_to_unreg(self,
+                                      cmd_runner: str,
+                                      target: str) -> None:
+        """Determine next step for set state.
+
+        Args:
+            cmd_runner: thread name doing the state change
+            target: thread name getting its state changed
+
+        """
+        pass
 
     ####################################################################
     # handle_start
@@ -17043,13 +17104,7 @@ class ConfigVerifier:
         ################################################################
         # determine next step
         ################################################################
-        pe = self.pending_events[cmd_runner]
-        sub_key: SubProcessKey = (cmd_runner,
-                                  request_name,
-                                  '_clean_registry',
-                                  'entry',
-                                  cmd_runner)
-        pe[PE.subprocess_msg][sub_key] += 1
+        pass
 
     ####################################################################
     # handle_subprocess_register_exit
@@ -17098,7 +17153,7 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
 
         self.clean_registry(cmd_runner=cmd_runner,
-                                target=target)
+                            target=target)
 
         sub_key: SubProcessKey = (cmd_runner,
                                   request_name,
@@ -17125,13 +17180,7 @@ class ConfigVerifier:
         ################################################################
         # determine next step
         ################################################################
-        pe = self.pending_events[cmd_runner]
-        sub_key: SubProcessKey = (cmd_runner,
-                                  request_name,
-                                  '_clean_pair_array',
-                                  'entry',
-                                  cmd_runner)
-        pe[PE.subprocess_msg][sub_key] += 1
+        pass
 
     ####################################################################
     # handle_subprocess_clean_pair_array_entry
@@ -17182,9 +17231,7 @@ class ConfigVerifier:
         ################################################################
         # determine next step
         ################################################################
-        pe = self.pending_events[cmd_runner]
-        add_key: AddRegKey = (cmd_runner, target)
-        pe[PE.add_reg_msg][add_key] += 1
+        pass
 
     ####################################################################
     # handle_subprocess_add_to_pair_array_entry
@@ -18572,8 +18619,9 @@ class ConfigVerifier:
                     state_to_use = st.ThreadState.Stopped
                 else:
                     state_to_use = item.st_state
-                self.pending_events[key][PE.status_msg][
-                    (item.is_alive, state_to_use)] += 1
+                if state_to_use != st.ThreadState.Initializing:
+                    self.pending_events[key][PE.status_msg][
+                        (item.is_alive, state_to_use)] += 1
                 if (not item.is_alive
                         and item.st_state == st.ThreadState.Stopped):
                     rem_key: RemRegKey = (
@@ -18582,18 +18630,18 @@ class ConfigVerifier:
                     pe[PE.rem_reg_msg][rem_key] += 1
                     rem_targets.append(key)
                     self.log_test_msg(f'clean_registry deleting {key=}')
-                    if (key != target
-                            and request in ('smart_unreg', 'smart_join')):
-                        sub_key: SubProcessKey = (cmd_runner,
-                                                  request,
-                                                  '_clean_registry',
-                                                  'entry',
-                                                  cmd_runner)
-                        if sub_key in pe[PE.subprocess_msg]:
-                            self.log_test_msg(
-                                f'clean_registry subtracting count for '
-                                f'{sub_key=}')
-                            pe[PE.subprocess_msg][sub_key] -= 1
+                    # if (key != target
+                    #         and request in ('smart_unreg', 'smart_join')):
+                    #     sub_key: SubProcessKey = (cmd_runner,
+                    #                               request,
+                    #                               '_clean_registry',
+                    #                               'entry',
+                    #                               cmd_runner)
+                    #     if sub_key in pe[PE.subprocess_msg]:
+                    #         self.log_test_msg(
+                    #             f'clean_registry subtracting count for '
+                    #             f'{sub_key=}')
+                    #         pe[PE.subprocess_msg][sub_key] -= 1
             if rem_targets:
                 pe[PE.did_clean_reg_msg] += 1
                 pe[PE.rem_reg_targets].append(rem_targets)
@@ -24155,7 +24203,7 @@ class TestSmartThreadScenarios:
              r"\('alpha', 'beta'\)"),
             'alpha updated _pair_array at UTC',
             "alpha did cleanup of registry at UTC",
-            'alpha did successful join of beta.',
+            'alpha did successful smart_join of beta.',
             (r"smart_resume entry: requestor: alpha targets: \['beta'\] "
              "timeout value: None "
              "test_smart_thread.py::TestSmartThreadScenarios"
