@@ -66,6 +66,10 @@ RemRegKey: TypeAlias = tuple[str, str]
 
 AckKey: TypeAlias = tuple[str, str]
 
+ConfirmStopKey: TypeAlias = tuple[str, str]
+
+AlreadyUnregKey: TypeAlias = tuple[str, str]
+
 PendEvents: TypeAlias = dict["PE", Any]
 
 
@@ -4636,6 +4640,128 @@ class SetStateLogSearchItem(LogSearchItem):
 
 
 ########################################################################
+# ConfirmStoppedLogSearchItem
+########################################################################
+class ConfirmStoppedLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+        """
+        super().__init__(
+            search_str=('[a-z]+ confirmed state for thread [a-z]+ is '
+                        f'ThreadState.Stopped'),
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int) -> "ConfirmStoppedLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            ConfirmStoppedLogSearchItem containing found message and index
+        """
+        return ConfirmStoppedLogSearchItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+    def run_process(self):
+        """Run the process to handle the log message."""
+        split_msg = self.found_log_msg.split()
+        cmd_runner = split_msg[0]
+        target = split_msg[5]
+
+        pe = self.config_ver.pending_events[cmd_runner]
+        stop_key: ConfirmStopKey = (cmd_runner, target)
+        if pe[PE.confirm_stop_msg][stop_key] <= 0:
+            raise UnexpectedEvent(
+                'UpdatePairArrayUtcLogSearchItem encountered unexpected '
+                f'log message: {self.found_log_msg}')
+
+        pe[PE.confirm_stop_msg][stop_key] -= 1
+
+        self.config_ver.add_log_msg(re.escape(self.found_log_msg))
+
+
+########################################################################
+# AlreadyUnregLogSearchItem
+########################################################################
+class AlreadyUnregLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+        """
+        super().__init__(
+            search_str=('[a-z]+ determined that thread [a-z]+ is already in '
+                        'state ThreadState.Unregistered'),
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int) -> "AlreadyUnregLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            AlreadyUnregLogSearchItem containing found message and index
+        """
+        return AlreadyUnregLogSearchItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+    def run_process(self):
+        """Run the process to handle the log message."""
+        split_msg = self.found_log_msg.split()
+        cmd_runner = split_msg[0]
+        target = split_msg[4]
+
+        pe = self.config_ver.pending_events[cmd_runner]
+        unreg_key: AlreadyUnregKey = (cmd_runner, target)
+        if pe[PE.already_unreg_msg][unreg_key] <= 0:
+            raise UnexpectedEvent(
+                'UpdatePairArrayUtcLogSearchItem encountered unexpected '
+                f'log message: {self.found_log_msg}')
+
+        ipe[PE.already_unreg_msg][unreg_key] -= 1
+
+        self.config_ver.add_log_msg(re.escape(self.found_log_msg))
+
+
+########################################################################
 # AddRegEntryLogSearchItem
 ########################################################################
 class AddRegEntryLogSearchItem(LogSearchItem):
@@ -4766,7 +4892,7 @@ class AddStatusBlockEntryLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=("[a-z]+ added status_blocks entry for "
-                        r"pair_key = \('[a-z]+', '[a-z]+'\), "
+                        r"PairKey\(name0='[a-z]+', name1='[a-z]+'\), "
                         "name = [a-z]+"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -4795,9 +4921,9 @@ class AddStatusBlockEntryLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
-        name_0 = split_msg[7][2:-2]  # lose left paren, quotes, comma
-        name_1 = split_msg[8][1:-3]  # lose quotes, right paren, comma
-        target = split_msg[11]
+        name_0 = split_msg[5][15:-2]  # lose left paren, comma, quotes
+        name_1 = split_msg[6][7:-3]  # lose right paren, quotes
+        target = split_msg[9]
         pair_key: st.PairKey = st.PairKey(name_0, name_1)
         self.config_ver.handle_add_status_block_log_msg(
             cmd_runner=cmd_runner,
@@ -5071,7 +5197,7 @@ class RemStatusBlockEntryLogSearchItem(LogSearchItem):
                           '|, with sync event set)*')
         super().__init__(
             search_str=("[a-z]+ removed status_blocks entry for "
-                        r"pair_key = \('[a-z]+', '[a-z]+'\), "
+                        r"PairKey\(name0='[a-z]+', name1='[a-z]+'\), "
                         f"name = [a-z]+{list_of_extras}"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -5100,19 +5226,22 @@ class RemStatusBlockEntryLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
-        pair_key_name_0 = split_msg[7][2:-3]
-        pair_key_name_1 = split_msg[8][1:-4]
-        rem_name = split_msg[13][0:-1]
+        name_0 = split_msg[5][15:-2]  # lose left paren, comma, quotes
+        name_1 = split_msg[6][7:-3]  # lose right paren, quotes
+        rem_name = split_msg[9]
 
-        pair_key = (pair_key_name_0, pair_key_name_1)
+        pair_key: st.PairKey = st.PairKey(name_0, name_1)
 
         pending_request = pending_msg = pending_wait = pending_sync = False
-        if ',with non-empty msg_q' in self.found_log_msg:
+        if ', with non-empty msg_q' in self.found_log_msg:
             pending_msg = True
         if ', with wait event set' in self.found_log_msg:
             pending_wait = True
         if ', with sync event set' in self.found_log_msg:
             pending_sync = True
+
+        if pending_msg or pending_wait or pending_sync:
+            rem_name = rem_name[0:-1]
 
         pe = self.config_ver.pending_events[cmd_runner]
 
@@ -5127,11 +5256,12 @@ class RemStatusBlockEntryLogSearchItem(LogSearchItem):
                                 def_del_reasons)
         if pe[PE.rem_status_block_msg][rem_sb_key] <= 0:
             raise UnexpectedEvent(
-                'RemStatusBlockEntryLogSearchItem encountered unexpected '
+                f'RemStatusBlockEntryLogSearchItem using {rem_sb_key=} '
+                'encountered unexpected '
                 f'log msg: {self.found_log_msg}')
 
         pe[PE.rem_status_block_msg][rem_sb_key] -= 1
-        pe[PE.notify_rem_status_block_msg][rem_sb_key] -= 1
+        # pe[PE.notify_rem_status_block_msg][rem_sb_key] -= 1
 
         self.config_ver.add_log_msg(re.escape(self.found_log_msg),
                                     log_level=logging.DEBUG)
@@ -5157,7 +5287,7 @@ class RemStatusBlockEntryDefLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str="[a-z]+ removal deferred for status_blocks entry "
-                       r"for pair_key = \('[a-z]+', '[a-z]+'\), "
+                       r"for PairKey\(name0='[a-z]+', name1='[a-z]+'\), "
                        "name = [a-z]+, reasons: ",
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -5186,11 +5316,11 @@ class RemStatusBlockEntryDefLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
-        pair_key_name_0 = split_msg[9][2:-3]
-        pair_key_name_1 = split_msg[10][1:-4]
-        rem_name = split_msg[13][0:-1]
+        name_0 = split_msg[7][15:-2]  # lose left paren, comma, quotes
+        name_1 = split_msg[8][7:-3]  # lose right paren, quotes
+        rem_name = split_msg[11][0:-1]
 
-        pair_key = (pair_key_name_0, pair_key_name_1)
+        pair_key: st.PairKey = st.PairKey(name_0, name_1)
 
         pending_request = pending_msg = pending_wait = pending_sync = False
         idx = -1
@@ -5250,7 +5380,7 @@ class RemPairArrayEntryLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=("[a-z]+ removed _pair_array entry for "
-                        "pair_key = \('[a-z]+', '[a-z]+'\)"),
+                        r"PairKey\(name0='[a-z]+', name1='[a-z]+'\)"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -5278,8 +5408,8 @@ class RemPairArrayEntryLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
-        name_0 = split_msg[7][2:-2]  # lose left paren, quotes, comma
-        name_1 = split_msg[8][1:-3]  # lose quotes, right paren, comma
+        name_0 = split_msg[5][15:-2]  # lose left paren, comma, quotes
+        name_1 = split_msg[6][7:-2]  # lose right paren, quotes
         pair_key: st.PairKey = st.PairKey(name_0, name_1)
 
         pe = self.config_ver.pending_events[cmd_runner]
@@ -5287,7 +5417,8 @@ class RemPairArrayEntryLogSearchItem(LogSearchItem):
 
         if pe[PE.rem_pair_array_entry_msg][rem_pae_key] <= 0:
             raise UnexpectedEvent(
-                'RemPairArrayEntryLogSearchItem encountered unexpected '
+                f'RemPairArrayEntryLogSearchItem using {rem_pae_key=}'
+                'encountered unexpected '
                 f'log message: {self.found_log_msg}')
 
         pe[PE.rem_pair_array_entry_msg][rem_pae_key] -= 1
@@ -6014,6 +6145,8 @@ LogSearchItems: TypeAlias = Union[
     RemPairArrayEntryLogSearchItem,
     DidCleanRegLogSearchItem,
     SetStateLogSearchItem,
+    ConfirmStoppedLogSearchItem,
+    AlreadyUnregLogSearchItem,
     RequestAckLogSearchItem,
     StoppedLogSearchItem,
     CmdWaitingLogSearchItem,
@@ -6149,6 +6282,8 @@ class StartRequest:
     timeout_remotes: set[str]
     stopped_remotes: set[str]
     deadlock_remotes: set[str]
+    eligible_targets: set[str]
+    completed_targets: set[str]
     timeout_type: TimeoutType = TimeoutType.TimeoutNone
     req_type: st.ReqType = st.ReqType.NoReq
 
@@ -6201,6 +6336,8 @@ class PE(Enum):
     notify_rem_status_block_msg = auto()
     notify_rem_status_block_def_msg = auto()
     ack_msg = auto()
+    confirm_stop_msg = auto()
+    already_unreg_msg = auto()
 
 
 
@@ -6306,6 +6443,8 @@ class ConfigVerifier:
             RemPairArrayEntryLogSearchItem(config_ver=self),
             DidCleanRegLogSearchItem(config_ver=self),
             SetStateLogSearchItem(config_ver=self),
+            ConfirmStoppedLogSearchItem(config_ver=self),
+            AlreadyUnregLogSearchItem(config_ver=self),
             RequestAckLogSearchItem(config_ver=self),
             StoppedLogSearchItem(config_ver=self),
             CmdWaitingLogSearchItem(config_ver=self),
@@ -6360,7 +6499,10 @@ class ConfigVerifier:
                 not_registered_remotes=set(),
                 timeout_remotes=set(),
                 stopped_remotes=set(),
-                deadlock_remotes=set())
+                deadlock_remotes=set(),
+                eligible_targets=set(),
+                completed_targets=set()
+            )
             self.pending_events[name][PE.num_targets_remaining] = 0
             self.pending_events[name][PE.request_msg] = defaultdict(int)
             self.pending_events[name][PE.subprocess_msg] = defaultdict(int)
@@ -6386,6 +6528,10 @@ class ConfigVerifier:
             self.pending_events[name][
                 PE.notify_rem_status_block_def_msg] = defaultdict(int)
             self.pending_events[name][PE.ack_msg] = defaultdict(int)
+            self.pending_events[name][
+                PE.confirm_stop_msg] = defaultdict(int)
+            self.pending_events[name][
+                PE.already_unreg_msg] = defaultdict(int)
 
         self.allow_log_test_msg = True
 
@@ -14330,7 +14476,9 @@ class ConfigVerifier:
                          not_registered_remotes=set(),
                          timeout_remotes=set(),
                          stopped_remotes=set(),
-                         deadlock_remotes=set()))
+                         deadlock_remotes=set(),
+                         eligible_targets=set(),
+                         completed_targets=set()))
 
         with self.ops_lock:
             self.monitor_add_items[cmd_runner] = MonitorAddItem(
@@ -14422,7 +14570,9 @@ class ConfigVerifier:
             not_registered_remotes=set(),
             timeout_remotes=set(),
             stopped_remotes=set(),
-            deadlock_remotes=set()))
+            deadlock_remotes=set(),
+            eligible_targets=set(),
+            completed_targets=set()))
 
         req_key_entry: RequestKey = ('smart_init',
                                      'entry')
@@ -15075,7 +15225,9 @@ class ConfigVerifier:
                          not_registered_remotes=set(),
                          timeout_remotes=timeout_remotes,
                          stopped_remotes=set(),
-                         deadlock_remotes=set()))
+                         deadlock_remotes=set(),
+                         eligible_targets=set(),
+                         completed_targets=set()))
 
         req_key_entry: RequestKey = ('smart_join',
                                      'entry')
@@ -15306,7 +15458,9 @@ class ConfigVerifier:
                          not_registered_remotes=set(),
                          timeout_remotes=timeout_names,
                          stopped_remotes=stopped_remotes.copy(),
-                         deadlock_remotes=set()))
+                         deadlock_remotes=set(),
+                         eligible_targets=set(),
+                         completed_targets=set()))
 
         req_key_entry: RequestKey = ('smart_recv',
                                      'entry')
@@ -15512,12 +15666,15 @@ class ConfigVerifier:
                                               targets=targets,
                                               pending_request_flag=True)
 
-            pe[PE.current_request] = StartRequest(req_type=st.ReqType.NoReq,
-                                              targets=set(),
-                                              not_registered_remotes=set(),
-                                              timeout_remotes=set(),
-                                              stopped_remotes=set(),
-                                              deadlock_remotes=set())
+            pe[PE.current_request] = StartRequest(
+                req_type=st.ReqType.NoReq,
+                targets=set(),
+                not_registered_remotes=set(),
+                timeout_remotes=set(),
+                stopped_remotes=set(),
+                deadlock_remotes=set(),
+                eligible_targets=set(),
+                completed_targets=set())
             # if request_name in ('smart_send', 'smart_recv', 'smart_wait',
             #                     'smart_resume', 'smart_sync'):
             #     if cmd_runner in self.request_pending_pair_keys:
@@ -15615,7 +15772,9 @@ class ConfigVerifier:
                              not_registered_remotes=set(),
                              timeout_remotes=set(),
                              stopped_remotes=set(),
-                             deadlock_remotes=set()))
+                             deadlock_remotes=set(),
+                             eligible_targets=set(),
+                             completed_targets=set()))
 
             req_key_entry: RequestKey = ('smart_start',
                                          'entry')
@@ -15757,11 +15916,15 @@ class ConfigVerifier:
 
         eligible_targets = (pe[PE.current_request].targets.copy()
                             - timeout_remotes)
-
+        pe[PE.current_request].eligible_targets = eligible_targets
+        pe[PE.current_request].completed_targets = set()
         for target in eligible_targets:
             if target in self.expected_registered:
                 if self.expected_registered[
-                        target].st_state != st.ThreadState.Stopped:
+                        target].st_state == st.ThreadState.Stopped:
+                    stop_key: ConfirmStopKey = (cmd_runner, target)
+                    pe[PE.confirm_stop_msg][stop_key] += 1
+                else:
                     state_key: SetStateKey = (cmd_runner,
                                               target,
                                               st.ThreadState.Alive,
@@ -15773,6 +15936,9 @@ class ConfigVerifier:
                                           st.ThreadState.Stopped,
                                           st.ThreadState.Unregistered)
                 pe[PE.set_state_msg][state_key] += 1
+            else:
+                unreg_key: AlreadyUnregKey = (cmd_runner, target)
+                pe[PE.already_unreg_msg][unreg_key] += 1
 
         sub_key: SubProcessKey = (cmd_runner,
                                   'smart_join',
@@ -16292,10 +16458,10 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         add_key: AddStatusBlockKey = (cmd_runner, pair_key, target)
 
-        if (add_key not in pe[PE.add_status_block_msg]
-                or pe[PE.add_status_block_msg][add_key] <= 0):
-            raise UnexpectedEvent(f'handle_add_status_block_log_msg '
-                                  f'encountered unexpected log msg: {log_msg}')
+        if pe[PE.add_status_block_msg][add_key] <= 0:
+            raise UnexpectedEvent('handle_add_status_block_log_msg using '
+                                  f'{add_key=} encountered unexpected '
+                                  f'log msg: {log_msg}')
 
         pe[PE.add_status_block_msg][add_key] -= 1
         self.add_log_msg(re.escape(log_msg))
@@ -16340,7 +16506,9 @@ class ConfigVerifier:
                          not_registered_remotes=set(),
                          timeout_remotes=timeout_names,
                          stopped_remotes=stopped_remotes.copy(),
-                         deadlock_remotes=set()))
+                         deadlock_remotes=set(),
+                         eligible_targets=set(),
+                         completed_targets=set()))
 
         req_key_entry: RequestKey = ('smart_resume',
                                      'entry')
@@ -16475,7 +16643,9 @@ class ConfigVerifier:
                          not_registered_remotes=set(),
                          timeout_remotes=timeout_remotes,
                          stopped_remotes=stopped_remotes.copy(),
-                         deadlock_remotes=set()))
+                         deadlock_remotes=set(),
+                         eligible_targets=set(),
+                         completed_targets=set()))
 
         req_key_entry: RequestKey = ('smart_send',
                                      'entry')
@@ -16917,7 +17087,9 @@ class ConfigVerifier:
                          not_registered_remotes=not_reg_remotes,
                          timeout_remotes=set(),
                          stopped_remotes=set(),
-                         deadlock_remotes=set()))
+                         deadlock_remotes=set(),
+                         eligible_targets=set(),
+                         completed_targets=set()))
 
         req_key_entry: RequestKey = ('smart_start',
                                      'entry')
@@ -17378,7 +17550,9 @@ class ConfigVerifier:
                          not_registered_remotes=set(),
                          timeout_remotes=timeout_remotes,
                          stopped_remotes=stopped_remotes.copy(),
-                         deadlock_remotes=conflict_remotes))
+                         deadlock_remotes=conflict_remotes,
+                         eligible_targets=set(),
+                         completed_targets=set()))
 
         req_key_entry: RequestKey = ('smart_sync',
                                      'entry')
@@ -17657,7 +17831,9 @@ class ConfigVerifier:
                          not_registered_remotes=not_registered_remotes.copy(),
                          timeout_remotes=set(),
                          stopped_remotes=set(),
-                         deadlock_remotes=set()))
+                         deadlock_remotes=set(),
+                         eligible_targets=set(),
+                         completed_targets=set()))
 
         req_key_entry: RequestKey = ('smart_unreg',
                                      'entry')
@@ -17758,7 +17934,9 @@ class ConfigVerifier:
                          timeout_remotes=timeout_remotes.copy(),
                          stopped_remotes=stopped_remotes.copy(),
                          deadlock_remotes=(conflict_remotes.copy() |
-                                           deadlock_remotes.copy())))
+                                           deadlock_remotes.copy()),
+                         eligible_targets=set(),
+                         completed_targets=set()))
 
         req_key_entry: RequestKey = ('smart_wait',
                                      'entry')
@@ -18630,6 +18808,7 @@ class ConfigVerifier:
                     pe[PE.rem_reg_msg][rem_key] += 1
                     rem_targets.append(key)
                     self.log_test_msg(f'clean_registry deleting {key=}')
+
                     # if (key != target
                     #         and request in ('smart_unreg', 'smart_join')):
                     #     sub_key: SubProcessKey = (cmd_runner,
@@ -18645,10 +18824,30 @@ class ConfigVerifier:
             if rem_targets:
                 pe[PE.did_clean_reg_msg] += 1
                 pe[PE.rem_reg_targets].append(rem_targets)
+
                 for target in rem_targets:
                     del self.expected_registered[target]
+                    pe[PE.current_request].completed_targets |= {target}
+
+            if (len(pe[PE.current_request].completed_targets)
+                    < len(pe[PE.current_request].eligible_targets)):
+                if pe[PE.current_request].req_type == st.ReqType.Smart_join:
+                    sub_key: SubProcessKey = (cmd_runner,
+                                              'smart_join',
+                                              '_clean_registry',
+                                              'entry',
+                                              cmd_runner)
+                    pe[PE.subprocess_msg][sub_key] += 1
+
+                    sub_key: SubProcessKey = (cmd_runner,
+                                              'smart_join',
+                                              '_clean_pair_array',
+                                              'entry',
+                                              cmd_runner)
+                    pe[PE.subprocess_msg][sub_key] += 1
 
         self.log_test_msg(f'clean_registry entry: {cmd_runner=}, {target=}')
+
     ####################################################################
     # del_from_pair_array
     ####################################################################
@@ -24452,7 +24651,9 @@ class TestSmartThreadScenarios:
                              not_registered_remotes=set(),
                              timeout_remotes=set(),
                              stopped_remotes=set(),
-                             deadlock_remotes=set()))
+                             deadlock_remotes=set(),
+                             eligible_targets=set(),
+                             completed_targets=set()))
 
             req_key_entry: RequestKey = ('smart_init',
                                          'entry')

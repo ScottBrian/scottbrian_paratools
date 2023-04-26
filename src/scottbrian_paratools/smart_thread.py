@@ -1249,8 +1249,7 @@ class SmartThread:
 
                     logger.debug(
                         f'{self.cmd_runner} removed status_blocks entry for '
-                        f'pair_key = {pair_key}, '
-                        f'name = {thread_name}{extra_msg}')
+                        f'{pair_key}, name = {thread_name}{extra_msg}')
                     changed = True
 
             # At this point, either or both threads of the pair will
@@ -1278,7 +1277,7 @@ class SmartThread:
                         pair_key].status_blocks.pop(thread_name, None)
                     logger.debug(
                         f'{self.cmd_runner} removed status_blocks entry for '
-                        f'pair_key = {pair_key}, name = {thread_name}')
+                        f'{pair_key}, name = {thread_name}')
                     changed = True
                 else:
                     SmartThread._pair_array[
@@ -1300,7 +1299,7 @@ class SmartThread:
 
                     logger.debug(
                         f'{self.cmd_runner} removal deferred for '
-                        f'status_blocks entry, pair_key = {pair_key}, '
+                        f'status_blocks entry, {pair_key}, '
                         f'name = {thread_name}, reasons: {extra_msg}')
 
             # remove _connection_pair if both names are gone
@@ -1311,8 +1310,7 @@ class SmartThread:
         for pair_key in connection_array_del_list:
             del SmartThread._pair_array[pair_key]
             logger.debug(
-                f'{self.cmd_runner} removed _pair_array entry for pair_key = '
-                f'{pair_key}')
+                f'{self.cmd_runner} removed _pair_array entry for {pair_key}')
             changed = True
 
         if changed:
@@ -1500,7 +1498,7 @@ class SmartThread:
 
         logger.debug(
             f'{cmd_runner} added status_blocks entry '
-            f'for pair_key = {pair_key}, name = {add_name}')
+            f'for {pair_key}, name = {add_name}')
 
     ####################################################################
     # _get_pair_key
@@ -2163,14 +2161,13 @@ class SmartThread:
         joined_remotes: set[str] = set()
         with self.cmd_lock:
             self.work_remotes: set[str] = request_block.remotes.copy()
-
             while self.work_remotes:
-
                 num_start_loop_work_remotes = len(self.work_remotes)
                 with sel.SELockExcl(SmartThread._registry_lock):
                     for remote in self.work_remotes.copy():
                         if remote not in SmartThread._registry:
-                            logger.debug(f'target {remote} already in '
+                            logger.debug(f'{self.cmd_runner} determined that '
+                                         f'thread {remote} is already in '
                                          f'state {ThreadState.Unregistered}')
                             self.work_remotes -= {remote}
                             joined_remotes |= {remote}
