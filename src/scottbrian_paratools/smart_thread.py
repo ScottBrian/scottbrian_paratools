@@ -1105,7 +1105,7 @@ class SmartThread:
 
         """
         logger.debug(f'{self.request.value} _register entry: '
-                     f'requestor: {self.cmd_runner}, '
+                     f'cmd_runner: {self.cmd_runner}, '
                      f'target: {self.name}')
         with sel.SELockExcl(SmartThread._registry_lock):
             ############################################################
@@ -1154,19 +1154,14 @@ class SmartThread:
                     'already registered for a different thread.')
 
         logger.debug(f'{self.request.value} _register exit: '
-                     f'requestor: {self.cmd_runner}, '
+                     f'cmd_runner: {self.cmd_runner}, '
                      f'target: {self.name}')
 
     ####################################################################
     # _clean_registry
     ####################################################################
-    def _clean_registry(self,
-                        target: Optional[str] = None) -> None:
+    def _clean_registry(self) -> None:
         """Clean up any old not alive items in the registry.
-
-        Args:
-            target: thread name that is the target of a command or
-                request
 
         Raises:
             SmartThreadErrorInRegistry: Registry item with key {key} has
@@ -1177,8 +1172,7 @@ class SmartThread:
 
         """
         logger.debug(f'{self.request.value} _clean_registry entry: '
-                     f'requestor: {self.cmd_runner}, '
-                     f'target: {target or self.name}')
+                     f'cmd_runner: {self.cmd_runner}')
         # Remove any old entries
         keys_to_del = []
         for key, item in SmartThread._registry.items():
@@ -1221,23 +1215,15 @@ class SmartThread:
                          f'{print_time}, deleted {keys_to_del}')
 
         logger.debug(f'{self.request.value} _clean_registry exit: '
-                     f'requestor: {self.cmd_runner}, '
-                     f'target: {target or self.name}')
+                     f'cmd_runner: {self.cmd_runner}')
 
     ###########################################################################
     # _clean_pair_array
     ###########################################################################
-    def _clean_pair_array(self,
-                          target: Optional[str] = None) -> None:
-        """Remove pair array entries as needed.
-
-        Args:
-            target: thread name that is the target of a command or
-                request
-        """
+    def _clean_pair_array(self) -> None:
+        """Remove pair array entries as needed."""
         logger.debug(f'{self.request.value} _clean_pair_array entry: '
-                     f'requestor: {self.cmd_runner}, '
-                     f'target: {target or self.name}')
+                     f'cmd_runner: {self.cmd_runner}')
         changed = False
 
         # find removable entries in connection pair array
@@ -1338,8 +1324,7 @@ class SmartThread:
                 f' {print_time}')
 
         logger.debug(f'{self.request.value} _clean_pair_array exit: '
-                     f'requestor: {self.cmd_runner}, '
-                     f'target: {target or self.name}')
+                     f'cmd_runner: {self.cmd_runner}')
 
     ###########################################################################
     # _add_to_pair_array
@@ -1370,7 +1355,7 @@ class SmartThread:
 
         """
         logger.debug(f'{self.request.value} _add_to_pair_array entry: '
-                     f'requestor: {self.cmd_runner}, '
+                     f'cmd_runner: {self.cmd_runner}, '
                      f'target: {self.name}')
 
         for existing_name in SmartThread._registry:
@@ -1485,7 +1470,7 @@ class SmartThread:
             f'{self.cmd_runner} updated _pair_array at UTC {print_time}')
 
         logger.debug(f'{self.request.value} _add_to_pair_array exit: '
-                     f'requestor: {self.cmd_runner}, '
+                     f'cmd_runner: {self.cmd_runner}, '
                      f'target: {self.name}')
 
     ###########################################################################
@@ -2044,8 +2029,8 @@ class SmartThread:
         self._set_state(
             target_thread=SmartThread._registry[remote],
             new_state=ThreadState.Stopped)
-        self._clean_registry(target=remote)
-        self._clean_pair_array(target=remote)
+        self._clean_registry()
+        self._clean_pair_array()
 
         logger.debug(
             f'{self.name} did successful smart_unreg of {remote}.')
@@ -2238,8 +2223,8 @@ class SmartThread:
         else:
             # set state to stopped
             if SmartThread._registry[remote].st_state == ThreadState.Stopped:
-                logger.debug(f'target {remote} already in '
-                             f'state {ThreadState.Stopped}')
+                logger.debug(f'{self.cmd_runner} confirmed state for '
+                             f'thread {remote} is {ThreadState.Stopped}')
             else:
                 self._set_state(
                     target_thread=SmartThread._registry[remote],

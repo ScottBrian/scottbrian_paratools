@@ -4530,7 +4530,7 @@ class SubProcessEntryExitLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(f"{list_of_smart_requests} {list_of_sub_processes} "
-                        "(entry|exit): requestor: [a-z]+, target: [a-z]+"),
+                        "(entry|exit): cmd_runner: [a-z]+(, target: [a-z]+)*"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -4560,8 +4560,10 @@ class SubProcessEntryExitLogSearchItem(LogSearchItem):
         request_name = split_msg[0]
         subprocess_name = split_msg[1]
         entry_exit = split_msg[2][0:-1]  # remove trailing colon
-        cmd_runner = split_msg[4][0:-1]  # remove trailing comma
-        target = split_msg[6]
+        cmd_runner = split_msg[4]
+        if split_msg[-2] == 'target:':
+            cmd_runner = cmd_runner[0:-1]  # remove trailing comma
+        target = split_msg[-1]
 
         self.config_ver.handle_subprocess_entry_exit_log_msg(
             cmd_runner=cmd_runner,
@@ -4920,8 +4922,8 @@ class RegistryStatusLogSearchItem(LogSearchItem):
         if self.config_ver.pending_events[
                 target][PE.status_msg][(is_alive, state)] <= 0:
             raise UnexpectedEvent(
-                'RegistryStatusLogSearchItem encountered unexpected '
-                f'log message: {self.found_log_msg}')
+                f'RegistryStatusLogSearchItem using {(is_alive, state)} '
+                f'encountered unexpected log message: {self.found_log_msg}')
 
         self.config_ver.pending_events[
             target][PE.status_msg][(is_alive, state)] -= 1
@@ -6363,9 +6365,9 @@ class ConfigVerifier:
             self.pending_events[name][PE.num_targets_remaining] = 0
             self.pending_events[name][PE.request_msg] = defaultdict(int)
             self.pending_events[name][PE.subprocess_msg] = defaultdict(int)
-            self.pending_events[name][PE.set_state_msg]=defaultdict(int)
-            self.pending_events[name][PE.status_msg]=defaultdict(int)
-            self.pending_events[name][PE.rem_reg_msg]=defaultdict(int)
+            self.pending_events[name][PE.set_state_msg] = defaultdict(int)
+            self.pending_events[name][PE.status_msg] = defaultdict(int)
+            self.pending_events[name][PE.rem_reg_msg] = defaultdict(int)
             self.pending_events[name][PE.did_clean_reg_msg] = 0
             self.pending_events[name][PE.update_pair_array_utc_msg] = 0
             self.pending_events[name][PE.did_cleanup_pair_array_utc_msg] = 0
@@ -15677,7 +15679,7 @@ class ConfigVerifier:
                                       'smart_unreg',
                                       '_clean_registry',
                                       'entry',
-                                      target)
+                                      cmd_runner)
             pe[PE.subprocess_msg][sub_key] += 1
 
     ####################################################################
@@ -15734,7 +15736,7 @@ class ConfigVerifier:
                                           'smart_join',
                                           '_clean_registry',
                                           'entry',
-                                          target)
+                                          cmd_runner)
                 pe[PE.subprocess_msg][sub_key] += 1
 
     ####################################################################
@@ -17046,7 +17048,7 @@ class ConfigVerifier:
                                   request_name,
                                   '_clean_registry',
                                   'entry',
-                                  target)
+                                  cmd_runner)
         pe[PE.subprocess_msg][sub_key] += 1
 
     ####################################################################
@@ -17094,17 +17096,15 @@ class ConfigVerifier:
         # determine next step
         ################################################################
         pe = self.pending_events[cmd_runner]
-        # if commander is initializing, registry is empty
-        if not (request_name == 'smart_init'
-                and target == self.commander_name):
-            self.clean_registry(cmd_runner=cmd_runner,
+
+        self.clean_registry(cmd_runner=cmd_runner,
                                 target=target)
 
         sub_key: SubProcessKey = (cmd_runner,
                                   request_name,
                                   '_clean_registry',
                                   'exit',
-                                  target)
+                                  cmd_runner)
         pe[PE.subprocess_msg][sub_key] += 1
 
     ####################################################################
@@ -17130,7 +17130,7 @@ class ConfigVerifier:
                                   request_name,
                                   '_clean_pair_array',
                                   'entry',
-                                  target)
+                                  cmd_runner)
         pe[PE.subprocess_msg][sub_key] += 1
 
     ####################################################################
@@ -17157,13 +17157,11 @@ class ConfigVerifier:
                 and target == self.commander_name):
             self.clean_pair_array(cmd_runner=cmd_runner)
 
-
-
         sub_key: SubProcessKey = (cmd_runner,
                                   request_name,
                                   '_clean_pair_array',
                                   'exit',
-                                  target)
+                                  cmd_runner)
         pe[PE.subprocess_msg][sub_key] += 1
 
     ####################################################################
@@ -18590,7 +18588,7 @@ class ConfigVerifier:
                                                   request,
                                                   '_clean_registry',
                                                   'entry',
-                                                  target)
+                                                  cmd_runner)
                         if sub_key in pe[PE.subprocess_msg]:
                             self.log_test_msg(
                                 f'clean_registry subtracting count for '
