@@ -2162,7 +2162,7 @@ class SmartThread:
         with self.cmd_lock:
             self.work_remotes: set[str] = request_block.remotes.copy()
             while self.work_remotes:
-                num_start_loop_work_remotes = len(self.work_remotes)
+                joined_remotes: set[str] = set()
                 with sel.SELockExcl(SmartThread._registry_lock):
                     for remote in self.work_remotes.copy():
                         if remote not in SmartThread._registry:
@@ -2179,21 +2179,24 @@ class SmartThread:
                             joined_remotes |= {remote}
 
                     # remove threads from the registry
-                    if len(self.work_remotes) != num_start_loop_work_remotes:
+                    if joined_remotes:
+                        # must remain under lock for these two calls
                         self._clean_registry()
                         self._clean_pair_array()
+                        logger.info(
+                            f'{self.name} did successful smart_join of '
+                            f'{sorted(joined_remotes)}.')
+                        if self.work_remotes:
+                            logger.info(
+                                f'{self.name} waiting for '
+                                f'{sorted(self.work_remotes)} to end in order '
+                                f'to complete the smart_join request.')
                     else:  # no progress was made
+                        time.sleep(0.2)
                         if request_block.timer.is_expired():
                             self._handle_loop_errors(
                                 request_block=request_block,
                                 pending_remotes=list(self.work_remotes))
-
-                time.sleep(0.2)
-
-        if joined_remotes:
-            logger.debug(
-                f'{self.name} did successful smart_join of '
-                f'{sorted(joined_remotes)}.')
 
         self.request = ReqType.NoReq
 

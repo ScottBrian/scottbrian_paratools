@@ -70,6 +70,10 @@ ConfirmStopKey: TypeAlias = tuple[str, str]
 
 AlreadyUnregKey: TypeAlias = tuple[str, str]
 
+UnregJoinSuccessKey: TypeAlias = tuple[str, str]
+
+JoinWaitingKey: TypeAlias = str
+
 PendEvents: TypeAlias = dict["PE", Any]
 
 
@@ -5562,7 +5566,7 @@ class RequestAckLogSearchItem(LogSearchItem):
 
         if pe[PE.ack_msg][ack_key] <= 0:
             raise UnexpectedEvent(
-                f'RequestAckLogSearchItem using {ack_key} detected '
+                f'RequestAckLogSearchItem using {ack_key=} detected '
                 f'unexpected log msg: {self.found_log_msg}'
             )
 
@@ -5593,6 +5597,147 @@ class RequestAckLogSearchItem(LogSearchItem):
             cmd_runner=cmd_runner,
             targets=[remote],
             pending_request_flag=False)
+
+        self.config_ver.add_log_msg(re.escape(self.found_log_msg),
+                                    log_level=logging.INFO)
+
+
+########################################################################
+# UnregJoinSuccessLogSearchItem
+########################################################################
+class UnregJoinSuccessLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+        """
+        super().__init__(
+            search_str=(f"[a-z]+ did successful (smart_unreg|smart_join) "
+                        r"of \[([a-z]*|,|'| )*\]"),
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int
+                           ) -> "UnregJoinSuccessLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            SyncResumedLogSearchItem containing found message and index
+        """
+        return UnregJoinSuccessLogSearchItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+    def run_process(self):
+        """Run the process to handle the log message."""
+        split_msg = self.found_log_msg.split()
+        cmd_runner = split_msg[0]
+        request = split_msg[3]
+        target_msg = self.found_log_msg.split('[')[1].split(']')[0].split(', ')
+
+        targets: list[str] = []
+        for item in target_msg:
+            targets.append(item[1:-1])
+
+        pe = self.config_ver.pending_events[cmd_runner]
+
+        uj_key: UnregJoinSuccessKey = (request, targets[0])
+
+        if pe[PE.unreg_join_success_msg][uj_key] <= 0:
+            raise UnexpectedEvent(
+                f'UnregJoinSuccessLogSearchItem using {uj_key=} detected '
+                f'unexpected log msg: {self.found_log_msg}'
+            )
+
+        pe[PE.unreg_join_success_msg][uj_key] -= 1
+
+        self.config_ver.add_log_msg(re.escape(self.found_log_msg),
+                                    log_level=logging.INFO)
+
+
+########################################################################
+# JoinWaitingLogSearchItem
+########################################################################
+class JoinWaitingLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+        """
+        super().__init__(
+            search_str=(fr"[a-z]+ waiting for \[([a-z]*|,|'| )*\] to end in "
+                        "order to complete the smart_join request."),
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int
+                           ) -> "JoinWaitingLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            SyncResumedLogSearchItem containing found message and index
+        """
+        return JoinWaitingLogSearchItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+    def run_process(self):
+        """Run the process to handle the log message."""
+        split_msg = self.found_log_msg.split()
+        cmd_runner = split_msg[0]
+        target_msg = self.found_log_msg.split('[')[1].split(']')[0].split(', ')
+
+        targets: list[str] = []
+        for item in target_msg:
+            targets.append(item[1:-1])
+
+        pe = self.config_ver.pending_events[cmd_runner]
+
+        join_wait_key: JoinWaitingKey = targets[0]
+
+        if pe[PE.join_waiting_msg][join_wait_key] <= 0:
+            raise UnexpectedEvent(
+                f'JoinWaitingLogSearchItem using {join_wait_key=} detected '
+                f'unexpected log msg: {self.found_log_msg}'
+            )
+
+        pe[PE.join_waiting_msg][join_wait_key] -= 1
 
         self.config_ver.add_log_msg(re.escape(self.found_log_msg),
                                     log_level=logging.INFO)
@@ -6148,6 +6293,8 @@ LogSearchItems: TypeAlias = Union[
     ConfirmStoppedLogSearchItem,
     AlreadyUnregLogSearchItem,
     RequestAckLogSearchItem,
+    UnregJoinSuccessLogSearchItem,
+    JoinWaitingLogSearchItem,
     StoppedLogSearchItem,
     CmdWaitingLogSearchItem,
     TestDebugLogSearchItem,
@@ -6338,6 +6485,8 @@ class PE(Enum):
     ack_msg = auto()
     confirm_stop_msg = auto()
     already_unreg_msg = auto()
+    unreg_join_success_msg = auto()
+    join_waiting_msg = auto()
 
 
 
@@ -6446,6 +6595,8 @@ class ConfigVerifier:
             ConfirmStoppedLogSearchItem(config_ver=self),
             AlreadyUnregLogSearchItem(config_ver=self),
             RequestAckLogSearchItem(config_ver=self),
+            UnregJoinSuccessLogSearchItem(config_ver=self),
+            JoinWaitingLogSearchItem(config_ver=self),
             StoppedLogSearchItem(config_ver=self),
             CmdWaitingLogSearchItem(config_ver=self),
             TestDebugLogSearchItem(config_ver=self),
@@ -6532,6 +6683,9 @@ class ConfigVerifier:
                 PE.confirm_stop_msg] = defaultdict(int)
             self.pending_events[name][
                 PE.already_unreg_msg] = defaultdict(int)
+            self.pending_events[name][
+                PE.unreg_join_success_msg] = defaultdict(int)
+            self.pending_events[name][PE.join_waiting_msg] = defaultdict(int)
 
         self.allow_log_test_msg = True
 
@@ -18829,6 +18983,16 @@ class ConfigVerifier:
                     del self.expected_registered[target]
                     pe[PE.current_request].completed_targets |= {target}
 
+                if pe[PE.current_request].req_type in (st.ReqType.Smart_unreg,
+                                                       st.ReqType.Smart_join):
+                    completed = pe[PE.current_request].completed_targets.copy()
+                    s_com = sorted(completed)
+
+                    uj_key: UnregJoinSuccessKey = (
+                        pe[PE.current_request].req_type.value,
+                        s_com[0])
+                    pe[PE.unreg_join_success_msg][uj_key] += 1
+
             if (len(pe[PE.current_request].completed_targets)
                     < len(pe[PE.current_request].eligible_targets)):
                 if pe[PE.current_request].req_type == st.ReqType.Smart_join:
@@ -18845,6 +19009,14 @@ class ConfigVerifier:
                                               'entry',
                                               cmd_runner)
                     pe[PE.subprocess_msg][sub_key] += 1
+
+                    eligibile = pe[PE.current_request].eligible_targets.copy()
+                    completed = pe[PE.current_request].completed_targets.copy()
+                    remaining = eligible - completed
+                    s_rem = sorted(remaining)
+
+                    wait_key: JoinWaitingKey = s_rem[0]
+                    pe[PE.join_waiting_msg][wait_key] += 1
 
         self.log_test_msg(f'clean_registry entry: {cmd_runner=}, {target=}')
 
