@@ -937,13 +937,19 @@ class SmartThread:
 
         self.auto_started = False
 
-        logger.debug(exit_log_msg)
+        extra_text = ''
+        if self.auto_start and not self.thread.is_alive():
+            self.auto_started = True
+            extra_text = ' and will perform an auto start'
+
+        logger.info(f'{self.cmd_runner} completed initialization of '
+                    f'{self.name} with thread_create = {self.thread_create} '
+                    f'and state = {self.st_state}{extra_text}.')
 
         self.request: ReqType = ReqType.NoReq
 
-        if self.auto_start and not self.thread.is_alive():
+        if self.auto_started:
             self.smart_start(self.name)
-            self.auto_started = True
 
     ####################################################################
     # repr
@@ -1356,9 +1362,11 @@ class SmartThread:
                      f'cmd_runner: {self.cmd_runner}, '
                      f'target: {self.name}')
 
+        changed = False
         for existing_name in SmartThread._registry:
             if existing_name == self.name:
                 continue
+            changed = True  # we will add the new name
             pair_key: PairKey = self._get_pair_key(self.name, existing_name)
             if pair_key in SmartThread._pair_array:
                 num_status_blocks = len(SmartThread._pair_array[
@@ -1406,7 +1414,6 @@ class SmartThread:
                 logger.debug(
                     f'{self.cmd_runner} added {pair_key} to the '
                     f'_pair_array')
-
             # add status block entries
             self._add_status_block_entry(
                 cmd_runner=self.cmd_runner,
@@ -1461,11 +1468,12 @@ class SmartThread:
                     f'TestDebug {self.cmd_runner} set request_pending in '
                     f'refresh for {pair_key=}, {existing_name=}')
 
-        SmartThread._pair_array_last_update = datetime.utcnow()
-        print_time = (SmartThread._pair_array_last_update
-                      .strftime("%H:%M:%S.%f"))
-        logger.debug(
-            f'{self.cmd_runner} updated _pair_array at UTC {print_time}')
+        if changed:
+            SmartThread._pair_array_last_update = datetime.utcnow()
+            print_time = (SmartThread._pair_array_last_update
+                          .strftime("%H:%M:%S.%f"))
+            logger.debug(
+                f'{self.cmd_runner} updated _pair_array at UTC {print_time}')
 
         logger.debug(f'{self.request.value} _add_to_pair_array exit: '
                      f'cmd_runner: {self.cmd_runner}, '
@@ -2019,7 +2027,7 @@ class SmartThread:
                 self._clean_pair_array()
 
                 if unreged_remotes:
-                    logger.debug(
+                    logger.info(
                         f'{self.name} did successful smart_unreg of '
                         f'{sorted(unreged_remotes)}.')
 
@@ -2157,8 +2165,6 @@ class SmartThread:
             log_msg=log_msg)
 
         # self._config_cmd_loop(request_block=request_block)
-
-        joined_remotes: set[str] = set()
         with self.cmd_lock:
             self.work_remotes: set[str] = request_block.remotes.copy()
             while self.work_remotes:

@@ -4815,7 +4815,6 @@ class AddRegEntryLogSearchItem(LogSearchItem):
             cmd_runner=split_msg[0],
             target=split_msg[2],
             log_msg=self.found_log_msg)
-        self.config_ver.add_log_msg(re.escape(self.found_log_msg))
 
 
 ########################################################################
@@ -5175,8 +5174,6 @@ class DidCleanRegLogSearchItem(LogSearchItem):
             targets=targets,
             log_msg=self.found_log_msg)
 
-        self.config_ver.add_log_msg(re.escape(self.found_log_msg))
-
 
 ########################################################################
 # RemStatusBlockEntryLogSearchItem
@@ -5479,10 +5476,10 @@ class DidCleanPairArrayUtcLogSearchItem(LogSearchItem):
         cmd_runner = self.found_log_msg.split(maxsplit=1)[0]
 
         pe = self.config_ver.pending_events[cmd_runner]
-        self.config_ver.log_test_msg(
-            'DidCleanPairArrayUtcLogSearchItem for '
-            f'{cmd_runner=} checking '
-            f'{pe[PE.did_cleanup_pair_array_utc_msg]=}')
+        # self.config_ver.log_test_msg(
+        #     'DidCleanPairArrayUtcLogSearchItem for '
+        #     f'{cmd_runner=} checking '
+        #     f'{pe[PE.did_cleanup_pair_array_utc_msg]=}')
         if pe[PE.did_cleanup_pair_array_utc_msg] <= 0:
             raise UnexpectedEvent(
                 'DidCleanPairArrayUtcLogSearchItem encountered unexpected '
@@ -15161,7 +15158,7 @@ class ConfigVerifier:
                                   f'unexpected log msg: {log_msg}')
 
         pe[PE.did_clean_reg_msg] -= 1
-        self.add_log_msg(log_msg)
+        self.add_log_msg(re.escape(log_msg))
 
         ################################################################
         # verify list of targets
@@ -15654,9 +15651,9 @@ class ConfigVerifier:
                 senders=remote,
                 log_msg=log_msg)
             assert recvd_msg[remote] == [exp_msgs.send_msgs[sr_key]]
-            self.add_log_msg(
-                new_log_msg=f"{cmd_runner} received msg from {remote}",
-                log_level=logging.INFO)
+            # self.add_log_msg(
+            #     new_log_msg=f"{cmd_runner} received msg from {remote}",
+            #     log_level=logging.INFO)
 
         elif timeout_type == TimeoutType.TimeoutFalse:
             pe[PE.request_msg][req_key_exit] += 1
