@@ -74,6 +74,11 @@ UnregJoinSuccessKey: TypeAlias = tuple[str, str]
 
 JoinWaitingKey: TypeAlias = str
 
+InitCompKey: TypeAlias = tuple(str,
+                               st.ThreadCreate,
+                               st.ThreadState,
+                               "InitCompTextUnit")
+
 PendEvents: TypeAlias = dict["PE", Any]
 
 
@@ -88,6 +93,28 @@ RemSbKey: TypeAlias = tuple[str, tuple[str, str], DefDelReasons]
 
 RemPaeKey: TypeAlias = tuple[str, tuple[str, str]]
 
+########################################################################
+# text units
+########################################################################
+list_of_extra_texts = ('(auto_start requested but not needed since '
+                               'thread is already alive'
+                               '|auto_start requested and will now be done'
+                               '|auto_start was not requested)')
+
+class InitCompTextUnit(Enum):
+    auto_start_not_needed = auto()
+    auto_start_yes = auto()
+    auto_start_no = auto()_
+
+
+init_complete_text_units: dict[InitCompTextUnit, str] = {
+    InitCompTextUnit.auto_start_not_needed: 'auto_start requested but not '
+                                            'needed since thread is already '
+                                            'alive',
+    InitCompTextUnit.auto_start_yes: 'auto_start requested and will now be '
+                                     'done',
+    InitCompTextUnit.auto_start_no: 'auto_start was not requested'
+}
 
 ########################################################################
 # SendRecvMsgs
@@ -4304,6 +4331,9 @@ class ThreadTracker:
     exiting: bool
     is_auto_started: bool
     is_TargetThread: bool
+    exp_init_comp_is_alive: bool
+    thread_create: st.ThreadCreate
+    exp_init_thread_state: st.ThreadState
     st_state: st.ThreadState
     found_del_pairs: dict[tuple[str, str, str], int]
     stopped_by: str = ''
@@ -4641,6 +4671,102 @@ class SetStateLogSearchItem(LogSearchItem):
                                                  from_state=from_state,
                                                  to_state=to_state,
                                                  log_msg=self.found_log_msg)
+
+
+########################################################################
+# InitCompleteLogSearchItem
+########################################################################
+class InitCompleteLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+        """
+        list_of_thread_creates = ('(ThreadCreate.Current'
+                                  '|ThreadCreate.Target'
+                                  '|ThreadCreate.Thread)')
+
+        list_of_extra_texts = ('(requested but not needed since '
+                               'thread is already alive'
+                               '|requested and will now be done'
+                               '|was not requested)')
+        super().__init__(
+            search_str=('[a-z]+ completed initialization of [a-z]+ with '
+                        f'{list_of_thread_creates} and '
+                        f'{list_of_thread_states}, auto_start '
+                        f'{list_of_extra_texts}.'),
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int) -> "InitCompleteLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            InitCompleteLogSearchItem containing found message and index
+        """
+        return InitCompleteLogSearchItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+    def run_process(self):
+        """Run the process to handle the log message."""
+        split_msg = self.found_log_msg.split()
+        cmd_runner = split_msg[0]
+        target_name = split_msg[4]
+        create_text = split_msg[6]
+        state_text = split_msg[8]
+
+        thread_create = eval('st.' + create_text)
+        thread_state = eval('st.' + state_text)
+
+
+        if (init_complete_text_units[InitCompTextUnit.auto_start_not_needed]
+                in self.found_log_msg):
+            auto_start = InitCompTextUnit.auto_start_not_needed
+        elif (init_complete_text_units[InitCompTextUnit.auto_start_yes]
+                in self.found_log_msg):
+            auto_start = InitCompTextUnit.auto_start_yes
+        elif (init_complete_text_units[InitCompTextUnit.auto_start_no]
+                in self.found_log_msg):
+            auto_start = InitCompTextUnit.auto_start_no
+        else:
+            raise InvalidInputDetected(
+                'InitCompleteLogSearchItem encountered log msg with '
+                f'unknown auto_start text: {self.found_log_msg}')
+
+        pe = self.config_ver.pending_events[cmd_runner]
+
+        comp_key: InitCompKey = (target_name,
+                                 thread_create,
+                                 thread_state,
+                                 auto_start)
+
+        if pe[PE.init_comp_msg][comp_key] <= 0:
+            raise UnexpectedEvent(
+                f'InitCompleteLogSearchItem using {comp_key=} encountered '
+                f'unexpected log message: {self.found_log_msg}')
+
+        pe[PE.init_comp_msg][comp_key] -= 1
+
+        self.config_ver.add_log_msg(re.escape(self.found_log_msg))
 
 
 ########################################################################
@@ -6287,6 +6413,7 @@ LogSearchItems: TypeAlias = Union[
     RemPairArrayEntryLogSearchItem,
     DidCleanRegLogSearchItem,
     SetStateLogSearchItem,
+    InitCompleteLogSearchItem,
     ConfirmStoppedLogSearchItem,
     AlreadyUnregLogSearchItem,
     RequestAckLogSearchItem,
@@ -6461,6 +6588,7 @@ class PendingEvent:
 class PE(Enum):
     start_request = auto()
     current_request = auto()
+    save_current_request = auto()
     num_targets_remaining = auto()
     request_msg = auto()
     subprocess_msg = auto()
@@ -6484,6 +6612,7 @@ class PE(Enum):
     already_unreg_msg = auto()
     unreg_join_success_msg = auto()
     join_waiting_msg = auto()
+    init_comp_msg = auto()
 
 
 
@@ -6589,6 +6718,7 @@ class ConfigVerifier:
             RemPairArrayEntryLogSearchItem(config_ver=self),
             DidCleanRegLogSearchItem(config_ver=self),
             SetStateLogSearchItem(config_ver=self),
+            InitCompleteLogSearchItem(config_ver=self),
             ConfirmStoppedLogSearchItem(config_ver=self),
             AlreadyUnregLogSearchItem(config_ver=self),
             RequestAckLogSearchItem(config_ver=self),
@@ -6651,6 +6781,16 @@ class ConfigVerifier:
                 eligible_targets=set(),
                 completed_targets=set()
             )
+            self.pending_events[name][PE.save_current_request] = StartRequest(
+                req_type=st.ReqType.NoReq,
+                targets=set(),
+                not_registered_remotes=set(),
+                timeout_remotes=set(),
+                stopped_remotes=set(),
+                deadlock_remotes=set(),
+                eligible_targets=set(),
+                completed_targets=set()
+            )
             self.pending_events[name][PE.num_targets_remaining] = 0
             self.pending_events[name][PE.request_msg] = defaultdict(int)
             self.pending_events[name][PE.subprocess_msg] = defaultdict(int)
@@ -6683,6 +6823,7 @@ class ConfigVerifier:
             self.pending_events[name][
                 PE.unreg_join_success_msg] = defaultdict(int)
             self.pending_events[name][PE.join_waiting_msg] = defaultdict(int)
+            self.pending_events[name][PE.init_comp_msg] = defaultdict(int)
 
         self.allow_log_test_msg = True
 
@@ -15897,26 +16038,33 @@ class ConfigVerifier:
                                   cmd_runner)
         pe[PE.subprocess_msg][sub_key] += 1
 
-    ####################################################################
-    # handle_request_smart_init_exit
-    ####################################################################
-    def handle_request_smart_init_exit(self,
-                                       cmd_runner: str) -> None:
-        """Handle the request exit for a request.
+        # determine smart_start
 
-        Args:
-            cmd_runner: thread name doing the request
+        if self.expected_registered[target].is_auto_started:
+            if self.expected_registered[target].exp_init_comp_is_alive:
+                auto_start: InitCompTextUnit = (
+                    InitCompTextUnit.auto_start_not_needed)
+            else:
+                auto_start: InitCompTextUnit = (
+                    InitCompTextUnit.auto_start_yes)
+        else:
+            auto_start: InitCompTextUnit = (
+                InitCompTextUnit.auto_start_no)
 
-        """
-        ################################################################
-        # determine next step
-        ################################################################
-        pe = self.pending_events[cmd_runner]
+        thread_create = self.expected_registered[target].thread_create
+        thread_state = self.expected_registered[target].exp_init_thread_state
 
-        target = list(pe[PE.current_request].targets)[0]
+        comp_key: InitCompKey = (target,
+                                 thread_create,
+                                 thread_state,
+                                 auto_start)
+        pe[PE.init_comp_msg][comp_key] += 1
+
 
         if (self.expected_registered[target].is_auto_started
                 and not self.expected_registered[target].is_alive):
+            self.log_test_msg('handle_request_smart_init_exit setting'
+                              'up StartRequest for smart_start')
             pe[PE.start_request].append(
                 StartRequest(req_type=st.ReqType.Smart_start,
                              targets={target},
@@ -15936,6 +16084,53 @@ class ConfigVerifier:
                                         'exit')
 
             pe[PE.request_msg][req_key_exit] += 1
+
+    ####################################################################
+    # handle_request_smart_init_exit
+    ####################################################################
+    def handle_request_smart_init_exit(self,
+                                       cmd_runner: str) -> None:
+        """Handle the request exit for a request.
+
+        Args:
+            cmd_runner: thread name doing the request
+
+        """
+        self.log_test_msg('handle_request_smart_init_exit entry: '
+                          f'{cmd_runner=}')
+        ################################################################
+        # determine next step
+        ################################################################
+        pe = self.pending_events[cmd_runner]
+
+        target = list(pe[PE.current_request].targets)[0]
+
+        if (self.expected_registered[target].is_auto_started
+                and not self.expected_registered[target].is_alive):
+            self.log_test_msg('handle_request_smart_init_exit setting'
+                              'up StartRequest for smart_start')
+            pe[PE.start_request].append(
+                StartRequest(req_type=st.ReqType.Smart_start,
+                             targets={target},
+                             not_registered_remotes=set(),
+                             timeout_remotes=set(),
+                             stopped_remotes=set(),
+                             deadlock_remotes=set(),
+                             eligible_targets=set(),
+                             completed_targets=set()))
+
+            req_key_entry: RequestKey = ('smart_start',
+                                         'entry')
+
+            pe[PE.request_msg][req_key_entry] += 1
+
+            req_key_exit: RequestKey = ('smart_start',
+                                        'exit')
+
+            pe[PE.request_msg][req_key_exit] += 1
+
+        self.log_test_msg('handle_request_smart_init_exit exit: '
+                          f'{cmd_runner=}')
 
     ####################################################################
     # handle_request_smart_start_entry
@@ -17572,10 +17767,10 @@ class ConfigVerifier:
 
         """
         pe = self.pending_events[cmd_runner]
-        self.add_to_pair_array(cmd_runner=cmd_runner,
-                               add_name=target)
-
-        pe[PE.update_pair_array_utc_msg] += 1
+        # add_to_pair_array reyurn true if pair array was updated
+        if self.add_to_pair_array(cmd_runner=cmd_runner,
+                                  add_name=target)
+            pe[PE.update_pair_array_utc_msg] += 1
 
         ################################################################
         # determine next step
@@ -18659,12 +18854,15 @@ class ConfigVerifier:
     ####################################################################
     def add_to_pair_array(self,
                           cmd_runner: str,
-                          add_name: str) -> None:
+                          add_name: str) -> bool:
         """Add thread to pair array.
 
         Args:
             cmd_runner: thread name doing the update
             add_name: thread name to add
+
+        Returns:
+            True if name was added, False otherwise
 
         Raises:
             InvalidConfigurationDetected: Attempt to add thread to
@@ -18683,9 +18881,11 @@ class ConfigVerifier:
                 f'add_to_pair_array detected {add_name=} not '
                 f'found in {self.expected_registered=}'
             )
+        changed = False
         for other_name in self.expected_registered.keys():
             if other_name == add_name:
                 continue
+            changed = True
             pair_key = st.SmartThread._get_pair_key(add_name, other_name)
 
             add_poc = 0
@@ -18758,6 +18958,7 @@ class ConfigVerifier:
 
         self.log_test_msg(f'add_to_pair_array entry: {cmd_runner=}, '
                           f'{add_name=}')
+        return changed
 
     ####################################################################
     # clean_pair_array
