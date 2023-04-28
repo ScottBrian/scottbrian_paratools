@@ -74,10 +74,10 @@ UnregJoinSuccessKey: TypeAlias = tuple[str, str]
 
 JoinWaitingKey: TypeAlias = str
 
-InitCompKey: TypeAlias = tuple(str,
+InitCompKey: TypeAlias = tuple[str,
                                st.ThreadCreate,
                                st.ThreadState,
-                               "InitCompTextUnit")
+                               "AutoStartDecision"]
 
 PendEvents: TypeAlias = dict["PE", Any]
 
@@ -101,19 +101,19 @@ list_of_extra_texts = ('(auto_start requested but not needed since '
                                '|auto_start requested and will now be done'
                                '|auto_start was not requested)')
 
-class InitCompTextUnit(Enum):
-    auto_start_not_needed = auto()
+class AutoStartDecision(Enum):
+    auto_start_obviated = auto()
     auto_start_yes = auto()
-    auto_start_no = auto()_
+    auto_start_no = auto()
 
 
-init_complete_text_units: dict[InitCompTextUnit, str] = {
-    InitCompTextUnit.auto_start_not_needed: 'auto_start requested but not '
-                                            'needed since thread is already '
-                                            'alive',
-    InitCompTextUnit.auto_start_yes: 'auto_start requested and will now be '
-                                     'done',
-    InitCompTextUnit.auto_start_no: 'auto_start was not requested'
+init_complete_text_units: dict[AutoStartDecision, str] = {
+    AutoStartDecision.auto_start_obviated: 'auto_start requested but not '
+                                           'needed since thread is already '
+                                           'alive',
+    AutoStartDecision.auto_start_yes: 'auto_start requested and will now be '
+                                      'done',
+    AutoStartDecision.auto_start_no: 'auto_start was not requested'
 }
 
 ########################################################################
@@ -4331,9 +4331,10 @@ class ThreadTracker:
     exiting: bool
     is_auto_started: bool
     is_TargetThread: bool
-    exp_init_comp_is_alive: bool
+    exp_init_is_alive: bool
     thread_create: st.ThreadCreate
     exp_init_thread_state: st.ThreadState
+    auto_start_decision: AutoStartDecision
     st_state: st.ThreadState
     found_del_pairs: dict[tuple[str, str, str], int]
     stopped_by: str = ''
@@ -4732,21 +4733,21 @@ class InitCompleteLogSearchItem(LogSearchItem):
         cmd_runner = split_msg[0]
         target_name = split_msg[4]
         create_text = split_msg[6]
-        state_text = split_msg[8]
+        state_text = split_msg[8][0:-1]
 
         thread_create = eval('st.' + create_text)
         thread_state = eval('st.' + state_text)
 
 
-        if (init_complete_text_units[InitCompTextUnit.auto_start_not_needed]
+        if (init_complete_text_units[AutoStartDecision.auto_start_obviated]
                 in self.found_log_msg):
-            auto_start = InitCompTextUnit.auto_start_not_needed
-        elif (init_complete_text_units[InitCompTextUnit.auto_start_yes]
+            auto_start = AutoStartDecision.auto_start_obviated
+        elif (init_complete_text_units[AutoStartDecision.auto_start_yes]
                 in self.found_log_msg):
-            auto_start = InitCompTextUnit.auto_start_yes
-        elif (init_complete_text_units[InitCompTextUnit.auto_start_no]
+            auto_start = AutoStartDecision.auto_start_yes
+        elif (init_complete_text_units[AutoStartDecision.auto_start_no]
                 in self.found_log_msg):
-            auto_start = InitCompTextUnit.auto_start_no
+            auto_start = AutoStartDecision.auto_start_no
         else:
             raise InvalidInputDetected(
                 'InitCompleteLogSearchItem encountered log msg with '
@@ -14742,23 +14743,27 @@ class ConfigVerifier:
         # start commander
         ################################################################
         if not self.commander_thread:
-            self.commander_thread = st.SmartThread(
+            commander_thread = st.SmartThread(
                 name=commander_name,
                 auto_start=auto_start,
                 max_msgs=self.max_msgs)
-        self.all_threads[commander_name] = self.commander_thread
+            self.all_threads[commander_name] = commander_thread
 
         if auto_start:
-            exp_status = st.ThreadState.Alive
+            exp_state = st.ThreadState.Alive
         else:
-            exp_status = st.ThreadState.Registered
+            exp_state = st.ThreadState.Registered
 
         self.expected_registered[commander_name] = ThreadTracker(
-            thread=self.commander_thread,
-            is_alive=self.cmd_thread_alive,
+            thread=commander_thread,
+            is_alive=False,
             exiting=False,
-            is_auto_started=self.cmd_thread_auto_start,
+            is_auto_started=auto_start,
             is_TargetThread=False,
+            exp_init_is_alive=True,
+            exp_init_thread_state=exp_state,
+            thread_create=st.ThreadCreate.Current,
+            auto_start_decision=AutoStartDecision.auto_start_obviated,
             st_state=st.ThreadState.Unregistered,
             found_del_pairs=defaultdict(int)
         )
@@ -14778,7 +14783,7 @@ class ConfigVerifier:
                 thread_alive=self.cmd_thread_alive,
                 auto_start=self.cmd_thread_auto_start,
                 is_ThreadTarget=False,
-                expected_state=exp_status)
+                expected_state=exp_state)
             self.cmd_waiting_event_items[cmd_runner] = threading.Event()
 
         self.monitor_pause = False
@@ -14845,12 +14850,28 @@ class ConfigVerifier:
 
         self.all_threads[name] = f1_thread
 
+        if is_thread_target:
+            thread_create: st.ThreadCreate = st.ThreadCreate.Target
+        else:
+            thread_create: st.ThreadCreate = st.ThreadCreate.Thread
+
+        if auto_start:
+            auto_start_decision: AutoStartDecision = (
+                AutoStartDecision.auto_start_yes)
+        else:
+            auto_start_decision: AutoStartDecision = (
+                AutoStartDecision.auto_start_no)
+
         self.expected_registered[name] = ThreadTracker(
             thread=f1_thread,
             is_alive=False,
             exiting=False,
             is_auto_started=auto_start,
             is_TargetThread=is_thread_target,
+            exp_init_is_alive=False,
+            exp_init_thread_state=st.ThreadState.Registered,
+            thread_create=thread_create,
+            auto_start_decision=auto_start_decision,
             st_state=st.ThreadState.Unregistered,
             found_del_pairs=defaultdict(int)
         )
@@ -16038,21 +16059,11 @@ class ConfigVerifier:
                                   cmd_runner)
         pe[PE.subprocess_msg][sub_key] += 1
 
-        # determine smart_start
-
-        if self.expected_registered[target].is_auto_started:
-            if self.expected_registered[target].exp_init_comp_is_alive:
-                auto_start: InitCompTextUnit = (
-                    InitCompTextUnit.auto_start_not_needed)
-            else:
-                auto_start: InitCompTextUnit = (
-                    InitCompTextUnit.auto_start_yes)
-        else:
-            auto_start: InitCompTextUnit = (
-                InitCompTextUnit.auto_start_no)
+        # determine init completion msg
 
         thread_create = self.expected_registered[target].thread_create
         thread_state = self.expected_registered[target].exp_init_thread_state
+        auto_start = self.expected_registered[target].auto_start_decision
 
         comp_key: InitCompKey = (target,
                                  thread_create,
@@ -16060,30 +16071,7 @@ class ConfigVerifier:
                                  auto_start)
         pe[PE.init_comp_msg][comp_key] += 1
 
-
-        if (self.expected_registered[target].is_auto_started
-                and not self.expected_registered[target].is_alive):
-            self.log_test_msg('handle_request_smart_init_exit setting'
-                              'up StartRequest for smart_start')
-            pe[PE.start_request].append(
-                StartRequest(req_type=st.ReqType.Smart_start,
-                             targets={target},
-                             not_registered_remotes=set(),
-                             timeout_remotes=set(),
-                             stopped_remotes=set(),
-                             deadlock_remotes=set(),
-                             eligible_targets=set(),
-                             completed_targets=set()))
-
-            req_key_entry: RequestKey = ('smart_start',
-                                         'entry')
-
-            pe[PE.request_msg][req_key_entry] += 1
-
-            req_key_exit: RequestKey = ('smart_start',
-                                        'exit')
-
-            pe[PE.request_msg][req_key_exit] += 1
+        self.log_test_msg(f'handle_request_smart_init_entry {comp_key=}')
 
     ####################################################################
     # handle_request_smart_init_exit
@@ -16103,31 +16091,45 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
 
+        self.log_test_msg('handle_request_smart_init_exit '
+                          f'{pe[PE.current_request]}')
+
         target = list(pe[PE.current_request].targets)[0]
 
-        if (self.expected_registered[target].is_auto_started
-                and not self.expected_registered[target].is_alive):
-            self.log_test_msg('handle_request_smart_init_exit setting'
-                              'up StartRequest for smart_start')
-            pe[PE.start_request].append(
-                StartRequest(req_type=st.ReqType.Smart_start,
-                             targets={target},
-                             not_registered_remotes=set(),
-                             timeout_remotes=set(),
-                             stopped_remotes=set(),
-                             deadlock_remotes=set(),
-                             eligible_targets=set(),
-                             completed_targets=set()))
+        pe[PE.save_current_request] = StartRequest(
+            req_type=st.ReqType.NoReq,
+            targets=set(),
+            not_registered_remotes=set(),
+            timeout_remotes=set(),
+            stopped_remotes=set(),
+            deadlock_remotes=set(),
+            eligible_targets=set(),
+            completed_targets=set()
+        )
 
-            req_key_entry: RequestKey = ('smart_start',
-                                         'entry')
-
-            pe[PE.request_msg][req_key_entry] += 1
-
-            req_key_exit: RequestKey = ('smart_start',
-                                        'exit')
-
-            pe[PE.request_msg][req_key_exit] += 1
+        # if (self.expected_registered[target].is_auto_started
+        #         and not self.expected_registered[target].is_alive):
+        #     self.log_test_msg('handle_request_smart_init_exit setting'
+        #                       'up StartRequest for smart_start')
+        #     pe[PE.start_request].append(
+        #         StartRequest(req_type=st.ReqType.Smart_start,
+        #                      targets={target},
+        #                      not_registered_remotes=set(),
+        #                      timeout_remotes=set(),
+        #                      stopped_remotes=set(),
+        #                      deadlock_remotes=set(),
+        #                      eligible_targets=set(),
+        #                      completed_targets=set()))
+        #
+        #     req_key_entry: RequestKey = ('smart_start',
+        #                                  'entry')
+        #
+        #     pe[PE.request_msg][req_key_entry] += 1
+        #
+        #     req_key_exit: RequestKey = ('smart_start',
+        #                                 'exit')
+        #
+        #     pe[PE.request_msg][req_key_exit] += 1
 
         self.log_test_msg('handle_request_smart_init_exit exit: '
                           f'{cmd_runner=}')
@@ -16175,7 +16177,15 @@ class ConfigVerifier:
         ################################################################
         # determine next step
         ################################################################
-        pass
+        pe = self.pending_events[cmd_runner]
+
+        # self.log_test_msg('handle_request_smart_start_exit '
+        #                   f'{pe[PE.current_request]}')
+        self.log_test_msg('handle_request_smart_start_exit '
+                          f'{pe[PE.save_current_request]}')
+
+        if pe[PE.save_current_request].req_type != st.ReqType.NoReq:
+            pe[PE.current_request] = pe[PE.save_current_request]
 
     ####################################################################
     # handle_request_smart_unreg_entry
@@ -17239,7 +17249,7 @@ class ConfigVerifier:
         # determine next step
         ################################################################
         pe = self.pending_events[cmd_runner]
-        if self.expected_registered[target].is_alive:
+        if self.expected_registered[target].exp_init_is_alive:
             key: SetStateKey = (cmd_runner,
                                 target,
                                 st.ThreadState.Registered,
@@ -17293,6 +17303,8 @@ class ConfigVerifier:
             target: thread name getting its state changed
 
         """
+        self.expected_registered[target].is_alive = True
+
         ################################################################
         # next step is to add entry to pair array
         ################################################################
@@ -17642,13 +17654,30 @@ class ConfigVerifier:
         ################################################################
         # determine next step
         ################################################################
-        pass
-        # pe = self.pending_events[cmd_runner]
-        #
-        # req_key: RequestKey = ('smart_init',
-        #                        'exit')
-        #
-        # pe.request_msg[req_key] += 1
+        pe = self.pending_events[cmd_runner]
+
+        pe[PE.save_current_request] = pe[PE.current_request]
+        if (self.expected_registered[target].auto_start_decision
+                == AutoStartDecision.auto_start_yes):
+            pe[PE.start_request].append(
+                StartRequest(req_type=st.ReqType.Smart_start,
+                             targets={target},
+                             not_registered_remotes=set(),
+                             timeout_remotes=set(),
+                             stopped_remotes=set(),
+                             deadlock_remotes=set(),
+                             eligible_targets=set(),
+                             completed_targets=set()))
+
+            req_key_entry: RequestKey = ('smart_start',
+                                         'entry')
+
+            pe[PE.request_msg][req_key_entry] += 1
+
+            req_key_exit: RequestKey = ('smart_start',
+                                        'exit')
+
+            pe[PE.request_msg][req_key_exit] += 1
 
     ####################################################################
     # handle_subprocess_clean_registry_entry
@@ -17769,7 +17798,7 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         # add_to_pair_array reyurn true if pair array was updated
         if self.add_to_pair_array(cmd_runner=cmd_runner,
-                                  add_name=target)
+                                  add_name=target):
             pe[PE.update_pair_array_utc_msg] += 1
 
         ################################################################
@@ -24998,18 +25027,38 @@ class TestSmartThreadScenarios:
             cmd_runners=[config_ver.commander_name],
             join_target_names=names)
 
-        def initialize_config_ver() -> None:
-            """Set up the mock registry for the commander."""
+        def initialize_config_ver(cmd_thread: st.SmartThread,
+                                  auto_start: bool,
+                                  auto_start_decision: AutoStartDecision,
+                                  exp_alive: bool,
+                                  thread_create: st.ThreadCreate,
+                                  exp_state: st.ThreadState) -> None:
+            """Set up the mock registry for the commander.
 
-            config_ver.all_threads[
-                commander_name] = config_ver.commander_thread
+            Args:
+                cmd_thread: the commander thread
+                auto_start: specifies whether auto_start was specified
+                    on the init
+                auto_start_decision: specifies whether an auto start is
+                    not needed, yes, or no
+                exp_alive: specifies whether the thread is expected to
+                    be alive at the end of smart_init
+                thread_create: specifies which create style is done
+                exp_state: the expected state after smart_init
+
+            """
+            config_ver.all_threads[commander_name] = cmd_thread
 
             config_ver.expected_registered[commander_name] = ThreadTracker(
-                thread=config_ver.commander_thread,
-                is_alive=config_ver.cmd_thread_alive,
+                thread=cmd_thread,
+                is_alive=False,
                 exiting=False,
-                is_auto_started=config_ver.cmd_thread_auto_start,
+                is_auto_started=auto_start,
                 is_TargetThread=False,
+                exp_init_is_alive=exp_alive,
+                exp_init_thread_state=exp_state,
+                thread_create=thread_create,
+                auto_start_decision=auto_start_decision,
                 st_state=st.ThreadState.Unregistered,
                 found_del_pairs=defaultdict(int)
             )
@@ -25042,74 +25091,92 @@ class TestSmartThreadScenarios:
         if commander_config == AppConfig.ScriptStyle:
             commander_thread = st.SmartThread(
                 name=commander_name)
-            config_ver.commander_thread = commander_thread
-            config_ver.cmd_thread_alive = True
-            config_ver.cmd_thread_auto_start = True
-            initialize_config_ver()
+            # config_ver.commander_thread = commander_thread
+            # config_ver.cmd_thread_alive = True
+            # config_ver.cmd_thread_auto_start = True
+            initialize_config_ver(
+                cmd_thread=commander_thread,
+                auto_start=True,
+                auto_start_decision=AutoStartDecision.auto_start_obviated,
+                exp_alive=True,
+                exp_state=st.ThreadState.Alive,
+                thread_create=st.ThreadCreate.Current)
             config_ver.monitor_pause = False
             config_ver.main_driver()
         elif commander_config == AppConfig.CurrentThreadApp:
-            commander_current_app = CommanderCurrentApp(
+            cmd_current_app = CommanderCurrentApp(
                 config_ver=config_ver,
                 name=commander_name,
                 max_msgs=10)
-            config_ver.commander_thread = commander_current_app.smart_thread
-            config_ver.cmd_thread_alive = True
-            config_ver.cmd_thread_auto_start = False
-            initialize_config_ver()
+            # config_ver.commander_thread = cmd_current_app.smart_thread
+            # config_ver.cmd_thread_alive = True
+            # config_ver.cmd_thread_auto_start = False
+            initialize_config_ver(
+                cmd_thread=cmd_current_app.smart_thread,
+                auto_start=False,
+                auto_start_decision=AutoStartDecision.auto_start_obviated,
+                exp_alive=True,
+                exp_state=st.ThreadState.Alive,
+                thread_create=st.ThreadCreate.Current)
             config_ver.monitor_pause = False
-            commander_current_app.run()
+            cmd_current_app.run()
         elif commander_config == AppConfig.RemoteThreadApp:
             outer_thread_app = OuterThreadApp(
                 config_ver=config_ver,
                 name=commander_name,
                 max_msgs=10)
-            config_ver.commander_thread = outer_thread_app.smart_thread
-            config_ver.cmd_thread_alive = False
-            config_ver.cmd_thread_auto_start = False
-            initialize_config_ver()
+            # config_ver.commander_thread = outer_thread_app.smart_thread
+            # config_ver.cmd_thread_alive = False
+            # config_ver.cmd_thread_auto_start = False
+            initialize_config_ver(
+                cmd_thread=outer_thread_app.smart_thread,
+                auto_start=False,
+                auto_start_decision=AutoStartDecision.auto_start_no,
+                exp_alive=False,
+                exp_state=st.ThreadState.Registered,
+                thread_create=st.ThreadCreate.Thread)
             config_ver.monitor_pause = False
             outer_thread_app.smart_thread.smart_start()
             outer_thread_app.join()
-            # config_ver.monitor_bail = True
-            # config_ver.monitor_exit = True
-            # config_ver.monitor_event.set()
-            # config_ver.monitor_thread.join()
         elif commander_config == AppConfig.RemoteSmartThreadApp:
             outer_thread_app = OuterSmartThreadApp(
                 config_ver=config_ver,
                 name=commander_name,
                 max_msgs=10)
-            config_ver.commander_thread = outer_thread_app
-            config_ver.cmd_thread_alive = False
-            config_ver.cmd_thread_auto_start = False
-            initialize_config_ver()
+            # config_ver.commander_thread = outer_thread_app
+            # config_ver.cmd_thread_alive = False
+            # config_ver.cmd_thread_auto_start = False
+            initialize_config_ver(
+                cmd_thread=outer_thread_app,
+                auto_start=False,
+                auto_start_decision=AutoStartDecision.auto_start_no,
+                exp_alive=False,
+                exp_state=st.ThreadState.Registered,
+                thread_create=st.ThreadCreate.Thread)
             config_ver.monitor_pause = False
             outer_thread_app.smart_start(commander_name)
             threading.Thread.join(outer_thread_app)
-            # config_ver.monitor_bail = True
-            # config_ver.monitor_exit = True
-            # config_ver.monitor_event.set()
-            # config_ver.monitor_thread.join()
         elif commander_config == AppConfig.RemoteSmartThreadApp2:
             outer_thread_app = OuterSmartThreadApp2(
                 config_ver=config_ver,
                 name=commander_name,
                 max_msgs=10)
-            config_ver.commander_thread = outer_thread_app
-            config_ver.cmd_thread_alive = False
-            config_ver.cmd_thread_auto_start = False
-            initialize_config_ver()
+            # config_ver.commander_thread = outer_thread_app
+            # config_ver.cmd_thread_alive = False
+            # config_ver.cmd_thread_auto_start = False
+            initialize_config_ver(
+                cmd_thread=outer_thread_app,
+                auto_start=False,
+                auto_start_decision=AutoStartDecision.auto_start_no,
+                exp_alive=False,
+                exp_state=st.ThreadState.Registered,
+                thread_create=st.ThreadCreate.Thread)
             config_ver.monitor_pause = False
             outer_thread_app.smart_start(commander_name)
             threading.Thread.join(outer_thread_app)
         else:
             raise UnrecognizedCmd('scenario_driver does not recognize '
                                   f'{commander_config=}')
-            # config_ver.monitor_bail = True
-            # config_ver.monitor_exit = True
-            # config_ver.monitor_event.set()
-            # config_ver.monitor_thread.join()
 
         ################################################################
         # check that pending events are complete
