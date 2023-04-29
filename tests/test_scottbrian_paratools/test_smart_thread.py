@@ -4767,7 +4767,8 @@ class InitCompleteLogSearchItem(LogSearchItem):
 
         pe[PE.init_comp_msg][comp_key] -= 1
 
-        self.config_ver.add_log_msg(re.escape(self.found_log_msg))
+        self.config_ver.add_log_msg(re.escape(self.found_log_msg),
+                                    log_level=logging.INFO)
 
 
 ########################################################################
@@ -15907,7 +15908,8 @@ class ConfigVerifier:
             if sorted(req_start_item.targets) != sorted(targets):
                 raise InvalidInputDetected(
                     'handle_request_entry_exit_log_msg expected '
-                    f'{req_start_item.targets=} but instead received '
+                    f'{sorted(req_start_item.targets)=} to be equal to '
+                    f'{sorted(targets)=} for '
                     f'log msg: {log_msg}')
 
             pe[PE.current_request] = req_start_item
@@ -15971,23 +15973,37 @@ class ConfigVerifier:
         if entry_exit == 'exit':
 
             if pe[PE.current_request].req_type.name in ('smart_send',
-                                                    'smart_recv',
-                                                    'smart_wait',
-                                                    'smart_resume',
-                                                    'smart_sync'):
+                                                        'smart_recv',
+                                                        'smart_wait',
+                                                        'smart_resume',
+                                                        'smart_sync'):
                 self.set_request_pending_flag(cmd_runner=cmd_runner,
                                               targets=targets,
-                                              pending_request_flag=True)
+                                              pending_request_flag=False)
 
-            pe[PE.current_request] = StartRequest(
-                req_type=st.ReqType.NoReq,
-                targets=set(),
-                not_registered_remotes=set(),
-                timeout_remotes=set(),
-                stopped_remotes=set(),
-                deadlock_remotes=set(),
-                eligible_targets=set(),
-                completed_targets=set())
+            pe = self.pending_events[cmd_runner]
+
+            if pe[PE.save_current_request].req_type != st.ReqType.NoReq:
+                pe[PE.current_request] = pe[PE.save_current_request]
+                pe[PE.save_current_request] = StartRequest(
+                    req_type=st.ReqType.NoReq,
+                    targets=set(),
+                    not_registered_remotes=set(),
+                    timeout_remotes=set(),
+                    stopped_remotes=set(),
+                    deadlock_remotes=set(),
+                    eligible_targets=set(),
+                    completed_targets=set())
+            else:
+                pe[PE.current_request] = StartRequest(
+                    req_type=st.ReqType.NoReq,
+                    targets=set(),
+                    not_registered_remotes=set(),
+                    timeout_remotes=set(),
+                    stopped_remotes=set(),
+                    deadlock_remotes=set(),
+                    eligible_targets=set(),
+                    completed_targets=set())
             # if request_name in ('smart_send', 'smart_recv', 'smart_wait',
             #                     'smart_resume', 'smart_sync'):
             #     if cmd_runner in self.request_pending_pair_keys:
@@ -16084,28 +16100,29 @@ class ConfigVerifier:
             cmd_runner: thread name doing the request
 
         """
-        self.log_test_msg('handle_request_smart_init_exit entry: '
-                          f'{cmd_runner=}')
+        pass
+        # self.log_test_msg('handle_request_smart_init_exit entry: '
+        #                   f'{cmd_runner=}')
         ################################################################
         # determine next step
         ################################################################
         pe = self.pending_events[cmd_runner]
 
-        self.log_test_msg('handle_request_smart_init_exit '
-                          f'{pe[PE.current_request]}')
-
-        target = list(pe[PE.current_request].targets)[0]
-
-        pe[PE.save_current_request] = StartRequest(
-            req_type=st.ReqType.NoReq,
-            targets=set(),
-            not_registered_remotes=set(),
-            timeout_remotes=set(),
-            stopped_remotes=set(),
-            deadlock_remotes=set(),
-            eligible_targets=set(),
-            completed_targets=set()
-        )
+        # self.log_test_msg('handle_request_smart_init_exit '
+        #                   f'{pe[PE.current_request]}')
+        #
+        # target = list(pe[PE.current_request].targets)[0]
+        #
+        # pe[PE.save_current_request] = StartRequest(
+        #     req_type=st.ReqType.NoReq,
+        #     targets=set(),
+        #     not_registered_remotes=set(),
+        #     timeout_remotes=set(),
+        #     stopped_remotes=set(),
+        #     deadlock_remotes=set(),
+        #     eligible_targets=set(),
+        #     completed_targets=set()
+        # )
 
         # if (self.expected_registered[target].is_auto_started
         #         and not self.expected_registered[target].is_alive):
@@ -16131,8 +16148,8 @@ class ConfigVerifier:
         #
         #     pe[PE.request_msg][req_key_exit] += 1
 
-        self.log_test_msg('handle_request_smart_init_exit exit: '
-                          f'{cmd_runner=}')
+        # self.log_test_msg('handle_request_smart_init_exit exit: '
+        #                   f'{cmd_runner=}')
 
     ####################################################################
     # handle_request_smart_start_entry
@@ -16177,15 +16194,7 @@ class ConfigVerifier:
         ################################################################
         # determine next step
         ################################################################
-        pe = self.pending_events[cmd_runner]
-
-        # self.log_test_msg('handle_request_smart_start_exit '
-        #                   f'{pe[PE.current_request]}')
-        self.log_test_msg('handle_request_smart_start_exit '
-                          f'{pe[PE.save_current_request]}')
-
-        if pe[PE.save_current_request].req_type != st.ReqType.NoReq:
-            pe[PE.current_request] = pe[PE.save_current_request]
+        pass
 
     ####################################################################
     # handle_request_smart_unreg_entry
@@ -21820,19 +21829,19 @@ class OuterThreadApp(threading.Thread):
             name='smart_start',
             seq='test_smart_thread.py::OuterThreadApp.run')
 
-        self.config_ver.add_request_log_msg(
-            cmd_runner=name,
-            smart_request='smart_start',
-            targets={name},
-            timeout=0,
-            timeout_type=TimeoutType.TimeoutNone,
-            enter_exit=('entry', 'exit'),
-            log_msg=None)
-
-        self.config_ver.add_log_msg(
-            f'{name} set state for thread {name} from '
-            'ThreadState.Registered to ThreadState.Alive'
-        )
+        # self.config_ver.add_request_log_msg(
+        #     cmd_runner=name,
+        #     smart_request='smart_start',
+        #     targets={name},
+        #     timeout=0,
+        #     timeout_type=TimeoutType.TimeoutNone,
+        #     enter_exit=('entry', 'exit'),
+        #     log_msg=None)
+        #
+        # self.config_ver.add_log_msg(
+        #     f'{name} set state for thread {name} from '
+        #     'ThreadState.Registered to ThreadState.Alive'
+        # )
 
         self.config_ver.monitor_event.set()
 
@@ -21958,26 +21967,31 @@ class OuterF1ThreadApp(threading.Thread):
         """
         super().__init__()
         self.config_ver = config_ver
+        self.name = name
         self.smart_thread = st.SmartThread(
             name=name,
             thread=self,
-            auto_start=False,
+            # auto_start=False,
+            auto_start=auto_start,
             max_msgs=max_msgs)
-        if auto_start:
-            self.smart_thread.smart_start(name)
+        # if auto_start:
+        #     self.smart_thread.smart_start(name)
 
     def run(self) -> None:
         """Run the test."""
-        log_msg_f1 = f'OuterF1ThreadApp.run() entry: {self.smart_thread.name=}'
+        log_msg_f1 = f'OuterF1ThreadApp.run() entry: {self.name=}'
+        # log_msg_f1 = f'OuterF1ThreadApp.run() entry: {self.smart_thread.name=}'
         self.config_ver.log_ver.add_msg(log_msg=re.escape(log_msg_f1))
         logger.debug(log_msg_f1)
 
-        self.config_ver.f1_driver(f1_name=self.smart_thread.name)
+        # self.config_ver.f1_driver(f1_name=self.smart_thread.name)
+        self.config_ver.f1_driver(f1_name=self.name)
 
         ####################################################################
         # exit
         ####################################################################
-        log_msg_f1 = f'OuterF1ThreadApp.run() exit: {self.smart_thread.name=}'
+        # log_msg_f1 = f'OuterF1ThreadApp.run() exit: {self.smart_thread.name=}'
+        log_msg_f1 = f'OuterF1ThreadApp.run() exit: {self.name=}'
         self.config_ver.log_ver.add_msg(log_msg=re.escape(log_msg_f1))
         logger.debug(log_msg_f1)
 
@@ -25114,7 +25128,7 @@ class TestSmartThreadScenarios:
             initialize_config_ver(
                 cmd_thread=cmd_current_app.smart_thread,
                 auto_start=False,
-                auto_start_decision=AutoStartDecision.auto_start_obviated,
+                auto_start_decision=AutoStartDecision.auto_start_no,
                 exp_alive=True,
                 exp_state=st.ThreadState.Alive,
                 thread_create=st.ThreadCreate.Current)
@@ -25136,6 +25150,27 @@ class TestSmartThreadScenarios:
                 exp_state=st.ThreadState.Registered,
                 thread_create=st.ThreadCreate.Thread)
             config_ver.monitor_pause = False
+
+            pe = config_ver.pending_events[commander_name]
+            pe[PE.start_request].append(
+                StartRequest(req_type=st.ReqType.Smart_start,
+                             targets={commander_name},
+                             not_registered_remotes=set(),
+                             timeout_remotes=set(),
+                             stopped_remotes=set(),
+                             deadlock_remotes=set(),
+                             eligible_targets=set(),
+                             completed_targets=set()))
+
+            req_key_entry: RequestKey = ('smart_start',
+                                         'entry')
+
+            pe[PE.request_msg][req_key_entry] += 1
+
+            req_key_exit: RequestKey = ('smart_start',
+                                        'exit')
+            pe[PE.request_msg][req_key_exit] += 1
+
             outer_thread_app.smart_thread.smart_start()
             outer_thread_app.join()
         elif commander_config == AppConfig.RemoteSmartThreadApp:
@@ -25154,6 +25189,27 @@ class TestSmartThreadScenarios:
                 exp_state=st.ThreadState.Registered,
                 thread_create=st.ThreadCreate.Thread)
             config_ver.monitor_pause = False
+
+            pe = config_ver.pending_events[commander_name]
+            pe[PE.start_request].append(
+                StartRequest(req_type=st.ReqType.Smart_start,
+                             targets={commander_name},
+                             not_registered_remotes=set(),
+                             timeout_remotes=set(),
+                             stopped_remotes=set(),
+                             deadlock_remotes=set(),
+                             eligible_targets=set(),
+                             completed_targets=set()))
+
+            req_key_entry: RequestKey = ('smart_start',
+                                         'entry')
+
+            pe[PE.request_msg][req_key_entry] += 1
+
+            req_key_exit: RequestKey = ('smart_start',
+                                        'exit')
+            pe[PE.request_msg][req_key_exit] += 1
+
             outer_thread_app.smart_start(commander_name)
             threading.Thread.join(outer_thread_app)
         elif commander_config == AppConfig.RemoteSmartThreadApp2:
@@ -25172,6 +25228,27 @@ class TestSmartThreadScenarios:
                 exp_state=st.ThreadState.Registered,
                 thread_create=st.ThreadCreate.Thread)
             config_ver.monitor_pause = False
+
+            pe = config_ver.pending_events[commander_name]
+            pe[PE.start_request].append(
+                StartRequest(req_type=st.ReqType.Smart_start,
+                             targets={commander_name},
+                             not_registered_remotes=set(),
+                             timeout_remotes=set(),
+                             stopped_remotes=set(),
+                             deadlock_remotes=set(),
+                             eligible_targets=set(),
+                             completed_targets=set()))
+
+            req_key_entry: RequestKey = ('smart_start',
+                                         'entry')
+
+            pe[PE.request_msg][req_key_entry] += 1
+
+            req_key_exit: RequestKey = ('smart_start',
+                                        'exit')
+            pe[PE.request_msg][req_key_exit] += 1
+
             outer_thread_app.smart_start(commander_name)
             threading.Thread.join(outer_thread_app)
         else:
