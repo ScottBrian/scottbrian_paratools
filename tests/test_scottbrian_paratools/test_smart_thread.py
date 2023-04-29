@@ -108,12 +108,9 @@ class AutoStartDecision(Enum):
 
 
 init_complete_text_units: dict[AutoStartDecision, str] = {
-    AutoStartDecision.auto_start_obviated: 'auto_start requested but not '
-                                           'needed since thread is already '
-                                           'alive',
-    AutoStartDecision.auto_start_yes: 'auto_start requested and will now be '
-                                      'done',
-    AutoStartDecision.auto_start_no: 'auto_start was not requested'
+    AutoStartDecision.auto_start_obviated: 'auto_start obviated',
+    AutoStartDecision.auto_start_yes: 'auto_start will proceed',
+    AutoStartDecision.auto_start_no: 'auto_start not requested'
 }
 
 ########################################################################
@@ -790,76 +787,76 @@ class ConfirmResponseNot(ConfirmResponse):
 ########################################################################
 # CreateCommanderAutoStart
 ########################################################################
-class CreateCommanderAutoStart(ConfigCmd):
-    """Create a commander thread with autostart."""
-    def __init__(self,
-                 cmd_runners: Iterable,
-                 commander_name: str,
-                 thread_alive: bool = True
-                 ) -> None:
-        """Initialize the instance.
-
-        Args:
-            cmd_runners: thread names that will execute the command
-            commander_name: name to be given the commander thread
-            thread_alive: specifies whether the thread is expected to be
-                alive
-        """
-        super().__init__(cmd_runners=cmd_runners)
-        self.specified_args = locals()  # used for __repr__
-
-        self.commander_name = commander_name
-        self.thread_alive = thread_alive
-        self.arg_list += ['commander_name',
-                          'thread_alive']
-
-    def run_process(self, cmd_runner: str) -> None:
-        """Run the command.
-
-        Args:
-           cmd_runner: name of thread running the command
-        """
-        self.config_ver.create_commander_thread(
-            cmd_runner=cmd_runner,
-            commander_name=self.commander_name,
-            thread_alive=self.thread_alive,
-            auto_start=True)
-
-
-########################################################################
-# CreateCommanderNoStart
-########################################################################
-class CreateCommanderNoStart(CreateCommanderAutoStart):
-    """Create a commander thread with no autostart."""
-    def __init__(self,
-                 cmd_runners: Iterable,
-                 commander_name: str,
-                 thread_alive: bool = True
-                 ) -> None:
-        """Initialize the instance.
-
-        Args:
-            cmd_runners: thread names that will execute the command
-            commander_name: name to be given the commander thread
-            thread_alive: specifies whether the thread is expected to be
-                alive
-        """
-        super().__init__(cmd_runners=cmd_runners,
-                         commander_name=commander_name,
-                         thread_alive=thread_alive)
-        self.specified_args = locals()  # used for __repr__
-
-    def run_process(self, cmd_runner: str) -> None:
-        """Run the command.
-
-        Args:
-           cmd_runner: name of thread running the command
-        """
-        self.config_ver.create_commander_thread(
-            cmd_runner=cmd_runner,
-            commander_name=self.commander_name,
-            thread_alive=self.thread_alive,
-            auto_start=False)
+# class CreateCommanderAutoStart(ConfigCmd):
+#     """Create a commander thread with autostart."""
+#     def __init__(self,
+#                  cmd_runners: Iterable,
+#                  commander_name: str,
+#                  thread_alive: bool = True
+#                  ) -> None:
+#         """Initialize the instance.
+#
+#         Args:
+#             cmd_runners: thread names that will execute the command
+#             commander_name: name to be given the commander thread
+#             thread_alive: specifies whether the thread is expected to be
+#                 alive
+#         """
+#         super().__init__(cmd_runners=cmd_runners)
+#         self.specified_args = locals()  # used for __repr__
+#
+#         self.commander_name = commander_name
+#         self.thread_alive = thread_alive
+#         self.arg_list += ['commander_name',
+#                           'thread_alive']
+#
+#     def run_process(self, cmd_runner: str) -> None:
+#         """Run the command.
+#
+#         Args:
+#            cmd_runner: name of thread running the command
+#         """
+#         self.config_ver.create_commander_thread(
+#             cmd_runner=cmd_runner,
+#             commander_name=self.commander_name,
+#             thread_alive=self.thread_alive,
+#             auto_start=True)
+#
+#
+# ########################################################################
+# # CreateCommanderNoStart
+# ########################################################################
+# class CreateCommanderNoStart(CreateCommanderAutoStart):
+#     """Create a commander thread with no autostart."""
+#     def __init__(self,
+#                  cmd_runners: Iterable,
+#                  commander_name: str,
+#                  thread_alive: bool = True
+#                  ) -> None:
+#         """Initialize the instance.
+#
+#         Args:
+#             cmd_runners: thread names that will execute the command
+#             commander_name: name to be given the commander thread
+#             thread_alive: specifies whether the thread is expected to be
+#                 alive
+#         """
+#         super().__init__(cmd_runners=cmd_runners,
+#                          commander_name=commander_name,
+#                          thread_alive=thread_alive)
+#         self.specified_args = locals()  # used for __repr__
+#
+#     def run_process(self, cmd_runner: str) -> None:
+#         """Run the command.
+#
+#         Args:
+#            cmd_runner: name of thread running the command
+#         """
+#         self.config_ver.create_commander_thread(
+#             cmd_runner=cmd_runner,
+#             commander_name=self.commander_name,
+#             thread_alive=self.thread_alive,
+#             auto_start=False)
 
 
 ########################################################################
@@ -4696,15 +4693,14 @@ class InitCompleteLogSearchItem(LogSearchItem):
                                   '|ThreadCreate.Target'
                                   '|ThreadCreate.Thread)')
 
-        list_of_extra_texts = ('(requested but not needed since '
-                               'thread is already alive'
-                               '|requested and will now be done'
-                               '|was not requested)')
+        list_of_auto_start_texts = ('(auto_start obviated'
+                                    '|auto_start will proceed'
+                                    '|auto_start not requested)')
         super().__init__(
-            search_str=('[a-z]+ completed initialization of [a-z]+ with '
-                        f'{list_of_thread_creates} and '
-                        f'{list_of_thread_states}, auto_start '
-                        f'{list_of_extra_texts}.'),
+            search_str=('[a-z]+ completed initialization of [a-z]+: '
+                        f'{list_of_thread_creates}, '
+                        f'{list_of_thread_states}, '
+                        f'{list_of_auto_start_texts}.'),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -4731,13 +4727,12 @@ class InitCompleteLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
-        target_name = split_msg[4]
-        create_text = split_msg[6]
-        state_text = split_msg[8][0:-1]
+        target_name = split_msg[4][0:-1]
+        create_text = split_msg[5][0:-1]
+        state_text = split_msg[6][0:-1]
 
         thread_create = eval('st.' + create_text)
         thread_state = eval('st.' + state_text)
-
 
         if (init_complete_text_units[AutoStartDecision.auto_start_obviated]
                 in self.found_log_msg):
@@ -6640,8 +6635,8 @@ class ConfigVerifier:
         self.specified_args = locals()  # used for __repr__, see below
         self.commander_name = commander_name
         self.commander_thread_config_built = False
-        self.cmd_thread_alive = False
-        self.cmd_thread_auto_start = False
+        # self.cmd_thread_alive = False
+        # self.cmd_thread_auto_start = False
         self.create_commander_event: threading.Event = threading.Event()
 
         self.monitor_thread = threading.Thread(target=self.monitor)
@@ -6672,7 +6667,7 @@ class ConfigVerifier:
         self.caplog_to_use = caplog_to_use
         self.msgs = msgs
         self.ops_lock = threading.RLock()
-        self.commander_thread: Optional[st.SmartThread] = None
+        # self.commander_thread: Optional[st.SmartThread] = None
         self.all_threads: dict[str, st.SmartThread] = {}
         self.max_msgs = max_msgs
 
@@ -7480,7 +7475,7 @@ class ConfigVerifier:
         # Make sure we have enough threads. Note that we subtract 1 from
         # the count of unregistered names to ensure we have one thread
         # for the commander
-        assert num_cd_actors <= len(self.unregistered_names) - 1
+        assert num_cd_actors <= len(self.unregistered_names)
 
         self.build_config(
             cmd_runner=self.commander_name,
@@ -7532,10 +7527,10 @@ class ConfigVerifier:
                 + num_stopped) <= len(self.thread_names)
         assert num_active >= 1  # always need at least 1 for commander
 
-        if not self.commander_thread_config_built:
-            self.build_create_suite(commander_name=self.commander_name)
-            self.commander_thread_config_built = True
-            # num_active -= 1  # one less active thread to create
+        # if not self.commander_thread_config_built:
+        #     self.build_create_suite(commander_name=self.commander_name)
+        #     self.commander_thread_config_built = True
+        #     # num_active -= 1  # one less active thread to create
 
         num_adjust_registered = len(self.registered_names) - num_registered
         num_adjust_active = len(self.active_names) - num_active
@@ -7650,10 +7645,10 @@ class ConfigVerifier:
                 active
             num_stopped_1: number of threads to initially build as
                 stopped
-            num_registered_2: number of threads to reconfigured as
+            num_registered_2: number of threads to reconfigure as
                 registered
-            num_active_2: number of threads to reconfigured as active
-            num_stopped_2: number of threads to reconfigured as stopped
+            num_active_2: number of threads to reconfigure as active
+            num_stopped_2: number of threads to reconfigure as stopped
 
         """
         self.build_config(
@@ -7696,25 +7691,25 @@ class ConfigVerifier:
             cmd_runner_to_use = cmd_runner
         else:
             cmd_runner_to_use = self.commander_name
-        if commander_name:
-            if not {commander_name}.issubset(self.unregistered_names):
-                raise InvalidInputDetected('Input commander name '
-                                           f'{commander_name} not a subset of '
-                                           'unregistered names '
-                                           f'{self.unregistered_names}')
-            self.unregistered_names -= {commander_name}
-
-            if commander_auto_start:
-                self.add_cmd(
-                    CreateCommanderAutoStart(cmd_runners=cmd_runner_to_use,
-                                             commander_name=commander_name))
-
-                self.active_names |= {commander_name}
-            else:
-                self.add_cmd(
-                    CreateCommanderNoStart(cmd_runners=cmd_runner_to_use,
-                                           commander_name=commander_name))
-                self.registered_names |= {commander_name}
+        # if commander_name:
+        #     if not {commander_name}.issubset(self.unregistered_names):
+        #         raise InvalidInputDetected('Input commander name '
+        #                                    f'{commander_name} not a subset of '
+        #                                    'unregistered names '
+        #                                    f'{self.unregistered_names}')
+        #     self.unregistered_names -= {commander_name}
+        #
+        #     if commander_auto_start:
+        #         self.add_cmd(
+        #             CreateCommanderAutoStart(cmd_runners=cmd_runner_to_use,
+        #                                      commander_name=commander_name))
+        #
+        #         self.active_names |= {commander_name}
+        #     else:
+        #         self.add_cmd(
+        #             CreateCommanderNoStart(cmd_runners=cmd_runner_to_use,
+        #                                    commander_name=commander_name))
+        #         self.registered_names |= {commander_name}
 
         if f1_create_items:
             f1_names: list[str] = []
@@ -7836,7 +7831,7 @@ class ConfigVerifier:
                                        f'{len(self.active_names)}')
 
         names: list[str] = list(
-            random.sample(self.active_names - {self.commander_name},
+            random.sample(sorted(self.active_names - {self.commander_name}),
                           num_to_exit))
 
         return self.build_exit_suite(cmd_runner=self.commander_name,
@@ -7868,7 +7863,7 @@ class ConfigVerifier:
                 f'{len(self.unregistered_names)}')
 
         names: list[str] = list(
-            random.sample(self.unregistered_names, num_to_create))
+            random.sample(sorted(self.unregistered_names), num_to_create))
         f1_create_items: list[F1CreateItem] = []
         for idx, name in enumerate(names):
             if idx % 2:
@@ -7949,7 +7944,7 @@ class ConfigVerifier:
                                        f'{len(self.stopped_remotes)}')
 
         names: list[str] = list(
-            random.sample(self.stopped_remotes, num_to_join))
+            random.sample(sorted(self.stopped_remotes), num_to_join))
 
         self.build_join_suite(
             cmd_runners=cmd_runners,
@@ -8013,7 +8008,7 @@ class ConfigVerifier:
                     + num_no_delay_unreg
                     + num_delay_unreg
                     + num_no_delay_reg
-                    + num_delay_reg) <= len(self.unregistered_names) - 1
+                    + num_delay_reg) <= len(self.unregistered_names)
 
         if (timeout_type == TimeoutType.TimeoutFalse
                 or timeout_type == TimeoutType.TimeoutTrue):
@@ -9998,7 +9993,7 @@ class ConfigVerifier:
                 + num_send_exit_senders
                 + num_nosend_exit_senders
                 + num_unreg_senders
-                + num_reg_senders) <= len(self.unregistered_names) - 1
+                + num_reg_senders) <= len(self.unregistered_names)
 
         assert num_receivers > 0
 
@@ -10322,7 +10317,7 @@ class ConfigVerifier:
 
         assert num_waiters > 0
         assert num_actors > 0
-        assert (num_waiters + num_actors) <= len(self.unregistered_names) - 1
+        assert (num_waiters + num_actors) <= len(self.unregistered_names)
 
         # number needed for waiters, actors, and commander
         num_active_threads_needed = num_waiters + num_actors + 1
@@ -11151,7 +11146,7 @@ class ConfigVerifier:
                 + num_unreg_after
                 + num_stop_after_ok
                 + num_stop_after_err)
-        assert total_arg_counts <= len(self.unregistered_names) - 1
+        assert total_arg_counts <= len(self.unregistered_names)
 
         assert num_resumers > 0
 
@@ -11501,7 +11496,7 @@ class ConfigVerifier:
                 + num_unreg_after
                 + num_stop_after_ok
                 + num_stop_after_err)
-        assert total_arg_counts <= len(self.unregistered_names) - 1
+        assert total_arg_counts <= len(self.unregistered_names)
 
         assert num_waiters > 0
 
@@ -11863,7 +11858,7 @@ class ConfigVerifier:
                 + num_unreg_no_delay
                 + num_unreg_delay
                 + num_stopped_no_delay
-                + num_stopped_delay) <= len(self.unregistered_names) - 1
+                + num_stopped_delay) <= len(self.unregistered_names)
 
         assert num_resumers > 0
 
@@ -13688,7 +13683,7 @@ class ConfigVerifier:
                 + num_registered_targets
                 + num_unreg_timeouts
                 + num_exit_timeouts
-                + num_full_q_timeouts) <= len(self.unregistered_names) - 1
+                + num_full_q_timeouts) <= len(self.unregistered_names)
 
         assert num_senders > 0
 
@@ -14301,7 +14296,7 @@ class ConfigVerifier:
                 + num_manual_start
                 + num_unreg
                 + num_alive
-                + num_stopped) <= len(self.unregistered_names) - 1
+                + num_stopped) <= len(self.unregistered_names)
 
         self.build_config(
             cmd_runner=self.commander_name,
@@ -14448,7 +14443,7 @@ class ConfigVerifier:
                                        f'{len(self.registered_names)}')
 
         names: list[str] = list(
-            random.sample(self.registered_names, num_to_start))
+            random.sample(sorted(self.registered_names), num_to_start))
 
         return self.build_start_suite(start_names=names)
 
@@ -14478,7 +14473,7 @@ class ConfigVerifier:
         # for the commander
         assert (num_syncers
                 + num_stopped_syncers
-                + num_timeout_syncers) <= len(self.unregistered_names) - 1
+                + num_timeout_syncers) <= len(self.unregistered_names)
 
         timeout_time = ((num_syncers * 0.64)
                         + (num_timeout_syncers * 0.64))
@@ -14682,7 +14677,7 @@ class ConfigVerifier:
                                        f'{len(self.registered_names)}')
 
         names: list[str] = list(
-            random.sample(self.registered_names, num_to_unreg))
+            random.sample(sorted(self.registered_names), num_to_unreg))
 
         return self.build_unreg_suite(names=names)
 
@@ -14710,7 +14705,7 @@ class ConfigVerifier:
         chosen_names: list[str] = []
         if num_names_needed > 0:
             chosen_names = list(
-                random.sample(name_collection, num_names_needed))
+                random.sample(sorted(name_collection), num_names_needed))
         if update_collection:
             name_collection -= set(chosen_names)
 
@@ -14721,88 +14716,88 @@ class ConfigVerifier:
     ####################################################################
     # create_commander_thread
     ####################################################################
-    def create_commander_thread(self,
-                                cmd_runner: str,
-                                commander_name: str,
-                                thread_alive: bool,
-                                auto_start: bool,
-                                ) -> None:
-        """Create the commander thread.
-
-        Args:
-            cmd_runner: name of thread doing the create
-            commander_name: name of new commander thread
-            thread_alive: specifies whether the thread is already
-                started
-            auto_start: specifies whether to start the thread
-            commander_config: specifies the style of commander thread
-        """
-        self.log_test_msg(f'create_commander_thread entry: {cmd_runner=}')
-        self.monitor_pause = True
-
-        ################################################################
-        # start commander
-        ################################################################
-        if not self.commander_thread:
-            commander_thread = st.SmartThread(
-                name=commander_name,
-                auto_start=auto_start,
-                max_msgs=self.max_msgs)
-            self.all_threads[commander_name] = commander_thread
-
-        if auto_start:
-            exp_state = st.ThreadState.Alive
-        else:
-            exp_state = st.ThreadState.Registered
-
-        self.expected_registered[commander_name] = ThreadTracker(
-            thread=commander_thread,
-            is_alive=False,
-            exiting=False,
-            is_auto_started=auto_start,
-            is_TargetThread=False,
-            exp_init_is_alive=True,
-            exp_init_thread_state=exp_state,
-            thread_create=st.ThreadCreate.Current,
-            auto_start_decision=AutoStartDecision.auto_start_obviated,
-            st_state=st.ThreadState.Unregistered,
-            found_del_pairs=defaultdict(int)
-        )
-        self.pending_events[commander_name][PE.start_request].append(
-            StartRequest(req_type=st.ReqType.Smart_init,
-                         targets={commander_name},
-                         not_registered_remotes=set(),
-                         timeout_remotes=set(),
-                         stopped_remotes=set(),
-                         deadlock_remotes=set(),
-                         eligible_targets=set(),
-                         completed_targets=set()))
-
-        with self.ops_lock:
-            self.monitor_add_items[cmd_runner] = MonitorAddItem(
-                cmd_runner=cmd_runner,
-                thread_alive=self.cmd_thread_alive,
-                auto_start=self.cmd_thread_auto_start,
-                is_ThreadTarget=False,
-                expected_state=exp_state)
-            self.cmd_waiting_event_items[cmd_runner] = threading.Event()
-
-        self.monitor_pause = False
-
-        self.monitor_event.set()
-
-        self.log_test_msg(f'{cmd_runner=} create_commander_thread waiting '
-                          f'for monitor')
-
-        self.cmd_waiting_event_items[cmd_runner].wait()
-        # with self.ops_lock:
-        #     del self.monitor_add_items[cmd_runner]
-        #     del self.cmd_waiting_event_items[cmd_runner]
-        #     self.expected_registered[commander_name].is_alive = True
-        #     self.expected_registered[
-        #         commander_name].st_state = st.ThreadState.Alive
-
-        self.log_test_msg(f'create_commander_thread exit: {cmd_runner=}')
+    # def create_commander_thread(self,
+    #                             cmd_runner: str,
+    #                             commander_name: str,
+    #                             thread_alive: bool,
+    #                             auto_start: bool,
+    #                             ) -> None:
+    #     """Create the commander thread.
+    #
+    #     Args:
+    #         cmd_runner: name of thread doing the create
+    #         commander_name: name of new commander thread
+    #         thread_alive: specifies whether the thread is already
+    #             started
+    #         auto_start: specifies whether to start the thread
+    #         commander_config: specifies the style of commander thread
+    #     """
+    #     self.log_test_msg(f'create_commander_thread entry: {cmd_runner=}')
+    #     self.monitor_pause = True
+    #
+    #     ################################################################
+    #     # start commander
+    #     ################################################################
+    #     if not self.commander_thread:
+    #         commander_thread = st.SmartThread(
+    #             name=commander_name,
+    #             auto_start=auto_start,
+    #             max_msgs=self.max_msgs)
+    #         self.all_threads[commander_name] = commander_thread
+    #
+    #     if auto_start:
+    #         exp_state = st.ThreadState.Alive
+    #     else:
+    #         exp_state = st.ThreadState.Registered
+    #
+    #     self.expected_registered[commander_name] = ThreadTracker(
+    #         thread=commander_thread,
+    #         is_alive=False,
+    #         exiting=False,
+    #         is_auto_started=auto_start,
+    #         is_TargetThread=False,
+    #         exp_init_is_alive=True,
+    #         exp_init_thread_state=exp_state,
+    #         thread_create=st.ThreadCreate.Current,
+    #         auto_start_decision=AutoStartDecision.auto_start_obviated,
+    #         st_state=st.ThreadState.Unregistered,
+    #         found_del_pairs=defaultdict(int)
+    #     )
+    #     self.pending_events[commander_name][PE.start_request].append(
+    #         StartRequest(req_type=st.ReqType.Smart_init,
+    #                      targets={commander_name},
+    #                      not_registered_remotes=set(),
+    #                      timeout_remotes=set(),
+    #                      stopped_remotes=set(),
+    #                      deadlock_remotes=set(),
+    #                      eligible_targets=set(),
+    #                      completed_targets=set()))
+    #
+    #     with self.ops_lock:
+    #         self.monitor_add_items[cmd_runner] = MonitorAddItem(
+    #             cmd_runner=cmd_runner,
+    #             thread_alive=self.cmd_thread_alive,
+    #             auto_start=self.cmd_thread_auto_start,
+    #             is_ThreadTarget=False,
+    #             expected_state=exp_state)
+    #         self.cmd_waiting_event_items[cmd_runner] = threading.Event()
+    #
+    #     self.monitor_pause = False
+    #
+    #     self.monitor_event.set()
+    #
+    #     self.log_test_msg(f'{cmd_runner=} create_commander_thread waiting '
+    #                       f'for monitor')
+    #
+    #     self.cmd_waiting_event_items[cmd_runner].wait()
+    #     # with self.ops_lock:
+    #     #     del self.monitor_add_items[cmd_runner]
+    #     #     del self.cmd_waiting_event_items[cmd_runner]
+    #     #     self.expected_registered[commander_name].is_alive = True
+    #     #     self.expected_registered[
+    #     #         commander_name].st_state = st.ThreadState.Alive
+    #
+    #     self.log_test_msg(f'create_commander_thread exit: {cmd_runner=}')
 
     ####################################################################
     # create_f1_thread
@@ -16741,8 +16736,7 @@ class ConfigVerifier:
         Args:
             cmd_runner: name of thread doing the cmd
             target: name of thread added to the registry
-            reg_update_msg: register update log message
-            reg_update_msg_log_idx: index in the log for the message
+            log_msg: register update log message
 
         """
         pe = self.pending_events[cmd_runner]
@@ -18921,8 +18915,12 @@ class ConfigVerifier:
             )
         changed = False
         for other_name in self.expected_registered.keys():
-            if other_name == add_name:
+            if ((other_name == add_name)
+                    or self.expected_registered[
+                        other_name].st_state == st.ThreadState.Unregistered):
                 continue
+            self.log_test_msg(f'add_to_pair_array proceeding with '
+                              f'{add_name=}, {other_name=}')
             changed = True
             pair_key = st.SmartThread._get_pair_key(add_name, other_name)
 
@@ -18937,6 +18935,8 @@ class ConfigVerifier:
                     self.pending_ops_counts[pair_key][other_name] = 0
 
             if pair_key not in self.expected_pairs:
+                self.log_test_msg(f'add_to_pair_array {pair_key=} not in '
+                                  f'{self.expected_pairs=}')
                 self.expected_pairs[pair_key] = {
                     add_name: ThreadPairStatus(
                         pending_ops_count=add_poc,
@@ -18957,6 +18957,8 @@ class ConfigVerifier:
             # if pair_key already exists, we need to add name
             # as a resurrected thread
             else:  # we already have a pair_key, need to add name
+                self.log_test_msg(f'add_to_pair_array {pair_key=} in '
+                                  f'{self.expected_pairs=}')
                 if not self.expected_pairs[pair_key]:
                     self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
@@ -18994,7 +18996,7 @@ class ConfigVerifier:
                 #                   f'for {pair_key=}, {add_name=} with '
                 #                   f'{add_poc=}')
 
-        self.log_test_msg(f'add_to_pair_array entry: {cmd_runner=}, '
+        self.log_test_msg(f'add_to_pair_array exit: {cmd_runner=}, '
                           f'{add_name=}')
         return changed
 
@@ -21782,7 +21784,7 @@ class CommanderCurrentApp:
             auto_start=False,
             max_msgs=max_msgs)
 
-        self.config_ver.commander_thread = self.smart_thread
+        # self.config_ver.commander_thread = self.smart_thread
 
     def run(self) -> None:
         """Run the test."""
@@ -21817,7 +21819,7 @@ class OuterThreadApp(threading.Thread):
             auto_start=False,
             max_msgs=max_msgs)
 
-        self.config_ver.commander_thread = self.smart_thread
+        # self.config_ver.commander_thread = self.smart_thread
 
     def run(self) -> None:
         """Run the test."""
@@ -21876,7 +21878,7 @@ class OuterSmartThreadApp(st.SmartThread, threading.Thread):
             auto_start=False,
             max_msgs=max_msgs)
         self.config_ver = config_ver
-        self.config_ver.commander_thread = self
+        # self.config_ver.commander_thread = self
 
     def run(self) -> None:
         """Run the test."""
@@ -21938,7 +21940,7 @@ class OuterSmartThreadApp2(threading.Thread, st.SmartThread):
             auto_start=False,
             max_msgs=max_msgs)
         self.config_ver = config_ver
-        self.config_ver.commander_thread = self
+        # self.config_ver.commander_thread = self
 
     def run(self) -> None:
         """Run the test."""
@@ -23596,11 +23598,11 @@ class TestSmartThreadScenarios:
                 active
             num_stopped_1_arg: number of threads to initially build as
                 stopped
-            num_registered_2_arg: number of threads to reconfigured as
+            num_registered_2_arg: number of threads to reconfigure as
                 registered
-            num_active_2_arg: number of threads to reconfigured as
+            num_active_2_arg: number of threads to reconfigure as
                 active
-            num_stopped_2_arg: number of threads to reconfigured as
+            num_stopped_2_arg: number of threads to reconfigure as
                 stopped
             caplog: pytest fixture to capture log output
 
@@ -25028,6 +25030,9 @@ class TestSmartThreadScenarios:
         config_ver.log_test_msg(f'scenario args: {scenario_builder_args}')
         config_ver.log_test_msg(f'{commander_config=}')
 
+        config_ver.unregistered_names -= {commander_name}
+        config_ver.active_names |= {commander_name}
+
         scenario_builder(config_ver,
                          **scenario_builder_args)
 
@@ -25105,9 +25110,7 @@ class TestSmartThreadScenarios:
         if commander_config == AppConfig.ScriptStyle:
             commander_thread = st.SmartThread(
                 name=commander_name)
-            # config_ver.commander_thread = commander_thread
-            # config_ver.cmd_thread_alive = True
-            # config_ver.cmd_thread_auto_start = True
+
             initialize_config_ver(
                 cmd_thread=commander_thread,
                 auto_start=True,
@@ -25122,9 +25125,7 @@ class TestSmartThreadScenarios:
                 config_ver=config_ver,
                 name=commander_name,
                 max_msgs=10)
-            # config_ver.commander_thread = cmd_current_app.smart_thread
-            # config_ver.cmd_thread_alive = True
-            # config_ver.cmd_thread_auto_start = False
+
             initialize_config_ver(
                 cmd_thread=cmd_current_app.smart_thread,
                 auto_start=False,
@@ -25139,9 +25140,7 @@ class TestSmartThreadScenarios:
                 config_ver=config_ver,
                 name=commander_name,
                 max_msgs=10)
-            # config_ver.commander_thread = outer_thread_app.smart_thread
-            # config_ver.cmd_thread_alive = False
-            # config_ver.cmd_thread_auto_start = False
+
             initialize_config_ver(
                 cmd_thread=outer_thread_app.smart_thread,
                 auto_start=False,
@@ -25178,9 +25177,7 @@ class TestSmartThreadScenarios:
                 config_ver=config_ver,
                 name=commander_name,
                 max_msgs=10)
-            # config_ver.commander_thread = outer_thread_app
-            # config_ver.cmd_thread_alive = False
-            # config_ver.cmd_thread_auto_start = False
+
             initialize_config_ver(
                 cmd_thread=outer_thread_app,
                 auto_start=False,
@@ -25217,9 +25214,7 @@ class TestSmartThreadScenarios:
                 config_ver=config_ver,
                 name=commander_name,
                 max_msgs=10)
-            # config_ver.commander_thread = outer_thread_app
-            # config_ver.cmd_thread_alive = False
-            # config_ver.cmd_thread_auto_start = False
+
             initialize_config_ver(
                 cmd_thread=outer_thread_app,
                 auto_start=False,

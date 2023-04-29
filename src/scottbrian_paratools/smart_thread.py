@@ -939,17 +939,16 @@ class SmartThread:
 
         if self.auto_start:
             if self.thread.is_alive():
-                extra_text = (', auto_start requested but not needed since '
-                              'thread is already alive')
+                extra_text = 'auto_start obviated'
             else:
                 self.auto_started = True
-                extra_text = (', auto_start requested and will now be done')
+                extra_text = 'auto_start will proceed'
         else:
-            extra_text = ', auto_start was not requested'
+            extra_text = 'auto_start not requested'
 
         logger.info(f'{self.cmd_runner} completed initialization of '
-                    f'{self.name} with {self.thread_create} '
-                    f'and {self.st_state}{extra_text}.')
+                    f'{self.name}: {self.thread_create}, '
+                    f'{self.st_state}, {extra_text}.')
 
         self.request: ReqType = ReqType.NoReq
 
