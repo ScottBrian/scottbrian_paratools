@@ -30,6 +30,7 @@ from scottbrian_utils.msgs import Msgs
 from scottbrian_utils.log_verifier import LogVer
 from scottbrian_utils.diag_msg import (get_formatted_call_sequence,
                                        get_caller_info)
+from scottbrian_locking import se_lock as sel
 
 ########################################################################
 # Local
@@ -126,6 +127,29 @@ class SrKey(NamedTuple):
 class SendRecvMsgs:
     """Messages to send and verify."""
     send_msgs: dict[SrKey, list[Any]]
+
+
+@dataclass
+class RegistrySnapshotItem:
+    is_alive: bool
+    state: st.ThreadState
+
+@dataclass
+class StatusBlockSnapshotItem:
+    pending_request: bool = False
+    pending_msg_count: int = 0
+    pending_wait: bool = False
+    pending_sync: bool = False
+
+@dataclass
+class PairArraySnapshotItem:
+    status_blocks: dict[str, StatusBlockSnapshotItem]
+
+@dataclass
+class SnapShotDataItem:
+    registry_items: dict[str, RegistrySnapshotItem]
+    pair_array_items: dict[
+        st.PairKey, dict[str, StatusBlockSnapshotItem]]
 
 
 ########################################################################
@@ -623,50 +647,6 @@ def get_set(item: Optional[Iterable] = None) -> set[Any]:
 
 
 ########################################################################
-# get_config_snapshot
-########################################################################
-def get_config_snapshot() -> SnapShotData:
-    """Return a set of structures to represent the current real config.
-
-    Args:
-        item: iterable to be returned as a set
-
-    Returns:
-        A set created from the input iterable item. Note that the set
-        will be empty if None was passed in.
-    """
-
-    class SnapShotData:
-        registry_items: dict[str, "ThreadTracker"]
-        pair_array_items: dict[st.PairKey, dict[str, "ThreadPairStatus"]]
-    class ThreadTracker:
-        """Class that tracks each thread."""
-        thread: st.SmartThread
-        is_alive: bool
-        exiting: bool
-        is_auto_started: bool
-        is_TargetThread: bool
-        exp_init_is_alive: bool
-        thread_create: st.ThreadCreate
-        exp_init_thread_state: st.ThreadState
-        auto_start_decision: AutoStartDecision
-        st_state: st.ThreadState
-        found_del_pairs: dict[tuple[str, str, str], int]
-        stopped_by: str = ''
-    snap_shot_data: SnapShotData = SnapShotData
-
-    registry_items: dict[str, "ThreadTracker"] = {}
-    for name, item in SmartThread._registry:
-        registry_items[name] = ThreadTracker(
-            thread=item,
-            is_alive=item.thread.is_alive(),
-            exiting=False,is_auto_started=)
-
-
-    return set({item} if isinstance(item, str) else item or '')
-
-
-########################################################################
 # ConfigCmd
 ########################################################################
 class ConfigCmd(ABC):
@@ -1158,7 +1138,7 @@ class LockObtain(ConfigCmd):
         Args:
             cmd_runner: name of thread running the command
         """
-        self.config_ver.lock_obtain(cmd_runner=cmd_runner)
+        self.config_ver.lock_obtain()
 
 
 ########################################################################
@@ -1183,7 +1163,7 @@ class LockRelease(ConfigCmd):
         Args:
             cmd_runner: name of thread running the command
         """
-        self.config_ver.lock_release(cmd_runner=cmd_runner)
+        self.config_ver.lock_release()
 
 
 ########################################################################
@@ -2051,7 +2031,8 @@ class ValidateConfig(ConfigCmd):
 
         self.config_ver.validate_config_complete_event.wait()
         self.config_ver.validate_config_complete_event.clear()
-
+        self.config_ver.create_snapshot_data(verify_name='verify_config',
+                                             verify_idx=self.serial_num)
         # self.config_ver.validate_config()
 
 
@@ -6405,9 +6386,9 @@ class MonitorCheckpointLogSearchItem(LogSearchItem):
             found_log_msg: log msg that was found
             found_log_idx: index in the log where message was found
         """
-        'Monitor Checkpoint: validate_config'
+        # 'Monitor Checkpoint: validate_config'
         super().__init__(
-            search_str='Monitor Checkpoint: [a-z_]+',
+            search_str='Monitor Checkpoint: [a-z_]+ [0-9]+',
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -6434,13 +6415,17 @@ class MonitorCheckpointLogSearchItem(LogSearchItem):
     def run_process(self):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
-        checkpoint_item = split_msg[2]
+        verify_name = split_msg[2]
+        verify_idx = int(split_msg[3])
 
-        if checkpoint_item == 'validate_config':
-            self.config_ver.validate_config()
-            self.config_ver.validate_config_complete_event.set()
-        elif checkpoint_item == 'check_pending_events':
-            self.config_ver.check_pending_events()
+        eval(verify_name)(verify_idx)
+
+
+        # if checkpoint_item == 'validate_config':
+        #     self.config_ver.validate_config()
+        #     self.config_ver.validate_config_complete_event.set()
+        if verify_name == 'check_pending_events':
+            # self.config_ver.check_pending_events()
             self.config_ver.check_pending_events_complete_event.set()
 
 
@@ -6870,6 +6855,8 @@ class ConfigVerifier:
                 PE.unreg_join_success_msg] = defaultdict(int)
             self.pending_events[name][PE.join_waiting_msg] = defaultdict(int)
             self.pending_events[name][PE.init_comp_msg] = defaultdict(int)
+
+        self.snap_shot_data: dict[int, SnapShotDataItem]
 
         self.allow_log_test_msg = True
 
@@ -8345,7 +8332,13 @@ class ConfigVerifier:
     ####################################################################
     # check_pending_events
     ####################################################################
-    def check_pending_events(self):
+    def check_pending_events(self,
+                             verify_idx: int) -> None:
+        """Check pending events are clear.
+
+        Args:
+            verify_idx: contains verify index to snapshot data
+        """
         incomplete_items: dict[str, dict[PE, Any]] = {}
         for cmd_runner, pend_events in self.pending_events.items():
             for event_name, item in pend_events.items():
@@ -14975,6 +14968,45 @@ class ConfigVerifier:
         self.log_test_msg(f'create_f1_thread exiting: {cmd_runner=}, '
                           f'{name=}')
 
+    ########################################################################
+    # get_config_snapshot
+    ########################################################################
+    def create_snapshot_data(self,
+                             verify_name: str,
+                             verify_idx: int) -> None:
+        """Create and save a snapshot of real structures for verification.
+
+        Args:
+            verify_name: name of verify cmd
+            verify_idx: index of the verify command
+        """
+        with sel.SELockExcl(st.SmartThread._registry_lock):
+            registry_items: dict[str, RegistrySnapshotItem] = {}
+            for name, item in st.SmartThread._registry:
+                registry_items[name] = RegistrySnapshotItem(
+                    is_alive=item.thread.is_alive(),
+                    state=item.st_state)
+
+            pair_array_items: dict[st.PairKey, dict[
+                str, StatusBlockSnapshotItem]] = {}
+            for pair_key, connection_pair in st.SmartThread._pair_array.items():
+                for name, sb_item in connection_pair.status_blocks.items():
+                    pair_array_items[pair_key][name] = StatusBlockSnapshotItem(
+                        pending_request=sb_item.request_pending,
+                        pending_msg_count=len(sb_item.msg_q),
+                        pending_wait=sb_item.wait_event.is_set(),
+                        pending_sync=sb_item.sync_event.is_set())
+
+            self.snap_shot_data[verify_idx] = SnapShotDataItem(
+                registry_items=registry_items.copy(),
+                pair_array_items=pair_array_items.copy()
+            )
+
+            self.config_ver.log_test_msg(
+                f'Monitor Checkpoint: {verify_name} {verify_idx}')
+
+        self.lock_release()
+
     ####################################################################
     # dec_ops_count
     ####################################################################
@@ -18543,35 +18575,27 @@ class ConfigVerifier:
     ####################################################################
     # lock_obtain
     ####################################################################
-    def lock_obtain(self, cmd_runner: str) -> None:
-        """Increment the pending operations count.
-
-        Args:
-            cmd_runner: name of thread that will get the lock
-        """
+    @staticmethod
+    def lock_obtain() -> None:
+        """Obtain the registry lock exclusive."""
         st.SmartThread._registry_lock.obtain_excl(timeout=60)
 
     ####################################################################
-    # lock_obtain
+    # lock_release
     ####################################################################
-    def lock_release(self, cmd_runner: str) -> None:
-        """Increment the pending operations count.
-
-        Args:
-            cmd_runner: name of thread that will get the lock
-        """
+    @staticmethod
+    def lock_release() -> None:
+        """Increment the pending operations count."""
         st.SmartThread._registry_lock.release()
 
     ####################################################################
-    # lock_obtain
+    # lock_swap
     ####################################################################
-    def lock_swap(self,
-                  cmd_runner: str,
-                  new_positions: list[str]) -> None:
+    @staticmethod
+    def lock_swap(new_positions: list[str]) -> None:
         """Increment the pending operations count.
 
         Args:
-            cmd_runner: name of thread that will get the lock
             new_positions: the desired positions on the lock queue
         """
         assert len(new_positions) == len(
@@ -19671,18 +19695,6 @@ class ConfigVerifier:
             mismatch between the real and mock configuration
 
         """
-        @dataclass
-        class RealRegistrySnapshotItem:
-            is_alive: bool
-            state: st.ThreadState
-
-        @dataclass
-        class RealStatusBlockItem:
-
-
-        @dataclass
-        class RealPairArraySnapshotItem:
-            status_blocks: dict[str, RealStatusBlockItem]
         # verify real registry matches expected_registered
         for name, thread in st.SmartThread._registry.items():
             if name not in self.expected_registered:
@@ -25315,7 +25327,7 @@ class TestSmartThreadScenarios:
         # check that pending events are complete
         ################################################################
 
-        config_ver.log_test_msg('Monitor Checkpoint: check_pending_events')
+        config_ver.log_test_msg('Monitor Checkpoint: check_pending_events 42')
         config_ver.monitor_event.set()
         config_ver.check_pending_events_complete_event.wait()
 
