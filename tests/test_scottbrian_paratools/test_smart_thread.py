@@ -207,6 +207,11 @@ class RequestConfirmParms:
     serial_number: int
 
 
+@dataclass
+class SnapShotData:
+    registry_items: dict[str, "ThreadTracker"]
+    pair_array_items: dict[st.PairKey, dict[str, "ThreadPairStatus"]]
+
 ########################################################################
 # Test settings for conflict_deadlock_scenarios
 ########################################################################
@@ -604,7 +609,7 @@ class FailedDefDelVerify(ErrorTstSmartThread):
 ########################################################################
 # get_set
 ########################################################################
-def get_set(item: Optional[Iterable] = None):
+def get_set(item: Optional[Iterable] = None) -> set[Any]:
     """Return a set given the iterable input.
 
     Args:
@@ -614,6 +619,50 @@ def get_set(item: Optional[Iterable] = None):
         A set created from the input iterable item. Note that the set
         will be empty if None was passed in.
     """
+    return set({item} if isinstance(item, str) else item or '')
+
+
+########################################################################
+# get_config_snapshot
+########################################################################
+def get_config_snapshot() -> SnapShotData:
+    """Return a set of structures to represent the current real config.
+
+    Args:
+        item: iterable to be returned as a set
+
+    Returns:
+        A set created from the input iterable item. Note that the set
+        will be empty if None was passed in.
+    """
+
+    class SnapShotData:
+        registry_items: dict[str, "ThreadTracker"]
+        pair_array_items: dict[st.PairKey, dict[str, "ThreadPairStatus"]]
+    class ThreadTracker:
+        """Class that tracks each thread."""
+        thread: st.SmartThread
+        is_alive: bool
+        exiting: bool
+        is_auto_started: bool
+        is_TargetThread: bool
+        exp_init_is_alive: bool
+        thread_create: st.ThreadCreate
+        exp_init_thread_state: st.ThreadState
+        auto_start_decision: AutoStartDecision
+        st_state: st.ThreadState
+        found_del_pairs: dict[tuple[str, str, str], int]
+        stopped_by: str = ''
+    snap_shot_data: SnapShotData = SnapShotData
+
+    registry_items: dict[str, "ThreadTracker"] = {}
+    for name, item in SmartThread._registry:
+        registry_items[name] = ThreadTracker(
+            thread=item,
+            is_alive=item.thread.is_alive(),
+            exiting=False,is_auto_started=)
+
+
     return set({item} if isinstance(item, str) else item or '')
 
 
@@ -19622,6 +19671,18 @@ class ConfigVerifier:
             mismatch between the real and mock configuration
 
         """
+        @dataclass
+        class RealRegistrySnapshotItem:
+            is_alive: bool
+            state: st.ThreadState
+
+        @dataclass
+        class RealStatusBlockItem:
+
+
+        @dataclass
+        class RealPairArraySnapshotItem:
+            status_blocks: dict[str, RealStatusBlockItem]
         # verify real registry matches expected_registered
         for name, thread in st.SmartThread._registry.items():
             if name not in self.expected_registered:
