@@ -139,8 +139,16 @@ class VerifyCountsData:
     num_active: int
     num_stopped: int
 
+@dataclass
+class VerifyStateData:
+    cmd_runner: str
+    check_state_names: set[str]
+    expected_state: st.ThreadState
 
-VerifyDataItems: TypeAlias = Union[VerifyCountsData]
+
+VerifyDataItems: TypeAlias = Union[
+    VerifyCountsData,
+    VerifyStateData]
 
 
 @dataclass
@@ -166,7 +174,7 @@ class PairArraySnapshotItem:
 class SnapShotDataItem:
     registry_items: dict[str, RegistrySnapshotItem]
     pair_array_items: dict[st.PairKey, dict[str, StatusBlockSnapshotItem]]
-    verify_data: VerifyCountsData
+    verify_data: VerifyDataItems
 
 
 ########################################################################
@@ -2136,9 +2144,13 @@ class VerifyActive(ConfigCmd):
         Args:
             cmd_runner: name of thread running the command
         """
-        self.config_ver.verify_is_active(
+        verify_active_data: VerifyActiveData = VerifyActiveData(
             cmd_runner=cmd_runner,
-            exp_active_names=self.exp_active_names)
+            exp_active_names=self.exp_active_names
+        )
+        self.config_ver.create_snapshot_data(verify_name='verify_counts',
+                                             verify_idx=self.serial_num,
+                                             verify_data=verify_active_data)
 
 
 ########################################################################
@@ -2488,10 +2500,14 @@ class VerifyState(ConfigCmd):
         Args:
             cmd_runner: name of thread running the command
         """
-        self.config_ver.verify_state(
+        verify_state_data: VerifyStateData = VerifyStateData(
             cmd_runner=cmd_runner,
             check_state_names=self.check_state_names,
             expected_state=self.expected_state)
+
+        self.config_ver.create_snapshot_data(verify_name='verify_state',
+                                             verify_idx=self.serial_num,
+                                             verify_data=verify_state_data)
 
 
 ########################################################################
@@ -21661,6 +21677,12 @@ class ConfigVerifier:
             cmd_runner=cmd_runner,
             check_state_names=exp_active_names,
             expected_state=st.ThreadState.Alive)
+        self.verify_state_part2(
+            cmd_runner=verify_state_data.cmd_runner,
+            check_state_names=verify_state_data.check_state_names,
+            expected_state=verify_state_data.expected_state,
+            real_reg_items=real_reg_items
+        )
         if len(exp_active_names) > 1:
             self.verify_paired(
                 cmd_runner=cmd_runner,
@@ -21749,6 +21771,12 @@ class ConfigVerifier:
             cmd_runner=cmd_runner,
             check_state_names=exp_registered_names,
             expected_state=st.ThreadState.Registered)
+        self.verify_state_part2(
+            cmd_runner=verify_state_data.cmd_runner,
+            check_state_names=verify_state_data.check_state_names,
+            expected_state=verify_state_data.expected_state,
+            real_reg_items=real_reg_items
+        )
         if len(exp_registered_names) > 1:
             self.verify_paired(cmd_runner=cmd_runner,
                                exp_paired_names=exp_registered_names)
@@ -21907,9 +21935,37 @@ class ConfigVerifier:
     # verify_state
     ####################################################################
     def verify_state(self,
-                     cmd_runner: str,
-                     check_state_names: set[str],
-                     expected_state: st.ThreadState) -> None:
+                     verify_idx: int) -> None:
+        """Verify that the given names have the given status.
+
+        Args:
+            verify_idx: index for the saved snapshot data
+
+        Raises:
+            InvalidConfigurationDetected: verify_state found mock
+            status not equal to the expected status
+
+        """
+        real_reg_items = self.snap_shot_data[verify_idx].registry_items
+        verify_state_data = self.snap_shot_data[
+                verify_idx].verify_data
+
+        self.verify_state_part2(
+            cmd_runner=verify_state_data.cmd_runner,
+            check_state_names=verify_state_data.check_state_names,
+            expected_state=verify_state_data.expected_state,
+            real_reg_items=real_reg_items
+        )
+
+    ####################################################################
+    # verify_state_part2
+    ####################################################################
+    def verify_state_part2(self,
+                           cmd_runner: str,
+                           check_state_names: set[str],
+                           expected_state: st.ThreadState,
+                           real_reg_items: dict[str, RegistrySnapshotItem]
+                           ) -> None:
         """Verify that the given names have the given status.
 
         Args:
@@ -21917,6 +21973,7 @@ class ConfigVerifier:
             check_state_names: names of the threads to check for the
                 given status
             expected_state: the status each thread is expected to have
+            real_reg_items: snapshot of registry data
 
         Raises:
             InvalidConfigurationDetected: verify_state found mock
@@ -21924,20 +21981,19 @@ class ConfigVerifier:
 
         """
         for name in check_state_names:
-            if not st.SmartThread._registry[name].st_state == expected_state:
+            if not real_reg_items[name].state == expected_state:
                 self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
-                    f'verify_state found {name} has real status '
-                    f'{st.SmartThread._registry[name].st_state} '
-                    'not equal to the expected status of '
-                    f'{expected_state} per {cmd_runner=}')
+                    f'verify_state found {name=} has real status '
+                    f'{real_reg_items[name].state} not equal to the expected '
+                    f'status of {expected_state=} per {cmd_runner=}')
             if not self.expected_registered[name].st_state == expected_state:
                 self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
-                    f'verify_state found {name} has mock status '
-                    f'{self.expected_registered[name].st_state} '
-                    'not equal to the expected status of '
-                    f'{expected_state} per {cmd_runner=}')
+                    f'verify_state found {name=} has mock status '
+                    f'{self.expected_registered[name].st_state} not equal to '
+                    f'the expected status of {expected_state=} per '
+                    f'{cmd_runner=}')
 
     ####################################################################
     # wait_for_recv_msg_timeouts
