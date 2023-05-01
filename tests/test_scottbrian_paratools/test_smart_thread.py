@@ -6416,13 +6416,13 @@ class MonitorCheckpointLogSearchItem(LogSearchItem):
         verify_name = split_msg[2]
         verify_idx = split_msg[3]
 
-        call_stm = f'self.{verify_name}(verify_idx={verify_idx})'
+        call_stm = f'self.config_ver.{verify_name}(verify_idx={verify_idx})'
 
         eval(call_stm)
 
 
         # if checkpoint_item == 'validate_config':
-        if checkpoint_item == 'verify_config':
+        if verify_name == 'verify_config':
             self.config_ver.validate_config_complete_event.set()
         elif verify_name == 'check_pending_events':
             # self.config_ver.check_pending_events()
@@ -14994,7 +14994,7 @@ class ConfigVerifier:
                 for name, sb_item in connection_pair.status_blocks.items():
                     pair_array_items[pair_key][name] = StatusBlockSnapshotItem(
                         pending_request=sb_item.request_pending,
-                        pending_msg_count=len(sb_item.msg_q),
+                        pending_msg_count=sb_item.msg_q.qsize(),
                         pending_wait=sb_item.wait_event.is_set(),
                         pending_sync=sb_item.sync_event.is_set())
 
