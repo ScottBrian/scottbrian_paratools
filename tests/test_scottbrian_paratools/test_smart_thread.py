@@ -134,6 +134,7 @@ class RegistrySnapshotItem:
     is_alive: bool
     state: st.ThreadState
 
+
 @dataclass
 class StatusBlockSnapshotItem:
     pending_request: bool = False
@@ -141,15 +142,16 @@ class StatusBlockSnapshotItem:
     pending_wait: bool = False
     pending_sync: bool = False
 
+
 @dataclass
 class PairArraySnapshotItem:
     status_blocks: dict[str, StatusBlockSnapshotItem]
 
+
 @dataclass
 class SnapShotDataItem:
     registry_items: dict[str, RegistrySnapshotItem]
-    pair_array_items: dict[
-        st.PairKey, dict[str, StatusBlockSnapshotItem]]
+    pair_array_items: dict[st.PairKey, dict[str, StatusBlockSnapshotItem]]
 
 
 ########################################################################
@@ -230,11 +232,6 @@ class RequestConfirmParms:
     request_name: str
     serial_number: int
 
-
-@dataclass
-class SnapShotData:
-    registry_items: dict[str, "ThreadTracker"]
-    pair_array_items: dict[st.PairKey, dict[str, "ThreadPairStatus"]]
 
 ########################################################################
 # Test settings for conflict_deadlock_scenarios
@@ -2027,12 +2024,13 @@ class ValidateConfig(ConfigCmd):
         Args:
             cmd_runner: name of thread running the command
         """
-        self.config_ver.log_test_msg('Monitor Checkpoint: validate_config')
+        self.config_ver.create_snapshot_data(verify_name='verify_config',
+                                             verify_idx=self.serial_num)
+        # self.config_ver.log_test_msg('Monitor Checkpoint: validate_config')
 
         self.config_ver.validate_config_complete_event.wait()
         self.config_ver.validate_config_complete_event.clear()
-        self.config_ver.create_snapshot_data(verify_name='verify_config',
-                                             verify_idx=self.serial_num)
+
         # self.config_ver.validate_config()
 
 
@@ -6416,15 +6414,17 @@ class MonitorCheckpointLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         verify_name = split_msg[2]
-        verify_idx = int(split_msg[3])
+        verify_idx = split_msg[3]
 
-        eval(verify_name)(verify_idx)
+        call_stm = f'self.{verify_name}(verify_idx={verify_idx})'
+
+        eval(call_stm)
 
 
         # if checkpoint_item == 'validate_config':
-        #     self.config_ver.validate_config()
-        #     self.config_ver.validate_config_complete_event.set()
-        if verify_name == 'check_pending_events':
+        if checkpoint_item == 'verify_config':
+            self.config_ver.validate_config_complete_event.set()
+        elif verify_name == 'check_pending_events':
             # self.config_ver.check_pending_events()
             self.config_ver.check_pending_events_complete_event.set()
 
@@ -6856,7 +6856,7 @@ class ConfigVerifier:
             self.pending_events[name][PE.join_waiting_msg] = defaultdict(int)
             self.pending_events[name][PE.init_comp_msg] = defaultdict(int)
 
-        self.snap_shot_data: dict[int, SnapShotDataItem]
+        self.snap_shot_data: dict[int, SnapShotDataItem] = {}
 
         self.allow_log_test_msg = True
 
@@ -14982,14 +14982,15 @@ class ConfigVerifier:
         """
         with sel.SELockExcl(st.SmartThread._registry_lock):
             registry_items: dict[str, RegistrySnapshotItem] = {}
-            for name, item in st.SmartThread._registry:
+            for name, item in st.SmartThread._registry.items():
                 registry_items[name] = RegistrySnapshotItem(
                     is_alive=item.thread.is_alive(),
                     state=item.st_state)
 
             pair_array_items: dict[st.PairKey, dict[
                 str, StatusBlockSnapshotItem]] = {}
-            for pair_key, connection_pair in st.SmartThread._pair_array.items():
+            for pair_key, connection_pair in (
+                    st.SmartThread._pair_array.items()):
                 for name, sb_item in connection_pair.status_blocks.items():
                     pair_array_items[pair_key][name] = StatusBlockSnapshotItem(
                         pending_request=sb_item.request_pending,
@@ -15002,10 +15003,8 @@ class ConfigVerifier:
                 pair_array_items=pair_array_items.copy()
             )
 
-            self.config_ver.log_test_msg(
+            self.log_test_msg(
                 f'Monitor Checkpoint: {verify_name} {verify_idx}')
-
-        self.lock_release()
 
     ####################################################################
     # dec_ops_count
@@ -19811,6 +19810,174 @@ class ConfigVerifier:
                         f'ConfigVerifier found name {name} in '
                         f'expected_pairs for pair_key {pair_key}, but not in '
                         'SmartThread._pair_array status_blocks')
+
+    ####################################################################
+    # validate_config
+    ####################################################################
+    def verify_config(self,
+                      verify_idx: int):
+        """Verify that the SmartThread config is correct.
+
+        Args:
+            verify_idx: index for the saved snapshot data
+
+        Raises:
+            InvalidConfigurationDetected: validate_config has found a
+            mismatch between the real and mock configuration
+
+        """
+        real_reg_items = self.snap_shot_data[verify_idx].registry_items
+        real_pair_array_items = self.snap_shot_data[
+            verify_idx].pair_array_items
+
+        # verify real registry matches expected_registered
+        for name, real_reg_item in real_reg_items.items():
+            if name not in self.expected_registered:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_config found SmartThread real registry has entry '
+                    f'for {name=} that is missing from the expected_registry. '
+                    f'{self.expected_registered.keys()=}')
+            if self.expected_registered[name].is_alive != real_reg_item.is_alive:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_config found SmartThread real registry has '
+                    f'entry for {name=} that has is_alive of '
+                    f'{real_reg_item.is_alive} which does not match the '
+                    f'expected_registered is_alive of '
+                    f'{self.expected_registered[name].is_alive}')
+            if self.expected_registered[name].st_state != real_reg_item.state:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_config found SmartThread real registry has '
+                    f'entry for {name=} that has status of '
+                    f'{real_reg_item.state} which does not match the '
+                    f'mock expected_registered status of '
+                    f'{self.expected_registered[name].st_state}')
+
+        # verify expected_registered matches real registry
+        for name, tracker in self.expected_registered.items():
+            if name not in real_reg_items:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_config found expected_registered has an entry '
+                    f'for {name=} that is missing from real '
+                    f'SmartThread._registry')
+
+        # verify pair_array matches expected_pairs
+        for pair_key, status_blocks in real_pair_array_items.items():
+            if len(status_blocks) == 0:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_config found pair_key {pair_key} in real '
+                    f'SmartThread._pair_array that has an empty status_blocks')
+            if pair_key not in self.expected_pairs:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_config found pair_key {pair_key} in real '
+                    f'SmartThread._pair_array that is not found in '
+                    f'expected_pairs')
+            for name, status_item in status_blocks.items():
+                if name not in real_reg_items:
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'verify_config found SmartThread real pair_array '
+                        f'has a status_blocks entry for {name=} that is '
+                        f'missing from the real registry. ')
+
+                if name not in self.expected_registered:
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'verify_config found {name=} in real '
+                        f'SmartThread._pair_array status_blocks for pair_key'
+                        f' {pair_key}, but is missing in mock '
+                        f'expected_registered')
+
+                if name not in self.expected_pairs[pair_key].keys():
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'verify_config found {name=} in real '
+                        f'SmartThread._pair_array status_blocks for pair_key'
+                        f' {pair_key}, but is missing in expected_pairs')
+
+                if len(status_blocks) == 1:
+                    if not (status_item.pending_request
+                            or status_item.pending_msg_count
+                            or status_item.pending_wait
+                            or status_item.pending_sync):
+                        self.abort_all_f1_threads()
+                        raise InvalidConfigurationDetected(
+                            f'verify_config found {name=} in real '
+                            f'SmartThread._pair_array status_blocks for '
+                            f'pair_key {pair_key}, but it is a single '
+                            f'name that has no pending reasons')
+                mock_status_item = self.expected_pairs[pair_key][name]
+                if (status_item.pending_request
+                        != mock_status_item.pending_request):
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'verify_config found {name=} in real '
+                        f'SmartThread._pair_array status_blocks for '
+                        f'pair_key {pair_key} has '
+                        f'{status_item.pending_request=} which does not '
+                        f'match {mock_status_item.pending_request=}')
+                if (status_item.pending_msg_count
+                        != mock_status_item.pending_msg_count):
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'verify_config found {name=} in real '
+                        f'SmartThread._pair_array status_blocks for '
+                        f'pair_key {pair_key} has '
+                        f'{status_item.pending_msg_count=} which does not '
+                        f'match {mock_status_item.pending_msg_count=}')
+                if (status_item.pending_wait
+                        != mock_status_item.pending_wait):
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'verify_config found {name=} in real '
+                        f'SmartThread._pair_array status_blocks for '
+                        f'pair_key {pair_key} has '
+                        f'{status_item.pending_wait=} which does not '
+                        f'match {mock_status_item.pending_wait=}')
+                if (status_item.pending_sync
+                        != mock_status_item.pending_sync):
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'verify_config found {name=} in real '
+                        f'SmartThread._pair_array status_blocks for '
+                        f'pair_key {pair_key} has '
+                        f'{status_item.pending_sync=} which does not '
+                        f'match {mock_status_item.pending_sync=}')
+
+        # verify expected_pairs matches pair_array
+        for pair_key, mock_status_blocks in self.expected_pairs.items():
+            if pair_key not in real_pair_array_items:
+                self.abort_all_f1_threads()
+                raise InvalidConfigurationDetected(
+                    f'verify_config found {pair_key=} in expected_pairs but '
+                    f'not in real SmartThread._pair_array')
+            for name, mock_status_item in mock_status_blocks.items():
+                if name not in real_reg_items:
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'verify_config found SmartThread mock pair_array '
+                        f'has a status_blocks entry for {name=} that is '
+                        f'missing from the real registry. ')
+
+                if name not in self.expected_registered:
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'verify_config found {name=} in mock '
+                        f'pair_array status_blocks for pair_key'
+                        f' {pair_key}, but is missing in '
+                        f'mock expected_registered')
+
+                if name not in real_pair_array_items[pair_key].status_blocks:
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'verify_config found {name=} in mock '
+                        f'expected_pairs for pair_key {pair_key}, but not in '
+                        'real SmartThread._pair_array status_blocks')
 
     ####################################################################
     # verify_counts
