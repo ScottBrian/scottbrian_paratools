@@ -102,6 +102,7 @@ list_of_extra_texts = ('(auto_start requested but not needed since '
                                '|auto_start requested and will now be done'
                                '|auto_start was not requested)')
 
+
 class AutoStartDecision(Enum):
     auto_start_obviated = auto()
     auto_start_yes = auto()
@@ -129,6 +130,19 @@ class SendRecvMsgs:
     send_msgs: dict[SrKey, list[Any]]
 
 
+########################################################################
+# VerifyData items
+########################################################################
+@dataclass
+class VerifyCountsData:
+    num_registered: int
+    num_active: int
+    num_stopped: int
+
+
+VerifyDataItems: TypeAlias = Union[VerifyCountsData]
+
+
 @dataclass
 class RegistrySnapshotItem:
     is_alive: bool
@@ -152,6 +166,7 @@ class PairArraySnapshotItem:
 class SnapShotDataItem:
     registry_items: dict[str, RegistrySnapshotItem]
     pair_array_items: dict[st.PairKey, dict[str, StatusBlockSnapshotItem]]
+    verify_data: VerifyCountsData
 
 
 ########################################################################
@@ -2162,9 +2177,14 @@ class VerifyCounts(ConfigCmd):
         Args:
             cmd_runner: name of thread running the command
         """
-        self.config_ver.verify_counts(num_registered=self.exp_num_registered,
-                                      num_active=self.exp_num_active,
-                                      num_stopped=self.exp_num_stopped)
+        verify_counts_data: VerifyCountsData = VerifyCountsData(
+            num_registered=self.exp_num_registered,
+            num_active=self.exp_num_active,
+            num_stopped=self.exp_num_stopped
+        )
+        self.config_ver.create_snapshot_data(verify_name='verify_counts',
+                                             verify_idx=self.serial_num,
+                                             verify_data=verify_counts_data)
 
 
 ########################################################################
@@ -6384,7 +6404,6 @@ class MonitorCheckpointLogSearchItem(LogSearchItem):
             found_log_msg: log msg that was found
             found_log_idx: index in the log where message was found
         """
-        # 'Monitor Checkpoint: validate_config'
         super().__init__(
             search_str='Monitor Checkpoint: [a-z_]+ [0-9]+',
             config_ver=config_ver,
@@ -6420,15 +6439,10 @@ class MonitorCheckpointLogSearchItem(LogSearchItem):
 
         eval(call_stm)
 
-
-        # if checkpoint_item == 'validate_config':
         if verify_name == 'verify_config':
             self.config_ver.validate_config_complete_event.set()
         elif verify_name == 'check_pending_events':
-            # self.config_ver.check_pending_events()
             self.config_ver.check_pending_events_complete_event.set()
-
-
 
 
 LogSearchItems: TypeAlias = Union[
@@ -14973,7 +14987,9 @@ class ConfigVerifier:
     ########################################################################
     def create_snapshot_data(self,
                              verify_name: str,
-                             verify_idx: int) -> None:
+                             verify_idx: int,
+                             verify_data: Optional[VerifyDataItems] = None
+                             ) -> None:
         """Create and save a snapshot of real structures for verification.
 
         Args:
@@ -14991,6 +15007,7 @@ class ConfigVerifier:
                 str, StatusBlockSnapshotItem]] = {}
             for pair_key, connection_pair in (
                     st.SmartThread._pair_array.items()):
+                pair_array_items[pair_key] = {}
                 for name, sb_item in connection_pair.status_blocks.items():
                     pair_array_items[pair_key][name] = StatusBlockSnapshotItem(
                         pending_request=sb_item.request_pending,
@@ -15000,7 +15017,8 @@ class ConfigVerifier:
 
             self.snap_shot_data[verify_idx] = SnapShotDataItem(
                 registry_items=registry_items.copy(),
-                pair_array_items=pair_array_items.copy()
+                pair_array_items=pair_array_items.copy(),
+                verify_data=verify_data
             )
 
             self.log_test_msg(
@@ -17739,9 +17757,9 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
 
-        pe[PE.save_current_request] = pe[PE.current_request]
         if (self.expected_registered[target].auto_start_decision
                 == AutoStartDecision.auto_start_yes):
+            pe[PE.save_current_request] = pe[PE.current_request]
             pe[PE.start_request].append(
                 StartRequest(req_type=st.ReqType.Smart_start,
                              targets={target},
@@ -19261,7 +19279,8 @@ class ConfigVerifier:
                     state_to_use = st.ThreadState.Stopped
                 else:
                     state_to_use = item.st_state
-                if state_to_use != st.ThreadState.Initializing:
+                if (state_to_use != st.ThreadState.Unregistered
+                        and state_to_use != st.ThreadState.Initializing):
                     self.pending_events[key][PE.status_msg][
                         (item.is_alive, state_to_use)] += 1
                 if (not item.is_alive
@@ -19972,7 +19991,7 @@ class ConfigVerifier:
                         f' {pair_key}, but is missing in '
                         f'mock expected_registered')
 
-                if name not in real_pair_array_items[pair_key].status_blocks:
+                if name not in real_pair_array_items[pair_key]:
                     self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f'verify_config found {name=} in mock '
@@ -19983,29 +20002,31 @@ class ConfigVerifier:
     # verify_counts
     ####################################################################
     def verify_counts(self,
-                      num_registered: Optional[int] = None,
-                      num_active: Optional[int] = None,
-                      num_stopped: Optional[int] = None) -> None:
+                      verify_idx: int) -> None:
         """Verify that the given counts are correct.
 
         Args:
-            num_registered: number of expected registered only threads
-            num_active: number of expected active threads
-            num_stopped: number of expected stopped threads
+            verify_idx: index for the saved snapshot data
 
         """
+        real_reg_items = self.snap_shot_data[verify_idx].registry_items
+        real_pair_array_items = self.snap_shot_data[
+            verify_idx].pair_array_items
+        verify_counts_data = self.snap_shot_data[
+            verify_idx].verify_data
+
         registered_found_real = 0
         active_found_real = 0
         stopped_found_real = 0
-        for name, thread in st.SmartThread._registry.items():
-            if thread.thread.is_alive():
-                if thread.st_state == st.ThreadState.Alive:
+        for name, real_reg_item in real_reg_items.items():
+            if real_reg_item.is_alive:
+                if real_reg_item.state == st.ThreadState.Alive:
                     active_found_real += 1
             else:
-                if thread.st_state == st.ThreadState.Registered:
+                if real_reg_item.state == st.ThreadState.Registered:
                     registered_found_real += 1
-                elif (thread.st_state == st.ThreadState.Alive
-                        or thread.st_state == st.ThreadState.Stopped):
+                elif (real_reg_item.state == st.ThreadState.Alive
+                        or real_reg_item.state == st.ThreadState.Stopped):
                     stopped_found_real += 1
 
         registered_found_mock = 0
@@ -20022,35 +20043,32 @@ class ConfigVerifier:
                         or thread_tracker.st_state == st.ThreadState.Stopped):
                     stopped_found_mock += 1
 
-        if num_registered is not None:
-            if not (num_registered
-                    == registered_found_real
-                    == registered_found_mock):
-                self.abort_all_f1_threads()
-                raise InvalidConfigurationDetected(
-                    f'verify_counts found expected {num_registered=} is not '
-                    f'equal to {registered_found_real=} and/or '
-                    f'{registered_found_mock=}')
+        if not (verify_counts_data.num_registered
+                == registered_found_real
+                == registered_found_mock):
+            self.abort_all_f1_threads()
+            raise InvalidConfigurationDetected(
+                f'verify_counts found expected '
+                f'{verify_counts_data.num_registered=} is not equal to '
+                f'{registered_found_real=} and/or {registered_found_mock=}')
 
-        if num_active is not None:
-            if not (num_active
-                    == active_found_real
-                    == active_found_mock):
-                self.abort_all_f1_threads()
-                raise InvalidConfigurationDetected(
-                    f'verify_counts found expected {num_active=} is not '
-                    f'equal to {active_found_real=} and/or '
-                    f'{active_found_mock=}')
+        if not (verify_counts_data.num_active
+                == active_found_real
+                == active_found_mock):
+            self.abort_all_f1_threads()
+            raise InvalidConfigurationDetected(
+                f'verify_counts found expected '
+                f'{verify_counts_data.num_active=} is not equal to '
+                f'{active_found_real=} and/or {active_found_mock=}')
 
-        if num_stopped is not None:
-            if not (num_stopped
-                    == stopped_found_real
-                    == stopped_found_mock):
-                self.abort_all_f1_threads()
-                raise InvalidConfigurationDetected(
-                    f'verify_counts found expected {num_stopped=} is not '
-                    f'equal to {stopped_found_real=} and/or '
-                    f'{stopped_found_mock=}')
+        if not (verify_counts_data.num_stopped
+                == stopped_found_real
+                == stopped_found_mock):
+            self.abort_all_f1_threads()
+            raise InvalidConfigurationDetected(
+                f'verify_counts found expected '
+                f'{verify_counts_data.num_stopped=} is not equal to '
+                f'{stopped_found_real=} and/or {stopped_found_mock=}')
 
     ####################################################################
     # verify_def_del
