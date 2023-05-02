@@ -157,10 +157,10 @@ class VerifyData:
     state_to_check: st.ThreadState
 
 
-@dataclass
-class VerifyActiveData:
-    cmd_runner: str
-    exp_active_names: set[str]
+# @dataclass
+# class VerifyActiveData:
+#     cmd_runner: str
+#     exp_active_names: set[str]
 
 
 @dataclass
@@ -169,18 +169,16 @@ class VerifyCountsData:
     num_active: int
     num_stopped: int
 
-@dataclass
-class VerifyStateData:
-    cmd_runner: str
-    check_state_names: set[str]
-    expected_state: st.ThreadState
+# @dataclass
+# class VerifyStateData:
+#     cmd_runner: str
+#     check_state_names: set[str]
+#     expected_state: st.ThreadState
 
 
 VerifyDataItems: TypeAlias = Union[
     VerifyData,
-    VerifyActiveData,
-    VerifyCountsData,
-    VerifyStateData]
+    VerifyCountsData]
 
 
 @dataclass
@@ -2199,37 +2197,37 @@ class VerifyConfig(ConfigCmd):
 ########################################################################
 # VerifyActive
 ########################################################################
-class VerifyActive(ConfigCmd):
-    """Verify that the threads are in the alive state."""
-    def __init__(self,
-                 cmd_runners: Iterable,
-                 exp_active_names: Iterable) -> None:
-        """Initialize the instance.
-
-        Args:
-            cmd_runners: thread names that will execute the command
-            exp_active_names: thread names expected to be active
-        """
-        super().__init__(cmd_runners=cmd_runners)
-        self.specified_args = locals()  # used for __repr__
-
-        self.exp_active_names = get_set(exp_active_names)
-
-        self.arg_list += ['exp_active_names']
-
-    def run_process(self, cmd_runner: str) -> None:
-        """Run the command.
-
-        Args:
-            cmd_runner: name of thread running the command
-        """
-        verify_active_data: VerifyActiveData = VerifyActiveData(
-            cmd_runner=cmd_runner,
-            exp_active_names=self.exp_active_names
-        )
-        self.config_ver.create_snapshot_data(verify_name='verify_active',
-                                             verify_idx=self.serial_num,
-                                             verify_data=verify_active_data)
+# class VerifyActive(ConfigCmd):
+#     """Verify that the threads are in the alive state."""
+#     def __init__(self,
+#                  cmd_runners: Iterable,
+#                  exp_active_names: Iterable) -> None:
+#         """Initialize the instance.
+#
+#         Args:
+#             cmd_runners: thread names that will execute the command
+#             exp_active_names: thread names expected to be active
+#         """
+#         super().__init__(cmd_runners=cmd_runners)
+#         self.specified_args = locals()  # used for __repr__
+#
+#         self.exp_active_names = get_set(exp_active_names)
+#
+#         self.arg_list += ['exp_active_names']
+#
+#     def run_process(self, cmd_runner: str) -> None:
+#         """Run the command.
+#
+#         Args:
+#             cmd_runner: name of thread running the command
+#         """
+#         verify_active_data: VerifyActiveData = VerifyActiveData(
+#             cmd_runner=cmd_runner,
+#             exp_active_names=self.exp_active_names
+#         )
+#         self.config_ver.create_snapshot_data(verify_name='verify_active',
+#                                              verify_idx=self.serial_num,
+#                                              verify_data=verify_active_data)
 
 
 ########################################################################
@@ -7943,12 +7941,19 @@ class ConfigVerifier:
                     expected_state=st.ThreadState.Alive))
 
         if active_names and validate_config:
-            self.add_cmd(VerifyAlive(cmd_runners=cmd_runner,
-                                     exp_alive_names=active_names))
-            self.add_cmd(VerifyState(
-                cmd_runners=cmd_runner,
-                check_state_names=active_names,
-                expected_state=st.ThreadState.Alive))
+            # self.add_cmd(VerifyAlive(cmd_runners=cmd_runner,
+            #                          exp_alive_names=active_names))
+            self.add_cmd(VerifyConfig(cmd_runners=cmd_runner,
+                                      verify_type=VerifyType.VerifyAlive,
+                                      names_to_check=active_names))
+            # self.add_cmd(VerifyState(
+            #     cmd_runners=cmd_runner,
+            #     check_state_names=active_names,
+            #     expected_state=st.ThreadState.Alive))
+            self.add_cmd(VerifyConfig(cmd_runners=cmd_runner,
+                                      verify_type=VerifyType.VerifyState,
+                                      names_to_check=active_names,
+                                      state_to_check=st.ThreadState.Alive))
 
         if validate_config:
             self.add_cmd(ValidateConfig(cmd_runners=cmd_runner))
@@ -14283,9 +14288,12 @@ class ConfigVerifier:
             cmd_runners='alpha',
             exp_in_registry_names=['alpha', 'beta', 'charlie', 'delta',
                                    'echo', 'fox', 'george']))
-        self.add_cmd(VerifyAlive(
-            cmd_runners='alpha',
-            exp_alive_names=['alpha', 'beta', 'charlie']))
+        # self.add_cmd(VerifyAlive(
+        #     cmd_runners='alpha',
+        #     exp_alive_names=['alpha', 'beta', 'charlie']))
+        self.add_cmd(VerifyConfig(cmd_runners='alpha',
+                                  verify_type=VerifyType.VerifyAlive,
+                                  names_to_check=['alpha', 'beta', 'charlie']))
         self.add_cmd(VerifyAliveNot(
             cmd_runners='alpha',
             exp_not_alive_names=['delta', 'echo', 'fox', 'george']))
@@ -14310,12 +14318,20 @@ class ConfigVerifier:
         self.add_cmd(StartThread(
             cmd_runners='alpha',
             start_names=['delta', 'echo']))
-        self.add_cmd(VerifyAlive(
+        # self.add_cmd(VerifyAlive(
+        #     cmd_runners='alpha',
+        #     exp_alive_names=['alpha', 'beta', 'charlie', 'delta', 'echo']))
+        self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
-            exp_alive_names=['alpha', 'beta', 'charlie', 'delta', 'echo']))
-        self.add_cmd(VerifyActive(
+            verify_type=VerifyType.VerifyAlive,
+            names_to_check=['alpha', 'beta', 'charlie', 'delta', 'echo']))
+        # self.add_cmd(VerifyActive(
+        #     cmd_runners='alpha',
+        #     exp_active_names=['alpha', 'beta', 'charlie', 'delta', 'echo']))
+        self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
-            exp_active_names=['alpha', 'beta', 'charlie', 'delta', 'echo']))
+            verify_type=VerifyType.VerifyActiveState,
+            names_to_check=['alpha', 'beta', 'charlie', 'delta', 'echo']))
         self.add_cmd(VerifyState(
             cmd_runners='alpha',
             check_state_names=['alpha', 'beta', 'charlie', 'delta', 'echo'],
