@@ -2060,32 +2060,32 @@ class Unregister(ConfigCmd):
 ########################################################################
 # ValidateConfig
 ########################################################################
-class ValidateConfig(ConfigCmd):
-    """Validate the configuration."""
-    def __init__(self,
-                 cmd_runners: Iterable) -> None:
-        """Initialize the instance.
-
-        Args:
-            cmd_runners: thread names that will execute the command
-        """
-        super().__init__(cmd_runners=cmd_runners)
-        self.specified_args = locals()  # used for __repr__
-
-    def run_process(self, cmd_runner: str) -> None:
-        """Run the command.
-
-        Args:
-            cmd_runner: name of thread running the command
-        """
-        self.config_ver.create_snapshot_data(verify_name='verify_config',
-                                             verify_idx=self.serial_num)
-        # self.config_ver.log_test_msg('Monitor Checkpoint: validate_config')
-
-        self.config_ver.verify_config_complete_event.wait()
-        self.config_ver.verify_config_complete_event.clear()
-
-        # self.config_ver.validate_config()
+# class ValidateConfig(ConfigCmd):
+#     """Validate the configuration."""
+#     def __init__(self,
+#                  cmd_runners: Iterable) -> None:
+#         """Initialize the instance.
+#
+#         Args:
+#             cmd_runners: thread names that will execute the command
+#         """
+#         super().__init__(cmd_runners=cmd_runners)
+#         self.specified_args = locals()  # used for __repr__
+#
+#     def run_process(self, cmd_runner: str) -> None:
+#         """Run the command.
+#
+#         Args:
+#             cmd_runner: name of thread running the command
+#         """
+#         self.config_ver.create_snapshot_data(verify_name='verify_config',
+#                                              verify_idx=self.serial_num)
+#         # self.config_ver.log_test_msg('Monitor Checkpoint: validate_config')
+#
+#         self.config_ver.verify_config_complete_event.wait()
+#         self.config_ver.verify_config_complete_event.clear()
+#
+#         # self.config_ver.validate_config()
 
 
 ########################################################################
@@ -2096,7 +2096,7 @@ class VerifyConfig(ConfigCmd):
     def __init__(self,
                  cmd_runners: Iterable,
                  verify_type: VerifyType,
-                 names_to_check: Iterable,
+                 names_to_check: Optional[Iterable] = None,
                  aux_names: Optional[Iterable] = None,
                  state_to_check: Optional[st.ThreadState] = None) -> None:
         """Initialize the instance.
@@ -2112,6 +2112,11 @@ class VerifyConfig(ConfigCmd):
         self.aux_names = get_set(aux_names)
         self.state_to_check = state_to_check
 
+        self.arg_list += ['verify_type',
+                          'names_to_check',
+                          'aux_names',
+                          'state_to_check']
+
     def run_process(self, cmd_runner: str) -> None:
         """Run the command.
 
@@ -2119,7 +2124,7 @@ class VerifyConfig(ConfigCmd):
             cmd_runner: name of thread running the command
         """
         verify_data: VerifyData = VerifyData(
-            cmd_runner=self.cmd_runner,
+            cmd_runner=self.cmd_runners,
             verify_type=self.verify_type,
             names_to_check=self.names_to_check,
             aux_names=self.aux_names,
@@ -7887,17 +7892,28 @@ class ConfigVerifier:
                 self.registered_names |= set(f1_no_start_names)
 
         if self.registered_names:
-            self.add_cmd(VerifyRegistered(
+            # self.add_cmd(VerifyRegistered(
+            #     cmd_runners=cmd_runner_to_use,
+            #     exp_registered_names=list(self.registered_names)))
+            self.add_cmd(VerifyConfig(
                 cmd_runners=cmd_runner_to_use,
-                exp_registered_names=list(self.registered_names)))
+                verify_type=VerifyType.VerifyRegisteredState,
+                names_to_check=self.registered_names))
 
         if self.active_names:
-            self.add_cmd(VerifyActive(
+            # self.add_cmd(VerifyActive(
+            #     cmd_runners=cmd_runner_to_use,
+            #     exp_active_names=list(self.active_names)))
+            self.add_cmd(VerifyConfig(
                 cmd_runners=cmd_runner_to_use,
-                exp_active_names=list(self.active_names)))
+                verify_type=VerifyType.VerifyActiveState,
+                names_to_check=self.active_names))
 
         if validate_config:
-            self.add_cmd(ValidateConfig(cmd_runners=cmd_runner_to_use))
+            # self.add_cmd(ValidateConfig(cmd_runners=cmd_runner_to_use))
+            self.add_cmd(VerifyConfig(
+                cmd_runners=cmd_runner_to_use,
+                verify_type=VerifyType.VerifyStructures))
 
     ####################################################################
     # build_exit_suite
@@ -7933,13 +7949,35 @@ class ConfigVerifier:
             if validate_config:
                 self.add_cmd(Pause(cmd_runners=cmd_runner,
                                    pause_seconds=.2))
-                self.add_cmd(VerifyAliveNot(cmd_runners=cmd_runner,
-                                            exp_not_alive_names=names))
-                self.add_cmd(VerifyState(
+                # self.add_cmd(VerifyAliveNot(cmd_runners=cmd_runner,
+                #                             exp_not_alive_names=names))
+                self.add_cmd(VerifyConfig(
                     cmd_runners=cmd_runner,
-                    check_state_names=names,
-                    expected_state=st.ThreadState.Alive))
-
+                    verify_type=VerifyType.VerifyNotAlive,
+                    names_to_check=names))
+                # self.add_cmd(VerifyState(
+                #     cmd_runners=cmd_runner,
+                #     check_state_names=names,
+                #     expected_state=st.ThreadState.Alive))
+                stopped_state_names: list[str] = []
+                alive_state_names: list[str] = []
+                for name in names:
+                    if self.expected_registered[name].is_TargetThread:
+                        stopped_state_names.append(name)
+                    else:
+                        alive_state_names.append(name)
+                if stopped_state_names:
+                    self.add_cmd(VerifyConfig(
+                        cmd_runners=cmd_runner,
+                        verify_type=VerifyType.VerifyState,
+                        names_to_check=stopped_state_names,
+                        state_to_check=st.ThreadState.Stopped))
+                if alive_state_names:
+                    self.add_cmd(VerifyConfig(
+                        cmd_runners=cmd_runner,
+                        verify_type=VerifyType.VerifyState,
+                        names_to_check=alive_state_names,
+                        state_to_check=st.ThreadState.Alive))
         if active_names and validate_config:
             # self.add_cmd(VerifyAlive(cmd_runners=cmd_runner,
             #                          exp_alive_names=active_names))
@@ -7956,7 +7994,10 @@ class ConfigVerifier:
                                       state_to_check=st.ThreadState.Alive))
 
         if validate_config:
-            self.add_cmd(ValidateConfig(cmd_runners=cmd_runner))
+            # self.add_cmd(ValidateConfig(cmd_runners=cmd_runner))
+            self.add_cmd(VerifyConfig(
+                cmd_runners=cmd_runner,
+                verify_type=VerifyType.VerifyStructures))
 
         self.active_names -= names
         self.stopped_remotes |= names
@@ -8059,15 +8100,27 @@ class ConfigVerifier:
             self.add_cmd(Join(
                 cmd_runners=cmd_runners,
                 join_names=join_target_names))
-            self.add_cmd(VerifyInRegistryNot(
+            # self.add_cmd(VerifyInRegistryNot(
+            #     cmd_runners=cmd_runners,
+            #     exp_not_in_registry_names=join_target_names))
+            self.add_cmd(VerifyConfig(
                 cmd_runners=cmd_runners,
-                exp_not_in_registry_names=join_target_names))
-            self.add_cmd(VerifyPairedNot(
+                verify_type=VerifyType.VerifyNotInRegistry,
+                names_to_check=join_target_names))
+
+            # self.add_cmd(VerifyPairedNot(
+            #     cmd_runners=cmd_runners,
+            #     exp_not_paired_names=join_target_names))
+            self.add_cmd(VerifyConfig(
                 cmd_runners=cmd_runners,
-                exp_not_paired_names=join_target_names))
+                verify_type=VerifyType.VerifyNotPaired,
+                names_to_check=join_target_names))
 
         if validate_config:
-            self.add_cmd(ValidateConfig(cmd_runners=cmd_runners))
+            # self.add_cmd(ValidateConfig(cmd_runners=cmd_runners))
+            self.add_cmd(VerifyConfig(
+                cmd_runners=cmd_runners,
+                verify_type=VerifyType.VerifyStructures))
 
         self.unregistered_names |= join_target_names
         self.stopped_remotes -= join_target_names
@@ -10887,10 +10940,15 @@ class ConfigVerifier:
                     join_target_names=actor_names)
 
                 for resumer_name in actor_names:
-                    self.add_cmd(VerifyPairedHalf(
+                    # self.add_cmd(VerifyPairedHalf(
+                    #     cmd_runners=self.commander_name,
+                    #     removed_names=resumer_name,
+                    #     exp_half_paired_names=target_names))
+                    self.add_cmd(VerifyConfig(
                         cmd_runners=self.commander_name,
-                        removed_names=resumer_name,
-                        exp_half_paired_names=target_names))
+                        verify_type=VerifyType.VerifyHalfPaired,
+                        names_to_check=target_names,
+                        aux_names=resumer_name))
 
                 timeout_time = 1.5
                 wait_serial_num = self.add_cmd(
@@ -12240,9 +12298,13 @@ class ConfigVerifier:
                 join_target_names=stopped_no_delay_targets)
 
             for stopped_no_delay_name in stopped_no_delay_targets:
-                self.add_cmd(VerifyPairedNot(
+                # self.add_cmd(VerifyPairedNot(
+                #     cmd_runners=self.commander_name,
+                #     exp_not_paired_names=stopped_no_delay_name))
+                self.add_cmd(VerifyConfig(
                     cmd_runners=self.commander_name,
-                    exp_not_paired_names=stopped_no_delay_name))
+                    verify_type=VerifyType.VerifyNotPaired,
+                    names_to_check=stopped_no_delay_name))
 
             f1_create_items: list[F1CreateItem] = []
             for idx, name in enumerate(stopped_no_delay_targets):
@@ -12318,9 +12380,13 @@ class ConfigVerifier:
                 join_target_names=stopped_delay_targets)
 
             for stopped_delay_name in stopped_delay_targets:
-                self.add_cmd(VerifyPairedNot(
+                # self.add_cmd(VerifyPairedNot(
+                #     cmd_runners=self.commander_name,
+                #     exp_not_paired_names=stopped_delay_name))
+                self.add_cmd(VerifyConfig(
                     cmd_runners=self.commander_name,
-                    exp_not_paired_names=stopped_delay_name))
+                    verify_type=VerifyType.VerifyNotPaired,
+                    names_to_check=stopped_delay_name))
 
             f1_create_items: list[F1CreateItem] = []
             for idx, name in enumerate(stopped_delay_targets):
@@ -14062,23 +14128,37 @@ class ConfigVerifier:
                 join_target_names=exit_names)
 
             for exit_name in exit_names:
-                self.add_cmd(VerifyPairedNot(
+                # self.add_cmd(VerifyPairedNot(
+                #     cmd_runners=self.commander_name,
+                #     exp_not_paired_names=[exit_name, sender_names[0]]))
+                self.add_cmd(VerifyConfig(
                     cmd_runners=self.commander_name,
-                    exp_not_paired_names=[exit_name, sender_names[0]]))
+                    verify_type=VerifyType.VerifyNotPaired,
+                    names_to_check=[exit_name, sender_names[0]]))
 
             if num_senders >= 2:
                 for exit_name in exit_names:
-                    self.add_cmd(VerifyPairedHalf(
+                    # self.add_cmd(VerifyPairedHalf(
+                    #     cmd_runners=self.commander_name,
+                    #     removed_names=exit_name,
+                    #     exp_half_paired_names=sender_names[1]))
+                    self.add_cmd(VerifyConfig(
                         cmd_runners=self.commander_name,
-                        removed_names=exit_name,
-                        exp_half_paired_names=sender_names[1]))
+                        verify_type=VerifyType.VerifyHalfPaired,
+                        names_to_check=sender_names[1],
+                        aux_names=exit_name))
 
             if num_senders == 3:
                 for exit_name in exit_names:
-                    self.add_cmd(VerifyPairedHalf(
+                    # self.add_cmd(VerifyPairedHalf(
+                    #     cmd_runners=self.commander_name,
+                    #     removed_names=exit_name,
+                    #     exp_half_paired_names=sender_names[2]))
+                    self.add_cmd(VerifyConfig(
                         cmd_runners=self.commander_name,
-                        removed_names=exit_name,
-                        exp_half_paired_names=sender_names[2]))
+                        verify_type=VerifyType.VerifyHalfPaired,
+                        names_to_check=sender_names[2],
+                        aux_names=exit_name))
 
         if timeout_type == TimeoutType.TimeoutTrue:
             send_msg_serial_num = self.add_cmd(
@@ -14237,9 +14317,13 @@ class ConfigVerifier:
 
             for sender_name in sender_names:
                 exp_not_paired = [sender_name] + exit_names
-                self.add_cmd(VerifyPairedNot(
+                # self.add_cmd(VerifyPairedNot(
+                #     cmd_runners=self.commander_name,
+                #     exp_not_paired_names=exp_not_paired))
+                self.add_cmd(VerifyConfig(
                     cmd_runners=self.commander_name,
-                    exp_not_paired_names=exp_not_paired))
+                    verify_type=VerifyType.VerifyNotPaired,
+                    names_to_check=exp_not_paired))
 
     ####################################################################
     # build_simple_scenario
@@ -14248,8 +14332,11 @@ class ConfigVerifier:
     def build_simple_scenario(self) -> None:
         """Add config cmds to the scenario queue."""
 
-        self.add_cmd(ValidateConfig(
-            cmd_runners='alpha'))
+        # self.add_cmd(ValidateConfig(
+        #     cmd_runners='alpha'))
+        self.add_cmd(VerifyConfig(
+            cmd_runners='alpha',
+            verify_type=VerifyType.VerifyStructures))
         self.add_cmd(CreateF1AutoStart(
             cmd_runners='alpha',
             f1_create_items=[
@@ -14284,37 +14371,68 @@ class ConfigVerifier:
                              target_rtn=outer_f1,
                              app_config=AppConfig.RemoteThreadApp)
             ]))
-        self.add_cmd(VerifyInRegistry(
+        # self.add_cmd(VerifyInRegistry(
+        #     cmd_runners='alpha',
+        #     exp_in_registry_names=['alpha', 'beta', 'charlie', 'delta',
+        #                            'echo', 'fox', 'george']))
+        self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
-            exp_in_registry_names=['alpha', 'beta', 'charlie', 'delta',
-                                   'echo', 'fox', 'george']))
+            verify_type=VerifyType.VerifyInRegistry,
+            names_to_check=['alpha', 'beta', 'charlie', 'delta', 'echo',
+                            'fox', 'george']))
         # self.add_cmd(VerifyAlive(
         #     cmd_runners='alpha',
         #     exp_alive_names=['alpha', 'beta', 'charlie']))
         self.add_cmd(VerifyConfig(cmd_runners='alpha',
                                   verify_type=VerifyType.VerifyAlive,
                                   names_to_check=['alpha', 'beta', 'charlie']))
-        self.add_cmd(VerifyAliveNot(
+        # self.add_cmd(VerifyAliveNot(
+        #     cmd_runners='alpha',
+        #     exp_not_alive_names=['delta', 'echo', 'fox', 'george']))
+        self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
-            exp_not_alive_names=['delta', 'echo', 'fox', 'george']))
-        self.add_cmd(VerifyActive(
+            verify_type=VerifyType.VerifyNotAlive,
+            names_to_check=['delta', 'echo', 'fox', 'george']))
+        # self.add_cmd(VerifyActive(
+        #     cmd_runners='alpha',
+        #     exp_active_names=['alpha', 'beta', 'charlie']))
+        self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
-            exp_active_names=['alpha', 'beta', 'charlie']))
-        self.add_cmd(VerifyRegistered(
+            verify_type=VerifyType.VerifyActiveState,
+            names_to_check=['alpha', 'beta', 'charlie']))
+        # self.add_cmd(VerifyRegistered(
+        #     cmd_runners='alpha',
+        #     exp_registered_names=['delta', 'echo', 'fox', 'george']))
+        self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
-            exp_registered_names=['delta', 'echo', 'fox', 'george']))
-        self.add_cmd(VerifyState(
+            verify_type=VerifyType.VerifyRegisteredState,
+            names_to_check=['delta', 'echo', 'fox', 'george']))
+        # self.add_cmd(VerifyState(
+        #     cmd_runners='alpha',
+        #     check_state_names=['alpha', 'beta', 'charlie'],
+        #     expected_state=st.ThreadState.Alive))
+        self.add_cmd(VerifyConfig(cmd_runners='alpha',
+                                  verify_type=VerifyType.VerifyState,
+                                  names_to_check=['alpha', 'beta', 'charlie'],
+                                  state_to_check=st.ThreadState.Alive))
+        # self.add_cmd(VerifyState(
+        #     cmd_runners='alpha',
+        #     check_state_names=['delta', 'echo', 'fox', 'george'],
+        #     expected_state=st.ThreadState.Registered))
+        self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
-            check_state_names=['alpha', 'beta', 'charlie'],
-            expected_state=st.ThreadState.Alive))
-        self.add_cmd(VerifyState(
+            verify_type=VerifyType.VerifyState,
+            names_to_check=['delta', 'echo', 'fox', 'george'],
+            state_to_check=st.ThreadState.Registered))
+        # self.add_cmd(VerifyPaired(
+        #     cmd_runners='alpha',
+        #     exp_paired_names=['alpha', 'beta', 'charlie', 'delta', 'echo',
+        #                       'fox', 'george']))
+        self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
-            check_state_names=['delta', 'echo', 'fox', 'george'],
-            expected_state=st.ThreadState.Registered))
-        self.add_cmd(VerifyPaired(
-            cmd_runners='alpha',
-            exp_paired_names=['alpha', 'beta', 'charlie', 'delta', 'echo',
-                              'fox', 'george']))
+            verify_type=VerifyType.VerifyPaired,
+            names_to_check=['alpha', 'beta', 'charlie', 'delta', 'echo',
+                            'fox', 'george']))
         self.add_cmd(StartThread(
             cmd_runners='alpha',
             start_names=['delta', 'echo']))
@@ -14332,12 +14450,20 @@ class ConfigVerifier:
             cmd_runners='alpha',
             verify_type=VerifyType.VerifyActiveState,
             names_to_check=['alpha', 'beta', 'charlie', 'delta', 'echo']))
-        self.add_cmd(VerifyState(
+        # self.add_cmd(VerifyState(
+        #     cmd_runners='alpha',
+        #     check_state_names=['alpha', 'beta', 'charlie', 'delta', 'echo'],
+        #     expected_state=st.ThreadState.Alive))
+        self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
-            check_state_names=['alpha', 'beta', 'charlie', 'delta', 'echo'],
-            expected_state=st.ThreadState.Alive))
-        self.add_cmd(ValidateConfig(
-            cmd_runners='alpha'))
+            verify_type=VerifyType.VerifyState,
+            names_to_check=['alpha', 'beta', 'charlie', 'delta', 'echo'],
+            state_to_check=st.ThreadState.Alive))
+        # self.add_cmd(ValidateConfig(
+        #     cmd_runners='alpha'))
+        self.add_cmd(VerifyConfig(
+            cmd_runners='alpha',
+            verify_type=VerifyType.VerifyStructures))
         ################################################################
         # smart_send
         ################################################################
@@ -14412,27 +14538,45 @@ class ConfigVerifier:
         self.add_cmd(StopThread(cmd_runners='alpha',
                                 stop_names=['beta', 'charlie',
                                             'delta', 'echo']))
-        self.add_cmd(VerifyAliveNot(
+        # self.add_cmd(VerifyAliveNot(
+        #     cmd_runners='alpha',
+        #     exp_not_alive_names=['beta', 'charlie', 'delta', 'echo',
+        #                          'fox', 'george']))
+        self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
-            exp_not_alive_names=['beta', 'charlie', 'delta', 'echo',
-                                 'fox', 'george']))
-        self.add_cmd(ValidateConfig(
-            cmd_runners='alpha'))
+            verify_type=VerifyType.VerifyNotAlive,
+            names_to_check=['beta', 'charlie', 'delta', 'echo', 'fox',
+                            'george']))
+        # self.add_cmd(ValidateConfig(
+        #     cmd_runners='alpha'))
+        self.add_cmd(VerifyConfig(
+            cmd_runners='alpha',
+            verify_type=VerifyType.VerifyStructures))
         self.add_cmd(Join(
             cmd_runners='alpha',
             join_names=['beta', 'charlie', 'delta', 'echo'],
             log_msg='Join test log message 7'))
-        self.add_cmd(ValidateConfig(
-            cmd_runners='alpha'))
+        # self.add_cmd(ValidateConfig(
+        #     cmd_runners='alpha'))
+        self.add_cmd(VerifyConfig(
+            cmd_runners='alpha',
+            verify_type=VerifyType.VerifyStructures))
         self.add_cmd(Unregister(
             cmd_runners='alpha',
             unregister_targets=['fox', 'george'],
             log_msg='Unregister test log message 8'))
-        self.add_cmd(VerifyInRegistryNot(
+        # self.add_cmd(VerifyInRegistryNot(
+        #     cmd_runners='alpha',
+        #     exp_not_in_registry_names=['fox', 'george']))
+        self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
-            exp_not_in_registry_names=['fox', 'george']))
-        self.add_cmd(ValidateConfig(
-            cmd_runners='alpha'))
+            verify_type=VerifyType.VerifyNotInRegistry,
+            names_to_check=['fox', 'george']))
+        # self.add_cmd(ValidateConfig(
+        #     cmd_runners='alpha'))
+        self.add_cmd(VerifyConfig(
+            cmd_runners='alpha',
+            verify_type=VerifyType.VerifyStructures))
 
     ####################################################################
     # build_smart_start_suite
@@ -14580,12 +14724,19 @@ class ConfigVerifier:
         self.add_cmd(
             StartThread(cmd_runners=self.commander_name,
                         start_names=start_names))
-        self.add_cmd(VerifyActive(
-                cmd_runners=self.commander_name,
-                exp_active_names=start_names))
+        # self.add_cmd(VerifyActive(
+        #         cmd_runners=self.commander_name,
+        #         exp_active_names=start_names))
+        self.add_cmd(VerifyConfig(
+            cmd_runners=self.commander_name,
+            verify_type=VerifyType.VerifyActiveState,
+            names_to_check=start_names))
 
         if validate_config:
-            self.add_cmd(ValidateConfig(cmd_runners=self.commander_name))
+            # self.add_cmd(ValidateConfig(cmd_runners=self.commander_name))
+            self.add_cmd(VerifyConfig(
+                cmd_runners=self.commander_name,
+                verify_type=VerifyType.VerifyStructures))
 
         self.registered_names -= set(start_names)
         self.active_names |= set(start_names)
@@ -14811,15 +14962,26 @@ class ConfigVerifier:
 
         self.add_cmd(Unregister(cmd_runners=self.commander_name,
                                 unregister_targets=names))
-        self.add_cmd(VerifyInRegistryNot(
+        # self.add_cmd(VerifyInRegistryNot(
+        #     cmd_runners=self.commander_name,
+        #     exp_not_in_registry_names=names))
+        self.add_cmd(VerifyConfig(
             cmd_runners=self.commander_name,
-            exp_not_in_registry_names=names))
-        self.add_cmd(VerifyPairedNot(
+            verify_type=VerifyType.VerifyNotInRegistry,
+            names_to_check=names))
+        # self.add_cmd(VerifyPairedNot(
+        #     cmd_runners=self.commander_name,
+        #     exp_not_paired_names=names))
+        self.add_cmd(VerifyConfig(
             cmd_runners=self.commander_name,
-            exp_not_paired_names=names))
+            verify_type=VerifyType.VerifyNotPaired,
+            names_to_check=names))
 
         if validate_config:
-            self.add_cmd(ValidateConfig(cmd_runners=self.commander_name))
+            # self.add_cmd(ValidateConfig(cmd_runners=self.commander_name))
+            self.add_cmd(VerifyConfig(
+                cmd_runners=self.commander_name,
+                verify_type=VerifyType.VerifyStructures))
 
         self.registered_names -= set(names)
         self.unregistered_names |= set(names)
@@ -26029,7 +26191,10 @@ class TestSmartThreadScenarios:
         scenario_builder(config_ver,
                          **scenario_builder_args)
 
-        config_ver.add_cmd(ValidateConfig(cmd_runners=commander_name))
+        # config_ver.add_cmd(ValidateConfig(cmd_runners=commander_name))
+        config_ver.add_cmd(VerifyConfig(
+            cmd_runners=commander_name,
+            verify_type=VerifyType.VerifyStructures))
 
         names = list(config_ver.active_names - {commander_name})
         config_ver.build_exit_suite(cmd_runner=commander_name,
