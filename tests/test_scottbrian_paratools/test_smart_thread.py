@@ -6805,6 +6805,7 @@ class ConfigVerifier:
         self.unregistered_names: set[str] = set(self.thread_names)
         self.registered_names: set[str] = set()
         self.active_names: set[str] = set()
+        self.thread_target_names: set[str] = set()
         self.stopped_remotes: set[str] = set()
         self.expected_registered: dict[str, ThreadTracker] = {}
         self.expected_pairs: dict[tuple[str, str],
@@ -7873,6 +7874,8 @@ class ConfigVerifier:
                 else:
                     f1_no_start_names.append(f1_create_item.name)
                     f1_no_start_items.append(f1_create_item)
+                if f1_create_item.app_config == AppConfig.ScriptStyle:
+                    self.thread_target_names |= {f1_create_item.name}
             if not set(f1_names).issubset(self.unregistered_names):
                 self.abort_all_f1_threads()
                 raise InvalidInputDetected(f'Input names {f1_names} not a '
@@ -7962,7 +7965,7 @@ class ConfigVerifier:
                 stopped_state_names: list[str] = []
                 alive_state_names: list[str] = []
                 for name in names:
-                    if self.expected_registered[name].is_TargetThread:
+                    if name in self.thread_target_names:
                         stopped_state_names.append(name)
                     else:
                         alive_state_names.append(name)
@@ -16671,6 +16674,19 @@ class ConfigVerifier:
                 unreg_key: AlreadyUnregKey = (cmd_runner, target)
                 pe[PE.already_unreg_msg][unreg_key] += 1
 
+        # find stopped ThreadTarget names that smart_join will pick off
+        for target in self.expected_registered:
+            if (target not in eligible_targets
+                    and self.expected_registered[
+                        target].st_state == st.ThreadState.Stopped
+                    and self.expected_registered[
+                        target].is_TargetThread):
+                state_key: SetStateKey = (cmd_runner,
+                                          target,
+                                          st.ThreadState.Stopped,
+                                          st.ThreadState.Unregistered)
+                pe[PE.set_state_msg][state_key] += 1
+
         sub_key: SubProcessKey = (cmd_runner,
                                   'smart_join',
                                   '_clean_registry',
@@ -19583,7 +19599,8 @@ class ConfigVerifier:
 
                 for target in rem_targets:
                     del self.expected_registered[target]
-                    pe[PE.current_request].completed_targets |= {target}
+                    if target in pe[PE.current_request].eligible_targets:
+                        pe[PE.current_request].completed_targets |= {target}
 
                 if pe[PE.current_request].req_type in (st.ReqType.Smart_unreg,
                                                        st.ReqType.Smart_join):
