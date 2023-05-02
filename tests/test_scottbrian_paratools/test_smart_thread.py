@@ -133,6 +133,35 @@ class SendRecvMsgs:
 ########################################################################
 # VerifyData items
 ########################################################################
+class VerifyType(Enum):
+    VerifyStructures = auto()
+    VerifyAlive = auto()
+    VerifyNotAlive = auto()
+    VerifyState = auto()
+    VerifyInRegistry = auto()
+    VerifyNotInRegistry = auto()
+    VerifyActiveState = auto()
+    VerifyRegisteredState = auto()
+    VerifyStoppedState = auto()
+    VerifyPaired = auto()
+    VerifyNotPaired = auto()
+    VerifyHalfPaired = auto()
+
+@dataclass
+class VerifyData:
+    cmd_runner: str
+    verify_type: VerifyType
+    names_to_check: set[str]
+    aux_names: set[str]
+    state_to_check: st.ThreadState
+
+
+@dataclass
+class VerifyActiveData:
+    cmd_runner: str
+    exp_active_names: set[str]
+
+
 @dataclass
 class VerifyCountsData:
     num_registered: int
@@ -147,6 +176,7 @@ class VerifyStateData:
 
 
 VerifyDataItems: TypeAlias = Union[
+    VerifyActiveData,
     VerifyCountsData,
     VerifyStateData]
 
@@ -165,16 +195,17 @@ class StatusBlockSnapshotItem:
     pending_sync: bool = False
 
 
-@dataclass
-class PairArraySnapshotItem:
-    status_blocks: dict[str, StatusBlockSnapshotItem]
+RegistryItems: TypeAlias = dict[str, RegistrySnapshotItem]
+StatusBlockItems: TypeAlias = dict[str, StatusBlockSnapshotItem]
+PairArrayItems: TypeAlias = dict[st.PairKey, StatusBlockItems]
 
 
 @dataclass
 class SnapShotDataItem:
-    registry_items: dict[str, RegistrySnapshotItem]
-    pair_array_items: dict[st.PairKey, dict[str, StatusBlockSnapshotItem]]
-    verify_data: VerifyDataItems
+    registry_items: RegistryItems
+    pair_array_items: PairArrayItems
+    verify_data: VerifyData
+
 
 
 ########################################################################
@@ -2051,11 +2082,57 @@ class ValidateConfig(ConfigCmd):
                                              verify_idx=self.serial_num)
         # self.config_ver.log_test_msg('Monitor Checkpoint: validate_config')
 
-        self.config_ver.validate_config_complete_event.wait()
-        self.config_ver.validate_config_complete_event.clear()
+        self.config_ver.verify_config_complete_event.wait()
+        self.config_ver.verify_config_complete_event.clear()
 
         # self.config_ver.validate_config()
 
+
+########################################################################
+# ValidateConfig
+########################################################################
+class VerifyConfig(ConfigCmd):
+    """Validate the configuration."""
+    def __init__(self,
+                 cmd_runners: Iterable,
+                 verify_type: VerifyType,
+                 names_to_check: Iterable,
+                 aux_names: Optional[Iterable] = None,
+                 state_to_check: Optional[st.ThreadState] = None) -> None:
+        """Initialize the instance.
+
+        Args:
+            cmd_runners: thread names that will execute the command
+        """
+        super().__init__(cmd_runners=cmd_runners)
+        self.specified_args = locals()  # used for __repr__
+
+        self.verify_type = verify_type
+        self.names_to_check = get_set(names_to_check)
+        self.aux_names = get_set(aux_names)
+        self.state_to_check = state_to_check
+
+    def run_process(self, cmd_runner: str) -> None:
+        """Run the command.
+
+        Args:
+            cmd_runner: name of thread running the command
+        """
+        verify_data: VerifyData = VerifyData(
+            cmd_runner=self.cmd_runner,
+            verify_type=self.verify_type,
+            names_to_check=self.names_to_check,
+            aux_names=self.aux_names,
+            state_to_check=self.state_to_check
+        )
+
+        self.config_ver.create_snapshot_data(verify_name='verify_config',
+                                             verify_idx=self.serial_num,
+                                             verify_data=verify_data)
+        # self.config_ver.log_test_msg('Monitor Checkpoint: validate_config')
+
+        self.config_ver.verify_config_complete_event.wait()
+        self.config_ver.verify_config_complete_event.clear()
 
 ########################################################################
 # VerifyAlive
@@ -2148,7 +2225,7 @@ class VerifyActive(ConfigCmd):
             cmd_runner=cmd_runner,
             exp_active_names=self.exp_active_names
         )
-        self.config_ver.create_snapshot_data(verify_name='verify_counts',
+        self.config_ver.create_snapshot_data(verify_name='verify_active',
                                              verify_idx=self.serial_num,
                                              verify_data=verify_active_data)
 
@@ -6456,7 +6533,7 @@ class MonitorCheckpointLogSearchItem(LogSearchItem):
         eval(call_stm)
 
         if verify_name == 'verify_config':
-            self.config_ver.validate_config_complete_event.set()
+            self.config_ver.verify_config_complete_event.set()
         elif verify_name == 'check_pending_events':
             self.config_ver.check_pending_events_complete_event.set()
 
@@ -6895,7 +6972,7 @@ class ConfigVerifier:
         self.monitor_pause: bool = False
         self.check_pending_events_complete_event: threading.Event = (
             threading.Event())
-        self.validate_config_complete_event: threading.Event = (
+        self.verify_config_complete_event: threading.Event = (
             threading.Event())
         self.monitor_thread.start()
 
@@ -15004,7 +15081,7 @@ class ConfigVerifier:
     def create_snapshot_data(self,
                              verify_name: str,
                              verify_idx: int,
-                             verify_data: Optional[VerifyDataItems] = None
+                             verify_data: VerifyData
                              ) -> None:
         """Create and save a snapshot of real structures for verification.
 
@@ -19861,11 +19938,87 @@ class ConfigVerifier:
             mismatch between the real and mock configuration
 
         """
+
+        class SnapShotDataItem:
+            registry_items: dict[str, RegistrySnapshotItem]
+            pair_array_items: dict[
+                st.PairKey, dict[str, StatusBlockSnapshotItem]]
+            verify_data: VerifyData
         real_reg_items = self.snap_shot_data[verify_idx].registry_items
         real_pair_array_items = self.snap_shot_data[
             verify_idx].pair_array_items
+        verify_data = self.snap_shot_data[verify_idx].verify_data
 
+        actions: dict[VerifyType, Callable[..., None]] = {
+            VerifyType.VerifyStructures: self.verify_structures,
+            ConflictDeadlockScenario.NormalResumeWait:
+                self.build_cd_normal_resume_wait_suite,
+            ConflictDeadlockScenario.ResumeSyncSyncWait:
+                self.build_cd_resume_sync_sync_wait_suite,
+            ConflictDeadlockScenario.SyncConflict:
+                self.build_cd_sync_conflict_suite,
+            ConflictDeadlockScenario.WaitDeadlock:
+                self.build_cd_wait_deadlock_suite,
+        }
+
+        actions[verify_data.verify_type](
+            cmd_runner=verify_data.cmd_runner,
+            names_to_check=verify_data.names_to_check,
+            aux_names=verify_data.aux_names,
+            state_to_check=verify_data.state_to_check
+        )
+
+        class VerifyData:
+            cmd_runner: str
+            verify_type: VerifyType
+            names_to_check: set[str]
+            aux_names: set[str]
+            state_to_check: st.ThreadState
+        # class VerifyType(Enum):
+        #     VerifyStructures = auto()
+        #     VerifyAlive = auto()
+        #     VerifyNotAlive = auto()
+        #     VerifyState = auto()
+        #     VerifyInRegistry = auto()
+        #     VerifyNotInRegistry = auto()
+        #     VerifyActiveState = auto()
+        #     VerifyRegisteredState = auto()
+        #     VerifyStoppedState = auto()
+        #     VerifyPaired = auto()
+        #     VerifyNotPaired = auto()
+        #     VerifyHalfPaired = auto()
         # verify real registry matches expected_registered
+
+    RegistryItems: TypeAlias = dict[str, RegistrySnapshotItem]
+    StatusBlockItems: TypeAlias = dict[str, StatusBlockSnapshotItem]
+    PairArrayItems: TypeAlias = dict[st.PairKey, StatusBlockItems]
+
+    ####################################################################
+    # validate_config
+    ####################################################################
+    def verify_structures(self,
+                          cmd_runner: str,
+                          names_to_check: set[str],
+                          aux_names: set[str],
+                          state_to_check: st.ThreadState,
+                          real_reg_items: RegistryItems,
+                          real_pair_array_items: PairArrayItems
+                          ) -> None:
+        """Verify that the SmartThread config is correct.
+
+        Args:
+            cmd_runner: thread name running this verification
+            names_to_check: thread names to be check for condition
+            aux_names: thread names to be checked for condition
+            state_to_check: state to check for with names_to_check
+            real_reg_items: snapshot of real registry items
+            real_pair_array_items: snapshot of real pair array
+
+        Raises:
+            InvalidConfigurationDetected: validate_config has found a
+            mismatch between the real and mock configuration
+
+        """
         for name, real_reg_item in real_reg_items.items():
             if name not in self.expected_registered:
                 self.abort_all_f1_threads()
@@ -21656,37 +21809,37 @@ class ConfigVerifier:
     # verify_is_active
     ####################################################################
     def verify_is_active(self,
-                         cmd_runner: str,
-                         exp_active_names: set[str]) -> None:
+                         verify_idx: int) -> None:
         """Verify that the given names are active.
 
         Args:
-            cmd_runner: thread doing the verify
-            exp_active_names: names of the threads to check for being
-                active
+            verify_idx: index for the saved snapshot data
 
         """
-        with self.monitor_condition:
-            self.monitor_event.set()
-            self.monitor_condition.wait()
+        real_reg_items = self.snap_shot_data[verify_idx].registry_items
+        verify_active_data = self.snap_shot_data[
+            verify_idx].verify_data
 
-        self.verify_in_registry(cmd_runner=cmd_runner,
-                                exp_in_registry_names=exp_active_names)
-        self.verify_is_alive(names=exp_active_names)
-        self.verify_state(
-            cmd_runner=cmd_runner,
-            check_state_names=exp_active_names,
-            expected_state=st.ThreadState.Alive)
+        # with self.monitor_condition:
+        #         self.monitor_event.set()
+        #         self.monitor_condition.wait()
+
+        self.verify_in_registry(
+            cmd_runner=verify_active_data.cmd_runner,
+            exp_in_registry_names=verify_active_data.exp_active_names)
+
+        self.verify_is_alive(names=verify_active_data.exp_active_names)
+
         self.verify_state_part2(
-            cmd_runner=verify_state_data.cmd_runner,
-            check_state_names=verify_state_data.check_state_names,
-            expected_state=verify_state_data.expected_state,
+            cmd_runner=verify_active_data.cmd_runner,
+            check_state_names=verify_active_data.exp_active_names,
+            expected_state=st.ThreadState.Alive,
             real_reg_items=real_reg_items
         )
-        if len(exp_active_names) > 1:
+        if len(verify_active_data.exp_active_names) > 1:
             self.verify_paired(
-                cmd_runner=cmd_runner,
-                exp_paired_names=exp_active_names)
+                cmd_runner=verify_active_data.cmd_runner,
+                exp_paired_names=verify_active_data.exp_active_names)
 
     ####################################################################
     # verify_is_alive
