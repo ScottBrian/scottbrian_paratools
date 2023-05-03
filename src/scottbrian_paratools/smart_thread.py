@@ -686,10 +686,10 @@ class SmartThread:
                 # Avoid a refcycle if the thread is running a function with
                 # an argument that has a member that points to the thread.
 
-                with sel.SELockExcl(SmartThread._registry_lock):
-                    self.smart_thread._set_state(
-                        target_thread=self.smart_thread,
-                        new_state=ThreadState.Stopped)
+                # with sel.SELockExcl(SmartThread._registry_lock):
+                #     self.smart_thread._set_state(
+                #         target_thread=self.smart_thread,
+                #         new_state=ThreadState.Stopped)
                 del self._target, self._args, self._kwargs
 
     ####################################################################
@@ -1197,8 +1197,7 @@ class SmartThread:
             logger.debug(
                 f'name={key}, {is_alive=}, state={state}, '
                 f'smart_thread={item}')
-            if ((not item.thread.is_alive())
-                    and (item.st_state & ThreadState.Stopped)):
+            if state == ThreadState.Stopped:
                 keys_to_del.append(key)
 
             if key != item.name:

@@ -115,6 +115,7 @@ init_complete_text_units: dict[AutoStartDecision, str] = {
     AutoStartDecision.auto_start_no: 'auto_start not requested'
 }
 
+
 ########################################################################
 # SendRecvMsgs
 ########################################################################
@@ -6698,6 +6699,7 @@ class StartRequest:
     deadlock_remotes: set[str]
     eligible_targets: set[str]
     completed_targets: set[str]
+    stopped_target_threads: set[str]
     timeout_type: TimeoutType = TimeoutType.TimeoutNone
     req_type: st.ReqType = st.ReqType.NoReq
 
@@ -6923,7 +6925,8 @@ class ConfigVerifier:
                 stopped_remotes=set(),
                 deadlock_remotes=set(),
                 eligible_targets=set(),
-                completed_targets=set()
+                completed_targets=set(),
+                stopped_target_threads=set()
             )
             self.pending_events[name][PE.save_current_request] = StartRequest(
                 req_type=st.ReqType.NoReq,
@@ -6933,7 +6936,8 @@ class ConfigVerifier:
                 stopped_remotes=set(),
                 deadlock_remotes=set(),
                 eligible_targets=set(),
-                completed_targets=set()
+                completed_targets=set(),
+                stopped_target_threads=set()
             )
             self.pending_events[name][PE.num_targets_remaining] = 0
             self.pending_events[name][PE.request_msg] = defaultdict(int)
@@ -15213,7 +15217,8 @@ class ConfigVerifier:
             stopped_remotes=set(),
             deadlock_remotes=set(),
             eligible_targets=set(),
-            completed_targets=set()))
+            completed_targets=set(),
+            stopped_target_threads=set()))
 
         req_key_entry: RequestKey = ('smart_init',
                                      'entry')
@@ -15910,7 +15915,8 @@ class ConfigVerifier:
                          stopped_remotes=set(),
                          deadlock_remotes=set(),
                          eligible_targets=set(),
-                         completed_targets=set()))
+                         completed_targets=set(),
+                         stopped_target_threads=set()))
 
         req_key_entry: RequestKey = ('smart_join',
                                      'entry')
@@ -16143,7 +16149,8 @@ class ConfigVerifier:
                          stopped_remotes=stopped_remotes.copy(),
                          deadlock_remotes=set(),
                          eligible_targets=set(),
-                         completed_targets=set()))
+                         completed_targets=set(),
+                         stopped_target_threads=set()))
 
         req_key_entry: RequestKey = ('smart_recv',
                                      'entry')
@@ -16283,9 +16290,6 @@ class ConfigVerifier:
 
             pe[PE.current_request] = req_start_item
 
-            self.log_test_msg(f'handle_request_entry_exit_log_msg looking '
-                              f'for {req_start_item.req_type.name=}')
-
             if req_start_item.req_type.name in ('smart_send',
                                                 'smart_recv',
                                                 'smart_wait',
@@ -16362,7 +16366,8 @@ class ConfigVerifier:
                     stopped_remotes=set(),
                     deadlock_remotes=set(),
                     eligible_targets=set(),
-                    completed_targets=set())
+                    completed_targets=set(),
+                    stopped_target_threads=set())
             else:
                 pe[PE.current_request] = StartRequest(
                     req_type=st.ReqType.NoReq,
@@ -16372,7 +16377,8 @@ class ConfigVerifier:
                     stopped_remotes=set(),
                     deadlock_remotes=set(),
                     eligible_targets=set(),
-                    completed_targets=set())
+                    completed_targets=set(),
+                    stopped_target_threads=set())
             # if request_name in ('smart_send', 'smart_recv', 'smart_wait',
             #                     'smart_resume', 'smart_sync'):
             #     if cmd_runner in self.request_pending_pair_keys:
@@ -16583,6 +16589,8 @@ class ConfigVerifier:
 
         eligible_targets = (pe[PE.current_request].targets.copy()
                             - pe[PE.current_request].not_registered_remotes)
+        pe[PE.current_request].eligible_targets = eligible_targets
+        pe[PE.current_request].completed_targets = set()
 
         for target in eligible_targets:
             state_key: SetStateKey = (cmd_runner,
@@ -16596,6 +16604,19 @@ class ConfigVerifier:
                                       st.ThreadState.Stopped,
                                       st.ThreadState.Unregistered)
             pe[PE.set_state_msg][state_key] += 1
+
+        # find stopped ThreadTarget names that smart_unreg will pick off
+        # for target in self.expected_registered:
+        #     if (target not in eligible_targets
+        #             and self.expected_registered[
+        #                 target].st_state == st.ThreadState.Stopped
+        #             and self.expected_registered[
+        #                 target].is_TargetThread):
+        #         state_key: SetStateKey = (cmd_runner,
+        #                                   target,
+        #                                   st.ThreadState.Stopped,
+        #                                   st.ThreadState.Unregistered)
+        #         pe[PE.set_state_msg][state_key] += 1
 
         sub_key: SubProcessKey = (cmd_runner,
                                   'smart_unreg',
@@ -16675,17 +16696,17 @@ class ConfigVerifier:
                 pe[PE.already_unreg_msg][unreg_key] += 1
 
         # find stopped ThreadTarget names that smart_join will pick off
-        for target in self.expected_registered:
-            if (target not in eligible_targets
-                    and self.expected_registered[
-                        target].st_state == st.ThreadState.Stopped
-                    and self.expected_registered[
-                        target].is_TargetThread):
-                state_key: SetStateKey = (cmd_runner,
-                                          target,
-                                          st.ThreadState.Stopped,
-                                          st.ThreadState.Unregistered)
-                pe[PE.set_state_msg][state_key] += 1
+        # for target in self.expected_registered:
+        #     if (target not in eligible_targets
+        #             and self.expected_registered[
+        #                 target].st_state == st.ThreadState.Stopped
+        #             and self.expected_registered[
+        #                 target].is_TargetThread):
+        #         state_key: SetStateKey = (cmd_runner,
+        #                                   target,
+        #                                   st.ThreadState.Stopped,
+        #                                   st.ThreadState.Unregistered)
+        #         pe[PE.set_state_msg][state_key] += 1
 
         sub_key: SubProcessKey = (cmd_runner,
                                   'smart_join',
@@ -17254,7 +17275,8 @@ class ConfigVerifier:
                          stopped_remotes=stopped_remotes.copy(),
                          deadlock_remotes=set(),
                          eligible_targets=set(),
-                         completed_targets=set()))
+                         completed_targets=set(),
+                         stopped_target_threads=set()))
 
         req_key_entry: RequestKey = ('smart_resume',
                                      'entry')
@@ -17391,7 +17413,8 @@ class ConfigVerifier:
                          stopped_remotes=stopped_remotes.copy(),
                          deadlock_remotes=set(),
                          eligible_targets=set(),
-                         completed_targets=set()))
+                         completed_targets=set(),
+                         stopped_target_threads=set()))
 
         req_key_entry: RequestKey = ('smart_send',
                                      'entry')
@@ -17550,8 +17573,7 @@ class ConfigVerifier:
                                   target,
                                   from_state,
                                   to_state)
-        if (state_key not in pe[PE.set_state_msg]
-                or pe[PE.set_state_msg][state_key] <= 0):
+        if pe[PE.set_state_msg][state_key] <= 0:
             raise UnexpectedEvent('handle_set_state_log_msg using '
                                   f'{state_key=} encountered '
                                   f'unexpected log msg: {log_msg}')
@@ -17837,7 +17859,8 @@ class ConfigVerifier:
                          stopped_remotes=set(),
                          deadlock_remotes=set(),
                          eligible_targets=set(),
-                         completed_targets=set()))
+                         completed_targets=set(),
+                         stopped_target_threads=set()))
 
         req_key_entry: RequestKey = ('smart_start',
                                      'entry')
@@ -18057,7 +18080,8 @@ class ConfigVerifier:
                              stopped_remotes=set(),
                              deadlock_remotes=set(),
                              eligible_targets=set(),
-                             completed_targets=set()))
+                             completed_targets=set(),
+                             stopped_target_threads=set()))
 
             req_key_entry: RequestKey = ('smart_start',
                                          'entry')
@@ -18084,6 +18108,22 @@ class ConfigVerifier:
             target: thread name of smart_thread
 
         """
+        pe = self.pending_events[cmd_runner]
+        eligible_targets = pe[PE.current_request].targets
+        # find stopped ThreadTarget names that smart_init will pick off
+        for tt_target in self.expected_registered:
+            if (tt_target not in eligible_targets
+                    and self.expected_registered[
+                        tt_target].st_state == st.ThreadState.Stopped
+                    and self.expected_registered[
+                        tt_target].is_TargetThread):
+                pe[PE.current_request].stopped_target_threads |= {tt_target}
+                state_key: SetStateKey = (cmd_runner,
+                                          tt_target,
+                                          st.ThreadState.Stopped,
+                                          st.ThreadState.Unregistered)
+                pe[PE.set_state_msg][state_key] += 1
+
         ################################################################
         # determine next step
         ################################################################
@@ -18139,8 +18179,9 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
         # if commander is initializing, pair array is empty
+
         if not (request_name == 'smart_init'
-                and target == self.commander_name):
+                and self.commander_name in pe[PE.current_request].targets):
             self.clean_pair_array(cmd_runner=cmd_runner)
 
         sub_key: SubProcessKey = (cmd_runner,
@@ -18317,7 +18358,8 @@ class ConfigVerifier:
                          stopped_remotes=stopped_remotes.copy(),
                          deadlock_remotes=conflict_remotes,
                          eligible_targets=set(),
-                         completed_targets=set()))
+                         completed_targets=set(),
+                         stopped_target_threads=set()))
 
         req_key_entry: RequestKey = ('smart_sync',
                                      'entry')
@@ -18598,7 +18640,8 @@ class ConfigVerifier:
                          stopped_remotes=set(),
                          deadlock_remotes=set(),
                          eligible_targets=set(),
-                         completed_targets=set()))
+                         completed_targets=set(),
+                         stopped_target_threads=set()))
 
         req_key_entry: RequestKey = ('smart_unreg',
                                      'entry')
@@ -18701,7 +18744,8 @@ class ConfigVerifier:
                          deadlock_remotes=(conflict_remotes.copy() |
                                            deadlock_remotes.copy()),
                          eligible_targets=set(),
-                         completed_targets=set()))
+                         completed_targets=set(),
+                         stopped_target_threads=set()))
 
         req_key_entry: RequestKey = ('smart_wait',
                                      'entry')
@@ -19629,7 +19673,7 @@ class ConfigVerifier:
                                               cmd_runner)
                     pe[PE.subprocess_msg][sub_key] += 1
 
-                    eligibile = pe[PE.current_request].eligible_targets.copy()
+                    eligible = pe[PE.current_request].eligible_targets.copy()
                     completed = pe[PE.current_request].completed_targets.copy()
                     remaining = eligible - completed
                     s_rem = sorted(remaining)
@@ -26266,7 +26310,8 @@ class TestSmartThreadScenarios:
                              stopped_remotes=set(),
                              deadlock_remotes=set(),
                              eligible_targets=set(),
-                             completed_targets=set()))
+                             completed_targets=set(),
+                             stopped_target_threads=set()))
 
             req_key_entry: RequestKey = ('smart_init',
                                          'entry')
@@ -26334,7 +26379,8 @@ class TestSmartThreadScenarios:
                              stopped_remotes=set(),
                              deadlock_remotes=set(),
                              eligible_targets=set(),
-                             completed_targets=set()))
+                             completed_targets=set(),
+                             stopped_target_threads=set()))
 
             req_key_entry: RequestKey = ('smart_start',
                                          'entry')
@@ -26371,7 +26417,8 @@ class TestSmartThreadScenarios:
                              stopped_remotes=set(),
                              deadlock_remotes=set(),
                              eligible_targets=set(),
-                             completed_targets=set()))
+                             completed_targets=set(),
+                             stopped_target_threads=set()))
 
             req_key_entry: RequestKey = ('smart_start',
                                          'entry')
@@ -26408,7 +26455,8 @@ class TestSmartThreadScenarios:
                              stopped_remotes=set(),
                              deadlock_remotes=set(),
                              eligible_targets=set(),
-                             completed_targets=set()))
+                             completed_targets=set(),
+                             stopped_target_threads=set()))
 
             req_key_entry: RequestKey = ('smart_start',
                                          'entry')
