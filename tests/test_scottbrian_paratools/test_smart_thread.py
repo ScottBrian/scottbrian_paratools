@@ -18111,18 +18111,18 @@ class ConfigVerifier:
         pe = self.pending_events[cmd_runner]
         eligible_targets = pe[PE.current_request].targets
         # find stopped ThreadTarget names that smart_init will pick off
-        for tt_target in self.expected_registered:
-            if (tt_target not in eligible_targets
-                    and self.expected_registered[
-                        tt_target].st_state == st.ThreadState.Stopped
-                    and self.expected_registered[
-                        tt_target].is_TargetThread):
-                pe[PE.current_request].stopped_target_threads |= {tt_target}
-                state_key: SetStateKey = (cmd_runner,
-                                          tt_target,
-                                          st.ThreadState.Stopped,
-                                          st.ThreadState.Unregistered)
-                pe[PE.set_state_msg][state_key] += 1
+        # for tt_target in self.expected_registered:
+        #     if (tt_target not in eligible_targets
+        #             and self.expected_registered[
+        #                 tt_target].st_state == st.ThreadState.Stopped
+        #             and self.expected_registered[
+        #                 tt_target].is_TargetThread):
+        #         pe[PE.current_request].stopped_target_threads |= {tt_target}
+        #         state_key: SetStateKey = (cmd_runner,
+        #                                   tt_target,
+        #                                   st.ThreadState.Stopped,
+        #                                   st.ThreadState.Unregistered)
+        #         pe[PE.set_state_msg][state_key] += 1
 
         ################################################################
         # determine next step
@@ -19144,13 +19144,13 @@ class ConfigVerifier:
                 raise InvalidConfigurationDetected(
                     f'stop_thread attempting to stop {stop_name} which is '
                     f'not in the registry: {self.expected_registered=}')
-            if self.expected_registered[stop_name].is_TargetThread:
-                state_key = (stop_name,
-                             stop_name,
-                             st.ThreadState.Alive,
-                             st.ThreadState.Stopped)
-                self.pending_events[stop_name][PE.set_state_msg][
-                    state_key] += 1
+            # if self.expected_registered[stop_name].is_TargetThread:
+            #     state_key = (stop_name,
+            #                  stop_name,
+            #                  st.ThreadState.Alive,
+            #                  st.ThreadState.Stopped)
+            #     self.pending_events[stop_name][PE.set_state_msg][
+            #         state_key] += 1
 
             self.monitor_event.set()
             exit_cmd = ExitThread(cmd_runners=stop_name,
@@ -20488,13 +20488,13 @@ class ConfigVerifier:
 
         """
         for name in names_to_check:
-            if not real_reg_items[name].state == state_to_check:
+            if real_reg_items[name].state != state_to_check:
                 self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f'verify_state found {name=} has real status '
                     f'{real_reg_items[name].state} not equal to the expected '
                     f'status of {state_to_check=} per {cmd_runner=}')
-            if not self.expected_registered[name].st_state == state_to_check:
+            if self.expected_registered[name].st_state != state_to_check:
                 self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f'verify_state found {name=} has mock status '

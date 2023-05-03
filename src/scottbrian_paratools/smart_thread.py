@@ -1187,17 +1187,24 @@ class SmartThread:
         # Remove any old entries
         keys_to_del = []
         for key, item in SmartThread._registry.items():
-            # note that for display purposes _get_state will return
+            # Note that for display purposes _get_state will return
             # stopped instead of alive when the thread is not alive and
             # state is alive. The decision to delete this item, however,
             # is done only when the st_state is stopped as that
-            # indicates that a smart_join has been officially done
+            # indicates that a smart_unreg or smart_join has been
+            # requested. We could have designed _clean_registry to go
+            # ahead and delete entries when they are not alive with
+            # ThreadState.Alive, meaning that any request other than
+            # smart_unreg or smart_join could cause the "stopped"
+            # entries to be deleted, but this would have led to
+            # unpredictable and inconsistent behavior depending on the
+            # mix of requests.
             is_alive = item.thread.is_alive()
             state = self._get_state(name=key)
             logger.debug(
                 f'name={key}, {is_alive=}, state={state}, '
                 f'smart_thread={item}')
-            if state == ThreadState.Stopped:
+            if item.st_state == ThreadState.Stopped:
                 keys_to_del.append(key)
 
             if key != item.name:
@@ -1539,247 +1546,6 @@ class SmartThread:
     @staticmethod
     def _get_set(item: Optional[Iterable] = None):
         return set({item} if isinstance(item, str) else item or '')
-
-    ###########################################################################
-    # _clean_pair_array
-    ###########################################################################
-    # def _clean_pair_array(self) -> None:
-    #     """Update the connection pair array from the _registry.
-    #
-    #     Notes:
-    #         1) A thread is registered during initialization and will
-    #            initially not be alive until started.
-    #         2) If a request is made that includes a yet to be registered
-    #            thread, or one that is not yet alive, the request will
-    #            loop until the remote thread becomes registered and
-    #            alive.
-    #         3) After a thread is registered and is alive, if it fails
-    #            and become not alive, it will remain in the registry
-    #            until its state is changed to Stopped to indicate it was
-    #            once alive. Its state is set to Stopped when a join is
-    #            done. This will allow a request to know whether to wait
-    #            for the thread to become alive, or to raise an error for
-    #            an attempted request on a thread that is no longer alive.
-    #         4) The remote_array will simply mirror what is in the
-    #            registry.
-    #
-    #     Error cases:
-    #         1) remote_array thread and registry thread do not match
-    #
-    #
-    #     Expected cases:
-    #         1) remote_array does not have a registry entry - add the
-    #            registry entry to the remote array
-    #         2) remote_array entry does not have flag set to indicate
-    #            thread became not alive, but registry does have the flag
-    #            set - simply set the flag in the remote_array entry -
-    #            request will fail if remote is part of the request
-    #         3) registry entry does not have a remote_array entry -
-    #            remove remote_array entry
-    #
-    #     """
-    #     current_thread_name = threading.current_thread().name
-    #     logger.debug(f'{current_thread_name} entered _clean_pair_array')
-    #     changed = False
-    #     # scan registry and adjust status
-    #
-    #     # for name0, s_thread1 in (SmartThread._registry.items()):
-    #     #
-    #     #     for name1, s_thread2 in (SmartThread._registry.items()):
-    #     #         if name0 == name1:
-    #     #             continue
-    #     pair_keys = combinations(sorted(SmartThread._registry.keys()), 2)
-    #
-    #     for pair_key in pair_keys:
-    #         # create new connection pair if needed
-    #         # pair_key = self._get_pair_key(name0, name1)
-    #         pair_key: PairKey
-    #         if pair_key not in SmartThread._pair_array:
-    #             SmartThread._pair_array[pair_key] = (
-    #                 SmartThread.ConnectionPair(
-    #                     status_lock=threading.Lock(),
-    #                     status_blocks={}
-    #                 ))
-    #             logger.debug(
-    #                 f'{current_thread_name} created _clean_pair_array with '
-    #                 f'pair_key = {pair_key}')
-    #             changed = True
-    #
-    #         # add status block for name0 and name1 if needed
-    #         set_pending_requestor_name = ''
-    #         for name in pair_key:
-    #             if (name not in SmartThread._pair_array[
-    #                     pair_key].status_blocks):
-    #
-    #                 # # get a unique time stamp
-    #                 # create_time = time.time()
-    #                 # while create_time == (
-    #                 #         SmartThread._create_pair_array_entry_time):
-    #                 #     create_time = time.time()
-    #                 # # update last create time
-    #                 # SmartThread._create_pair_array_entry_time = create_time
-    #
-    #                 # add an entry for this thread
-    #                 create_time = SmartThread._registry[name].create_time
-    #                 SmartThread._pair_array[
-    #                     pair_key].status_blocks[
-    #                     name] = SmartThread.ConnectionStatusBlock(
-    #                             name=name,
-    #                             create_time=create_time,
-    #                             target_create_time=0.0,
-    #                             wait_event=threading.Event(),
-    #                             sync_event=threading.Event(),
-    #                             msg_q=queue.Queue(maxsize=self.max_msgs))
-    #                 logger.debug(
-    #                     f'{current_thread_name} added status_blocks entry '
-    #                     f'for pair_key = {pair_key}, name = {name}')
-    #                 changed = True
-    #
-    #                 # find and update a zero create time in work_pk_remotes
-    #                 if name == pair_key[0]:
-    #                     other_name = pair_key[1]
-    #                 else:
-    #                     other_name = pair_key[0]
-    #
-    #                 # check for other_name doing a request and is
-    #                 # waiting for the new thread to be added as
-    #                 # indicated by being in the missing_remotes set
-    #                 if name in SmartThread._registry[
-    #                         other_name].missing_remotes:
-    #                     # we need to erase the name from the missing
-    #                     # list in case the new thread becomes stopped,
-    #                     # and then is started again with a new create
-    #                     # time, and then we add it again to the
-    #                     # found_pk_remotes as another entry with the
-    #                     # same pair_key and name, but a different
-    #                     # create time which would likely lead to an
-    #                     # error
-    #                     SmartThread._registry[
-    #                         other_name].missing_remotes.remove(name)
-    #
-    #                     # update the found_pk_remotes so that other_name
-    #                     # will see that we have a new entry and add
-    #                     # it to its work_pk_remotes
-    #                     SmartThread._registry[
-    #                         other_name].found_pk_remotes.append(
-    #                         PairKeyRemote(pair_key,
-    #                                       name,
-    #                                       create_time))
-    #                     set_pending_requestor_name = other_name
-    #
-    #             else:  # entry already exists
-    #                 # reset del_deferred in case it is ON and the
-    #                 # other name is a resurrected thread
-    #                 SmartThread._pair_array[
-    #                     pair_key].status_blocks[
-    #                     name].del_deferred = False
-    #         if set_pending_requestor_name:
-    #             SmartThread._pair_array[
-    #                 pair_key].status_blocks[
-    #                 set_pending_requestor_name].request_pending = True
-    #             SmartThread._pair_array[
-    #                 pair_key].status_blocks[
-    #                 set_pending_requestor_name].request = \
-    #                 SmartThread._registry[
-    #                         set_pending_requestor_name].request
-    #             logger.debug(
-    #                 f'TestDebug {current_thread_name} set request_pending in '
-    #                 f'refresh for {pair_key=}, {set_pending_requestor_name=}')
-    #     # find removable entries in connection pair array
-    #     connection_array_del_list = []
-    #     for pair_key in SmartThread._pair_array.keys():
-    #         # remove thread(s) from status_blocks if not registered
-    #         for thread_name in pair_key:
-    #             if (thread_name not in SmartThread._registry
-    #                     and thread_name in SmartThread._pair_array[
-    #                         pair_key].status_blocks):
-    #                 rem_entry = SmartThread._pair_array[
-    #                         pair_key].status_blocks[
-    #                         thread_name]
-    #                 extra_msg = ''
-    #                 if not rem_entry.msg_q.empty():
-    #                     extra_msg += ', with non-empty msg_q'
-    #                 if rem_entry.wait_event.is_set():
-    #                     extra_msg += ', with wait event set'
-    #                 if rem_entry.sync_event.is_set():
-    #                     extra_msg += ', with sync event set'
-    #                 SmartThread._pair_array[
-    #                         pair_key].status_blocks.pop(thread_name, None)
-    #
-    #                 logger.debug(
-    #                     f'{current_thread_name} removed status_blocks '
-    #                     f'entry for pair_key = {pair_key}, '
-    #                     f'name = {thread_name}{extra_msg}')
-    #                 changed = True
-    #
-    #         # At this point, either or both threads of the pair will
-    #         # have been removed if no longer registered. If only one
-    #         # thread was removed, then the remaining thread is still
-    #         # registered but should also be removed unless it has one or
-    #         # more messages pending, a wait pending, or is in the middle
-    #         # of a request, in which case we need to leave the entry in
-    #         # place to allow the thread to eventually read its messages
-    #         # or recognize the wait or complete the request. For this
-    #         # case, we will set the del_pending flag to indicate in the
-    #         # request methods that once the request is completed,
-    #         # _clean_pair_array should be called to clean up this
-    #         # entry.
-    #         if len(SmartThread._pair_array[pair_key].status_blocks) == 1:
-    #             thread_name = list(SmartThread._pair_array[
-    #                     pair_key].status_blocks.keys())[0]
-    #             remaining_sb = SmartThread._pair_array[
-    #                     pair_key].status_blocks[thread_name]
-    #             if (not remaining_sb.request_pending
-    #                     and remaining_sb.msg_q.empty()
-    #                     and not remaining_sb.wait_event.is_set()
-    #                     and not remaining_sb.sync_event.is_set()):
-    #                 SmartThread._pair_array[
-    #                     pair_key].status_blocks.pop(thread_name, None)
-    #                 logger.debug(
-    #                     f'{current_thread_name} removed status_blocks entry'
-    #                     f' for pair_key = {pair_key}, name = '
-    #                     f'{thread_name}')
-    #                 changed = True
-    #             else:
-    #                 SmartThread._pair_array[
-    #                     pair_key].status_blocks[
-    #                     thread_name].del_deferred = True
-    #                 extra_msg = ', reasons: '
-    #                 if remaining_sb.request_pending:
-    #                     extra_msg += 'pending request'
-    #                 if not remaining_sb.msg_q.empty():
-    #                     extra_msg += ', non-empty msg_q'
-    #                 if remaining_sb.wait_event.is_set():
-    #                     extra_msg += ', wait event set'
-    #                 if remaining_sb.sync_event.is_set():
-    #                     extra_msg += ', sync event set'
-    #
-    #                 logger.debug(
-    #                     f'{current_thread_name} deferred removal of '
-    #                     f'status_blocks entry for pair_key = {pair_key}, '
-    #                     f'name = {thread_name}{extra_msg}')
-    #
-    #         # remove _connection_pair if both names are gone
-    #         if not SmartThread._pair_array[
-    #                 pair_key].status_blocks:
-    #             connection_array_del_list.append(pair_key)
-    #
-    #     for pair_key in connection_array_del_list:
-    #         del SmartThread._pair_array[pair_key]
-    #         logger.debug(
-    #             f'{current_thread_name} removed _pair_array entry'
-    #             f' for pair_key = {pair_key}')
-    #         changed = True
-    #
-    #     if changed:
-    #         SmartThread._pair_array_last_update = datetime.utcnow()
-    #         print_time = (SmartThread._pair_array_last_update
-    #                       .strftime("%H:%M:%S.%f"))
-    #         logger.debug(
-    #             f'{current_thread_name} updated _pair_array'
-    #             f' at UTC {print_time}')
-    #
-    #     logger.debug(f'{current_thread_name} exiting _clean_pair_array')
 
     ####################################################################
     # start
@@ -4629,7 +4395,7 @@ class SmartThread:
         """
         pk_remotes: list[PairKeyRemote] = []
 
-        with sel.SELockShare(SmartThread._registry_lock):
+        with sel.SELockExcl(SmartThread._registry_lock):
             if not remotes:
                 remotes: set[str] = set()
                 for pair_key, item in SmartThread._pair_array.items():
@@ -4934,7 +4700,6 @@ class SmartThread:
         """Do common setup for each request.
 
         Args:
-            request: type of request
             process_rtn: method to process the request for each
                 iteration of the request loop
             cleanup_rtn: method to back out a failed request
@@ -5011,46 +4776,6 @@ class SmartThread:
                             ReqType.Smart_wait):
             self._set_work_pk_remotes(request=self.request,
                                       remotes=remotes)
-            # with sel.SELockShare(SmartThread._registry_lock):
-            #     self.missing_remotes: set[str] = set()
-            #     for remote in remotes:
-            #         if remote in SmartThread._registry:
-            #             target_create_time = SmartThread._registry[
-            #                 remote].create_time
-            #         else:
-            #             target_create_time = 0.0
-            #
-            #         pair_key = self._get_pair_key(self.name, remote)
-            #         if pair_key in SmartThread._pair_array:
-            #             local_sb = SmartThread._pair_array[
-            #                 pair_key].status_blocks[self.name]
-            #             local_sb.request_pending = True
-            #             logger.debug(
-            #                 f'TestDebug {self.name} set '
-            #                 f'request_pending for {remote=}')
-            #             # if (remote in SmartThread._pair_array[
-            #             #         pair_key].status_blocks):
-            #             #     target_create_time = SmartThread._pair_array[
-            #             #         pair_key].status_blocks[remote].create_time
-            #             local_sb.target_create_time = target_create_time
-            #         pk_remote = PairKeyRemote(pair_key=pair_key,
-            #                                   remote=remote,
-            #                                   create_time=target_create_time)
-            #         pk_remotes.append(pk_remote)
-            #
-            #         # if we just added a pk_remote that has not yet
-            #         # come into existence
-            #         if target_create_time == 0.0:
-            #             # tell _clean_pair_array that we are looking
-            #             # for this remote
-            #             self.missing_remotes |= {remote}
-            #
-            #     # we need to set the work remotes before releasing the
-            #     # lock - any starts or deletes need to be accounted for
-            #     # starting now
-            #     self.work_pk_remotes: list[PairKeyRemote] = (
-            #         pk_remotes.copy())
-            #     self.found_pk_remotes: list[PairKeyRemote] = []
 
         request_block = RequestBlock(
             request=self.request,
