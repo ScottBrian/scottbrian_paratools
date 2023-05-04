@@ -19655,6 +19655,8 @@ class ConfigVerifier:
                         pe[PE.current_request].req_type.value,
                         s_com[0])
                     pe[PE.unreg_join_success_msg][uj_key] += 1
+                    self.log_test_msg('clean_registry added '
+                                      f'unreg_join_success_msg with {uj_key=}')
 
             if (len(pe[PE.current_request].completed_targets)
                     < len(pe[PE.current_request].eligible_targets)):
@@ -19681,7 +19683,7 @@ class ConfigVerifier:
                     wait_key: JoinWaitingKey = s_rem[0]
                     pe[PE.join_waiting_msg][wait_key] += 1
 
-        self.log_test_msg(f'clean_registry entry: {cmd_runner=}, {target=}')
+        self.log_test_msg(f'clean_registry exit: {cmd_runner=}, {target=}')
 
     ####################################################################
     # del_from_pair_array

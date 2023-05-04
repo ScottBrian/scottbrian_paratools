@@ -950,6 +950,7 @@ class SmartThread:
                     f'{self.st_state}, {extra_text}.')
 
         self.request: ReqType = ReqType.NoReq
+        self.wait_for_any = False
 
         if self.auto_started:
             self.smart_start(self.name)
@@ -3485,6 +3486,7 @@ class SmartThread:
             log_msg=log_msg)
 
         if wait_for == WaitFor.Any:
+            self.wait_for_any = True
             request_block.completion_count = len(request_block.remotes) - 1
 
         request_block.ret_msg = []
@@ -3494,6 +3496,7 @@ class SmartThread:
         logger.debug(request_block.exit_log_msg)
 
         self.request = ReqType.NoReq
+        self.wait_for_any = False
 
         return request_block.ret_msg
 
@@ -4348,7 +4351,9 @@ class SmartThread:
             # handle any error or timeout cases - don't worry about any
             # remotes that were still pending - we need to fail the
             # request as soon as we know about any unresolvable failures
-            if ((request_block.stopped_remotes and request_block.remotes)
+            if ((request_block.stopped_remotes and request_block.remotes
+                 and (self.request != ReqType.Smart_wait
+                      or (self.wait_for_any and not request_block.ret_msg)))
                     or request_block.deadlock_remotes
                     or request_block.timer.is_expired()):
 
