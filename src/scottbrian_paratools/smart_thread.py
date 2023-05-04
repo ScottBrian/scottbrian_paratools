@@ -3050,16 +3050,25 @@ class SmartThread:
                              f'from {pk_remote.remote}')
                 received_msgs: list[Any] = []
                 # recv message from remote
-                recvd_msg = local_sb.msg_q.get(
-                    timeout=timeout_value)
-                received_msgs.append(recvd_msg)
-                logger.info(
-                    f'{self.name} smart_recv received msg from '
-                    f'{pk_remote.remote}')
-                while not local_sb.msg_q.empty():
-                    recvd_msg = local_sb.msg_q.get()
+                with SmartThread._pair_array[pk_remote.pair_key].status_lock:
+                    recvd_msg = local_sb.msg_q.get(
+                        timeout=timeout_value)
                     received_msgs.append(recvd_msg)
+                    logger.info(
+                        f'{self.name} smart_recv received msg from '
+                        f'{pk_remote.remote}')
+                    while not local_sb.msg_q.empty():
+                        recvd_msg = local_sb.msg_q.get()
+                        received_msgs.append(recvd_msg)
+                    # reset recv_wait after we get messages instead of
+                    # before so as to avoid having the flag being
+                    # momentarily False with the msg_q empty in the
+                    # small gap between the try attempt and an
+                    # exception. This will prevent the remote from
+                    # missing a deadlock detection case during the gap.
+                    local_sb.recv_wait = False
 
+                # if here, msg_q was not empty (i.e., no exception)
                 request_block.ret_msg[pk_remote.remote] = received_msgs
                 logger.debug(f'TestDebug {self.name} got message '
                              f'from {pk_remote.remote}, {received_msgs=}')
@@ -3520,10 +3529,19 @@ class SmartThread:
         for timeout_value in (SmartThread.K_REQUEST_MIN_INTERVAL,
                               request_block.request_max_interval):
             if local_sb.wait_event.wait(timeout=timeout_value):
-                local_sb.wait_wait = False
+                # We need to the lock to coordinate with the remote
+                # deadlock detection code to prevent:
+                # 1) the remote sees that the wait_wait flag is True
+                # 2) we reset wait_wait
+                # 3) we clear the wait event
+                # 4) the remote sees the wait event is clear and decides
+                #    we have a deadlock
+                with SmartThread._pair_array[pk_remote.pair_key].status_lock:
+                    local_sb.wait_wait = False
 
-                # be ready for next wait
-                local_sb.wait_event.clear()
+                    # be ready for next wait
+                    local_sb.wait_event.clear()
+
                 if (local_sb.del_deferred and
                         not local_sb.sync_event.is_set()):
                     request_block.do_refresh = True
@@ -4048,15 +4066,19 @@ class SmartThread:
         for timeout_value in (SmartThread.K_REQUEST_MIN_INTERVAL,
                               request_block.request_max_interval):
             if local_sb.sync_event.wait(timeout=timeout_value):
-                # Since our sync_event is set, the remote won't be
-                # checking our flags and won't start a new sync until we
-                # clear our sync_event. Thus, we do not need to hold the
-                # status_lock here while we reset flags and clear the
-                # event.
-                local_sb.sync_wait = False
+                # We need to the lock to coordinate with the remote
+                # deadlock detection code to prevent:
+                # 1) the remote sees that the sync_wait flag is True
+                # 2) we reset sync_wait
+                # 3) we clear the sync event
+                # 4) the remote sees the sync event is clear and decides
+                #    we have a deadlock
+                with SmartThread._pair_array[pk_remote.pair_key].status_lock:
+                    local_sb.sync_wait = False
 
-                # be ready for next sync wait
-                local_sb.sync_event.clear()
+                    # be ready for next sync wait
+                    local_sb.sync_event.clear()
+
                 if (local_sb.del_deferred and
                         not local_sb.wait_event.is_set()):
                     request_block.do_refresh = True
@@ -4635,6 +4657,9 @@ class SmartThread:
             local_sb: connection block for this thread
             remote_sb: connection block for remote thread
 
+        Notes:
+            1) must be entered holding the status_lock
+
         """
         # if the deadlock has already been detected by
         # the remote, no need to analyse this side. Just
@@ -4842,7 +4867,7 @@ class SmartThread:
         exit_log_msg = (
             f'{request.value} exit: {log_msg_body}')
 
-        logger.debug(entry_log_msg, stacklevel=3)
+        logger.debug(entry_log_msg, stacklevel=latest)
         return exit_log_msg
 
     ####################################################################

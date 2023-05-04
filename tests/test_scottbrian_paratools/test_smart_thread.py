@@ -7968,23 +7968,23 @@ class ConfigVerifier:
                 #     expected_state=st.ThreadState.Alive))
                 stopped_state_names: list[str] = []
                 alive_state_names: list[str] = []
-                for name in names:
-                    if name in self.thread_target_names:
-                        stopped_state_names.append(name)
-                    else:
-                        alive_state_names.append(name)
-                if stopped_state_names:
-                    self.add_cmd(VerifyConfig(
-                        cmd_runners=cmd_runner,
-                        verify_type=VerifyType.VerifyState,
-                        names_to_check=stopped_state_names,
-                        state_to_check=st.ThreadState.Stopped))
-                if alive_state_names:
-                    self.add_cmd(VerifyConfig(
-                        cmd_runners=cmd_runner,
-                        verify_type=VerifyType.VerifyState,
-                        names_to_check=alive_state_names,
-                        state_to_check=st.ThreadState.Alive))
+                # for name in names:
+                #     if name in self.thread_target_names:
+                #         stopped_state_names.append(name)
+                #     else:
+                #         alive_state_names.append(name)
+                # if stopped_state_names:
+                #     self.add_cmd(VerifyConfig(
+                #         cmd_runners=cmd_runner,
+                #         verify_type=VerifyType.VerifyState,
+                #         names_to_check=stopped_state_names,
+                #         state_to_check=st.ThreadState.Stopped))
+                # if alive_state_names:
+                self.add_cmd(VerifyConfig(
+                    cmd_runners=cmd_runner,
+                    verify_type=VerifyType.VerifyState,
+                    names_to_check=names,
+                    state_to_check=st.ThreadState.Alive))
         if active_names and validate_config:
             # self.add_cmd(VerifyAlive(cmd_runners=cmd_runner,
             #                          exp_alive_names=active_names))
@@ -20488,18 +20488,14 @@ class ConfigVerifier:
 
         """
         for name in names_to_check:
-            if real_reg_items[name].state != state_to_check:
+            if (real_reg_items[name].state != state_to_check
+                    or self.expected_registered[name].st_state
+                    != state_to_check):
                 self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
-                    f'verify_state found {name=} has real status '
-                    f'{real_reg_items[name].state} not equal to the expected '
-                    f'status of {state_to_check=} per {cmd_runner=}')
-            if self.expected_registered[name].st_state != state_to_check:
-                self.abort_all_f1_threads()
-                raise InvalidConfigurationDetected(
-                    f'verify_state found {name=} has mock status '
-                    f'{self.expected_registered[name].st_state} not equal to '
-                    f'the expected status of {state_to_check=} per '
+                    f'verify_state for {name=}: {state_to_check=} does has '
+                    f'not match either/both {real_reg_items[name].state} nor '
+                    f'{self.expected_registered[name].st_state} per '
                     f'{cmd_runner=}')
 
     ####################################################################
