@@ -1905,24 +1905,6 @@ class SmartThread:
 
 
         """
-        # self.request = ReqType.Smart_join
-        # # get RequestBlock with targets in a set and a timer object
-        # request_block = self._request_setup(
-        #     remotes=targets,
-        #     error_stopped_target=False,
-        #     process_rtn=self._process_smart_join,
-        #     cleanup_rtn=None,
-        #     get_block_lock=False,
-        #     completion_count=0,
-        #     timeout=timeout,
-        #     log_msg=log_msg)
-        #
-        # self._config_cmd_loop(request_block=request_block)
-        #
-        # self.request = ReqType.NoReq
-        #
-        # logger.debug(request_block.exit_log_msg)
-
         self.request = ReqType.Smart_join
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
@@ -2026,18 +2008,18 @@ class SmartThread:
             return False
 
         # we need to check to make sure the thread is
-        # not alive in case we timed out
+        # not alive in case we timed out on the thread.join above
         if SmartThread._registry[remote].thread.is_alive():
             return False  # give thread more time to end
         else:
             # set state to stopped
-            if SmartThread._registry[remote].st_state == ThreadState.Stopped:
-                logger.debug(f'{self.cmd_runner} confirmed state for '
-                             f'thread {remote} is {ThreadState.Stopped}')
-            else:
-                self._set_state(
-                    target_thread=SmartThread._registry[remote],
-                    new_state=ThreadState.Stopped)
+            # if SmartThread._registry[remote].st_state == ThreadState.Stopped:
+            #     logger.debug(f'{self.cmd_runner} confirmed state for '
+            #                  f'thread {remote} is {ThreadState.Stopped}')
+            # else:
+            self._set_state(
+                target_thread=SmartThread._registry[remote],
+                new_state=ThreadState.Stopped)
 
         # restart while loop with one less remote
         return True

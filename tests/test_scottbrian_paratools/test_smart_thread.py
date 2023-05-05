@@ -530,29 +530,6 @@ num_exit_timeouts_arg_list = [0, 1, 2]
 num_full_q_timeouts_arg_list = [0, 1, 2]
 # num_full_q_timeouts_arg_list = [3]  # 0.11
 
-########################################################################
-# Test settings for test_join_timeout_scenarios
-########################################################################
-num_active_no_target_arg_list = [1, 2, 3]
-# num_active_no_target_arg_list = [3]
-
-num_no_delay_exit_arg_list = [0, 1, 2]
-# num_no_delay_exit_arg_list = [2]
-
-num_delay_exit_arg_list = [0, 1, 2]
-# num_delay_exit_arg_list = [2]
-
-num_no_delay_unreg_arg_list = [0, 1, 2]
-# num_no_delay_unreg_arg_list = [2]
-
-num_delay_unreg_arg_list = [0, 1, 2]
-# num_delay_unreg_arg_list = [2]
-
-num_no_delay_reg_arg_list = [0, 1, 2]
-# num_no_delay_reg_arg_list = [2]
-
-num_delay_reg_arg_list = [0, 1, 2]
-# num_delay_reg_arg_list = [2]
 
 # ########################################################################
 # # Test settings for test_resume_timeout_scenarios
@@ -1051,20 +1028,24 @@ class Join(ConfigCmd):
     def __init__(self,
                  cmd_runners: Iterable,
                  join_names: Iterable,
+                 unreg_names: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
         Args:
             cmd_runners: thread names that will execute the command
             join_names: thread names to join
+            unreg_names: thread names that are already unregistered
             log_msg: log message specification for the smart_join
         """
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
 
         self.join_names = get_set(join_names)
+        self.unreg_names = get_set(unreg_names)
         self.log_msg = log_msg
-        self.arg_list += ['join_names']
+        self.arg_list += ['join_names',
+                          'unreg_names']
 
     def run_process(self, cmd_runner: str) -> None:
         """Run the command.
@@ -1074,6 +1055,7 @@ class Join(ConfigCmd):
         """
         self.config_ver.handle_join(cmd_runner=cmd_runner,
                                     join_names=self.join_names,
+                                    unreg_names=self.unreg_names,
                                     timeout_type=TimeoutType.TimeoutNone,
                                     timeout=0,
                                     log_msg=self.log_msg)
@@ -1088,17 +1070,20 @@ class JoinTimeoutFalse(Join):
                  cmd_runners: Iterable,
                  join_names: Iterable,
                  timeout: IntOrFloat,
+                 unreg_names: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
         Args:
             cmd_runners: thread names that will execute the command
             join_names: thread names to join
+            unreg_names: thread names that are already unregistered
             timeout: timeout specification for the smart_join
             log_msg: log message specification for the smart_join
         """
         super().__init__(cmd_runners=cmd_runners,
                          join_names=join_names,
+                         unreg_names=unreg_names,
                          log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
 
@@ -1113,6 +1098,7 @@ class JoinTimeoutFalse(Join):
         """
         self.config_ver.handle_join(cmd_runner=cmd_runner,
                                     join_names=self.join_names,
+                                    unreg_names=self.unreg_names,
                                     timeout_type=TimeoutType.TimeoutFalse,
                                     timeout=self.timeout,
                                     log_msg=self.log_msg)
@@ -1128,18 +1114,21 @@ class JoinTimeoutTrue(JoinTimeoutFalse):
                  join_names: Iterable,
                  timeout: IntOrFloat,
                  timeout_names: Iterable,
+                 unreg_names: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
         Args:
             cmd_runners: thread names that will execute the command
             join_names: thread names to join
+            unreg_names: thread names that are already unregistered
             timeout: timeout specification for the smart_join
             timeout_names: thread names expected to cause timeout
             log_msg: log message specification for the smart_join
         """
         super().__init__(cmd_runners=cmd_runners,
                          join_names=join_names,
+                         unreg_names=unreg_names,
                          timeout=timeout,
                          log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
@@ -1156,6 +1145,7 @@ class JoinTimeoutTrue(JoinTimeoutFalse):
         if self.timeout_names:
             self.config_ver.handle_join(cmd_runner=cmd_runner,
                                         join_names=self.join_names,
+                                        unreg_names=self.unreg_names,
                                         timeout_type=TimeoutType.TimeoutTrue,
                                         timeout=self.timeout,
                                         timeout_names=self.timeout_names,
@@ -1163,6 +1153,7 @@ class JoinTimeoutTrue(JoinTimeoutFalse):
         else:
             self.config_ver.handle_join(cmd_runner=cmd_runner,
                                         join_names=self.join_names,
+                                        unreg_names=self.unreg_names,
                                         timeout_type=TimeoutType.TimeoutFalse,
                                         timeout=self.timeout,
                                         log_msg=self.log_msg)
@@ -3684,118 +3675,6 @@ def recv_msg_after_join_arg(request: Any) -> int:
 
 
 ###############################################################################
-# num_active_no_target_arg
-###############################################################################
-@pytest.fixture(params=num_active_no_target_arg_list)  # type: ignore
-def num_active_no_target_arg(request: Any) -> int:
-    """Which threads should exit before alpha recvs msg.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_no_delay_exit_arg
-###############################################################################
-@pytest.fixture(params=num_no_delay_exit_arg_list)  # type: ignore
-def num_no_delay_exit_arg(request: Any) -> int:
-    """Which threads should exit before alpha recvs msg.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_delay_exit_arg
-###############################################################################
-@pytest.fixture(params=num_delay_exit_arg_list)  # type: ignore
-def num_delay_exit_arg(request: Any) -> int:
-    """Which threads should exit before alpha recvs msg.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_no_delay_unreg_arg
-###############################################################################
-@pytest.fixture(params=num_no_delay_unreg_arg_list)  # type: ignore
-def num_no_delay_unreg_arg(request: Any) -> int:
-    """Which threads should exit before alpha recvs msg.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_delay_unreg_arg
-###############################################################################
-@pytest.fixture(params=num_delay_unreg_arg_list)  # type: ignore
-def num_delay_unreg_arg(request: Any) -> int:
-    """Which threads should exit before alpha recvs msg.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_no_delay_reg_arg
-###############################################################################
-@pytest.fixture(params=num_no_delay_reg_arg_list)  # type: ignore
-def num_no_delay_reg_arg(request: Any) -> int:
-    """Which threads should exit before alpha recvs msg.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_delay_reg_arg
-###############################################################################
-@pytest.fixture(params=num_delay_reg_arg_list)  # type: ignore
-def num_delay_reg_arg(request: Any) -> int:
-    """Which threads should exit before alpha recvs msg.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
 # timeout_arg fixtures
 ###############################################################################
 timeout_arg_list = [None, 'TO_False', 'TO_True']
@@ -5030,7 +4909,7 @@ class AlreadyUnregLogSearchItem(LogSearchItem):
                 'UpdatePairArrayUtcLogSearchItem encountered unexpected '
                 f'log message: {self.found_log_msg}')
 
-        ipe[PE.already_unreg_msg][unreg_key] -= 1
+        pe[PE.already_unreg_msg][unreg_key] -= 1
 
         self.config_ver.add_log_msg(re.escape(self.found_log_msg))
 
@@ -6409,6 +6288,20 @@ class CRunnerRaisesLogSearchItem(LogSearchItem):
                                                  targets=targets,
                                                  pending_request_flag=False)
 
+        pe = self.pending_events[cmd_runner]
+        pe[PE.current_request] = StartRequest(
+            req_type=st.ReqType.NoReq,
+            targets=set(),
+            unreg_remotes=set(),
+            not_registered_remotes=set(),
+            timeout_remotes=set(),
+            stopped_remotes=set(),
+            deadlock_remotes=set(),
+            eligible_targets=set(),
+            completed_targets=set(),
+            first_round_completed=set(),
+            stopped_target_threads=set())
+
         self.config_ver.add_log_msg(re.escape(self.found_log_msg),
                                     log_level=logging.ERROR)
 
@@ -6558,7 +6451,7 @@ LogSearchItems: TypeAlias = Union[
     DidCleanRegLogSearchItem,
     SetStateLogSearchItem,
     InitCompleteLogSearchItem,
-    ConfirmStoppedLogSearchItem,
+    # ConfirmStoppedLogSearchItem,
     AlreadyUnregLogSearchItem,
     RequestAckLogSearchItem,
     UnregJoinSuccessLogSearchItem,
@@ -6693,12 +6586,14 @@ class PaLogMsgsFound:
 @dataclass
 class StartRequest:
     targets: set[str]
+    unreg_remotes: set[str]
     not_registered_remotes: set[str]
     timeout_remotes: set[str]
     stopped_remotes: set[str]
     deadlock_remotes: set[str]
     eligible_targets: set[str]
     completed_targets: set[str]
+    first_round_completed: set[str]
     stopped_target_threads: set[str]
     timeout_type: TimeoutType = TimeoutType.TimeoutNone
     req_type: st.ReqType = st.ReqType.NoReq
@@ -6865,7 +6760,7 @@ class ConfigVerifier:
             DidCleanRegLogSearchItem(config_ver=self),
             SetStateLogSearchItem(config_ver=self),
             InitCompleteLogSearchItem(config_ver=self),
-            ConfirmStoppedLogSearchItem(config_ver=self),
+            # ConfirmStoppedLogSearchItem(config_ver=self),
             AlreadyUnregLogSearchItem(config_ver=self),
             RequestAckLogSearchItem(config_ver=self),
             UnregJoinSuccessLogSearchItem(config_ver=self),
@@ -6920,23 +6815,27 @@ class ConfigVerifier:
             self.pending_events[name][PE.current_request] = StartRequest(
                 req_type=st.ReqType.NoReq,
                 targets=set(),
+                unreg_remotes=set(),
                 not_registered_remotes=set(),
                 timeout_remotes=set(),
                 stopped_remotes=set(),
                 deadlock_remotes=set(),
                 eligible_targets=set(),
                 completed_targets=set(),
+                first_round_completed=set(),
                 stopped_target_threads=set()
             )
             self.pending_events[name][PE.save_current_request] = StartRequest(
                 req_type=st.ReqType.NoReq,
                 targets=set(),
+                unreg_remotes=set(),
                 not_registered_remotes=set(),
                 timeout_remotes=set(),
                 stopped_remotes=set(),
                 deadlock_remotes=set(),
                 eligible_targets=set(),
                 completed_targets=set(),
+                first_round_completed=set(),
                 stopped_target_threads=set()
             )
             self.pending_events[name][PE.num_targets_remaining] = 0
@@ -8169,7 +8068,6 @@ class ConfigVerifier:
             num_active_no_target: int,
             num_no_delay_exit: int,
             num_delay_exit: int,
-            num_no_delay_unreg: int,
             num_delay_unreg: int,
             num_no_delay_reg: int,
             num_delay_reg: int) -> None:
@@ -8188,16 +8086,13 @@ class ConfigVerifier:
                 delay to allow a TimeoutFalse join to succeed, and a
                 long delay to cause a TimeoutTrue join to
                 timeout and a TimeoutNone to eventually succeed
-            num_no_delay_unreg: number of threads that should be
-                unregistered and targeted for join, and then be
-                be immediately created, started, exited to allow the
-                join to succeed
             num_delay_unreg: number of threads that should be
-                unregistered and targeted for join, and then be
-                be created, started, exited after a short delay to allow
-                a TimeoutFalse join to succeed, and a long delay to
-                cause a TimeoutTrue join to timeout and a TimeoutNone to
-                eventually succeed
+                unregistered and targeted for join. These will cause the
+                already unregistered log message and will be considered
+                as successfully joined in the smart_join completion
+                message. They will be eventually started to show that
+                they are unaffected by the smart_join once they are
+                recognized as already unregistered.
             num_no_delay_reg: number of threads that should be
                 registered and targeted for join, and then be
                 be immediately started and exited to allow the
@@ -8215,7 +8110,6 @@ class ConfigVerifier:
         assert 1 < (num_active_no_target
                     + num_no_delay_exit
                     + num_delay_exit
-                    + num_no_delay_unreg
                     + num_delay_unreg
                     + num_no_delay_reg
                     + num_delay_reg) <= len(self.unregistered_names)
@@ -8239,7 +8133,6 @@ class ConfigVerifier:
                 + 1)
 
         timeout_time = (((num_no_delay_exit
-                        + num_no_delay_unreg
                         + num_no_delay_reg) * 0.3)
                         + ((num_delay_exit
                            + num_delay_unreg
@@ -8292,16 +8185,7 @@ class ConfigVerifier:
             var_name_for_log='delay_exit_names')
 
         ################################################################
-        # choose send_exit_sender_names
-        ################################################################
-        no_delay_unreg_names = self.choose_names(
-            name_collection=unregistered_names_copy,
-            num_names_needed=num_no_delay_unreg,
-            update_collection=True,
-            var_name_for_log='no_delay_unreg_names')
-
-        ################################################################
-        # choose nosend_exit_sender_names
+        # choose delay_unreg_names
         ################################################################
         delay_unreg_names = self.choose_names(
             name_collection=unregistered_names_copy,
@@ -8332,7 +8216,6 @@ class ConfigVerifier:
         ################################################################
         all_target_names: list[str] = (no_delay_exit_names
                                        + delay_exit_names
-                                       + no_delay_unreg_names
                                        + delay_unreg_names
                                        + no_delay_reg_names
                                        + delay_reg_names)
@@ -8354,12 +8237,14 @@ class ConfigVerifier:
             join_serial_num = self.add_cmd(
                 Join(cmd_runners=active_no_target_names[0],
                      join_names=all_target_names,
+                     unreg_names=delay_unreg_names,
                      log_msg=log_msg))
         elif timeout_type == TimeoutType.TimeoutFalse:
             confirm_cmd_to_use = 'JoinTimeoutFalse'
             join_serial_num = self.add_cmd(
                 JoinTimeoutFalse(cmd_runners=active_no_target_names[0],
                                  join_names=all_target_names,
+                                 unreg_names=delay_unreg_names,
                                  timeout=timeout_time,
                                  log_msg=log_msg))
         else:  # TimeoutType.TimeoutTrue
@@ -8367,6 +8252,7 @@ class ConfigVerifier:
             join_serial_num = self.add_cmd(
                 JoinTimeoutTrue(cmd_runners=active_no_target_names[0],
                                 join_names=all_target_names,
+                                unreg_names=delay_unreg_names,
                                 timeout=timeout_time,
                                 timeout_names=all_timeout_names,
                                 log_msg=log_msg))
@@ -8377,28 +8263,6 @@ class ConfigVerifier:
         if no_delay_exit_names:
             self.build_exit_suite(cmd_runner=self.commander_name,
                                   names=no_delay_exit_names,
-                                  validate_config=False)
-
-        ################################################################
-        # handle no_delay_unreg_names
-        ################################################################
-        if no_delay_unreg_names:
-            f1_create_items: list[F1CreateItem] = []
-            for idx, name in enumerate(no_delay_unreg_names):
-                if idx % 2:
-                    app_config = AppConfig.ScriptStyle
-                else:
-                    app_config = AppConfig.RemoteThreadApp
-
-                f1_create_items.append(F1CreateItem(name=name,
-                                                    auto_start=True,
-                                                    target_rtn=outer_f1,
-                                                    app_config=app_config))
-
-            self.build_create_suite(f1_create_items=f1_create_items,
-                                    validate_config=False)
-            self.build_exit_suite(cmd_runner=self.commander_name,
-                                  names=no_delay_unreg_names,
                                   validate_config=False)
 
         ################################################################
@@ -8474,6 +8338,11 @@ class ConfigVerifier:
                 confirm_serial_num=join_serial_num,
                 confirmers=active_no_target_names[0]))
 
+        if delay_unreg_names:
+            self.add_cmd(VerifyConfig(
+                cmd_runner=self.commander_name,
+                verify_type=VerifyType.VerifyStoppedState,
+                names_to_check=delay_unreg_names))
     ####################################################################
     # build_msg_suite
     ####################################################################
@@ -15212,12 +15081,14 @@ class ConfigVerifier:
         pe[PE.start_request].append(StartRequest(
             req_type=st.ReqType.Smart_init,
             targets={name},
+            unreg_remotes=set(),
             not_registered_remotes=set(),
             timeout_remotes=set(),
             stopped_remotes=set(),
             deadlock_remotes=set(),
             eligible_targets=set(),
             completed_targets=set(),
+            first_round_completed=set(),
             stopped_target_threads=set()))
 
         req_key_entry: RequestKey = ('smart_init',
@@ -15876,6 +15747,7 @@ class ConfigVerifier:
     def handle_join(self,
                     cmd_runner: str,
                     join_names: set[str],
+                    unreg_names: set[str],
                     log_msg: str,
                     timeout_type: TimeoutType = TimeoutType.TimeoutNone,
                     timeout: Optional[IntOrFloat] = None,
@@ -15886,6 +15758,7 @@ class ConfigVerifier:
         Args:
             cmd_runner: name of thread doing the cmd
             join_names: target threads that we will join
+            unreg_names: thread names that are already unregistered
             log_msg: log message to issue on the join (name be None)
             timeout_type: None, False, or True
             timeout: value for timeout on join request
@@ -15910,12 +15783,14 @@ class ConfigVerifier:
             StartRequest(req_type=st.ReqType.Smart_join,
                          timeout_type=timeout_type,
                          targets=join_names.copy(),
+                         unreg_remotes=unreg_names.copy(),
                          not_registered_remotes=set(),
                          timeout_remotes=timeout_remotes,
                          stopped_remotes=set(),
                          deadlock_remotes=set(),
                          eligible_targets=set(),
                          completed_targets=set(),
+                         first_round_completed=set(),
                          stopped_target_threads=set()))
 
         req_key_entry: RequestKey = ('smart_join',
@@ -16144,12 +16019,14 @@ class ConfigVerifier:
             StartRequest(req_type=st.ReqType.Smart_recv,
                          timeout_type=timeout_type,
                          targets={remote},
+                         unreg_remotes=set(),
                          not_registered_remotes=set(),
                          timeout_remotes=timeout_names,
                          stopped_remotes=stopped_remotes.copy(),
                          deadlock_remotes=set(),
                          eligible_targets=set(),
                          completed_targets=set(),
+                         first_round_completed=set(),
                          stopped_target_threads=set()))
 
         req_key_entry: RequestKey = ('smart_recv',
@@ -16361,23 +16238,27 @@ class ConfigVerifier:
                 pe[PE.save_current_request] = StartRequest(
                     req_type=st.ReqType.NoReq,
                     targets=set(),
+                    unreg_remotes=set(),
                     not_registered_remotes=set(),
                     timeout_remotes=set(),
                     stopped_remotes=set(),
                     deadlock_remotes=set(),
                     eligible_targets=set(),
                     completed_targets=set(),
+                    first_round_completed=set(),
                     stopped_target_threads=set())
             else:
                 pe[PE.current_request] = StartRequest(
                     req_type=st.ReqType.NoReq,
                     targets=set(),
+                    unreg_remotes=set(),
                     not_registered_remotes=set(),
                     timeout_remotes=set(),
                     stopped_remotes=set(),
                     deadlock_remotes=set(),
                     eligible_targets=set(),
                     completed_targets=set(),
+                    first_round_completed=set(),
                     stopped_target_threads=set())
             # if request_name in ('smart_send', 'smart_recv', 'smart_wait',
             #                     'smart_resume', 'smart_sync'):
@@ -16663,11 +16544,14 @@ class ConfigVerifier:
         # determine next step
         ################################################################
         pe = self.pending_events[cmd_runner]
-
+        exp_first_round_completed: set[str] = set()
+        delayed_remotes: set[str] = set()
         if pe[PE.current_request].timeout_type == TimeoutType.TimeoutTrue:
             timeout_remotes = pe[PE.current_request].timeout_remotes
         else:
             timeout_remotes = set()
+            delayed_remotes: set[str] = pe[
+                PE.current_request].timeout_remotes.copy()
 
         eligible_targets = (pe[PE.current_request].targets.copy()
                             - timeout_remotes)
@@ -16691,10 +16575,32 @@ class ConfigVerifier:
                                           st.ThreadState.Stopped,
                                           st.ThreadState.Unregistered)
                 pe[PE.set_state_msg][state_key] += 1
+                if (not self.expected_registered[target].is_alive
+                        and self.expected_registered[
+                        target].st_state == st.ThreadState.Alive):
+                    exp_first_round_completed |= {target}
             else:
-                unreg_key: AlreadyUnregKey = (cmd_runner, target)
-                pe[PE.already_unreg_msg][unreg_key] += 1
+                if target in pe[PE.current_request].unreg_remotes:
+                    unreg_key: AlreadyUnregKey = (cmd_runner, target)
+                    pe[PE.already_unreg_msg][unreg_key] += 1
+                    exp_first_round_completed |= {target}
+                else:
+                    raise InvalidConfigurationDetected(
+                        f'handle_request_smart_join_entry {cmd_runner=} '
+                        f'found {target=} is unregistered but not in the set '
+                        f'of {pe[PE.current_request].unreg_remotes=}')
 
+        if exp_first_round_completed:
+            pe[PE.current_request].first_round_completed = (
+                exp_first_round_completed.copy())
+            s_com = sorted(exp_first_round_completed)
+
+            uj_key: UnregJoinSuccessKey = (
+                pe[PE.current_request].req_type.value,
+                s_com[0])
+            pe[PE.unreg_join_success_msg][uj_key] += 1
+            self.log_test_msg('handle_request_smart_join_entry added '
+                              f'unreg_join_success_msg with {uj_key=}')
         # find stopped ThreadTarget names that smart_join will pick off
         # for target in self.expected_registered:
         #     if (target not in eligible_targets
@@ -16708,19 +16614,20 @@ class ConfigVerifier:
         #                                   st.ThreadState.Unregistered)
         #         pe[PE.set_state_msg][state_key] += 1
 
-        sub_key: SubProcessKey = (cmd_runner,
-                                  'smart_join',
-                                  '_clean_registry',
-                                  'entry',
-                                  cmd_runner)
-        pe[PE.subprocess_msg][sub_key] += 1
+        if eligible_targets:
+            sub_key: SubProcessKey = (cmd_runner,
+                                      'smart_join',
+                                      '_clean_registry',
+                                      'entry',
+                                      cmd_runner)
+            pe[PE.subprocess_msg][sub_key] += 1
 
-        sub_key: SubProcessKey = (cmd_runner,
-                                  'smart_join',
-                                  '_clean_pair_array',
-                                  'entry',
-                                  cmd_runner)
-        pe[PE.subprocess_msg][sub_key] += 1
+            sub_key: SubProcessKey = (cmd_runner,
+                                      'smart_join',
+                                      '_clean_pair_array',
+                                      'entry',
+                                      cmd_runner)
+            pe[PE.subprocess_msg][sub_key] += 1
 
     ####################################################################
     # handle_request_smart_join_exit
@@ -17270,12 +17177,14 @@ class ConfigVerifier:
             StartRequest(req_type=st.ReqType.Smart_resume,
                          timeout_type=timeout_type,
                          targets=targets,
+                         unreg_remotes=set(),
                          not_registered_remotes=set(),
                          timeout_remotes=timeout_names,
                          stopped_remotes=stopped_remotes.copy(),
                          deadlock_remotes=set(),
                          eligible_targets=set(),
                          completed_targets=set(),
+                         first_round_completed=set(),
                          stopped_target_threads=set()))
 
         req_key_entry: RequestKey = ('smart_resume',
@@ -17408,12 +17317,14 @@ class ConfigVerifier:
             StartRequest(req_type=st.ReqType.Smart_send,
                          timeout_type=timeout_type,
                          targets=receivers,
+                         unreg_remotes=set(),
                          not_registered_remotes=set(),
                          timeout_remotes=timeout_remotes,
                          stopped_remotes=stopped_remotes.copy(),
                          deadlock_remotes=set(),
                          eligible_targets=set(),
                          completed_targets=set(),
+                         first_round_completed=set(),
                          stopped_target_threads=set()))
 
         req_key_entry: RequestKey = ('smart_send',
@@ -17854,12 +17765,14 @@ class ConfigVerifier:
         pe[PE.start_request].append(
             StartRequest(req_type=st.ReqType.Smart_start,
                          targets=start_names,
+                         unreg_remotes=set(),
                          not_registered_remotes=not_reg_remotes,
                          timeout_remotes=set(),
                          stopped_remotes=set(),
                          deadlock_remotes=set(),
                          eligible_targets=set(),
                          completed_targets=set(),
+                         first_round_completed=set(),
                          stopped_target_threads=set()))
 
         req_key_entry: RequestKey = ('smart_start',
@@ -18075,12 +17988,14 @@ class ConfigVerifier:
             pe[PE.start_request].append(
                 StartRequest(req_type=st.ReqType.Smart_start,
                              targets={target},
+                             unreg_remotes=set(),
                              not_registered_remotes=set(),
                              timeout_remotes=set(),
                              stopped_remotes=set(),
                              deadlock_remotes=set(),
                              eligible_targets=set(),
                              completed_targets=set(),
+                             first_round_completed=set(),
                              stopped_target_threads=set()))
 
             req_key_entry: RequestKey = ('smart_start',
@@ -18353,12 +18268,14 @@ class ConfigVerifier:
             StartRequest(req_type=st.ReqType.Smart_sync,
                          timeout_type=timeout_type,
                          targets=targets,
+                         unreg_remotes=set(),
                          not_registered_remotes=set(),
                          timeout_remotes=timeout_remotes,
                          stopped_remotes=stopped_remotes.copy(),
                          deadlock_remotes=conflict_remotes,
                          eligible_targets=set(),
                          completed_targets=set(),
+                         first_round_completed=set(),
                          stopped_target_threads=set()))
 
         req_key_entry: RequestKey = ('smart_sync',
@@ -18545,7 +18462,7 @@ class ConfigVerifier:
         """
         targets_msg = re.escape(
             f'while processing a {smart_request} '
-            f'request with remotes '
+            f'request with targets '
             f'{sorted(targets)}.')
 
         if not pending_remotes:
@@ -18563,15 +18480,15 @@ class ConfigVerifier:
         pending_msg = (
             r" Remotes that are pending: \[([a-z]*|,|'| )*\].")
 
-        # if stopped_remotes:
-        #     stopped_msg = re.escape(
-        #         ' Remotes that are stopped: '
-        #         f'{sorted(stopped_remotes)}.')
-        # else:
-        #     stopped_msg = ''
+        if stopped_remotes:
+            stopped_msg = re.escape(
+                ' Remotes that are stopped: '
+                f'{sorted(stopped_remotes)}.')
+        else:
+            stopped_msg = ''
 
-        stopped_msg = (
-            r" Remotes that are stopped: \[([a-z]*|,|'| )*\].")
+        # stopped_msg = (
+        #     r" Remotes that are stopped: \[([a-z]*|,|'| )*\].")
 
         if unreg_remotes:
             unreg_msg = re.escape(
@@ -18635,12 +18552,14 @@ class ConfigVerifier:
         pe[PE.start_request].append(
             StartRequest(req_type=st.ReqType.Smart_unreg,
                          targets=unregister_targets.copy(),
+                         unreg_remotes=set(),
                          not_registered_remotes=not_registered_remotes.copy(),
                          timeout_remotes=set(),
                          stopped_remotes=set(),
                          deadlock_remotes=set(),
                          eligible_targets=set(),
                          completed_targets=set(),
+                         first_round_completed=set(),
                          stopped_target_threads=set()))
 
         req_key_entry: RequestKey = ('smart_unreg',
@@ -18738,6 +18657,7 @@ class ConfigVerifier:
             StartRequest(req_type=st.ReqType.Smart_wait,
                          timeout_type=timeout_type,
                          targets=resumers,
+                         unreg_remotes=set(),
                          not_registered_remotes=set(),
                          timeout_remotes=timeout_remotes.copy(),
                          stopped_remotes=stopped_remotes.copy(),
@@ -18745,6 +18665,7 @@ class ConfigVerifier:
                                            deadlock_remotes.copy()),
                          eligible_targets=set(),
                          completed_targets=set(),
+                         first_round_completed=set(),
                          stopped_target_threads=set()))
 
         req_key_entry: RequestKey = ('smart_wait',
@@ -19640,23 +19561,27 @@ class ConfigVerifier:
             if rem_targets:
                 pe[PE.did_clean_reg_msg] += 1
                 pe[PE.rem_reg_targets].append(rem_targets)
-
+                completed: set[str] = set()
                 for target in rem_targets:
                     del self.expected_registered[target]
                     if target in pe[PE.current_request].eligible_targets:
                         pe[PE.current_request].completed_targets |= {target}
+                        completed |= {target}
 
                 if pe[PE.current_request].req_type in (st.ReqType.Smart_unreg,
                                                        st.ReqType.Smart_join):
-                    completed = pe[PE.current_request].completed_targets.copy()
-                    s_com = sorted(completed)
+                    if pe[PE.current_request].first_round_completed:
+                        pe[PE.current_request].first_round_completed = set()
+                    else:
+                        s_com = sorted(completed)
 
-                    uj_key: UnregJoinSuccessKey = (
-                        pe[PE.current_request].req_type.value,
-                        s_com[0])
-                    pe[PE.unreg_join_success_msg][uj_key] += 1
-                    self.log_test_msg('clean_registry added '
-                                      f'unreg_join_success_msg with {uj_key=}')
+                        uj_key: UnregJoinSuccessKey = (
+                            pe[PE.current_request].req_type.value,
+                            s_com[0])
+                        pe[PE.unreg_join_success_msg][uj_key] += 1
+                        self.log_test_msg(
+                            'clean_registry added '
+                            f'unreg_join_success_msg with {uj_key=}')
 
             if (len(pe[PE.current_request].completed_targets)
                     < len(pe[PE.current_request].eligible_targets)):
@@ -24838,13 +24763,22 @@ class TestSmartThreadScenarios:
     ####################################################################
     # test_join_timeout_scenarios
     ####################################################################
+    @pytest.mark.parametrize("timeout_type_arg",
+                             [TimeoutType.TimeoutNone,
+                              TimeoutType.TimeoutFalse,
+                              TimeoutType.TimeoutTrue])
+    @pytest.mark.parametrize("num_active_no_target_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_no_delay_exit_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_delay_exit_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_delay_unreg_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_no_delay_reg_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_delay_reg_arg", [0, 1, 2])
     def test_join_timeout_scenarios(
             self,
             timeout_type_arg: TimeoutType,
             num_active_no_target_arg: int,
             num_no_delay_exit_arg: int,
             num_delay_exit_arg: int,
-            num_no_delay_unreg_arg: int,
             num_delay_unreg_arg: int,
             num_no_delay_reg_arg: int,
             num_delay_reg_arg: int,
@@ -24866,16 +24800,13 @@ class TestSmartThreadScenarios:
                 delay to allow a TimeoutFalse join to succeed, and a
                 long delay to cause a TimeoutTrue join to
                 timeout and a TimeoutNone to eventually succeed
-            num_no_delay_unreg_arg: number of threads that should be
-                unregistered and targeted for join, and then be
-                be immediately created, started, exited to allow the
-                join to succeed
             num_delay_unreg_arg: number of threads that should be
-                unregistered and targeted for join, and then be
-                be created, started, exited after a short delay to allow
-                a TimeoutFalse join to succeed, and a long delay to
-                cause a TimeoutTrue join to timeout and a TimeoutNone to
-                eventually succeed
+                unregistered and targeted for join. These will cause the
+                already unregistered log message and will be considered
+                as successfully joined in the smart_join completion
+                message. They will be eventually started to show that
+                they are unaffected by the smart_join once they are
+                recognized as already unregistered.
             num_no_delay_reg_arg: number of threads that should be
                 registered and targeted for join, and then be
                 be immediately started and exited to allow the
@@ -24892,14 +24823,12 @@ class TestSmartThreadScenarios:
         if timeout_type_arg == TimeoutType.TimeoutNone:
             if (num_no_delay_exit_arg
                     + num_delay_exit_arg
-                    + num_no_delay_unreg_arg
                     + num_delay_unreg_arg
                     + num_no_delay_reg_arg
                     + num_delay_reg_arg) == 0:
                 return
         else:
             if (num_delay_exit_arg
-                    + num_delay_unreg_arg
                     + num_delay_reg_arg) == 0:
                 return
 
@@ -24908,7 +24837,6 @@ class TestSmartThreadScenarios:
             'num_active_no_target': num_active_no_target_arg,
             'num_no_delay_exit': num_no_delay_exit_arg,
             'num_delay_exit': num_delay_exit_arg,
-            'num_no_delay_unreg': num_no_delay_unreg_arg,
             'num_delay_unreg': num_delay_unreg_arg,
             'num_no_delay_reg': num_no_delay_reg_arg,
             'num_delay_reg': num_delay_reg_arg
@@ -26303,12 +26231,14 @@ class TestSmartThreadScenarios:
             pe[PE.start_request].append(
                 StartRequest(req_type=st.ReqType.Smart_init,
                              targets={commander_name},
+                             unreg_remotes=set(),
                              not_registered_remotes=set(),
                              timeout_remotes=set(),
                              stopped_remotes=set(),
                              deadlock_remotes=set(),
                              eligible_targets=set(),
                              completed_targets=set(),
+                             first_round_completed=set(),
                              stopped_target_threads=set()))
 
             req_key_entry: RequestKey = ('smart_init',
@@ -26372,12 +26302,14 @@ class TestSmartThreadScenarios:
             pe[PE.start_request].append(
                 StartRequest(req_type=st.ReqType.Smart_start,
                              targets={commander_name},
+                             unreg_remotes=set(),
                              not_registered_remotes=set(),
                              timeout_remotes=set(),
                              stopped_remotes=set(),
                              deadlock_remotes=set(),
                              eligible_targets=set(),
                              completed_targets=set(),
+                             first_round_completed=set(),
                              stopped_target_threads=set()))
 
             req_key_entry: RequestKey = ('smart_start',
@@ -26410,12 +26342,14 @@ class TestSmartThreadScenarios:
             pe[PE.start_request].append(
                 StartRequest(req_type=st.ReqType.Smart_start,
                              targets={commander_name},
+                             unreg_remotes=set(),
                              not_registered_remotes=set(),
                              timeout_remotes=set(),
                              stopped_remotes=set(),
                              deadlock_remotes=set(),
                              eligible_targets=set(),
                              completed_targets=set(),
+                             first_round_completed=set(),
                              stopped_target_threads=set()))
 
             req_key_entry: RequestKey = ('smart_start',
@@ -26448,12 +26382,14 @@ class TestSmartThreadScenarios:
             pe[PE.start_request].append(
                 StartRequest(req_type=st.ReqType.Smart_start,
                              targets={commander_name},
+                             unreg_remotes=set(),
                              not_registered_remotes=set(),
                              timeout_remotes=set(),
                              stopped_remotes=set(),
                              deadlock_remotes=set(),
                              eligible_targets=set(),
                              completed_targets=set(),
+                             first_round_completed=set(),
                              stopped_target_threads=set()))
 
             req_key_entry: RequestKey = ('smart_start',
