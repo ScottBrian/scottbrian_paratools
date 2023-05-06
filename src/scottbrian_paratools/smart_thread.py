@@ -1946,11 +1946,10 @@ class SmartThread:
                         logger.info(
                             f'{self.name} did successful smart_join of '
                             f'{sorted(joined_remotes)}.')
-                        if self.work_remotes:
-                            logger.info(
-                                f'{self.name} smart_join completed targets: '
-                                f'{sorted(completed_targets)}, pending '
-                                f'targets: {sorted(self.work_remotes)}')
+                        logger.info(
+                            f'{self.name} smart_join completed targets: '
+                            f'{sorted(completed_targets)}, pending '
+                            f'targets: {sorted(self.work_remotes)}')
                     else:  # no progress was made
                         time.sleep(0.2)
                         if request_block.timer.is_expired():

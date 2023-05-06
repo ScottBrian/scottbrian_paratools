@@ -659,6 +659,11 @@ class FailedDefDelVerify(ErrorTstSmartThread):
     pass
 
 
+class RemainingPendingEvents(ErrorTstSmartThread):
+    """There are remaining pending events."""
+    pass
+
+
 ########################################################################
 # get_set
 ########################################################################
@@ -5838,11 +5843,9 @@ class JoinWaitingLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            # search_str=(fr"[a-z]+ waiting for \[([a-z]*|,|'| )*\] to end in "
-            #             "order to complete the smart_join request."),
             search_str=("[a-z]+ smart_join "
-                        r"completed targets: \[('[a-z]+'|,)*\], "
-                        r"pending targets: \[('[a-z]+'|,)*\]."),
+                        r"completed targets: \[('[a-z]+'|, )*\], "
+                        r"pending targets: \[('[a-z]+'|, )*\]"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -5872,15 +5875,16 @@ class JoinWaitingLogSearchItem(LogSearchItem):
         cmd_runner = split_msg[0]
         left_bracket_split_msg = self.found_log_msg.split('[')
         comp_targ_msg = left_bracket_split_msg[1].split(']')[0].split(', ')
-        pend_targ_msg = left_bracket_split_msg[2].split(']')[0].split(', ')
 
         comp_targets: list[str] = []
         for item in comp_targ_msg:
             comp_targets.append(item[1:-1])
 
         pend_targets: list[str] = []
-        for item in pend_targ_msg:
-            pend_targets.append(item[1:-1])
+        if left_bracket_split_msg[2] != ']':
+            pend_targ_msg = left_bracket_split_msg[2].split(']')[0].split(', ')
+            for item in pend_targ_msg:
+                pend_targets.append(item[1:-1])
 
         pe = self.config_ver.pending_events[cmd_runner]
 
@@ -7635,13 +7639,10 @@ class ConfigVerifier:
                 self.registered_names |= set(f1_no_start_names)
 
         if self.registered_names:
-            # self.add_cmd(VerifyRegistered(
-            #     cmd_runners=cmd_runner_to_use,
-            #     exp_registered_names=list(self.registered_names)))
             self.add_cmd(VerifyConfig(
                 cmd_runners=cmd_runner_to_use,
                 verify_type=VerifyType.VerifyRegisteredState,
-                names_to_check=self.registered_names))
+                names_to_check=self.registered_names.copy()))
 
         if self.active_names:
             # self.add_cmd(VerifyActive(
@@ -7650,7 +7651,7 @@ class ConfigVerifier:
             self.add_cmd(VerifyConfig(
                 cmd_runners=cmd_runner_to_use,
                 verify_type=VerifyType.VerifyAliveState,
-                names_to_check=self.active_names))
+                names_to_check=self.active_names.copy()))
 
         if validate_config:
             # self.add_cmd(ValidateConfig(cmd_runners=cmd_runner_to_use))
@@ -7971,7 +7972,7 @@ class ConfigVerifier:
         timeout_time = (((num_no_delay_exit
                         + num_no_delay_reg) * 0.3)
                         + ((num_delay_exit
-                           + num_delay_reg) * 0.6))
+                           + num_delay_reg) * 1.1))
 
         if timeout_type == TimeoutType.TimeoutNone:
             pause_time = 0.5
@@ -8255,7 +8256,7 @@ class ConfigVerifier:
             for cmd_runner, item in incomplete_items.items():
                 self.log_test_msg(f'incomplete_item: {cmd_runner=}, {item=}')
             self.abort_all_f1_threads()
-            raise InvalidConfigurationDetected(
+            raise RemainingPendingEvents(
                 'check_pending_events detected that there are remaining '
                 f'pending items:\n {incomplete_items=}')
 
@@ -24622,24 +24623,25 @@ class TestSmartThreadScenarios:
     ####################################################################
     # test_join_timeout_scenarios
     ####################################################################
-    # @pytest.mark.parametrize("timeout_type_arg",
-    #                          [TimeoutType.TimeoutNone,
-    #                           TimeoutType.TimeoutFalse,
-    #                           TimeoutType.TimeoutTrue])
-    # @pytest.mark.parametrize("num_active_no_target_arg", [1, 2, 3])
-    # @pytest.mark.parametrize("num_no_delay_exit_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_delay_exit_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_delay_unreg_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_no_delay_reg_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_delay_reg_arg", [0, 1, 2])
     @pytest.mark.parametrize("timeout_type_arg",
-                             [TimeoutType.TimeoutTrue])
-    @pytest.mark.parametrize("num_active_no_target_arg", [1])
-    @pytest.mark.parametrize("num_no_delay_exit_arg", [0])
-    @pytest.mark.parametrize("num_delay_exit_arg", [1])
-    @pytest.mark.parametrize("num_delay_unreg_arg", [1])
-    @pytest.mark.parametrize("num_no_delay_reg_arg", [0])
-    @pytest.mark.parametrize("num_delay_reg_arg", [0])
+                             [TimeoutType.TimeoutNone,
+                              TimeoutType.TimeoutFalse,
+                              TimeoutType.TimeoutTrue])
+    @pytest.mark.parametrize("num_active_no_target_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_no_delay_exit_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_delay_exit_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_delay_unreg_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_no_delay_reg_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_delay_reg_arg", [0, 1, 2])
+
+    # @pytest.mark.parametrize("timeout_type_arg",
+    #                          [TimeoutType.TimeoutTrue])
+    # @pytest.mark.parametrize("num_active_no_target_arg", [1])
+    # @pytest.mark.parametrize("num_no_delay_exit_arg", [0])
+    # @pytest.mark.parametrize("num_delay_exit_arg", [1])
+    # @pytest.mark.parametrize("num_delay_unreg_arg", [0])
+    # @pytest.mark.parametrize("num_no_delay_reg_arg", [1])
+    # @pytest.mark.parametrize("num_delay_reg_arg", [0])
     def test_join_timeout_scenarios(
             self,
             timeout_type_arg: TimeoutType,
