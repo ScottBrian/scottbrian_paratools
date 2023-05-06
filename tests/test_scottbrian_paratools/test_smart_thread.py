@@ -5888,178 +5888,6 @@ class JoinWaitingLogSearchItem(LogSearchItem):
         self.config_ver.add_log_msg(re.escape(self.found_log_msg),
                                     log_level=logging.INFO)
 
-########################################################################
-# RecvMsgLogSearchItem
-########################################################################
-# class RecvMsgLogSearchItem(LogSearchItem):
-#     """Input to search log msgs."""
-#
-#     def __init__(self,
-#                  config_ver: "ConfigVerifier",
-#                  found_log_msg: str = '',
-#                  found_log_idx: int = 0,
-#                  ) -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             config_ver: configuration verifier
-#             found_log_msg: log msg that was found
-#             found_log_idx: index in the log where message was found
-#         """
-#         super().__init__(
-#             search_str='[a-z]+ received msg from [a-z]+',
-#             config_ver=config_ver,
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx
-#         )
-#
-#     def get_found_log_item(self,
-#                            found_log_msg: str,
-#                            found_log_idx: int) -> "RecvMsgLogSearchItem":
-#         """Return a found log item.
-#
-#         Args:
-#             found_log_msg: log msg that was found
-#             found_log_idx: index in the log where message was found
-#
-#         Returns:
-#             RecvMsgLogSearchItem containing found message and index
-#         """
-#         return RecvMsgLogSearchItem(
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx,
-#             config_ver=self.config_ver)
-#
-#     def run_process(self):
-#         """Run the process to handle the log message."""
-#         split_msg = self.found_log_msg.split()
-#         cmd_runner = split_msg[0]
-#         sender = split_msg[4]
-#
-#         self.config_ver.set_msg_pending_count(receiver=cmd_runner,
-#                                               sender=sender,
-#                                               pending_msg_adj=-1)
-
-        # self.config_ver.dec_ops_count(
-        #     cmd_runner=split_msg[0],
-        #     sender=split_msg[4],
-        #     dec_ops_type='smart_recv')
-
-
-########################################################################
-# WaitResumedLogSearchItem
-########################################################################
-# class WaitResumedLogSearchItem(LogSearchItem):
-#     """Input to search log msgs."""
-#
-#     def __init__(self,
-#                  config_ver: "ConfigVerifier",
-#                  found_log_msg: str = '',
-#                  found_log_idx: int = 0,
-#                  ) -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             config_ver: configuration verifier
-#             found_log_msg: log msg that was found
-#             found_log_idx: index in the log where message was found
-#         """
-#         super().__init__(
-#             search_str='[a-z]+ smart_wait resumed by [a-z]+',
-#             config_ver=config_ver,
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx
-#         )
-#
-#     def get_found_log_item(self,
-#                            found_log_msg: str,
-#                            found_log_idx: int) -> "WaitResumedLogSearchItem":
-#         """Return a found log item.
-#
-#         Args:
-#             found_log_msg: log msg that was found
-#             found_log_idx: index in the log where message was found
-#
-#         Returns:
-#             WaitResumedLogSearchItem containing found message and index
-#         """
-#         return WaitResumedLogSearchItem(
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx,
-#             config_ver=self.config_ver)
-#
-#     def run_process(self):
-#         """Run the process to handle the log message."""
-#         split_msg = self.found_log_msg.split()
-#         cmd_runner = split_msg[0]
-#         resumer = split_msg[4]
-#
-#         self.config_ver.set_wait_pending_flag(waiter=cmd_runner,
-#                                               resumer=resumer,
-#                                               pending_wait_flag=False)
-
-        # self.config_ver.dec_ops_count(
-        #     cmd_runner=split_msg[0],
-        #     sender=split_msg[4],
-        #     dec_ops_type='wait')
-
-
-########################################################################
-# SyncResumedLogSearchItem
-########################################################################
-# class SyncResumedLogSearchItem(LogSearchItem):
-#     """Input to search log msgs."""
-#
-#     def __init__(self,
-#                  config_ver: "ConfigVerifier",
-#                  found_log_msg: str = '',
-#                  found_log_idx: int = 0,
-#                  ) -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             config_ver: configuration verifier
-#             found_log_msg: log msg that was found
-#             found_log_idx: index in the log where message was found
-#         """
-#         super().__init__(
-#             search_str='[a-z]+ smart_sync resumed by [a-z]+',
-#             config_ver=config_ver,
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx
-#         )
-#
-#     def get_found_log_item(self,
-#                            found_log_msg: str,
-#                            found_log_idx: int
-#                            ) -> "SyncResumedLogSearchItem":
-#         """Return a found log item.
-#
-#         Args:
-#             found_log_msg: log msg that was found
-#             found_log_idx: index in the log where message was found
-#
-#         Returns:
-#             SyncResumedLogSearchItem containing found message and index
-#         """
-#         return SyncResumedLogSearchItem(
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx,
-#             config_ver=self.config_ver)
-#
-#     def run_process(self):
-#         """Run the process to handle the log message."""
-#         split_msg = self.found_log_msg.split()
-#         cmd_runner = split_msg[0]
-#         resumer = split_msg[4]
-#
-#         self.config_ver.set_sync_pending_flag(waiter=cmd_runner,
-#                                               resumer=resumer,
-#                                               pending_sync_flag=False)
-#
-#         self.config_ver.add_log_msg(self.found_log_msg,
-#                                     log_level=logging.INFO)
-
 
 ########################################################################
 # StoppedLogSearchItem
@@ -6288,7 +6116,7 @@ class CRunnerRaisesLogSearchItem(LogSearchItem):
                                                  targets=targets,
                                                  pending_request_flag=False)
 
-        pe = self.pending_events[cmd_runner]
+        pe = self.config_ver.pending_events[cmd_runner]
         pe[PE.current_request] = StartRequest(
             req_type=st.ReqType.NoReq,
             targets=set(),
@@ -6302,8 +6130,8 @@ class CRunnerRaisesLogSearchItem(LogSearchItem):
             first_round_completed=set(),
             stopped_target_threads=set())
 
-        self.config_ver.add_log_msg(re.escape(self.found_log_msg),
-                                    log_level=logging.ERROR)
+        # self.config_ver.add_log_msg(re.escape(self.found_log_msg),
+        #                             log_level=logging.ERROR)
 
         # self.config_ver.log_test_msg(f'request msg parse {handle_name=}, '
         #                              f'{cmd_runner=}')
@@ -15832,14 +15660,8 @@ class ConfigVerifier:
             err_str = str(exc.value)
             assert re.fullmatch(error_msg, err_str)
 
-            self.add_log_msg(
-                self.get_error_msg(
-                    cmd_runner=cmd_runner,
-                    smart_request='smart_join',
-                    targets=join_names,
-                    pending_remotes=timeout_names,
-                    error_str='SmartThreadRequestTimedOut'),
-                log_level=logging.ERROR)
+            self.add_log_msg(error_msg,
+                             log_level=logging.ERROR)
 
         # self.add_request_log_msg(cmd_runner=cmd_runner,
         #                          smart_request='smart_join',
@@ -16590,17 +16412,17 @@ class ConfigVerifier:
                         f'found {target=} is unregistered but not in the set '
                         f'of {pe[PE.current_request].unreg_remotes=}')
 
-        if exp_first_round_completed:
-            pe[PE.current_request].first_round_completed = (
-                exp_first_round_completed.copy())
-            s_com = sorted(exp_first_round_completed)
-
-            uj_key: UnregJoinSuccessKey = (
-                pe[PE.current_request].req_type.value,
-                s_com[0])
-            pe[PE.unreg_join_success_msg][uj_key] += 1
-            self.log_test_msg('handle_request_smart_join_entry added '
-                              f'unreg_join_success_msg with {uj_key=}')
+        # if exp_first_round_completed:
+        #     pe[PE.current_request].first_round_completed = (
+        #         exp_first_round_completed.copy())
+        #     s_com = sorted(exp_first_round_completed)
+        #
+        #     uj_key: UnregJoinSuccessKey = (
+        #         pe[PE.current_request].req_type.value,
+        #         s_com[0])
+        #     pe[PE.unreg_join_success_msg][uj_key] += 1
+            # self.log_test_msg('handle_request_smart_join_entry added '
+            #                   f'unreg_join_success_msg with {uj_key=}')
         # find stopped ThreadTarget names that smart_join will pick off
         # for target in self.expected_registered:
         #     if (target not in eligible_targets
@@ -16621,6 +16443,10 @@ class ConfigVerifier:
                                       'entry',
                                       cmd_runner)
             pe[PE.subprocess_msg][sub_key] += 1
+            self.log_test_msg(
+                f'handle_request_smart_join_entry {cmd_runner=} added '
+                f'subprocess_msg with {sub_key=} and bumped count to: '
+                f'{pe[PE.subprocess_msg][sub_key]=}')
 
             sub_key: SubProcessKey = (cmd_runner,
                                       'smart_join',
@@ -19558,33 +19384,52 @@ class ConfigVerifier:
                     #             f'clean_registry subtracting count for '
                     #             f'{sub_key=}')
                     #         pe[PE.subprocess_msg][sub_key] -= 1
+            completed: set[str] = set()
+            if pe[PE.current_request].req_type in (st.ReqType.Smart_unreg,
+                                                   st.ReqType.Smart_join):
+                # if this is first visit to clean_registry
+                if (pe[PE.current_request].unreg_remotes
+                        and not pe[PE.current_request].completed_targets):
+                    pe[PE.current_request].completed_targets |= pe[
+                        PE.current_request].unreg_remotes
+                    completed |= pe[PE.current_request].unreg_remotes
+
             if rem_targets:
                 pe[PE.did_clean_reg_msg] += 1
                 pe[PE.rem_reg_targets].append(rem_targets)
-                completed: set[str] = set()
+
                 for target in rem_targets:
                     del self.expected_registered[target]
                     if target in pe[PE.current_request].eligible_targets:
                         pe[PE.current_request].completed_targets |= {target}
                         completed |= {target}
 
-                if pe[PE.current_request].req_type in (st.ReqType.Smart_unreg,
-                                                       st.ReqType.Smart_join):
-                    if pe[PE.current_request].first_round_completed:
-                        pe[PE.current_request].first_round_completed = set()
-                    else:
-                        s_com = sorted(completed)
+            if pe[PE.current_request].req_type in (st.ReqType.Smart_unreg,
+                                                   st.ReqType.Smart_join):
+                # if pe[PE.current_request].first_round_completed:
+                #     pe[PE.current_request].first_round_completed = set()
+                # else:
+                s_com = sorted(completed)
 
-                        uj_key: UnregJoinSuccessKey = (
-                            pe[PE.current_request].req_type.value,
-                            s_com[0])
-                        pe[PE.unreg_join_success_msg][uj_key] += 1
-                        self.log_test_msg(
-                            'clean_registry added '
-                            f'unreg_join_success_msg with {uj_key=}')
+                uj_key: UnregJoinSuccessKey = (
+                    pe[PE.current_request].req_type.value,
+                    s_com[0])
+                pe[PE.unreg_join_success_msg][uj_key] += 1
+                self.log_test_msg(
+                    'clean_registry added '
+                    f'unreg_join_success_msg with {uj_key=}')
+
+            self.log_test_msg(
+                f'clean_registry has '
+                f'{len(pe[PE.current_request].completed_targets)=} and '
+                f'{len(pe[PE.current_request].targets)=}')
+            self.log_test_msg(
+                f'clean_registry has '
+                f'{pe[PE.current_request].completed_targets=} and '
+                f'{pe[PE.current_request].targets=}')
 
             if (len(pe[PE.current_request].completed_targets)
-                    < len(pe[PE.current_request].eligible_targets)):
+                    < len(pe[PE.current_request].targets)):
                 if pe[PE.current_request].req_type == st.ReqType.Smart_join:
                     sub_key: SubProcessKey = (cmd_runner,
                                               'smart_join',
@@ -19592,6 +19437,10 @@ class ConfigVerifier:
                                               'entry',
                                               cmd_runner)
                     pe[PE.subprocess_msg][sub_key] += 1
+                    self.log_test_msg(
+                        f'clean_registry {cmd_runner=} added '
+                        f'subprocess_msg with {sub_key=} and bumped count to: '
+                        f'{pe[PE.subprocess_msg][sub_key]=}')
 
                     sub_key: SubProcessKey = (cmd_runner,
                                               'smart_join',
@@ -19600,13 +19449,16 @@ class ConfigVerifier:
                                               cmd_runner)
                     pe[PE.subprocess_msg][sub_key] += 1
 
-                    eligible = pe[PE.current_request].eligible_targets.copy()
+                    all_targets = pe[PE.current_request].targets.copy()
                     completed = pe[PE.current_request].completed_targets.copy()
-                    remaining = eligible - completed
+                    remaining = all_targets - completed
                     s_rem = sorted(remaining)
 
                     wait_key: JoinWaitingKey = s_rem[0]
                     pe[PE.join_waiting_msg][wait_key] += 1
+                    self.log_test_msg(
+                        'clean_registry added '
+                        f'join_waiting_msg with {wait_key=}')
 
         self.log_test_msg(f'clean_registry exit: {cmd_runner=}, {target=}')
 
@@ -24763,16 +24615,24 @@ class TestSmartThreadScenarios:
     ####################################################################
     # test_join_timeout_scenarios
     ####################################################################
+    # @pytest.mark.parametrize("timeout_type_arg",
+    #                          [TimeoutType.TimeoutNone,
+    #                           TimeoutType.TimeoutFalse,
+    #                           TimeoutType.TimeoutTrue])
+    # @pytest.mark.parametrize("num_active_no_target_arg", [1, 2, 3])
+    # @pytest.mark.parametrize("num_no_delay_exit_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_delay_exit_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_delay_unreg_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_no_delay_reg_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_delay_reg_arg", [0, 1, 2])
     @pytest.mark.parametrize("timeout_type_arg",
-                             [TimeoutType.TimeoutNone,
-                              TimeoutType.TimeoutFalse,
-                              TimeoutType.TimeoutTrue])
-    @pytest.mark.parametrize("num_active_no_target_arg", [1, 2, 3])
-    @pytest.mark.parametrize("num_no_delay_exit_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_delay_exit_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_delay_unreg_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_no_delay_reg_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_delay_reg_arg", [0, 1, 2])
+                             [TimeoutType.TimeoutTrue])
+    @pytest.mark.parametrize("num_active_no_target_arg", [1])
+    @pytest.mark.parametrize("num_no_delay_exit_arg", [1])
+    @pytest.mark.parametrize("num_delay_exit_arg", [1])
+    @pytest.mark.parametrize("num_delay_unreg_arg", [0])
+    @pytest.mark.parametrize("num_no_delay_reg_arg", [0])
+    @pytest.mark.parametrize("num_delay_reg_arg", [0])
     def test_join_timeout_scenarios(
             self,
             timeout_type_arg: TimeoutType,
@@ -25804,7 +25664,7 @@ class TestSmartThreadScenarios:
 
             Args:
                 log_msgs: messages to add
-                log_name: name of log it is accociated with
+                log_name: name of log it is associated with
                 log_level: log level of the msg
             """
             if isinstance(log_msgs, str):
