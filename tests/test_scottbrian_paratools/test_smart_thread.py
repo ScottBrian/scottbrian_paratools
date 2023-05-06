@@ -73,7 +73,7 @@ AlreadyUnregKey: TypeAlias = tuple[str, str]
 
 UnregJoinSuccessKey: TypeAlias = tuple[str, str]
 
-JoinWaitingKey: TypeAlias = str
+JoinProgKey: TypeAlias = tuple[int, int]
 
 InitCompKey: TypeAlias = tuple[str,
                                st.ThreadCreate,
@@ -141,7 +141,7 @@ class VerifyType(Enum):
     VerifyState = auto()
     VerifyInRegistry = auto()
     VerifyNotInRegistry = auto()
-    VerifyActiveState = auto()
+    VerifyAliveState = auto()
     VerifyRegisteredState = auto()
     VerifyStoppedState = auto()
     VerifyPaired = auto()
@@ -4906,8 +4906,8 @@ class AlreadyUnregLogSearchItem(LogSearchItem):
         unreg_key: AlreadyUnregKey = (cmd_runner, target)
         if pe[PE.already_unreg_msg][unreg_key] <= 0:
             raise UnexpectedEvent(
-                'UpdatePairArrayUtcLogSearchItem encountered unexpected '
-                f'log message: {self.found_log_msg}')
+                f'AlreadyUnregLogSearchItem using {unreg_key=} encountered '
+                f'unexpected log message: {self.found_log_msg}')
 
         pe[PE.already_unreg_msg][unreg_key] -= 1
 
@@ -5838,8 +5838,11 @@ class JoinWaitingLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str=(fr"[a-z]+ waiting for \[([a-z]*|,|'| )*\] to end in "
-                        "order to complete the smart_join request."),
+            # search_str=(fr"[a-z]+ waiting for \[([a-z]*|,|'| )*\] to end in "
+            #             "order to complete the smart_join request."),
+            search_str=("[a-z]+ smart_join "
+                        r"completed targets: \[('[a-z]+'|,)*\], "
+                        r"pending targets: \[('[a-z]+'|,)*\]."),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -5867,23 +5870,29 @@ class JoinWaitingLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
-        target_msg = self.found_log_msg.split('[')[1].split(']')[0].split(', ')
+        left_bracket_split_msg = self.found_log_msg.split('[')
+        comp_targ_msg = left_bracket_split_msg[1].split(']')[0].split(', ')
+        pend_targ_msg = left_bracket_split_msg[2].split(']')[0].split(', ')
 
-        targets: list[str] = []
-        for item in target_msg:
-            targets.append(item[1:-1])
+        comp_targets: list[str] = []
+        for item in comp_targ_msg:
+            comp_targets.append(item[1:-1])
+
+        pend_targets: list[str] = []
+        for item in pend_targ_msg:
+            pend_targets.append(item[1:-1])
 
         pe = self.config_ver.pending_events[cmd_runner]
 
-        join_wait_key: JoinWaitingKey = targets[0]
+        prog_key: JoinProgKey = (len(comp_targets), len(pend_targets))
 
-        if pe[PE.join_waiting_msg][join_wait_key] <= 0:
+        if pe[PE.join_progress_msg][prog_key] <= 0:
             raise UnexpectedEvent(
-                f'JoinWaitingLogSearchItem using {join_wait_key=} detected '
+                f'JoinWaitingLogSearchItem using {prog_key=} detected '
                 f'unexpected log msg: {self.found_log_msg}'
             )
 
-        pe[PE.join_waiting_msg][join_wait_key] -= 1
+        pe[PE.join_progress_msg][prog_key] -= 1
 
         self.config_ver.add_log_msg(re.escape(self.found_log_msg),
                                     log_level=logging.INFO)
@@ -6479,7 +6488,7 @@ class PE(Enum):
     confirm_stop_msg = auto()
     already_unreg_msg = auto()
     unreg_join_success_msg = auto()
-    join_waiting_msg = auto()
+    join_progress_msg = auto()
     init_comp_msg = auto()
 
 
@@ -6697,7 +6706,7 @@ class ConfigVerifier:
                 PE.already_unreg_msg] = defaultdict(int)
             self.pending_events[name][
                 PE.unreg_join_success_msg] = defaultdict(int)
-            self.pending_events[name][PE.join_waiting_msg] = defaultdict(int)
+            self.pending_events[name][PE.join_progress_msg] = defaultdict(int)
             self.pending_events[name][PE.init_comp_msg] = defaultdict(int)
 
         self.snap_shot_data: dict[int, SnapShotDataItem] = {}
@@ -7640,7 +7649,7 @@ class ConfigVerifier:
             #     exp_active_names=list(self.active_names)))
             self.add_cmd(VerifyConfig(
                 cmd_runners=cmd_runner_to_use,
-                verify_type=VerifyType.VerifyActiveState,
+                verify_type=VerifyType.VerifyAliveState,
                 names_to_check=self.active_names))
 
         if validate_config:
@@ -7945,7 +7954,6 @@ class ConfigVerifier:
         if (timeout_type == TimeoutType.TimeoutFalse
                 or timeout_type == TimeoutType.TimeoutTrue):
             assert (num_delay_exit
-                    + num_delay_unreg
                     + num_delay_reg) > 0
 
         assert num_active_no_target > 0
@@ -7963,7 +7971,6 @@ class ConfigVerifier:
         timeout_time = (((num_no_delay_exit
                         + num_no_delay_reg) * 0.3)
                         + ((num_delay_exit
-                           + num_delay_unreg
                            + num_delay_reg) * 0.6))
 
         if timeout_type == TimeoutType.TimeoutNone:
@@ -8049,7 +8056,6 @@ class ConfigVerifier:
                                        + delay_reg_names)
 
         all_timeout_names: list[str] = (delay_exit_names
-                                        + delay_unreg_names
                                         + delay_reg_names)
 
         if len(all_target_names) % 2 == 0:
@@ -8106,15 +8112,9 @@ class ConfigVerifier:
         ################################################################
         # pause for short or long delay
         ################################################################
-        if (timeout_type == TimeoutType.TimeoutNone
-                or timeout_type == TimeoutType.TimeoutFalse):
-            self.add_cmd(
-                Pause(cmd_runners=self.commander_name,
-                      pause_seconds=pause_time))
-        elif timeout_type == TimeoutType.TimeoutTrue:
-            self.add_cmd(
-                Pause(cmd_runners=self.commander_name,
-                      pause_seconds=pause_time))
+        self.add_cmd(
+            Pause(cmd_runners=self.commander_name,
+                  pause_seconds=pause_time))
 
         ################################################################
         # handle delay_exit_names
@@ -8152,6 +8152,11 @@ class ConfigVerifier:
         if delay_reg_names:
             self.build_start_suite(start_names=delay_reg_names,
                                    validate_config=False)
+            self.add_cmd(VerifyConfig(
+                cmd_runners=self.commander_name,
+                verify_type=VerifyType.VerifyAliveState,
+                names_to_check=delay_unreg_names))
+
             self.build_exit_suite(cmd_runner=self.commander_name,
                                   names=delay_reg_names,
                                   validate_config=False)
@@ -8168,9 +8173,10 @@ class ConfigVerifier:
 
         if delay_unreg_names:
             self.add_cmd(VerifyConfig(
-                cmd_runner=self.commander_name,
+                cmd_runners=self.commander_name,
                 verify_type=VerifyType.VerifyStoppedState,
                 names_to_check=delay_unreg_names))
+
     ####################################################################
     # build_msg_suite
     ####################################################################
@@ -14102,7 +14108,7 @@ class ConfigVerifier:
         #     exp_active_names=['alpha', 'beta', 'charlie']))
         self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
-            verify_type=VerifyType.VerifyActiveState,
+            verify_type=VerifyType.VerifyAliveState,
             names_to_check=['alpha', 'beta', 'charlie']))
         # self.add_cmd(VerifyRegistered(
         #     cmd_runners='alpha',
@@ -14152,7 +14158,7 @@ class ConfigVerifier:
         #     exp_active_names=['alpha', 'beta', 'charlie', 'delta', 'echo']))
         self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
-            verify_type=VerifyType.VerifyActiveState,
+            verify_type=VerifyType.VerifyAliveState,
             names_to_check=['alpha', 'beta', 'charlie', 'delta', 'echo']))
         # self.add_cmd(VerifyState(
         #     cmd_runners='alpha',
@@ -14433,7 +14439,7 @@ class ConfigVerifier:
         #         exp_active_names=start_names))
         self.add_cmd(VerifyConfig(
             cmd_runners=self.commander_name,
-            verify_type=VerifyType.VerifyActiveState,
+            verify_type=VerifyType.VerifyAliveState,
             names_to_check=start_names))
 
         if validate_config:
@@ -19419,6 +19425,17 @@ class ConfigVerifier:
                     'clean_registry added '
                     f'unreg_join_success_msg with {uj_key=}')
 
+                if pe[PE.current_request].req_type == st.ReqType.Smart_join:
+                    all_targets = pe[PE.current_request].targets.copy()
+                    completed = pe[PE.current_request].completed_targets.copy()
+                    remaining = all_targets - completed
+
+                    prog_key: JoinProgKey = (len(completed), len(remaining))
+                    pe[PE.join_progress_msg][prog_key] += 1
+                    self.log_test_msg(
+                        'clean_registry added '
+                        f'join_progress_msg with {prog_key=}')
+
             self.log_test_msg(
                 f'clean_registry has '
                 f'{len(pe[PE.current_request].completed_targets)=} and '
@@ -19429,7 +19446,7 @@ class ConfigVerifier:
                 f'{pe[PE.current_request].targets=}')
 
             if (len(pe[PE.current_request].completed_targets)
-                    < len(pe[PE.current_request].targets)):
+                    < len(pe[PE.current_request].eligible_targets)):
                 if pe[PE.current_request].req_type == st.ReqType.Smart_join:
                     sub_key: SubProcessKey = (cmd_runner,
                                               'smart_join',
@@ -19449,16 +19466,6 @@ class ConfigVerifier:
                                               cmd_runner)
                     pe[PE.subprocess_msg][sub_key] += 1
 
-                    all_targets = pe[PE.current_request].targets.copy()
-                    completed = pe[PE.current_request].completed_targets.copy()
-                    remaining = all_targets - completed
-                    s_rem = sorted(remaining)
-
-                    wait_key: JoinWaitingKey = s_rem[0]
-                    pe[PE.join_waiting_msg][wait_key] += 1
-                    self.log_test_msg(
-                        'clean_registry added '
-                        f'join_waiting_msg with {wait_key=}')
 
         self.log_test_msg(f'clean_registry exit: {cmd_runner=}, {target=}')
 
@@ -19967,7 +19974,7 @@ class ConfigVerifier:
             VerifyType.VerifyState: self.verify_state,
             VerifyType.VerifyInRegistry: self.verify_in_registry,
             VerifyType.VerifyNotInRegistry: self.verify_not_in_registry,
-            VerifyType.VerifyActiveState: self.verify_active_state,
+            VerifyType.VerifyAliveState: self.verify_active_state,
             VerifyType.VerifyRegisteredState: self.verify_registered_state,
             VerifyType.VerifyStoppedState: self.verify_stopped_state,
             VerifyType.VerifyPaired: self.verify_paired,
@@ -24628,9 +24635,9 @@ class TestSmartThreadScenarios:
     @pytest.mark.parametrize("timeout_type_arg",
                              [TimeoutType.TimeoutTrue])
     @pytest.mark.parametrize("num_active_no_target_arg", [1])
-    @pytest.mark.parametrize("num_no_delay_exit_arg", [1])
+    @pytest.mark.parametrize("num_no_delay_exit_arg", [0])
     @pytest.mark.parametrize("num_delay_exit_arg", [1])
-    @pytest.mark.parametrize("num_delay_unreg_arg", [0])
+    @pytest.mark.parametrize("num_delay_unreg_arg", [1])
     @pytest.mark.parametrize("num_no_delay_reg_arg", [0])
     @pytest.mark.parametrize("num_delay_reg_arg", [0])
     def test_join_timeout_scenarios(

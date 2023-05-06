@@ -1919,26 +1919,27 @@ class SmartThread:
 
         # self._config_cmd_loop(request_block=request_block)
         with self.cmd_lock:
+            completed_targets: set[str] = set()
             self.work_remotes: set[str] = request_block.remotes.copy()
             while self.work_remotes:
                 joined_remotes: set[str] = set()
                 with sel.SELockExcl(SmartThread._registry_lock):
                     for remote in self.work_remotes.copy():
-                        if remote not in SmartThread._registry:
+                        if remote in SmartThread._registry:
+                            if request_block.process_rtn(request_block,
+                                                         remote):
+                                self.work_remotes -= {remote}
+                                joined_remotes |= {remote}
+                        else:
                             logger.debug(f'{self.cmd_runner} determined that '
                                          f'thread {remote} is already in '
                                          f'state {ThreadState.Unregistered}')
                             self.work_remotes -= {remote}
                             joined_remotes |= {remote}
-                            continue
-
-                        if request_block.process_rtn(request_block,
-                                                     remote):
-                            self.work_remotes -= {remote}
-                            joined_remotes |= {remote}
 
                     # remove threads from the registry
                     if joined_remotes:
+                        completed_targets |= joined_remotes
                         # must remain under lock for these two calls
                         self._clean_registry()
                         self._clean_pair_array()
@@ -1947,9 +1948,9 @@ class SmartThread:
                             f'{sorted(joined_remotes)}.')
                         if self.work_remotes:
                             logger.info(
-                                f'{self.name} waiting for '
-                                f'{sorted(self.work_remotes)} to end in order '
-                                f'to complete the smart_join request.')
+                                f'{self.name} smart_join completed targets: '
+                                f'{sorted(completed_targets)}, pending '
+                                f'targets: {sorted(self.work_remotes)}')
                     else:  # no progress was made
                         time.sleep(0.2)
                         if request_block.timer.is_expired():
