@@ -2012,11 +2012,6 @@ class SmartThread:
         if SmartThread._registry[remote].thread.is_alive():
             return False  # give thread more time to end
         else:
-            # set state to stopped
-            # if SmartThread._registry[remote].st_state == ThreadState.Stopped:
-            #     logger.debug(f'{self.cmd_runner} confirmed state for '
-            #                  f'thread {remote} is {ThreadState.Stopped}')
-            # else:
             self._set_state(
                 target_thread=SmartThread._registry[remote],
                 new_state=ThreadState.Stopped)

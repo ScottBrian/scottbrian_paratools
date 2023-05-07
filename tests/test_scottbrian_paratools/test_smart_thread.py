@@ -4354,7 +4354,7 @@ class F1CreateItem:
 @dataclass
 class ThreadTracker:
     """Class that tracks each thread."""
-    thread: st.SmartThread
+    thread: Optional[st.SmartThread]
     is_alive: bool
     exiting: bool
     is_auto_started: bool
@@ -4798,9 +4798,9 @@ class InitCompleteLogSearchItem(LogSearchItem):
 
 
 ########################################################################
-# ConfirmStoppedLogSearchItem
+# F1AppExitLogSearchItem
 ########################################################################
-class ConfirmStoppedLogSearchItem(LogSearchItem):
+class F1AppExitLogSearchItem(LogSearchItem):
     """Input to search log msgs."""
 
     def __init__(self,
@@ -4815,9 +4815,11 @@ class ConfirmStoppedLogSearchItem(LogSearchItem):
             found_log_msg: log msg that was found
             found_log_idx: index in the log where message was found
         """
+        list_of_thread_apps = (r'(OuterF1ThreadApp.run\(\)'
+                               '|outer_f1)')
         super().__init__(
-            search_str=('[a-z]+ confirmed state for thread [a-z]+ is '
-                        f'ThreadState.Stopped'),
+            # search_str=r'OuterF1ThreadApp.run\(\) exit: [a-z]+',
+            search_str=f'{list_of_thread_apps} exit: [a-z]+',
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -4825,7 +4827,7 @@ class ConfirmStoppedLogSearchItem(LogSearchItem):
 
     def get_found_log_item(self,
                            found_log_msg: str,
-                           found_log_idx: int) -> "ConfirmStoppedLogSearchItem":
+                           found_log_idx: int) -> "F1AppExitLogSearchItem":
         """Return a found log item.
 
         Args:
@@ -4833,9 +4835,9 @@ class ConfirmStoppedLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
 
         Returns:
-            ConfirmStoppedLogSearchItem containing found message and index
+            F1AppExitLogSearchItem containing found message and index
         """
-        return ConfirmStoppedLogSearchItem(
+        return F1AppExitLogSearchItem(
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
@@ -4843,19 +4845,13 @@ class ConfirmStoppedLogSearchItem(LogSearchItem):
     def run_process(self):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
-        cmd_runner = split_msg[0]
-        target = split_msg[5]
+        target = split_msg[2]
 
-        pe = self.config_ver.pending_events[cmd_runner]
-        stop_key: ConfirmStopKey = (cmd_runner, target)
-        if pe[PE.confirm_stop_msg][stop_key] <= 0:
-            raise UnexpectedEvent(
-                'UpdatePairArrayUtcLogSearchItem encountered unexpected '
-                f'log message: {self.found_log_msg}')
+        self.config_ver.expected_registered[target].is_alive = False
+        # self.config_ver.log_test_msg(
+        #     f'F1AppExitLogSearchItem set {target} is_alive to False')
 
-        pe[PE.confirm_stop_msg][stop_key] -= 1
-
-        self.config_ver.add_log_msg(re.escape(self.found_log_msg))
+        # self.config_ver.add_log_msg(re.escape(self.found_log_msg))
 
 
 ########################################################################
@@ -6292,7 +6288,7 @@ LogSearchItems: TypeAlias = Union[
     DidCleanRegLogSearchItem,
     SetStateLogSearchItem,
     InitCompleteLogSearchItem,
-    # ConfirmStoppedLogSearchItem,
+    F1AppExitLogSearchItem,
     AlreadyUnregLogSearchItem,
     RequestAckLogSearchItem,
     UnregJoinSuccessLogSearchItem,
@@ -6601,7 +6597,7 @@ class ConfigVerifier:
             DidCleanRegLogSearchItem(config_ver=self),
             SetStateLogSearchItem(config_ver=self),
             InitCompleteLogSearchItem(config_ver=self),
-            # ConfirmStoppedLogSearchItem(config_ver=self),
+            F1AppExitLogSearchItem(config_ver=self),
             AlreadyUnregLogSearchItem(config_ver=self),
             RequestAckLogSearchItem(config_ver=self),
             UnregJoinSuccessLogSearchItem(config_ver=self),
@@ -7365,9 +7361,7 @@ class ConfigVerifier:
             ConflictDeadlockScenario.WaitDeadlock:
                 self.build_cd_wait_deadlock_suite,
         }
-        # Make sure we have enough threads. Note that we subtract 1 from
-        # the count of unregistered names to ensure we have one thread
-        # for the commander
+        # Make sure we have enough threads
         assert num_cd_actors <= len(self.unregistered_names)
 
         self.build_config(
@@ -7942,9 +7936,7 @@ class ConfigVerifier:
                 timeout and a TimeoutNone to eventually succeed
 
         """
-        # Make sure we have enough threads. Note that we subtract 1 from
-        # the count of unregistered names to ensure we have one thread
-        # for the commander
+        # Make sure we have enough threads
         assert 1 < (num_active_no_target
                     + num_no_delay_exit
                     + num_delay_exit
@@ -7972,7 +7964,7 @@ class ConfigVerifier:
         timeout_time = (((num_no_delay_exit
                         + num_no_delay_reg) * 0.3)
                         + ((num_delay_exit
-                           + num_delay_reg) * 1.1))
+                           + num_delay_reg) * 1.5))
 
         if timeout_type == TimeoutType.TimeoutNone:
             pause_time = 0.5
@@ -8206,6 +8198,131 @@ class ConfigVerifier:
             RecvMsg(cmd_runners=to_names,
                     senders=from_names,
                     exp_msgs=msgs_to_send))
+
+    ####################################################################
+    # build_pending_flags_scenarios
+    ####################################################################
+    def build_pending_flags_scenarios(
+            self,
+            num_request_pending: int,
+            num_reg_to_stop: int) -> None:
+        """Return a list of ConfigCmd items for a create.
+
+        Args:
+            num_request_pending: number of threads to get the
+                request_pending flag set and be deferred delete
+            num_reg_to_stop: number of threads that will be initially
+                registered and will be a request target, and then
+                unregistered to cause request_pending to be on in the
+                request cmd_runner (until it discovers the stopped
+                target)
+        """
+        num_lockers = 3
+        # Make sure we have enough threads.
+        assert (num_lockers
+                +num_request_pending
+                + num_reg_to_stop) <= len(self.unregistered_names)
+
+        num_registered_needed = num_reg_to_stop
+
+        num_active_needed = num_lockers + num_request_pending
+
+        self.build_config(
+            cmd_runner=self.commander_name,
+            num_registered=num_registered_needed,
+            num_active=num_active_needed)
+
+        self.log_name_groups()
+
+        unregistered_names_copy = self.unregistered_names.copy()
+        registered_names_copy = self.registered_names.copy()
+        active_names_copy = self.active_names - {self.commander_name}
+
+        ################################################################
+        # choose locker_names
+        ################################################################
+        locker_names = self.choose_names(
+            name_collection=active_names_copy,
+            num_names_needed=num_lockers,
+            update_collection=True,
+            var_name_for_log='locker_names')
+
+        ################################################################
+        # choose request_pending_names
+        ################################################################
+        request_pending_names = self.choose_names(
+            name_collection=active_names_copy,
+            num_names_needed=num_request_pending,
+            update_collection=True,
+            var_name_for_log='request_pending_names')
+
+        ################################################################
+        # choose req_to_stop_names
+        ################################################################
+        req_to_stop_names = self.choose_names(
+            name_collection=registered_names_copy,
+            num_names_needed=num_reg_to_stop,
+            update_collection=True,
+            var_name_for_log='req_to_stop_names')
+
+        lock_positions: list[str] = []
+        ################################################################
+        # process request_pending cases
+        ################################################################
+        # have request_pending name request smart_recv on reg_to_stop
+        # commander does smart_unreg of reg_to_stop
+        # expected result is request_pending causes deferred delete
+        # verify the request_pending is half paired
+        # verify the delete deferred msgs during clean_pair_array
+        # request_pending will eventually detect the stopped target
+        # verify request_pending is not paired
+
+        obtain_lock_serial_num_0 = self.add_cmd(
+            LockObtain(cmd_runners=locker_names[0]))
+        lock_positions.append(locker_names[0])
+
+        # we can confirm only this first lock obtain
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd='LockObtain',
+                confirm_serial_num=obtain_lock_serial_num_0,
+                confirmers=locker_names[0]))
+
+        wait_serial_num = self.add_cmd(
+            Wait(cmd_runners=request_pending_names,
+                 resumers=req_to_stop_names,
+                 stopped_remotes=req_to_stop_names))
+
+        unreg_serial_num = self.add_cmd(
+            Unregister(cmd_runners=self.commander_name,
+                       unregister_targets=req_to_stop_names))
+
+        self.add_cmd(VerifyConfig(
+            cmd_runners=self.commander_name,
+            verify_type=VerifyType.VerifyHalfPaired,
+            names_to_check=request_pending_names,
+            aux_names=req_to_stop_names))
+
+        ################################################################
+        # confirm the wait is done
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='Wait',
+                confirm_serial_num=wait_serial_num,
+                confirmers=request_pending_names))
+
+        ################################################################
+        # confirm the unreg is done
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='Unregister',
+                confirm_serial_num=unreg_serial_num,
+                confirmers=self.commander_name))
 
     ####################################################################
     # check_pending_events
@@ -9904,9 +10021,7 @@ class ConfigVerifier:
                 and will be started and then do the smart_send
 
         """
-        # Make sure we have enough threads. Note that we subtract 1 from
-        # the count of unregistered names to ensure we have one thread
-        # for the commander
+        # Make sure we have enough threads
         assert (num_receivers
                 + num_active_no_delay_senders
                 + num_active_delay_senders
@@ -10231,10 +10346,7 @@ class ConfigVerifier:
             Actors.RegActor:
                 self.build_reg_resume_wait_timeout_suite,
         }
-        # Make sure we have enough threads. Note that we subtract 1 from
-        # the count of unregistered names to ensure we have one thread
-        # for the commander
-
+        # Make sure we have enough threads
         assert num_waiters > 0
         assert num_actors > 0
         assert (num_waiters + num_actors) <= len(self.unregistered_names)
@@ -11060,9 +11172,7 @@ class ConfigVerifier:
                 result in a not alive error
 
         """
-        # Make sure we have enough threads. Note that we subtract 1 from
-        # the count of unregistered names to ensure we have one thread
-        # for the commander
+        # Make sure we have enough threads
         total_arg_counts = (
                 num_resumers
                 + num_start_before
@@ -11410,9 +11520,7 @@ class ConfigVerifier:
                 result in a not alive error
 
         """
-        # Make sure we have enough threads. Note that we subtract 1 from
-        # the count of unregistered names to ensure we have one thread
-        # for the commander
+        # Make sure we have enough threads
         total_arg_counts = (
                 num_waiters
                 + num_start_before
@@ -11773,9 +11881,7 @@ class ConfigVerifier:
                 the resume and are resurrected after a timeout
 
         """
-        # Make sure we have enough threads. Note that we subtract 1 from
-        # the count of unregistered names to ensure we have one thread
-        # for the commander
+        # Make sure we have enough threads
         assert (num_resumers
                 + num_active
                 + num_registered_before
@@ -13608,9 +13714,7 @@ class ConfigVerifier:
                 should cause timeout by having a full msg queue
 
         """
-        # Make sure we have enough threads. Note that we subtract 1 from
-        # the count of unregistered names to ensure we have one thread
-        # for the commander
+        # Make sure we have enough threads
         assert (num_senders
                 + num_active_targets
                 + num_registered_targets
@@ -14309,9 +14413,7 @@ class ConfigVerifier:
             num_stopped: number of threads that are stopped
 
         """
-        # Make sure we have enough threads. Note that we subtract 1 from
-        # the count of unregistered names to ensure we have one thread
-        # for the commander
+        # Make sure we have enough threads
         num_alt_cmd_runners = 1
         assert (num_alt_cmd_runners
                 + num_auto_start
@@ -14497,9 +14599,7 @@ class ConfigVerifier:
                 cause a timeout error
 
         """
-        # Make sure we have enough threads. Note that we subtract 1 from
-        # the count of unregistered names to ensure we have one thread
-        # for the commander
+        # Make sure we have enough threads
         assert (num_syncers
                 + num_stopped_syncers
                 + num_timeout_syncers) <= len(self.unregistered_names)
@@ -14867,24 +14967,7 @@ class ConfigVerifier:
 
         is_thread_target = False
         if app_config == AppConfig.ScriptStyle:
-            f1_thread = st.SmartThread(name=name,
-                                       target=target,
-                                       args=(name, self),
-                                       auto_start=auto_start,
-                                       max_msgs=self.max_msgs)
             is_thread_target = True
-        elif app_config == AppConfig.RemoteThreadApp:
-            f1_outer_app = OuterF1ThreadApp(
-                config_ver=self,
-                name=name,
-                auto_start=auto_start,
-                max_msgs=self.max_msgs)
-            f1_thread = f1_outer_app.smart_thread
-        else:
-            raise UnrecognizedCmd('create_f1_thread does not recognize '
-                                  f'{app_config=}')
-
-        self.all_threads[name] = f1_thread
 
         if is_thread_target:
             thread_create: st.ThreadCreate = st.ThreadCreate.Target
@@ -14898,19 +14981,20 @@ class ConfigVerifier:
             auto_start_decision: AutoStartDecision = (
                 AutoStartDecision.auto_start_no)
 
-        self.expected_registered[name] = ThreadTracker(
-            thread=f1_thread,
-            is_alive=False,
-            exiting=False,
-            is_auto_started=auto_start,
-            is_TargetThread=is_thread_target,
-            exp_init_is_alive=False,
-            exp_init_thread_state=st.ThreadState.Registered,
-            thread_create=thread_create,
-            auto_start_decision=auto_start_decision,
-            st_state=st.ThreadState.Unregistered,
-            found_del_pairs=defaultdict(int)
-        )
+        with self.ops_lock:
+            self.expected_registered[name] = ThreadTracker(
+                thread=None,
+                is_alive=False,
+                exiting=False,
+                is_auto_started=auto_start,
+                is_TargetThread=is_thread_target,
+                exp_init_is_alive=False,
+                exp_init_thread_state=st.ThreadState.Registered,
+                thread_create=thread_create,
+                auto_start_decision=auto_start_decision,
+                st_state=st.ThreadState.Unregistered,
+                found_del_pairs=defaultdict(int)
+            )
 
         pe = self.pending_events[cmd_runner]
         pe[PE.start_request].append(StartRequest(
@@ -14935,6 +15019,26 @@ class ConfigVerifier:
                                     'exit')
 
         pe[PE.request_msg][req_key_exit] += 1
+
+        if app_config == AppConfig.ScriptStyle:
+            f1_thread = st.SmartThread(name=name,
+                                       target=target,
+                                       args=(name, self),
+                                       auto_start=auto_start,
+                                       max_msgs=self.max_msgs)
+        elif app_config == AppConfig.RemoteThreadApp:
+            f1_outer_app = OuterF1ThreadApp(
+                config_ver=self,
+                name=name,
+                auto_start=auto_start,
+                max_msgs=self.max_msgs)
+            f1_thread = f1_outer_app.smart_thread
+        else:
+            raise UnrecognizedCmd('create_f1_thread does not recognize '
+                                  f'{app_config=}')
+
+        self.all_threads[name] = f1_thread
+        self.expected_registered[name].thread = f1_thread
 
         self.monitor_pause = False
 
@@ -15201,21 +15305,6 @@ class ConfigVerifier:
                 assert False
 
         return True
-
-    ####################################################################
-    # get_is_alive
-    ####################################################################
-    # def get_is_alive(self, name: str) -> bool:
-    #     """Get the is_alive flag for the named thread.
-    #
-    #     Args:
-    #         name: thread to get the is_alive flag
-    #
-    #     """
-    #     if self.expected_registered[name].exiting:
-    #         return self.expected_registered[name].thread.thread.is_alive()
-    #     else:
-    #         return self.expected_registered[name].is_alive
 
     ####################################################################
     # get_log_msg
@@ -15971,6 +16060,7 @@ class ConfigVerifier:
                 f'encountered unexpected log msg: {log_msg}')
 
         pe[PE.request_msg][req_key] -= 1
+
         self.add_log_msg(re.escape(log_msg))
 
         if entry_exit == 'entry':
@@ -19370,6 +19460,9 @@ class ConfigVerifier:
                         and state_to_use != st.ThreadState.Initializing):
                     self.pending_events[key][PE.status_msg][
                         (item.is_alive, state_to_use)] += 1
+                    self.log_test_msg(
+                        f'clean_registry status key {key=}'
+                        f'{(item.is_alive, state_to_use)=}')
                 if (not item.is_alive
                         and item.st_state == st.ThreadState.Stopped):
                     rem_key: RemRegKey = (
@@ -19379,18 +19472,6 @@ class ConfigVerifier:
                     rem_targets.append(key)
                     self.log_test_msg(f'clean_registry deleting {key=}')
 
-                    # if (key != target
-                    #         and request in ('smart_unreg', 'smart_join')):
-                    #     sub_key: SubProcessKey = (cmd_runner,
-                    #                               request,
-                    #                               '_clean_registry',
-                    #                               'entry',
-                    #                               cmd_runner)
-                    #     if sub_key in pe[PE.subprocess_msg]:
-                    #         self.log_test_msg(
-                    #             f'clean_registry subtracting count for '
-                    #             f'{sub_key=}')
-                    #         pe[PE.subprocess_msg][sub_key] -= 1
             completed: set[str] = set()
             if pe[PE.current_request].req_type in (st.ReqType.Smart_unreg,
                                                    st.ReqType.Smart_join):
@@ -22980,10 +23061,8 @@ class OuterF1ThreadApp(threading.Thread):
 
     def run(self) -> None:
         """Run the test."""
-        log_msg_f1 = f'OuterF1ThreadApp.run() entry: {self.name=}'
-        # log_msg_f1 = f'OuterF1ThreadApp.run() entry: {self.smart_thread.name=}'
-        self.config_ver.log_ver.add_msg(log_msg=re.escape(log_msg_f1))
-        logger.debug(log_msg_f1)
+        self.config_ver.log_test_msg(
+            f'OuterF1ThreadApp.run() entry: {self.name}')
 
         # self.config_ver.f1_driver(f1_name=self.smart_thread.name)
         self.config_ver.f1_driver(f1_name=self.name)
@@ -22991,10 +23070,8 @@ class OuterF1ThreadApp(threading.Thread):
         ####################################################################
         # exit
         ####################################################################
-        # log_msg_f1 = f'OuterF1ThreadApp.run() exit: {self.smart_thread.name=}'
-        log_msg_f1 = f'OuterF1ThreadApp.run() exit: {self.name=}'
-        self.config_ver.log_ver.add_msg(log_msg=re.escape(log_msg_f1))
-        logger.debug(log_msg_f1)
+        self.config_ver.log_test_msg(
+            f'OuterF1ThreadApp.run() exit: {self.name}')
 
 
 ########################################################################
@@ -23008,18 +23085,16 @@ def outer_f1(f1_name: str, f1_config_ver: ConfigVerifier):
         f1_config_ver: configuration verifier instance
 
     """
-    log_msg_f1 = f'outer_f1 entered for {f1_name}'
-    f1_config_ver.log_ver.add_msg(log_msg=log_msg_f1)
-    logger.debug(log_msg_f1)
+    f1_config_ver.log_test_msg(
+        f'outer_f1 entry: {f1_name}')
 
     f1_config_ver.f1_driver(f1_name=f1_name)
 
     ####################################################################
     # exit
     ####################################################################
-    log_msg_f1 = f'outer_f1 exiting for {f1_name}'
-    f1_config_ver.log_ver.add_msg(log_msg=log_msg_f1)
-    logger.debug(log_msg_f1)
+    f1_config_ver.log_test_msg(
+        f'outer_f1 exit: {f1_name}')
 
 
 ########################################################################
@@ -24621,6 +24696,40 @@ class TestSmartThreadScenarios:
             caplog_to_use=caplog)
 
     ####################################################################
+    # test_pending_flags_scenarios
+    ####################################################################
+    @pytest.mark.parametrize("num_request_pending_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_reg_to_stop_arg", [1, 2, 3])
+    def test_pending_flags_scenarios(
+            self,
+            num_request_pending_arg: int,
+            num_reg_to_stop_arg: int,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            num_request_pending_arg: number of threads to get the
+                request_pending flag set and be deferred delete
+            num_reg_to_stop_arg: number of threads that will be
+                initially registered and will be a request target, and
+                then unregistered to cause request_pending to be on in
+                the request cmd_runner (until it discovers the stopped
+                target)
+            caplog: pytest fixture to capture log output
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {
+            'num_request_pending': num_request_pending_arg,
+            'num_reg_to_stop': num_reg_to_stop_arg,
+        }
+
+        self.scenario_driver(
+            scenario_builder=ConfigVerifier.build_pending_flags_scenarios,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
+
+    ####################################################################
     # test_join_timeout_scenarios
     ####################################################################
     @pytest.mark.parametrize("timeout_type_arg",
@@ -24640,7 +24749,7 @@ class TestSmartThreadScenarios:
     # @pytest.mark.parametrize("num_no_delay_exit_arg", [0])
     # @pytest.mark.parametrize("num_delay_exit_arg", [1])
     # @pytest.mark.parametrize("num_delay_unreg_arg", [0])
-    # @pytest.mark.parametrize("num_no_delay_reg_arg", [1])
+    # @pytest.mark.parametrize("num_no_delay_reg_arg", [2])
     # @pytest.mark.parametrize("num_delay_reg_arg", [0])
     def test_join_timeout_scenarios(
             self,
