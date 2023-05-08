@@ -4632,6 +4632,9 @@ class SubProcessEntryExitLogSearchItem(LogSearchItem):
             cmd_runner = cmd_runner[0:-1]  # remove trailing comma
         target = split_msg[-1]
 
+        if subprocess_name == '_clean_registry':
+            self.config_ver.last_clean_reg_msg_idx = self.found_log_idx
+
         self.config_ver.handle_subprocess_entry_exit_log_msg(
             cmd_runner=cmd_runner,
             request_name=request_name,
@@ -4848,6 +4851,9 @@ class F1AppExitLogSearchItem(LogSearchItem):
         target = split_msg[2]
 
         self.config_ver.expected_registered[target].is_alive = False
+
+        self.config_ver.last_thread_stop_msg_idx[target] = self.found_log_idx
+
         # self.config_ver.log_test_msg(
         #     f'F1AppExitLogSearchItem set {target} is_alive to False')
 
@@ -5200,12 +5206,29 @@ class RegistryStatusLogSearchItem(LogSearchItem):
 
         if self.config_ver.pending_events[
                 target][PE.status_msg][(is_alive, state)] <= 0:
-            raise UnexpectedEvent(
-                f'RegistryStatusLogSearchItem using {(is_alive, state)} '
-                f'encountered unexpected log message: {self.found_log_msg}')
+            if (not is_alive
+                    and (self.config_ver.last_clean_reg_msg_idx
+                         < self.config_ver.last_thread_stop_msg_idx[target])):
+                if self.config_ver.pending_events[
+                        target][PE.status_msg][
+                        (True, st.ThreadState.Alive)] <= 0:
+                    raise UnexpectedEvent(
+                        f'RegistryStatusLogSearchItem 1 using '
+                        f'{(True, st.ThreadState.Alive)} encountered '
+                        f'unexpected log message: {self.found_log_msg}')
+                else:
+                    self.config_ver.pending_events[
+                        target][PE.status_msg][
+                        (True, st.ThreadState.Alive)] -= 1
+            else:
+                raise UnexpectedEvent(
+                    f'RegistryStatusLogSearchItem 2 using {(is_alive, state)} '
+                    f'encountered unexpected log message: '
+                    f'{self.found_log_msg}')
 
-        self.config_ver.pending_events[
-            target][PE.status_msg][(is_alive, state)] -= 1
+        else:
+            self.config_ver.pending_events[
+                target][PE.status_msg][(is_alive, state)] -= 1
 
         self.config_ver.add_log_msg(re.escape(self.found_log_msg))
 
@@ -6492,7 +6515,6 @@ class PE(Enum):
     init_comp_msg = auto()
 
 
-
 class ConfigVerifier:
     """Class that tracks and verifies the SmartThread configuration."""
 
@@ -6712,6 +6734,9 @@ class ConfigVerifier:
         self.snap_shot_data: dict[int, SnapShotDataItem] = {}
 
         self.allow_log_test_msg = True
+
+        self.last_clean_reg_msg_idx: int = 0
+        self.last_thread_stop_msg_idx: dict[str, int] = defaultdict(int)
 
         self.monitor_event: threading.Event = threading.Event()
         self.monitor_condition: threading.Condition = threading.Condition()
@@ -8148,7 +8173,7 @@ class ConfigVerifier:
             self.add_cmd(VerifyConfig(
                 cmd_runners=self.commander_name,
                 verify_type=VerifyType.VerifyAliveState,
-                names_to_check=delay_unreg_names))
+                names_to_check=delay_reg_names))
 
             self.build_exit_suite(cmd_runner=self.commander_name,
                                   names=delay_reg_names,
@@ -8218,14 +8243,18 @@ class ConfigVerifier:
                 target)
         """
         num_lockers = 3
+        num_unregers = 1
         # Make sure we have enough threads.
         assert (num_lockers
-                +num_request_pending
+                + num_unregers
+                + num_request_pending
                 + num_reg_to_stop) <= len(self.unregistered_names)
 
         num_registered_needed = num_reg_to_stop
 
-        num_active_needed = num_lockers + num_request_pending
+        num_active_needed = (num_lockers
+                             + num_unregers
+                             + num_request_pending)
 
         self.build_config(
             cmd_runner=self.commander_name,
@@ -8237,6 +8266,15 @@ class ConfigVerifier:
         unregistered_names_copy = self.unregistered_names.copy()
         registered_names_copy = self.registered_names.copy()
         active_names_copy = self.active_names - {self.commander_name}
+
+        ################################################################
+        # choose unreger_names
+        ################################################################
+        unreger_names = self.choose_names(
+            name_collection=active_names_copy,
+            num_names_needed=num_unregers,
+            update_collection=True,
+            var_name_for_log='unreger_names')
 
         ################################################################
         # choose locker_names
@@ -8277,6 +8315,10 @@ class ConfigVerifier:
         # request_pending will eventually detect the stopped target
         # verify request_pending is not paired
 
+        ################################################################
+        # start of by getting lock_0
+        # locks held: lock_0
+        ################################################################
         obtain_lock_serial_num_0 = self.add_cmd(
             LockObtain(cmd_runners=locker_names[0]))
         lock_positions.append(locker_names[0])
@@ -8289,14 +8331,78 @@ class ConfigVerifier:
                 confirm_serial_num=obtain_lock_serial_num_0,
                 confirmers=locker_names[0]))
 
-        wait_serial_num = self.add_cmd(
-            Wait(cmd_runners=request_pending_names,
-                 resumers=req_to_stop_names,
-                 stopped_remotes=req_to_stop_names))
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
 
+        ################################################################
+        # smart_wait will get behind lock_0 in request_setup
+        # locks held: lock_0|smart_wait
+        ################################################################
+        wait_serial_num = self.add_cmd(
+            Wait(cmd_runners=request_pending_names[0],
+                 resumers=req_to_stop_names[0],
+                 stopped_remotes=req_to_stop_names[0]))
+        lock_positions.append(request_pending_names[0])
+
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # locker_1 gets behind the smart_wait
+        # locks held: lock_0|smart_wait|lock_1
+        ################################################################
+        obtain_lock_serial_num_1 = self.add_cmd(
+            LockObtain(cmd_runners=locker_names[1]))
+        lock_positions.append(locker_names[1])
+
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # smart_unreg gets behind lock_1
+        # locks held: lock_0|smart_wait|lock_1|smart_unreg
+        ################################################################
         unreg_serial_num = self.add_cmd(
-            Unregister(cmd_runners=self.commander_name,
-                       unregister_targets=req_to_stop_names))
+            Unregister(cmd_runners=unreger_names[0],
+                       unregister_targets=req_to_stop_names[0]))
+        lock_positions.append(unreger_names[0])
+
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # locker_2 gets behind the smart_unreg
+        # locks held: lock_0|smart_wait|lock_1|smart_unreg|lock_2
+        ################################################################
+        obtain_lock_serial_num_2 = self.add_cmd(
+            LockObtain(cmd_runners=locker_names[2]))
+        lock_positions.append(locker_names[2])
+
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # release lock_0 to allow smart_wait to do request_set_up
+        # locks held: lock_1|smart_unreg|lock_2|smart_wait
+        ################################################################
+        self.add_cmd(
+            LockRelease(cmd_runners=locker_names[0]))
+        lock_positions.remove(locker_names[0])
+        # releasing lock 0 will allow the smart_wait to do request_setup
+        # and then get behind lock_2
+        lock_positions.remove(request_pending_names[0])
+        lock_positions.append(request_pending_names[0])
+
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+
 
         self.add_cmd(VerifyConfig(
             cmd_runners=self.commander_name,
@@ -24744,10 +24850,10 @@ class TestSmartThreadScenarios:
     @pytest.mark.parametrize("num_delay_reg_arg", [0, 1, 2])
 
     # @pytest.mark.parametrize("timeout_type_arg",
-    #                          [TimeoutType.TimeoutTrue])
+    #                          [TimeoutType.TimeoutNone])
     # @pytest.mark.parametrize("num_active_no_target_arg", [1])
-    # @pytest.mark.parametrize("num_no_delay_exit_arg", [0])
-    # @pytest.mark.parametrize("num_delay_exit_arg", [1])
+    # @pytest.mark.parametrize("num_no_delay_exit_arg", [2])
+    # @pytest.mark.parametrize("num_delay_exit_arg", [2])
     # @pytest.mark.parametrize("num_delay_unreg_arg", [0])
     # @pytest.mark.parametrize("num_no_delay_reg_arg", [2])
     # @pytest.mark.parametrize("num_delay_reg_arg", [0])
