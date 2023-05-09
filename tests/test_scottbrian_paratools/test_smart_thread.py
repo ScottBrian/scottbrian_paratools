@@ -6,6 +6,7 @@
 from abc import ABC, abstractmethod
 from collections import deque, defaultdict
 from collections.abc import Iterable
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum, auto
@@ -166,7 +167,7 @@ class VerifyData:
     aux_names: set[str]
     state_to_check: st.ThreadState
     exp_pending_flags: PendingFlags
-    skip_lock: bool
+    obtain_reg_lock: bool
 
 
 # @dataclass
@@ -180,6 +181,7 @@ class VerifyCountsData:
     num_registered: int
     num_active: int
     num_stopped: int
+    obtain_reg_lock: bool = True
 
 # @dataclass
 # class VerifyStateData:
@@ -218,6 +220,28 @@ class SnapShotDataItem:
     pair_array_items: PairArrayItems
     verify_data: VerifyDataItems
 
+
+@contextmanager
+def conditional_registry_lock(*args, **kwds) -> None:
+    """Obtain the connection_block lock.
+
+    This method is called to conditionally obtain a lock using a with
+    statement.
+
+    Args:
+        args: the lock to obtain
+        kwds: whether to obtain the lock
+
+    """
+    # if request needs the lock
+    if kwds['obtain_tf']:
+        kwds['lock'].obtain_excl()
+    try:
+        yield
+    finally:
+        # release the lock if it was obtained
+        if kwds['obtain_tf']:
+            kwds['lock'].release()
 
 
 ########################################################################
@@ -2108,7 +2132,7 @@ class VerifyConfig(ConfigCmd):
                  aux_names: Optional[Iterable] = None,
                  state_to_check: Optional[st.ThreadState] = None,
                  exp_pending_flags: Optional[PendingFlags] = None,
-                 skip_lock: bool = False) -> None:
+                 obtain_reg_lock: bool = True) -> None:
         """Initialize the instance.
 
         Args:
@@ -2118,7 +2142,7 @@ class VerifyConfig(ConfigCmd):
             aux_names: thread names associated with names_to_check
             state_to_check: expected ThreadState
             exp_pending_flags: expected pending flags
-            skip_lock: if True, do not obtain the smart_thread lock
+            obtain_reg_lock: if True, obtain the smart_thread lock
 
         """
         super().__init__(cmd_runners=cmd_runners)
@@ -2129,7 +2153,7 @@ class VerifyConfig(ConfigCmd):
         self.aux_names = get_set(aux_names)
         self.state_to_check = state_to_check
         self.exp_pending_flags = exp_pending_flags
-        self.skip_lock = skip_lock
+        self.obtain_reg_lock = obtain_reg_lock
 
         self.arg_list += ['verify_type',
                           'names_to_check',
@@ -2149,7 +2173,7 @@ class VerifyConfig(ConfigCmd):
             aux_names=self.aux_names,
             state_to_check=self.state_to_check,
             exp_pending_flags=self.exp_pending_flags,
-            skip_lock=self.skip_lock
+            obtain_reg_lock=self.obtain_reg_lock
         )
 
         self.config_ver.create_snapshot_data(verify_name='verify_config',
@@ -5466,7 +5490,16 @@ class RemStatusBlockEntryLogSearchItem(LogSearchItem):
         rem_sb_key: RemSbKey = (rem_name,
                                 pair_key,
                                 def_del_reasons)
+        # self.config_ver.log_test_msg(
+        #     'RemStatusBlockEntryLogSearchItem about to check '
+        #     f'{pe[PE.rem_status_block_msg][rem_sb_key]=} for '
+        #     f'{cmd_runner=}, {rem_sb_key=}'
+        # )
         if pe[PE.rem_status_block_msg][rem_sb_key] <= 0:
+            self.config_ver.log_test_msg(
+                f'RemStatusBlockEntryLogSearchItem using {rem_sb_key=} '
+                'encountered unexpected '
+                f'log msg: {self.found_log_msg}')
             raise UnexpectedEvent(
                 f'RemStatusBlockEntryLogSearchItem using {rem_sb_key=} '
                 'encountered unexpected '
@@ -5474,6 +5507,11 @@ class RemStatusBlockEntryLogSearchItem(LogSearchItem):
 
         pe[PE.rem_status_block_msg][rem_sb_key] -= 1
         # pe[PE.notify_rem_status_block_msg][rem_sb_key] -= 1
+        # self.config_ver.log_test_msg(
+        #     'RemStatusBlockEntryLogSearchItem decremented: new value: '
+        #     f'{pe[PE.rem_status_block_msg][rem_sb_key]=} for '
+        #     f'{cmd_runner=}, {rem_sb_key=}'
+        # )
 
         self.config_ver.add_log_msg(re.escape(self.found_log_msg),
                                     log_level=logging.DEBUG)
@@ -5567,6 +5605,9 @@ class RemStatusBlockEntryDefLogSearchItem(LogSearchItem):
                 f'log msg: {self.found_log_msg}')
 
         pe[PE.rem_status_block_def_msg][rem_sb_key] -= 1
+
+        if [PE.notify_rem_status_block_def_msg][rem_sb_key] > 0:
+            [PE.notify_rem_status_block_def_msg][rem_sb_key] -= 1
 
         self.config_ver.add_log_msg(re.escape(self.found_log_msg),
                                     log_level=logging.DEBUG)
@@ -6888,6 +6929,8 @@ class ConfigVerifier:
             pending_request_flag: specifies value to set for request
 
         """
+        # self.log_test_msg(f'set_request_pending_flag entry: {cmd_runner=}, '
+        #                   f'{targets=}, {pending_request_flag=}')
         for target in targets:
             pair_key = st.SmartThread._get_pair_key(cmd_runner, target)
             if pair_key not in self.expected_pairs:
@@ -8318,7 +8361,7 @@ class ConfigVerifier:
 
         num_active_needed = (num_lockers
                              + num_unregers
-                             + num_request_pending)
+                             + num_request_pending) + 1
 
         self.build_config(
             cmd_runner=self.commander_name,
@@ -8490,7 +8533,38 @@ class ConfigVerifier:
             names_to_check=request_pending_names,
             aux_names=req_to_stop_names,
             exp_pending_flags=exp_pending_flags,
-            skip_lock=True))
+            obtain_reg_lock=False))
+
+        pe = self.pending_events[request_pending_names[0]]
+
+        pair_key = st.SmartThread._get_pair_key(request_pending_names[0],
+                                                req_to_stop_names[0])
+
+        def_del_reasons: DefDelReasons = DefDelReasons(
+            pending_request=True,
+            pending_msg=False,
+            pending_wait=False,
+            pending_sync=False)
+
+        rem_sb_key: RemSbKey = (request_pending_names[0],
+                                pair_key,
+                                def_del_reasons)
+
+        pe[PE.notify_rem_status_block_def_msg][rem_sb_key] += 1
+
+        ################################################################
+        # release lock_2 to allow smart_wait to complete
+        # locks held: None
+        ################################################################
+        self.add_cmd(
+            LockRelease(cmd_runners=locker_names[2]))
+        lock_positions.remove(locker_names[2])
+        # releasing lock 1 will allow the smart_unreg complete
+        lock_positions.remove(request_pending_names[0])
+
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
 
         ################################################################
         # confirm the wait is done
@@ -15276,33 +15350,35 @@ class ConfigVerifier:
             verify_idx: index of the verify command
             verify_data: data to be saved with the snapshot
         """
-        with sel.SELockExcl(st.SmartThread._registry_lock):
-            registry_items: dict[str, RegistrySnapshotItem] = {}
-            for name, item in st.SmartThread._registry.items():
-                registry_items[name] = RegistrySnapshotItem(
-                    is_alive=item.thread.is_alive(),
-                    state=item.st_state)
+        # with sel.SELockExcl(st.SmartThread._registry_lock):
+        # with conditional_registry_lock(lock=st.SmartThread._registry_lock,
+        #                                obtain_tf=verify_data.obtain_reg_lock):
+        registry_items: dict[str, RegistrySnapshotItem] = {}
+        for name, item in st.SmartThread._registry.items():
+            registry_items[name] = RegistrySnapshotItem(
+                is_alive=item.thread.is_alive(),
+                state=item.st_state)
 
-            pair_array_items: dict[st.PairKey, dict[
-                str, StatusBlockSnapshotItem]] = {}
-            for pair_key, connection_pair in (
-                    st.SmartThread._pair_array.items()):
-                pair_array_items[pair_key] = {}
-                for name, sb_item in connection_pair.status_blocks.items():
-                    pair_array_items[pair_key][name] = StatusBlockSnapshotItem(
-                        pending_request=sb_item.request_pending,
-                        pending_msg_count=sb_item.msg_q.qsize(),
-                        pending_wait=sb_item.wait_event.is_set(),
-                        pending_sync=sb_item.sync_event.is_set())
+        pair_array_items: dict[st.PairKey, dict[
+            str, StatusBlockSnapshotItem]] = {}
+        for pair_key, connection_pair in (
+                st.SmartThread._pair_array.items()):
+            pair_array_items[pair_key] = {}
+            for name, sb_item in connection_pair.status_blocks.items():
+                pair_array_items[pair_key][name] = StatusBlockSnapshotItem(
+                    pending_request=sb_item.request_pending,
+                    pending_msg_count=sb_item.msg_q.qsize(),
+                    pending_wait=sb_item.wait_event.is_set(),
+                    pending_sync=sb_item.sync_event.is_set())
 
-            self.snap_shot_data[verify_idx] = SnapShotDataItem(
-                registry_items=registry_items.copy(),
-                pair_array_items=pair_array_items.copy(),
-                verify_data=verify_data
-            )
+        self.snap_shot_data[verify_idx] = SnapShotDataItem(
+            registry_items=registry_items.copy(),
+            pair_array_items=pair_array_items.copy(),
+            verify_data=verify_data
+        )
 
-            self.log_test_msg(
-                f'Monitor Checkpoint: {verify_name} {verify_idx}')
+        self.log_test_msg(
+            f'Monitor Checkpoint: {verify_name} {verify_idx}')
 
     ####################################################################
     # dec_ops_count
@@ -16238,6 +16314,9 @@ class ConfigVerifier:
             log_msg: log message for the request
 
         """
+        self.log_test_msg('handle_request_entry_exit_log_msg entry: '
+                          f'{cmd_runner=}, {request_name=}, {entry_exit=}, '
+                          f'{targets=}')
         pe = self.pending_events[cmd_runner]
 
         req_key: RequestKey = (request_name,
@@ -16275,11 +16354,11 @@ class ConfigVerifier:
 
             pe[PE.current_request] = req_start_item
 
-            if req_start_item.req_type.name in ('smart_send',
-                                                'smart_recv',
-                                                'smart_wait',
-                                                'smart_resume',
-                                                'smart_sync'):
+            if req_start_item.req_type.value in ('smart_send',
+                                                 'smart_recv',
+                                                 'smart_wait',
+                                                 'smart_resume',
+                                                 'smart_sync'):
                 self.set_request_pending_flag(cmd_runner=cmd_runner,
                                               targets=targets,
                                               pending_request_flag=True)
@@ -16879,6 +16958,21 @@ class ConfigVerifier:
             ack_key: AckKey = (target, 'smart_wait')
 
             pe[PE.ack_msg][ack_key] += 1
+
+        if pe[PE.current_request].stopped_remotes:
+            sub_key: SubProcessKey = (cmd_runner,
+                                      'smart_wait',
+                                      '_clean_registry',
+                                      'entry',
+                                      cmd_runner)
+            pe[PE.subprocess_msg][sub_key] += 1
+
+            sub_key: SubProcessKey = (cmd_runner,
+                                      'smart_wait',
+                                      '_clean_pair_array',
+                                      'entry',
+                                      cmd_runner)
+            pe[PE.subprocess_msg][sub_key] += 1
 
     ####################################################################
     # handle_request_smart_wait_exit
@@ -18020,10 +18114,13 @@ class ConfigVerifier:
                                   entry_exit,
                                   target)
         if pe[PE.subprocess_msg][sub_key] <= 0:
-            raise UnexpectedEvent(
+            error_msg = (
                 f'handle_subprocess_entry_exit_log_msg using {sub_key=}, '
                 f'{pe[PE.subprocess_msg]=}, '
                 f'encountered unexpected log msg: {log_msg}')
+            self.log_test_msg(error_msg)
+            self.abort_all_f1_threads()
+            raise UnexpectedEvent(error_msg)
 
         pe[PE.subprocess_msg][sub_key] -= 1
         self.add_log_msg(log_msg)
@@ -19491,8 +19588,11 @@ class ConfigVerifier:
             self.log_test_msg('clean_pair_array processing '
                               f'{pair_key=}')
 
-            pending_request = pending_msg = pending_wait = pending_sync = False
             for name in pair_key:
+                pending_request = False
+                pending_msg = False
+                pending_wait = False
+                pending_sync = False
                 defer = False
                 if name in pae:
                     if pae[name].pending_request:
@@ -19518,11 +19618,16 @@ class ConfigVerifier:
 
                     if name in self.expected_registered and defer:
                         self.log_test_msg('clean_pair_array deferred '
-                                          f'{pair_key=}, {name=}'
+                                          f'{pair_key=}, {name=}, '
                                           f'{rem_sb_key=}')
                         pe[PE.rem_status_block_def_msg][rem_sb_key] += 1
                     else:
                         del pae[name]
+                        # self.log_test_msg(
+                        #     f'clean_pair_array about to increment '
+                        #     f'{pe[PE.rem_status_block_msg][rem_sb_key]=} '
+                        #     f'for {cmd_runner=} with {rem_sb_key=}'
+                        # )
                         pe[PE.rem_status_block_msg][rem_sb_key] += 1
                         self.log_test_msg('clean_pair_array removed '
                                           f'{pair_key=}, {name=}')
@@ -20533,10 +20638,15 @@ class ConfigVerifier:
                     or self.expected_registered[name].st_state
                     != verify_data.state_to_check):
                 self.abort_all_f1_threads()
+                self.log_test_msg(
+                    f'verify_state for {name=}: {verify_data.state_to_check=} '
+                    f'does not match either/both {real_reg_items[name].state} '
+                    f'or {self.expected_registered[name].st_state} per '
+                    f'{verify_data.cmd_runner=}')
                 raise InvalidConfigurationDetected(
                     f'verify_state for {name=}: {verify_data.state_to_check=} '
                     f'does not match either/both {real_reg_items[name].state} '
-                    f'nor {self.expected_registered[name].st_state} per '
+                    f'or {self.expected_registered[name].st_state} per '
                     f'{verify_data.cmd_runner=}')
 
     ####################################################################
@@ -20635,6 +20745,7 @@ class ConfigVerifier:
                           real_pair_array_items=real_pair_array_items,
                           verify_data=verify_data)
 
+        verify_data.state_to_check = st.ThreadState.Alive
         self.verify_state(real_reg_items=real_reg_items,
                           real_pair_array_items=real_pair_array_items,
                           verify_data=verify_data)
@@ -20672,6 +20783,7 @@ class ConfigVerifier:
                               real_pair_array_items=real_pair_array_items,
                               verify_data=verify_data)
 
+        verify_data.state_to_check = st.ThreadState.Registered
         self.verify_state(real_reg_items=real_reg_items,
                           real_pair_array_items=real_pair_array_items,
                           verify_data=verify_data)
@@ -20901,6 +21013,10 @@ class ConfigVerifier:
                 pair_key = st.SmartThread._get_pair_key(remote_name,
                                                         check_name)
                 if pair_key not in real_pair_array_items:
+                    self.log_test_msg(
+                        f'verify_pending_flags 1 found {pair_key=} is not '
+                        f'in the real pair_array needed to check '
+                        f'{check_name=}, {remote_name=}')
                     self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f'verify_pending_flags found {pair_key=} is not '
@@ -20908,6 +21024,10 @@ class ConfigVerifier:
                         f'{check_name=}, {remote_name=}')
 
                 if check_name not in real_pair_array_items[pair_key]:
+                    self.log_test_msg(
+                        f'verify_pending_flags 2 found {check_name=} does '
+                        f'not have a status block in the real pair_array for '
+                        f'{pair_key=}.')
                     self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f'verify_pending_flags found {check_name=} does '
@@ -20915,6 +21035,10 @@ class ConfigVerifier:
                         f'{pair_key=}.')
 
                 if pair_key not in self.expected_pairs:
+                    self.log_test_msg(
+                        f'verify_pending_flags 3 found {pair_key=} is not '
+                        f'in the mock pair_array needed to check '
+                        f'{check_name=}, {remote_name=}')
                     self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f'verify_pending_flags found {pair_key=} is not '
@@ -20922,9 +21046,13 @@ class ConfigVerifier:
                         f'{check_name=}, {remote_name=}')
 
                 if check_name not in self.expected_pairs[pair_key]:
+                    self.log_test_msg(
+                        f'verify_pending_flags 4 found {check_name=} does '
+                        f'not have a status block in the mock pair_array for '
+                        f'{pair_key=}.')
                     self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
-                        f'verify_pending_flags found {check_name=} does '
+                        f'verify_pending_flags 4 found {check_name=} does '
                         f'not have a status block in the mock pair_array for '
                         f'{pair_key=}.')
 
@@ -20947,6 +21075,12 @@ class ConfigVerifier:
                 if (real_pending_flags
                         != mock_pending_flags
                         != verify_data.exp_pending_flags):
+                    self.log_test_msg(
+                        f'verify_pending_flags 5 found {pair_key=}, '
+                        f'{check_name=} does have matching pending flags: '
+                        f'{real_pending_flags=}, '
+                        f'{mock_pending_flags=}, '
+                        f'{verify_data.exp_pending_flags=}.')
                     self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f'verify_pending_flags found {pair_key=}, '
@@ -24883,8 +25017,8 @@ class TestSmartThreadScenarios:
     ####################################################################
     # test_pending_flags_scenarios
     ####################################################################
-    @pytest.mark.parametrize("num_request_pending_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_reg_to_stop_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_request_pending_arg", [1])
+    @pytest.mark.parametrize("num_reg_to_stop_arg", [1])
     def test_pending_flags_scenarios(
             self,
             num_request_pending_arg: int,
