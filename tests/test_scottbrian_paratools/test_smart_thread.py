@@ -147,6 +147,15 @@ class VerifyType(Enum):
     VerifyPaired = auto()
     VerifyNotPaired = auto()
     VerifyHalfPaired = auto()
+    VerifyPendingFlags = auto()
+
+
+@dataclass
+class PendingFlags:
+    pending_request: bool = False
+    pending_msgs: int = 0
+    pending_wait: bool = False
+    pending_sync: bool = False
 
 
 @dataclass
@@ -156,6 +165,8 @@ class VerifyData:
     names_to_check: set[str]
     aux_names: set[str]
     state_to_check: st.ThreadState
+    exp_pending_flags: PendingFlags
+    skip_lock: bool
 
 
 # @dataclass
@@ -2095,11 +2106,20 @@ class VerifyConfig(ConfigCmd):
                  verify_type: VerifyType,
                  names_to_check: Optional[Iterable] = None,
                  aux_names: Optional[Iterable] = None,
-                 state_to_check: Optional[st.ThreadState] = None) -> None:
+                 state_to_check: Optional[st.ThreadState] = None,
+                 exp_pending_flags: Optional[PendingFlags] = None,
+                 skip_lock: bool = False) -> None:
         """Initialize the instance.
 
         Args:
             cmd_runners: thread names that will execute the command
+            verify_type: type of verification to do
+            names_to_check: thread names to verify
+            aux_names: thread names associated with names_to_check
+            state_to_check: expected ThreadState
+            exp_pending_flags: expected pending flags
+            skip_lock: if True, do not obtain the smart_thread lock
+
         """
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
@@ -2108,6 +2128,8 @@ class VerifyConfig(ConfigCmd):
         self.names_to_check = get_set(names_to_check)
         self.aux_names = get_set(aux_names)
         self.state_to_check = state_to_check
+        self.exp_pending_flags = exp_pending_flags
+        self.skip_lock = skip_lock
 
         self.arg_list += ['verify_type',
                           'names_to_check',
@@ -2121,11 +2143,13 @@ class VerifyConfig(ConfigCmd):
             cmd_runner: name of thread running the command
         """
         verify_data: VerifyData = VerifyData(
-            cmd_runner=self.cmd_runners,
+            cmd_runner=cmd_runner,
             verify_type=self.verify_type,
             names_to_check=self.names_to_check,
             aux_names=self.aux_names,
-            state_to_check=self.state_to_check
+            state_to_check=self.state_to_check,
+            exp_pending_flags=self.exp_pending_flags,
+            skip_lock=self.skip_lock
         )
 
         self.config_ver.create_snapshot_data(verify_name='verify_config',
@@ -8442,13 +8466,31 @@ class ConfigVerifier:
             LockVerify(cmd_runners=self.commander_name,
                        exp_positions=lock_positions.copy()))
 
+        ################################################################
+        # release lock_1 to allow smart_unreg to remove smart_wait targ
+        # locks held: lock_2|smart_wait
+        ################################################################
+        self.add_cmd(
+            LockRelease(cmd_runners=locker_names[1]))
+        lock_positions.remove(locker_names[1])
+        # releasing lock 1 will allow the smart_unreg complete
+        lock_positions.remove(unreger_names[0])
 
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
 
+        ################################################################
+        # verify results
+        ################################################################
+        exp_pending_flags = PendingFlags(pending_request=True)
         self.add_cmd(VerifyConfig(
             cmd_runners=self.commander_name,
-            verify_type=VerifyType.VerifyHalfPaired,
+            verify_type=VerifyType.VerifyPendingFlags,
             names_to_check=request_pending_names,
-            aux_names=req_to_stop_names))
+            aux_names=req_to_stop_names,
+            exp_pending_flags=exp_pending_flags,
+            skip_lock=True))
 
         ################################################################
         # confirm the wait is done
@@ -15232,6 +15274,7 @@ class ConfigVerifier:
         Args:
             verify_name: name of verify cmd
             verify_idx: index of the verify command
+            verify_data: data to be saved with the snapshot
         """
         with sel.SELockExcl(st.SmartThread._registry_lock):
             registry_items: dict[str, RegistrySnapshotItem] = {}
@@ -20208,38 +20251,40 @@ class ConfigVerifier:
             VerifyType.VerifyPaired: self.verify_paired,
             VerifyType.VerifyNotPaired: self.verify_not_paired,
             VerifyType.VerifyHalfPaired: self.verify_half_paired,
+            VerifyType.VerifyPendingFlags: self.verify_pending_flags,
+
         }
 
+        # actions[verify_data.verify_type](
+        #     cmd_runner=verify_data.cmd_runner,
+        #     names_to_check=verify_data.names_to_check,
+        #     aux_names=verify_data.aux_names,
+        #     state_to_check=verify_data.state_to_check,
+        #     real_reg_items=self.snap_shot_data[verify_idx].registry_items,
+        #     real_pair_array_items=self.snap_shot_data[
+        #         verify_idx].pair_array_items
+        # )
         actions[verify_data.verify_type](
-            cmd_runner=verify_data.cmd_runner,
-            names_to_check=verify_data.names_to_check,
-            aux_names=verify_data.aux_names,
-            state_to_check=verify_data.state_to_check,
             real_reg_items=self.snap_shot_data[verify_idx].registry_items,
             real_pair_array_items=self.snap_shot_data[
-                verify_idx].pair_array_items
+                verify_idx].pair_array_items,
+            verify_data=verify_data
         )
 
     ####################################################################
     # verify_structures
     ####################################################################
     def verify_structures(self,
-                          cmd_runner: str,
-                          names_to_check: set[str],
-                          aux_names: set[str],
-                          state_to_check: st.ThreadState,
                           real_reg_items: RegistryItems,
-                          real_pair_array_items: PairArrayItems
+                          real_pair_array_items: PairArrayItems,
+                          verify_data: VerifyData
                           ) -> None:
         """Verify that the SmartThread config is correct.
 
         Args:
-            cmd_runner: thread name running this verification
-            names_to_check: thread names to be check for condition
-            aux_names: thread names to be checked for condition
-            state_to_check: state to check for with names_to_check
             real_reg_items: snapshot of real registry items
             real_pair_array_items: snapshot of real pair array
+            verify_data: contains data items used for the verification
 
         Raises:
             InvalidConfigurationDetected: validate_config has found a
@@ -20399,29 +20444,23 @@ class ConfigVerifier:
     # verify_alive
     ####################################################################
     def verify_alive(self,
-                     cmd_runner: str,
-                     names_to_check: set[str],
-                     aux_names: set[str],
-                     state_to_check: st.ThreadState,
                      real_reg_items: RegistryItems,
-                     real_pair_array_items: PairArrayItems
+                     real_pair_array_items: PairArrayItems,
+                     verify_data: VerifyData
                      ) -> None:
         """Verify that the SmartThread config is correct.
 
         Args:
-            cmd_runner: thread name running this verification
-            names_to_check: thread names to be check for condition
-            aux_names: thread names to be checked for condition
-            state_to_check: state to check for with names_to_check
             real_reg_items: snapshot of real registry items
             real_pair_array_items: snapshot of real pair array
+            verify_data: contains data items used for the verification
 
         Raises:
             InvalidConfigurationDetected: validate_config has found a
             mismatch between the real and mock configuration
 
         """
-        for name in names_to_check:
+        for name in verify_data.names_to_check:
             if not real_reg_items[name].is_alive:
                 self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
@@ -20439,29 +20478,23 @@ class ConfigVerifier:
     # verify_not_alive
     ####################################################################
     def verify_not_alive(self,
-                        cmd_runner: str,
-                        names_to_check: set[str],
-                        aux_names: set[str],
-                        state_to_check: st.ThreadState,
                         real_reg_items: RegistryItems,
-                        real_pair_array_items: PairArrayItems
+                        real_pair_array_items: PairArrayItems,
+                        verify_data: VerifyData
                         ) -> None:
         """Verify that the SmartThread config is correct.
 
         Args:
-            cmd_runner: thread name running this verification
-            names_to_check: thread names to be check for condition
-            aux_names: thread names to be checked for condition
-            state_to_check: state to check for with names_to_check
             real_reg_items: snapshot of real registry items
             real_pair_array_items: snapshot of real pair array
+            verify_data: contains data items used for the verification
 
         Raises:
             InvalidConfigurationDetected: validate_config has found a
             mismatch between the real and mock configuration
 
         """
-        for name in names_to_check:
+        for name in verify_data.names_to_check:
             if real_reg_items[name].is_alive:
                 self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
@@ -20479,266 +20512,204 @@ class ConfigVerifier:
     # verify_state
     ####################################################################
     def verify_state(self,
-                     cmd_runner: str,
-                     names_to_check: set[str],
-                     aux_names: set[str],
-                     state_to_check: st.ThreadState,
                      real_reg_items: RegistryItems,
-                     real_pair_array_items: PairArrayItems
+                     real_pair_array_items: PairArrayItems,
+                     verify_data: VerifyData
                      ) -> None:
         """Verify that the SmartThread config is correct.
 
         Args:
-            cmd_runner: thread name running this verification
-            names_to_check: thread names to be check for condition
-            aux_names: thread names to be checked for condition
-            state_to_check: state to check for with names_to_check
             real_reg_items: snapshot of real registry items
             real_pair_array_items: snapshot of real pair array
+            verify_data: contains data items used for the verification
 
         Raises:
             InvalidConfigurationDetected: validate_config has found a
             mismatch between the real and mock configuration
 
         """
-        for name in names_to_check:
-            if (real_reg_items[name].state != state_to_check
+        for name in verify_data.names_to_check:
+            if (real_reg_items[name].state != verify_data.state_to_check
                     or self.expected_registered[name].st_state
-                    != state_to_check):
+                    != verify_data.state_to_check):
                 self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
-                    f'verify_state for {name=}: {state_to_check=} does has '
-                    f'not match either/both {real_reg_items[name].state} nor '
-                    f'{self.expected_registered[name].st_state} per '
-                    f'{cmd_runner=}')
+                    f'verify_state for {name=}: {verify_data.state_to_check=} '
+                    f'does not match either/both {real_reg_items[name].state} '
+                    f'nor {self.expected_registered[name].st_state} per '
+                    f'{verify_data.cmd_runner=}')
 
     ####################################################################
     # verify_in_registry
     ####################################################################
     def verify_in_registry(self,
-                           cmd_runner: str,
-                           names_to_check: set[str],
-                           aux_names: set[str],
-                           state_to_check: st.ThreadState,
                            real_reg_items: RegistryItems,
-                           real_pair_array_items: PairArrayItems
+                           real_pair_array_items: PairArrayItems,
+                           verify_data: VerifyData
                            ) -> None:
         """Verify that the SmartThread config is correct.
 
         Args:
-            cmd_runner: thread name running this verification
-            names_to_check: thread names to be check for condition
-            aux_names: thread names to be checked for condition
-            state_to_check: state to check for with names_to_check
             real_reg_items: snapshot of real registry items
             real_pair_array_items: snapshot of real pair array
+            verify_data: contains data items used for the verification
 
         Raises:
             InvalidConfigurationDetected: validate_config has found a
             mismatch between the real and mock configuration
 
         """
-        for name in names_to_check:
+        for name in verify_data.names_to_check:
             if name not in real_reg_items:
                 self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f'verify_in_registry found {name=} is not registered in '
-                    f'the real SmartThread._registry per {cmd_runner=}')
+                    f'the real SmartThread._registry per '
+                    f'{verify_data.cmd_runner=}')
             if name not in self.expected_registered:
                 self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f'verify_in_registry found {name=} is not registered in '
-                    f'the mock SmartThread._registry per {cmd_runner=}')
+                    f'the mock SmartThread._registry per '
+                    f'{verify_data.cmd_runner=}')
 
     ####################################################################
     # verify_not_in_registry
     ####################################################################
     def verify_not_in_registry(self,
-                               cmd_runner: str,
-                               names_to_check: set[str],
-                               aux_names: set[str],
-                               state_to_check: st.ThreadState,
                                real_reg_items: RegistryItems,
-                               real_pair_array_items: PairArrayItems
+                               real_pair_array_items: PairArrayItems,
+                               verify_data: VerifyData
                                ) -> None:
         """Verify that the SmartThread config is correct.
 
         Args:
-            cmd_runner: thread name running this verification
-            names_to_check: thread names to be check for condition
-            aux_names: thread names to be checked for condition
-            state_to_check: state to check for with names_to_check
             real_reg_items: snapshot of real registry items
             real_pair_array_items: snapshot of real pair array
+            verify_data: contains data items used for the verification
 
         Raises:
             InvalidConfigurationDetected: validate_config has found a
             mismatch between the real and mock configuration
 
         """
-        for name in names_to_check:
+        for name in verify_data.names_to_check:
             if name in real_reg_items:
                 self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f'verify_not_in_registry found {name=} is registered in '
-                    f'the real SmartThread._registry per {cmd_runner=}')
+                    f'the real SmartThread._registry per '
+                    f'{verify_data.cmd_runner=}')
             if name in self.expected_registered:
                 self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f'verify_in_registry_not found {name=} is registered in '
-                    f'the mock expected_registered per {cmd_runner=}')
+                    f'the mock expected_registered per '
+                    f'{verify_data.cmd_runner=}')
 
     ####################################################################
     # verify_active_state
     ####################################################################
     def verify_active_state(self,
-                            cmd_runner: str,
-                            names_to_check: set[str],
-                            aux_names: set[str],
-                            state_to_check: st.ThreadState,
                             real_reg_items: RegistryItems,
-                            real_pair_array_items: PairArrayItems
+                            real_pair_array_items: PairArrayItems,
+                            verify_data: VerifyData
                             ) -> None:
         """Verify that the SmartThread config is correct.
 
         Args:
-            cmd_runner: thread name running this verification
-            names_to_check: thread names to be check for condition
-            aux_names: thread names to be checked for condition
-            state_to_check: state to check for with names_to_check
             real_reg_items: snapshot of real registry items
             real_pair_array_items: snapshot of real pair array
+            verify_data: contains data items used for the verification
 
         Raises:
             InvalidConfigurationDetected: validate_config has found a
             mismatch between the real and mock configuration
 
         """
-        self.verify_in_registry(cmd_runner=cmd_runner,
-                                names_to_check=names_to_check,
-                                aux_names=aux_names,
-                                state_to_check=state_to_check,
-                                real_reg_items=real_reg_items,
-                                real_pair_array_items=real_pair_array_items)
+        self.verify_in_registry(real_reg_items=real_reg_items,
+                                real_pair_array_items=real_pair_array_items,
+                                verify_data=verify_data)
 
-        self.verify_alive(cmd_runner=cmd_runner,
-                          names_to_check=names_to_check,
-                          aux_names=aux_names,
-                          state_to_check=state_to_check,
-                          real_reg_items=real_reg_items,
-                          real_pair_array_items=real_pair_array_items)
+        self.verify_alive(real_reg_items=real_reg_items,
+                          real_pair_array_items=real_pair_array_items,
+                          verify_data=verify_data)
 
-        self.verify_state(cmd_runner=cmd_runner,
-                          names_to_check=names_to_check,
-                          aux_names=aux_names,
-                          state_to_check=st.ThreadState.Alive,
-                          real_reg_items=real_reg_items,
-                          real_pair_array_items=real_pair_array_items)
+        self.verify_state(real_reg_items=real_reg_items,
+                          real_pair_array_items=real_pair_array_items,
+                          verify_data=verify_data)
 
-        if len(names_to_check) > 1:
-            self.verify_paired(cmd_runner=cmd_runner,
-                               names_to_check=names_to_check,
-                               aux_names=aux_names,
-                               state_to_check=st.ThreadState.Alive,
-                               real_reg_items=real_reg_items,
-                               real_pair_array_items=real_pair_array_items)
+        if len(verify_data.names_to_check) > 1:
+            self.verify_paired(real_reg_items=real_reg_items,
+                               real_pair_array_items=real_pair_array_items,
+                               verify_data=verify_data)
 
     ####################################################################
     # verify_registered_state
     ####################################################################
     def verify_registered_state(self,
-                                cmd_runner: str,
-                                names_to_check: set[str],
-                                aux_names: set[str],
-                                state_to_check: st.ThreadState,
                                 real_reg_items: RegistryItems,
-                                real_pair_array_items: PairArrayItems
+                                real_pair_array_items: PairArrayItems,
+                                verify_data: VerifyData
                                 ) -> None:
         """Verify that the SmartThread config is correct.
 
         Args:
-            cmd_runner: thread name running this verification
-            names_to_check: thread names to be check for condition
-            aux_names: thread names to be checked for condition
-            state_to_check: state to check for with names_to_check
             real_reg_items: snapshot of real registry items
             real_pair_array_items: snapshot of real pair array
+            verify_data: contains data items used for the verification
 
         Raises:
             InvalidConfigurationDetected: validate_config has found a
             mismatch between the real and mock configuration
 
         """
-        self.verify_in_registry(cmd_runner=cmd_runner,
-                                names_to_check=names_to_check,
-                                aux_names=aux_names,
-                                state_to_check=state_to_check,
-                                real_reg_items=real_reg_items,
-                                real_pair_array_items=real_pair_array_items)
+        self.verify_in_registry(real_reg_items=real_reg_items,
+                                real_pair_array_items=real_pair_array_items,
+                                verify_data=verify_data)
 
-        self.verify_not_alive(cmd_runner=cmd_runner,
-                              names_to_check=names_to_check,
-                              aux_names=aux_names,
-                              state_to_check=state_to_check,
-                              real_reg_items=real_reg_items,
-                              real_pair_array_items=real_pair_array_items)
+        self.verify_not_alive(real_reg_items=real_reg_items,
+                              real_pair_array_items=real_pair_array_items,
+                              verify_data=verify_data)
 
-        self.verify_state(cmd_runner=cmd_runner,
-                          names_to_check=names_to_check,
-                          aux_names=aux_names,
-                          state_to_check=st.ThreadState.Registered,
-                          real_reg_items=real_reg_items,
-                          real_pair_array_items=real_pair_array_items)
+        self.verify_state(real_reg_items=real_reg_items,
+                          real_pair_array_items=real_pair_array_items,
+                          verify_data=verify_data)
 
-        if len(names_to_check) > 1:
-            self.verify_paired(cmd_runner=cmd_runner,
-                               names_to_check=names_to_check,
-                               aux_names=aux_names,
-                               state_to_check=st.ThreadState.Alive,
-                               real_reg_items=real_reg_items,
-                               real_pair_array_items=real_pair_array_items)
+        if len(verify_data.names_to_check) > 1:
+            self.verify_paired(real_reg_items=real_reg_items,
+                               real_pair_array_items=real_pair_array_items,
+                               verify_data=verify_data)
 
     ####################################################################
     # verify_stopped_state
     ####################################################################
     def verify_stopped_state(self,
-                             cmd_runner: str,
-                             names_to_check: set[str],
-                             aux_names: set[str],
-                             state_to_check: st.ThreadState,
                              real_reg_items: RegistryItems,
-                             real_pair_array_items: PairArrayItems
+                             real_pair_array_items: PairArrayItems,
+                             verify_data: VerifyData
                              ) -> None:
         """Verify that the SmartThread config is correct.
 
         Args:
-            cmd_runner: thread name running this verification
-            names_to_check: thread names to be check for condition
-            aux_names: thread names to be checked for condition
-            state_to_check: state to check for with names_to_check
             real_reg_items: snapshot of real registry items
             real_pair_array_items: snapshot of real pair array
+            verify_data: contains data items used for the verification
 
         Raises:
             InvalidConfigurationDetected: validate_config has found a
             mismatch between the real and mock configuration
 
         """
-        self.verify_in_registry(cmd_runner=cmd_runner,
-                                names_to_check=names_to_check,
-                                aux_names=aux_names,
-                                state_to_check=state_to_check,
-                                real_reg_items=real_reg_items,
-                                real_pair_array_items=real_pair_array_items)
+        self.verify_in_registry(real_reg_items=real_reg_items,
+                                real_pair_array_items=real_pair_array_items,
+                                verify_data=verify_data)
 
-        self.verify_not_alive(cmd_runner=cmd_runner,
-                              names_to_check=names_to_check,
-                              aux_names=aux_names,
-                              state_to_check=state_to_check,
-                              real_reg_items=real_reg_items,
-                              real_pair_array_items=real_pair_array_items)
+        self.verify_not_alive(real_reg_items=real_reg_items,
+                              real_pair_array_items=real_pair_array_items,
+                              verify_data=verify_data)
 
-        for name in names_to_check:
+        for name in verify_data.names_to_check:
             if real_reg_items[name].state not in (st.ThreadState.Alive,
                                                   st.ThreadState.Stopped):
                 self.abort_all_f1_threads()
@@ -20757,41 +20728,32 @@ class ConfigVerifier:
                     f'the expected state of {st.ThreadState.Alive} or '
                     f'{st.ThreadState.Stopped} per {cmd_runner=}')
 
-        if len(names_to_check) > 1:
-            self.verify_paired(cmd_runner=cmd_runner,
-                               names_to_check=names_to_check,
-                               aux_names=aux_names,
-                               state_to_check=st.ThreadState.Alive,
-                               real_reg_items=real_reg_items,
-                               real_pair_array_items=real_pair_array_items)
+        if len(verify_data.names_to_check) > 1:
+            self.verify_paired(real_reg_items=real_reg_items,
+                               real_pair_array_items=real_pair_array_items,
+                               verify_data=verify_data)
 
     ####################################################################
     # verify_paired
     ####################################################################
     def verify_paired(self,
-                      cmd_runner: str,
-                      names_to_check: set[str],
-                      aux_names: set[str],
-                      state_to_check: st.ThreadState,
                       real_reg_items: RegistryItems,
-                      real_pair_array_items: PairArrayItems
+                      real_pair_array_items: PairArrayItems,
+                      verify_data: VerifyData
                       ) -> None:
         """Verify that the SmartThread config is correct.
 
         Args:
-            cmd_runner: thread name running this verification
-            names_to_check: thread names to be check for condition
-            aux_names: thread names to be checked for condition
-            state_to_check: state to check for with names_to_check
             real_reg_items: snapshot of real registry items
             real_pair_array_items: snapshot of real pair array
+            verify_data: contains data items used for the verification
 
         Raises:
             InvalidConfigurationDetected: validate_config has found a
             mismatch between the real and mock configuration
 
         """
-        pair_keys = combinations(sorted(names_to_check), 2)
+        pair_keys = combinations(sorted(verify_data.names_to_check), 2)
         for pair_key in pair_keys:
             if pair_key not in real_pair_array_items:
                 self.abort_all_f1_threads()
@@ -20822,29 +20784,23 @@ class ConfigVerifier:
     # verify_not_paired
     ####################################################################
     def verify_not_paired(self,
-                          cmd_runner: str,
-                          names_to_check: set[str],
-                          aux_names: set[str],
-                          state_to_check: st.ThreadState,
                           real_reg_items: RegistryItems,
-                          real_pair_array_items: PairArrayItems
+                          real_pair_array_items: PairArrayItems,
+                          verify_data: VerifyData
                           ) -> None:
         """Verify that the SmartThread config is correct.
 
         Args:
-            cmd_runner: thread name running this verification
-            names_to_check: thread names to be check for condition
-            aux_names: thread names to be checked for condition
-            state_to_check: state to check for with names_to_check
             real_reg_items: snapshot of real registry items
             real_pair_array_items: snapshot of real pair array
+            verify_data: contains data items used for the verification
 
         Raises:
             InvalidConfigurationDetected: validate_config has found a
             mismatch between the real and mock configuration
 
         """
-        pair_keys = combinations(sorted(names_to_check), 2)
+        pair_keys = combinations(sorted(verify_data.names_to_check), 2)
         for pair_key in pair_keys:
             if pair_key in real_pair_array_items:
                 self.abort_all_f1_threads()
@@ -20862,30 +20818,24 @@ class ConfigVerifier:
     # verify_half_paired
     ####################################################################
     def verify_half_paired(self,
-                           cmd_runner: str,
-                           names_to_check: set[str],
-                           aux_names: set[str],
-                           state_to_check: st.ThreadState,
                            real_reg_items: RegistryItems,
-                           real_pair_array_items: PairArrayItems
+                           real_pair_array_items: PairArrayItems,
+                           verify_data: VerifyData
                            ) -> None:
         """Verify that the SmartThread config is correct.
 
         Args:
-            cmd_runner: thread name running this verification
-            names_to_check: thread names to be check for condition
-            aux_names: thread names to be checked for condition
-            state_to_check: state to check for with names_to_check
             real_reg_items: snapshot of real registry items
             real_pair_array_items: snapshot of real pair array
+            verify_data: contains data items used for the verification
 
         Raises:
             InvalidConfigurationDetected: validate_config has found a
             mismatch between the real and mock configuration
 
         """
-        for removed_name in aux_names:
-            for exp_remaining_name in names_to_check:
+        for removed_name in verify_data.aux_names:
+            for exp_remaining_name in verify_data.names_to_check:
                 pair_key = st.SmartThread._get_pair_key(removed_name,
                                                         exp_remaining_name)
                 if pair_key not in real_pair_array_items:
@@ -20925,6 +20875,85 @@ class ConfigVerifier:
                         f'verify_half_paired found {exp_remaining_name=} does '
                         f'not have a status block in the mock pair_array for '
                         f'{pair_key=}.')
+
+    ####################################################################
+    # verify_half_paired
+    ####################################################################
+    def verify_pending_flags(self,
+                             real_reg_items: RegistryItems,
+                             real_pair_array_items: PairArrayItems,
+                             verify_data: VerifyData
+                           ) -> None:
+        """Verify that the SmartThread config is correct.
+
+        Args:
+            real_reg_items: snapshot of real registry items
+            real_pair_array_items: snapshot of real pair array
+            verify_data: contains data items used for the verification
+
+        Raises:
+            InvalidConfigurationDetected: validate_config has found a
+            mismatch between the real and mock configuration
+
+        """
+        for remote_name in verify_data.aux_names:
+            for check_name in verify_data.names_to_check:
+                pair_key = st.SmartThread._get_pair_key(remote_name,
+                                                        check_name)
+                if pair_key not in real_pair_array_items:
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'verify_pending_flags found {pair_key=} is not '
+                        f'in the real pair_array needed to check '
+                        f'{check_name=}, {remote_name=}')
+
+                if check_name not in real_pair_array_items[pair_key]:
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'verify_pending_flags found {check_name=} does '
+                        f'not have a status block in the real pair_array for '
+                        f'{pair_key=}.')
+
+                if pair_key not in self.expected_pairs:
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'verify_pending_flags found {pair_key=} is not '
+                        f'in the mock pair_array needed to check '
+                        f'{check_name=}, {remote_name=}')
+
+                if check_name not in self.expected_pairs[pair_key]:
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'verify_pending_flags found {check_name=} does '
+                        f'not have a status block in the mock pair_array for '
+                        f'{pair_key=}.')
+
+                real_sb = real_pair_array_items[pair_key][check_name]
+                real_pending_flags = PendingFlags(
+                    pending_request=real_sb.pending_request,
+                    pending_msgs=real_sb.pending_msg_count,
+                    pending_wait=real_sb.pending_wait,
+                    pending_sync=real_sb.pending_sync
+                )
+
+                mock_sb = self.expected_pairs[pair_key][check_name]
+                mock_pending_flags = PendingFlags(
+                    pending_request=mock_sb.pending_request,
+                    pending_msgs=mock_sb.pending_msg_count,
+                    pending_wait=mock_sb.pending_wait,
+                    pending_sync=mock_sb.pending_sync
+                )
+
+                if (real_pending_flags
+                        != mock_pending_flags
+                        != verify_data.exp_pending_flags):
+                    self.abort_all_f1_threads()
+                    raise InvalidConfigurationDetected(
+                        f'verify_pending_flags found {pair_key=}, '
+                        f'{check_name=} does have matching pending flags: '
+                        f'{real_pending_flags=}, '
+                        f'{mock_pending_flags=}, '
+                        f'{verify_data.exp_pending_flags=}.')
 
     ####################################################################
     # verify_counts
@@ -20997,6 +21026,7 @@ class ConfigVerifier:
                 f'verify_counts found expected '
                 f'{verify_counts_data.num_stopped=} is not equal to '
                 f'{stopped_found_real=} and/or {stopped_found_mock=}')
+
 
     ####################################################################
     # verify_def_del
