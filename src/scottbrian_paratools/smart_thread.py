@@ -1778,6 +1778,8 @@ class SmartThread:
         # self._config_cmd_loop(request_block=request_block)
 
         unreged_remotes: set[str] = set()
+        # @sbt what is this doing for us? it only locks the thread
+        # against itself
         with self.cmd_lock:
             self.work_remotes: set[str] = request_block.remotes.copy()
             with sel.SELockExcl(SmartThread._registry_lock):

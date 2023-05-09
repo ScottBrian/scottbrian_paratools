@@ -2808,6 +2808,8 @@ class WaitForRequestTimeouts(ConfigCmd):
                  cmd_runners: Iterable,
                  actor_names: Iterable,
                  timeout_names: Iterable,
+                 use_work_remotes: bool = False,
+                 as_subset: bool = False
                  ) -> None:
         """Initialize the instance.
 
@@ -2817,6 +2819,10 @@ class WaitForRequestTimeouts(ConfigCmd):
                 timeout or timeout condition
             timeout_names: thread names that are expected to cause
                 timeout by not responding or by not being alive
+            use_work_remotes: if True, compare against work_remotes,
+                else pk_remotes
+            as_subset: if True, the wait is satisfied when the
+                timeout_names are a subset of the pk_remotes
         """
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
@@ -2825,8 +2831,14 @@ class WaitForRequestTimeouts(ConfigCmd):
 
         self.timeout_names = get_set(timeout_names)
 
+        self.use_work_remotes = use_work_remotes
+
+        self.as_subset = as_subset
+
         self.arg_list += ['actor_names',
-                          'timeout_names']
+                          'timeout_names',
+                          'use_work_remotes',
+                          'as_subset']
 
     def run_process(self, cmd_runner: str) -> None:
         """Run the command.
@@ -2837,7 +2849,9 @@ class WaitForRequestTimeouts(ConfigCmd):
         self.config_ver.wait_for_request_timeouts(
             cmd_runner=cmd_runner,
             actor_names=self.actor_names,
-            timeout_names=self.timeout_names)
+            timeout_names=self.timeout_names,
+            use_work_remotes=self.use_work_remotes,
+            as_subset=self.as_subset)
 
 
 # ###############################################################################
@@ -7995,7 +8009,7 @@ class ConfigVerifier:
             pause_time = 0.5
         elif timeout_type == TimeoutType.TimeoutFalse:
             pause_time = 0.5
-            timeout_time += (pause_time * 2)  # prevent timeout
+            timeout_time += (pause_time * 4)  # prevent timeout
         else:  # timeout True
             pause_time = timeout_time + 1  # force timeout
 
@@ -8128,6 +8142,19 @@ class ConfigVerifier:
                                   validate_config=False)
 
         ################################################################
+        # make sure smart_join is in loop waiting for timeout names
+        ################################################################
+        if (timeout_type != TimeoutType.TimeoutNone
+                and all_timeout_names):
+            self.add_cmd(
+                WaitForRequestTimeouts(
+                    cmd_runners=self.commander_name,
+                    actor_names=active_no_target_names[0],
+                    timeout_names=all_timeout_names,
+                    use_work_remotes=True,
+                    as_subset=True))
+
+        ################################################################
         # pause for short or long delay
         ################################################################
         self.add_cmd(
@@ -8135,11 +8162,39 @@ class ConfigVerifier:
                   pause_seconds=pause_time))
 
         ################################################################
+        # make sure smart_join sees the timeout_names as pending
+        ################################################################
+        if (timeout_type != TimeoutType.TimeoutNone
+                and all_timeout_names):
+            self.add_cmd(
+                WaitForRequestTimeouts(
+                    cmd_runners=self.commander_name,
+                    actor_names=active_no_target_names[0],
+                    timeout_names=all_timeout_names,
+                    use_work_remotes=True,
+                    as_subset=True))
+
+        ################################################################
         # handle delay_exit_names
         ################################################################
         if delay_exit_names:
             self.build_exit_suite(cmd_runner=self.commander_name,
                                   names=delay_exit_names,
+                                  validate_config=False)
+
+        ################################################################
+        # handle delay_reg_names
+        ################################################################
+        if delay_reg_names:
+            self.build_start_suite(start_names=delay_reg_names,
+                                   validate_config=False)
+            self.add_cmd(VerifyConfig(
+                cmd_runners=self.commander_name,
+                verify_type=VerifyType.VerifyAliveState,
+                names_to_check=delay_reg_names))
+
+            self.build_exit_suite(cmd_runner=self.commander_name,
+                                  names=delay_reg_names,
                                   validate_config=False)
 
         ################################################################
@@ -8162,21 +8217,6 @@ class ConfigVerifier:
                                     validate_config=False)
             self.build_exit_suite(cmd_runner=self.commander_name,
                                   names=delay_unreg_names,
-                                  validate_config=False)
-
-        ################################################################
-        # handle delay_reg_names
-        ################################################################
-        if delay_reg_names:
-            self.build_start_suite(start_names=delay_reg_names,
-                                   validate_config=False)
-            self.add_cmd(VerifyConfig(
-                cmd_runners=self.commander_name,
-                verify_type=VerifyType.VerifyAliveState,
-                names_to_check=delay_reg_names))
-
-            self.build_exit_suite(cmd_runner=self.commander_name,
-                                  names=delay_reg_names,
                                   validate_config=False)
 
         ################################################################
@@ -22889,32 +22929,40 @@ class ConfigVerifier:
     def wait_for_request_timeouts(self,
                                   cmd_runner: str,
                                   actor_names: set[str],
-                                  timeout_names: set[str]) -> None:
-        """Verify that the senders have detected the timeout threads.
+                                  timeout_names: set[str],
+                                  use_work_remotes: bool,
+                                  as_subset: bool) -> None:
+        """Verify that the actor have detected the timeout threads.
 
         Args:
-            cmd_runner: thread doing the wait
-            actor_names: names of the threads to check for timeout
-            timeout_names: threads that cause timeout by being
-                unregistered
+            cmd_runner: thread doing the WaitForTimeouts
+            actor_names: thread names to verify that they recognized the
+                timeout_names as being delayed
+            timeout_names: threads that cause timeout by being in state
+                other than a state that the actor can proceed
+            use_work_remotes: if True, compare against work_remotes,
+                else pk_remotes
+            as_subset: if True, the wait is satisfied when the
+                timeout_names are a subset of the pk_remotes
 
         Raises:
             CmdTimedOut: wait_for_request_timeouts timed out
 
         """
-        timeouts: set[str] = set()
-        if timeout_names:
-            timeouts = set(sorted(timeout_names))
-
         work_actors = actor_names.copy()
         start_time = time.time()
-        test_timeouts: set[str] = set()
+        work_names: set[str] = set()
         while work_actors:
             for actor in work_actors:
-                test_timeouts = set(sorted(
-                    [remote for pk, remote, _ in self.all_threads[
-                        actor].work_pk_remotes]))
-                if timeouts == test_timeouts:
+                if use_work_remotes:
+                    work_names = self.all_threads[actor].work_remotes
+                else:
+                    work_names = {
+                        remote for pk, remote, _ in self.all_threads[
+                            actor].work_pk_remotes}
+                if (timeout_names == work_names
+                        or (as_subset
+                            and timeout_names <= work_names)):
                     work_actors.remove(actor)
                     break
 
@@ -22922,7 +22970,8 @@ class ConfigVerifier:
             if start_time + 30 < time.time():
                 raise CmdTimedOut('wait_for_request_timeouts timed out '
                                   f'with {work_actors=}, '
-                                  f'{timeouts=}, {sorted(test_timeouts)=}')
+                                  f'{sorted(timeout_names)=}, '
+                                  f'{sorted(work_names)=}')
 
 
 ########################################################################
@@ -24850,12 +24899,12 @@ class TestSmartThreadScenarios:
     @pytest.mark.parametrize("num_delay_reg_arg", [0, 1, 2])
 
     # @pytest.mark.parametrize("timeout_type_arg",
-    #                          [TimeoutType.TimeoutNone])
+    #                          [TimeoutType.TimeoutFalse])
     # @pytest.mark.parametrize("num_active_no_target_arg", [1])
-    # @pytest.mark.parametrize("num_no_delay_exit_arg", [2])
-    # @pytest.mark.parametrize("num_delay_exit_arg", [2])
+    # @pytest.mark.parametrize("num_no_delay_exit_arg", [0])
+    # @pytest.mark.parametrize("num_delay_exit_arg", [1])
     # @pytest.mark.parametrize("num_delay_unreg_arg", [0])
-    # @pytest.mark.parametrize("num_no_delay_reg_arg", [2])
+    # @pytest.mark.parametrize("num_no_delay_reg_arg", [0])
     # @pytest.mark.parametrize("num_delay_reg_arg", [0])
     def test_join_timeout_scenarios(
             self,
