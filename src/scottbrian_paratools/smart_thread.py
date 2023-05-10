@@ -1317,7 +1317,7 @@ class SmartThread:
 
                     logger.debug(
                         f'{self.cmd_runner} removal deferred for '
-                        f'status_blocks entry, {pair_key}, '
+                        f'status_blocks entry for {pair_key}, '
                         f'name = {thread_name}, reasons: {extra_msg}')
 
             # remove _connection_pair if both names are gone
@@ -4323,8 +4323,8 @@ class SmartThread:
 
                 if request_block.do_refresh:
                     logger.debug(
-                        f'{self.name} calling refresh, remaining remotes: '
-                        f'{self.work_pk_remotes}')
+                        f'{self.name} {self.request.value} calling refresh, '
+                        f'remaining remotes: {self.work_pk_remotes}')
                     with sel.SELockExcl(SmartThread._registry_lock):
                         self._clean_registry()
                         self._clean_pair_array()

@@ -81,6 +81,8 @@ InitCompKey: TypeAlias = tuple[str,
                                st.ThreadState,
                                "AutoStartDecision"]
 
+CallRefKey: TypeAlias = str
+
 PendEvents: TypeAlias = dict["PE", Any]
 
 
@@ -5596,6 +5598,9 @@ class RemStatusBlockEntryDefLogSearchItem(LogSearchItem):
         rem_sb_key: RemSbKey = (rem_name,
                                 pair_key,
                                 def_del_reasons)
+        self.config_ver.log_test_msg(
+            f'RemStatusBlockEntryDefLogSearchItem {rem_sb_key=}')
+
         if pe[PE.rem_status_block_def_msg][rem_sb_key] <= 0:
             raise UnexpectedEvent(
                 'RemStatusBlockEntryDefLogSearchItem encountered unexpected '
@@ -5603,8 +5608,8 @@ class RemStatusBlockEntryDefLogSearchItem(LogSearchItem):
 
         pe[PE.rem_status_block_def_msg][rem_sb_key] -= 1
 
-        if [PE.notify_rem_status_block_def_msg][rem_sb_key] > 0:
-            [PE.notify_rem_status_block_def_msg][rem_sb_key] -= 1
+        if pe[PE.notify_rem_status_block_def_msg][rem_sb_key] > 0:
+            pe[PE.notify_rem_status_block_def_msg][rem_sb_key] -= 1
 
         self.config_ver.add_log_msg(re.escape(self.found_log_msg),
                                     log_level=logging.DEBUG)
@@ -5867,8 +5872,8 @@ class RequestRefreshLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str=(f"[a-z]+ calling refresh, remaining remotes: "
-                        r"\["),
+            search_str=(f"[a-z]+ {list_of_smart_requests} calling refresh, "
+                        r"remaining remotes: \["),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -5896,6 +5901,7 @@ class RequestRefreshLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
+        request = split_msg[1]
         target_msg = self.found_log_msg.split('[')[1].split(']')[0]
 
         targets: set[str] = set()
@@ -5907,11 +5913,12 @@ class RequestRefreshLogSearchItem(LogSearchItem):
 
         self.config_ver.handle_request_refresh_log_msg(
             cmd_runner=cmd_runner,
+            request=request,
             targets=targets,
             log_msg=self.found_log_msg)
 
         self.config_ver.add_log_msg(re.escape(self.found_log_msg),
-                                    log_level=logging.INFO)
+                                    log_level=logging.DEBUG)
 
 
 ########################################################################
@@ -6656,6 +6663,7 @@ class PE(Enum):
     unreg_join_success_msg = auto()
     join_progress_msg = auto()
     init_comp_msg = auto()
+    calling_refresh_msg = auto()
 
 
 class ConfigVerifier:
@@ -6874,6 +6882,8 @@ class ConfigVerifier:
                 PE.unreg_join_success_msg] = defaultdict(int)
             self.pending_events[name][PE.join_progress_msg] = defaultdict(int)
             self.pending_events[name][PE.init_comp_msg] = defaultdict(int)
+            self.pending_events[name][
+                PE.calling_refresh_msg] = defaultdict(int)
 
         self.snap_shot_data: dict[int, SnapShotDataItem] = {}
 
@@ -8401,32 +8411,31 @@ class ConfigVerifier:
     ####################################################################
     def build_pending_flags_scenarios(
             self,
-            num_request_pending: int,
-            num_reg_to_stop: int) -> None:
+            request_type: st.ReqType,
+            pending_request: bool) -> None:
         """Return a list of ConfigCmd items for a create.
 
         Args:
-            num_request_pending: number of threads to get the
-                request_pending flag set and be deferred delete
-            num_reg_to_stop: number of threads that will be initially
-                registered and will be a request target, and then
-                unregistered to cause request_pending to be on in the
-                request cmd_runner (until it discovers the stopped
-                target)
+            request_type: request type that is to get the pending
+                flags set on it
+            pending_request: if True, then cause request_pending
+                to set
         """
+        num_pending_requestors = 1
+        num_reg_to_stop = 1
         num_lockers = 3
         num_unregers = 1
         # Make sure we have enough threads.
         assert (num_lockers
                 + num_unregers
-                + num_request_pending
+                + num_pending_requestors
                 + num_reg_to_stop) <= len(self.unregistered_names)
 
         num_registered_needed = num_reg_to_stop
 
         num_active_needed = (num_lockers
                              + num_unregers
-                             + num_request_pending) + 1
+                             + num_pending_requestors) + 1
 
         self.build_config(
             cmd_runner=self.commander_name,
@@ -8458,13 +8467,13 @@ class ConfigVerifier:
             var_name_for_log='locker_names')
 
         ################################################################
-        # choose request_pending_names
+        # choose pending_requestor_names
         ################################################################
-        request_pending_names = self.choose_names(
+        pending_requestor_names = self.choose_names(
             name_collection=active_names_copy,
-            num_names_needed=num_request_pending,
+            num_names_needed=num_pending_requestors,
             update_collection=True,
-            var_name_for_log='request_pending_names')
+            var_name_for_log='pending_requestor_names')
 
         ################################################################
         # choose req_to_stop_names
@@ -8511,11 +8520,22 @@ class ConfigVerifier:
         # smart_wait will get behind lock_0 in request_setup
         # locks held: lock_0|smart_wait
         ################################################################
-        wait_serial_num = self.add_cmd(
-            Wait(cmd_runners=request_pending_names[0],
-                 resumers=req_to_stop_names[0],
-                 stopped_remotes=req_to_stop_names[0]))
-        lock_positions.append(request_pending_names[0])
+        if request_type == st.ReqType.Smart_wait:
+            pend_req_serial_num = self.add_cmd(
+                Wait(cmd_runners=pending_requestor_names[0],
+                     resumers=req_to_stop_names[0],
+                     stopped_remotes=req_to_stop_names[0]))
+        elif request_type == st.ReqType.Smart_resume:
+            pend_req_serial_num = self.add_cmd(
+                Resume(cmd_runners=pending_requestor_names[0],
+                       targets=req_to_stop_names[0],
+                       stopped_remotes=req_to_stop_names[0]))
+        elif request_type == st.ReqType.Smart_send:
+            pend_req_serial_num = self.add_cmd(
+                SendMsg(cmd_runners=pending_requestor_names[0],
+                        receivers=req_to_stop_names[0],
+                        stopped_remotes=req_to_stop_names[0]))
+        lock_positions.append(pending_requestor_names[0])
 
         self.add_cmd(
             LockVerify(cmd_runners=self.commander_name,
@@ -8567,8 +8587,8 @@ class ConfigVerifier:
         lock_positions.remove(locker_names[0])
         # releasing lock 0 will allow the smart_wait to do request_setup
         # and then get behind lock_2
-        lock_positions.remove(request_pending_names[0])
-        lock_positions.append(request_pending_names[0])
+        lock_positions.remove(pending_requestor_names[0])
+        lock_positions.append(pending_requestor_names[0])
 
         self.add_cmd(
             LockVerify(cmd_runners=self.commander_name,
@@ -8595,14 +8615,14 @@ class ConfigVerifier:
         self.add_cmd(VerifyConfig(
             cmd_runners=self.commander_name,
             verify_type=VerifyType.VerifyPendingFlags,
-            names_to_check=request_pending_names,
+            names_to_check=pending_requestor_names,
             aux_names=req_to_stop_names,
             exp_pending_flags=exp_pending_flags,
             obtain_reg_lock=False))
 
-        pe = self.pending_events[request_pending_names[0]]
+        pe = self.pending_events[unreger_names[0]]
 
-        pair_key = st.SmartThread._get_pair_key(request_pending_names[0],
+        pair_key = st.SmartThread._get_pair_key(pending_requestor_names[0],
                                                 req_to_stop_names[0])
 
         def_del_reasons: DefDelReasons = DefDelReasons(
@@ -8611,7 +8631,7 @@ class ConfigVerifier:
             pending_wait=False,
             pending_sync=False)
 
-        rem_sb_key: RemSbKey = (request_pending_names[0],
+        rem_sb_key: RemSbKey = (pending_requestor_names[0],
                                 pair_key,
                                 def_del_reasons)
 
@@ -8625,7 +8645,7 @@ class ConfigVerifier:
             LockRelease(cmd_runners=locker_names[2]))
         lock_positions.remove(locker_names[2])
         # releasing lock 1 will allow the smart_unreg complete
-        lock_positions.remove(request_pending_names[0])
+        lock_positions.remove(pending_requestor_names[0])
 
         self.add_cmd(
             LockVerify(cmd_runners=self.commander_name,
@@ -8638,8 +8658,8 @@ class ConfigVerifier:
             ConfirmResponse(
                 cmd_runners=self.commander_name,
                 confirm_cmd='Wait',
-                confirm_serial_num=wait_serial_num,
-                confirmers=request_pending_names))
+                confirm_serial_num=pend_req_serial_num,
+                confirmers=pending_requestor_names))
 
         ################################################################
         # confirm the unreg is done
@@ -8649,7 +8669,7 @@ class ConfigVerifier:
                 cmd_runners=self.commander_name,
                 confirm_cmd='Unregister',
                 confirm_serial_num=unreg_serial_num,
-                confirmers=self.commander_name))
+                confirmers=unreger_names))
 
     ####################################################################
     # check_pending_events
@@ -16933,6 +16953,25 @@ class ConfigVerifier:
 
             pe[PE.ack_msg][ack_key] += 1
 
+        if pe[PE.current_request].stopped_remotes:
+            ref_key: CallRefKey = 'smart_send'
+
+            pe[PE.calling_refresh_msg][ref_key] += 1
+
+            sub_key: SubProcessKey = (cmd_runner,
+                                      'smart_send',
+                                      '_clean_registry',
+                                      'entry',
+                                      cmd_runner)
+            pe[PE.subprocess_msg][sub_key] += 1
+
+            sub_key: SubProcessKey = (cmd_runner,
+                                      'smart_send',
+                                      '_clean_pair_array',
+                                      'entry',
+                                      cmd_runner)
+            pe[PE.subprocess_msg][sub_key] += 1
+
     ####################################################################
     # handle_request_smart_send_exit
     ####################################################################
@@ -17027,6 +17066,10 @@ class ConfigVerifier:
             pe[PE.ack_msg][ack_key] += 1
 
         if pe[PE.current_request].stopped_remotes:
+            ref_key: CallRefKey = 'smart_wait'
+
+            pe[PE.calling_refresh_msg][ref_key] += 1
+
             sub_key: SubProcessKey = (cmd_runner,
                                       'smart_wait',
                                       '_clean_registry',
@@ -17086,6 +17129,25 @@ class ConfigVerifier:
             ack_key: AckKey = (target, 'smart_resume')
 
             pe[PE.ack_msg][ack_key] += 1
+
+        if pe[PE.current_request].stopped_remotes:
+            ref_key: CallRefKey = 'smart_resume'
+
+            pe[PE.calling_refresh_msg][ref_key] += 1
+
+            sub_key: SubProcessKey = (cmd_runner,
+                                      'smart_resume',
+                                      '_clean_registry',
+                                      'entry',
+                                      cmd_runner)
+            pe[PE.subprocess_msg][sub_key] += 1
+
+            sub_key: SubProcessKey = (cmd_runner,
+                                      'smart_resume',
+                                      '_clean_pair_array',
+                                      'entry',
+                                      cmd_runner)
+            pe[PE.subprocess_msg][sub_key] += 1
 
     ####################################################################
     # handle_request_smart_start_exit
@@ -17188,12 +17250,14 @@ class ConfigVerifier:
     ####################################################################
     def handle_request_refresh_log_msg(self,
                                        cmd_runner: str,
+                                       request: str,
                                        targets: set[str],
                                        log_msg: str) -> None:
         """Handle the request refresh log msgs.
 
         Args:
             cmd_runner: name of thread doing the cmd
+            request: smart request name
             targets: thread names of remaining targets
             log_msg: log message for the request
 
@@ -17203,10 +17267,34 @@ class ConfigVerifier:
         targets_to_reset: set[str] = (pe[PE.current_request].targets
                                       - targets)
 
+        ref_key: CallRefKey = request
+
+        if pe[PE.calling_refresh_msg][ref_key] <= 0:
+            raise UnexpectedEvent(
+                f'handle_request_refresh_log_msg using {ref_key=} '
+                f'detected unexpected log msg: {log_msg}'
+            )
+
+        pe[PE.calling_refresh_msg][ref_key] -= 1
+
         self.set_request_pending_flag(
             cmd_runner=cmd_runner,
             targets=targets_to_reset,
             pending_request_flag=False)
+
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request,
+                                  '_clean_registry',
+                                  'entry',
+                                  cmd_runner)
+        pe[PE.subprocess_msg][sub_key] += 1
+
+        sub_key: SubProcessKey = (cmd_runner,
+                                  request,
+                                  '_clean_pair_array',
+                                  'entry',
+                                  cmd_runner)
+        pe[PE.subprocess_msg][sub_key] += 1
 
         # request = pe[PE.current_request].req_type.value
 
@@ -25132,30 +25220,29 @@ class TestSmartThreadScenarios:
     ####################################################################
     # test_pending_flags_scenarios
     ####################################################################
-    @pytest.mark.parametrize("num_request_pending_arg", [1])
-    @pytest.mark.parametrize("num_reg_to_stop_arg", [1])
+    @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_wait,
+                                                  st.ReqType.Smart_resume,
+                                                  st.ReqType.Smart_send])
+    @pytest.mark.parametrize("pending_request_arg", [True])
     def test_pending_flags_scenarios(
             self,
-            num_request_pending_arg: int,
-            num_reg_to_stop_arg: int,
+            request_type_arg: st.ReqType,
+            pending_request_arg: bool,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
         """Test meta configuration scenarios.
 
         Args:
-            num_request_pending_arg: number of threads to get the
-                request_pending flag set and be deferred delete
-            num_reg_to_stop_arg: number of threads that will be
-                initially registered and will be a request target, and
-                then unregistered to cause request_pending to be on in
-                the request cmd_runner (until it discovers the stopped
-                target)
+            request_type_arg: request type that is to get the pending
+                flags set on it
+            pending_request_arg: if True, then cause request_pending
+                to set
             caplog: pytest fixture to capture log output
 
         """
         args_for_scenario_builder: dict[str, Any] = {
-            'num_request_pending': num_request_pending_arg,
-            'num_reg_to_stop': num_reg_to_stop_arg,
+            'request_type': request_type_arg,
+            'pending_request': pending_request_arg,
         }
 
         self.scenario_driver(
