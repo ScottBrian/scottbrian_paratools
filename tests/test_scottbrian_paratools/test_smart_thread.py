@@ -2830,10 +2830,7 @@ class WaitForRecvTimeouts(ConfigCmd):
 
         Args:
             cmd_runners: thread names that will execute the command
-            actor_names: thread names that are cmd runners waiting for a
-                timeout or timeout condition
-            timeout_names: thread names that are expected to cause
-                timeout by not responding or by not being alive
+
         """
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
@@ -5844,8 +5841,74 @@ class RequestAckLogSearchItem(LogSearchItem):
 
         self.config_ver.set_request_pending_flag(
             cmd_runner=cmd_runner,
-            targets=[remote],
+            targets={remote},
             pending_request_flag=False)
+
+        self.config_ver.add_log_msg(re.escape(self.found_log_msg),
+                                    log_level=logging.INFO)
+
+
+########################################################################
+# RequestRefreshLogSearchItem
+########################################################################
+class RequestRefreshLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+        """
+        super().__init__(
+            search_str=(f"[a-z]+ calling refresh, remaining remotes: "
+                        r"\["),
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int
+                           ) -> "RequestRefreshLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            SyncResumedLogSearchItem containing found message and index
+        """
+        return RequestRefreshLogSearchItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+    def run_process(self):
+        """Run the process to handle the log message."""
+        split_msg = self.found_log_msg.split()
+        cmd_runner = split_msg[0]
+        target_msg = self.found_log_msg.split('[')[1].split(']')[0]
+
+        targets: set[str] = set()
+        if target_msg:
+            split_targets = target_msg.split()
+            for idx in range(0, len(split_targets), 4):
+                remote = split_targets[idx+2][8:-2]
+                targets |= {remote}
+
+        self.config_ver.handle_request_refresh_log_msg(
+            cmd_runner=cmd_runner,
+            targets=targets,
+            log_msg=self.found_log_msg)
 
         self.config_ver.add_log_msg(re.escape(self.found_log_msg),
                                     log_level=logging.INFO)
@@ -6219,9 +6282,9 @@ class CRunnerRaisesLogSearchItem(LogSearchItem):
         cmd_runner = split_msg[0]
         target_msg = self.found_log_msg.split('[')[1].split(']')[0].split(', ')
 
-        targets: list[str] = []
+        targets: set[str] = set()
         for item in target_msg:
-            targets.append(item[1:-1])
+            targets |= {item[1:-1]}
 
         self.config_ver.set_request_pending_flag(cmd_runner=cmd_runner,
                                                  targets=targets,
@@ -6393,6 +6456,7 @@ LogSearchItems: TypeAlias = Union[
     F1AppExitLogSearchItem,
     AlreadyUnregLogSearchItem,
     RequestAckLogSearchItem,
+    RequestRefreshLogSearchItem,
     UnregJoinSuccessLogSearchItem,
     JoinWaitingLogSearchItem,
     StoppedLogSearchItem,
@@ -6701,6 +6765,7 @@ class ConfigVerifier:
             F1AppExitLogSearchItem(config_ver=self),
             AlreadyUnregLogSearchItem(config_ver=self),
             RequestAckLogSearchItem(config_ver=self),
+            RequestRefreshLogSearchItem(config_ver=self),
             UnregJoinSuccessLogSearchItem(config_ver=self),
             JoinWaitingLogSearchItem(config_ver=self),
             StoppedLogSearchItem(config_ver=self),
@@ -6919,7 +6984,7 @@ class ConfigVerifier:
     ####################################################################
     def set_request_pending_flag(self,
                                  cmd_runner: str,
-                                 targets: list[str],
+                                 targets: set[str],
                                  pending_request_flag: bool) -> None:
         """Set or reset request pending flags.
 
@@ -16323,9 +16388,11 @@ class ConfigVerifier:
                                entry_exit)
 
         if pe[PE.request_msg][req_key] <= 0:
-            raise UnexpectedEvent(
+            error_msg = (
                 f'handle_request_entry_exit_log_msg using {req_key=} '
                 f'encountered unexpected log msg: {log_msg}')
+            self.log_test_msg(error_msg)
+            raise UnexpectedEvent(error_msg)
 
         pe[PE.request_msg][req_key] -= 1
 
@@ -16360,7 +16427,7 @@ class ConfigVerifier:
                                                  'smart_resume',
                                                  'smart_sync'):
                 self.set_request_pending_flag(cmd_runner=cmd_runner,
-                                              targets=targets,
+                                              targets=set(targets),
                                               pending_request_flag=True)
 
         ################################################################
@@ -16415,7 +16482,7 @@ class ConfigVerifier:
                                                         'smart_resume',
                                                         'smart_sync'):
                 self.set_request_pending_flag(cmd_runner=cmd_runner,
-                                              targets=targets,
+                                              targets=set(targets),
                                               pending_request_flag=False)
 
             pe = self.pending_events[cmd_runner]
@@ -17115,6 +17182,54 @@ class ConfigVerifier:
     #                 f'request_pending removed for {cmd_runner=}, '
     #                 f'{removed_pair_keys=}')
     #     self.handle_deferred_deletes(cmd_runner=cmd_runner)
+
+    ####################################################################
+    # handle_request_entry_exit_log_msg
+    ####################################################################
+    def handle_request_refresh_log_msg(self,
+                                       cmd_runner: str,
+                                       targets: set[str],
+                                       log_msg: str) -> None:
+        """Handle the request refresh log msgs.
+
+        Args:
+            cmd_runner: name of thread doing the cmd
+            targets: thread names of remaining targets
+            log_msg: log message for the request
+
+        """
+        pe = self.pending_events[cmd_runner]
+
+        targets_to_reset: set[str] = (pe[PE.current_request].targets
+                                      - targets)
+
+        self.set_request_pending_flag(
+            cmd_runner=cmd_runner,
+            targets=targets_to_reset,
+            pending_request_flag=False)
+
+        # request = pe[PE.current_request].req_type.value
+
+        # if request == 'smart_send':
+        #     self.config_ver.set_msg_pending_count(receiver=remote,
+        #                                           sender=cmd_runner,
+        #                                           pending_msg_adj=1)
+        # elif request == 'smart_recv':
+        #     self.config_ver.set_msg_pending_count(receiver=cmd_runner,
+        #                                           sender=remote,
+        #                                           pending_msg_adj=-1)
+        # elif request == 'smart_wait':
+        #     self.config_ver.set_wait_pending_flag(waiter=cmd_runner,
+        #                                           resumer=remote,
+        #                                           pending_wait_flag=False)
+        # elif request == 'smart_resume':
+        #     self.config_ver.set_wait_pending_flag(waiter=remote,
+        #                                           resumer=cmd_runner,
+        #                                           pending_wait_flag=True)
+        # elif request == 'smart_sync':
+        #     self.config_ver.set_sync_pending_flag(waiter=cmd_runner,
+        #                                           resumer=remote,
+        #                                           pending_sync_flag=False)
 
     ####################################################################
     # handle_recv_waiting_log_msg

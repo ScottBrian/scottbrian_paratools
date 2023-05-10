@@ -4322,6 +4322,9 @@ class SmartThread:
                                 f'request_pending for {pk_remote.remote=}')
 
                 if request_block.do_refresh:
+                    logger.debug(
+                        f'{self.name} calling refresh, remaining remotes: '
+                        f'{self.work_pk_remotes}')
                     with sel.SELockExcl(SmartThread._registry_lock):
                         self._clean_registry()
                         self._clean_pair_array()
@@ -4331,8 +4334,8 @@ class SmartThread:
             # remotes that were still pending - we need to fail the
             # request as soon as we know about any unresolvable failures
             if ((request_block.stopped_remotes and request_block.remotes
-                 and (self.request != ReqType.Smart_wait
-                      or (self.wait_for_any and not request_block.ret_msg)))
+                 and not (self.request == ReqType.Smart_wait
+                          and self.wait_for_any and request_block.ret_msg))
                     or request_block.deadlock_remotes
                     or request_block.timer.is_expired()):
 
