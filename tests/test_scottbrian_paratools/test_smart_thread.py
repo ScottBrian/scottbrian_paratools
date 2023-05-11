@@ -8218,7 +8218,8 @@ class ConfigVerifier:
     def build_pending_flags_scenarios(
             self,
             request_type: st.ReqType,
-            pending_request_tf: bool) -> None:
+            pending_request_tf: bool,
+            pending_msg_count: int) -> None:
         """Return a list of ConfigCmd items for a create.
 
         Args:
@@ -8226,18 +8227,20 @@ class ConfigVerifier:
                 flags set on it
             pending_request_tf: if True, then cause request_pending
                 to be set
+            pending_msg_count: number of msgs to be placed on the
+                pending thread
         """
         num_pending_requestors = 1
-        num_reg_to_stop = 1
-        num_lockers = 3
+        num_remotes = 1
+        num_lockers = 4
         num_unregers = 1
         # Make sure we have enough threads.
         assert (num_lockers
                 + num_unregers
                 + num_pending_requestors
-                + num_reg_to_stop) <= len(self.unregistered_names)
+                + num_remotes) <= len(self.unregistered_names)
 
-        num_registered_needed = num_reg_to_stop
+        num_registered_needed = num_remotes
 
         num_active_needed = (num_lockers
                              + num_unregers
@@ -8282,13 +8285,13 @@ class ConfigVerifier:
             var_name_for_log='pending_requestor_names')
 
         ################################################################
-        # choose req_to_stop_names
+        # choose remote_names
         ################################################################
-        req_to_stop_names = self.choose_names(
+        remote_names = self.choose_names(
             name_collection=registered_names_copy,
-            num_names_needed=num_reg_to_stop,
+            num_names_needed=num_remotes,
             update_collection=True,
-            var_name_for_log='req_to_stop_names')
+            var_name_for_log='remote_names')
 
         lock_positions: list[str] = []
         ################################################################
@@ -8303,7 +8306,10 @@ class ConfigVerifier:
         # verify request_pending is not paired
 
         msgs_to_send = self.create_msgs(sender_names=pending_requestor_names,
-                                        receiver_names=req_to_stop_names[0])
+                                        receiver_names=remote_names[0])
+
+        if pending_msg_count > 0:
+
 
         ################################################################
         # start of by getting lock_0
@@ -8332,19 +8338,19 @@ class ConfigVerifier:
         if request_type == st.ReqType.Smart_wait:
             pend_req_serial_num = self.add_cmd(
                 Wait(cmd_runners=pending_requestor_names[0],
-                     resumers=req_to_stop_names[0],
-                     stopped_remotes=req_to_stop_names[0]))
+                     resumers=remote_names[0],
+                     stopped_remotes=remote_names[0]))
         elif request_type == st.ReqType.Smart_resume:
             pend_req_serial_num = self.add_cmd(
                 Resume(cmd_runners=pending_requestor_names[0],
-                       targets=req_to_stop_names[0],
-                       stopped_remotes=req_to_stop_names[0]))
+                       targets=remote_names[0],
+                       stopped_remotes=remote_names[0]))
         elif request_type == st.ReqType.Smart_send:
             pend_req_serial_num = self.add_cmd(
                 SendMsg(cmd_runners=pending_requestor_names[0],
-                        receivers=req_to_stop_names[0],
+                        receivers=remote_names[0],
                         msgs_to_send=msgs_to_send,
-                        stopped_remotes=req_to_stop_names[0]))
+                        stopped_remotes=remote_names[0]))
         lock_positions.append(pending_requestor_names[0])
 
         self.add_cmd(
@@ -8369,7 +8375,7 @@ class ConfigVerifier:
         ################################################################
         unreg_serial_num = self.add_cmd(
             Unregister(cmd_runners=unreger_names[0],
-                       unregister_targets=req_to_stop_names[0]))
+                       unregister_targets=remote_names[0]))
         lock_positions.append(unreger_names[0])
 
         self.add_cmd(
@@ -8405,8 +8411,20 @@ class ConfigVerifier:
                        exp_positions=lock_positions.copy()))
 
         ################################################################
+        # locker_3 gets behind the smart_wait
+        # locks held: lock_1|smart_unreg|lock_2|smart_wait|lock_3
+        ################################################################
+        obtain_lock_serial_num_3 = self.add_cmd(
+            LockObtain(cmd_runners=locker_names[3]))
+        lock_positions.append(locker_names[3])
+
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
         # release lock_1 to allow smart_unreg to remove smart_wait targ
-        # locks held: lock_2|smart_wait
+        # locks held: lock_2|smart_wait|lock_3
         ################################################################
         self.add_cmd(
             LockRelease(cmd_runners=locker_names[1]))
@@ -8420,14 +8438,16 @@ class ConfigVerifier:
 
         if not pending_request_tf:
             ############################################################
-            # release lock_2 to allow smart_wait to complete
-            # locks held: None
+            # release lock_2 - smart_wait resets request_pending and
+            # then waits behind lock_3 just before refresh
+            # locks held: lock_3|smart_wait
             ############################################################
             self.add_cmd(
                 LockRelease(cmd_runners=locker_names[2]))
             lock_positions.remove(locker_names[2])
             # releasing lock 1 will allow the smart_unreg complete
             lock_positions.remove(pending_requestor_names[0])
+            lock_positions.append(pending_requestor_names[0])
 
             self.add_cmd(
                 LockVerify(cmd_runners=self.commander_name,
@@ -8440,7 +8460,7 @@ class ConfigVerifier:
             cmd_runners=self.commander_name,
             verify_type=VerifyType.VerifyPendingFlags,
             names_to_check=pending_requestor_names,
-            aux_names=req_to_stop_names,
+            aux_names=remote_names,
             exp_pending_flags=exp_pending_flags,
             obtain_reg_lock=False))
 
@@ -8448,7 +8468,7 @@ class ConfigVerifier:
             pe = self.pending_events[unreger_names[0]]
 
             pair_key = st.SmartThread._get_pair_key(pending_requestor_names[0],
-                                                    req_to_stop_names[0])
+                                                    remote_names[0])
 
             def_del_reasons: DefDelReasons = DefDelReasons(
                 pending_request=pending_request_tf,
@@ -23752,10 +23772,12 @@ class TestSmartThreadScenarios:
                                                   st.ReqType.Smart_resume,
                                                   st.ReqType.Smart_send])
     @pytest.mark.parametrize("pending_request_tf_arg", [True, False])
+    @pytest.mark.parametrize("pending_msg_count_arg", [0, 1, 2])
     def test_pending_flags_scenarios(
             self,
             request_type_arg: st.ReqType,
             pending_request_tf_arg: bool,
+            pending_msg_count_arg: int,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
         """Test meta configuration scenarios.
@@ -23764,13 +23786,19 @@ class TestSmartThreadScenarios:
             request_type_arg: request type that is to get the pending
                 flags set on it
             pending_request_tf_arg: if True, then cause request_pending
-                to be set
+                to be set on the pending thread
+            pending_msg_count_arg: number of msgs to be placed on the
+                pending thread
             caplog: pytest fixture to capture log output
 
         """
+        if not pending_request_tf_arg and pending_msg_count_arg == 0:
+            return
+
         args_for_scenario_builder: dict[str, Any] = {
             'request_type': request_type_arg,
             'pending_request_tf': pending_request_tf_arg,
+            'pending_msg_count': pending_msg_count_arg,
         }
 
         self.scenario_driver(
