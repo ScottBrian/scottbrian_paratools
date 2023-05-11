@@ -4357,7 +4357,6 @@ class ThreadTracker:
 @dataclass
 class ThreadPairStatus:
     """Class that keeps pair status."""
-    pending_ops_count: int
     reset_ops_count: bool
     pending_request: bool = False
     pending_msg_count: int = 0
@@ -6639,7 +6638,6 @@ class ConfigVerifier:
         self.all_threads: dict[str, st.SmartThread] = {}
         self.max_msgs = max_msgs
 
-        self.pending_ops_counts: dict[tuple[str, str], dict[str, int]] = {}
         self.expected_num_recv_timeouts: int = 0
 
         # self.del_def_pairs_count: dict[
@@ -6665,9 +6663,6 @@ class ConfigVerifier:
         self.stopping_names: list[str] = []
 
         self.recently_stopped: dict[str, int] = defaultdict(int)
-
-        # self.pending_recv_msg_par: dict[str, bool] = defaultdict(bool)
-        self.update_pair_array_items: deque[UpaItem] = deque()
 
         self.log_start_idx: int = 0
         self.log_search_items: tuple[LogSearchItems, ...] = (
@@ -8223,14 +8218,14 @@ class ConfigVerifier:
     def build_pending_flags_scenarios(
             self,
             request_type: st.ReqType,
-            pending_request: bool) -> None:
+            pending_request_tf: bool) -> None:
         """Return a list of ConfigCmd items for a create.
 
         Args:
             request_type: request type that is to get the pending
                 flags set on it
-            pending_request: if True, then cause request_pending
-                to set
+            pending_request_tf: if True, then cause request_pending
+                to be set
         """
         num_pending_requestors = 1
         num_reg_to_stop = 1
@@ -8423,10 +8418,24 @@ class ConfigVerifier:
             LockVerify(cmd_runners=self.commander_name,
                        exp_positions=lock_positions.copy()))
 
+        if not pending_request_tf:
+            ############################################################
+            # release lock_2 to allow smart_wait to complete
+            # locks held: None
+            ############################################################
+            self.add_cmd(
+                LockRelease(cmd_runners=locker_names[2]))
+            lock_positions.remove(locker_names[2])
+            # releasing lock 1 will allow the smart_unreg complete
+            lock_positions.remove(pending_requestor_names[0])
+
+            self.add_cmd(
+                LockVerify(cmd_runners=self.commander_name,
+                           exp_positions=lock_positions.copy()))
         ################################################################
         # verify results
         ################################################################
-        exp_pending_flags = PendingFlags(pending_request=True)
+        exp_pending_flags = PendingFlags(pending_request=pending_request_tf)
         self.add_cmd(VerifyConfig(
             cmd_runners=self.commander_name,
             verify_type=VerifyType.VerifyPendingFlags,
@@ -8435,36 +8444,38 @@ class ConfigVerifier:
             exp_pending_flags=exp_pending_flags,
             obtain_reg_lock=False))
 
-        pe = self.pending_events[unreger_names[0]]
+        if pending_request_tf:
+            pe = self.pending_events[unreger_names[0]]
 
-        pair_key = st.SmartThread._get_pair_key(pending_requestor_names[0],
-                                                req_to_stop_names[0])
+            pair_key = st.SmartThread._get_pair_key(pending_requestor_names[0],
+                                                    req_to_stop_names[0])
 
-        def_del_reasons: DefDelReasons = DefDelReasons(
-            pending_request=True,
-            pending_msg=False,
-            pending_wait=False,
-            pending_sync=False)
+            def_del_reasons: DefDelReasons = DefDelReasons(
+                pending_request=pending_request_tf,
+                pending_msg=False,
+                pending_wait=False,
+                pending_sync=False)
 
-        rem_sb_key: RemSbKey = (pending_requestor_names[0],
-                                pair_key,
-                                def_del_reasons)
+            rem_sb_key: RemSbKey = (pending_requestor_names[0],
+                                    pair_key,
+                                    def_del_reasons)
 
-        pe[PE.notify_rem_status_block_def_msg][rem_sb_key] += 1
+            pe[PE.notify_rem_status_block_def_msg][rem_sb_key] += 1
 
-        ################################################################
-        # release lock_2 to allow smart_wait to complete
-        # locks held: None
-        ################################################################
-        self.add_cmd(
-            LockRelease(cmd_runners=locker_names[2]))
-        lock_positions.remove(locker_names[2])
-        # releasing lock 1 will allow the smart_unreg complete
-        lock_positions.remove(pending_requestor_names[0])
+        if lock_positions:  # if we still hold lock_2
+            ################################################################
+            # release lock_2 to allow smart_wait to complete
+            # locks held: None
+            ################################################################
+            self.add_cmd(
+                LockRelease(cmd_runners=locker_names[2]))
+            lock_positions.remove(locker_names[2])
+            # releasing lock 1 will allow the smart_unreg complete
+            lock_positions.remove(pending_requestor_names[0])
 
-        self.add_cmd(
-            LockVerify(cmd_runners=self.commander_name,
-                       exp_positions=lock_positions.copy()))
+            self.add_cmd(
+                LockVerify(cmd_runners=self.commander_name,
+                           exp_positions=lock_positions.copy()))
 
         ################################################################
         # confirm the wait is done
@@ -15177,73 +15188,6 @@ class ConfigVerifier:
             f'Monitor Checkpoint: {verify_name} {verify_idx}')
 
     ####################################################################
-    # dec_ops_count
-    ####################################################################
-    def dec_ops_count(self,
-                      cmd_runner: str,
-                      sender: str,
-                      dec_ops_type: str) -> None:
-        """Decrement the pending operations count.
-
-        Args:
-            cmd_runner: the names of the thread whose count is to be
-                decremented
-            sender: the name of the threads that is paired with the
-                cmd_runner
-            dec_ops_type: smart_recv or wait
-
-        """
-        pair_key = st.SmartThread._get_pair_key(cmd_runner, sender)
-        self.log_test_msg(
-            f'dec_ops_count entry: {cmd_runner=}, {pair_key=}')
-
-        with self.ops_lock:
-            self.expected_pairs[pair_key][cmd_runner].pending_ops_count -= 1
-            ops_count = self.expected_pairs[pair_key][
-                cmd_runner].pending_ops_count
-            self.log_test_msg(f'dec_ops_count for {cmd_runner=} with '
-                              f'{pair_key=} dec ops_count to {ops_count}')
-            if self.expected_pairs[pair_key][cmd_runner].pending_ops_count < 0:
-                self.abort_all_f1_threads()
-                raise InvalidConfigurationDetected(
-                    f'dec_ops_count for for pair_key {pair_key}, '
-                    f'name {cmd_runner} was decremented below zero')
-
-            # indicate that this thread might need to update pair array
-            # self.pending_recv_msg_par[cmd_runner] = True
-
-            # remove sender from list if deferred delete is not needed
-            # self.recv_msg_event_items[cmd_runner].targets.remove(sender)
-
-            # determine whether deferred delete is needed
-            if (self.expected_pairs[pair_key][
-                    cmd_runner].pending_ops_count == 0
-                    and sender not in self.expected_pairs[pair_key].keys()):
-                self.update_pair_array_items.append(UpaItem(
-                    upa_cmd_runner=cmd_runner,
-                    upa_type=dec_ops_type,
-                    upa_target=sender,
-                    upa_def_del_name=cmd_runner,
-                    upa_process=''))
-
-                # we need to post later when we do the pair array update
-                # self.recv_msg_event_items[
-                #     cmd_runner].deferred_post_needed = True
-                # self.log_test_msg(f'dec_ops_count for {cmd_runner=} with '
-                #                   f'{pair_key=} set deferred_post_needed')
-
-            # post handle_recv_msg if all receives are now processed
-            # if (not self.recv_msg_event_items[cmd_runner].targets
-            #         and not self.recv_msg_event_items[
-            #             cmd_runner].deferred_post_needed):
-            #     self.recv_msg_event_items[cmd_runner].client_event.set()
-            #     self.log_test_msg(f'dec_ops_count for {cmd_runner=} with '
-            #                       f'{pair_key=} set client_event')
-
-        self.log_test_msg(
-            f'dec_ops_count exit: {cmd_runner=}, {pair_key=}')
-
-    ####################################################################
     # dec_recv_timeout
     ####################################################################
     def dec_recv_timeout(self):
@@ -16820,64 +16764,6 @@ class ConfigVerifier:
 
         # del self.expected_registered[rem_name]
 
-    # ####################################################################
-    # # handle_reg_remove
-    # ####################################################################
-    # def handle_reg_remove(self,
-    #                       cmd_runner: str,
-    #                       del_name: str,
-    #                       process: str,
-    #                       reg_rem_log_idx: int
-    #                       ) -> None:
-    #     """Handle the removed from registry log message.
-    #
-    #     Args:
-    #         cmd_runner: name of thread doing the cmd
-    #         del_name: name of thread being removed
-    #         process: smart_thread request that was running
-    #         reg_rem_log_idx: index in log messages for reg remove msg
-    #
-    #     """
-    #     self.log_test_msg(f'handle_reg_remove entered: {cmd_runner=}, '
-    #                       f'{del_name=}, {process=}')
-    #
-    #     # with self.ops_lock:
-    #     #     # reg remove means that recv_msgs are no longer pending
-    #     #     self.pending_recv_msg_par = defaultdict(bool)
-    #
-    #     with self.ops_lock:
-    #         if process == 'join':
-    #             from_status = st.ThreadState.Alive
-    #         else:
-    #             from_status = st.ThreadState.Registered
-    #
-    #         self.expected_registered[del_name].is_alive = False
-    #         self.expected_registered[
-    #             del_name].st_state = st.ThreadState.Stopped
-    #         # if (not self.expected_registered[del_name].is_TargetThread
-    #         #         and process == 'join'):
-    #         #     self.add_log_msg(
-    #         #         f'{cmd_runner} set state for thread '
-    #         #         f'{del_name} '
-    #         #         f'from {from_status} to '
-    #         #         f'{st.ThreadState.Stopped}')
-    #
-    #         # self.handle_exp_status_log_msgs(log_idx=reg_rem_log_idx)
-    #
-    #         del self.expected_registered[del_name]
-    #
-    #         self.add_log_msg(f'{cmd_runner} removed {del_name} from registry '
-    #                          f'for {process=}')
-    #
-    #         # self.add_log_msg(f'{cmd_runner} entered _clean_pair_array')
-    #
-    #         self.update_pair_array_items.append(UpaItem(
-    #             upa_cmd_runner=cmd_runner,
-    #             upa_type='del',
-    #             upa_target=del_name,
-    #             upa_def_del_name='',
-    #             upa_process=process))
-
     ####################################################################
     # handle_add_pair_array_log_msg
     ####################################################################
@@ -16994,7 +16880,6 @@ class ConfigVerifier:
             timeout: timeout value for smart_resume
             timeout_names: names that will cause timeout
             timeout_type: None, False, or True
-            code: code to provide to waiter
             log_msg: log msg for smart_resume
         """
         self.log_test_msg(f'handle_resume entry: {cmd_runner=}, {targets=}, '
@@ -17028,11 +16913,7 @@ class ConfigVerifier:
         req_key_exit: RequestKey = ('smart_resume',
                                     'exit')
 
-        # enter_exit = ('entry', 'exit')
         if stopped_remotes:
-            inc_ops_names: set[str] = targets - stopped_remotes
-            self.inc_ops_count(inc_ops_names, cmd_runner)
-            # enter_exit = ('entry', )
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_resume(
@@ -17055,23 +16936,18 @@ class ConfigVerifier:
 
         elif timeout_type == TimeoutType.TimeoutNone:
             pe[PE.request_msg][req_key_exit] += 1
-            self.inc_ops_count(targets.copy(), cmd_runner)
             self.all_threads[cmd_runner].smart_resume(
                 waiters=targets,
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutFalse:
             pe[PE.request_msg][req_key_exit] += 1
-            self.inc_ops_count(targets.copy(), cmd_runner)
             self.all_threads[cmd_runner].smart_resume(
                 waiters=targets,
                 timeout=timeout,
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutTrue:
-            inc_ops_names: set[str] = targets - set(timeout_names)
-            self.inc_ops_count(inc_ops_names, cmd_runner)
-            # enter_exit = ('entry', )
             with pytest.raises(st.SmartThreadRequestTimedOut):
                 self.all_threads[cmd_runner].smart_resume(
                     waiters=targets,
@@ -17168,24 +17044,6 @@ class ConfigVerifier:
         req_key_exit: RequestKey = ('smart_send',
                                     'exit')
 
-        ops_count_names = receivers.copy()
-
-        if unreg_timeout_names:
-            ops_count_names = list(
-                set(ops_count_names)
-                - set(unreg_timeout_names))
-        if fullq_timeout_names:
-            ops_count_names = list(
-                set(ops_count_names)
-                - set(fullq_timeout_names))
-
-        if stopped_remotes:
-            ops_count_names = list(
-                set(ops_count_names)
-                - stopped_remotes)
-
-        self.inc_ops_count(ops_count_names, cmd_runner)
-
         elapsed_time: float = 0
         start_time = time.time()
 
@@ -17268,27 +17126,13 @@ class ConfigVerifier:
                     stopped_remotes=set(stopped_remotes)),
                 log_level=logging.ERROR)
 
-        # self.add_request_log_msg(cmd_runner=cmd_runner,
-        #                          smart_request='smart_send',
-        #                          targets=receivers,
-        #                          timeout=timeout,
-        #                          timeout_type=timeout_type,
-        #                          enter_exit=enter_exit,
-        #                          log_msg=log_msg)
-        # for name in ops_count_names:
-        #     log_msg = f'{cmd_runner} sent message to {name}'
-        #     self.log_ver.add_msg(
-        #         log_name='scottbrian_paratools.smart_thread',
-        #         log_level=logging.INFO,
-        #         log_msg=log_msg)
-
         mean_elapsed_time = elapsed_time / len(receivers)
         self.log_test_msg(f'handle_send exit: {cmd_runner=} '
                           f'{elapsed_time=}, {len(receivers)=} '
                           f'{mean_elapsed_time=}')
 
     ####################################################################
-    # handle_send_msg
+    # handle_set_state_log_msg
     ####################################################################
     def handle_set_state_log_msg(self,
                                  cmd_runner: str,
@@ -18634,52 +18478,6 @@ class ConfigVerifier:
                           f'{resumers=}, {stopped_remotes=}')
 
     ####################################################################
-    # inc_ops_count
-    ####################################################################
-    def inc_ops_count(self, targets: list[str], remote: str) -> None:
-        """Increment the pending operations count.
-
-        Args:
-            targets: the names of the threads whose count is to be
-                       incremented
-            remote: the names of the threads that are paired with
-                         the targets
-        """
-        self.log_test_msg(f'inc_ops_count entry: {targets=}, {remote=}')
-        with self.ops_lock:
-            for target in targets:
-                pair_key = st.SmartThread._get_pair_key(target, remote)
-                # check to make sure remote is paired - might not have
-                # started yet. Note that we also need to check to make
-                # sure the target is in the expected pairs in case it
-                # was removed but the other thread remained because it
-                # has a pending ops count (and non-empty msg_q)
-                if (pair_key in self.expected_pairs and
-                        target in self.expected_pairs[pair_key]):
-                    self.expected_pairs[pair_key][
-                        target].pending_ops_count += 1
-                    ops_count = self.expected_pairs[pair_key][
-                        target].pending_ops_count
-                    self.log_test_msg(f'inc_ops_count for {pair_key=}, '
-                                      f'{target=} set to {ops_count=}')
-                else:
-                    # we are assuming that the remote will be started
-                    # while smart_send is running and that the msg
-                    # will be delivered (otherwise we should not have
-                    # called inc_ops_count)
-                    if pair_key not in self.pending_ops_counts:
-                        self.pending_ops_counts[pair_key] = {}
-                    if target in self.pending_ops_counts[pair_key]:
-                        self.pending_ops_counts[pair_key][target] += 1
-                    else:
-                        self.pending_ops_counts[pair_key][target] = 1
-                    ops_count = self.pending_ops_counts[pair_key][target]
-                    self.log_test_msg(f'inc_ops_count for {pair_key=}, '
-                                      f'{target=} set pending {ops_count=}')
-
-        self.log_test_msg(f'inc_ops_count exit: {targets=}, {remote=}')
-
-    ####################################################################
     # lock_obtain
     ####################################################################
     @staticmethod
@@ -18986,25 +18784,13 @@ class ConfigVerifier:
             changed = True
             pair_key = st.SmartThread._get_pair_key(add_name, other_name)
 
-            add_poc = 0
-            other_poc = 0
-            if pair_key in self.pending_ops_counts:
-                if add_name in self.pending_ops_counts[pair_key]:
-                    add_poc = self.pending_ops_counts[pair_key][add_name]
-                    self.pending_ops_counts[pair_key][add_name] = 0
-                if other_name in self.pending_ops_counts[pair_key]:
-                    other_poc = self.pending_ops_counts[pair_key][other_name]
-                    self.pending_ops_counts[pair_key][other_name] = 0
-
             if pair_key not in self.expected_pairs:
                 self.log_test_msg(f'add_to_pair_array {pair_key=} not in '
                                   f'{self.expected_pairs=}')
                 self.expected_pairs[pair_key] = {
                     add_name: ThreadPairStatus(
-                        pending_ops_count=add_poc,
                         reset_ops_count=False),
                     other_name: ThreadPairStatus(
-                        pending_ops_count=other_poc,
                         reset_ops_count=False)}
                 add_key: AddPaKey = (cmd_runner,
                                      pair_key)
@@ -19041,7 +18827,6 @@ class ConfigVerifier:
 
                 # looks OK, just add in the new name
                 self.expected_pairs[pair_key][add_name] = ThreadPairStatus(
-                    pending_ops_count=add_poc,
                     reset_ops_count=False)
 
                 add_status_key: AddStatusBlockKey = (cmd_runner,
@@ -19278,323 +19063,6 @@ class ConfigVerifier:
                     pe[PE.subprocess_msg][sub_key] += 1
 
         self.log_test_msg(f'clean_registry exit: {cmd_runner=}, {target=}')
-
-    ####################################################################
-    # del_from_pair_array
-    ####################################################################
-    def del_from_pair_array(self,
-                            cmd_runner: str,
-                            del_name: str) -> None:
-        """Remove thread from pair_array.
-
-        Args:
-            cmd_runner: thread name doin the update
-            del_name: thread name to remove
-
-        Raises:
-            InvalidConfigurationDetected: Attempt to add thread to
-                existing pair array that has an empty ThreadPairStatus
-                dict, or that already has the thread in the pair array,
-                or that did not have the other name in the pair array.
-
-        """
-        self.log_test_msg(f'del_from_pair_array entry: {cmd_runner=}, '
-                          f'{del_name=}')
-
-        pe = self.pending_events[cmd_runner]
-
-        if del_name in self.expected_registered:
-            raise IncorrectDataDetected(
-                f'del_from_pair_array detected {del_name=} unexpectedly '
-                f'found in {self.expected_registered=}'
-            )
-        for other_name in self.expected_registered.keys():
-            if other_name == target:
-                continue
-            pair_key = st.SmartThread._get_pair_key(target, other_name)
-
-            target_poc = 0
-            other_poc = 0
-            if pair_key in self.pending_ops_counts:
-                if target in self.pending_ops_counts[pair_key]:
-                    target_poc = self.pending_ops_counts[pair_key][target]
-                    self.pending_ops_counts[pair_key][target] = 0
-                if other_name in self.pending_ops_counts[pair_key]:
-                    other_poc = self.pending_ops_counts[pair_key][other_name]
-                    self.pending_ops_counts[pair_key][other_name] = 0
-
-            if pair_key not in self.expected_pairs:
-                self.expected_pairs[pair_key] = {
-                    target: ThreadPairStatus(
-                        pending_ops_count=target_poc,
-                        reset_ops_count=False),
-                    other_name: ThreadPairStatus(
-                        pending_ops_count=other_poc,
-                        reset_ops_count=False)}
-                add_key: AddPaKey = (cmd_runner,
-                                     pair_key)
-                pe[PE.add_pair_array][add_key] += 1
-
-                for pair_name in pair_key:
-                    add_status_key: AddStatusBlockKey = (cmd_runner,
-                                                         pair_key,
-                                                         pair_name)
-                    pe[PE.add_status_block_msg][add_status_key] += 1
-
-            # if pair_key already exists, we need to add name
-            # as a resurrected thread
-            else:  # we already have a pair_key, need to add name
-                if not self.expected_pairs[pair_key]:
-                    self.abort_all_f1_threads()
-                    raise InvalidConfigurationDetected(
-                        'Attempt to add thread to existing pair array '
-                        'that has an empty ThreadPairStatus dict')
-                if target in self.expected_pairs[pair_key].keys():
-                    self.abort_all_f1_threads()
-                    raise InvalidConfigurationDetected(
-                        f'{cmd_runner} attempted to add {target} to '
-                        f'pair array for {pair_key=} that already '
-                        'has the thread in the pair array')
-
-                if other_name not in self.expected_pairs[pair_key].keys():
-                    self.abort_all_f1_threads()
-                    raise InvalidConfigurationDetected(
-                        'Attempt to add thread to pair array that did '
-                        'not have the other name in the pair array')
-
-                # looks OK, just add in the new name
-                self.expected_pairs[pair_key][target] = ThreadPairStatus(
-                    pending_ops_count=target_poc,
-                    reset_ops_count=False)
-
-                add_status_key: AddStatusBlockKey = (cmd_runner,
-                                                     pair_key,
-                                                     target)
-                pe[PE.add_status_block_msg][add_status_key] += 1
-
-                # self.log_test_msg(f'{cmd_runner} '
-                #                   'resurrected expected_pairs '
-                #                   f'for {pair_key=}, {target=} with '
-                #                   f'{target_poc=}')
-
-        self.log_test_msg(f'del_from_pair_array entry: {cmd_runner=}, '
-                          f'{del_name=}')
-
-        pair_keys_to_delete = []
-        for pair_key in self.expected_pairs:
-            if del_name not in pair_key:
-                continue
-            if del_name == pair_key[0]:
-                other_name = pair_key[1]
-            else:
-                other_name = pair_key[0]
-
-            if del_name not in self.expected_pairs[pair_key].keys():
-                self.abort_all_f1_threads()
-                raise InvalidConfigurationDetected(
-                    f'The expected_pairs for pair_key {pair_key} '
-                    'contains an entry of '
-                    f'{self.expected_pairs[pair_key]}  which does not '
-                    f'include the {del_name=} being deleted')
-
-            if other_name not in self.expected_pairs[pair_key].keys():
-                # check that del_name had reason to be in pair_array
-                pair_keys_to_delete.append(pair_key)
-            else:
-                request_is_pending = False
-                if (other_name in self.request_pending_pair_keys
-                        and pair_key in self.request_pending_pair_keys[
-                            other_name]):
-                    request_is_pending = True
-                    self.log_test_msg('found request_pending for '
-                                      f'{other_name=}, {pair_key=}')
-                if (self.expected_pairs[pair_key][
-                    other_name].pending_ops_count == 0
-                        and not request_is_pending):
-                    pair_keys_to_delete.append(pair_key)
-                    self.log_test_msg(
-                        f'update_pair_array_del rem_pair_key 2 {pair_key}, '
-                        f'{other_name}')
-                    self.add_log_msg(re.escape(
-                        f"{cmd_runner} removed status_blocks entry "
-                        f"for pair_key = {pair_key}, "
-                        f"name = {other_name}"))
-                else:
-                    # remember for next update by smart_recv or wait
-                    del_def_key = (pair_key, other_name)
-                    self.del_deferred_list.append(del_def_key)
-
-                    # best we can do is delete the del_name for now
-                    del self.expected_pairs[pair_key][del_name]
-
-            self.log_test_msg(
-                f'update_pair_array_del 2 rem_pair_key 3 {pair_key}, '
-                f'{del_name}')
-            self.add_log_msg(re.escape(
-                f"{cmd_runner} removed status_blocks entry "
-                f"for pair_key = {pair_key}, "
-                f"name = {del_name}"))
-
-        for pair_key in pair_keys_to_delete:
-
-
-            del self.expected_pairs[pair_key]
-            self.add_log_msg(re.escape(
-                f'{cmd_runner} removed _pair_array entry'
-                f' for pair_key = {pair_key}'))
-
-            # split_msg = self.last_clean_reg_log_msg.split()
-            # if (split_msg[0] != cmd_runner
-            #         or split_msg[9] != f"['{del_name}']"):
-            #     raise FailedToFindLogMsg(f'del_thread {cmd_runner=}, '
-            #                              f'{del_name} did not match '
-            #                              f'{self.last_clean_reg_log_msg=} ')
-            # self.add_log_msg(re.escape(self.last_clean_reg_log_msg))
-
-        self.add_log_msg(f'{cmd_runner} did successful '
-                         f'{process} of {del_name}.')
-
-    ####################################################################
-    # update_pair_array_del
-    ####################################################################
-    def update_pair_array_del(self,
-                              cmd_runner: str,
-                              upa_item: UpaItem) -> None:
-        """Unregister the named threads.
-
-        Args:
-            cmd_runner: name of thread doing the update
-            upa_item: describes what the update is for
-
-        Raises:
-            InvalidConfigurationDetected: The expected_pairs for
-            pair_key contains an entry of which does not include the
-            name being deleted.
-
-        """
-        del_name = upa_item.upa_target
-        process = upa_item.upa_process
-        pair_keys_to_delete = []
-        for pair_key in self.expected_pairs:
-            if del_name not in pair_key:
-                continue
-            if del_name == pair_key[0]:
-                other_name = pair_key[1]
-            else:
-                other_name = pair_key[0]
-
-            if del_name not in self.expected_pairs[pair_key].keys():
-                self.abort_all_f1_threads()
-                raise InvalidConfigurationDetected(
-                    f'The expected_pairs for pair_key {pair_key} '
-                    'contains an entry of '
-                    f'{self.expected_pairs[pair_key]}  which does not '
-                    f'include the {del_name=} being deleted')
-
-            if other_name not in self.expected_pairs[pair_key].keys():
-                pair_keys_to_delete.append(pair_key)
-            else:
-                request_is_pending = False
-                if (other_name in self.request_pending_pair_keys
-                        and pair_key in self.request_pending_pair_keys[
-                            other_name]):
-                    request_is_pending = True
-                    self.log_test_msg('found request_pending for '
-                                      f'{other_name=}, {pair_key=}')
-                if (self.expected_pairs[pair_key][
-                        other_name].pending_ops_count == 0
-                        and not request_is_pending):
-                    pair_keys_to_delete.append(pair_key)
-                    self.log_test_msg(
-                        f'update_pair_array_del rem_pair_key 2 {pair_key}, '
-                        f'{other_name}')
-                    self.add_log_msg(re.escape(
-                        f"{cmd_runner} removed status_blocks entry "
-                        f"for pair_key = {pair_key}, "
-                        f"name = {other_name}"))
-                else:
-                    # remember for next update by smart_recv or wait
-                    del_def_key = (pair_key, other_name)
-                    self.del_deferred_list.append(del_def_key)
-
-                    # best we can do is delete the del_name for now
-                    del self.expected_pairs[pair_key][del_name]
-
-            self.log_test_msg(
-                f'update_pair_array_del 2 rem_pair_key 3 {pair_key}, '
-                f'{del_name}')
-            self.add_log_msg(re.escape(
-                f"{cmd_runner} removed status_blocks entry "
-                f"for pair_key = {pair_key}, "
-                f"name = {del_name}"))
-
-        for pair_key in pair_keys_to_delete:
-            self.log_test_msg(f'update_pair_array_del for {cmd_runner=}, '
-                              f'{del_name=}, {process=} deleted '
-                              f'{pair_key=}')
-
-            del self.expected_pairs[pair_key]
-            self.add_log_msg(re.escape(
-                f'{cmd_runner} removed _pair_array entry'
-                f' for pair_key = {pair_key}'))
-
-            # split_msg = self.last_clean_reg_log_msg.split()
-            # if (split_msg[0] != cmd_runner
-            #         or split_msg[9] != f"['{del_name}']"):
-            #     raise FailedToFindLogMsg(f'del_thread {cmd_runner=}, '
-            #                              f'{del_name} did not match '
-            #                              f'{self.last_clean_reg_log_msg=} ')
-            # self.add_log_msg(re.escape(self.last_clean_reg_log_msg))
-
-        self.add_log_msg(f'{cmd_runner} did successful '
-                         f'{process} of {del_name}.')
-
-    ####################################################################
-    # update_pair_array
-    ####################################################################
-    def update_pair_array_def_del(self,
-                                  cmd_runner: str,
-                                  upa_item: UpaItem) -> None:
-        """Unregister the named threads.
-
-        Args:
-            cmd_runner: name of thread doing the update
-            upa_item: describes what the update is for
-
-        """
-        def_del_name = upa_item.upa_def_del_name
-        target_name = upa_item.upa_target
-
-        # It is possible that the target_name could have been resurrected if
-        # an add was done between the time that smart_recv issued the
-        # recvd msg log msg its entry to refresh_pair_array. In this
-        # case, the updated pair array log message must be for some
-        # other update the smart_recv found, such as another deferred
-        # delete that was also done between the above mentioned events
-
-        pair_key_1 = st.SmartThread._get_pair_key(def_del_name, target_name)
-
-        # convert pair_key_1 to tuple so that it will match the removed
-        # pair_key log message issued by SmartThread which uses tuples
-        pair_key = (pair_key_1.name0, pair_key_1.name1)
-        if (target_name not in self.expected_registered
-                and pair_key in self.expected_pairs
-                and target_name not in self.expected_pairs[pair_key].keys()
-                and self.expected_pairs[pair_key][
-                    def_del_name].pending_ops_count == 0):
-            del self.expected_pairs[pair_key]
-
-            self.log_test_msg(
-                f'update_pair_array_def_del rem_pair_key 4 {pair_key}, '
-                f'{def_del_name}')
-            self.add_log_msg(re.escape(
-                f"{cmd_runner} removed status_blocks entry "
-                f"for pair_key = {pair_key}, "
-                f"name = {def_del_name}"))
-
-            self.add_log_msg(re.escape(
-                f'{cmd_runner} removed _pair_array entry'
-                f' for pair_key = {pair_key}'))
 
     ####################################################################
     # verify_config
@@ -20336,10 +19804,9 @@ class ConfigVerifier:
                     pending_wait=mock_sb.pending_wait,
                     pending_sync=mock_sb.pending_sync
                 )
-
-                if (real_pending_flags
-                        != mock_pending_flags
-                        != verify_data.exp_pending_flags):
+                if ((real_pending_flags != verify_data.exp_pending_flags)
+                        or (mock_pending_flags !=
+                            verify_data.exp_pending_flags)):
                     self.log_test_msg(
                         f'verify_pending_flags 5 found {pair_key=}, '
                         f'{check_name=} does have matching pending flags: '
@@ -24284,11 +23751,11 @@ class TestSmartThreadScenarios:
     @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_wait,
                                                   st.ReqType.Smart_resume,
                                                   st.ReqType.Smart_send])
-    @pytest.mark.parametrize("pending_request_arg", [True])
+    @pytest.mark.parametrize("pending_request_tf_arg", [True, False])
     def test_pending_flags_scenarios(
             self,
             request_type_arg: st.ReqType,
-            pending_request_arg: bool,
+            pending_request_tf_arg: bool,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
         """Test meta configuration scenarios.
@@ -24296,14 +23763,14 @@ class TestSmartThreadScenarios:
         Args:
             request_type_arg: request type that is to get the pending
                 flags set on it
-            pending_request_arg: if True, then cause request_pending
-                to set
+            pending_request_tf_arg: if True, then cause request_pending
+                to be set
             caplog: pytest fixture to capture log output
 
         """
         args_for_scenario_builder: dict[str, Any] = {
             'request_type': request_type_arg,
-            'pending_request': pending_request_arg,
+            'pending_request_tf': pending_request_tf_arg,
         }
 
         self.scenario_driver(
