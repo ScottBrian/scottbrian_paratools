@@ -4487,7 +4487,7 @@ class RequestEntryExitLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(f"{list_of_smart_requests} (entry|exit): "
-                        r"requestor: [a-z]+, targets: \[([a-z]*|,|'| )*\]"),
+                        r"requestor: [a-z0-9_]+, targets: \[([a-z0-9_]*|,|'| )*\]"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -4583,7 +4583,7 @@ class SubProcessEntryExitLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(f"{list_of_smart_requests} {list_of_sub_processes} "
-                        "(entry|exit): cmd_runner: [a-z]+(, target: [a-z]+)*"),
+                        "(entry|exit): cmd_runner: [a-z0-9_]+(, target: [a-z0-9_]+)*"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -4649,7 +4649,7 @@ class SetStateLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str=('[a-z]+ set state for thread [a-z]+ from '
+            search_str=('[a-z0-9_]+ set state for thread [a-z0-9_]+ from '
                         f'{list_of_thread_states} to {list_of_thread_states}'),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -4717,7 +4717,7 @@ class InitCompleteLogSearchItem(LogSearchItem):
                                     '|auto_start will proceed'
                                     '|auto_start not requested)')
         super().__init__(
-            search_str=('[a-z]+ completed initialization of [a-z]+: '
+            search_str=('[a-z0-9_]+ completed initialization of [a-z0-9_]+: '
                         f'{list_of_thread_creates}, '
                         f'{list_of_thread_states}, '
                         f'{list_of_auto_start_texts}.'),
@@ -4807,8 +4807,8 @@ class F1AppExitLogSearchItem(LogSearchItem):
         list_of_thread_apps = (r'(OuterF1ThreadApp.run\(\)'
                                '|outer_f1)')
         super().__init__(
-            # search_str=r'OuterF1ThreadApp.run\(\) exit: [a-z]+',
-            search_str=f'{list_of_thread_apps} exit: [a-z]+',
+            # search_str=r'OuterF1ThreadApp.run\(\) exit: [a-z0-9_]+',
+            search_str=f'{list_of_thread_apps} exit: [a-z0-9_]+',
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -4865,7 +4865,7 @@ class AlreadyUnregLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str=('[a-z]+ determined that thread [a-z]+ is already in '
+            search_str=('[a-z0-9_]+ determined that thread [a-z0-9_]+ is already in '
                         'state ThreadState.Unregistered'),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -4926,7 +4926,7 @@ class AddRegEntryLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str=(f'[a-z]+ added [a-z]+ to SmartThread registry at UTC '
+            search_str=(f'[a-z0-9_]+ added [a-z0-9_]+ to SmartThread registry at UTC '
                         f'{time_match}'),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -4978,8 +4978,8 @@ class AddPairArrayEntryLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str=("[a-z]+ added "
-                        r"PairKey\(name0='[a-z]+', name1='[a-z]+'\) to the "
+            search_str=("[a-z0-9_]+ added "
+                        r"PairKey\(name0='[a-z0-9_]+', name1='[a-z0-9_]+'\) to the "
                         "_pair_array"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -5036,9 +5036,9 @@ class AddStatusBlockEntryLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str=("[a-z]+ added status_blocks entry for "
-                        r"PairKey\(name0='[a-z]+', name1='[a-z]+'\), "
-                        "name = [a-z]+"),
+            search_str=("[a-z0-9_]+ added status_blocks entry for "
+                        r"PairKey\(name0='[a-z0-9_]+', name1='[a-z0-9_]+'\), "
+                        "name = [a-z0-9_]+"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -5095,7 +5095,7 @@ class UpdatePairArrayUtcLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str=f'[a-z]+ updated _pair_array at UTC {time_match}',
+            search_str=f'[a-z0-9_]+ updated _pair_array at UTC {time_match}',
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -5153,7 +5153,7 @@ class RegistryStatusLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str=('name=[a-z]+, is_alive=(True|False), '
+            search_str=('name=[a-z0-9_]+, is_alive=(True|False), '
                         f'state={list_of_thread_states}, smart_thread='),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -5233,7 +5233,7 @@ class RemRegEntryLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str=("[a-z]+ removed [a-z]+ from registry for "
+            search_str=("[a-z0-9_]+ removed [a-z0-9_]+ from registry for "
                         f"request {list_of_smart_requests}"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -5289,8 +5289,8 @@ class DidCleanRegLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str=(f"[a-z]+ did cleanup of registry at UTC {time_match}, "
-                        r"deleted \[('[a-z]+'|, )+\]"),
+            search_str=(f"[a-z0-9_]+ did cleanup of registry at UTC {time_match}, "
+                        r"deleted \[('[a-z0-9_]+'|, )+\]"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -5351,9 +5351,9 @@ class RemStatusBlockEntryLogSearchItem(LogSearchItem):
                           '|, with wait event set'
                           '|, with sync event set)*')
         super().__init__(
-            search_str=("[a-z]+ removed status_blocks entry for "
-                        r"PairKey\(name0='[a-z]+', name1='[a-z]+'\), "
-                        f"name = [a-z]+{list_of_extras}"),
+            search_str=("[a-z0-9_]+ removed status_blocks entry for "
+                        r"PairKey\(name0='[a-z0-9_]+', name1='[a-z0-9_]+'\), "
+                        f"name = [a-z0-9_]+{list_of_extras}"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -5455,9 +5455,9 @@ class RemStatusBlockEntryDefLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str="[a-z]+ removal deferred for status_blocks entry "
-                       r"for PairKey\(name0='[a-z]+', name1='[a-z]+'\), "
-                       "name = [a-z]+, reasons: ",
+            search_str="[a-z0-9_]+ removal deferred for status_blocks entry "
+                       r"for PairKey\(name0='[a-z0-9_]+', name1='[a-z0-9_]+'\), "
+                       "name = [a-z0-9_]+, reasons: ",
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -5554,8 +5554,8 @@ class RemPairArrayEntryLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str=("[a-z]+ removed _pair_array entry for "
-                        r"PairKey\(name0='[a-z]+', name1='[a-z]+'\)"),
+            search_str=("[a-z0-9_]+ removed _pair_array entry for "
+                        r"PairKey\(name0='[a-z0-9_]+', name1='[a-z0-9_]+'\)"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -5620,7 +5620,7 @@ class DidCleanPairArrayUtcLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str=('[a-z]+ did clean up of _pair_array at UTC '
+            search_str=('[a-z0-9_]+ did clean up of _pair_array at UTC '
                         f'{time_match}'),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -5695,7 +5695,7 @@ class RequestAckLogSearchItem(LogSearchItem):
                         '|smart_resume resumed'
                         '|smart_sync achieved with)')
         super().__init__(
-            search_str=f"[a-z]+ {list_of_acks} [a-z]+",
+            search_str=f"[a-z0-9_]+ {list_of_acks} [a-z0-9_]+",
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -5787,7 +5787,7 @@ class RequestRefreshLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str=(f"[a-z]+ {list_of_smart_requests} calling refresh, "
+            search_str=(f"[a-z0-9_]+ {list_of_smart_requests} calling refresh, "
                         r"remaining remotes: \["),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -5855,8 +5855,8 @@ class UnregJoinSuccessLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str=(f"[a-z]+ did successful (smart_unreg|smart_join) "
-                        r"of \[([a-z]*|,|'| )*\]"),
+            search_str=(f"[a-z0-9_]+ did successful (smart_unreg|smart_join) "
+                        r"of \[([a-z0-9_]*|,|'| )*\]"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -5926,9 +5926,9 @@ class JoinWaitingLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str=("[a-z]+ smart_join "
-                        r"completed targets: \[('[a-z]+'|, )*\], "
-                        r"pending targets: \[('[a-z]+'|, )*\]"),
+            search_str=("[a-z0-9_]+ smart_join "
+                        r"completed targets: \[('[a-z0-9_]+'|, )*\], "
+                        r"pending targets: \[('[a-z0-9_]+'|, )*\]"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -6004,7 +6004,7 @@ class StoppedLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str='[a-z]+ has been stopped by [a-z]+',
+            search_str='[a-z0-9_]+ has been stopped by [a-z0-9_]+',
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -6067,7 +6067,7 @@ class CmdWaitingLogSearchItem(LogSearchItem):
                                    '|handle_wait'
                                    '|handle_unregister)')
         super().__init__(
-            search_str=(f"cmd_runner='[a-z]+' {list_of_waiting_methods} "
+            search_str=(f"cmd_runner='[a-z0-9_]+' {list_of_waiting_methods} "
                         "waiting for monitor"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -6121,7 +6121,7 @@ class TestDebugLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str='TestDebug [a-z]+ ',
+            search_str='TestDebug [a-z0-9_]+ ',
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -6172,9 +6172,9 @@ class CRunnerRaisesLogSearchItem(LogSearchItem):
         list_of_errors = ('(SmartThreadRemoteThreadNotAlive'
                           '|SmartThreadRequestTimedOut)')
         super().__init__(
-            search_str=(f"[a-z]+ raising {list_of_errors} while processing "
+            search_str=(f"[a-z0-9_]+ raising {list_of_errors} while processing "
                         f"a {list_of_smart_requests} request with "
-                        r"targets \[([a-z]*|,|'| )*\]"),
+                        r"targets \[([a-z0-9_]*|,|'| )*\]"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -8526,27 +8526,34 @@ class ConfigVerifier:
             # smart_wait will get behind lock_0 in request_setup
             # locks held: lock_0|smart_wait
             ################################################################
+            stopped_remotes = set()
             if request_type == st.ReqType.Smart_wait:
+                if not pending_wait_tf:
+                    stopped_remotes = remote_names[0]
                 pend_req_serial_num = self.add_cmd(
                     Wait(cmd_runners=pending_names[0],
                          resumers=remote_names[0],
-                         stopped_remotes=remote_names[0]))
+                         stopped_remotes=stopped_remotes))
             elif request_type == st.ReqType.Smart_resume:
                 pend_req_serial_num = self.add_cmd(
                     Resume(cmd_runners=pending_names[0],
-                           targets=remote_names[0],
-                           stopped_remotes=remote_names[0]))
+                           targets=remote_names[0]))
             elif request_type == st.ReqType.Smart_send:
                 pend_req_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=pending_names[0],
                             receivers=remote_names[0],
-                            msgs_to_send=msgs_to_send,
-                            stopped_remotes=remote_names[0]))
+                            msgs_to_send=msgs_to_send))
             lock_positions.append(pending_names[0])
 
             self.add_cmd(
                 LockVerify(cmd_runners=self.commander_name,
                            exp_positions=lock_positions.copy()))
+
+            if not stopped_remotes:
+                pe = self.pending_events[pending_names[0]]
+                ref_key: CallRefKey = request_type.value
+
+                pe[PE.calling_refresh_msg][ref_key] += 1
 
             ################################################################
             # locker_1 gets behind the smart_wait
@@ -8617,6 +8624,10 @@ class ConfigVerifier:
             exp_pending_flags=exp_pending_flags,
             obtain_reg_lock=False))
 
+        self.build_exit_suite(cmd_runner=self.commander_name,
+                              names=remote_names,
+                              validate_config=False)
+
         if pending_request_tf:
             ################################################################
             # release lock_1 to allow smart_join to remove smart_wait targ
@@ -8662,17 +8673,21 @@ class ConfigVerifier:
         pending_msg_tf: bool = False
         if pending_msg_count > 0:
             pending_msg_tf = True
-        def_del_reasons: DefDelReasons = DefDelReasons(
-            pending_request=pending_request_tf,
-            pending_msg=pending_msg_tf,
-            pending_wait=pending_wait_tf,
-            pending_sync=False)
+        if (pending_request_tf
+                or pending_msg_tf
+                or pending_wait_tf
+                or pending_sync_tf):
+            def_del_reasons: DefDelReasons = DefDelReasons(
+                pending_request=pending_request_tf,
+                pending_msg=pending_msg_tf,
+                pending_wait=pending_wait_tf,
+                pending_sync=False)
 
-        rem_sb_key: RemSbKey = (pending_names[0],
-                                pair_key,
-                                def_del_reasons)
+            rem_sb_key: RemSbKey = (pending_names[0],
+                                    pair_key,
+                                    def_del_reasons)
 
-        pe[PE.notify_rem_status_block_def_msg][rem_sb_key] += 1
+            pe[PE.notify_rem_status_block_def_msg][rem_sb_key] += 1
 
         if lock_positions:  # if we still hold lock_2
             ################################################################
@@ -18710,7 +18725,7 @@ class ConfigVerifier:
         #     f'{sorted(pending_remotes)}.')
 
         pending_msg = (
-            r" Remotes that are pending: \[([a-z]*|,|'| )*\].")
+            r" Remotes that are pending: \[([a-z0-9_]*|,|'| )*\].")
 
         if stopped_remotes:
             stopped_msg = re.escape(
@@ -18720,7 +18735,7 @@ class ConfigVerifier:
             stopped_msg = ''
 
         # stopped_msg = (
-        #     r" Remotes that are stopped: \[([a-z]*|,|'| )*\].")
+        #     r" Remotes that are stopped: \[([a-z0-9_]*|,|'| )*\].")
 
         if unreg_remotes:
             unreg_msg = re.escape(
@@ -24300,10 +24315,9 @@ class TestSmartThreadScenarios:
     ####################################################################
     # test_pending_flags_scenarios
     ####################################################################
-    # @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_wait,
-    #                                               st.ReqType.Smart_resume,
-    #                                               st.ReqType.Smart_send])
-    @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_wait])
+    @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_wait,
+                                                  st.ReqType.Smart_resume,
+                                                  st.ReqType.Smart_send])
     @pytest.mark.parametrize("pending_request_tf_arg", [True, False])
     @pytest.mark.parametrize("pending_msg_count_arg", [0, 1, 2])
     @pytest.mark.parametrize("pending_wait_tf_arg", [True, False])
