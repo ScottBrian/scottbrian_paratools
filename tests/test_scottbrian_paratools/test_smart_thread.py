@@ -2085,7 +2085,8 @@ class VerifyConfig(ConfigCmd):
         self.arg_list += ['verify_type',
                           'names_to_check',
                           'aux_names',
-                          'state_to_check']
+                          'state_to_check',
+                          'exp_pending_flags']
 
     def run_process(self, cmd_runner: str) -> None:
         """Run the command.
@@ -6697,36 +6698,123 @@ class ConfigVerifier:
 
         self.log_found_items: deque[LogSearchItem] = deque()
 
-        # self.pending_events: dict[str, PendingEvent] = {}
-        # for name in self.thread_names:
-        #     self.pending_events[name] = PendingEvent(
-        #         start_request=deque(),
-        #         current_request=StartRequest(req_type=st.ReqType.NoReq,
-        #                                      targets=set(),
-        #                                      not_registered_remotes=set(),
-        #                                      timeout_remotes=set(),
-        #                                      stopped_remotes=set(),
-        #                                      deadlock_remotes=set()),
-        #         num_targets_remaining=0,
-        #         request_msg=defaultdict(int),
-        #         subprocess_msg=defaultdict(int),
-        #         set_state_msg=defaultdict(int),
-        #         status_msg=defaultdict(int),
-        #         rem_reg_msg=defaultdict(int),
-        #         did_clean_reg_msg=0,
-        #         update_pair_array_utc_msg=0,
-        #         did_cleanup_pair_array_utc_msg=0,
-        #         rem_reg_targets=deque(),
-        #         add_reg_msg=defaultdict(int),
-        #         add_pair_array_msg=defaultdict(int),
-        #         add_status_block_msg=defaultdict(int),
-        #         rem_status_block_msg=defaultdict(int),
-        #         rem_status_block_def_msg=defaultdict(int),
-        #         rem_pair_array_entry_msg=defaultdict(int),
-        #         notify_rem_status_block_msg=defaultdict(int),
-        #         notify_rem_status_block_def_msg=defaultdict(int),
-        #         ack_msg=defaultdict(int))
         self.pending_events: dict[str, PendEvents] = {}
+        self.setup_pending_events()
+        # for name in self.thread_names:
+        #     self.pending_events[name] = {}
+        # for name in self.thread_names:
+        #     self.pending_events[name][PE.start_request] = deque()
+        #     self.pending_events[name][PE.current_request] = StartRequest(
+        #         req_type=st.ReqType.NoReq,
+        #         targets=set(),
+        #         unreg_remotes=set(),
+        #         not_registered_remotes=set(),
+        #         timeout_remotes=set(),
+        #         stopped_remotes=set(),
+        #         deadlock_remotes=set(),
+        #         eligible_targets=set(),
+        #         completed_targets=set(),
+        #         first_round_completed=set(),
+        #         stopped_target_threads=set()
+        #     )
+        #     self.pending_events[name][PE.save_current_request] = StartRequest(
+        #         req_type=st.ReqType.NoReq,
+        #         targets=set(),
+        #         unreg_remotes=set(),
+        #         not_registered_remotes=set(),
+        #         timeout_remotes=set(),
+        #         stopped_remotes=set(),
+        #         deadlock_remotes=set(),
+        #         eligible_targets=set(),
+        #         completed_targets=set(),
+        #         first_round_completed=set(),
+        #         stopped_target_threads=set()
+        #     )
+        #     self.pending_events[name][PE.num_targets_remaining] = 0
+        #     self.pending_events[name][PE.request_msg] = defaultdict(int)
+        #     self.pending_events[name][PE.subprocess_msg] = defaultdict(int)
+        #     self.pending_events[name][PE.set_state_msg] = defaultdict(int)
+        #     self.pending_events[name][PE.status_msg] = defaultdict(int)
+        #     self.pending_events[name][PE.rem_reg_msg] = defaultdict(int)
+        #     self.pending_events[name][PE.did_clean_reg_msg] = 0
+        #     self.pending_events[name][PE.update_pair_array_utc_msg] = 0
+        #     self.pending_events[name][PE.did_cleanup_pair_array_utc_msg] = 0
+        #     self.pending_events[name][PE.rem_reg_targets] = deque()
+        #     self.pending_events[name][PE.add_reg_msg] = defaultdict(int)
+        #     self.pending_events[name][PE.add_pair_array_msg] = defaultdict(int)
+        #     self.pending_events[name][
+        #         PE.add_status_block_msg] = defaultdict(int)
+        #     self.pending_events[name][
+        #         PE.rem_status_block_msg] = defaultdict(int)
+        #     self.pending_events[name][
+        #         PE.rem_status_block_def_msg] = defaultdict(int)
+        #     self.pending_events[name][
+        #         PE.rem_pair_array_entry_msg] = defaultdict(int)
+        #     self.pending_events[name][
+        #         PE.notify_rem_status_block_msg] = defaultdict(int)
+        #     self.pending_events[name][
+        #         PE.notify_rem_status_block_def_msg] = defaultdict(int)
+        #     self.pending_events[name][PE.ack_msg] = defaultdict(int)
+        #     self.pending_events[name][
+        #         PE.confirm_stop_msg] = defaultdict(int)
+        #     self.pending_events[name][
+        #         PE.already_unreg_msg] = defaultdict(int)
+        #     self.pending_events[name][
+        #         PE.unreg_join_success_msg] = defaultdict(int)
+        #     self.pending_events[name][PE.join_progress_msg] = defaultdict(int)
+        #     self.pending_events[name][PE.init_comp_msg] = defaultdict(int)
+        #     self.pending_events[name][
+        #         PE.calling_refresh_msg] = defaultdict(int)
+
+        self.snap_shot_data: dict[int, SnapShotDataItem] = {}
+
+        self.allow_log_test_msg = True
+
+        self.last_clean_reg_msg_idx: int = 0
+        self.last_thread_stop_msg_idx: dict[str, int] = defaultdict(int)
+
+        self.monitor_event: threading.Event = threading.Event()
+        self.monitor_condition: threading.Condition = threading.Condition()
+        self.monitor_pause: bool = False
+        self.check_pending_events_complete_event: threading.Event = (
+            threading.Event())
+        self.verify_config_complete_event: threading.Event = (
+            threading.Event())
+        self.monitor_thread.start()
+
+    ####################################################################
+    # __repr__
+    ####################################################################
+    def __repr__(self) -> str:
+        """Return a representation of the class.
+
+        Returns:
+            The representation as how the class is instantiated
+
+        """
+        if TYPE_CHECKING:
+            __class__: Type[ConfigVerifier]  # noqa: F842
+        classname = self.__class__.__name__
+        parms = ""
+        comma = ''
+
+        for key, item in self.specified_args.items():
+            if item:  # if not None
+                if key in ('log_ver',):
+                    if type(item) is str:
+                        parms += comma + f"{key}='{item}'"
+                    else:
+                        parms += comma + f"{key}={item}"
+                    comma = ', '  # after first item, now need comma
+
+        return f'{classname}({parms})'
+
+    ####################################################################
+    # setup_pending_events
+    ####################################################################
+    def setup_pending_events(self):
+        """Setup the pending events for all threads."""
+        self.pending_events = {}
         for name in self.thread_names:
             self.pending_events[name] = {}
         for name in self.thread_names:
@@ -6792,49 +6880,6 @@ class ConfigVerifier:
             self.pending_events[name][PE.init_comp_msg] = defaultdict(int)
             self.pending_events[name][
                 PE.calling_refresh_msg] = defaultdict(int)
-
-        self.snap_shot_data: dict[int, SnapShotDataItem] = {}
-
-        self.allow_log_test_msg = True
-
-        self.last_clean_reg_msg_idx: int = 0
-        self.last_thread_stop_msg_idx: dict[str, int] = defaultdict(int)
-
-        self.monitor_event: threading.Event = threading.Event()
-        self.monitor_condition: threading.Condition = threading.Condition()
-        self.monitor_pause: bool = False
-        self.check_pending_events_complete_event: threading.Event = (
-            threading.Event())
-        self.verify_config_complete_event: threading.Event = (
-            threading.Event())
-        self.monitor_thread.start()
-
-    ####################################################################
-    # __repr__
-    ####################################################################
-    def __repr__(self) -> str:
-        """Return a representation of the class.
-
-        Returns:
-            The representation as how the class is instantiated
-
-        """
-        if TYPE_CHECKING:
-            __class__: Type[ConfigVerifier]  # noqa: F842
-        classname = self.__class__.__name__
-        parms = ""
-        comma = ''
-
-        for key, item in self.specified_args.items():
-            if item:  # if not None
-                if key in ('log_ver',):
-                    if type(item) is str:
-                        parms += comma + f"{key}='{item}'"
-                    else:
-                        parms += comma + f"{key}={item}"
-                    comma = ', '  # after first item, now need comma
-
-        return f'{classname}({parms})'
 
     ####################################################################
     # monitor
@@ -7517,6 +7562,92 @@ class ConfigVerifier:
                                   exp_num_registered=num_registered,
                                   exp_num_active=num_active,
                                   exp_num_stopped=num_stopped))
+
+    ####################################################################
+    # create_config
+    ####################################################################
+    def create_config(self,
+                      unreg_names: Optional[Iterable] = None,
+                      reg_names: Optional[Iterable] = None,
+                      active_names: Optional[Iterable] = None,
+                      stopped_names: Optional[Iterable] = None,
+                      ) -> None:
+        """Add ConfigCmd items to the queue to create a config.
+
+        Args:
+            unreg_names: thread names to be in the unreg pool
+            reg_names: thread names to be in the registered pool
+            active_names: thread names to be in the active pool
+            stopped_names: thread names to be in the stopped pool
+
+        """
+        self.thread_names: list[str] = ['alpha']
+        if unreg_names:
+            self.thread_names.extend(unreg_names)
+
+        if reg_names:
+            self.thread_names.extend(reg_names)
+        if active_names:
+            self.thread_names.extend(active_names)
+        if stopped_names:
+            self.thread_names.extend(stopped_names)
+
+        self.unregistered_names: set[str] = set(self.thread_names)
+        self.setup_pending_events()
+
+        if reg_names:
+            names: list[str] = sorted(reg_names)
+            f1_create_items: list[F1CreateItem] = []
+            for idx, name in enumerate(names):
+                if idx % 2:
+                    app_config = AppConfig.ScriptStyle
+                else:
+                    app_config = AppConfig.RemoteThreadApp
+
+                f1_create_items.append(F1CreateItem(name=name,
+                                                    auto_start=False,
+                                                    target_rtn=outer_f1,
+                                                    app_config=app_config))
+
+            self.build_create_suite(f1_create_items=f1_create_items,
+                                    validate_config=True)
+
+        if active_names:
+            names: list[str] = sorted(active_names)
+            f1_create_items: list[F1CreateItem] = []
+            for idx, name in enumerate(names):
+                if idx % 2:
+                    app_config = AppConfig.ScriptStyle
+                else:
+                    app_config = AppConfig.RemoteThreadApp
+
+                f1_create_items.append(F1CreateItem(name=name,
+                                                    auto_start=True,
+                                                    target_rtn=outer_f1,
+                                                    app_config=app_config))
+
+            self.build_create_suite(f1_create_items=f1_create_items,
+                                    validate_config=True)
+
+        if stopped_names:
+            names: list[str] = sorted(stopped_names)
+            f1_create_items: list[F1CreateItem] = []
+            for idx, name in enumerate(names):
+                if idx % 2:
+                    app_config = AppConfig.ScriptStyle
+                else:
+                    app_config = AppConfig.RemoteThreadApp
+
+                f1_create_items.append(F1CreateItem(name=name,
+                                                    auto_start=True,
+                                                    target_rtn=outer_f1,
+                                                    app_config=app_config))
+
+            self.build_create_suite(f1_create_items=f1_create_items,
+                                    validate_config=True)
+
+            self.build_exit_suite(cmd_runner=self.commander_name,
+                                  names=names)
 
     ####################################################################
     # build_config_build_suite
@@ -8234,64 +8365,74 @@ class ConfigVerifier:
             pending_wait_tf: if True, pending_wait flag is to be set
             pending_sync_tf: if True, pending_sync flag is to be set
         """
-        num_pending = 1
-        num_remotes = 1
-        num_lockers = 4
-        num_joiners = 1
-        # Make sure we have enough threads.
-        assert (num_lockers
-                + num_joiners
-                + num_pending
-                + num_remotes) <= len(self.unregistered_names)
+        # num_pending = 1
+        # num_remotes = 1
+        # num_lockers = 4
+        # num_joiners = 1
+        # # Make sure we have enough threads.
+        # assert (num_lockers
+        #         + num_joiners
+        #         + num_pending
+        #         + num_remotes) <= len(self.unregistered_names)
+        #
+        # num_active_needed = (num_pending
+        #                      + num_remotes
+        #                      + num_lockers
+        #                      + num_joiners) + 1
 
-        num_active_needed = (num_pending
-                             + num_remotes
-                             + num_lockers
-                             + num_joiners) + 1
+        # self.build_config(
+        #     cmd_runner=self.commander_name,
+        #     num_active=num_active_needed)
 
-        self.build_config(
-            cmd_runner=self.commander_name,
-            num_active=num_active_needed)
+        pending_names = ['pending_0']
+        remote_names = ['remote_0']
+        locker_names = ['locker_0', 'locker_1', 'locker_2', 'locker_3']
+        joiner_names = ['joiner_0']
+
+        active_names: list[str] = (
+                pending_names + remote_names + locker_names + joiner_names)
+
+        self.create_config(active_names=active_names)
 
         self.log_name_groups()
 
-        active_names_copy = self.active_names - {self.commander_name}
+        # active_names_copy = self.active_names - {self.commander_name}
 
-        ################################################################
-        # choose pending_names
-        ################################################################
-        pending_names = self.choose_names(
-            name_collection=active_names_copy,
-            num_names_needed=num_pending,
-            update_collection=True,
-            var_name_for_log='pending_names')
-
-        ################################################################
-        # choose remote_names
-        ################################################################
-        remote_names = self.choose_names(
-            name_collection=active_names_copy,
-            num_names_needed=num_remotes,
-            update_collection=True,
-            var_name_for_log='remote_names')
-
-        ################################################################
-        # choose locker_names
-        ################################################################
-        locker_names = self.choose_names(
-            name_collection=active_names_copy,
-            num_names_needed=num_lockers,
-            update_collection=True,
-            var_name_for_log='locker_names')
-
-        ################################################################
-        # choose joiner_names
-        ################################################################
-        joiner_names = self.choose_names(
-            name_collection=active_names_copy,
-            num_names_needed=num_joiners,
-            update_collection=True,
-            var_name_for_log='joiner_names')
+        # ################################################################
+        # # choose pending_names
+        # ################################################################
+        # pending_names = self.choose_names(
+        #     name_collection=active_names_copy,
+        #     num_names_needed=num_pending,
+        #     update_collection=True,
+        #     var_name_for_log='pending_names')
+        #
+        # ################################################################
+        # # choose remote_names
+        # ################################################################
+        # remote_names = self.choose_names(
+        #     name_collection=active_names_copy,
+        #     num_names_needed=num_remotes,
+        #     update_collection=True,
+        #     var_name_for_log='remote_names')
+        #
+        # ################################################################
+        # # choose locker_names
+        # ################################################################
+        # locker_names = self.choose_names(
+        #     name_collection=active_names_copy,
+        #     num_names_needed=num_lockers,
+        #     update_collection=True,
+        #     var_name_for_log='locker_names')
+        #
+        # ################################################################
+        # # choose joiner_names
+        # ################################################################
+        # joiner_names = self.choose_names(
+        #     name_collection=active_names_copy,
+        #     num_names_needed=num_joiners,
+        #     update_collection=True,
+        #     var_name_for_log='joiner_names')
 
         lock_positions: list[str] = []
         pend_req_serial_num: int = 0
@@ -8316,9 +8457,16 @@ class ConfigVerifier:
         # handle pending_msg_count
         ################################################################
         for _ in range(pending_msg_count):
-            self.add_cmd(SendMsg(cmd_runners=remote_names,
-                                 receivers=pending_names,
-                                 msgs_to_send=msgs_to_send))
+            send_msg_serial_num = self.add_cmd(SendMsg(
+                cmd_runners=remote_names,
+                receivers=pending_names,
+                msgs_to_send=msgs_to_send))
+            self.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=self.commander_name,
+                    confirm_cmd='SendMsg',
+                    confirm_serial_num=send_msg_serial_num,
+                    confirmers=remote_names))
 
         exp_pending_flags = PendingFlags(pending_msgs=pending_msg_count)
         self.add_cmd(VerifyConfig(
@@ -8333,8 +8481,15 @@ class ConfigVerifier:
         # handle pending_wait
         ################################################################
         if pending_wait_tf:
-            self.add_cmd(Resume(cmd_runners=remote_names,
-                                targets=pending_names))
+            resume_serial_num = self.add_cmd(Resume(
+                cmd_runners=remote_names,
+                targets=pending_names))
+            self.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=self.commander_name,
+                    confirm_cmd='Resume',
+                    confirm_serial_num=resume_serial_num,
+                    confirmers=remote_names))
 
         exp_pending_flags = PendingFlags(pending_msgs=pending_msg_count,
                                          pending_wait=pending_wait_tf)
@@ -20213,7 +20368,7 @@ class ConfigVerifier:
                     self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f'verify_pending_flags found {pair_key=}, '
-                        f'{check_name=} does have matching pending flags: '
+                        f'{check_name=} does not have matching pending flags: '
                         f'{real_pending_flags=}, '
                         f'{mock_pending_flags=}, '
                         f'{verify_data.exp_pending_flags=}.')
