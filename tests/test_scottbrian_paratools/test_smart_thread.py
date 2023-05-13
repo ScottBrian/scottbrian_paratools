@@ -1570,8 +1570,8 @@ class SendMsg(ConfigCmd):
     """Do smart_send."""
     def __init__(self,
                  cmd_runners: Iterable,
-                 receivers: Iterable,
                  msgs_to_send: SendRecvMsgs,
+                 receivers: Optional[Iterable] = None,
                  stopped_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
@@ -1621,9 +1621,9 @@ class SendMsgTimeoutFalse(SendMsg):
     """Do smart_send with timeout false."""
     def __init__(self,
                  cmd_runners: Iterable,
-                 receivers: Iterable,
                  msgs_to_send: SendRecvMsgs,
                  timeout: IntOrFloat,
+                 receivers: Optional[Iterable] = None,
                  stopped_remotes: Optional[StrOrSet] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
@@ -1673,11 +1673,11 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
     """Do smart_send with timeout true."""
     def __init__(self,
                  cmd_runners: Iterable,
-                 receivers: Iterable,
                  msgs_to_send: SendRecvMsgs,
                  timeout: IntOrFloat,
                  unreg_timeout_names: Iterable,
                  fullq_timeout_names: Iterable,
+                 receivers: Optional[Iterable] = None,
                  stopped_remotes: Optional[StrOrSet] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
@@ -8365,25 +8365,6 @@ class ConfigVerifier:
             pending_wait_tf: if True, pending_wait flag is to be set
             pending_sync_tf: if True, pending_sync flag is to be set
         """
-        # num_pending = 1
-        # num_remotes = 1
-        # num_lockers = 4
-        # num_joiners = 1
-        # # Make sure we have enough threads.
-        # assert (num_lockers
-        #         + num_joiners
-        #         + num_pending
-        #         + num_remotes) <= len(self.unregistered_names)
-        #
-        # num_active_needed = (num_pending
-        #                      + num_remotes
-        #                      + num_lockers
-        #                      + num_joiners) + 1
-
-        # self.build_config(
-        #     cmd_runner=self.commander_name,
-        #     num_active=num_active_needed)
-
         pending_names = ['pending_0']
         remote_names = ['remote_0']
         locker_names = ['locker_0', 'locker_1', 'locker_2', 'locker_3']
@@ -8396,50 +8377,9 @@ class ConfigVerifier:
 
         self.log_name_groups()
 
-        # active_names_copy = self.active_names - {self.commander_name}
-
-        # ################################################################
-        # # choose pending_names
-        # ################################################################
-        # pending_names = self.choose_names(
-        #     name_collection=active_names_copy,
-        #     num_names_needed=num_pending,
-        #     update_collection=True,
-        #     var_name_for_log='pending_names')
-        #
-        # ################################################################
-        # # choose remote_names
-        # ################################################################
-        # remote_names = self.choose_names(
-        #     name_collection=active_names_copy,
-        #     num_names_needed=num_remotes,
-        #     update_collection=True,
-        #     var_name_for_log='remote_names')
-        #
-        # ################################################################
-        # # choose locker_names
-        # ################################################################
-        # locker_names = self.choose_names(
-        #     name_collection=active_names_copy,
-        #     num_names_needed=num_lockers,
-        #     update_collection=True,
-        #     var_name_for_log='locker_names')
-        #
-        # ################################################################
-        # # choose joiner_names
-        # ################################################################
-        # joiner_names = self.choose_names(
-        #     name_collection=active_names_copy,
-        #     num_names_needed=num_joiners,
-        #     update_collection=True,
-        #     var_name_for_log='joiner_names')
-
         lock_positions: list[str] = []
         pend_req_serial_num: int = 0
         join_serial_num: int = 0
-
-        msgs_to_send = self.create_msgs(sender_names=pending_names,
-                                        receiver_names=remote_names[0])
 
         ################################################################
         # verify all flags off
@@ -8456,11 +8396,25 @@ class ConfigVerifier:
         ################################################################
         # handle pending_msg_count
         ################################################################
-        for _ in range(pending_msg_count):
+        sr_key = SrKey(sender=remote_names[0],
+                       receiver=pending_names[0])
+        msgs_rem_to_pend: SendRecvMsgs = SendRecvMsgs({sr_key: []})
+
+        for idx in range(pending_msg_count):
+            msg_to_send = self.create_msgs(sender_names=remote_names,
+                                           receiver_names=pending_names)
+            time.sleep(.1)
+            self.log_test_msg(f'build_pending {msg_to_send=}')
+            # we are sending 1 or 2 msgs, but only receiving once, so we
+            # need to add the new msg each time we send since the
+            # receive will get them all at the same time
+            msgs_rem_to_pend.send_msgs[sr_key].append(
+                msg_to_send.send_msgs[sr_key])
+            self.log_test_msg(f'build_pending {msgs_rem_to_pend=}')
             send_msg_serial_num = self.add_cmd(SendMsg(
                 cmd_runners=remote_names,
-                receivers=pending_names,
-                msgs_to_send=msgs_to_send))
+                # receivers=pending_names,
+                msgs_to_send=msg_to_send))
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=self.commander_name,
@@ -8529,10 +8483,13 @@ class ConfigVerifier:
             stopped_remotes = set()
             if request_type == st.ReqType.Smart_send:
                 stopped_remotes = remote_names[0]
+                msgs_pend_to_rem = self.create_msgs(
+                    sender_names=pending_names,
+                    receiver_names=remote_names)
                 pend_req_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=pending_names[0],
                             receivers=remote_names[0],
-                            msgs_to_send=msgs_to_send,
+                            msgs_to_send=msgs_pend_to_rem,
                             stopped_remotes=stopped_remotes))
             elif request_type == st.ReqType.Smart_recv:
                 if pending_msg_count == 0:
@@ -8540,7 +8497,7 @@ class ConfigVerifier:
                 pend_req_serial_num = self.add_cmd(
                     RecvMsg(cmd_runners=pending_names[0],
                             senders=remote_names[0],
-                            exp_msgs=msgs_to_send,
+                            exp_msgs=msgs_rem_to_pend,
                             stopped_remotes=stopped_remotes))
             elif request_type == st.ReqType.Smart_wait:
                 if not pending_wait_tf:
@@ -13192,9 +13149,9 @@ class ConfigVerifier:
                     confirmers=resumer_names))
 
     ####################################################################
-    # build_send_msg_suite
+    # build_send_rotate_state_scenario
     ####################################################################
-    def build_send_msg_suite(
+    def build_send_rotate_state_scenario(
             self,
             timeout_type: TimeoutType,
             send_msg_state: tuple[st.ThreadState, int],
@@ -13598,9 +13555,9 @@ class ConfigVerifier:
                 confirmers=sender_name))
 
     ####################################################################
-    # build_rotate_state_suite
+    # build_rotate_state_scenario
     ####################################################################
-    def build_rotate_state_suite(
+    def build_rotate_state_scenario(
             self,
             timeout_type: TimeoutType,
             req0: SmartRequestType,
@@ -16489,7 +16446,24 @@ class ConfigVerifier:
                 self.set_request_pending_flag(cmd_runner=cmd_runner,
                                               targets=set(targets),
                                               pending_request_flag=True)
+            if req_start_item.stopped_remotes:
+                ref_key: CallRefKey = req_start_item.req_type.value
 
+                pe[PE.calling_refresh_msg][ref_key] += 1
+
+                sub_key: SubProcessKey = (cmd_runner,
+                                          req_start_item.req_type.value,
+                                          '_clean_registry',
+                                          'entry',
+                                          cmd_runner)
+                pe[PE.subprocess_msg][sub_key] += 1
+
+                sub_key: SubProcessKey = (cmd_runner,
+                                          req_start_item.req_type.value,
+                                          '_clean_pair_array',
+                                          'entry',
+                                          cmd_runner)
+                pe[PE.subprocess_msg][sub_key] += 1
         ################################################################
         # call handler for request
         ################################################################
@@ -16971,24 +16945,24 @@ class ConfigVerifier:
 
             pe[PE.ack_msg][ack_key] += 1
 
-        if pe[PE.current_request].stopped_remotes:
-            ref_key: CallRefKey = 'smart_send'
-
-            pe[PE.calling_refresh_msg][ref_key] += 1
-
-            sub_key: SubProcessKey = (cmd_runner,
-                                      'smart_send',
-                                      '_clean_registry',
-                                      'entry',
-                                      cmd_runner)
-            pe[PE.subprocess_msg][sub_key] += 1
-
-            sub_key: SubProcessKey = (cmd_runner,
-                                      'smart_send',
-                                      '_clean_pair_array',
-                                      'entry',
-                                      cmd_runner)
-            pe[PE.subprocess_msg][sub_key] += 1
+        # if pe[PE.current_request].stopped_remotes:
+        #     ref_key: CallRefKey = 'smart_send'
+        #
+        #     pe[PE.calling_refresh_msg][ref_key] += 1
+        #
+        #     sub_key: SubProcessKey = (cmd_runner,
+        #                               'smart_send',
+        #                               '_clean_registry',
+        #                               'entry',
+        #                               cmd_runner)
+        #     pe[PE.subprocess_msg][sub_key] += 1
+        #
+        #     sub_key: SubProcessKey = (cmd_runner,
+        #                               'smart_send',
+        #                               '_clean_pair_array',
+        #                               'entry',
+        #                               cmd_runner)
+        #     pe[PE.subprocess_msg][sub_key] += 1
 
     ####################################################################
     # handle_request_smart_send_exit
@@ -17083,24 +17057,24 @@ class ConfigVerifier:
 
             pe[PE.ack_msg][ack_key] += 1
 
-        if pe[PE.current_request].stopped_remotes:
-            ref_key: CallRefKey = 'smart_wait'
-
-            pe[PE.calling_refresh_msg][ref_key] += 1
-
-            sub_key: SubProcessKey = (cmd_runner,
-                                      'smart_wait',
-                                      '_clean_registry',
-                                      'entry',
-                                      cmd_runner)
-            pe[PE.subprocess_msg][sub_key] += 1
-
-            sub_key: SubProcessKey = (cmd_runner,
-                                      'smart_wait',
-                                      '_clean_pair_array',
-                                      'entry',
-                                      cmd_runner)
-            pe[PE.subprocess_msg][sub_key] += 1
+        # if pe[PE.current_request].stopped_remotes:
+        #     ref_key: CallRefKey = 'smart_wait'
+        #
+        #     pe[PE.calling_refresh_msg][ref_key] += 1
+        #
+        #     sub_key: SubProcessKey = (cmd_runner,
+        #                               'smart_wait',
+        #                               '_clean_registry',
+        #                               'entry',
+        #                               cmd_runner)
+        #     pe[PE.subprocess_msg][sub_key] += 1
+        #
+        #     sub_key: SubProcessKey = (cmd_runner,
+        #                               'smart_wait',
+        #                               '_clean_pair_array',
+        #                               'entry',
+        #                               cmd_runner)
+        #     pe[PE.subprocess_msg][sub_key] += 1
 
     ####################################################################
     # handle_request_smart_wait_exit
@@ -17148,24 +17122,24 @@ class ConfigVerifier:
 
             pe[PE.ack_msg][ack_key] += 1
 
-        if pe[PE.current_request].stopped_remotes:
-            ref_key: CallRefKey = 'smart_resume'
-
-            pe[PE.calling_refresh_msg][ref_key] += 1
-
-            sub_key: SubProcessKey = (cmd_runner,
-                                      'smart_resume',
-                                      '_clean_registry',
-                                      'entry',
-                                      cmd_runner)
-            pe[PE.subprocess_msg][sub_key] += 1
-
-            sub_key: SubProcessKey = (cmd_runner,
-                                      'smart_resume',
-                                      '_clean_pair_array',
-                                      'entry',
-                                      cmd_runner)
-            pe[PE.subprocess_msg][sub_key] += 1
+        # if pe[PE.current_request].stopped_remotes:
+        #     ref_key: CallRefKey = 'smart_resume'
+        #
+        #     pe[PE.calling_refresh_msg][ref_key] += 1
+        #
+        #     sub_key: SubProcessKey = (cmd_runner,
+        #                               'smart_resume',
+        #                               '_clean_registry',
+        #                               'entry',
+        #                               cmd_runner)
+        #     pe[PE.subprocess_msg][sub_key] += 1
+        #
+        #     sub_key: SubProcessKey = (cmd_runner,
+        #                               'smart_resume',
+        #                               '_clean_pair_array',
+        #                               'entry',
+        #                               cmd_runner)
+        #     pe[PE.subprocess_msg][sub_key] += 1
 
     ####################################################################
     # handle_request_smart_start_exit
@@ -17641,7 +17615,7 @@ class ConfigVerifier:
             # each of the receivers, so we need to modify SendRecvMsgs to
             # make each message the same for each sender, receiver pair
             # for this cmd_runner.
-            send_msg = 'this is a test message from handle_send_msg'
+            send_msg = f'test message from handle_send_msg {self.get_ptime()}'
             sr_keys = list(msg_to_send.send_msgs.keys())
             for sr_key in sr_keys:
                 if sr_key.sender == cmd_runner:
@@ -24332,14 +24306,48 @@ class TestSmartThreadScenarios:
             caplog_to_use=caplog)
 
     ####################################################################
+    # test_send_scenarios
+    ####################################################################
+    @pytest.mark.parametrize("num_senders_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_receivers_arg", [1, 2, 3])
+    def test_send_scenarios(
+            self,
+            num_senders_arg: int,
+            num_receivers_arg: int,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            num_senders_arg: number of sender threads
+            num_receivers_arg: number of receiver threads
+            caplog: pytest fixture to capture log output
+
+        """
+
+        args_for_scenario_builder: dict[str, Any] = {
+            'request_type': request_type_arg,
+            'pending_request_tf': pending_request_tf_arg,
+            'pending_msg_count': pending_msg_count_arg,
+            'pending_wait_tf': pending_wait_tf_arg,
+            'pending_sync_tf': pending_wait_tf_arg,
+        }
+
+        self.scenario_driver(
+            scenario_builder=ConfigVerifier.build_pending_flags_scenarios,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
+
+    ####################################################################
     # test_pending_flags_scenarios
     ####################################################################
-    @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_send,
-                                                  st.ReqType.Smart_recv,
-                                                  st.ReqType.Smart_wait,
-                                                  st.ReqType.Smart_resume,
-                                                  st.ReqType.Smart_sync
-                                                  ])
+    # @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_send,
+    #                                               st.ReqType.Smart_recv,
+    #                                               st.ReqType.Smart_wait,
+    #                                               st.ReqType.Smart_resume,
+    #                                               st.ReqType.Smart_sync
+    #                                               ])
+    @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_recv])
     @pytest.mark.parametrize("pending_request_tf_arg", [True, False])
     @pytest.mark.parametrize("pending_msg_count_arg", [0, 1, 2])
     @pytest.mark.parametrize("pending_wait_tf_arg", [True, False])
@@ -24396,15 +24404,6 @@ class TestSmartThreadScenarios:
     @pytest.mark.parametrize("num_delay_unreg_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_no_delay_reg_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_delay_reg_arg", [0, 1, 2])
-
-    # @pytest.mark.parametrize("timeout_type_arg",
-    #                          [TimeoutType.TimeoutFalse])
-    # @pytest.mark.parametrize("num_active_no_target_arg", [1])
-    # @pytest.mark.parametrize("num_no_delay_exit_arg", [0])
-    # @pytest.mark.parametrize("num_delay_exit_arg", [1])
-    # @pytest.mark.parametrize("num_delay_unreg_arg", [0])
-    # @pytest.mark.parametrize("num_no_delay_reg_arg", [0])
-    # @pytest.mark.parametrize("num_delay_reg_arg", [0])
     def test_join_timeout_scenarios(
             self,
             timeout_type_arg: TimeoutType,
@@ -24668,7 +24667,7 @@ class TestSmartThreadScenarios:
         }
 
         self.scenario_driver(
-            scenario_builder=ConfigVerifier.build_rotate_state_suite,
+            scenario_builder=ConfigVerifier.build_rotate_state_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
             commander_config=commander_config
@@ -24717,9 +24716,9 @@ class TestSmartThreadScenarios:
         )
 
     ####################################################################
-    # test_send_msg_scenarios
+    # test_send_rotate_state_scenarios
     ####################################################################
-    def test_send_msg_scenarios(
+    def test_send_rotate_state_scenarios(
             self,
             timeout_type_arg: TimeoutType,
             send_msg_state_arg: tuple[st.ThreadState, int],
@@ -24755,7 +24754,7 @@ class TestSmartThreadScenarios:
         }
 
         self.scenario_driver(
-            scenario_builder=ConfigVerifier.build_send_msg_suite,
+            scenario_builder=ConfigVerifier.build_send_rotate_state_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
             commander_config=commander_config
