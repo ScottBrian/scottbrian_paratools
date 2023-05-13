@@ -134,6 +134,25 @@ class SendRecvMsgs:
     send_msgs: dict[SrKey, list[Any]]
 
 
+class SendType(Enum):
+    ToRemotes = auto()
+    Broadcast = auto()
+    SRMsgs = auto()
+
+
+class MsgType(Enum):
+    Text = auto()
+    Int = auto()
+    Object = auto()
+    ListText = auto()
+    DictText = auto()
+
+
+class MsgCollectionType(Enum):
+    Simple = auto()
+    List = auto()
+    Dict = auto()
+
 ########################################################################
 # VerifyData items
 ########################################################################
@@ -24308,12 +24327,32 @@ class TestSmartThreadScenarios:
     ####################################################################
     # test_send_scenarios
     ####################################################################
+    class SendType(Enum):
+        ToRemotes = auto()
+        Broadcast = auto()
+        SRMsgs = auto()
+
+    class MsgType(Enum):
+        Text = auto()
+        Int = auto()
+        Object = auto()
+        ListText = auto()
+        DictText = auto()
+
+    class MsgCollectionType(Enum):
+        Simple = auto()
+        List = auto()
+        Dict = auto()
     @pytest.mark.parametrize("num_senders_arg", [1, 2, 3])
     @pytest.mark.parametrize("num_receivers_arg", [1, 2, 3])
+    @pytest.mark.parametrize("send_type_arg", [SendType.ToRemotes,
+                                               SendType.Broadcast,
+                                               SendType.SRMsgs])
     def test_send_scenarios(
             self,
             num_senders_arg: int,
             num_receivers_arg: int,
+            send_type_arg: SendType,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
         """Test meta configuration scenarios.
@@ -24321,6 +24360,7 @@ class TestSmartThreadScenarios:
         Args:
             num_senders_arg: number of sender threads
             num_receivers_arg: number of receiver threads
+            send_type_arg: type of send to do
             caplog: pytest fixture to capture log output
 
         """
