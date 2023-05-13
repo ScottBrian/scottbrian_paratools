@@ -8527,7 +8527,22 @@ class ConfigVerifier:
             # locks held: lock_0|smart_wait
             ################################################################
             stopped_remotes = set()
-            if request_type == st.ReqType.Smart_wait:
+            if request_type == st.ReqType.Smart_send:
+                stopped_remotes = remote_names[0]
+                pend_req_serial_num = self.add_cmd(
+                    SendMsg(cmd_runners=pending_names[0],
+                            receivers=remote_names[0],
+                            msgs_to_send=msgs_to_send,
+                            stopped_remotes=stopped_remotes))
+            elif request_type == st.ReqType.Smart_recv:
+                if pending_msg_count == 0:
+                    stopped_remotes = remote_names[0]
+                pend_req_serial_num = self.add_cmd(
+                    RecvMsg(cmd_runners=pending_names[0],
+                            senders=remote_names[0],
+                            exp_msgs=msgs_to_send,
+                            stopped_remotes=stopped_remotes))
+            elif request_type == st.ReqType.Smart_wait:
                 if not pending_wait_tf:
                     stopped_remotes = remote_names[0]
                 pend_req_serial_num = self.add_cmd(
@@ -8535,14 +8550,18 @@ class ConfigVerifier:
                          resumers=remote_names[0],
                          stopped_remotes=stopped_remotes))
             elif request_type == st.ReqType.Smart_resume:
+                stopped_remotes = remote_names[0]
                 pend_req_serial_num = self.add_cmd(
                     Resume(cmd_runners=pending_names[0],
-                           targets=remote_names[0]))
-            elif request_type == st.ReqType.Smart_send:
+                           targets=remote_names[0],
+                           stopped_remotes=stopped_remotes))
+            elif request_type == st.ReqType.Smart_sync:
+                stopped_remotes = remote_names[0]
                 pend_req_serial_num = self.add_cmd(
-                    SendMsg(cmd_runners=pending_names[0],
-                            receivers=remote_names[0],
-                            msgs_to_send=msgs_to_send))
+                    Sync(cmd_runners=pending_names[0],
+                         targets=remote_names[0],
+                         stopped_remotes=stopped_remotes))
+
             lock_positions.append(pending_names[0])
 
             self.add_cmd(
@@ -24315,9 +24334,12 @@ class TestSmartThreadScenarios:
     ####################################################################
     # test_pending_flags_scenarios
     ####################################################################
-    @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_wait,
+    @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_send,
+                                                  st.ReqType.Smart_recv,
+                                                  st.ReqType.Smart_wait,
                                                   st.ReqType.Smart_resume,
-                                                  st.ReqType.Smart_send])
+                                                  st.ReqType.Smart_sync
+                                                  ])
     @pytest.mark.parametrize("pending_request_tf_arg", [True, False])
     @pytest.mark.parametrize("pending_msg_count_arg", [0, 1, 2])
     @pytest.mark.parametrize("pending_wait_tf_arg", [True, False])
