@@ -120,6 +120,21 @@ init_complete_text_units: dict[AutoStartDecision, str] = {
 
 
 ########################################################################
+# get_ptime
+########################################################################
+def get_ptime() -> str:
+    """Returns a printable UTC time stamp.
+
+    Returns:
+        a timestamp as a string
+    """
+    now_time = datetime.utcnow()
+    print_time = now_time.strftime("%H:%M:%S.%f")
+
+    return print_time
+
+
+########################################################################
 # SendRecvMsgs
 ########################################################################
 class SrKey(NamedTuple):
@@ -129,9 +144,9 @@ class SrKey(NamedTuple):
 
 
 @dataclass
-class SendRecvMsgs:
-    """Messages to send and verify."""
-    send_msgs: dict[SrKey, list[Any]]
+class SendRecvPacket:
+    msgs_to_send: list[Any]
+    sent_msgs: list[Any]
 
 
 class SendType(Enum):
@@ -142,16 +157,53 @@ class SendType(Enum):
 
 class MsgType(Enum):
     Text = auto()
-    Int = auto()
-    Object = auto()
-    ListText = auto()
-    DictText = auto()
+    # Int = auto()
+    # Object = auto()
 
 
 class MsgCollectionType(Enum):
     Simple = auto()
     List = auto()
-    Dict = auto()
+    # Dict = auto()
+
+
+class SendRecvMsgs:
+    """Messages to send and verify."""
+    def __init__(self):
+        self.send_recv_msgs: dict[SrKey, SendRecvPacket] = {}
+
+    def add_msgs(self,
+                 senders: Iterable,
+                 receivers: Iterable,
+                 collection_type: MsgCollectionType,
+                 num_msgs_in_collection: int = 1):
+        """Create a set of message for testing send and recv.
+
+        Args:
+            senders: thread names of the sender threads
+            receivers: thread names of the receiver threads
+            collection_type: simple or list
+            num_msgs_in_collection: number of messages for non-simple
+                collection
+
+        """
+        sender_names = get_set(senders)
+        receiver_names = get_set(receivers)
+        for sr_pair in product(sender_names, receiver_names):
+            sr_key: SrKey = SrKey(sr_pair[0], sr_pair[1])
+            if sr_key not in self.send_recv_msgs:
+                self.send_recv_msgs[sr_key] = SendRecvPacket(msgs_to_send=[],
+                                                             sent_msgs=[])
+            if collection_type == MsgCollectionType.Simple:
+                self.send_recv_msgs[sr_key].msgs_to_send.append(
+                    f'send recv simple msg: {sr_key.sender} built msg for '
+                    f'{sr_key.receiver} at {get_ptime()}')
+            elif collection_type == MsgCollectionType.List:
+                self.send_recv_msgs[sr_key].msgs_to_send.append([])
+                for idx in range(num_msgs_in_collection):
+                    self.send_recv_msgs[sr_key].msgs_to_send[-1].append(
+                        f'send recv collection msg: {sr_key.sender} built msg '
+                        f'{idx} for {sr_key.receiver} at {get_ptime()}')
 
 ########################################################################
 # VerifyData items
@@ -8189,7 +8241,7 @@ class ConfigVerifier:
                                         + delay_reg_names)
 
         if len(all_target_names) % 2 == 0:
-            log_msg = f'join log test: {self.get_ptime()}'
+            log_msg = f'join log test: {get_ptime()}'
         else:
             log_msg = None
 
@@ -8351,7 +8403,7 @@ class ConfigVerifier:
             for to_name in to_names:
                 sr_key: SrKey = SrKey(sender=from_name, receiver=to_name)
                 msgs_to_send.send_msgs[sr_key] = [
-                    f'send test: {self.get_ptime()}']
+                    f'send test: {get_ptime()}']
         self.add_cmd(
             SendMsg(cmd_runners=from_names,
                     receivers=to_names,
@@ -9153,7 +9205,7 @@ class ConfigVerifier:
             for idx in range(num_msgs):
                 msgs.append(f'send recv test: {sr_key.sender} '
                             f'sending msg {idx} to {sr_key.receiver} '
-                            f'at {self.get_ptime()}')
+                            f'at {get_ptime()}')
             if num_msgs == 1:
                 send_recv_msgs.send_msgs[sr_key] = msgs[0]
             else:
@@ -10578,7 +10630,7 @@ class ConfigVerifier:
             update_collection=False,
             var_name_for_log='sender_names')
 
-        log_msg = f'smart_recv log test: {self.get_ptime()}'
+        log_msg = f'smart_recv log test: {get_ptime()}'
 
         ################################################################
         # setup the messages to send
@@ -10896,7 +10948,7 @@ class ConfigVerifier:
             num_timeouts=len(all_timeout_names) * num_receivers)
 
         if len(all_sender_names) % 2 == 0:
-            log_msg = f'smart_recv log test: {self.get_ptime()}'
+            log_msg = f'smart_recv log test: {get_ptime()}'
         else:
             log_msg = None
 
@@ -11163,7 +11215,7 @@ class ConfigVerifier:
             update_collection=False,
             var_name_for_log='resumer_names')
 
-        log_msg = f'wait log test: {self.get_ptime()}'
+        log_msg = f'wait log test: {get_ptime()}'
 
         ################################################################
         # setup the names
@@ -13218,7 +13270,7 @@ class ConfigVerifier:
             update_collection=False,
             var_name_for_log='receiver_names')
 
-        log_msg = f'smart_send log test: {self.get_ptime()}'
+        log_msg = f'smart_send log test: {get_ptime()}'
 
         ################################################################
         # setup the messages to send
@@ -13639,11 +13691,11 @@ class ConfigVerifier:
         if req0 == SmartRequestType.SendMsg:
             sr_key: SrKey = SrKey(sender=req0_name, receiver=req1_name)
             sender_msgs.send_msgs[sr_key] = [f'send test: {req0_name} sending '
-                                             f'msg at {self.get_ptime()}']
+                                             f'msg at {get_ptime()}']
         if req1 == SmartRequestType.SendMsg:
             sr_key: SrKey = SrKey(sender=req1_name, receiver=req0_name)
             sender_msgs.send_msgs[sr_key] = [f'send test: {req1_name} sending '
-                                             f'msg at {self.get_ptime()}']
+                                             f'msg at {get_ptime()}']
 
         req0_conflict_remotes: set[str] = set()
         req0_deadlock_remotes: set[str] = set()
@@ -14292,6 +14344,35 @@ class ConfigVerifier:
                                    serial_number=request_serial_num)
 
     ####################################################################
+    # build_send_rotate_state_scenario
+    ####################################################################
+    def build_send_scenario(
+            self,
+            num_senders: int,
+            num_receivers: int,
+            send_type: SendType,
+            collection_type_1: MsgCollectionType,
+            collection_type_2: MsgCollectionType,
+            collection_type_3: MsgCollectionType) -> None:
+        """Add cmds to run scenario.
+
+        Args:
+            num_senders: number of sender threads
+            num_receivers: number of receiver threads
+            send_type: type of send to do
+            collection_type_1: simple or list
+            collection_type_2: None, simple, or list
+            collection_type_3: None, simple, or list
+
+        """
+        sender_names = ['sender_0', 'sender_1', 'sender_2']
+        receiver_names = ['receiver_0', 'receiver_1', 'receiver_2']
+
+        self.create_config(active_names=sender_names + receiver_names)
+
+        self.log_name_groups()
+
+    ####################################################################
     # build_sync_request
     ####################################################################
     def build_sync_request(
@@ -14567,8 +14648,8 @@ class ConfigVerifier:
             for exit_name in exit_names:
                 sr_key: SrKey = SrKey(exit_name, sender_names[1])
                 sender_1_msg_1.send_msgs[sr_key] = [
-                    f'send test: {self.get_ptime()}']
-                log_msg = f'log test: {self.get_ptime()}'
+                    f'send test: {get_ptime()}']
+                log_msg = f'log test: {get_ptime()}'
 
                 send_msg_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=exit_name,
@@ -14591,7 +14672,7 @@ class ConfigVerifier:
             for exit_name in exit_names:
                 sr_key: SrKey = SrKey(exit_name, sender_names[2])
                 sender_2_msg_1.send_msgs[exit_name] = [
-                    f'send test: {self.get_ptime()}']
+                    f'send test: {get_ptime()}']
                 send_msg_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=exit_name,
                             receivers=sender_names[2],
@@ -14607,8 +14688,8 @@ class ConfigVerifier:
                                     confirmers=[exit_name]))
 
                 sender_2_msg_2.send_msgs[sr_key] = [
-                    f'send test: {self.get_ptime()}']
-                log_msg = f'log test: {self.get_ptime()}'
+                    f'send test: {get_ptime()}']
+                log_msg = f'log test: {get_ptime()}'
 
                 send_msg_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=exit_name,
@@ -14655,7 +14736,7 @@ class ConfigVerifier:
                 # the idea here is to have the first exit_name have zero
                 # msgs, the second will have 1 msg, etc, etc, etc...
                 for num_msgs in range(idx):
-                    log_msg = f'log test: {self.get_ptime()}'
+                    log_msg = f'log test: {get_ptime()}'
                     send_msg_serial_num = self.add_cmd(
                         SendMsg(cmd_runners=sender_names,
                                 receivers=exit_names[idx],
@@ -14789,7 +14870,7 @@ class ConfigVerifier:
 
         # do RecvMsg to verify the SendMsg for receivers
         if final_recv_names:
-            log_msg = f'log test: {self.get_ptime()}'
+            log_msg = f'log test: {get_ptime()}'
             recv_msg_serial_num = self.add_cmd(
                 RecvMsg(cmd_runners=final_recv_names,
                         senders=sender_names,
@@ -15956,21 +16037,6 @@ class ConfigVerifier:
             return True
         else:
             return False
-
-    ####################################################################
-    # get_ptime
-    ####################################################################
-    @staticmethod
-    def get_ptime() -> str:
-        """Returns a printable UTC time stamp.
-
-        Returns:
-            a timestamp as a string
-        """
-        now_time = datetime.utcnow()
-        print_time = now_time.strftime("%H:%M:%S.%f")
-
-        return print_time
 
     ####################################################################
     # handle_did_clean_reg_log_msg
@@ -17634,7 +17700,7 @@ class ConfigVerifier:
             # each of the receivers, so we need to modify SendRecvMsgs to
             # make each message the same for each sender, receiver pair
             # for this cmd_runner.
-            send_msg = f'test message from handle_send_msg {self.get_ptime()}'
+            send_msg = f'test message from handle_send_msg {get_ptime()}'
             sr_keys = list(msg_to_send.send_msgs.keys())
             for sr_key in sr_keys:
                 if sr_key.sender == cmd_runner:
@@ -24327,32 +24393,30 @@ class TestSmartThreadScenarios:
     ####################################################################
     # test_send_scenarios
     ####################################################################
-    class SendType(Enum):
-        ToRemotes = auto()
-        Broadcast = auto()
-        SRMsgs = auto()
-
-    class MsgType(Enum):
-        Text = auto()
-        Int = auto()
-        Object = auto()
-        ListText = auto()
-        DictText = auto()
-
-    class MsgCollectionType(Enum):
-        Simple = auto()
-        List = auto()
-        Dict = auto()
     @pytest.mark.parametrize("num_senders_arg", [1, 2, 3])
     @pytest.mark.parametrize("num_receivers_arg", [1, 2, 3])
     @pytest.mark.parametrize("send_type_arg", [SendType.ToRemotes,
                                                SendType.Broadcast,
                                                SendType.SRMsgs])
+    @pytest.mark.parametrize("collection_type_1_arg",
+                             [MsgCollectionType.Simple,
+                              MsgCollectionType.List])
+    @pytest.mark.parametrize("collection_type_2_arg",
+                             [None,
+                              MsgCollectionType.Simple,
+                              MsgCollectionType.List])
+    @pytest.mark.parametrize("collection_type_3_arg",
+                             [None,
+                              MsgCollectionType.Simple,
+                              MsgCollectionType.List])
     def test_send_scenarios(
             self,
             num_senders_arg: int,
             num_receivers_arg: int,
             send_type_arg: SendType,
+            collection_type_1_arg: MsgCollectionType,
+            collection_type_2_arg: MsgCollectionType,
+            collection_type_3_arg: MsgCollectionType,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
         """Test meta configuration scenarios.
@@ -24361,20 +24425,25 @@ class TestSmartThreadScenarios:
             num_senders_arg: number of sender threads
             num_receivers_arg: number of receiver threads
             send_type_arg: type of send to do
+            collection_type_1_arg: simple or list
+            collection_type_2_arg: None, simple, or list
+            collection_type_3_arg: None, simple, or list
             caplog: pytest fixture to capture log output
 
         """
+        if collection_type_3_arg and not collection_type_2_arg:
+            return
 
         args_for_scenario_builder: dict[str, Any] = {
-            'request_type': request_type_arg,
-            'pending_request_tf': pending_request_tf_arg,
-            'pending_msg_count': pending_msg_count_arg,
-            'pending_wait_tf': pending_wait_tf_arg,
-            'pending_sync_tf': pending_wait_tf_arg,
+            'num_senders': num_senders_arg,
+            'num_receivers': num_receivers_arg,
+            'collection_type_1': collection_type_1_arg,
+            'collection_type_2': collection_type_2_arg,
+            'collection_type_3': collection_type_3_arg,
         }
 
         self.scenario_driver(
-            scenario_builder=ConfigVerifier.build_pending_flags_scenarios,
+            scenario_builder=ConfigVerifier.build_send_scenarios,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 
