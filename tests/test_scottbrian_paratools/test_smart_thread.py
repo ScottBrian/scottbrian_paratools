@@ -1641,8 +1641,9 @@ class SendMsg(ConfigCmd):
     """Do smart_send."""
     def __init__(self,
                  cmd_runners: Iterable,
+                 receivers: Iterable,
                  msgs_to_send: SendRecvMsgs,
-                 receivers: Optional[Iterable] = None,
+                 send_type: SendType = SendType.ToRemotes,
                  stopped_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
@@ -1651,6 +1652,7 @@ class SendMsg(ConfigCmd):
             cmd_runners: thread names that will execute the command
             receivers: thread names that will receive the message
             msgs_to_send: messages to send and verify
+            send_type: specifies how to send the messages
             stopped_remotes: thread names that are stopped
             log_msg: log message for smart_send
         """
@@ -1660,12 +1662,15 @@ class SendMsg(ConfigCmd):
         self.receivers = get_set(receivers)
         self.msgs_to_send = msgs_to_send
 
+        self.send_type = send_type
+
         self.stopped_remotes = get_set(stopped_remotes)
 
         self.log_msg = log_msg
 
         self.arg_list += ['receivers',
-                          'stopped_remotes']
+                          'stopped_remotes',
+                          'send_type']
 
     def run_process(self, cmd_runner: str) -> None:
         """Run the command.
@@ -1677,6 +1682,7 @@ class SendMsg(ConfigCmd):
             cmd_runner=cmd_runner,
             receivers=self.receivers,
             msg_to_send=self.msgs_to_send,
+            send_type=self.send_type,
             timeout_type=TimeoutType.TimeoutNone,
             timeout=0,
             unreg_timeout_names=None,
@@ -1694,6 +1700,7 @@ class SendMsgTimeoutFalse(SendMsg):
                  cmd_runners: Iterable,
                  msgs_to_send: SendRecvMsgs,
                  timeout: IntOrFloat,
+                 send_type: SendType = SendType.ToRemotes,
                  receivers: Optional[Iterable] = None,
                  stopped_remotes: Optional[StrOrSet] = None,
                  log_msg: Optional[str] = None) -> None:
@@ -1704,6 +1711,7 @@ class SendMsgTimeoutFalse(SendMsg):
             receivers: thread names that will receive the message
             msgs_to_send: messages to send and verify
             timeout: value for smart_send
+            send_type: specifies how to send the messages
             stopped_remotes: thread names that are stopped
             log_msg: log message for smart_send
         """
@@ -1711,6 +1719,7 @@ class SendMsgTimeoutFalse(SendMsg):
             cmd_runners=cmd_runners,
             receivers=receivers,
             msgs_to_send=msgs_to_send,
+            send_type=send_type,
             stopped_remotes=stopped_remotes,
             log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
@@ -1729,6 +1738,7 @@ class SendMsgTimeoutFalse(SendMsg):
             cmd_runner=cmd_runner,
             receivers=self.receivers,
             msg_to_send=self.msgs_to_send,
+            send_type=self.send_type,
             timeout_type=TimeoutType.TimeoutFalse,
             timeout=self.timeout,
             unreg_timeout_names=None,
@@ -1745,10 +1755,11 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
     def __init__(self,
                  cmd_runners: Iterable,
                  msgs_to_send: SendRecvMsgs,
+                 receivers: Iterable,
                  timeout: IntOrFloat,
                  unreg_timeout_names: Iterable,
                  fullq_timeout_names: Iterable,
-                 receivers: Optional[Iterable] = None,
+                 send_type: SendType = SendType.ToRemotes,
                  stopped_remotes: Optional[StrOrSet] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
@@ -1760,6 +1771,7 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
             timeout: value for smart_send
             unreg_timeout_names: thread names that are not registered
             fullq_timeout_names: thread names whose msg_q is full
+            send_type: specifies how to send the messages
             stopped_remotes: thread names that are stopped
             log_msg: log message for smart_send
         """
@@ -1768,6 +1780,7 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
             receivers=receivers,
             msgs_to_send=msgs_to_send,
             timeout=timeout,
+            send_type=send_type,
             stopped_remotes=stopped_remotes,
             log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
@@ -1789,6 +1802,7 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
             cmd_runner=cmd_runner,
             receivers=self.receivers,
             msg_to_send=self.msgs_to_send,
+            send_type=self.send_type,
             timeout_type=TimeoutType.TimeoutTrue,
             timeout=self.timeout,
             unreg_timeout_names=set(self.unreg_timeout_names),
@@ -14351,9 +14365,9 @@ class ConfigVerifier:
             num_senders: int,
             num_receivers: int,
             send_type: SendType,
-            collection_type_1: MsgCollectionType,
-            collection_type_2: MsgCollectionType,
-            collection_type_3: MsgCollectionType) -> None:
+            collection_type_1: tuple[int, MsgCollectionType],
+            collection_type_2: tuple[int, MsgCollectionType],
+            collection_type_3: tuple[int, MsgCollectionType]) -> None:
         """Add cmds to run scenario.
 
         Args:
@@ -14365,12 +14379,62 @@ class ConfigVerifier:
             collection_type_3: None, simple, or list
 
         """
-        sender_names = ['sender_0', 'sender_1', 'sender_2']
-        receiver_names = ['receiver_0', 'receiver_1', 'receiver_2']
+        senders: set[str] = set()
+        for idx in range(num_senders):
+            senders |= {'sender_' + str(idx)}
 
-        self.create_config(active_names=sender_names + receiver_names)
+        receivers: set[str] = set()
+        for idx in range(num_receivers):
+            receivers |= {'receiver_' + str(idx)}
+
+        self.create_config(active_names=senders | receivers)
 
         self.log_name_groups()
+
+        msgs_to_send = SendRecvMsgs()
+        msgs_to_send.add_msgs(senders=senders,
+                              receivers=receivers,
+                              collection_type=collection_type_1[1],
+                              num_msgs_in_collection=collection_type_1[0])
+        if collection_type_2[0] > 0:
+            msgs_to_send.add_msgs(senders=senders,
+                                  receivers=receivers,
+                                  collection_type=collection_type_2[1],
+                                  num_msgs_in_collection=collection_type_2[0])
+        if collection_type_3[0] > 0:
+            msgs_to_send.add_msgs(senders=senders,
+                                  receivers=receivers,
+                                  collection_type=collection_type_3[1],
+                                  num_msgs_in_collection=collection_type_3[0])
+
+        ############################################################
+        # send messages
+        ############################################################
+        send_msg_serial_num = self.add_cmd(SendMsg(
+            cmd_runners=senders,
+            receivers=receivers,
+            msgs_to_send=msgs_to_send,
+            send_type=send_type))
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='SendMsg',
+                confirm_serial_num=send_msg_serial_num,
+                confirmers=senders))
+
+        ############################################################
+        # receive messages
+        ############################################################
+        recv_msg_serial_num = self.add_cmd(RecvMsg(
+            cmd_runners=receivers,
+            senders=senders,
+            exp_msgs=msgs_to_send))
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='RecvMsg',
+                confirm_serial_num=recv_msg_serial_num,
+                confirmers=receivers))
 
     ####################################################################
     # build_sync_request
@@ -17628,6 +17692,7 @@ class ConfigVerifier:
                         cmd_runner: str,
                         receivers: set[str],
                         msg_to_send: SendRecvMsgs,
+                        send_type: SendType,
                         log_msg: str,
                         timeout_type: TimeoutType = TimeoutType.TimeoutNone,
                         timeout: IntOrFloat = 0,
@@ -17641,6 +17706,7 @@ class ConfigVerifier:
             cmd_runner: name of thread doing the cmd
             receivers: names of threads to receive the message
             msg_to_send: message to send to the receivers
+            send_type: specifies how to send the message
             log_msg: log message for smart_send to issue
             timeout_type: specifies None, False, or True
             timeout: value to use for timeout on the smart_send request
@@ -24399,24 +24465,30 @@ class TestSmartThreadScenarios:
                                                SendType.Broadcast,
                                                SendType.SRMsgs])
     @pytest.mark.parametrize("collection_type_1_arg",
-                             [MsgCollectionType.Simple,
-                              MsgCollectionType.List])
-    @pytest.mark.parametrize("collection_type_2_arg",
-                             [None,
-                              MsgCollectionType.Simple,
-                              MsgCollectionType.List])
-    @pytest.mark.parametrize("collection_type_3_arg",
-                             [None,
-                              MsgCollectionType.Simple,
-                              MsgCollectionType.List])
+                             [(1, MsgCollectionType.Simple),
+                              (1, MsgCollectionType.List),
+                              (2, MsgCollectionType.List),
+                              (3,MsgCollectionType.List)])
+    @pytest.mark.parametrize("collection_type_1_arg",
+                             [(0, MsgCollectionType.Simple),
+                              (1, MsgCollectionType.Simple),
+                              (1, MsgCollectionType.List),
+                              (2, MsgCollectionType.List),
+                              (3, MsgCollectionType.List)])
+    @pytest.mark.parametrize("collection_type_1_arg",
+                             [(0, MsgCollectionType.Simple),
+                              (1, MsgCollectionType.Simple),
+                              (1, MsgCollectionType.List),
+                              (2, MsgCollectionType.List),
+                              (3, MsgCollectionType.List)])
     def test_send_scenarios(
             self,
             num_senders_arg: int,
             num_receivers_arg: int,
             send_type_arg: SendType,
-            collection_type_1_arg: MsgCollectionType,
-            collection_type_2_arg: MsgCollectionType,
-            collection_type_3_arg: MsgCollectionType,
+            collection_type_1_arg: tuple[int, MsgCollectionType],
+            collection_type_2_arg: tuple[int, MsgCollectionType],
+            collection_type_3_arg: tuple[int, MsgCollectionType],
             caplog: pytest.CaptureFixture[str]
     ) -> None:
         """Test meta configuration scenarios.
@@ -24425,13 +24497,14 @@ class TestSmartThreadScenarios:
             num_senders_arg: number of sender threads
             num_receivers_arg: number of receiver threads
             send_type_arg: type of send to do
-            collection_type_1_arg: simple or list
-            collection_type_2_arg: None, simple, or list
-            collection_type_3_arg: None, simple, or list
+            collection_type_1_arg: count and type
+            collection_type_2_arg: count and type
+            collection_type_3_arg: count and type
             caplog: pytest fixture to capture log output
 
         """
-        if collection_type_3_arg and not collection_type_2_arg:
+        # skip any gap cases
+        if collection_type_2_arg[0] == 0 and collection_type_3_arg[0] > 0:
             return
 
         args_for_scenario_builder: dict[str, Any] = {
