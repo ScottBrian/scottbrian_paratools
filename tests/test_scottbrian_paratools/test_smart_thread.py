@@ -24380,6 +24380,47 @@ class TestSmartThreadExamples:
 
         logger.debug('mainline exiting')
 
+@pytest.fixture(params=['a', 'b', 'c'])  # type: ignore
+def parm0(request: Any) -> int:
+    """Number of threads to auto start.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    return request.param
+
+@pytest.fixture(params=[1, 2, 3])  # type: ignore
+def parm1(request: Any, parm0) -> int:
+    """Number of threads to auto start.
+
+    Args:
+        request: special fixture that returns the fixture params
+
+    Returns:
+        The params values are returned one at a time
+    """
+    ans = (request.param, parm0)
+    return ans
+
+MsgKey: TypeAlias = tuple[MsgCollectionType, MsgType, int]
+@pytest.fixture(scope="class")
+def base_msgs() -> dict[MsgKey, list[Any]]:
+    ret_base_msgs: dict[MsgKey, list[Any]] = {}
+    for msg_collection_type in [MsgCollectionType.Simple,
+                                MsgCollectionType.List]:
+        for msg_type in [MsgType.Text, MsgType.Int]:
+            for num_msgs in range(1, 4):
+                msg_key: MsgKey = (msg_collection_type, msg_type, num_msgs)
+                for idx in range(num_msgs):
+                    if msg_collection_type == MsgCollectionType.Simple:
+                        if msg_type == MsgType.Text:
+
+
+
+
 
 ########################################################################
 # TestSmartThreadScenarios class
@@ -24459,6 +24500,16 @@ class TestSmartThreadScenarios:
     ####################################################################
     # test_send_scenarios
     ####################################################################
+
+
+
+    def test_parms(self, parm1):
+        logger.debug(f'test_parms {parm1=}')
+
+
+
+
+
     @pytest.mark.parametrize("num_senders_arg", [1, 2, 3])
     @pytest.mark.parametrize("num_receivers_arg", [1, 2, 3])
     @pytest.mark.parametrize("send_type_arg", [SendType.ToRemotes,
@@ -24469,13 +24520,13 @@ class TestSmartThreadScenarios:
                               (1, MsgCollectionType.List),
                               (2, MsgCollectionType.List),
                               (3,MsgCollectionType.List)])
-    @pytest.mark.parametrize("collection_type_1_arg",
+    @pytest.mark.parametrize("collection_type_2_arg",
                              [(0, MsgCollectionType.Simple),
                               (1, MsgCollectionType.Simple),
                               (1, MsgCollectionType.List),
                               (2, MsgCollectionType.List),
                               (3, MsgCollectionType.List)])
-    @pytest.mark.parametrize("collection_type_1_arg",
+    @pytest.mark.parametrize("collection_type_3_arg",
                              [(0, MsgCollectionType.Simple),
                               (1, MsgCollectionType.Simple),
                               (1, MsgCollectionType.List),
