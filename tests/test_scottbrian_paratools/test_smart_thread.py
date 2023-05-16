@@ -137,16 +137,16 @@ def get_ptime() -> str:
 ########################################################################
 # SendRecvMsgs
 ########################################################################
-class SrKey(NamedTuple):
-    """Key for SendRecvMsgs."""
-    sender: str
-    receiver: str
+SrMsgKey: TypeAlias = tuple[str, str]
+SendRecvMsgs: TypeAlias = dict[SrMsgKey, list[Any]]
+
+BaseMsgKey: TypeAlias = tuple[int, SrMsgKey]
+BaseMsgs: TypeAlias = dict[BaseMsgKey, list[Any]]
 
 
 @dataclass
 class SendRecvPacket:
     msgs_to_send: list[Any]
-    sent_msgs: list[Any]
 
 
 class SendType(Enum):
@@ -168,42 +168,61 @@ class MsgCollectionType(Enum):
 
 
 class SendRecvMsgs:
-    """Messages to send and verify."""
-    def __init__(self):
-        self.send_recv_msgs: dict[SrKey, SendRecvPacket] = {}
-
-    def add_msgs(self,
+    def __init__(self,
                  senders: Iterable,
                  receivers: Iterable,
-                 collection_type: MsgCollectionType,
-                 num_msgs_in_collection: int = 1):
-        """Create a set of message for testing send and recv.
+                 num_msgs: int,
+                 base_msgs: BaseMsgs):
+        self.send_msgs: dict[SrMsgKey, list[Any]] = {}
+        send_names = get_set(senders)
+        recv_names = get_set(receivers)
+        for send_name in send_names:
+            for recv_name in recv_names:
+                sr_key: SrMsgKey = (send_name, recv_name)
+                base_msg_key: BaseMsgKey = (num_msgs, sr_key)
+                self.send_msgs[sr_key] = base_msgs[base_msg_key]
 
-        Args:
-            senders: thread names of the sender threads
-            receivers: thread names of the receiver threads
-            collection_type: simple or list
-            num_msgs_in_collection: number of messages for non-simple
-                collection
+    def gen_send_msgs(self):
 
-        """
-        sender_names = get_set(senders)
-        receiver_names = get_set(receivers)
-        for sr_pair in product(sender_names, receiver_names):
-            sr_key: SrKey = SrKey(sr_pair[0], sr_pair[1])
-            if sr_key not in self.send_recv_msgs:
-                self.send_recv_msgs[sr_key] = SendRecvPacket(msgs_to_send=[],
-                                                             sent_msgs=[])
-            if collection_type == MsgCollectionType.Simple:
-                self.send_recv_msgs[sr_key].msgs_to_send.append(
-                    f'send recv simple msg: {sr_key.sender} built msg for '
-                    f'{sr_key.receiver} at {get_ptime()}')
-            elif collection_type == MsgCollectionType.List:
-                self.send_recv_msgs[sr_key].msgs_to_send.append([])
-                for idx in range(num_msgs_in_collection):
-                    self.send_recv_msgs[sr_key].msgs_to_send[-1].append(
-                        f'send recv collection msg: {sr_key.sender} built msg '
-                        f'{idx} for {sr_key.receiver} at {get_ptime()}')
+
+
+@pytest.fixture(scope="class")
+def base_msgs() -> BaseMsgs:
+    """Build base message.
+
+    Returns:
+        The message used for testing send/recv
+    """
+    ret_base_msgs: BaseMsgs = {}
+    for sender in ('sender_0', 'sender_1', 'sender_2'):
+        for receiver in ('receiver_0', 'receiver_1', 'receiver_2'):
+            sr_key: SrMsgKey = (sender, receiver)
+            msg_1_1 = (f'{sender} 1 of 1 messages to {receiver} built '
+                       f'{get_ptime()}')
+            msg_key: BaseMsgKey = (1, sr_key)
+            ret_base_msgs[msg_key] = [msg_1_1]
+            time.sleep(0.01)  # ensure ptime is different
+            msg_1_2 = (f'{sender} 1 of 2 messages to {receiver} built '
+                       f'{get_ptime()}')
+            time.sleep(0.01)  # ensure ptime is different
+            msg_2_2 = (f'{sender} 2 of 2 messages to {receiver} built '
+                       f'{get_ptime()}')
+            msg_key: BaseMsgKey = (2, sr_key)
+            ret_base_msgs[msg_key] = [msg_1_2, msg_2_2]
+            time.sleep(0.01)  # ensure ptime is different
+            msg_1_3 = (f'{sender} 1 of 3 messages to {receiver} built '
+                       f'{get_ptime()}')
+            time.sleep(0.01)  # ensure ptime is different
+            msg_2_3 = (f'{sender} 2 of 3 messages to {receiver} built '
+                       f'{get_ptime()}')
+            time.sleep(0.01)  # ensure ptime is different
+            msg_3_3 = (f'{sender} 3 of 3 messages to {receiver} built '
+                       f'{get_ptime()}')
+            msg_key: BaseMsgKey = (3, sr_key)
+            ret_base_msgs[msg_key] = [msg_1_3, msg_2_3, msg_3_3]
+
+    return ret_base_msgs
+
 
 ########################################################################
 # VerifyData items
@@ -8415,7 +8434,7 @@ class ConfigVerifier:
         msgs_to_send: SendRecvMsgs = SendRecvMsgs({})
         for from_name in from_names:
             for to_name in to_names:
-                sr_key: SrKey = SrKey(sender=from_name, receiver=to_name)
+                sr_key: SrKeyMsgKey = SrKeyMsgKey(sender=from_name, receiver=to_name)
                 msgs_to_send.send_msgs[sr_key] = [
                     f'send test: {get_ptime()}']
         self.add_cmd(
@@ -8481,7 +8500,7 @@ class ConfigVerifier:
         ################################################################
         # handle pending_msg_count
         ################################################################
-        sr_key = SrKey(sender=remote_names[0],
+        sr_key = SrKeyMsgKey(sender=remote_names[0],
                        receiver=pending_names[0])
         msgs_rem_to_pend: SendRecvMsgs = SendRecvMsgs({sr_key: []})
 
@@ -9214,7 +9233,7 @@ class ConfigVerifier:
         receiver_names = get_set(receiver_names)
         send_recv_msgs: SendRecvMsgs = SendRecvMsgs({})
         for sr_pair in product(sender_names, receiver_names):
-            sr_key: SrKey = SrKey(sr_pair[0], sr_pair[1])
+            sr_key: SrKeyMsgKey = SrKeyMsgKey(sr_pair[0], sr_pair[1])
             msgs: list[Any] = []
             for idx in range(num_msgs):
                 msgs.append(f'send recv test: {sr_key.sender} '
@@ -13703,11 +13722,11 @@ class ConfigVerifier:
 
         sender_msgs: SendRecvMsgs = SendRecvMsgs({})
         if req0 == SmartRequestType.SendMsg:
-            sr_key: SrKey = SrKey(sender=req0_name, receiver=req1_name)
+            sr_key: SrKeyMsgKey = SrKeyMsgKey(sender=req0_name, receiver=req1_name)
             sender_msgs.send_msgs[sr_key] = [f'send test: {req0_name} sending '
                                              f'msg at {get_ptime()}']
         if req1 == SmartRequestType.SendMsg:
-            sr_key: SrKey = SrKey(sender=req1_name, receiver=req0_name)
+            sr_key: SrKeyMsgKey = SrKeyMsgKey(sender=req1_name, receiver=req0_name)
             sender_msgs.send_msgs[sr_key] = [f'send test: {req1_name} sending '
                                              f'msg at {get_ptime()}']
 
@@ -14364,19 +14383,17 @@ class ConfigVerifier:
             self,
             num_senders: int,
             num_receivers: int,
+            num_msgs: int,
             send_type: SendType,
-            collection_type_1: tuple[int, MsgCollectionType],
-            collection_type_2: tuple[int, MsgCollectionType],
-            collection_type_3: tuple[int, MsgCollectionType]) -> None:
+            base_msgs: BaseMsgs) -> None:
         """Add cmds to run scenario.
 
         Args:
             num_senders: number of sender threads
             num_receivers: number of receiver threads
+            num_msgs: number of message to send
             send_type: type of send to do
-            collection_type_1: simple or list
-            collection_type_2: None, simple, or list
-            collection_type_3: None, simple, or list
+            base_msgs: dict of msgs to send
 
         """
         senders: set[str] = set()
@@ -14391,7 +14408,10 @@ class ConfigVerifier:
 
         self.log_name_groups()
 
-        msgs_to_send = SendRecvMsgs()
+        msgs_to_send = SendRecvMsgs(senders=senders,
+                                    receivers=receivers,
+                                    num_msgs=num_msgs,
+                                    base_msgs=base_msgs)
         msgs_to_send.add_msgs(senders=senders,
                               receivers=receivers,
                               collection_type=collection_type_1[1],
@@ -14710,7 +14730,7 @@ class ConfigVerifier:
         sender_1_msg_1: SendRecvMsgs = SendRecvMsgs({})
         if exit_names and num_senders >= 2:
             for exit_name in exit_names:
-                sr_key: SrKey = SrKey(exit_name, sender_names[1])
+                sr_key: SrKeyMsgKey = SrKeyMsgKey(exit_name, sender_names[1])
                 sender_1_msg_1.send_msgs[sr_key] = [
                     f'send test: {get_ptime()}']
                 log_msg = f'log test: {get_ptime()}'
@@ -14734,7 +14754,7 @@ class ConfigVerifier:
         sender_2_msg_2: SendRecvMsgs = SendRecvMsgs({})
         if exit_names and num_senders == 3:
             for exit_name in exit_names:
-                sr_key: SrKey = SrKey(exit_name, sender_names[2])
+                sr_key: SrKeyMsgKey = SrKeyMsgKey(exit_name, sender_names[2])
                 sender_2_msg_1.send_msgs[exit_name] = [
                     f'send test: {get_ptime()}']
                 send_msg_serial_num = self.add_cmd(
@@ -16451,7 +16471,7 @@ class ConfigVerifier:
         req_key_exit: RequestKey = ('smart_recv',
                                     'exit')
 
-        sr_key: SrKey = SrKey(sender=remote, receiver=cmd_runner)
+        sr_key: SrKeyMsgKey = SrKeyMsgKey(sender=remote, receiver=cmd_runner)
         # enter_exit = ('entry', 'exit')
         if stopped_remotes:
             # enter_exit = ('entry', )
@@ -24380,47 +24400,6 @@ class TestSmartThreadExamples:
 
         logger.debug('mainline exiting')
 
-@pytest.fixture(params=['a', 'b', 'c'])  # type: ignore
-def parm0(request: Any) -> int:
-    """Number of threads to auto start.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return request.param
-
-@pytest.fixture(params=[1, 2, 3])  # type: ignore
-def parm1(request: Any, parm0) -> int:
-    """Number of threads to auto start.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    ans = (request.param, parm0)
-    return ans
-
-MsgKey: TypeAlias = tuple[MsgCollectionType, MsgType, int]
-@pytest.fixture(scope="class")
-def base_msgs() -> dict[MsgKey, list[Any]]:
-    ret_base_msgs: dict[MsgKey, list[Any]] = {}
-    for msg_collection_type in [MsgCollectionType.Simple,
-                                MsgCollectionType.List]:
-        for msg_type in [MsgType.Text, MsgType.Int]:
-            for num_msgs in range(1, 4):
-                msg_key: MsgKey = (msg_collection_type, msg_type, num_msgs)
-                for idx in range(num_msgs):
-                    if msg_collection_type == MsgCollectionType.Simple:
-                        if msg_type == MsgType.Text:
-
-
-
-
 
 ########################################################################
 # TestSmartThreadScenarios class
@@ -24500,46 +24479,19 @@ class TestSmartThreadScenarios:
     ####################################################################
     # test_send_scenarios
     ####################################################################
-
-
-
-    def test_parms(self, parm1):
-        logger.debug(f'test_parms {parm1=}')
-
-
-
-
-
     @pytest.mark.parametrize("num_senders_arg", [1, 2, 3])
     @pytest.mark.parametrize("num_receivers_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_msgs_arg", [1, 2, 3])
     @pytest.mark.parametrize("send_type_arg", [SendType.ToRemotes,
                                                SendType.Broadcast,
                                                SendType.SRMsgs])
-    @pytest.mark.parametrize("collection_type_1_arg",
-                             [(1, MsgCollectionType.Simple),
-                              (1, MsgCollectionType.List),
-                              (2, MsgCollectionType.List),
-                              (3,MsgCollectionType.List)])
-    @pytest.mark.parametrize("collection_type_2_arg",
-                             [(0, MsgCollectionType.Simple),
-                              (1, MsgCollectionType.Simple),
-                              (1, MsgCollectionType.List),
-                              (2, MsgCollectionType.List),
-                              (3, MsgCollectionType.List)])
-    @pytest.mark.parametrize("collection_type_3_arg",
-                             [(0, MsgCollectionType.Simple),
-                              (1, MsgCollectionType.Simple),
-                              (1, MsgCollectionType.List),
-                              (2, MsgCollectionType.List),
-                              (3, MsgCollectionType.List)])
     def test_send_scenarios(
             self,
             num_senders_arg: int,
             num_receivers_arg: int,
+            num_msgs_arg: int,
             send_type_arg: SendType,
-            collection_type_1_arg: tuple[int, MsgCollectionType],
-            collection_type_2_arg: tuple[int, MsgCollectionType],
-            collection_type_3_arg: tuple[int, MsgCollectionType],
+            base_msgs_arg: base_msgs,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
         """Test meta configuration scenarios.
@@ -24547,27 +24499,23 @@ class TestSmartThreadScenarios:
         Args:
             num_senders_arg: number of sender threads
             num_receivers_arg: number of receiver threads
+            num_msgs_arg: number of message to send
             send_type_arg: type of send to do
-            collection_type_1_arg: count and type
-            collection_type_2_arg: count and type
-            collection_type_3_arg: count and type
+            base_msgs_arg: dict of msgs to send
             caplog: pytest fixture to capture log output
 
         """
-        # skip any gap cases
-        if collection_type_2_arg[0] == 0 and collection_type_3_arg[0] > 0:
-            return
-
         args_for_scenario_builder: dict[str, Any] = {
             'num_senders': num_senders_arg,
             'num_receivers': num_receivers_arg,
-            'collection_type_1': collection_type_1_arg,
-            'collection_type_2': collection_type_2_arg,
+            'num_msgs': num_msgs_arg,
+            'send_type': send_type_arg,
+            'base_msgs': base_msgs_arg,
             'collection_type_3': collection_type_3_arg,
         }
 
         self.scenario_driver(
-            scenario_builder=ConfigVerifier.build_send_scenarios,
+            scenario_builder=ConfigVerifier.build_send_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 
