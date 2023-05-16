@@ -138,9 +138,8 @@ def get_ptime() -> str:
 # SendRecvMsgs
 ########################################################################
 SrMsgKey: TypeAlias = tuple[str, str]
-SendRecvMsgs: TypeAlias = dict[SrMsgKey, list[Any]]
 
-BaseMsgKey: TypeAlias = tuple[int, SrMsgKey]
+BaseMsgKey: TypeAlias = tuple[int, SrMsgKey, str]
 BaseMsgs: TypeAlias = dict[BaseMsgKey, list[Any]]
 
 
@@ -172,18 +171,56 @@ class SendRecvMsgs:
                  senders: Iterable,
                  receivers: Iterable,
                  num_msgs: int,
+                 msg_send_type: SendType,
                  base_msgs: BaseMsgs):
-        self.send_msgs: dict[SrMsgKey, list[Any]] = {}
+        self.send_broadcast_msgs: dict[str, Any] = {}
+        self.send_targeted_msgs: dict[str, dict[str, Any]] = {}
         send_names = get_set(senders)
         recv_names = get_set(receivers)
         for send_name in send_names:
             for recv_name in recv_names:
                 sr_key: SrMsgKey = (send_name, recv_name)
-                base_msg_key: BaseMsgKey = (num_msgs, sr_key)
+                if msg_send_type.SRMsgs:
+                    base_msg_key: BaseMsgKey = (num_msgs, sr_key, "targeted")
+                else:
+                    base_msg_key: BaseMsgKey = (num_msgs, sr_key, "broadcast")
                 self.send_msgs[sr_key] = base_msgs[base_msg_key]
 
-    def gen_send_msgs(self):
+    def gen_send_msgs(self,
+                      send_name: str,
+                      recv_name: str):
+        sr_key: SrMsgKey = (send_name, recv_name)
+        for msg in self.send_msgs[sr_key]:
+            yield msg
 
+
+class BaseMsgs:
+    def __init__(self,
+                 num_senders: int,
+                 num_receivers: int,
+                 max_msgs: int) -> None:
+        self.num_senders = num_senders
+        self.num_receivers = num_receivers
+        self.max_msgs = max_msgs
+        self.broadcast_msgs: dict[str, list[Any]] = {}
+        self.directed_msgs: dict[str, dict[str, list[Any]]] = {}
+        self.build_msgs()
+
+    def build_msgs(self):
+        for sender_idx in range(self.num_senders):
+            sender_name = f'sender_{sender_idx}'
+            self.broadcast_msgs[sender_name] = []
+            for msg_idx in range(self.max_msgs):
+                self.broadcast_msgs[sender_name].append(
+                    f'{sender_name} broadcast message {msg_idx}')
+
+            self.directed_msgs[sender_name] = {}
+            for receiver_idx in range(self.num_receivers):
+                receiver_name = f'receiver_{receiver_idx}'
+                self.directed_msgs[sender_name][receiver_name] = []
+                for msg_idx in range(self.max_msgs):
+                    self.directed_msgs[sender_name][receiver_name].append(
+                        f'{sender_name} message {msg_idx} to {receiver_name}')
 
 
 @pytest.fixture(scope="class")
@@ -193,34 +230,9 @@ def base_msgs() -> BaseMsgs:
     Returns:
         The message used for testing send/recv
     """
-    ret_base_msgs: BaseMsgs = {}
-    for sender in ('sender_0', 'sender_1', 'sender_2'):
-        for receiver in ('receiver_0', 'receiver_1', 'receiver_2'):
-            sr_key: SrMsgKey = (sender, receiver)
-            msg_1_1 = (f'{sender} 1 of 1 messages to {receiver} built '
-                       f'{get_ptime()}')
-            msg_key: BaseMsgKey = (1, sr_key)
-            ret_base_msgs[msg_key] = [msg_1_1]
-            time.sleep(0.01)  # ensure ptime is different
-            msg_1_2 = (f'{sender} 1 of 2 messages to {receiver} built '
-                       f'{get_ptime()}')
-            time.sleep(0.01)  # ensure ptime is different
-            msg_2_2 = (f'{sender} 2 of 2 messages to {receiver} built '
-                       f'{get_ptime()}')
-            msg_key: BaseMsgKey = (2, sr_key)
-            ret_base_msgs[msg_key] = [msg_1_2, msg_2_2]
-            time.sleep(0.01)  # ensure ptime is different
-            msg_1_3 = (f'{sender} 1 of 3 messages to {receiver} built '
-                       f'{get_ptime()}')
-            time.sleep(0.01)  # ensure ptime is different
-            msg_2_3 = (f'{sender} 2 of 3 messages to {receiver} built '
-                       f'{get_ptime()}')
-            time.sleep(0.01)  # ensure ptime is different
-            msg_3_3 = (f'{sender} 3 of 3 messages to {receiver} built '
-                       f'{get_ptime()}')
-            msg_key: BaseMsgKey = (3, sr_key)
-            ret_base_msgs[msg_key] = [msg_1_3, msg_2_3, msg_3_3]
-
+    ret_base_msgs: BaseMsgs = BaseMsgs(num_senders=3,
+                                       num_receivers=3,
+                                       max_msgs=3)
     return ret_base_msgs
 
 
@@ -14412,24 +14424,11 @@ class ConfigVerifier:
                                     receivers=receivers,
                                     num_msgs=num_msgs,
                                     base_msgs=base_msgs)
-        msgs_to_send.add_msgs(senders=senders,
-                              receivers=receivers,
-                              collection_type=collection_type_1[1],
-                              num_msgs_in_collection=collection_type_1[0])
-        if collection_type_2[0] > 0:
-            msgs_to_send.add_msgs(senders=senders,
-                                  receivers=receivers,
-                                  collection_type=collection_type_2[1],
-                                  num_msgs_in_collection=collection_type_2[0])
-        if collection_type_3[0] > 0:
-            msgs_to_send.add_msgs(senders=senders,
-                                  receivers=receivers,
-                                  collection_type=collection_type_3[1],
-                                  num_msgs_in_collection=collection_type_3[0])
 
         ############################################################
         # send messages
         ############################################################
+
         send_msg_serial_num = self.add_cmd(SendMsg(
             cmd_runners=senders,
             receivers=receivers,
@@ -17716,7 +17715,6 @@ class ConfigVerifier:
                         log_msg: str,
                         timeout_type: TimeoutType = TimeoutType.TimeoutNone,
                         timeout: IntOrFloat = 0,
-                        broadcast: bool = False,
                         unreg_timeout_names: Optional[set[str]] = None,
                         fullq_timeout_names: Optional[set[str]] = None,
                         stopped_remotes: Optional[set[str]] = None) -> None:
@@ -17730,8 +17728,6 @@ class ConfigVerifier:
             log_msg: log message for smart_send to issue
             timeout_type: specifies None, False, or True
             timeout: value to use for timeout on the smart_send request
-            broadcast: specifies whether to broadcast the message to all
-                active threads
             unreg_timeout_names: names of threads that are unregistered
                 and are expected to cause timeout
             fullq_timeout_names: names of threads whose msg_q is full
@@ -17740,8 +17736,9 @@ class ConfigVerifier:
 
         """
         self.log_test_msg(f'handle_send entry: {cmd_runner=}, {receivers=}, '
-                          f'{timeout_type=}, {unreg_timeout_names=}, '
-                          f'{fullq_timeout_names=}, {stopped_remotes=}')
+                          f'{send_type=}, {timeout_type=}, '
+                          f'{unreg_timeout_names=}, {fullq_timeout_names=}, '
+                          f'{stopped_remotes=}')
         self.log_ver.add_call_seq(
             name='smart_send',
             seq='test_smart_thread.py::ConfigVerifier.handle_send_msg')
@@ -17781,36 +17778,30 @@ class ConfigVerifier:
         send_msg: Any = None
         send_msgs: st.SendMsgs = st.SendMsgs({})
 
-        if receivers or broadcast:
-            # For receivers or broadcast, the same message is sent to
-            # each of the receivers, so we need to modify SendRecvMsgs to
-            # make each message the same for each sender, receiver pair
-            # for this cmd_runner.
-            send_msg = f'test message from handle_send_msg {get_ptime()}'
-            sr_keys = list(msg_to_send.send_msgs.keys())
-            for sr_key in sr_keys:
-                if sr_key.sender == cmd_runner:
-                    msg_to_send.send_msgs[sr_key] = send_msg
-        else:
+        if send_type.SRMsgs:
             # for a smart_send using the SendMsgs option, we need to
             # build a SendMsgs dict from the SendRecvMsgs test messages
             for sr_key, item in msg_to_send.send_msgs.items():
-                if sr_key.sender == cmd_runner:
-                    send_msgs.send_msgs[sr_key.receiver] = item
+                if sr_key[0] == cmd_runner:
+                    send_msgs.send_msgs[sr_key[1]] = item
             send_msg = send_msgs
 
+        if send_type.Broadcast:
+            true_receivers = set()
+        else:
+            true_receivers = receivers
         # enter_exit = ('entry', 'exit')
         if stopped_remotes:
             # enter_exit = ('entry', )
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_send(
-                        receivers=receivers,
+                        receivers=true_receivers,
                         msg=send_msg,
                         log_msg=log_msg)
                 else:
                     self.all_threads[cmd_runner].smart_send(
-                        receivers=receivers,
+                        receivers=true_receivers,
                         msg=send_msg,
                         timeout=timeout,
                         log_msg=log_msg)
@@ -17819,7 +17810,7 @@ class ConfigVerifier:
                 self.get_error_msg(
                     cmd_runner=cmd_runner,
                     smart_request='smart_send',
-                    targets=receivers,
+                    targets=true_receivers,
                     error_str='SmartThreadRemoteThreadNotAlive',
                     stopped_remotes=stopped_remotes),
                 log_level=logging.ERROR)
@@ -17827,14 +17818,14 @@ class ConfigVerifier:
         elif timeout_type == TimeoutType.TimeoutNone:
             pe[PE.request_msg][req_key_exit] += 1
             self.all_threads[cmd_runner].smart_send(
-                receivers=receivers,
+                receivers=true_receivers,
                 msg=send_msg,
                 log_msg=log_msg)
             elapsed_time += (time.time() - start_time)
         elif timeout_type == TimeoutType.TimeoutFalse:
             pe[PE.request_msg][req_key_exit] += 1
             self.all_threads[cmd_runner].smart_send(
-                receivers=receivers,
+                receivers=true_receivers,
                 msg=send_msg,
                 timeout=timeout,
                 log_msg=log_msg)
@@ -17843,7 +17834,7 @@ class ConfigVerifier:
             # enter_exit = ('entry', )
             with pytest.raises(st.SmartThreadRequestTimedOut):
                 self.all_threads[cmd_runner].smart_send(
-                    receivers=receivers,
+                    receivers=true_receivers,
                     msg=send_msg,
                     timeout=timeout,
                     log_msg=log_msg)
@@ -17852,7 +17843,7 @@ class ConfigVerifier:
                 self.get_error_msg(
                     cmd_runner=cmd_runner,
                     smart_request='smart_send',
-                    targets=receivers,
+                    targets=true_receivers,
                     error_str='SmartThreadRequestTimedOut',
                     stopped_remotes=set(stopped_remotes)),
                 log_level=logging.ERROR)
