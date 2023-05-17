@@ -168,72 +168,106 @@ class MsgCollectionType(Enum):
 
 class SendRecvMsgs:
     def __init__(self,
-                 senders: Iterable,
-                 receivers: Iterable,
-                 num_msgs: int,
-                 msg_send_type: SendType,
-                 base_msgs: BaseMsgs):
-        self.send_broadcast_msgs: dict[str, Any] = {}
-        self.send_targeted_msgs: dict[str, dict[str, Any]] = {}
-        send_names = get_set(senders)
-        recv_names = get_set(receivers)
-        for send_name in send_names:
-            for recv_name in recv_names:
-                sr_key: SrMsgKey = (send_name, recv_name)
-                if msg_send_type.SRMsgs:
-                    base_msg_key: BaseMsgKey = (num_msgs, sr_key, "targeted")
-                else:
-                    base_msg_key: BaseMsgKey = (num_msgs, sr_key, "broadcast")
-                self.send_msgs[sr_key] = base_msgs[base_msg_key]
-
-    def gen_send_msgs(self,
-                      send_name: str,
-                      recv_name: str):
-        sr_key: SrMsgKey = (send_name, recv_name)
-        for msg in self.send_msgs[sr_key]:
-            yield msg
-
-
-class BaseMsgs:
-    def __init__(self,
-                 num_senders: int,
-                 num_receivers: int,
-                 max_msgs: int) -> None:
-        self.num_senders = num_senders
-        self.num_receivers = num_receivers
-        self.max_msgs = max_msgs
-        self.broadcast_msgs: dict[str, list[Any]] = {}
-        self.directed_msgs: dict[str, dict[str, list[Any]]] = {}
+                 sender_names: Iterable,
+                 receiver_names: Iterable,
+                 num_msgs: int) -> None:
+        self.sender_names = get_set(sender_names)
+        self.receiver_names = get_set(receiver_names)
+        self.num_msgs = num_msgs
+        self.broadcast_msgs: list[dict[str, Any]] = []
+        self.directed_msgs: list[dict[str, dict[str, Any]]] = []
+        self.exp_received_msgs: dict[str, dict[str, list[Any]]] = {}
         self.build_msgs()
 
     def build_msgs(self):
-        for sender_idx in range(self.num_senders):
-            sender_name = f'sender_{sender_idx}'
-            self.broadcast_msgs[sender_name] = []
-            for msg_idx in range(self.max_msgs):
-                self.broadcast_msgs[sender_name].append(
-                    f'{sender_name} broadcast message {msg_idx}')
+        for msg_idx in range(self.num_msgs):
+            self.broadcast_msgs.append({})
+            for sender_name in self.sender_names:
+                self.broadcast_msgs[msg_idx][
+                    sender_name] = (f'{sender_name} broadcast message'
+                                    f' {msg_idx}')
 
-            self.directed_msgs[sender_name] = {}
-            for receiver_idx in range(self.num_receivers):
-                receiver_name = f'receiver_{receiver_idx}'
-                self.directed_msgs[sender_name][receiver_name] = []
-                for msg_idx in range(self.max_msgs):
-                    self.directed_msgs[sender_name][receiver_name].append(
-                        f'{sender_name} message {msg_idx} to {receiver_name}')
+                self.directed_msgs.append({sender_name: {}})
+                for receiver_name in self.receiver_names:
+                    self.directed_msgs[msg_idx][sender_name][
+                        receiver_name] = (f'{sender_name} message {msg_idx} '
+                                          f'to {receiver_name}')
+
+    def get_broadcast_msg(self,
+                          sender_name: str,
+                          msg_idx: int):
+        return self.broadcast_msgs[msg_idx][sender_name]
+
+    def get_send_msgs(self,
+                      sender_name: str,
+                      receiver_names: Iterable,
+                      msg_idx: int):
+        send_msgs: st.SendMsgs = st.SendMsgs(send_msgs={})
+        for receiver_name in receiver_names:
+            msg = self.directed_msgs[msg_idx][sender_name][receiver_name]
+            send_msgs.send_msgs[receiver_name] = msg
+            self.add_exp_msg_received(receiver_name=receiver_name,
+                                      sender_name=sender_name,
+                                      msg=msg)
+        return send_msgs
+
+    def add_exp_msg_received(self,
+                             receiver_name: str,
+                             sender_name: str,
+                             msg: Any):
+        self.exp_received_msgs[receiver_name][sender_name].append(msg)
 
 
-@pytest.fixture(scope="class")
-def base_msgs() -> BaseMsgs:
-    """Build base message.
-
-    Returns:
-        The message used for testing send/recv
-    """
-    ret_base_msgs: BaseMsgs = BaseMsgs(num_senders=3,
-                                       num_receivers=3,
-                                       max_msgs=3)
-    return ret_base_msgs
+# class BaseMsgs:
+#     def __init__(self,
+#                  sender_names: Iterable,
+#                  receiver_names: Iterable,
+#                  max_msgs: int = 3) -> None:
+#         self.sender_names = get_set(sender_names)
+#         self.receiver_names = get_set(receiver_names)
+#         self.max_msgs = max_msgs
+#         self.broadcast_msgs: dict[str, list[Any]] = {}
+#         self.directed_msgs: dict[str, dict[str, list[Any]]] = {}
+#         self.received_msgs: dict[str, dict[str, list[Any]]] = {}
+#         self.build_msgs()
+#
+#     def build_msgs(self):
+#         for sender_name in self.sender_names:
+#             self.broadcast_msgs[sender_name] = []
+#             for msg_idx in range(self.max_msgs):
+#                 self.broadcast_msgs[sender_name].append(
+#                     f'{sender_name} broadcast message {msg_idx}')
+#
+#             self.directed_msgs[sender_name] = {}
+#             for receiver_name in self.receiver_names:
+#                 self.directed_msgs[sender_name][receiver_name] = []
+#                 for msg_idx in range(self.max_msgs):
+#                     self.directed_msgs[sender_name][receiver_name].append(
+#                         f'{sender_name} message {msg_idx} to {receiver_name}')
+#
+#
+# @pytest.fixture(scope="class")
+# def base_msgs() -> BaseMsgs:
+#     """Build base message.
+#
+#     Returns:
+#         The message used for testing send/recv
+#     """
+#     num_senders = 6
+#     num_receivers = 6
+#     max_msgs = 3
+#     sender_names: set[str] = set()
+#     for idx in range(num_senders):
+#         sender_names |= f'sender_{idx}'
+#
+#     receiver_names: set[str] = set()
+#     for idx in range(num_receivers):
+#         receiver_names |= f'receiver_{idx}'
+#
+#     ret_base_msgs: BaseMsgs = BaseMsgs(sender_names=sender_names,
+#                                        receiver_names=receiver_names,
+#                                        max_msgs=max_msgs)
+#     return ret_base_msgs
 
 
 ########################################################################
@@ -1674,6 +1708,7 @@ class SendMsg(ConfigCmd):
                  cmd_runners: Iterable,
                  receivers: Iterable,
                  msgs_to_send: SendRecvMsgs,
+                 msg_idx: int,
                  send_type: SendType = SendType.ToRemotes,
                  stopped_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
@@ -1683,6 +1718,7 @@ class SendMsg(ConfigCmd):
             cmd_runners: thread names that will execute the command
             receivers: thread names that will receive the message
             msgs_to_send: messages to send and verify
+            msg_idx: index to use with msgs_to_send for this call
             send_type: specifies how to send the messages
             stopped_remotes: thread names that are stopped
             log_msg: log message for smart_send
@@ -1692,6 +1728,7 @@ class SendMsg(ConfigCmd):
 
         self.receivers = get_set(receivers)
         self.msgs_to_send = msgs_to_send
+        self.msg_idx = msg_idx
 
         self.send_type = send_type
 
@@ -1701,7 +1738,8 @@ class SendMsg(ConfigCmd):
 
         self.arg_list += ['receivers',
                           'stopped_remotes',
-                          'send_type']
+                          'send_type',
+                          'msg_idx']
 
     def run_process(self, cmd_runner: str) -> None:
         """Run the command.
@@ -1712,7 +1750,8 @@ class SendMsg(ConfigCmd):
         self.config_ver.handle_send_msg(
             cmd_runner=cmd_runner,
             receivers=self.receivers,
-            msg_to_send=self.msgs_to_send,
+            msgs_to_send=self.msgs_to_send,
+            msg_idx=self.msg_idx,
             send_type=self.send_type,
             timeout_type=TimeoutType.TimeoutNone,
             timeout=0,
@@ -1730,6 +1769,7 @@ class SendMsgTimeoutFalse(SendMsg):
     def __init__(self,
                  cmd_runners: Iterable,
                  msgs_to_send: SendRecvMsgs,
+                 msg_idx: int,
                  timeout: IntOrFloat,
                  send_type: SendType = SendType.ToRemotes,
                  receivers: Optional[Iterable] = None,
@@ -1741,6 +1781,7 @@ class SendMsgTimeoutFalse(SendMsg):
             cmd_runners: thread names that will execute the command
             receivers: thread names that will receive the message
             msgs_to_send: messages to send and verify
+            msg_idx: index to use with msgs_to_send for this call
             timeout: value for smart_send
             send_type: specifies how to send the messages
             stopped_remotes: thread names that are stopped
@@ -1750,6 +1791,7 @@ class SendMsgTimeoutFalse(SendMsg):
             cmd_runners=cmd_runners,
             receivers=receivers,
             msgs_to_send=msgs_to_send,
+            msg_idx=msg_idx,
             send_type=send_type,
             stopped_remotes=stopped_remotes,
             log_msg=log_msg)
@@ -1768,7 +1810,8 @@ class SendMsgTimeoutFalse(SendMsg):
         self.config_ver.handle_send_msg(
             cmd_runner=cmd_runner,
             receivers=self.receivers,
-            msg_to_send=self.msgs_to_send,
+            msgs_to_send=self.msgs_to_send,
+            msg_idx=self.msg_idx,
             send_type=self.send_type,
             timeout_type=TimeoutType.TimeoutFalse,
             timeout=self.timeout,
@@ -1786,6 +1829,7 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
     def __init__(self,
                  cmd_runners: Iterable,
                  msgs_to_send: SendRecvMsgs,
+                 msg_idx: int,
                  receivers: Iterable,
                  timeout: IntOrFloat,
                  unreg_timeout_names: Iterable,
@@ -1799,6 +1843,7 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
             cmd_runners: thread names that will execute the command
             receivers: thread names that will receive the message
             msgs_to_send: messages to send and verify
+            msg_idx: index to use with msgs_to_send for this call
             timeout: value for smart_send
             unreg_timeout_names: thread names that are not registered
             fullq_timeout_names: thread names whose msg_q is full
@@ -1810,6 +1855,7 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
             cmd_runners=cmd_runners,
             receivers=receivers,
             msgs_to_send=msgs_to_send,
+            msg_idx=msg_idx,
             timeout=timeout,
             send_type=send_type,
             stopped_remotes=stopped_remotes,
@@ -1832,7 +1878,8 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
         self.config_ver.handle_send_msg(
             cmd_runner=cmd_runner,
             receivers=self.receivers,
-            msg_to_send=self.msgs_to_send,
+            msgs_to_send=self.msgs_to_send,
+            msg_idx=self.msg_idx,
             send_type=self.send_type,
             timeout_type=TimeoutType.TimeoutTrue,
             timeout=self.timeout,
@@ -14396,8 +14443,7 @@ class ConfigVerifier:
             num_senders: int,
             num_receivers: int,
             num_msgs: int,
-            send_type: SendType,
-            base_msgs: BaseMsgs) -> None:
+            send_type: SendType) -> None:
         """Add cmds to run scenario.
 
         Args:
@@ -14420,26 +14466,26 @@ class ConfigVerifier:
 
         self.log_name_groups()
 
-        msgs_to_send = SendRecvMsgs(senders=senders,
-                                    receivers=receivers,
-                                    num_msgs=num_msgs,
-                                    base_msgs=base_msgs)
+        msgs_to_send = SendRecvMsgs(sender_names=senders,
+                                    receiver_names=receivers,
+                                    num_msgs=num_msgs)
 
         ############################################################
         # send messages
         ############################################################
-
-        send_msg_serial_num = self.add_cmd(SendMsg(
-            cmd_runners=senders,
-            receivers=receivers,
-            msgs_to_send=msgs_to_send,
-            send_type=send_type))
-        self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=self.commander_name,
-                confirm_cmd='SendMsg',
-                confirm_serial_num=send_msg_serial_num,
-                confirmers=senders))
+        for msg_idx in range(num_msgs):
+            send_msg_serial_num = self.add_cmd(SendMsg(
+                cmd_runners=senders,
+                receivers=receivers,
+                msgs_to_send=msgs_to_send,
+                msg_idx=msg_idx,
+                send_type=send_type))
+            self.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=self.commander_name,
+                    confirm_cmd='SendMsg',
+                    confirm_serial_num=send_msg_serial_num,
+                    confirmers=senders))
 
         ############################################################
         # receive messages
@@ -17710,7 +17756,8 @@ class ConfigVerifier:
     def handle_send_msg(self,
                         cmd_runner: str,
                         receivers: set[str],
-                        msg_to_send: SendRecvMsgs,
+                        msgs_to_send: SendRecvMsgs,
+                        msg_idx: int,
                         send_type: SendType,
                         log_msg: str,
                         timeout_type: TimeoutType = TimeoutType.TimeoutNone,
@@ -17723,7 +17770,8 @@ class ConfigVerifier:
         Args:
             cmd_runner: name of thread doing the cmd
             receivers: names of threads to receive the message
-            msg_to_send: message to send to the receivers
+            msgs_to_send: message to send to the receivers
+            msg_idx: index to use with msgs_to_send for this call
             send_type: specifies how to send the message
             log_msg: log message for smart_send to issue
             timeout_type: specifies None, False, or True
@@ -17781,10 +17829,13 @@ class ConfigVerifier:
         if send_type.SRMsgs:
             # for a smart_send using the SendMsgs option, we need to
             # build a SendMsgs dict from the SendRecvMsgs test messages
-            for sr_key, item in msg_to_send.send_msgs.items():
-                if sr_key[0] == cmd_runner:
-                    send_msgs.send_msgs[sr_key[1]] = item
-            send_msg = send_msgs
+            send_msg = msgs_to_send.get_send_msgs(sender_name=cmd_runner,
+                                                  receiver_names=receivers,
+                                                  msg_idx=msg_idx)
+        else:
+            send_msg = msgs_to_send.get_broadcast_msg(
+                sender_name=cmd_runner,
+                msg_idx=msg_idx)
 
         if send_type.Broadcast:
             true_receivers = set()
@@ -24482,7 +24533,6 @@ class TestSmartThreadScenarios:
             num_receivers_arg: int,
             num_msgs_arg: int,
             send_type_arg: SendType,
-            base_msgs_arg: base_msgs,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
         """Test meta configuration scenarios.
@@ -24492,7 +24542,6 @@ class TestSmartThreadScenarios:
             num_receivers_arg: number of receiver threads
             num_msgs_arg: number of message to send
             send_type_arg: type of send to do
-            base_msgs_arg: dict of msgs to send
             caplog: pytest fixture to capture log output
 
         """
@@ -24501,8 +24550,6 @@ class TestSmartThreadScenarios:
             'num_receivers': num_receivers_arg,
             'num_msgs': num_msgs_arg,
             'send_type': send_type_arg,
-            'base_msgs': base_msgs_arg,
-            'collection_type_3': collection_type_3_arg,
         }
 
         self.scenario_driver(
