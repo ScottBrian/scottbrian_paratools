@@ -16406,83 +16406,11 @@ class ConfigVerifier:
                           f'{senders=}, {stopped_remotes=}, {timeout_type=}, '
                           f'{timeout=}, {timeout_names=}')
 
-        self.monitor_event.set()
-        timeout_true_value = timeout
-        timeout_type_to_use = timeout_type
-        timeout_name = set()
-        for remote in senders:
-            if remote in stopped_remotes:
-                stopped_remote = {remote}
-            else:
-                stopped_remote = set()
-            if timeout_type == TimeoutType.TimeoutTrue:
-                if remote in timeout_names:
-                    timeout_name = {remote}
-                    timeout_type_to_use = TimeoutType.TimeoutTrue
-                else:
-                    timeout_name = set()
-                    timeout_type_to_use = TimeoutType.TimeoutFalse
-
-            self.handle_recv_msg2(
-                cmd_runner=cmd_runner,
-                remote=remote,
-                exp_msgs=exp_msgs,
-                stopped_remotes=stopped_remote,
-                timeout_type=timeout_type_to_use,
-                timeout=timeout_true_value,
-                timeout_names=timeout_name,
-                log_msg=log_msg)
-
-            if timeout_type == TimeoutType.TimeoutTrue:
-                timeout_true_value = 0.2
-
-        self.wait_for_monitor(cmd_runner=cmd_runner,
-                              rtn_name='handle_recv')
-
-        self.log_test_msg(f'handle_recv_msg exit: {cmd_runner=}, '
-                          f'{senders=}, {stopped_remotes=}, {timeout_type=}, '
-                          f'{timeout=}, {timeout_names=}')
-
-    ####################################################################
-    # handle_recv_msg
-    ####################################################################
-    def handle_recv_msg2(self,
-                         cmd_runner: str,
-                         remote: str,
-                         exp_msgs: SendRecvMsgs,
-                         stopped_remotes: set[str],
-                         timeout_type: TimeoutType,
-                         timeout: IntOrFloat,
-                         timeout_names: set[str],
-                         log_msg: str) -> None:
-        """Handle the send_recv_cmd execution and log msgs.
-
-        Args:
-            cmd_runner: name of thread doing the cmd
-            remote: names of the sender
-            exp_msgs: expected messages from senders
-            stopped_remotes: name of remote that is stopped. Will be
-                None or the same name as remote
-            timeout_type: None, False, or True
-            timeout: value to use for timeout
-            timeout_names: name of remote that fails to send a message
-                within the timeout time. Will be None or the same name
-                as the remote
-            log_msg: log message to isee on smart_recv
-
-        """
-        self.log_test_msg(f'handle_recv_msg2 entry: {cmd_runner=}, '
-                          f'{remote=}, {stopped_remotes=}')
-
-        self.log_ver.add_call_seq(
-            name='smart_recv',
-            seq='test_smart_thread.py::ConfigVerifier.handle_recv_msg2')
-
         pe = self.pending_events[cmd_runner]
         pe[PE.start_request].append(
             StartRequest(req_type=st.ReqType.Smart_recv,
                          timeout_type=timeout_type,
-                         targets={remote},
+                         targets=senders,
                          unreg_remotes=set(),
                          not_registered_remotes=set(),
                          timeout_remotes=timeout_names,
@@ -16501,18 +16429,15 @@ class ConfigVerifier:
         req_key_exit: RequestKey = ('smart_recv',
                                     'exit')
 
-        sr_key: SrMsgKey = SrMsgKey(sender=remote, receiver=cmd_runner)
-        # enter_exit = ('entry', 'exit')
         if stopped_remotes:
-            # enter_exit = ('entry', )
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
                     recvd_msg = self.all_threads[cmd_runner].smart_recv(
-                        senders=remote,
+                        senders=senders,
                         log_msg=log_msg)
                 else:
                     recvd_msg = self.all_threads[cmd_runner].smart_recv(
-                        senders=remote,
+                        senders=senders,
                         timeout=timeout,
                         log_msg=log_msg)
 
@@ -16520,7 +16445,7 @@ class ConfigVerifier:
                 self.get_error_msg(
                     cmd_runner=cmd_runner,
                     smart_request='smart_recv',
-                    targets={remote},
+                    targets=senders,
                     error_str='SmartThreadRemoteThreadNotAlive',
                     stopped_remotes=stopped_remotes),
                 log_level=logging.ERROR)
@@ -16528,10 +16453,12 @@ class ConfigVerifier:
         elif timeout_type == TimeoutType.TimeoutNone:
             pe[PE.request_msg][req_key_exit] += 1
             recvd_msg = self.all_threads[cmd_runner].smart_recv(
-                senders=remote,
+                senders=senders,
                 log_msg=log_msg)
-            assert recvd_msg[remote] == exp_msgs.exp_received_msgs[
-                cmd_runner][remote]
+
+            for remote in senders:
+                assert recvd_msg[remote] == exp_msgs.exp_received_msgs[
+                    cmd_runner][remote]
             # self.add_log_msg(
             #     new_log_msg=f"{cmd_runner} received msg from {remote}",
             #     log_level=logging.INFO)
@@ -16539,20 +16466,18 @@ class ConfigVerifier:
         elif timeout_type == TimeoutType.TimeoutFalse:
             pe[PE.request_msg][req_key_exit] += 1
             recvd_msg = self.all_threads[cmd_runner].smart_recv(
-                senders=remote,
+                senders=senders,
                 timeout=timeout,
                 log_msg=log_msg)
-            assert recvd_msg[remote] == exp_msgs.exp_received_msgs[
-                cmd_runner][remote]
-            # self.add_log_msg(
-            #     new_log_msg=f"{cmd_runner} received msg from {remote}",
-            #     log_level=logging.INFO)
+
+            for remote in senders:
+                assert recvd_msg[remote] == exp_msgs.exp_received_msgs[
+                    cmd_runner][remote]
 
         elif timeout_type == TimeoutType.TimeoutTrue:
-            # enter_exit = ('entry', )
             with pytest.raises(st.SmartThreadRequestTimedOut):
                 recvd_msg = self.all_threads[cmd_runner].smart_recv(
-                    senders=remote,
+                    senders=senders,
                     timeout=timeout,
                     log_msg=log_msg)
 
@@ -16562,21 +16487,219 @@ class ConfigVerifier:
                 self.get_error_msg(
                     cmd_runner=cmd_runner,
                     smart_request='smart_recv',
-                    targets={remote},
+                    targets=senders,
                     error_str='SmartThreadRequestTimedOut',
                     stopped_remotes=stopped_remotes),
                 log_level=logging.ERROR)
 
-        # self.add_request_log_msg(cmd_runner=cmd_runner,
-        #                          smart_request='smart_recv',
-        #                          targets={remote},
-        #                          timeout=timeout,
-        #                          timeout_type=timeout_type,
-        #                          enter_exit=enter_exit,
-        #                          log_msg=log_msg)
+        self.wait_for_monitor(cmd_runner=cmd_runner,
+                              rtn_name='handle_recv')
 
-        self.log_test_msg(f'handle_recv_msg2 exit: {cmd_runner=}, '
-                          f'{remote=}, {stopped_remotes=}')
+        self.log_test_msg(f'handle_recv_msg exit: {cmd_runner=}, '
+                          f'{senders=}, {stopped_remotes=}, {timeout_type=}, '
+                          f'{timeout=}, {timeout_names=}')
+
+    # ####################################################################
+    # # handle_recv_msg
+    # ####################################################################
+    # def handle_recv_msg(self,
+    #                     cmd_runner: str,
+    #                     senders: set[str],
+    #                     exp_msgs: SendRecvMsgs,
+    #                     stopped_remotes: set[str],
+    #                     timeout_type: TimeoutType,
+    #                     timeout: IntOrFloat,
+    #                     timeout_names: set[str],
+    #                     log_msg: str) -> None:
+    #     """Handle the send_recv_cmd execution and log msgs.
+    #
+    #     Args:
+    #         cmd_runner: name of thread doing the cmd
+    #         senders: names of the senders
+    #         exp_msgs: expected messages by sender name
+    #         stopped_remotes: names of remotes that are stopped.
+    #         timeout_type: None, False, or True
+    #         timeout: value to use for timeout
+    #         timeout_names: names of remotes that fail to send a message
+    #             within the timeout time.
+    #         log_msg: log message to isee on smart_recv
+    #
+    #     """
+    #     self.log_test_msg(f'handle_recv_msg entry: {cmd_runner=}, '
+    #                       f'{senders=}, {stopped_remotes=}, {timeout_type=}, '
+    #                       f'{timeout=}, {timeout_names=}')
+    #
+    #     self.monitor_event.set()
+    #     timeout_true_value = timeout
+    #     timeout_type_to_use = timeout_type
+    #     timeout_name = set()
+    #     for remote in senders:
+    #         if remote in stopped_remotes:
+    #             stopped_remote = {remote}
+    #         else:
+    #             stopped_remote = set()
+    #         if timeout_type == TimeoutType.TimeoutTrue:
+    #             if remote in timeout_names:
+    #                 timeout_name = {remote}
+    #                 timeout_type_to_use = TimeoutType.TimeoutTrue
+    #             else:
+    #                 timeout_name = set()
+    #                 timeout_type_to_use = TimeoutType.TimeoutFalse
+    #
+    #         self.handle_recv_msg2(
+    #             cmd_runner=cmd_runner,
+    #             remote=remote,
+    #             exp_msgs=exp_msgs,
+    #             stopped_remotes=stopped_remote,
+    #             timeout_type=timeout_type_to_use,
+    #             timeout=timeout_true_value,
+    #             timeout_names=timeout_name,
+    #             log_msg=log_msg)
+    #
+    #         if timeout_type == TimeoutType.TimeoutTrue:
+    #             timeout_true_value = 0.2
+    #
+    #     self.wait_for_monitor(cmd_runner=cmd_runner,
+    #                           rtn_name='handle_recv')
+    #
+    #     self.log_test_msg(f'handle_recv_msg exit: {cmd_runner=}, '
+    #                       f'{senders=}, {stopped_remotes=}, {timeout_type=}, '
+    #                       f'{timeout=}, {timeout_names=}')
+    #
+    # ####################################################################
+    # # handle_recv_msg
+    # ####################################################################
+    # def handle_recv_msg2(self,
+    #                      cmd_runner: str,
+    #                      remote: str,
+    #                      exp_msgs: SendRecvMsgs,
+    #                      stopped_remotes: set[str],
+    #                      timeout_type: TimeoutType,
+    #                      timeout: IntOrFloat,
+    #                      timeout_names: set[str],
+    #                      log_msg: str) -> None:
+    #     """Handle the send_recv_cmd execution and log msgs.
+    #
+    #     Args:
+    #         cmd_runner: name of thread doing the cmd
+    #         remote: names of the sender
+    #         exp_msgs: expected messages from senders
+    #         stopped_remotes: name of remote that is stopped. Will be
+    #             None or the same name as remote
+    #         timeout_type: None, False, or True
+    #         timeout: value to use for timeout
+    #         timeout_names: name of remote that fails to send a message
+    #             within the timeout time. Will be None or the same name
+    #             as the remote
+    #         log_msg: log message to isee on smart_recv
+    #
+    #     """
+    #     self.log_test_msg(f'handle_recv_msg2 entry: {cmd_runner=}, '
+    #                       f'{remote=}, {stopped_remotes=}')
+    #
+    #     self.log_ver.add_call_seq(
+    #         name='smart_recv',
+    #         seq='test_smart_thread.py::ConfigVerifier.handle_recv_msg2')
+    #
+    #     pe = self.pending_events[cmd_runner]
+    #     pe[PE.start_request].append(
+    #         StartRequest(req_type=st.ReqType.Smart_recv,
+    #                      timeout_type=timeout_type,
+    #                      targets={remote},
+    #                      unreg_remotes=set(),
+    #                      not_registered_remotes=set(),
+    #                      timeout_remotes=timeout_names,
+    #                      stopped_remotes=stopped_remotes.copy(),
+    #                      deadlock_remotes=set(),
+    #                      eligible_targets=set(),
+    #                      completed_targets=set(),
+    #                      first_round_completed=set(),
+    #                      stopped_target_threads=set()))
+    #
+    #     req_key_entry: RequestKey = ('smart_recv',
+    #                                  'entry')
+    #
+    #     pe[PE.request_msg][req_key_entry] += 1
+    #
+    #     req_key_exit: RequestKey = ('smart_recv',
+    #                                 'exit')
+    #
+    #     sr_key: SrMsgKey = SrMsgKey(sender=remote, receiver=cmd_runner)
+    #     # enter_exit = ('entry', 'exit')
+    #     if stopped_remotes:
+    #         # enter_exit = ('entry', )
+    #         with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
+    #             if timeout_type == TimeoutType.TimeoutNone:
+    #                 recvd_msg = self.all_threads[cmd_runner].smart_recv(
+    #                     senders=remote,
+    #                     log_msg=log_msg)
+    #             else:
+    #                 recvd_msg = self.all_threads[cmd_runner].smart_recv(
+    #                     senders=remote,
+    #                     timeout=timeout,
+    #                     log_msg=log_msg)
+    #
+    #         self.add_log_msg(
+    #             self.get_error_msg(
+    #                 cmd_runner=cmd_runner,
+    #                 smart_request='smart_recv',
+    #                 targets={remote},
+    #                 error_str='SmartThreadRemoteThreadNotAlive',
+    #                 stopped_remotes=stopped_remotes),
+    #             log_level=logging.ERROR)
+    #
+    #     elif timeout_type == TimeoutType.TimeoutNone:
+    #         pe[PE.request_msg][req_key_exit] += 1
+    #         recvd_msg = self.all_threads[cmd_runner].smart_recv(
+    #             senders=remote,
+    #             log_msg=log_msg)
+    #         assert recvd_msg[remote] == exp_msgs.exp_received_msgs[
+    #             cmd_runner][remote]
+    #         # self.add_log_msg(
+    #         #     new_log_msg=f"{cmd_runner} received msg from {remote}",
+    #         #     log_level=logging.INFO)
+    #
+    #     elif timeout_type == TimeoutType.TimeoutFalse:
+    #         pe[PE.request_msg][req_key_exit] += 1
+    #         recvd_msg = self.all_threads[cmd_runner].smart_recv(
+    #             senders=remote,
+    #             timeout=timeout,
+    #             log_msg=log_msg)
+    #         assert recvd_msg[remote] == exp_msgs.exp_received_msgs[
+    #             cmd_runner][remote]
+    #         # self.add_log_msg(
+    #         #     new_log_msg=f"{cmd_runner} received msg from {remote}",
+    #         #     log_level=logging.INFO)
+    #
+    #     elif timeout_type == TimeoutType.TimeoutTrue:
+    #         # enter_exit = ('entry', )
+    #         with pytest.raises(st.SmartThreadRequestTimedOut):
+    #             recvd_msg = self.all_threads[cmd_runner].smart_recv(
+    #                 senders=remote,
+    #                 timeout=timeout,
+    #                 log_msg=log_msg)
+    #
+    #         self.dec_recv_timeout()
+    #
+    #         self.add_log_msg(
+    #             self.get_error_msg(
+    #                 cmd_runner=cmd_runner,
+    #                 smart_request='smart_recv',
+    #                 targets={remote},
+    #                 error_str='SmartThreadRequestTimedOut',
+    #                 stopped_remotes=stopped_remotes),
+    #             log_level=logging.ERROR)
+    #
+    #     # self.add_request_log_msg(cmd_runner=cmd_runner,
+    #     #                          smart_request='smart_recv',
+    #     #                          targets={remote},
+    #     #                          timeout=timeout,
+    #     #                          timeout_type=timeout_type,
+    #     #                          enter_exit=enter_exit,
+    #     #                          log_msg=log_msg)
+    #
+    #     self.log_test_msg(f'handle_recv_msg2 exit: {cmd_runner=}, '
+    #                       f'{remote=}, {stopped_remotes=}')
 
     ####################################################################
     # handle_request_entry_exit_log_msg
