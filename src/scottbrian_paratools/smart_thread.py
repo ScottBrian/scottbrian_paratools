@@ -2475,13 +2475,13 @@ class SmartThread:
         """
         self.request = ReqType.Smart_send
         work_targets: set[str]
-        if receivers is None:
+        if not receivers:
             if isinstance(msg, SendMsgs):
                 work_targets = set(msg.send_msgs.keys())
             else:
                 work_targets = set()
                 with sel.SELockShare(SmartThread._registry_lock):
-                    for remote in list(SmartThread._registry.keys()):
+                    for remote in SmartThread._registry:
                         if (remote != self.name and
                                 self._get_state(remote) == ThreadState.Alive):
                             work_targets |= {remote}

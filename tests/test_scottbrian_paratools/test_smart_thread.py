@@ -137,7 +137,11 @@ def get_ptime() -> str:
 ########################################################################
 # SendRecvMsgs
 ########################################################################
-SrMsgKey: TypeAlias = tuple[str, str]
+# SrMsgKey: TypeAlias = tuple[str, str]
+class SrMsgKey(NamedTuple):
+    sender: str
+    receiver: str
+
 
 BaseMsgKey: TypeAlias = tuple[int, SrMsgKey, str]
 BaseMsgs: TypeAlias = dict[BaseMsgKey, list[Any]]
@@ -170,13 +174,16 @@ class SendRecvMsgs:
     def __init__(self,
                  sender_names: Iterable,
                  receiver_names: Iterable,
-                 num_msgs: int) -> None:
+                 num_msgs: int,
+                 send_type: SendType) -> None:
         self.sender_names = get_set(sender_names)
         self.receiver_names = get_set(receiver_names)
         self.num_msgs = num_msgs
+        self.send_type = send_type
         self.broadcast_msgs: list[dict[str, Any]] = []
         self.directed_msgs: list[dict[str, dict[str, Any]]] = []
-        self.exp_received_msgs: dict[str, dict[str, list[Any]]] = {}
+        self.exp_received_msgs: dict[
+            str, dict[str, list[Any]]] = defaultdict(lambda: defaultdict(list))
         self.build_msgs()
 
     def build_msgs(self):
@@ -187,7 +194,8 @@ class SendRecvMsgs:
                     sender_name] = (f'{sender_name} broadcast message'
                                     f' {msg_idx}')
 
-                self.directed_msgs.append({sender_name: {}})
+                self.directed_msgs.append(
+                    defaultdict(lambda: defaultdict(str)))
                 for receiver_name in self.receiver_names:
                     self.directed_msgs[msg_idx][sender_name][
                         receiver_name] = (f'{sender_name} message {msg_idx} '
@@ -195,13 +203,19 @@ class SendRecvMsgs:
 
     def get_broadcast_msg(self,
                           sender_name: str,
-                          msg_idx: int):
-        return self.broadcast_msgs[msg_idx][sender_name]
+                          receiver_names: Iterable,
+                          msg_idx: int) -> str:
+        msg = self.broadcast_msgs[msg_idx][sender_name]
+        for receiver_name in receiver_names:
+            self.add_exp_msg_received(receiver_name=receiver_name,
+                                      sender_name=sender_name,
+                                      msg=msg)
+        return msg
 
     def get_send_msgs(self,
                       sender_name: str,
                       receiver_names: Iterable,
-                      msg_idx: int):
+                      msg_idx: int) -> st.SendMsgs:
         send_msgs: st.SendMsgs = st.SendMsgs(send_msgs={})
         for receiver_name in receiver_names:
             msg = self.directed_msgs[msg_idx][sender_name][receiver_name]
@@ -4693,38 +4707,6 @@ class RequestEntryExitLogSearchItem(LogSearchItem):
             targets=targets,
             log_msg=self.found_log_msg)
 
-        # if entry_exit == 'entry:':
-        #     self.config_ver.handle_request_entry_log_msg(
-        #         cmd_runner=cmd_runner,
-        #         targets=targets)
-        #     if request_name in ('smart_unreg', 'smart_join',
-        #     'smart_start'):
-        #         try:
-        #             req_start_item = self.config_ver.pending_events[
-        #                 cmd_runner].start_request.pop()
-        #         except IndexError:
-        #             raise UnexpectedEvent(
-        #                 'RequestEntryExitLogSearchItem encountered
-        #                 unexpected '
-        #                 f'start request log msg:
-        #                 {self.found_log_msg}')
-        #
-        #         self.config_ver.handle_start_request_log_msg(
-        #             cmd_runner=cmd_runner,
-        #             req_start_item=req_start_item)
-        #
-        #     self.config_ver.handle_request_entry_log_msg(
-        #         cmd_runner=cmd_runner,
-        #         targets=targets)
-        #     self.config_ver.log_test_msg('request_pending set for '
-        #                                  f'{cmd_runner=}, {targets=}')
-        # else:
-        #     self.config_ver.handle_request_exit_log_msg(
-        #         cmd_runner=cmd_runner)
-        #     self.config_ver.log_test_msg('request_pending reset for '
-        #                                  f'{cmd_runner=}
-        #                                  via request exit')
-
 
 ########################################################################
 # SubProcessEntryExitLogSearchItem
@@ -5908,7 +5890,7 @@ class RequestAckLogSearchItem(LogSearchItem):
         elif request == 'smart_recv':
             self.config_ver.set_msg_pending_count(receiver=cmd_runner,
                                                   sender=remote,
-                                                  pending_msg_adj=-1)
+                                                  pending_msg_adj=0)
         elif request == 'smart_wait':
             self.config_ver.set_wait_pending_flag(waiter=cmd_runner,
                                                   resumer=remote,
@@ -7169,7 +7151,10 @@ class ConfigVerifier:
             )
 
         cb = pae[receiver]
-        new_msg_count = cb.pending_msg_count + pending_msg_adj
+        if pending_msg_adj == 0:
+            new_msg_count = 0
+        else:
+            new_msg_count = cb.pending_msg_count + pending_msg_adj
         self.log_test_msg(f'set_msg_pending_count {receiver=}, '
                           f'{pair_key=}, {sender=}, updating from '
                           f'{cb.pending_msg_count=} to '
@@ -14451,7 +14436,6 @@ class ConfigVerifier:
             num_receivers: number of receiver threads
             num_msgs: number of message to send
             send_type: type of send to do
-            base_msgs: dict of msgs to send
 
         """
         senders: set[str] = set()
@@ -14468,7 +14452,8 @@ class ConfigVerifier:
 
         msgs_to_send = SendRecvMsgs(sender_names=senders,
                                     receiver_names=receivers,
-                                    num_msgs=num_msgs)
+                                    num_msgs=num_msgs,
+                                    send_type=send_type)
 
         ############################################################
         # send messages
@@ -16516,7 +16501,7 @@ class ConfigVerifier:
         req_key_exit: RequestKey = ('smart_recv',
                                     'exit')
 
-        sr_key: SrKeyMsgKey = SrKeyMsgKey(sender=remote, receiver=cmd_runner)
+        sr_key: SrMsgKey = SrMsgKey(sender=remote, receiver=cmd_runner)
         # enter_exit = ('entry', 'exit')
         if stopped_remotes:
             # enter_exit = ('entry', )
@@ -16545,7 +16530,8 @@ class ConfigVerifier:
             recvd_msg = self.all_threads[cmd_runner].smart_recv(
                 senders=remote,
                 log_msg=log_msg)
-            assert recvd_msg[remote] == [exp_msgs.send_msgs[sr_key]]
+            assert recvd_msg[remote] == exp_msgs.exp_received_msgs[
+                cmd_runner][remote]
             # self.add_log_msg(
             #     new_log_msg=f"{cmd_runner} received msg from {remote}",
             #     log_level=logging.INFO)
@@ -16556,7 +16542,8 @@ class ConfigVerifier:
                 senders=remote,
                 timeout=timeout,
                 log_msg=log_msg)
-            assert recvd_msg[remote] == [exp_msgs.send_msgs[sr_key]]
+            assert recvd_msg[remote] == exp_msgs.exp_received_msgs[
+                cmd_runner][remote]
             # self.add_log_msg(
             #     new_log_msg=f"{cmd_runner} received msg from {remote}",
             #     log_level=logging.INFO)
@@ -17159,25 +17146,6 @@ class ConfigVerifier:
 
             pe[PE.ack_msg][ack_key] += 1
 
-        # if pe[PE.current_request].stopped_remotes:
-        #     ref_key: CallRefKey = 'smart_send'
-        #
-        #     pe[PE.calling_refresh_msg][ref_key] += 1
-        #
-        #     sub_key: SubProcessKey = (cmd_runner,
-        #                               'smart_send',
-        #                               '_clean_registry',
-        #                               'entry',
-        #                               cmd_runner)
-        #     pe[PE.subprocess_msg][sub_key] += 1
-        #
-        #     sub_key: SubProcessKey = (cmd_runner,
-        #                               'smart_send',
-        #                               '_clean_pair_array',
-        #                               'entry',
-        #                               cmd_runner)
-        #     pe[PE.subprocess_msg][sub_key] += 1
-
     ####################################################################
     # handle_request_smart_send_exit
     ####################################################################
@@ -17468,29 +17436,6 @@ class ConfigVerifier:
                                   'entry',
                                   cmd_runner)
         pe[PE.subprocess_msg][sub_key] += 1
-
-        # request = pe[PE.current_request].req_type.value
-
-        # if request == 'smart_send':
-        #     self.config_ver.set_msg_pending_count(receiver=remote,
-        #                                           sender=cmd_runner,
-        #                                           pending_msg_adj=1)
-        # elif request == 'smart_recv':
-        #     self.config_ver.set_msg_pending_count(receiver=cmd_runner,
-        #                                           sender=remote,
-        #                                           pending_msg_adj=-1)
-        # elif request == 'smart_wait':
-        #     self.config_ver.set_wait_pending_flag(waiter=cmd_runner,
-        #                                           resumer=remote,
-        #                                           pending_wait_flag=False)
-        # elif request == 'smart_resume':
-        #     self.config_ver.set_wait_pending_flag(waiter=remote,
-        #                                           resumer=cmd_runner,
-        #                                           pending_wait_flag=True)
-        # elif request == 'smart_sync':
-        #     self.config_ver.set_sync_pending_flag(waiter=cmd_runner,
-        #                                           resumer=remote,
-        #                                           pending_sync_flag=False)
 
     ####################################################################
     # handle_recv_waiting_log_msg
@@ -17791,6 +17736,17 @@ class ConfigVerifier:
             name='smart_send',
             seq='test_smart_thread.py::ConfigVerifier.handle_send_msg')
 
+        if send_type == SendType.Broadcast:
+            true_receivers = set()
+            receivers = set()
+            for remote, thread_tracker in self.expected_registered.items():
+                if remote == cmd_runner:
+                    continue
+                if thread_tracker.st_state == st.ThreadState.Alive:
+                    receivers |= {remote}
+        else:
+            true_receivers = receivers
+
         timeout_remotes = set()
         if unreg_timeout_names:
             timeout_remotes = unreg_timeout_names.copy()
@@ -17826,7 +17782,7 @@ class ConfigVerifier:
         send_msg: Any = None
         send_msgs: st.SendMsgs = st.SendMsgs({})
 
-        if send_type.SRMsgs:
+        if send_type == SendType.SRMsgs:
             # for a smart_send using the SendMsgs option, we need to
             # build a SendMsgs dict from the SendRecvMsgs test messages
             send_msg = msgs_to_send.get_send_msgs(sender_name=cmd_runner,
@@ -17835,12 +17791,9 @@ class ConfigVerifier:
         else:
             send_msg = msgs_to_send.get_broadcast_msg(
                 sender_name=cmd_runner,
+                receiver_names=receivers,
                 msg_idx=msg_idx)
 
-        if send_type.Broadcast:
-            true_receivers = set()
-        else:
-            true_receivers = receivers
         # enter_exit = ('entry', 'exit')
         if stopped_remotes:
             # enter_exit = ('entry', )
