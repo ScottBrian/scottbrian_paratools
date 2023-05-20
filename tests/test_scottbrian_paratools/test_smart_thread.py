@@ -8544,25 +8544,19 @@ class ConfigVerifier:
         ################################################################
         # handle pending_msg_count
         ################################################################
-        sr_key = SrKeyMsgKey(sender=remote_names[0],
-                       receiver=pending_names[0])
-        msgs_rem_to_pend: SendRecvMsgs = SendRecvMsgs({sr_key: []})
+        msgs_remote_to_pending = SendRecvMsgs(
+            sender_names=remote_names,
+            receiver_names=pending_names,
+            num_msgs=pending_msg_count,
+            send_type=SendType.ToRemotes)
 
         for idx in range(pending_msg_count):
-            msg_to_send = self.create_msgs(sender_names=remote_names,
-                                           receiver_names=pending_names)
-            time.sleep(.1)
-            self.log_test_msg(f'build_pending {msg_to_send=}')
-            # we are sending 1 or 2 msgs, but only receiving once, so we
-            # need to add the new msg each time we send since the
-            # receive will get them all at the same time
-            msgs_rem_to_pend.send_msgs[sr_key].append(
-                msg_to_send.send_msgs[sr_key])
-            self.log_test_msg(f'build_pending {msgs_rem_to_pend=}')
             send_msg_serial_num = self.add_cmd(SendMsg(
                 cmd_runners=remote_names,
-                # receivers=pending_names,
-                msgs_to_send=msg_to_send))
+                receivers=pending_names,
+                msgs_to_send=msgs_remote_to_pending,
+                msg_idx=idx,
+                send_type=SendType.ToRemotes))
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=self.commander_name,
@@ -8631,13 +8625,15 @@ class ConfigVerifier:
             stopped_remotes = set()
             if request_type == st.ReqType.Smart_send:
                 stopped_remotes = remote_names[0]
-                msgs_pend_to_rem = self.create_msgs(
-                    sender_names=pending_names,
-                    receiver_names=remote_names)
+                msgs_pending_to_remote = SendRecvMsgs(
+                    sender_names=remote_names,
+                    receiver_names=pending_names,
+                    num_msgs=1,
+                    send_type=SendType.ToRemotes)
                 pend_req_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=pending_names[0],
                             receivers=remote_names[0],
-                            msgs_to_send=msgs_pend_to_rem,
+                            msgs_to_send=msgs_pending_to_remote,
                             stopped_remotes=stopped_remotes))
             elif request_type == st.ReqType.Smart_recv:
                 if pending_msg_count == 0:
@@ -8645,7 +8641,7 @@ class ConfigVerifier:
                 pend_req_serial_num = self.add_cmd(
                     RecvMsg(cmd_runners=pending_names[0],
                             senders=remote_names[0],
-                            exp_msgs=msgs_rem_to_pend,
+                            exp_msgs=msgs_remote_to_pending,
                             stopped_remotes=stopped_remotes))
             elif request_type == st.ReqType.Smart_wait:
                 if not pending_wait_tf:
@@ -8850,345 +8846,6 @@ class ConfigVerifier:
                 confirmers=joiner_names))
 
     ####################################################################
-    # build_pending_flags_scenarios2
-    ####################################################################
-    def build_pending_flags_scenarios2(
-            self,
-            request_type: st.ReqType,
-            pending_request_tf: bool,
-            pending_msg_count: int,
-            pending_wait_tf: bool,
-            pending_sync_tf: bool) -> None:
-        """Return a list of ConfigCmd items for a create.
-
-        Args:
-            request_type: request type that is to get the pending
-                flags set on it
-            pending_request_tf: if True, pending_request flag is to be
-                set
-            pending_msg_count: number of msgs to be placed on the
-                pending thread
-            pending_wait_tf: if True, pending_wait flag is to be set
-            pending_sync_tf: if True, pending_sync flag is to be set
-        """
-        num_pending = 1
-        num_remotes = 1
-        num_lockers = 4
-        num_unregers = 1
-        # Make sure we have enough threads.
-        assert (num_lockers
-                + num_unregers
-                + num_pending
-                + num_remotes) <= len(self.unregistered_names)
-
-        num_active_needed = (num_pending
-                             + num_remotes
-                             + num_lockers
-                             + num_unregers) + 1
-
-        self.build_config(
-            cmd_runner=self.commander_name,
-            num_active=num_active_needed)
-
-        self.log_name_groups()
-
-        active_names_copy = self.active_names - {self.commander_name}
-
-        ################################################################
-        # choose pending_names
-        ################################################################
-        pending_names = self.choose_names(
-            name_collection=active_names_copy,
-            num_names_needed=num_pending,
-            update_collection=True,
-            var_name_for_log='pending_names')
-
-        ################################################################
-        # choose remote_names
-        ################################################################
-        remote_names = self.choose_names(
-            name_collection=active_names_copy,
-            num_names_needed=num_remotes,
-            update_collection=True,
-            var_name_for_log='remote_names')
-
-        ################################################################
-        # choose locker_names
-        ################################################################
-        locker_names = self.choose_names(
-            name_collection=active_names_copy,
-            num_names_needed=num_lockers,
-            update_collection=True,
-            var_name_for_log='locker_names')
-
-        ################################################################
-        # choose unreger_names
-        ################################################################
-        unreger_names = self.choose_names(
-            name_collection=active_names_copy,
-            num_names_needed=num_unregers,
-            update_collection=True,
-            var_name_for_log='unreger_names')
-
-        lock_positions: list[str] = []
-
-        msgs_to_send = self.create_msgs(sender_names=pending_names,
-                                        receiver_names=remote_names[0])
-
-        ################################################################
-        # verify all flags off
-        ################################################################
-        exp_pending_flags = PendingFlags()
-        self.add_cmd(VerifyConfig(
-            cmd_runners=self.commander_name,
-            verify_type=VerifyType.VerifyPendingFlags,
-            names_to_check=pending_names,
-            aux_names=remote_names,
-            exp_pending_flags=exp_pending_flags,
-            obtain_reg_lock=False))
-
-        ################################################################
-        # handle pending_msg_count
-        ################################################################
-        for _ in range(pending_msg_count):
-            self.add_cmd(SendMsg(cmd_runners=remote_names,
-                                 receivers=pending_names,
-                                 msgs_to_send=msgs_to_send))
-
-        exp_pending_flags = PendingFlags(pending_msgs=pending_msg_count)
-        self.add_cmd(VerifyConfig(
-            cmd_runners=self.commander_name,
-            verify_type=VerifyType.VerifyPendingFlags,
-            names_to_check=pending_names,
-            aux_names=remote_names,
-            exp_pending_flags=exp_pending_flags,
-            obtain_reg_lock=False))
-
-        ################################################################
-        # handle pending_wait
-        ################################################################
-        if pending_wait_tf:
-            self.add_cmd(Resume(cmd_runners=remote_names,
-                                targets=pending_names))
-
-        exp_pending_flags = PendingFlags(pending_msgs=pending_msg_count,
-                                         pending_wait=pending_wait_tf)
-        self.add_cmd(VerifyConfig(
-            cmd_runners=self.commander_name,
-            verify_type=VerifyType.VerifyPendingFlags,
-            names_to_check=pending_names,
-            aux_names=remote_names,
-            exp_pending_flags=exp_pending_flags,
-            obtain_reg_lock=False))
-
-        if pending_request_tf:
-            ################################################################
-            # start of by getting lock_0
-            # locks held: lock_0
-            ################################################################
-            obtain_lock_serial_num_0 = self.add_cmd(
-                LockObtain(cmd_runners=locker_names[0]))
-            lock_positions.append(locker_names[0])
-
-            # we can confirm only this first lock obtain
-            self.add_cmd(
-                ConfirmResponse(
-                    cmd_runners=[self.commander_name],
-                    confirm_cmd='LockObtain',
-                    confirm_serial_num=obtain_lock_serial_num_0,
-                    confirmers=locker_names[0]))
-
-            self.add_cmd(
-                LockVerify(cmd_runners=self.commander_name,
-                           exp_positions=lock_positions.copy()))
-
-            ################################################################
-            # smart_wait will get behind lock_0 in request_setup
-            # locks held: lock_0|smart_wait
-            ################################################################
-            if request_type == st.ReqType.Smart_wait:
-                pend_req_serial_num = self.add_cmd(
-                    Wait(cmd_runners=pending_names[0],
-                         resumers=remote_names[0],
-                         stopped_remotes=remote_names[0]))
-            elif request_type == st.ReqType.Smart_resume:
-                pend_req_serial_num = self.add_cmd(
-                    Resume(cmd_runners=pending_names[0],
-                           targets=remote_names[0],
-                           stopped_remotes=remote_names[0]))
-            elif request_type == st.ReqType.Smart_send:
-                pend_req_serial_num = self.add_cmd(
-                    SendMsg(cmd_runners=pending_names[0],
-                            receivers=remote_names[0],
-                            msgs_to_send=msgs_to_send,
-                            stopped_remotes=remote_names[0]))
-            lock_positions.append(pending_names[0])
-
-            self.add_cmd(
-                LockVerify(cmd_runners=self.commander_name,
-                           exp_positions=lock_positions.copy()))
-
-            ################################################################
-            # locker_1 gets behind the smart_wait
-            # locks held: lock_0|smart_wait|lock_1
-            ################################################################
-            obtain_lock_serial_num_1 = self.add_cmd(
-                LockObtain(cmd_runners=locker_names[1]))
-            lock_positions.append(locker_names[1])
-
-            self.add_cmd(
-                LockVerify(cmd_runners=self.commander_name,
-                           exp_positions=lock_positions.copy()))
-
-            ################################################################
-            # smart_unreg gets behind lock_1
-            # locks held: lock_0|smart_wait|lock_1|smart_unreg
-            ################################################################
-            unreg_serial_num = self.add_cmd(
-                Unregister(cmd_runners=unreger_names[0],
-                           unregister_targets=remote_names[0]))
-            lock_positions.append(unreger_names[0])
-
-            self.add_cmd(
-                LockVerify(cmd_runners=self.commander_name,
-                           exp_positions=lock_positions.copy()))
-
-            ################################################################
-            # locker_2 gets behind the smart_unreg
-            # locks held: lock_0|smart_wait|lock_1|smart_unreg|lock_2
-            ################################################################
-            obtain_lock_serial_num_2 = self.add_cmd(
-                LockObtain(cmd_runners=locker_names[2]))
-            lock_positions.append(locker_names[2])
-
-            self.add_cmd(
-                LockVerify(cmd_runners=self.commander_name,
-                           exp_positions=lock_positions.copy()))
-
-            ################################################################
-            # release lock_0 to allow smart_wait to do request_set_up
-            # locks held: lock_1|smart_unreg|lock_2|smart_wait
-            ################################################################
-            self.add_cmd(
-                LockRelease(cmd_runners=locker_names[0]))
-            lock_positions.remove(locker_names[0])
-            # releasing lock 0 will allow the smart_wait to do request_setup
-            # and then get behind lock_2
-            lock_positions.remove(pending_names[0])
-            lock_positions.append(pending_names[0])
-
-            self.add_cmd(
-                LockVerify(cmd_runners=self.commander_name,
-                           exp_positions=lock_positions.copy()))
-
-            ################################################################
-            # locker_3 gets behind the smart_wait
-            # locks held: lock_1|smart_unreg|lock_2|smart_wait|lock_3
-            ################################################################
-            obtain_lock_serial_num_3 = self.add_cmd(
-                LockObtain(cmd_runners=locker_names[3]))
-            lock_positions.append(locker_names[3])
-
-            self.add_cmd(
-                LockVerify(cmd_runners=self.commander_name,
-                           exp_positions=lock_positions.copy()))
-
-            ################################################################
-            # release lock_1 to allow smart_unreg to remove smart_wait targ
-            # locks held: lock_2|smart_wait|lock_3
-            ################################################################
-            self.add_cmd(
-                LockRelease(cmd_runners=locker_names[1]))
-            lock_positions.remove(locker_names[1])
-            # releasing lock 1 will allow the smart_unreg complete
-            lock_positions.remove(unreger_names[0])
-
-            self.add_cmd(
-                LockVerify(cmd_runners=self.commander_name,
-                           exp_positions=lock_positions.copy()))
-
-        if not pending_request_tf:
-            ############################################################
-            # release lock_2 - smart_wait resets request_pending and
-            # then waits behind lock_3 just before refresh
-            # locks held: lock_3|smart_wait
-            ############################################################
-            self.add_cmd(
-                LockRelease(cmd_runners=locker_names[2]))
-            lock_positions.remove(locker_names[2])
-            # releasing lock 1 will allow the smart_unreg complete
-            lock_positions.remove(pending_names[0])
-            lock_positions.append(pending_names[0])
-
-            self.add_cmd(
-                LockVerify(cmd_runners=self.commander_name,
-                           exp_positions=lock_positions.copy()))
-        ################################################################
-        # verify results
-        ################################################################
-        exp_pending_flags = PendingFlags(pending_request=pending_request_tf)
-        self.add_cmd(VerifyConfig(
-            cmd_runners=self.commander_name,
-            verify_type=VerifyType.VerifyPendingFlags,
-            names_to_check=pending_names,
-            aux_names=remote_names,
-            exp_pending_flags=exp_pending_flags,
-            obtain_reg_lock=False))
-
-        if pending_request_tf:
-            pe = self.pending_events[unreger_names[0]]
-
-            pair_key = st.SmartThread._get_pair_key(pending_names[0],
-                                                    remote_names[0])
-
-            def_del_reasons: DefDelReasons = DefDelReasons(
-                pending_request=pending_request_tf,
-                pending_msg=False,
-                pending_wait=False,
-                pending_sync=False)
-
-            rem_sb_key: RemSbKey = (pending_names[0],
-                                    pair_key,
-                                    def_del_reasons)
-
-            pe[PE.notify_rem_status_block_def_msg][rem_sb_key] += 1
-
-        if lock_positions:  # if we still hold lock_2
-            ################################################################
-            # release lock_2 to allow smart_wait to complete
-            # locks held: None
-            ################################################################
-            self.add_cmd(
-                LockRelease(cmd_runners=locker_names[2]))
-            lock_positions.remove(locker_names[2])
-            # releasing lock 1 will allow the smart_unreg complete
-            lock_positions.remove(pending_names[0])
-
-            self.add_cmd(
-                LockVerify(cmd_runners=self.commander_name,
-                           exp_positions=lock_positions.copy()))
-
-        ################################################################
-        # confirm the wait is done
-        ################################################################
-        self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=self.commander_name,
-                confirm_cmd='Wait',
-                confirm_serial_num=pend_req_serial_num,
-                confirmers=pending_names))
-
-        ################################################################
-        # confirm the unreg is done
-        ################################################################
-        self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=self.commander_name,
-                confirm_cmd='Unregister',
-                confirm_serial_num=unreg_serial_num,
-                confirmers=unreger_names))
-
-    ####################################################################
     # check_pending_events
     ####################################################################
     def check_pending_events(self,
@@ -9240,55 +8897,6 @@ class ConfigVerifier:
             raise RemainingPendingEvents(
                 'check_pending_events detected that there are remaining '
                 f'pending items:\n {incomplete_items=}')
-
-    # def check_pending_events(self):
-    #     incomplete_items: dict[str, Any] = {}
-    #     for key, item in self.pending_events.items():
-    #         for key2, item2 in item.set_state_msg.items():
-    #             if item2 != 0:
-    #                 item_id = (key, key2)
-    #                 incomplete_items['set_state_msg'] = item_id
-    #
-    #     if incomplete_items:
-    #         raise InvalidConfigurationDetected(
-    #             'check_pending_events detected that there are remaining '
-    #             f'pending items: {incomplete_items=}')
-
-    ####################################################################
-    # create_msgs
-    ####################################################################
-    def create_msgs(self,
-                    sender_names: Iterable,
-                    receiver_names: Iterable,
-                    num_msgs: int = 1) -> SendRecvMsgs:
-        """Create a set of message for testing send and recv.
-
-        Args:
-            sender_names: names of the sender threads
-            receiver_names: names of the receiver threads
-            num_msgs: number of messages to create
-
-        Returns:
-            SendRecvMsgs dictionary of messages indexed by sender and
-            receiver pairs
-
-        """
-        sender_names = get_set(sender_names)
-        receiver_names = get_set(receiver_names)
-        send_recv_msgs: SendRecvMsgs = SendRecvMsgs({})
-        for sr_pair in product(sender_names, receiver_names):
-            sr_key: SrKeyMsgKey = SrKeyMsgKey(sr_pair[0], sr_pair[1])
-            msgs: list[Any] = []
-            for idx in range(num_msgs):
-                msgs.append(f'send recv test: {sr_key.sender} '
-                            f'sending msg {idx} to {sr_key.receiver} '
-                            f'at {get_ptime()}')
-            if num_msgs == 1:
-                send_recv_msgs.send_msgs[sr_key] = msgs[0]
-            else:
-                send_recv_msgs.send_msgs[sr_key] = msgs
-
-        return send_recv_msgs
 
     ####################################################################
     # build_def_del_pending_scenario
@@ -9556,11 +9164,16 @@ class ConfigVerifier:
             ############################################################
             exit_names.append(sender_names[0])
 
-            sender_msgs = self.create_msgs(sender_names, receivers)
+            sender_msgs = SendRecvMsgs(
+                sender_names=sender_names,
+                receiver_names=receivers,
+                num_msgs=1,
+                send_type=SendType.ToRemotes)
             send_msg_serial_num_0 = self.add_cmd(
                 SendMsg(cmd_runners=sender_names[0],
                         receivers=receivers,
-                        msgs_to_send=sender_msgs))
+                        msgs_to_send=sender_msgs,
+                        msg_idx=1))
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
@@ -10098,11 +9711,16 @@ class ConfigVerifier:
             ############################################################
             exit_names.append(sender_names[0])
 
-            sender_msgs = self.create_msgs(sender_names, receivers)
+            sender_msgs = SendRecvMsgs(
+                sender_names=sender_names,
+                receiver_names=receivers,
+                num_msgs=1,
+                send_type=SendType.ToRemotes)
             send_msg_serial_num_0 = self.add_cmd(
                 SendMsg(cmd_runners=sender_names[0],
                         receivers=receivers,
-                        msgs_to_send=sender_msgs))
+                        msgs_to_send=sender_msgs,
+                        msg_idx=1))
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
@@ -10715,7 +10333,11 @@ class ConfigVerifier:
         receiver_name = receiver_names[0]
         sender_name = sender_names[0]
 
-        sender_msgs = self.create_msgs(sender_name, receiver_name)
+        sender_msgs = SendRecvMsgs(
+            sender_names=sender_name,
+            receiver_names=receiver_name,
+            num_msgs=1,
+            send_type=SendType.ToRemotes)
         confirm_cmd_to_use = 'RecvMsg'
         recv_msg_serial_num = 0
         ################################################################
@@ -10776,7 +10398,8 @@ class ConfigVerifier:
                         self.add_cmd(
                             SendMsg(cmd_runners=sender_name,
                                     receivers=receiver_name,
-                                    msgs_to_send=sender_msgs))
+                                    msgs_to_send=sender_msgs,
+                                    msg_idx=1))
                     current_state = st.ThreadState.Alive
                 ########################################################
                 # do stop to make sender stopped
@@ -11032,7 +10655,11 @@ class ConfigVerifier:
         ################################################################
         # setup the messages to send
         ################################################################
-        sender_msgs = self.create_msgs(all_sender_names, receiver_names)
+        sender_msgs = SendRecvMsgs(
+            sender_names=all_sender_names,
+            receiver_names=receiver_names,
+            num_msgs=1,
+            send_type=SendType.ToRemotes)
 
         if timeout_type == TimeoutType.TimeoutNone:
             confirm_cmd_to_use = 'RecvMsg'
@@ -11069,7 +10696,8 @@ class ConfigVerifier:
             self.add_cmd(
                 SendMsg(cmd_runners=active_no_delay_sender_names,
                         receivers=receiver_names,
-                        msgs_to_send=sender_msgs))
+                        msgs_to_send=sender_msgs,
+                        msg_idx=1))
 
         self.add_cmd(
             Pause(cmd_runners=self.commander_name,
@@ -11084,7 +10712,8 @@ class ConfigVerifier:
             self.add_cmd(
                 SendMsg(cmd_runners=active_delay_sender_names,
                         receivers=receiver_names,
-                        msgs_to_send=sender_msgs))
+                        msgs_to_send=sender_msgs,
+                        msg_idx=1))
 
         ################################################################
         # do smart_send from send_exit_senders and then exit
@@ -11093,7 +10722,8 @@ class ConfigVerifier:
             self.add_cmd(
                 SendMsg(cmd_runners=send_exit_sender_names,
                         receivers=receiver_names,
-                        msgs_to_send=sender_msgs))
+                        msgs_to_send=sender_msgs,
+                        msg_idx=1))
 
             self.build_exit_suite(
                 cmd_runner=self.commander_name,
@@ -11133,7 +10763,8 @@ class ConfigVerifier:
             self.add_cmd(
                 SendMsg(cmd_runners=nosend_exit_sender_names,
                         receivers=receiver_names,
-                        msgs_to_send=sender_msgs))
+                        msgs_to_send=sender_msgs,
+                        msg_idx=1))
 
         ################################################################
         # create and start the unreg_senders, then do smart_send
@@ -11156,7 +10787,8 @@ class ConfigVerifier:
             self.add_cmd(
                 SendMsg(cmd_runners=unreg_sender_names,
                         receivers=receiver_names,
-                        msgs_to_send=sender_msgs))
+                        msgs_to_send=sender_msgs,
+                        msg_idx=1))
 
         ################################################################
         # start the reg_senders, then do smart_send
@@ -11168,7 +10800,8 @@ class ConfigVerifier:
             self.add_cmd(
                 SendMsg(cmd_runners=reg_sender_names,
                         receivers=receiver_names,
-                        msgs_to_send=sender_msgs))
+                        msgs_to_send=sender_msgs,
+                        msg_idx=1))
 
         ################################################################
         # finally, confirm the smart_recv is done
@@ -13354,8 +12987,18 @@ class ConfigVerifier:
         ################################################################
         receiver_name = receiver_names[0]
         sender_name = sender_names[0]
-        sender_msgs = self.create_msgs(sender_name, receiver_name)
-        receiver_msgs = self.create_msgs(receiver_name, sender_name)
+
+        sender_msgs = SendRecvMsgs(
+            sender_names=sender_name,
+            receiver_names=receiver_name,
+            num_msgs=1,
+            send_type=SendType.ToRemotes)
+
+        receiver_msgs = SendRecvMsgs(
+            sender_names=receiver_name,
+            receiver_names=sender_name,
+            num_msgs=1,
+            send_type=SendType.ToRemotes)
 
         confirm_cmd_to_use = 'SendMsg'
         send_msg_serial_num = 0
@@ -13526,6 +13169,7 @@ class ConfigVerifier:
                                 cmd_runners=receiver_name,
                                 receivers=sender_name,
                                 msgs_to_send=receiver_msgs,
+                                msg_idx=1,
                                 stopped_remotes=set(),
                                 log_msg=log_msg))
                         self.add_cmd(
@@ -13603,6 +13247,7 @@ class ConfigVerifier:
                                     cmd_runners=sender_name,
                                     receivers=receiver_name,
                                     msgs_to_send=sender_msgs,
+                                    msg_idx=1,
                                     stopped_remotes=stopped_remotes,
                                     log_msg=log_msg))
                         elif send_resume == 'resume':
@@ -13632,6 +13277,7 @@ class ConfigVerifier:
                                     cmd_runners=sender_name,
                                     receivers=receiver_name,
                                     msgs_to_send=sender_msgs,
+                                    msg_idx=1,
                                     timeout=timeout_time,
                                     stopped_remotes=stopped_remotes,
                                     log_msg=log_msg))
@@ -13663,6 +13309,7 @@ class ConfigVerifier:
                                     cmd_runners=sender_name,
                                     receivers=receiver_name,
                                     msgs_to_send=sender_msgs,
+                                    msg_idx=1,
                                     timeout=timeout_time,
                                     unreg_timeout_names=receiver_name,
                                     fullq_timeout_names=[],
@@ -14755,20 +14402,26 @@ class ConfigVerifier:
                                   + exit_names
                                   + full_q_names)
 
-        sender_msgs = self.create_msgs(sender_names, all_targets)
+        sender_msgs = SendRecvMsgs(
+            sender_names=sender_names,
+            receiver_names=all_targets,
+            num_msgs=1,
+            send_type=SendType.ToRemotes)
 
-        sender_1_msg_1: SendRecvMsgs = SendRecvMsgs({})
+        sender_1_msg_1 = SendRecvMsgs(
+            sender_names=exit_name,
+            receiver_names=sender_names[1],
+            num_msgs=1,
+            send_type=SendType.ToRemotes)
         if exit_names and num_senders >= 2:
             for exit_name in exit_names:
-                sr_key: SrKeyMsgKey = SrKeyMsgKey(exit_name, sender_names[1])
-                sender_1_msg_1.send_msgs[sr_key] = [
-                    f'send test: {get_ptime()}']
                 log_msg = f'log test: {get_ptime()}'
 
                 send_msg_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=exit_name,
                             receivers=sender_names[1],
                             msgs_to_send=sender_1_msg_1,
+                            msg_idx=1,
                             log_msg=log_msg))
 
                 ########################################################
@@ -14781,6 +14434,11 @@ class ConfigVerifier:
                                     confirmers=[exit_name]))
 
         sender_2_msg_1: SendRecvMsgs = SendRecvMsgs({})
+        sender_1_msg_1 = SendRecvMsgs(
+            sender_names=exit_name,
+            receiver_names=sender_names[1],
+            num_msgs=1,
+            send_type=SendType.ToRemotes)
         sender_2_msg_2: SendRecvMsgs = SendRecvMsgs({})
         if exit_names and num_senders == 3:
             for exit_name in exit_names:
@@ -14831,7 +14489,8 @@ class ConfigVerifier:
                 send_msg_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=sender_names,
                             receivers=full_q_names,
-                            msgs_to_send=sender_msgs))
+                            msgs_to_send=sender_msgs,
+                            msg_idx=1))
 
                 ########################################################
                 # confirm the smart_send
@@ -14855,6 +14514,7 @@ class ConfigVerifier:
                         SendMsg(cmd_runners=sender_names,
                                 receivers=exit_names[idx],
                                 msgs_to_send=sender_msgs,
+                                msg_idx=1,
                                 log_msg=log_msg))
 
                     ####################################################
@@ -14911,6 +14571,7 @@ class ConfigVerifier:
                     cmd_runners=sender_names,
                     receivers=all_targets,
                     msgs_to_send=sender_msgs,
+                    msg_idx=1,
                     timeout=timeout_time,
                     unreg_timeout_names=unreg_timeout_names+exit_names,
                     fullq_timeout_names=full_q_names))
@@ -14924,6 +14585,7 @@ class ConfigVerifier:
                         cmd_runners=sender_names,
                         receivers=all_targets,
                         msgs_to_send=sender_msgs,
+                        msg_idx=1,
                         timeout=timeout_time))
 
                 confirm_cmd_to_use = 'SendMsgTimeoutFalse'
@@ -14931,7 +14593,8 @@ class ConfigVerifier:
                 send_msg_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=sender_names,
                             receivers=all_targets,
-                            msgs_to_send=sender_msgs))
+                            msgs_to_send=sender_msgs,
+                            msg_idx=1))
                 confirm_cmd_to_use = 'SendMsg'
 
             self.add_cmd(WaitForRequestTimeouts(
@@ -15212,8 +14875,11 @@ class ConfigVerifier:
         ################################################################
         # smart_send
         ################################################################
-        msgs_to_send = self.create_msgs(['delta', 'echo'],
-                                        ['alpha', 'beta', 'charlie'])
+        msgs_to_send = SendRecvMsgs(
+            sender_names=['delta', 'echo'],
+            receiver_names=['alpha', 'beta', 'charlie'],
+            num_msgs=1,
+            send_type=SendType.ToRemotes)
         send_msg_serial_num = self.add_cmd(
             SendMsg(cmd_runners=['delta', 'echo'],
                     receivers=['alpha', 'beta', 'charlie'],
