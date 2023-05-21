@@ -5764,7 +5764,7 @@ class DidCleanPairArrayUtcLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str=('[a-z0-9_]+ did clean up of _pair_array at UTC '
+            search_str=('[a-z0-9_]+ did cleanup of _pair_array at UTC '
                         f'{time_match}'),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -9890,39 +9890,11 @@ class ConfigVerifier:
 
             pe[PE.calling_refresh_msg][ref_key] += 1
 
-            sub_key: SubProcessKey = (cmd_0_confirmer,
-                                      cmd_0_smart_name,
-                                      '_clean_registry',
-                                      'entry',
-                                      cmd_0_confirmer)
-            pe[PE.subprocess_msg][sub_key] += 1
-
-            sub_key: SubProcessKey = (cmd_0_confirmer,
-                                      cmd_0_smart_name,
-                                      '_clean_pair_array',
-                                      'entry',
-                                      cmd_0_confirmer)
-            pe[PE.subprocess_msg][sub_key] += 1
-
             if double_request:
                 pe = self.pending_events[cmd_1_confirmer]
                 ref_key: CallRefKey = cmd_1_smart_name
 
                 pe[PE.calling_refresh_msg][ref_key] += 1
-
-                sub_key: SubProcessKey = (cmd_1_confirmer,
-                                          cmd_1_smart_name,
-                                          '_clean_registry',
-                                          'entry',
-                                          cmd_1_confirmer)
-                pe[PE.subprocess_msg][sub_key] += 1
-
-                sub_key: SubProcessKey = (cmd_1_confirmer,
-                                          cmd_1_smart_name,
-                                          '_clean_pair_array',
-                                          'entry',
-                                          cmd_1_confirmer)
-                pe[PE.subprocess_msg][sub_key] += 1
 
         self.add_cmd(
             ConfirmResponse(
@@ -18564,11 +18536,13 @@ class ConfigVerifier:
     ####################################################################
     # lock_swap
     ####################################################################
-    @staticmethod
-    def lock_swap(new_positions: list[str]) -> None:
+    def lock_swap(self,
+                  cmd_runner: str,
+                  new_positions: list[str]) -> None:
         """Increment the pending operations count.
 
         Args:
+            cmd_runner: thread name doing the cmd
             new_positions: the desired positions on the lock queue
         """
         assert len(new_positions) == len(
@@ -20080,6 +20054,7 @@ class ConfigVerifier:
         ################################################################
         recv_0_pa_msgs_found = self.find_def_del_pair_array_msgs(
             cmd_runner=receiver_names[0],
+            request_type=st.ReqType.Smart_recv,
             deleted_names=[sender_names[0], resumer_names[0]],
             def_del_names=receiver_names + waiter_names,
             start_log_idx=start_log_idx,
@@ -20103,6 +20078,7 @@ class ConfigVerifier:
         ################################################################
         recv_1_pa_msgs_found = self.find_def_del_pair_array_msgs(
             cmd_runner=receiver_names[1],
+            request_type=st.ReqType.Smart_recv,
             deleted_names=[sender_names[0], resumer_names[0]],
             def_del_names=receiver_names + waiter_names,
             start_log_idx=start_log_idx,
@@ -20125,6 +20101,7 @@ class ConfigVerifier:
         ################################################################
         wait_0_pa_msgs_found = self.find_def_del_pair_array_msgs(
             cmd_runner=waiter_names[0],
+            request_type=st.ReqType.Smart_wait,
             deleted_names=[sender_names[0], resumer_names[0]],
             def_del_names=receiver_names + waiter_names,
             start_log_idx=start_log_idx,
@@ -20148,6 +20125,7 @@ class ConfigVerifier:
         ################################################################
         wait_1_pa_msgs_found = self.find_def_del_pair_array_msgs(
             cmd_runner=waiter_names[1],
+            request_type=st.ReqType.Smart_wait,
             deleted_names=[sender_names[0], resumer_names[0]],
             def_del_names=receiver_names + waiter_names,
             start_log_idx=start_log_idx,
@@ -20158,6 +20136,7 @@ class ConfigVerifier:
         ################################################################
         del_pa_msgs_found = self.find_def_del_pair_array_msgs(
             cmd_runner=deleter_names[0],
+            request_type=st.ReqType.Smart_join,
             deleted_names=[sender_names[0], resumer_names[0]],
             def_del_names=receiver_names + waiter_names,
             start_log_idx=start_log_idx,
@@ -20168,6 +20147,7 @@ class ConfigVerifier:
         ################################################################
         add_pa_msgs_found = self.find_def_del_pair_array_msgs(
             cmd_runner=adder_names[0],
+            request_type=st.ReqType.Smart_init,
             deleted_names=[sender_names[0], resumer_names[0]],
             def_del_names=receiver_names + waiter_names,
             start_log_idx=start_log_idx,
@@ -21359,6 +21339,7 @@ class ConfigVerifier:
     ####################################################################
     def find_def_del_pair_array_msgs(self,
                                      cmd_runner: str,
+                                     request_type: st.ReqType,
                                      deleted_names: list[str],
                                      def_del_names: list[str],
                                      start_log_idx: int,
@@ -21368,6 +21349,7 @@ class ConfigVerifier:
 
         Args:
             cmd_runner: name of thread doing the pair array updates
+            request_type: the ReqType for the request
             deleted_names: names of threads that were previously deleted
                 that caused the def_del_names to be a deferred delete
             def_del_names: names of deferred delete threads
@@ -21381,7 +21363,7 @@ class ConfigVerifier:
         # find entered refresh pair array log msg
         ################################################################
         # search_msg = f'{cmd_runner} entered _clean_pair_array'
-        search_msg = (f'{cmd_runner} _clean_pair_array entry: '
+        search_msg = (f'{request_type.value} _clean_pair_array entry: '
                       f'cmd_runner: {cmd_runner}')
 
         log_msg, log_pos = self.get_log_msg(
@@ -21405,13 +21387,21 @@ class ConfigVerifier:
             for def_del_name in def_del_names:
                 pair_key = st.SmartThread._get_pair_key(name0=deleted_name,
                                                         name1=def_del_name)
-                search_msg1 = (f"{cmd_runner} removed status_blocks entry "
-                               f"for pair_key = "
-                               fr"\('{pair_key[0]}', '{pair_key[1]}'\), "
-                               f"name = {def_del_name}")
-                search_msg2 = (f"{cmd_runner} removed _pair_array entry "
-                               f"for pair_key = "
-                               fr"\('{pair_key[0]}', '{pair_key[1]}'\)")
+                # search_msg1 = (f"{cmd_runner} removed status_blocks entry "
+                #                f"for pair_key = "
+                #                fr"\('{pair_key[0]}', '{pair_key[1]}'\), "
+                #                f"name = {def_del_name}")
+                search_msg1 = (
+                    f"{cmd_runner} removed status_blocks entry for "
+                    fr"PairKey\(name0='{pair_key[0]}', "
+                    fr"name1='{pair_key[1]}'\), "
+                    f"name = {def_del_name}")
+                # search_msg2 = (f"{cmd_runner} removed _pair_array entry "
+                #                f"for pair_key = "
+                #                fr"\('{pair_key[0]}', '{pair_key[1]}'\)")
+                search_msg2 = (f"{cmd_runner} removed _pair_array entry for "
+                               fr"PairKey\(name0='{pair_key[0]}', "
+                               fr"name1='{pair_key[1]}'\)")
 
                 log_msg1, log_pos1 = self.get_log_msg(
                     search_msg=search_msg1,
@@ -21436,7 +21426,7 @@ class ConfigVerifier:
         ################################################################
         # get updated pair array log msg
         ################################################################
-        search_msg = (f'{cmd_runner} updated _pair_array at UTC '
+        search_msg = (f'{cmd_runner} did cleanup of _pair_array at UTC '
                       f'{time_match}')
 
         log_msg, log_pos = self.get_log_msg(
