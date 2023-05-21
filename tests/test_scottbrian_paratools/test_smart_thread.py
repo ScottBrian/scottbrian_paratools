@@ -206,15 +206,8 @@ class SendRecvMsgs:
                           sender_name: str,
                           receiver_names: Iterable,
                           msg_idx: int) -> str:
-        logger.debug(
-            f'get_broadcast_msg {sender_name=} about to obtain the '
-            f' broadcast msg for {receiver_names} with {msg_idx=}')
-
         with self.msg_lock:
             msg = self.broadcast_msgs[msg_idx][sender_name]
-            logger.debug(
-                f'get_broadcast_msg {sender_name=} got {msg=} and about to '
-                f'add_exp_msg_received')
             for receiver_name in receiver_names:
                 self.add_exp_msg_received(receiver_name=receiver_name,
                                           sender_name=sender_name,
@@ -5575,8 +5568,7 @@ class RemStatusBlockEntryLogSearchItem(LogSearchItem):
                 f'log msg: {self.found_log_msg}')
             raise UnexpectedEvent(
                 f'RemStatusBlockEntryLogSearchItem using {rem_sb_key=} '
-                'encountered unexpected '
-                f'log msg: {self.found_log_msg}')
+                f'encountered unexpected log msg: {self.found_log_msg}')
 
         pe[PE.rem_status_block_msg][rem_sb_key] -= 1
         # pe[PE.notify_rem_status_block_msg][rem_sb_key] -= 1
@@ -5672,13 +5664,11 @@ class RemStatusBlockEntryDefLogSearchItem(LogSearchItem):
         rem_sb_key: RemSbKey = (rem_name,
                                 pair_key,
                                 def_del_reasons)
-        self.config_ver.log_test_msg(
-            f'RemStatusBlockEntryDefLogSearchItem {rem_sb_key=}')
 
         if pe[PE.rem_status_block_def_msg][rem_sb_key] <= 0:
             raise UnexpectedEvent(
-                'RemStatusBlockEntryDefLogSearchItem encountered unexpected '
-                f'log msg: {self.found_log_msg}')
+                f'RemStatusBlockEntryDefLogSearchItem using {rem_sb_key=} '
+                f'encountered unexpected log msg: {self.found_log_msg}')
 
         pe[PE.rem_status_block_def_msg][rem_sb_key] -= 1
 
@@ -8494,7 +8484,7 @@ class ConfigVerifier:
             SendMsg(cmd_runners=from_names,
                     receivers=to_names,
                     msgs_to_send=msgs_to_send,
-                    msg_idx=1))
+                    msg_idx=0))
 
         self.add_cmd(
             RecvMsg(cmd_runners=to_names,
@@ -8644,7 +8634,7 @@ class ConfigVerifier:
                     SendMsg(cmd_runners=pending_names[0],
                             receivers=remote_names[0],
                             msgs_to_send=msgs_pending_to_remote,
-                            msg_idx=1,
+                            msg_idx=0,
                             stopped_remotes=stopped_remotes))
             elif request_type == st.ReqType.Smart_recv:
                 if pending_msg_count == 0:
@@ -9184,7 +9174,7 @@ class ConfigVerifier:
                 SendMsg(cmd_runners=sender_names[0],
                         receivers=receivers,
                         msgs_to_send=sender_msgs,
-                        msg_idx=1))
+                        msg_idx=0))
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
@@ -9731,7 +9721,7 @@ class ConfigVerifier:
                 SendMsg(cmd_runners=sender_names[0],
                         receivers=receivers,
                         msgs_to_send=sender_msgs,
-                        msg_idx=1))
+                        msg_idx=0))
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
@@ -10410,7 +10400,7 @@ class ConfigVerifier:
                             SendMsg(cmd_runners=sender_name,
                                     receivers=receiver_name,
                                     msgs_to_send=sender_msgs,
-                                    msg_idx=1))
+                                    msg_idx=0))
                     current_state = st.ThreadState.Alive
                 ########################################################
                 # do stop to make sender stopped
@@ -10708,7 +10698,7 @@ class ConfigVerifier:
                 SendMsg(cmd_runners=active_no_delay_sender_names,
                         receivers=receiver_names,
                         msgs_to_send=sender_msgs,
-                        msg_idx=1))
+                        msg_idx=0))
 
         self.add_cmd(
             Pause(cmd_runners=self.commander_name,
@@ -10724,7 +10714,7 @@ class ConfigVerifier:
                 SendMsg(cmd_runners=active_delay_sender_names,
                         receivers=receiver_names,
                         msgs_to_send=sender_msgs,
-                        msg_idx=1))
+                        msg_idx=0))
 
         ################################################################
         # do smart_send from send_exit_senders and then exit
@@ -10734,7 +10724,7 @@ class ConfigVerifier:
                 SendMsg(cmd_runners=send_exit_sender_names,
                         receivers=receiver_names,
                         msgs_to_send=sender_msgs,
-                        msg_idx=1))
+                        msg_idx=0))
 
             self.build_exit_suite(
                 cmd_runner=self.commander_name,
@@ -10775,7 +10765,7 @@ class ConfigVerifier:
                 SendMsg(cmd_runners=nosend_exit_sender_names,
                         receivers=receiver_names,
                         msgs_to_send=sender_msgs,
-                        msg_idx=1))
+                        msg_idx=0))
 
         ################################################################
         # create and start the unreg_senders, then do smart_send
@@ -10799,7 +10789,7 @@ class ConfigVerifier:
                 SendMsg(cmd_runners=unreg_sender_names,
                         receivers=receiver_names,
                         msgs_to_send=sender_msgs,
-                        msg_idx=1))
+                        msg_idx=0))
 
         ################################################################
         # start the reg_senders, then do smart_send
@@ -10812,7 +10802,7 @@ class ConfigVerifier:
                 SendMsg(cmd_runners=reg_sender_names,
                         receivers=receiver_names,
                         msgs_to_send=sender_msgs,
-                        msg_idx=1))
+                        msg_idx=0))
 
         ################################################################
         # finally, confirm the smart_recv is done
@@ -13180,7 +13170,7 @@ class ConfigVerifier:
                                 cmd_runners=receiver_name,
                                 receivers=sender_name,
                                 msgs_to_send=receiver_msgs,
-                                msg_idx=1,
+                                msg_idx=0,
                                 stopped_remotes=set(),
                                 log_msg=log_msg))
                         self.add_cmd(
@@ -13258,7 +13248,7 @@ class ConfigVerifier:
                                     cmd_runners=sender_name,
                                     receivers=receiver_name,
                                     msgs_to_send=sender_msgs,
-                                    msg_idx=1,
+                                    msg_idx=0,
                                     stopped_remotes=stopped_remotes,
                                     log_msg=log_msg))
                         elif send_resume == 'resume':
@@ -13288,7 +13278,7 @@ class ConfigVerifier:
                                     cmd_runners=sender_name,
                                     receivers=receiver_name,
                                     msgs_to_send=sender_msgs,
-                                    msg_idx=1,
+                                    msg_idx=0,
                                     timeout=timeout_time,
                                     stopped_remotes=stopped_remotes,
                                     log_msg=log_msg))
@@ -13320,7 +13310,7 @@ class ConfigVerifier:
                                     cmd_runners=sender_name,
                                     receivers=receiver_name,
                                     msgs_to_send=sender_msgs,
-                                    msg_idx=1,
+                                    msg_idx=0,
                                     timeout=timeout_time,
                                     unreg_timeout_names=receiver_name,
                                     fullq_timeout_names=[],
@@ -13942,7 +13932,7 @@ class ConfigVerifier:
                     cmd_runners=cmd_runner,
                     receivers=target,
                     msgs_to_send=request_specific_args['sender_msgs'],
-                    msg_idx=1,
+                    msg_idx=0,
                     stopped_remotes=stopped_remotes))
         elif timeout_type == TimeoutType.TimeoutFalse:
             confirm_request_name = 'SendMsgTimeoutFalse'
@@ -13952,7 +13942,7 @@ class ConfigVerifier:
                     cmd_runners=cmd_runner,
                     receivers=target,
                     msgs_to_send=request_specific_args['sender_msgs'],
-                    msg_idx=1,
+                    msg_idx=0,
                     timeout=timeout_time,
                     stopped_remotes=stopped_remotes))
         else:  # timeout_type == TimeoutType.TimeoutTrue
@@ -13963,7 +13953,7 @@ class ConfigVerifier:
                     cmd_runners=cmd_runner,
                     receivers=target,
                     msgs_to_send=request_specific_args['sender_msgs'],
-                    msg_idx=1,
+                    msg_idx=0,
                     timeout=timeout_time,
                     unreg_timeout_names=target,
                     fullq_timeout_names=[],
@@ -14439,7 +14429,7 @@ class ConfigVerifier:
                     SendMsg(cmd_runners=exit_name,
                             receivers=sender_names[1],
                             msgs_to_send=sender_1_msg_1,
-                            msg_idx=1,
+                            msg_idx=0,
                             log_msg=log_msg))
 
                 ########################################################
@@ -14469,7 +14459,7 @@ class ConfigVerifier:
                     SendMsg(cmd_runners=exit_name,
                             receivers=sender_names[2],
                             msgs_to_send=sender_2_msg_1,
-                            msg_idx=1))
+                            msg_idx=0))
 
                 ########################################################
                 # confirm the smart_send
@@ -14486,7 +14476,7 @@ class ConfigVerifier:
                     SendMsg(cmd_runners=exit_name,
                             receivers=sender_names[2],
                             msgs_to_send=sender_2_msg_2,
-                            msg_idx=1,
+                            msg_idx=0,
                             log_msg=log_msg))
 
                 ########################################################
@@ -14510,7 +14500,7 @@ class ConfigVerifier:
                     SendMsg(cmd_runners=sender_names,
                             receivers=full_q_names,
                             msgs_to_send=sender_msgs,
-                            msg_idx=1))
+                            msg_idx=0))
 
                 ########################################################
                 # confirm the smart_send
@@ -14534,7 +14524,7 @@ class ConfigVerifier:
                         SendMsg(cmd_runners=sender_names,
                                 receivers=exit_names[idx],
                                 msgs_to_send=sender_msgs,
-                                msg_idx=1,
+                                msg_idx=0,
                                 log_msg=log_msg))
 
                     ####################################################
@@ -14591,7 +14581,7 @@ class ConfigVerifier:
                     cmd_runners=sender_names,
                     receivers=all_targets,
                     msgs_to_send=sender_msgs,
-                    msg_idx=1,
+                    msg_idx=0,
                     timeout=timeout_time,
                     unreg_timeout_names=unreg_timeout_names+exit_names,
                     fullq_timeout_names=full_q_names))
@@ -14605,7 +14595,7 @@ class ConfigVerifier:
                         cmd_runners=sender_names,
                         receivers=all_targets,
                         msgs_to_send=sender_msgs,
-                        msg_idx=1,
+                        msg_idx=0,
                         timeout=timeout_time))
 
                 confirm_cmd_to_use = 'SendMsgTimeoutFalse'
@@ -14614,7 +14604,7 @@ class ConfigVerifier:
                     SendMsg(cmd_runners=sender_names,
                             receivers=all_targets,
                             msgs_to_send=sender_msgs,
-                            msg_idx=1))
+                            msg_idx=0))
                 confirm_cmd_to_use = 'SendMsg'
 
             self.add_cmd(WaitForRequestTimeouts(
@@ -14900,11 +14890,12 @@ class ConfigVerifier:
             receiver_names=['alpha', 'beta', 'charlie'],
             num_msgs=1,
             send_type=SendType.ToRemotes)
+
         send_msg_serial_num = self.add_cmd(
             SendMsg(cmd_runners=['delta', 'echo'],
                     receivers=['alpha', 'beta', 'charlie'],
                     msgs_to_send=msgs_to_send,
-                    msg_idx=1,
+                    msg_idx=0,
                     log_msg='SendCmd test log message 1'))
 
         ################################################################
@@ -17386,8 +17377,7 @@ class ConfigVerifier:
 
         elapsed_time: float = 0
         start_time = time.time()
-        self.log_test_msg(f'handle_send_msg {cmd_runner=} about to obtain the '
-                          f'msg')
+
         if send_type == SendType.SRMsgs:
             # for a smart_send using the SendMsgs option, we need to
             # build a SendMsgs dict from the SendRecvMsgs test messages
@@ -17395,18 +17385,12 @@ class ConfigVerifier:
                                                   receiver_names=receivers,
                                                   msg_idx=msg_idx)
         else:
-            self.log_test_msg(
-                f'handle_send_msg {cmd_runner=} about to obtain the '
-                f' broadcast msg')
             send_msg = msgs_to_send.get_broadcast_msg(
                 sender_name=cmd_runner,
                 receiver_names=receivers,
                 msg_idx=msg_idx)
 
-        self.log_test_msg(f'handle_send_msg {cmd_runner=} about to select the '
-                          f'smart_send with {send_msg=} to {true_receivers=}')
         if stopped_remotes:
-            # enter_exit = ('entry', )
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_send(
@@ -17431,8 +17415,6 @@ class ConfigVerifier:
 
         elif timeout_type == TimeoutType.TimeoutNone:
             pe[PE.request_msg][req_key_exit] += 1
-            self.log_test_msg(f'handle_send_msg about to smart_send with '
-                              f'{send_msg=} to {true_receivers=}')
             self.all_threads[cmd_runner].smart_send(
                 receivers=true_receivers,
                 msg=send_msg,
@@ -17447,7 +17429,6 @@ class ConfigVerifier:
                 log_msg=log_msg)
             elapsed_time += (time.time() - start_time)
         elif timeout_type == TimeoutType.TimeoutTrue:
-            # enter_exit = ('entry', )
             with pytest.raises(st.SmartThreadRequestTimedOut):
                 self.all_threads[cmd_runner].smart_send(
                     receivers=true_receivers,
@@ -19279,7 +19260,7 @@ class ConfigVerifier:
         self.log_test_msg(f'clean_pair_array exit: {cmd_runner=} ')
 
     ####################################################################
-    # clean_pair_array
+    # clean_registry
     ####################################################################
     def clean_registry(self,
                        cmd_runner: str,
@@ -20338,7 +20319,7 @@ class ConfigVerifier:
         ################################################################
         # get first smart_recv log msg
         ################################################################
-        search_msg = (f'{receiver_names[0]} received msg from '
+        search_msg = (f'{receiver_names[0]} smart_recv received msg from '
                       f'{sender_names[0]}')
 
         recv_0_log_msg, recv_0_log_pos = self.get_log_msg(
@@ -20361,7 +20342,7 @@ class ConfigVerifier:
         ################################################################
         # get second smart_recv log msg
         ################################################################
-        search_msg = (f'{receiver_names[1]} received msg from '
+        search_msg = (f'{receiver_names[1]} smart_recv received msg from '
                       f'{sender_names[0]}')
 
         recv_1_log_msg, recv_1_log_pos = self.get_log_msg(
