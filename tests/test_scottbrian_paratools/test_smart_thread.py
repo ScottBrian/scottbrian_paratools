@@ -6844,71 +6844,6 @@ class ConfigVerifier:
 
         self.pending_events: dict[str, PendEvents] = {}
         self.setup_pending_events()
-        # for name in self.thread_names:
-        #     self.pending_events[name] = {}
-        # for name in self.thread_names:
-        #     self.pending_events[name][PE.start_request] = deque()
-        #     self.pending_events[name][PE.current_request] = StartRequest(
-        #         req_type=st.ReqType.NoReq,
-        #         targets=set(),
-        #         unreg_remotes=set(),
-        #         not_registered_remotes=set(),
-        #         timeout_remotes=set(),
-        #         stopped_remotes=set(),
-        #         deadlock_remotes=set(),
-        #         eligible_targets=set(),
-        #         completed_targets=set(),
-        #         first_round_completed=set(),
-        #         stopped_target_threads=set()
-        #     )
-        #     self.pending_events[name][PE.save_current_request] = StartRequest(
-        #         req_type=st.ReqType.NoReq,
-        #         targets=set(),
-        #         unreg_remotes=set(),
-        #         not_registered_remotes=set(),
-        #         timeout_remotes=set(),
-        #         stopped_remotes=set(),
-        #         deadlock_remotes=set(),
-        #         eligible_targets=set(),
-        #         completed_targets=set(),
-        #         first_round_completed=set(),
-        #         stopped_target_threads=set()
-        #     )
-        #     self.pending_events[name][PE.num_targets_remaining] = 0
-        #     self.pending_events[name][PE.request_msg] = defaultdict(int)
-        #     self.pending_events[name][PE.subprocess_msg] = defaultdict(int)
-        #     self.pending_events[name][PE.set_state_msg] = defaultdict(int)
-        #     self.pending_events[name][PE.status_msg] = defaultdict(int)
-        #     self.pending_events[name][PE.rem_reg_msg] = defaultdict(int)
-        #     self.pending_events[name][PE.did_clean_reg_msg] = 0
-        #     self.pending_events[name][PE.update_pair_array_utc_msg] = 0
-        #     self.pending_events[name][PE.did_cleanup_pair_array_utc_msg] = 0
-        #     self.pending_events[name][PE.rem_reg_targets] = deque()
-        #     self.pending_events[name][PE.add_reg_msg] = defaultdict(int)
-        #     self.pending_events[name][PE.add_pair_array_msg] = defaultdict(int)
-        #     self.pending_events[name][
-        #         PE.add_status_block_msg] = defaultdict(int)
-        #     self.pending_events[name][
-        #         PE.rem_status_block_msg] = defaultdict(int)
-        #     self.pending_events[name][
-        #         PE.rem_status_block_def_msg] = defaultdict(int)
-        #     self.pending_events[name][
-        #         PE.rem_pair_array_entry_msg] = defaultdict(int)
-        #     self.pending_events[name][
-        #         PE.notify_rem_status_block_msg] = defaultdict(int)
-        #     self.pending_events[name][
-        #         PE.notify_rem_status_block_def_msg] = defaultdict(int)
-        #     self.pending_events[name][PE.ack_msg] = defaultdict(int)
-        #     self.pending_events[name][
-        #         PE.confirm_stop_msg] = defaultdict(int)
-        #     self.pending_events[name][
-        #         PE.already_unreg_msg] = defaultdict(int)
-        #     self.pending_events[name][
-        #         PE.unreg_join_success_msg] = defaultdict(int)
-        #     self.pending_events[name][PE.join_progress_msg] = defaultdict(int)
-        #     self.pending_events[name][PE.init_comp_msg] = defaultdict(int)
-        #     self.pending_events[name][
-        #         PE.calling_refresh_msg] = defaultdict(int)
 
         self.snap_shot_data: dict[int, SnapShotDataItem] = {}
 
@@ -7040,32 +6975,6 @@ class ConfigVerifier:
                 continue
             if self.monitor_bail:
                 break
-
-            # for key, tracker in self.expected_registered.items():
-            #     if key in self.request_pending_pair_keys:
-            #         del_list: list[str] = []
-            #         for pair_key in self.request_pending_pair_keys[key]:
-            #             pair_key_exists = False
-            #             for pair_key2, remote, _ in (
-            #                     tracker.thread.work_pk_remotes):
-            #                 if pair_key == pair_key2:
-            #                     pair_key_exists = True
-            #                     break
-            #             if not pair_key_exists:
-            #                 if key == pair_key.name0:
-            #                     remote = pair_key.name1
-            #                 else:
-            #                     remote = pair_key.name0
-            #                 del_list.append(remote)
-            #         if del_list:
-            #             # do not use log_test_msg for this one - the
-            #             # allow_log_test_msg flag may be False, but
-            #             this
-            #             # msg is needed and must not be suppressed
-            #             a_msg = f'monitor found del keys {del_list}
-            #             for {key}'
-            #             self.log_ver.add_msg(log_msg=re.escape(a_msg))
-            #             logger.debug(a_msg)
 
             while self.get_log_msgs():
                 while self.log_found_items:
@@ -9607,12 +9516,14 @@ class ConfigVerifier:
         del_add_request = False
 
         cmd_0_name: str = ''
+        cmd_0_smart_name = ''
         cmd_0_confirmer: str = ''
         cmd_0_serial_num: int = 0
         recv_0_name: str = ''
         wait_0_name: str = ''
 
         cmd_1_name: str = ''
+        cmd_1_smart_name = ''
         cmd_1_confirmer: str = ''
         cmd_1_serial_num: int = 0
         recv_1_name: str = ''
@@ -9653,6 +9564,7 @@ class ConfigVerifier:
                 or def_del_scenario == DefDelScenario.RecvDel
                 or def_del_scenario == DefDelScenario.RecvAdd):
             cmd_0_name = 'RecvMsg'
+            cmd_0_smart_name = 'smart_recv'
             recv_0_name = receiver_names[0]
             cmd_0_confirmer = recv_0_name
             receivers.append(recv_0_name)
@@ -9667,6 +9579,7 @@ class ConfigVerifier:
                 or def_del_scenario == DefDelScenario.WaitAdd):
 
             cmd_0_name = 'Wait'
+            cmd_0_smart_name = 'smart_wait'
             wait_0_name = waiter_names[0]
             cmd_0_confirmer = wait_0_name
             waiters.append(wait_0_name)
@@ -9682,6 +9595,7 @@ class ConfigVerifier:
             else:
                 recv_1_name = receiver_names[1]
             cmd_1_name = 'RecvMsg'
+            cmd_1_smart_name = 'smart_recv'
             receivers.append(recv_1_name)
 
         elif (def_del_scenario == DefDelScenario.Wait0Wait1
@@ -9693,6 +9607,7 @@ class ConfigVerifier:
             else:
                 wait_1_name = waiter_names[1]
             cmd_1_name = 'Wait'
+            cmd_1_smart_name = 'smart_wait'
             waiters.append(wait_1_name)
 
         exiters: list[str] = []
@@ -9814,6 +9729,7 @@ class ConfigVerifier:
             if not single_request:
                 first_cmd_lock_pos = recv_0_name
                 lock_positions.append(recv_0_name)
+
         else:  # must be wait
             cmd_0_serial_num = self.add_cmd(
                 Wait(cmd_runners=wait_0_name,
@@ -9836,19 +9752,19 @@ class ConfigVerifier:
         # refresh pair_array
         # 'd' means the lock in _cmd_loop (e.g., for del or add)
         ################################################################
-        ############################################################
+        ################################################################
         # verify locks held:
         # For 1 request scenarios: no locks held
         # For all others: lock_0|request_0a
-        ############################################################
+        ################################################################
         self.add_cmd(
             LockVerify(cmd_runners=self.commander_name,
                        exp_positions=lock_positions.copy()))
 
         ################################################################
-        # Get lock 1 to keep the second smart_recv/wait progressing beyond
-        # the lock obtain in _request_setup where the pk_remotes list
-        # is built.
+        # Get lock 1 to keep the second smart_recv/wait progressing
+        # beyond the lock obtain in _request_setup where the pk_remotes
+        # list is built.
         ################################################################
         if not single_request:
             self.add_cmd(
@@ -9877,6 +9793,7 @@ class ConfigVerifier:
                             log_msg='def_del_recv_test_1'))
                 second_cmd_lock_pos = recv_1_name
                 lock_positions.append(recv_1_name)
+
             else:  # must be wait
                 cmd_1_confirmer = wait_1_name
                 cmd_1_serial_num = self.add_cmd(
@@ -9887,6 +9804,7 @@ class ConfigVerifier:
                          log_msg='def_del_wait_test_1'))
                 second_cmd_lock_pos = wait_1_name
                 lock_positions.append(wait_1_name)
+
             ############################################################
             # complete the build in part a
             ############################################################
@@ -9960,6 +9878,52 @@ class ConfigVerifier:
                 second_cmd_lock_pos=second_cmd_lock_pos,
                 locker_names=locker_names)
 
+        ################################################################
+        # handle expected refresh call
+        ################################################################
+        if (def_del_scenario != DefDelScenario.NormalRecv
+                and def_del_scenario != DefDelScenario.NormalWait
+                and def_del_scenario != DefDelScenario.ResurrectionRecv
+                and def_del_scenario != DefDelScenario.ResurrectionWait):
+            pe = self.pending_events[cmd_0_confirmer]
+            ref_key: CallRefKey = cmd_0_smart_name
+
+            pe[PE.calling_refresh_msg][ref_key] += 1
+
+            sub_key: SubProcessKey = (cmd_0_confirmer,
+                                      cmd_0_smart_name,
+                                      '_clean_registry',
+                                      'entry',
+                                      cmd_0_confirmer)
+            pe[PE.subprocess_msg][sub_key] += 1
+
+            sub_key: SubProcessKey = (cmd_0_confirmer,
+                                      cmd_0_smart_name,
+                                      '_clean_pair_array',
+                                      'entry',
+                                      cmd_0_confirmer)
+            pe[PE.subprocess_msg][sub_key] += 1
+
+            if double_request:
+                pe = self.pending_events[cmd_1_confirmer]
+                ref_key: CallRefKey = cmd_1_smart_name
+
+                pe[PE.calling_refresh_msg][ref_key] += 1
+
+                sub_key: SubProcessKey = (cmd_1_confirmer,
+                                          cmd_1_smart_name,
+                                          '_clean_registry',
+                                          'entry',
+                                          cmd_1_confirmer)
+                pe[PE.subprocess_msg][sub_key] += 1
+
+                sub_key: SubProcessKey = (cmd_1_confirmer,
+                                          cmd_1_smart_name,
+                                          '_clean_pair_array',
+                                          'entry',
+                                          cmd_1_confirmer)
+                pe[PE.subprocess_msg][sub_key] += 1
+
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
@@ -10031,8 +9995,8 @@ class ConfigVerifier:
                        exp_positions=lock_positions.copy()))
 
         ################################################################
-        # Get lock 2 to keep the first smart_recv/wait progressing beyond
-        # the lock obtain in _request_loop.
+        # Get lock 2 to keep the first smart_recv/wait progressing
+        # beyond the lock obtain in _request_loop.
         ################################################################
         self.add_cmd(
             LockObtain(cmd_runners=locker_names[2]))
@@ -15866,82 +15830,6 @@ class ConfigVerifier:
                 f'log msg: {log_msg}')
 
     ####################################################################
-    # handle_exp_status_log_msgs
-    ####################################################################
-    def handle_exp_status_log_msgs(self,
-                                   log_idx: int,
-                                   name: Optional[str] = None
-                                   ) -> None:
-        """Add a thread to the ConfigVerifier.
-
-        Args:
-            log_idx: index of either register or delete msg
-            name: name to check to skip log msg
-        """
-        # self.log_test_msg(f'handle_exp_status_log_msgs entry: {log_idx=} '
-        #                   f'{name=}')
-        for a_name, tracker in self.expected_registered.items():
-            # ignore the new thread for now - we are in reg cleanup just
-            # before we add the new thread
-            if name and a_name == name:
-                continue
-
-            # If a_name was recently stopped, the log msg idx was saved
-            # in recently_stopped. If never stopped, the idx will be
-            # zero
-            stopped_log_idx = self.recently_stopped[a_name]
-
-            search_msg = f'name={a_name}, smart_thread='
-
-            log_msg, log_pos = self.get_log_msg(search_msg=search_msg,
-                                                skip_num=0,
-                                                start_idx=0,
-                                                end_idx=log_idx,
-                                                reverse_search=True)
-            if not log_msg:
-                self.abort_all_f1_threads()
-                raise FailedToFindLogMsg(f'for {a_name=}')
-            # the timing of the stop and the join make it difficult to
-            # verify the is_alive and status, so we just accept this
-            # status msg as is when there is a stop between the
-            # issuing of the status message and the join
-            elif (log_pos - 7) < stopped_log_idx < log_idx:
-                self.add_log_msg(re.escape(log_msg))
-                log_msg = f'handle_exp_status_log_msgs accept 1 for {a_name}'
-                self.log_ver.add_msg(log_msg=re.escape(log_msg))
-                logger.debug(log_msg)
-            elif a_name in self.stopping_names:
-                self.add_log_msg(re.escape(log_msg))
-                log_msg = f'handle_exp_status_log_msgs accept 2 for {a_name}'
-                self.log_ver.add_msg(log_msg=re.escape(log_msg))
-                logger.debug(log_msg)
-            else:
-                split_msg = log_msg.split()
-                part_split = split_msg[-3].removesuffix(',')
-                part_split2 = part_split.split('=')
-                is_alive = eval(part_split2[1])
-                part_split3 = split_msg[-2].removesuffix(':')
-                part_split4 = part_split3.split('=<')
-                status = eval('st.' + part_split4[1])
-                if (status == tracker.st_state
-                        and is_alive == tracker.is_alive):
-                    self.add_log_msg(re.escape(log_msg))
-                    log_msg = (f'handle_exp_status_log_msgs verified '
-                               f'for {a_name}')
-                    self.log_ver.add_msg(log_msg=re.escape(log_msg))
-                    logger.debug(log_msg)
-                else:
-                    self.abort_all_f1_threads()
-                    raise FailedToFindLogMsg(f'for {a_name=} expected '
-                                             f'{tracker.is_alive=}, '
-                                             f'got {is_alive=} '
-                                             f'{tracker.st_state=} '
-                                             f'got {status=} '
-                                             f'for {log_msg=} ')
-
-        # self.log_test_msg(f'handle_exp_status_log_msgs exit: {log_idx=} '
-        #                   f'{name=}')
-    ####################################################################
     # handle_join
     ####################################################################
     def handle_join(self,
@@ -16423,55 +16311,6 @@ class ConfigVerifier:
 
         """
         pass
-        # self.log_test_msg('handle_request_smart_init_exit entry: '
-        #                   f'{cmd_runner=}')
-        ################################################################
-        # determine next step
-        ################################################################
-        pe = self.pending_events[cmd_runner]
-
-        # self.log_test_msg('handle_request_smart_init_exit '
-        #                   f'{pe[PE.current_request]}')
-        #
-        # target = list(pe[PE.current_request].targets)[0]
-        #
-        # pe[PE.save_current_request] = StartRequest(
-        #     req_type=st.ReqType.NoReq,
-        #     targets=set(),
-        #     not_registered_remotes=set(),
-        #     timeout_remotes=set(),
-        #     stopped_remotes=set(),
-        #     deadlock_remotes=set(),
-        #     eligible_targets=set(),
-        #     completed_targets=set()
-        # )
-
-        # if (self.expected_registered[target].is_auto_started
-        #         and not self.expected_registered[target].is_alive):
-        #     self.log_test_msg('handle_request_smart_init_exit setting'
-        #                       'up StartRequest for smart_start')
-        #     pe[PE.start_request].append(
-        #         StartRequest(req_type=st.ReqType.Smart_start,
-        #                      targets={target},
-        #                      not_registered_remotes=set(),
-        #                      timeout_remotes=set(),
-        #                      stopped_remotes=set(),
-        #                      deadlock_remotes=set(),
-        #                      eligible_targets=set(),
-        #                      completed_targets=set()))
-        #
-        #     req_key_entry: RequestKey = ('smart_start',
-        #                                  'entry')
-        #
-        #     pe[PE.request_msg][req_key_entry] += 1
-        #
-        #     req_key_exit: RequestKey = ('smart_start',
-        #                                 'exit')
-        #
-        #     pe[PE.request_msg][req_key_exit] += 1
-
-        # self.log_test_msg('handle_request_smart_init_exit exit: '
-        #                   f'{cmd_runner=}')
 
     ####################################################################
     # handle_request_smart_start_entry
@@ -16551,19 +16390,6 @@ class ConfigVerifier:
                                       st.ThreadState.Stopped,
                                       st.ThreadState.Unregistered)
             pe[PE.set_state_msg][state_key] += 1
-
-        # find stopped ThreadTarget names that smart_unreg will pick off
-        # for target in self.expected_registered:
-        #     if (target not in eligible_targets
-        #             and self.expected_registered[
-        #                 target].st_state == st.ThreadState.Stopped
-        #             and self.expected_registered[
-        #                 target].is_TargetThread):
-        #         state_key: SetStateKey = (cmd_runner,
-        #                                   target,
-        #                                   st.ThreadState.Stopped,
-        #                                   st.ThreadState.Unregistered)
-        #         pe[PE.set_state_msg][state_key] += 1
 
         sub_key: SubProcessKey = (cmd_runner,
                                   'smart_unreg',
@@ -16655,30 +16481,6 @@ class ConfigVerifier:
                         f'handle_request_smart_join_entry {cmd_runner=} '
                         f'found {target=} is unregistered but not in the set '
                         f'of {pe[PE.current_request].unreg_remotes=}')
-
-        # if exp_first_round_completed:
-        #     pe[PE.current_request].first_round_completed = (
-        #         exp_first_round_completed.copy())
-        #     s_com = sorted(exp_first_round_completed)
-        #
-        #     uj_key: UnregJoinSuccessKey = (
-        #         pe[PE.current_request].req_type.value,
-        #         s_com[0])
-        #     pe[PE.unreg_join_success_msg][uj_key] += 1
-            # self.log_test_msg('handle_request_smart_join_entry added '
-            #                   f'unreg_join_success_msg with {uj_key=}')
-        # find stopped ThreadTarget names that smart_join will pick off
-        # for target in self.expected_registered:
-        #     if (target not in eligible_targets
-        #             and self.expected_registered[
-        #                 target].st_state == st.ThreadState.Stopped
-        #             and self.expected_registered[
-        #                 target].is_TargetThread):
-        #         state_key: SetStateKey = (cmd_runner,
-        #                                   target,
-        #                                   st.ThreadState.Stopped,
-        #                                   st.ThreadState.Unregistered)
-        #         pe[PE.set_state_msg][state_key] += 1
 
         if eligible_targets:
             sub_key: SubProcessKey = (cmd_runner,
@@ -16838,25 +16640,6 @@ class ConfigVerifier:
 
             pe[PE.ack_msg][ack_key] += 1
 
-        # if pe[PE.current_request].stopped_remotes:
-        #     ref_key: CallRefKey = 'smart_wait'
-        #
-        #     pe[PE.calling_refresh_msg][ref_key] += 1
-        #
-        #     sub_key: SubProcessKey = (cmd_runner,
-        #                               'smart_wait',
-        #                               '_clean_registry',
-        #                               'entry',
-        #                               cmd_runner)
-        #     pe[PE.subprocess_msg][sub_key] += 1
-        #
-        #     sub_key: SubProcessKey = (cmd_runner,
-        #                               'smart_wait',
-        #                               '_clean_pair_array',
-        #                               'entry',
-        #                               cmd_runner)
-        #     pe[PE.subprocess_msg][sub_key] += 1
-
     ####################################################################
     # handle_request_smart_wait_exit
     ####################################################################
@@ -16902,25 +16685,6 @@ class ConfigVerifier:
             ack_key: AckKey = (target, 'smart_resume')
 
             pe[PE.ack_msg][ack_key] += 1
-
-        # if pe[PE.current_request].stopped_remotes:
-        #     ref_key: CallRefKey = 'smart_resume'
-        #
-        #     pe[PE.calling_refresh_msg][ref_key] += 1
-        #
-        #     sub_key: SubProcessKey = (cmd_runner,
-        #                               'smart_resume',
-        #                               '_clean_registry',
-        #                               'entry',
-        #                               cmd_runner)
-        #     pe[PE.subprocess_msg][sub_key] += 1
-        #
-        #     sub_key: SubProcessKey = (cmd_runner,
-        #                               'smart_resume',
-        #                               '_clean_pair_array',
-        #                               'entry',
-        #                               cmd_runner)
-        #     pe[PE.subprocess_msg][sub_key] += 1
 
     ####################################################################
     # handle_request_smart_start_exit
@@ -17080,6 +16844,7 @@ class ConfigVerifier:
         pe[PE.rem_reg_msg][rem_key] -= 1
         self.add_log_msg(re.escape(log_msg))
 
+        # @sbt
         # del self.expected_registered[rem_name]
 
     ####################################################################
@@ -18022,22 +17787,6 @@ class ConfigVerifier:
             target: thread name of smart_thread
 
         """
-        pe = self.pending_events[cmd_runner]
-        eligible_targets = pe[PE.current_request].targets
-        # find stopped ThreadTarget names that smart_init will pick off
-        # for tt_target in self.expected_registered:
-        #     if (tt_target not in eligible_targets
-        #             and self.expected_registered[
-        #                 tt_target].st_state == st.ThreadState.Stopped
-        #             and self.expected_registered[
-        #                 tt_target].is_TargetThread):
-        #         pe[PE.current_request].stopped_target_threads |= {tt_target}
-        #         state_key: SetStateKey = (cmd_runner,
-        #                                   tt_target,
-        #                                   st.ThreadState.Stopped,
-        #                                   st.ThreadState.Unregistered)
-        #         pe[PE.set_state_msg][state_key] += 1
-
         ################################################################
         # determine next step
         ################################################################
@@ -19018,13 +18767,6 @@ class ConfigVerifier:
                 raise InvalidConfigurationDetected(
                     f'stop_thread attempting to stop {stop_name} which is '
                     f'not in the registry: {self.expected_registered=}')
-            # if self.expected_registered[stop_name].is_TargetThread:
-            #     state_key = (stop_name,
-            #                  stop_name,
-            #                  st.ThreadState.Alive,
-            #                  st.ThreadState.Stopped)
-            #     self.pending_events[stop_name][PE.set_state_msg][
-            #         state_key] += 1
 
             self.monitor_event.set()
             exit_cmd = ExitThread(cmd_runners=stop_name,
@@ -19187,9 +18929,13 @@ class ConfigVerifier:
         pair_keys_to_delete = []
         for pair_key in self.expected_pairs:
             if (pair_key[0] in self.expected_registered
-                    and pair_key[1] in self.expected_registered):
-                self.log_test_msg('clean_pair_array continue with '
-                                  f'{pair_key=}')
+                    and self.expected_registered[pair_key[0]].st_state
+                    != st.ThreadState.Initializing
+                    and pair_key[1] in self.expected_registered
+                    and self.expected_registered[pair_key[1]].st_state
+                    != st.ThreadState.Initializing):
+                # self.log_test_msg('clean_pair_array continue with '
+                #                   f'{pair_key=}')
                 continue
 
             # one or both need to be removed from pair_array
@@ -21634,7 +21380,9 @@ class ConfigVerifier:
         ################################################################
         # find entered refresh pair array log msg
         ################################################################
-        search_msg = f'{cmd_runner} entered _clean_pair_array'
+        # search_msg = f'{cmd_runner} entered _clean_pair_array'
+        search_msg = (f'{cmd_runner} _clean_pair_array entry: '
+                      f'cmd_runner: {cmd_runner}')
 
         log_msg, log_pos = self.get_log_msg(
             search_msg=search_msg,
@@ -21708,418 +21456,6 @@ class ConfigVerifier:
             removed_sb_entry=found_removed_status_block_msgs,
             removed_pa_entry=found_removed_pa_entry_msgs,
             updated_pa=upa_log_msg_found)
-
-    ####################################################################
-    # verify_in_registry
-    ####################################################################
-    # def verify_in_registry(self,
-    #                        cmd_runner: str,
-    #                        exp_in_registry_names: set[str]) -> None:
-    #     """Verify that the given names are registered.
-    #
-    #     Args:
-    #         cmd_runner: name of thread doing the verify
-    #         exp_in_registry_names: names of the threads to check for
-    #             being in the registry
-    #
-    #     Raises:
-    #         InvalidConfigurationDetected:  verify_in_registry found
-    #             name is not in the real or mock registry
-    #
-    #     """
-    #     for exp_in_registry_name in exp_in_registry_names:
-    #         if exp_in_registry_name not in st.SmartThread._registry:
-    #             self.abort_all_f1_threads()
-    #             raise InvalidConfigurationDetected(
-    #                 f'verify_in_registry found {exp_in_registry_name} is not '
-    #                 'registered in the real SmartThread._registry '
-    #                 f'per {cmd_runner=}')
-    #         if exp_in_registry_name not in self.expected_registered:
-    #             self.abort_all_f1_threads()
-    #             raise InvalidConfigurationDetected(
-    #                 f'verify_in_registry found {exp_in_registry_name} is not '
-    #                 'registered in the mock SmartThread._registry '
-    #                 f'per {cmd_runner=}')
-
-    ####################################################################
-    # verify_in_registry_not
-    ####################################################################
-    # def verify_in_registry_not(self,
-    #                            cmd_runner: str,
-    #                            exp_not_in_registry_names: set[str]
-    #                            ) -> None:
-    #     """Verify that the given names are not registered.
-    #
-    #     Args:
-    #         cmd_runner: name of thread doing the verify
-    #         exp_not_in_registry_names: names of the threads to check for
-    #             not being in the registry
-    #
-    #     Raises:
-    #         InvalidConfigurationDetected: verify_in_registry_not found
-    #             name is in the real or mock registry
-    #
-    #     """
-    #     with self.monitor_condition:
-    #         self.monitor_event.set()
-    #         self.monitor_condition.wait()
-    #
-    #     for exp_not_in_registry_name in exp_not_in_registry_names:
-    #         if exp_not_in_registry_name in st.SmartThread._registry:
-    #             self.abort_all_f1_threads()
-    #             raise InvalidConfigurationDetected(
-    #                 f'verify_in_registry_not found {exp_not_in_registry_name} '
-    #                 'is registered in the real SmartThread._registry per '
-    #                 f'{cmd_runner=}')
-    #         if exp_not_in_registry_name in self.expected_registered:
-    #             self.abort_all_f1_threads()
-    #             raise InvalidConfigurationDetected(
-    #                 f'verify_in_registry_not found {exp_not_in_registry_name} '
-    #                 'is registered in the mock expected_registered per '
-    #                 f'{cmd_runner=}')
-
-    ####################################################################
-    # verify_is_active
-    ####################################################################
-    # def verify_is_active(self,
-    #                      verify_idx: int) -> None:
-    #     """Verify that the given names are active.
-    #
-    #     Args:
-    #         verify_idx: index for the saved snapshot data
-    #
-    #     """
-    #     real_reg_items = self.snap_shot_data[verify_idx].registry_items
-    #     verify_active_data = self.snap_shot_data[
-    #         verify_idx].verify_data
-    #
-    #     # with self.monitor_condition:
-    #     #         self.monitor_event.set()
-    #     #         self.monitor_condition.wait()
-    #
-    #     self.verify_in_registry(
-    #         cmd_runner=verify_active_data.cmd_runner,
-    #         exp_in_registry_names=verify_active_data.exp_active_names)
-    #
-    #     self.verify_is_alive(names=verify_active_data.exp_active_names)
-    #
-    #     self.verify_state_part2(
-    #         cmd_runner=verify_active_data.cmd_runner,
-    #         check_state_names=verify_active_data.exp_active_names,
-    #         expected_state=st.ThreadState.Alive,
-    #         real_reg_items=real_reg_items
-    #     )
-    #     if len(verify_active_data.exp_active_names) > 1:
-    #         self.verify_paired(
-    #             cmd_runner=verify_active_data.cmd_runner,
-    #             exp_paired_names=verify_active_data.exp_active_names)
-
-    ####################################################################
-    # verify_is_alive
-    ####################################################################
-    # def verify_is_alive(self, names: set[str]) -> None:
-    #     """Verify that the given names are alive.
-    #
-    #     Args:
-    #         names: names of the threads to check for being alive
-    #
-    #     Raises:
-    #         InvalidConfigurationDetected: verify_is_alive found {name}
-    #             has real or mock is_alive that is not True
-    #
-    #     """
-    #     with self.monitor_condition:
-    #         self.monitor_event.set()
-    #         self.monitor_condition.wait()
-    #     with self.monitor_condition:
-    #         self.monitor_event.set()
-    #         self.monitor_condition.wait()
-    #     for name in names:
-    #         if not st.SmartThread._registry[name].thread.is_alive():
-    #             self.abort_all_f1_threads()
-    #             raise InvalidConfigurationDetected(
-    #                 f'verify_is_alive found {name} has real is_alive = '
-    #                 f'{st.SmartThread._registry[name].thread.is_alive()} '
-    #                 'which is not equal to the expected is_alive of True ')
-    #         if not self.expected_registered[name].is_alive:
-    #             self.abort_all_f1_threads()
-    #             raise InvalidConfigurationDetected(
-    #                 f'verify_is_alive found {name} has mock is_alive = '
-    #                 f'{self.expected_registered[name].is_alive} which is '
-    #                 'not equal to the expected is_alive of True ')
-
-    ####################################################################
-    # verify_is_alive_not
-    ####################################################################
-    # def verify_is_alive_not(self, names: set[str]) -> None:
-    #     """Verify that the given names are not alive.
-    #
-    #     Args:
-    #         names: names of the threads to check for being not alive
-    #
-    #     Raises:
-    #         InvalidConfigurationDetected: verify_is_alive_not found
-    #         {name} has real or mock is_alive that is not False
-    #
-    #     """
-    #     for name in names:
-    #         if st.SmartThread._registry[name].thread.is_alive():
-    #             self.abort_all_f1_threads()
-    #             raise InvalidConfigurationDetected(
-    #                 f'verify_is_alive_not found {name} has real is_alive = '
-    #                 f'{st.SmartThread._registry[name].thread.is_alive()} '
-    #                 'which is not equal to the expected is_alive of False ')
-    #         if self.expected_registered[name].is_alive:
-    #             self.abort_all_f1_threads()
-    #             raise InvalidConfigurationDetected(
-    #                 f'verify_is_alive_not found {name} has mock is_alive = '
-    #                 f'{self.expected_registered[name].is_alive} which is '
-    #                 'not equal to the expected is_alive of False')
-
-    ####################################################################
-    # verify_is_registered
-    ####################################################################
-    # def verify_is_registered(self,
-    #                          cmd_runner: str,
-    #                          exp_registered_names: set[str]) -> None:
-    #     """Verify that the given names are registered only.
-    #
-    #     Args:
-    #         cmd_runner: thread doing the verify
-    #         exp_registered_names: names of the threads to check for
-    #             being registered
-    #
-    #     """
-    #     self.verify_in_registry(cmd_runner=cmd_runner,
-    #                             exp_in_registry_names=exp_registered_names)
-    #     self.verify_is_alive_not(names=exp_registered_names)
-    #     self.verify_state(
-    #         cmd_runner=cmd_runner,
-    #         check_state_names=exp_registered_names,
-    #         expected_state=st.ThreadState.Registered)
-    #     self.verify_state_part2(
-    #         cmd_runner=verify_state_data.cmd_runner,
-    #         check_state_names=verify_state_data.check_state_names,
-    #         expected_state=verify_state_data.expected_state,
-    #         real_reg_items=real_reg_items
-    #     )
-    #     if len(exp_registered_names) > 1:
-    #         self.verify_paired(cmd_runner=cmd_runner,
-    #                            exp_paired_names=exp_registered_names)
-
-    ####################################################################
-    # verify_paired
-    ####################################################################
-    # def verify_paired(self,
-    #                   cmd_runner: str,
-    #                   exp_paired_names: set[str]) -> None:
-    #     """Verify that the given names are paired.
-    #
-    #     Args:
-    #         cmd_runner: thread doing tyhe verify
-    #         exp_paired_names: names of the threads to check for being
-    #             paired
-    #
-    #     Raises:
-    #         InvalidConfigurationDetected: verify_paired found
-    #             pair_key or status block is not in the real pair_array
-    #
-    #     """
-    #     pair_keys = combinations(sorted(exp_paired_names), 2)
-    #     for pair_key in pair_keys:
-    #         if pair_key not in st.SmartThread._pair_array:
-    #             self.abort_all_f1_threads()
-    #             raise InvalidConfigurationDetected(
-    #                 f'verify_paired found {pair_key=} is not '
-    #                 f'in the real pair_array')
-    #         if pair_key[0] not in st.SmartThread._pair_array[
-    #                 pair_key].status_blocks:
-    #             self.abort_all_f1_threads()
-    #             raise InvalidConfigurationDetected(
-    #                 f'verify_paired found {pair_key[0]=} does not '
-    #                 f'have a status block in the real pair_array')
-    #         if pair_key[1] not in st.SmartThread._pair_array[
-    #                 pair_key].status_blocks:
-    #             self.abort_all_f1_threads()
-    #             raise InvalidConfigurationDetected(
-    #                 f'verify_paired found {pair_key[1]=} does not '
-    #                 f'have a status block in the real pair_array')
-    #
-    #         if pair_key not in self.expected_pairs:
-    #             self.abort_all_f1_threads()
-    #             raise InvalidConfigurationDetected(
-    #                 f'verify_paired found {pair_key=} is not '
-    #                 f'in the mock pair_array')
-    #         if pair_key[0] not in self.expected_pairs[pair_key]:
-    #             self.abort_all_f1_threads()
-    #             raise InvalidConfigurationDetected(
-    #                 f'verify_paired found {pair_key[0]=} does not '
-    #                 f'have a status block in the mock pair_array')
-    #         if pair_key[1] not in self.expected_pairs[pair_key]:
-    #             self.abort_all_f1_threads()
-    #             raise InvalidConfigurationDetected(
-    #                 f'verify_paired found {pair_key[1]=} does not '
-    #                 f'have a status block in the mock pair_array')
-    #
-    # ####################################################################
-    # # verify_paired_half
-    # ####################################################################
-    # def verify_paired_half(self,
-    #                        cmd_runner: str,
-    #                        removed_names: set[str],
-    #                        exp_half_paired_names: set[str]) -> None:
-    #     """Verify that the given names are half paired.
-    #
-    #     Args:
-    #         cmd_runner: thread doing the verify
-    #         removed_names: names of the threads that were removed
-    #         exp_half_paired_names: the names that should be in pair array
-    #
-    #     Raises:
-    #         InvalidConfigurationDetected: verify_paired_half found
-    #         {exp_remaining_name} does not have a status block in the
-    #         real pair_array
-    #
-    #     """
-    #     for removed_name in removed_names:
-    #         for exp_remaining_name in exp_half_paired_names:
-    #             pair_key = st.SmartThread._get_pair_key(removed_name,
-    #                                                     exp_remaining_name)
-    #             if pair_key not in st.SmartThread._pair_array:
-    #                 self.abort_all_f1_threads()
-    #                 raise InvalidConfigurationDetected(
-    #                     f'verify_paired_half found {pair_key=} is not '
-    #                     f'in the real pair_array')
-    #             num_real_status_blocks = len(st.SmartThread._pair_array[
-    #                     pair_key].status_blocks)
-    #             if num_real_status_blocks != 1:
-    #                 self.abort_all_f1_threads()
-    #                 raise InvalidConfigurationDetected(
-    #                     f'verify_paired_half found '
-    #                     f'{num_real_status_blocks=} is not equal to 1 '
-    #                     f'in the real pair_array')
-    #             if exp_remaining_name not in st.SmartThread._pair_array[
-    #                             pair_key].status_blocks:
-    #                 self.abort_all_f1_threads()
-    #                 raise InvalidConfigurationDetected(
-    #                     f'verify_paired_half found '
-    #                     f'{exp_remaining_name=} does not have a status block '
-    #                     f'in the real pair_array for {pair_key=}.')
-    #
-    #             if pair_key not in self.expected_pairs:
-    #                 self.abort_all_f1_threads()
-    #                 raise InvalidConfigurationDetected(
-    #                     f'verify_paired_half found {pair_key=} is not '
-    #                     f'in the mock pair_array')
-    #             num_mock_status_blocks = len(self.expected_pairs[pair_key])
-    #             if num_mock_status_blocks != 1:
-    #                 self.abort_all_f1_threads()
-    #                 raise InvalidConfigurationDetected(
-    #                     f'verify_paired_half found '
-    #                     f'{num_mock_status_blocks=} is not 1 '
-    #                     f'in the mock pair_array')
-    #             if exp_remaining_name not in self.expected_pairs[pair_key]:
-    #                 self.abort_all_f1_threads()
-    #                 raise InvalidConfigurationDetected(
-    #                     f'verify_paired_half found '
-    #                     f'{exp_remaining_name=} does not have a status block '
-    #                     f'in the mock pair_array for {pair_key=}.')
-    #
-    # ####################################################################
-    # # verify_paired_not
-    # ####################################################################
-    # def verify_paired_not(self,
-    #                       cmd_runner: str,
-    #                       exp_not_paired_names: set[str]) -> None:
-    #     """Verify that the given names are not paired.
-    #
-    #     Args:
-    #         cmd_runner: thread doing the verify
-    #         exp_not_paired_names: names of the threads to check for
-    #             being not paired
-    #
-    #     Raises:
-    #         InvalidConfigurationDetected: verify_paired_not found
-    #          pair_key in the real or mock pair_array
-    #
-    #     """
-    #     pair_keys = combinations(sorted(exp_not_paired_names), 2)
-    #     for pair_key in pair_keys:
-    #         if pair_key in st.SmartThread._pair_array:
-    #             self.abort_all_f1_threads()
-    #             raise InvalidConfigurationDetected(
-    #                 f'verify_paired_not found {pair_key=} is in '
-    #                 f'in the real pair_array')
-    #
-    #         if pair_key in self.expected_pairs:
-    #             self.abort_all_f1_threads()
-    #             raise InvalidConfigurationDetected(
-    #                 f'verify_paired_not found {pair_key=} is in '
-    #                 f'in the mock pair_array')
-
-    ####################################################################
-    # verify_state
-    ####################################################################
-    # def verify_state(self,
-    #                  verify_idx: int) -> None:
-    #     """Verify that the given names have the given status.
-    #
-    #     Args:
-    #         verify_idx: index for the saved snapshot data
-    #
-    #     Raises:
-    #         InvalidConfigurationDetected: verify_state found mock
-    #         status not equal to the expected status
-    #
-    #     """
-    #     real_reg_items = self.snap_shot_data[verify_idx].registry_items
-    #     verify_state_data = self.snap_shot_data[
-    #             verify_idx].verify_data
-    #
-    #     self.verify_state_part2(
-    #         cmd_runner=verify_state_data.cmd_runner,
-    #         check_state_names=verify_state_data.check_state_names,
-    #         expected_state=verify_state_data.expected_state,
-    #         real_reg_items=real_reg_items
-    #     )
-
-    ####################################################################
-    # verify_state_part2
-    ####################################################################
-    # def verify_state_part2(self,
-    #                        cmd_runner: str,
-    #                        check_state_names: set[str],
-    #                        expected_state: st.ThreadState,
-    #                        real_reg_items: dict[str, RegistrySnapshotItem]
-    #                        ) -> None:
-    #     """Verify that the given names have the given status.
-    #
-    #     Args:
-    #         cmd_runner: thread doing the verify
-    #         check_state_names: names of the threads to check for the
-    #             given status
-    #         expected_state: the status each thread is expected to have
-    #         real_reg_items: snapshot of registry data
-    #
-    #     Raises:
-    #         InvalidConfigurationDetected: verify_state found mock
-    #         status not equal to the expected status
-    #
-    #     """
-    #     for name in check_state_names:
-    #         if not real_reg_items[name].state == expected_state:
-    #             self.abort_all_f1_threads()
-    #             raise InvalidConfigurationDetected(
-    #                 f'verify_state found {name=} has real status '
-    #                 f'{real_reg_items[name].state} not equal to the expected '
-    #                 f'status of {expected_state=} per {cmd_runner=}')
-    #         if not self.expected_registered[name].st_state == expected_state:
-    #             self.abort_all_f1_threads()
-    #             raise InvalidConfigurationDetected(
-    #                 f'verify_state found {name=} has mock status '
-    #                 f'{self.expected_registered[name].st_state} not equal to '
-    #                 f'the expected status of {expected_state=} per '
-    #                 f'{cmd_runner=}')
 
     ####################################################################
     # wait_for_recv_msg_timeouts
