@@ -9025,9 +9025,9 @@ class ConfigVerifier:
                            exp_positions=lock_positions.copy()))
 
             ############################################################
-            # release lock_0 to get pend_sync to set remote_sync and
-            # then get behind lock_2 (after seeing its sync flag is not
-            # yet set be remote_sync)
+            # release lock_0 to get pend_sync to set its pending_request
+            # and then get behind lock_2 just before starting request
+            # loop
             # locks held:
             # before: lock_0|pend_sync|lock_1|remote_sync|lock_2
             # after : lock_1|remote_sync|lock_2|pend_sync
@@ -9035,6 +9035,89 @@ class ConfigVerifier:
             self.add_cmd(
                 LockRelease(cmd_runners=locker_names[0]))
             lock_positions.remove(locker_names[0])
+            lock_positions.remove(pending_names[0])
+
+            lock_positions.append(pending_names[0])
+
+            self.add_cmd(
+                LockVerify(cmd_runners=self.commander_name,
+                           exp_positions=lock_positions.copy()))
+
+            ############################################################
+            # locker_3 gets behind pend_sync to block remote_sync
+            # locks held:
+            # before: lock_1|remote_sync|lock_2|pend_sync
+            # after : lock_1|remote_sync|lock_2|pend_sync|lock_3
+            ############################################################
+            self.add_cmd(
+                LockObtain(cmd_runners=locker_names[3]))
+            lock_positions.append(locker_names[3])
+
+            self.add_cmd(
+                LockVerify(cmd_runners=self.commander_name,
+                           exp_positions=lock_positions.copy()))
+
+            ############################################################
+            # release lock_1 to get remote_sync to set its
+            # pending_request and then get behind lock_2 just before
+            # starting request loop
+            # locks held:
+            # before: lock_1|remote_sync|lock_2|pend_sync|lock_3
+            # after : lock_2|pend_sync|lock_3|remote_sync
+            ############################################################
+            self.add_cmd(
+                LockRelease(cmd_runners=locker_names[0]))
+            lock_positions.remove(locker_names[1])
+            lock_positions.remove(remote_names[0])
+
+            lock_positions.append(remote_names[0])
+
+            self.add_cmd(
+                LockVerify(cmd_runners=self.commander_name,
+                           exp_positions=lock_positions.copy()))
+
+            ############################################################
+            # smart_join gets behind remote_sync
+            # locks held:
+            # before: lock_2|pend_sync|lock_3|remote_sync
+            # after : lock_2|pend_sync|lock_3|remote_sync|smart_join
+            ############################################################
+            join_serial_num = self.add_cmd(
+                Join(cmd_runners=joiner_names[0],
+                     join_names=remote_names[0]))
+            lock_positions.append(joiner_names[0])
+
+            self.add_cmd(
+                LockVerify(cmd_runners=self.commander_name,
+                           exp_positions=lock_positions.copy()))
+
+            ############################################################
+            # locker_4 gets behind smart_join to block pend_sync
+            # locks held:
+            # before: lock_2|pend_sync|lock_3|remote_sync|smart_join
+            # after : lock_2|pend_sync|lock_3|remote_sync|smart_join
+            #         |lock_4
+            ############################################################
+            self.add_cmd(
+                LockObtain(cmd_runners=locker_names[3]))
+            lock_positions.append(locker_names[4])
+
+            self.add_cmd(
+                LockVerify(cmd_runners=self.commander_name,
+                           exp_positions=lock_positions.copy()))
+
+            ############################################################
+            # release lock_2 to get pend_sync to set sync flag for
+            # remote_sync and then get behind lock_4 (because its sync
+            # flag is not yet set by remote_sync)
+            # locks held:
+            # before: lock_2|pend_sync|lock_3|remote_sync|smart_join
+            #         |lock_4
+            # after : lock_3|remote_sync|smart_join|lock_4|pend_sync
+            ############################################################
+            self.add_cmd(
+                LockRelease(cmd_runners=locker_names[2]))
+            lock_positions.remove(locker_names[2])
             lock_positions.remove(pending_names[0])
 
             lock_positions.append(pending_names[0])
