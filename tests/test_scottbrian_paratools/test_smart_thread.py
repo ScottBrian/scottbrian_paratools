@@ -8419,6 +8419,32 @@ class ConfigVerifier:
             pending_msg_count: number of msgs to be placed on the
                 pending thread
             pending_wait_tf: if True, pending_wait flag is to be set
+
+        Notes:
+            There are two test cases dealing with the pending flags:
+            test_pending_sans_sync_scenarios:
+                this will test combinations for:
+                    pending_request: True, False
+                    pending_msg: count of 0, 1, 2
+                    pending_wait: True, False
+                using requests:
+                    smart_send
+                    smart_recv
+                    smart_wait
+                    smart_resume
+
+            test_pending_sync_only_scenarios:
+                this will test combinations for:
+                    pending_request: True
+                    pending_msg: count of 0, 1, 2
+                    pending_wait: True, False
+                    pending_sync: True, False
+                using requests:
+                    smart_sync
+
+            The reason for having two different test cases is that
+            pending_sync can only be set with smart_sync, and
+            only with pending_request also set.
         """
         pending_names = ['pending_0']
         remote_names = ['remote_0']
@@ -8786,6 +8812,32 @@ class ConfigVerifier:
                 pending thread
             pending_wait_tf: if True, pending_wait flag is to be set
             pending_sync_tf: if True, pending_sync flag is to be set
+
+        Notes:
+            There are two test cases dealing with the pending flags:
+            test_pending_sans_sync_scenarios:
+                this will test combinations for:
+                    pending_request: True, False
+                    pending_msg: count of 0, 1, 2
+                    pending_wait: True, False
+                using requests:
+                    smart_send
+                    smart_recv
+                    smart_wait
+                    smart_resume
+
+            test_pending_sync_only_scenarios:
+                this will test combinations for:
+                    pending_request: True
+                    pending_msg: count of 0, 1, 2
+                    pending_wait: True, False
+                    pending_sync: True, False
+                using requests:
+                    smart_sync
+
+            The reason for having two different test cases is that
+            pending_sync can only be set with smart_sync, and
+            only with pending_request also set.
         """
         pending_names = ['pending_0']
         remote_names = ['remote_0']
@@ -8825,7 +8877,7 @@ class ConfigVerifier:
         msgs_remote_to_pending = SendRecvMsgs(
             sender_names=remote_names,
             receiver_names=pending_names,
-            num_msgs=pending_msg_count,
+            num_msgs=max(1, pending_msg_count),
             send_type=SendType.ToRemotes)
 
         for idx in range(pending_msg_count):
@@ -8875,75 +8927,115 @@ class ConfigVerifier:
             exp_pending_flags=exp_pending_flags,
             obtain_reg_lock=False))
 
-        if pending_request_tf:
-            ############################################################
-            # start of by getting lock_0
-            # before locks held: none
-            # after locks held: lock_0
-            ############################################################
-            obtain_lock_serial_num_0 = self.add_cmd(
-                LockObtain(cmd_runners=locker_names[0]))
-            lock_positions.append(locker_names[0])
+        ################################################################
+        # start of by getting lock_0
+        # locks held:
+        # before: none
+        # after : lock_0
+        ################################################################
+        obtain_lock_serial_num_0 = self.add_cmd(
+            LockObtain(cmd_runners=locker_names[0]))
+        lock_positions.append(locker_names[0])
 
-            # we can confirm only this first lock obtain
-            self.add_cmd(
-                ConfirmResponse(
-                    cmd_runners=[self.commander_name],
-                    confirm_cmd='LockObtain',
-                    confirm_serial_num=obtain_lock_serial_num_0,
-                    confirmers=locker_names[0]))
+        # we can confirm only this first lock obtain
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd='LockObtain',
+                confirm_serial_num=obtain_lock_serial_num_0,
+                confirmers=locker_names[0]))
+
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # pend_sync will get behind lock_0 in request_setup
+        # locks held:
+        # before: lock_0
+        # after : lock_0|pend_sync
+        ################################################################
+        if pending_sync_tf:
+            stopped_remotes = set()
+        else:
+            stopped_remotes = remote_names[0]
+        pend_req_serial_num = self.add_cmd(
+            Sync(cmd_runners=pending_names[0],
+                 targets=remote_names[0],
+                 stopped_remotes=stopped_remotes))
+
+        lock_positions.append(pending_names[0])
+
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        if not stopped_remotes:
+            pe = self.pending_events[pending_names[0]]
+            ref_key: CallRefKey = request_type.value
+
+            pe[PE.calling_refresh_msg][ref_key] += 1
+
+        ################################################################
+        # locker_1 gets behind the pend_sync
+        # locks held:
+        # before: lock_0|pend_sync
+        # after : lock_0|pend_sync|lock_1
+        ################################################################
+        self.add_cmd(
+            LockObtain(cmd_runners=locker_names[1]))
+        lock_positions.append(locker_names[1])
+
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ############################################################
+        # handle sync case part 1
+        ############################################################
+        if pending_sync_tf:
+            ############################################################
+            # remote_sync gets behind lock_1
+            # locks held:
+            # before: lock_0|pend_sync|lock_1
+            # after : lock_0|pend_sync|lock_1|remote_sync
+            ############################################################
+            self.add_cmd(Sync(
+                cmd_runners=remote_names[0],
+                targets=pending_names[0],
+                stopped_remotes=set()))
+            lock_positions.append(remote_names[0])
 
             self.add_cmd(
                 LockVerify(cmd_runners=self.commander_name,
                            exp_positions=lock_positions.copy()))
 
             ############################################################
-            # smart_req will get behind lock_0 in request_setup
-            # before locks held: lock_0
-            # after locks held: lock_0|smart_req
+            # locker_2 gets behind remote_sync
+            # locks held:
+            # before: lock_0|pend_sync|lock_1|remote_sync
+            # after : lock_0|pend_sync|lock_1|remote_sync|lock_2
             ############################################################
-            stopped_remotes = set()
-            if request_type == st.ReqType.Smart_send:
-                stopped_remotes = remote_names[0]
-                msgs_pending_to_remote = SendRecvMsgs(
-                    sender_names=remote_names,
-                    receiver_names=pending_names,
-                    num_msgs=1,
-                    send_type=SendType.ToRemotes)
-                pend_req_serial_num = self.add_cmd(
-                    SendMsg(cmd_runners=pending_names[0],
-                            receivers=remote_names[0],
-                            msgs_to_send=msgs_pending_to_remote,
-                            msg_idx=0,
-                            stopped_remotes=stopped_remotes))
-            elif request_type == st.ReqType.Smart_recv:
-                if pending_msg_count == 0:
-                    stopped_remotes = remote_names[0]
-                pend_req_serial_num = self.add_cmd(
-                    RecvMsg(cmd_runners=pending_names[0],
-                            senders=remote_names[0],
-                            exp_msgs=msgs_remote_to_pending,
-                            stopped_remotes=stopped_remotes))
-            elif request_type == st.ReqType.Smart_wait:
-                if not pending_wait_tf:
-                    stopped_remotes = remote_names[0]
-                pend_req_serial_num = self.add_cmd(
-                    Wait(cmd_runners=pending_names[0],
-                         resumers=remote_names[0],
-                         stopped_remotes=stopped_remotes))
-            elif request_type == st.ReqType.Smart_resume:
-                stopped_remotes = remote_names[0]
-                pend_req_serial_num = self.add_cmd(
-                    Resume(cmd_runners=pending_names[0],
-                           targets=remote_names[0],
-                           stopped_remotes=stopped_remotes))
-            elif request_type == st.ReqType.Smart_sync:
-                if not pending_sync_tf:
-                    stopped_remotes = remote_names[0]
-                pend_req_serial_num = self.add_cmd(
-                    Sync(cmd_runners=pending_names[0],
-                         targets=remote_names[0],
-                         stopped_remotes=stopped_remotes))
+            self.add_cmd(
+                LockObtain(cmd_runners=locker_names[2]))
+            lock_positions.append(locker_names[2])
+
+            self.add_cmd(
+                LockVerify(cmd_runners=self.commander_name,
+                           exp_positions=lock_positions.copy()))
+
+            ############################################################
+            # release lock_0 to get pend_sync to set remote_sync and
+            # then get behind lock_2 (after seeing its sync flag is not
+            # yet set be remote_sync)
+            # locks held:
+            # before: lock_0|pend_sync|lock_1|remote_sync|lock_2
+            # after : lock_1|remote_sync|lock_2|pend_sync
+            ############################################################
+            self.add_cmd(
+                LockRelease(cmd_runners=locker_names[0]))
+            lock_positions.remove(locker_names[0])
+            lock_positions.remove(pending_names[0])
 
             lock_positions.append(pending_names[0])
 
@@ -8951,40 +9043,13 @@ class ConfigVerifier:
                 LockVerify(cmd_runners=self.commander_name,
                            exp_positions=lock_positions.copy()))
 
-            if not stopped_remotes:
-                pe = self.pending_events[pending_names[0]]
-                ref_key: CallRefKey = request_type.value
-
-                pe[PE.calling_refresh_msg][ref_key] += 1
-
+        else:
             ############################################################
-            # locker_1 gets behind the smart_req
-            # before locks held: lock_0|smart_req
-            # after locks held: lock_0|smart_req|lock_1
-            ############################################################
-            obtain_lock_serial_num_1 = self.add_cmd(
-                LockObtain(cmd_runners=locker_names[1]))
-            lock_positions.append(locker_names[1])
-
-            self.add_cmd(
-                LockVerify(cmd_runners=self.commander_name,
-                           exp_positions=lock_positions.copy()))
-
-            ############################################################
-            # handle sync case part 1
-            ############################################################
-            if pending_sync_tf:
-                self.build_pending_flags_with_sync(
-                    pending_request_tf=pending_request_tf,
-                    pending_names=pending_names,
-                    remote_names=remote_names,
-                    locker_names=locker_names,
-                    joiner_names=joiner_names)
-
-            ################################################################
             # smart_join gets behind lock_1
-            # locks held: lock_0|smart_wait|lock_1|smart_join
-            ################################################################
+            # locks held:
+            # before: lock_0|pend_sync|lock_1
+            # after : lock_0|pend_sync|lock_1|smart_join
+            ############################################################
             join_serial_num = self.add_cmd(
                 Join(cmd_runners=joiner_names[0],
                      join_names=remote_names[0]))
