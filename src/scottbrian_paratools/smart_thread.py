@@ -3060,7 +3060,9 @@ class SmartThread:
                 # thread is now empty as a result of this recv,
                 # we can go ahead and delete the pair, so
                 # set the flag to do a refresh
-                if local_sb.del_deferred:
+                if (local_sb.del_deferred
+                        and not local_sb.wait_event.is_set()
+                        and not local_sb.sync_event.is_set()):
                     request_block.do_refresh = True
                 return True
 
@@ -3524,8 +3526,9 @@ class SmartThread:
                     # be ready for next wait
                     local_sb.wait_event.clear()
 
-                if (local_sb.del_deferred and
-                        not local_sb.sync_event.is_set()):
+                if (local_sb.del_deferred
+                        and local_sb.msg_q.empty()
+                        and not local_sb.sync_event.is_set()):
                     request_block.do_refresh = True
                 logger.info(
                     f'{self.name} smart_wait resumed by '
@@ -4031,9 +4034,9 @@ class SmartThread:
                             # sync resume remote thread
                             remote_sb.sync_event.set()
                             local_sb.sync_wait = True
-                            logger.debug(
-                                f'TestDebug {self.name} process_sync '
-                                f'set sync_event for {pk_remote.remote=}')
+                            logger.info(
+                                f'{self.name} smart_sync set event for '
+                                f'{pk_remote.remote}')
                         else:
                             return False
                     else:
@@ -4061,8 +4064,9 @@ class SmartThread:
                     # be ready for next sync wait
                     local_sb.sync_event.clear()
 
-                if (local_sb.del_deferred and
-                        not local_sb.wait_event.is_set()):
+                if (local_sb.del_deferred
+                        and local_sb.msg_q.empty()
+                        and not local_sb.wait_event.is_set()):
                     request_block.do_refresh = True
                 logger.info(
                     f'{self.name} smart_sync achieved with '

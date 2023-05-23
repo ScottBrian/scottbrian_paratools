@@ -5837,6 +5837,7 @@ class RequestAckLogSearchItem(LogSearchItem):
                         '|smart_recv received msg from'
                         '|smart_wait resumed by'
                         '|smart_resume resumed'
+                        '|smart_sync set event for'
                         '|smart_sync achieved with)')
         super().__init__(
             search_str=f"[a-z0-9_]+ {list_of_acks} [a-z0-9_]+",
@@ -5868,6 +5869,7 @@ class RequestAckLogSearchItem(LogSearchItem):
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
         request = split_msg[1]
+        action = split_msg[2]
         remote = split_msg[-1]
 
         pe = self.config_ver.pending_events[cmd_runner]
@@ -5899,14 +5901,19 @@ class RequestAckLogSearchItem(LogSearchItem):
                                                   resumer=cmd_runner,
                                                   pending_wait_flag=True)
         elif request == 'smart_sync':
-            self.config_ver.set_sync_pending_flag(waiter=cmd_runner,
-                                                  resumer=remote,
-                                                  pending_sync_flag=False)
-
-        self.config_ver.set_request_pending_flag(
-            cmd_runner=cmd_runner,
-            targets={remote},
-            pending_request_flag=False)
+            if action == 'set':
+                self.config_ver.set_sync_pending_flag(waiter=cmd_runner,
+                                                      resumer=remote,
+                                                      pending_sync_flag=True)
+            else:
+                self.config_ver.set_sync_pending_flag(waiter=cmd_runner,
+                                                      resumer=remote,
+                                                      pending_sync_flag=False)
+        if not (request == 'smart_sync' and action == 'set'):
+            self.config_ver.set_request_pending_flag(
+                cmd_runner=cmd_runner,
+                targets={remote},
+                pending_request_flag=False)
 
         self.config_ver.add_log_msg(re.escape(self.found_log_msg),
                                     log_level=logging.INFO)
@@ -8970,7 +8977,9 @@ class ConfigVerifier:
             LockVerify(cmd_runners=self.commander_name,
                        exp_positions=lock_positions.copy()))
 
-        if not stopped_remotes:
+        if (not stopped_remotes
+                and pending_msg_count == 0
+                and not pending_wait_tf):
             pe = self.pending_events[pending_names[0]]
             ref_key: CallRefKey = 'smart_sync'
 
@@ -17259,7 +17268,7 @@ class ConfigVerifier:
         for target in eligible_targets:
             ack_key: AckKey = (target, 'smart_sync')
 
-            pe[PE.ack_msg][ack_key] += 1
+            pe[PE.ack_msg][ack_key] += 2
 
     ####################################################################
     # handle_request_smart_sync_exit
