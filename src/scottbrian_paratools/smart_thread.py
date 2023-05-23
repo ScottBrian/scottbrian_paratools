@@ -2594,7 +2594,7 @@ class SmartThread:
         else:
             if remote_state == ThreadState.Stopped:
                 request_block.stopped_remotes |= {pk_remote.remote}
-                request_block.do_refresh = True
+                # request_block.do_refresh = True
                 return True  # we are done with this remote
 
         return False  # give the remote some more time
@@ -3060,10 +3060,10 @@ class SmartThread:
                 # thread is now empty as a result of this recv,
                 # we can go ahead and delete the pair, so
                 # set the flag to do a refresh
-                if (local_sb.del_deferred
-                        and not local_sb.wait_event.is_set()
-                        and not local_sb.sync_event.is_set()):
-                    request_block.do_refresh = True
+                # if (local_sb.del_deferred
+                #         and not local_sb.wait_event.is_set()
+                #         and not local_sb.sync_event.is_set()):
+                #     request_block.do_refresh = True
                 return True
 
             except queue.Empty:
@@ -3137,7 +3137,7 @@ class SmartThread:
                     if self._get_target_state(
                             pk_remote) == ThreadState.Stopped:
                         request_block.stopped_remotes |= {pk_remote.remote}
-                        request_block.do_refresh = True
+                        # request_block.do_refresh = True
                         local_sb.recv_wait = False
                         return True  # we are done with this remote
                     else:
@@ -3526,10 +3526,10 @@ class SmartThread:
                     # be ready for next wait
                     local_sb.wait_event.clear()
 
-                if (local_sb.del_deferred
-                        and local_sb.msg_q.empty()
-                        and not local_sb.sync_event.is_set()):
-                    request_block.do_refresh = True
+                # if (local_sb.del_deferred
+                #         and local_sb.msg_q.empty()
+                #         and not local_sb.sync_event.is_set()):
+                #     request_block.do_refresh = True
                 logger.info(
                     f'{self.name} smart_wait resumed by '
                     f'{pk_remote.remote}')
@@ -3581,7 +3581,7 @@ class SmartThread:
 
                 if self._get_target_state(pk_remote) == ThreadState.Stopped:
                     request_block.stopped_remotes |= {pk_remote.remote}
-                    request_block.do_refresh = True
+                    # request_block.do_refresh = True
                     local_sb.wait_wait = False
                     return True  # we are done with this remote
                 else:
@@ -3864,7 +3864,7 @@ class SmartThread:
         else:
             if remote_state == ThreadState.Stopped:
                 request_block.stopped_remotes |= {pk_remote.remote}
-                request_block.do_refresh = True
+                # request_block.do_refresh = True
                 return True  # we are done with this remote
 
         # remote is not yet alive, has pending wait, or pending deadlock
@@ -4004,7 +4004,7 @@ class SmartThread:
             if remote_state != ThreadState.Alive:
                 if remote_state == ThreadState.Stopped:
                     request_block.stopped_remotes |= {pk_remote.remote}
-                    request_block.do_refresh = True
+                    # request_block.do_refresh = True
                     return True  # we are done with this remote
                 else:
                     return False  # remote needs more time
@@ -4064,10 +4064,10 @@ class SmartThread:
                     # be ready for next sync wait
                     local_sb.sync_event.clear()
 
-                if (local_sb.del_deferred
-                        and local_sb.msg_q.empty()
-                        and not local_sb.wait_event.is_set()):
-                    request_block.do_refresh = True
+                # if (local_sb.del_deferred
+                #         and local_sb.msg_q.empty()
+                #         and not local_sb.wait_event.is_set()):
+                #     request_block.do_refresh = True
                 logger.info(
                     f'{self.name} smart_sync achieved with '
                     f'{pk_remote.remote}')
@@ -4096,7 +4096,7 @@ class SmartThread:
                             pk_remote)
                             == ThreadState.Stopped):
                         remote_sb.sync_event.clear()
-                        request_block.do_refresh = True
+                        # request_block.do_refresh = True
 
             if local_sb.deadlock:
                 request_block.deadlock_remotes |= {pk_remote.remote}
@@ -4108,7 +4108,7 @@ class SmartThread:
 
             if self._get_target_state(pk_remote) == ThreadState.Stopped:
                 request_block.stopped_remotes |= {pk_remote.remote}
-                request_block.do_refresh = True
+                # request_block.do_refresh = True
                 local_sb.sync_wait = False
                 return True  # we are done with this remote
             else:
@@ -4320,10 +4320,15 @@ class SmartThread:
                             self.missing_remotes -= {pk_remote.remote}
                             local_sb.target_create_time = 0.0
                             local_sb.request_pending = False
+                            if (local_sb.del_deferred
+                                    and local_sb.msg_q.empty()
+                                    and not local_sb.wait_event.is_set()
+                                    and not local_sb.sync_event.is_set()):
+                                request_block.do_refresh = True
                             local_sb.request = ReqType.NoReq
-                            logger.debug(
-                                f'TestDebug {self.name} reset '
-                                f'request_pending for {pk_remote.remote=}')
+                            # logger.debug(
+                            #     f'TestDebug {self.name} reset '
+                            #     f'request_pending for {pk_remote.remote=}')
 
                 if request_block.do_refresh:
                     logger.debug(
@@ -4364,6 +4369,9 @@ class SmartThread:
 
                     pending_remotes = [remote for pk, remote, _ in
                                        self.work_pk_remotes]
+                    logger.debug(
+                        f'{self.name} {self.request.value} calling refresh, '
+                        f'remaining remotes: {self.work_pk_remotes}')
                     self.work_pk_remotes = []
                     self.missing_remotes = []
                     self._clean_registry()
