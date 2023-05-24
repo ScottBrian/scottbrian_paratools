@@ -4162,8 +4162,8 @@ class SmartThread:
                         if local_sb.sync_event.is_set():
                             local_sb.sync_event.clear()
                             logger.debug(
-                                f'TestDebug {self.name} backout entry: '
-                                f'cleared local sync_event')
+                                f'{self.name} smart_sync backout reset '
+                                f'local sync_event for {remote}')
                         else:
                             if remote in SmartThread._pair_array[
                                     pair_key].status_blocks:
@@ -4172,8 +4172,8 @@ class SmartThread:
                                 # backout the sync resume
                                 remote_sb.sync_event.clear()
                                 logger.debug(
-                                    f'TestDebug {self.name} backout entry: '
-                                    f'cleared remote sync_event')
+                                    f'{self.name} smart_sync backout reset '
+                                    f'remote sync_event for {remote}')
                     if backout_request == 'smart_wait' and local_sb.wait_wait:
                         local_sb.wait_wait = False
                         local_sb.wait_event.clear()

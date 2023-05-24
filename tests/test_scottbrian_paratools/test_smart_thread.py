@@ -89,10 +89,10 @@ CheckPendArg: TypeAlias = tuple[str, st.PairKey]
 
 
 class DefDelReasons(NamedTuple):
-    pending_request: bool
-    pending_msg: bool
-    pending_wait: bool
-    pending_sync: bool
+    pending_request: bool = False
+    pending_msg: bool = False
+    pending_wait: bool = False
+    pending_sync: bool = False
 
 
 RemSbKey: TypeAlias = tuple[str, tuple[str, str], DefDelReasons]
@@ -5879,6 +5879,8 @@ class RequestAckLogSearchItem(LogSearchItem):
                         '|smart_wait resumed by'
                         '|smart_resume resumed'
                         '|smart_sync set event for'
+                        '|smart_sync backout reset local sync_event for'
+                        '|smart_sync backout reset remote sync_event for'
                         '|smart_sync achieved with)')
         super().__init__(
             search_str=f"[a-z0-9_]+ {list_of_acks} [a-z0-9_]+",
@@ -5939,11 +5941,25 @@ class RequestAckLogSearchItem(LogSearchItem):
                 self.config_ver.set_sync_pending_flag(waiter=remote,
                                                       resumer=cmd_runner,
                                                       pending_sync_flag=True)
-            else:
+            elif action == 'achieved':
                 ack_key = (remote, 'smart_sync_achieved')
                 self.config_ver.set_sync_pending_flag(waiter=cmd_runner,
                                                       resumer=remote,
                                                       pending_sync_flag=False)
+            elif action == 'backout':
+                if split_msg[4] == 'local':
+                    ack_key = (remote, 'smart_sync_backout_local')
+                    self.config_ver.set_sync_pending_flag(
+                        waiter=cmd_runner,
+                        resumer=remote,
+                        pending_sync_flag=False)
+                else:
+                    ack_key = (remote, 'smart_sync_backout_remote')
+                    self.config_ver.set_sync_pending_flag(
+                        waiter=remote,
+                        resumer=cmd_runner,
+                        pending_sync_flag=False)
+
         if not (request == 'smart_sync' and action == 'set'):
             self.config_ver.set_request_pending_flag(
                 cmd_runner=cmd_runner,
@@ -8751,6 +8767,14 @@ class ConfigVerifier:
             exp_pending_flags=exp_pending_flags,
             obtain_reg_lock=False))
 
+        ################################################################
+        # verify config structures
+        ################################################################
+        self.add_cmd(VerifyConfig(
+            cmd_runners=self.commander_name,
+            verify_type=VerifyType.VerifyStructures,
+            obtain_reg_lock=False))
+
         self.build_exit_suite(cmd_runner=self.commander_name,
                               names=remote_names,
                               validate_config=False)
@@ -8856,6 +8880,13 @@ class ConfigVerifier:
                 confirm_cmd='Unregister',
                 confirm_serial_num=join_serial_num,
                 confirmers=joiner_names))
+        ################################################################
+        # verify config structures
+        ################################################################
+        self.add_cmd(VerifyConfig(
+            cmd_runners=self.commander_name,
+            verify_type=VerifyType.VerifyStructures,
+            obtain_reg_lock=False))
 
     ####################################################################
     # build_pending_sync_only_scenarios
@@ -9287,6 +9318,14 @@ class ConfigVerifier:
             exp_pending_flags=exp_pending_flags,
             obtain_reg_lock=False))
 
+        ################################################################
+        # verify config structures
+        ################################################################
+        self.add_cmd(VerifyConfig(
+            cmd_runners=self.commander_name,
+            verify_type=VerifyType.VerifyStructures,
+            obtain_reg_lock=False))
+
         self.build_exit_suite(cmd_runner=self.commander_name,
                               names=remote_names,
                               validate_config=False)
@@ -9378,6 +9417,14 @@ class ConfigVerifier:
                 confirm_serial_num=join_serial_num,
                 confirmers=joiner_names))
 
+        ################################################################
+        # verify config structures
+        ################################################################
+        self.add_cmd(VerifyConfig(
+            cmd_runners=self.commander_name,
+            verify_type=VerifyType.VerifyStructures,
+            obtain_reg_lock=True))
+
     ####################################################################
     # build_remove_reasons_scenarios
     ####################################################################
@@ -9394,31 +9441,6 @@ class ConfigVerifier:
             pending_wait_tf: if True, pending_wait flag is to be set
             pending_sync_tf: if True, pending_sync flag is to be set
 
-        Notes:
-            There are two test cases dealing with the pending flags:
-            test_pending_sans_sync_scenarios:
-                this will test combinations for:
-                    pending_request: True, False
-                    pending_msg: count of 0, 1, 2
-                    pending_wait: True, False
-                using requests:
-                    smart_send
-                    smart_recv
-                    smart_wait
-                    smart_resume
-
-            test_pending_sync_only_scenarios:
-                this will test combinations for:
-                    pending_request: True
-                    pending_msg: count of 0, 1, 2
-                    pending_wait: True, False
-                    pending_sync: True, False
-                using requests:
-                    smart_sync
-
-            The reason for having two different test cases is that
-            pending_sync can only be set with smart_sync, and
-            only with pending_request also set.
         """
         pending_names = ['pending_0']
         remote_names = ['remote_0']
@@ -9693,6 +9715,14 @@ class ConfigVerifier:
             obtain_reg_lock=False))
 
         ################################################################
+        # verify config structures
+        ################################################################
+        self.add_cmd(VerifyConfig(
+            cmd_runners=self.commander_name,
+            verify_type=VerifyType.VerifyStructures,
+            obtain_reg_lock=False))
+
+        ################################################################
         # remove the pending thread
         ################################################################
         self.build_exit_suite(cmd_runner=self.commander_name,
@@ -9773,6 +9803,167 @@ class ConfigVerifier:
                 confirm_cmd='Join',
                 confirm_serial_num=join_serial_num,
                 confirmers=joiner_names))
+
+        ################################################################
+        # verify config structures
+        ################################################################
+        self.add_cmd(VerifyConfig(
+            cmd_runners=self.commander_name,
+            verify_type=VerifyType.VerifyStructures,
+            obtain_reg_lock=True))
+
+    ####################################################################
+    # build_backout_sync_scenario
+    ####################################################################
+    def build_backout_sync_scenario(self) -> None:
+        """Return a list of ConfigCmd items for a create."""
+        pending_names = ['pending_0']
+        remote_names = ['remote_0']
+        locker_names = ['locker_0', 'locker_1', 'locker_2']
+        joiner_names = ['joiner_0']
+
+        active_names: list[str] = (
+                pending_names
+                + remote_names
+                + locker_names
+                + joiner_names)
+
+        self.create_config(active_names=active_names)
+
+        self.log_name_groups()
+
+        pending_name = pending_names[0]
+        remote_name = remote_names[0]
+        joiner_name = joiner_names[0]
+
+        lock_positions: list[str] = []
+        pend_req_serial_num: int = 0
+        join_serial_num: int = 0
+
+        ################################################################
+        # verify all flags off
+        ################################################################
+        exp_pending_flags = PendingFlags()
+        self.add_cmd(VerifyConfig(
+            cmd_runners=self.commander_name,
+            verify_type=VerifyType.VerifyPendingFlags,
+            names_to_check=pending_name,
+            aux_names=remote_name,
+            exp_pending_flags=exp_pending_flags,
+            obtain_reg_lock=False))
+
+        ################################################################
+        # issue the sync to set sync_event for pending_name
+        ################################################################
+        sync_serial_num = self.add_cmd(Sync(
+            cmd_runners=remote_name,
+            targets=pending_name,
+            stopped_remotes=pending_name))
+
+        # Normally, handle_request_smart_sync_entry will set up the
+        # ack msg when the target is not included in the set of
+        # stopped_remotes. TIn this case, we know the sync flag will
+        # be set for the pending_name, but we include it in the set
+        # of stopped_remotes. So, we need to set up the ack msg
+        # here.
+        pe = self.pending_events[remote_name]
+
+        ack_key: AckKey = (pending_name, 'smart_sync_set')
+
+        pe[PE.ack_msg][ack_key] += 1
+
+        ################################################################
+        # wait for the pending_sync flag to be set in mock structures
+        ################################################################
+        pair_key = st.SmartThread._get_pair_key(remote_name,
+                                                pending_name)
+        check_pend_arg: CheckPendArg = (pending_name, pair_key)
+        self.add_cmd(WaitForCondition(
+            cmd_runners=self.commander_name,
+            check_rtn=self.check_sync_event_set,
+            check_args=check_pend_arg))
+
+        ################################################################
+        # verify the pending flags are as expected before we do the join
+        ################################################################
+        exp_pending_flags = PendingFlags(pending_sync=True)
+        self.add_cmd(VerifyConfig(
+            cmd_runners=self.commander_name,
+            verify_type=VerifyType.VerifyPendingFlags,
+            names_to_check=pending_name,
+            aux_names=remote_name,
+            exp_pending_flags=exp_pending_flags,
+            obtain_reg_lock=False))
+
+        ################################################################
+        # verify config structures
+        ################################################################
+        self.add_cmd(VerifyConfig(
+            cmd_runners=self.commander_name,
+            verify_type=VerifyType.VerifyStructures,
+            obtain_reg_lock=False))
+
+        ################################################################
+        # remove the pending thread to cause the backout
+        ################################################################
+        self.build_exit_suite(cmd_runner=self.commander_name,
+                              names=pending_name,
+                              validate_config=False)
+
+        pe = self.pending_events[remote_name]
+
+        ack_key: AckKey = (pending_name, 'smart_sync_backout_remote')
+
+        pe[PE.ack_msg][ack_key] += 1
+
+        ################################################################
+        # do smart_join
+        ################################################################
+        join_serial_num = self.add_cmd(
+            Join(cmd_runners=joiner_name,
+                 join_names=pending_name))
+
+        pe = self.pending_events[joiner_name]
+
+        pair_key = st.SmartThread._get_pair_key(pending_name,
+                                                remote_name)
+
+        # we expect no reasons
+        def_del_reasons: DefDelReasons = DefDelReasons()
+
+        rem_sb_key: RemSbKey = (pending_name,
+                                pair_key,
+                                def_del_reasons)
+
+        pe[PE.notify_rem_status_block_msg][rem_sb_key] += 1
+
+        ################################################################
+        # confirm the sync is done
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='Sync',
+                confirm_serial_num=sync_serial_num,
+                confirmers=remote_name))
+
+        ################################################################
+        # confirm the join is done
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='Join',
+                confirm_serial_num=join_serial_num,
+                confirmers=joiner_names))
+
+        ################################################################
+        # verify config structures
+        ################################################################
+        self.add_cmd(VerifyConfig(
+            cmd_runners=self.commander_name,
+            verify_type=VerifyType.VerifyStructures,
+            obtain_reg_lock=True))
 
     ####################################################################
     # check_pending_events
@@ -24581,6 +24772,26 @@ class TestSmartThreadScenarios:
 
         self.scenario_driver(
             scenario_builder=ConfigVerifier.build_remove_reasons_scenarios,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
+
+    ####################################################################
+    # test_backout_sync_scenario
+    ####################################################################
+    def test_backout_sync_scenario(
+            self,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            caplog: pytest fixture to capture log output
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {}
+
+        self.scenario_driver(
+            scenario_builder=ConfigVerifier.build_backout_sync_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 
