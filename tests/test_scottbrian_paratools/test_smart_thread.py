@@ -85,6 +85,8 @@ CallRefKey: TypeAlias = str
 
 PendEvents: TypeAlias = dict["PE", Any]
 
+CheckPendArg: TypeAlias = tuple[str, st.PairKey]
+
 
 class DefDelReasons(NamedTuple):
     pending_request: bool
@@ -2933,21 +2935,20 @@ class WaitForCondition(ConfigCmd):
     """Wait for receive message timeouts."""
     def __init__(self,
                  cmd_runners: Iterable,
-                 targets: Iterable,
-                 check_rtn: Callable[..., None]) -> None:
+                 check_rtn: Callable[..., bool],
+                 check_args: Any) -> None:
         """Initialize the instance.
 
         Args:
             cmd_runners: thread names that will execute the command
-            targets: thread names to check condition for
             check_rtn: routine that will do the check
+            check_args: the arguments for the check_rtn
 
         """
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
-
-        self.targets = get_set(targets)
         self.check_rtn = check_rtn
+        self.check_args = check_args
 
     def run_process(self, cmd_runner: str) -> None:
         """Run the command.
@@ -2955,8 +2956,12 @@ class WaitForCondition(ConfigCmd):
         Args:
             cmd_runner: name of thread running the command
         """
-        self.check_rtn(cmd_runner=cmd_runner,
-                       targets=self.targets)
+        start_time = time.time()
+        while not self.check_rtn(cmd_runner=cmd_runner,
+                                 check_args=self.check_args):
+            time.sleep(0.1)
+            if start_time + 30 < time.time():
+                raise CmdTimedOut('WaitForCondition timed out')
 
 
 ########################################################################
@@ -5912,14 +5917,6 @@ class RequestAckLogSearchItem(LogSearchItem):
 
         ack_key: AckKey = (remote, request)
 
-        if pe[PE.ack_msg][ack_key] <= 0:
-            raise UnexpectedEvent(
-                f'RequestAckLogSearchItem using {ack_key=} detected '
-                f'unexpected log msg: {self.found_log_msg}'
-            )
-
-        pe[PE.ack_msg][ack_key] -= 1
-
         if request == 'smart_send':
             self.config_ver.set_msg_pending_count(receiver=remote,
                                                   sender=cmd_runner,
@@ -5938,10 +5935,12 @@ class RequestAckLogSearchItem(LogSearchItem):
                                                   pending_wait_flag=True)
         elif request == 'smart_sync':
             if action == 'set':
+                ack_key = (remote, 'smart_sync_set')
                 self.config_ver.set_sync_pending_flag(waiter=cmd_runner,
                                                       resumer=remote,
                                                       pending_sync_flag=True)
             else:
+                ack_key = (remote, 'smart_sync_achieved')
                 self.config_ver.set_sync_pending_flag(waiter=cmd_runner,
                                                       resumer=remote,
                                                       pending_sync_flag=False)
@@ -5950,6 +5949,14 @@ class RequestAckLogSearchItem(LogSearchItem):
                 cmd_runner=cmd_runner,
                 targets={remote},
                 pending_request_flag=False)
+
+        if pe[PE.ack_msg][ack_key] <= 0:
+            raise UnexpectedEvent(
+                f'RequestAckLogSearchItem using {ack_key=} detected '
+                f'unexpected log msg: {self.found_log_msg}'
+            )
+
+        pe[PE.ack_msg][ack_key] -= 1
 
         self.config_ver.add_log_msg(re.escape(self.found_log_msg),
                                     log_level=logging.INFO)
@@ -9510,9 +9517,25 @@ class ConfigVerifier:
                 targets=pending_names,
                 stopped_remotes=pending_names))
 
-        self.add_cmd(WaitForCondition(cmd_runners=self.commander_name,
-                                      targets=pending_names,
-                                      check_rtn=self.check_sync_event_set))
+            # Normally, handle_request_smart_sync_entry will set up the
+            # ack msg when the target is not included in the set of
+            # stopped_remotes. TIn this case, we know the sync flag will
+            # be set for the pending_name, but we include it in the set
+            # of stopped_remotes. So, we need to set up the ack msg
+            # here.
+            pe = self.pending_events[remote_names[0]]
+
+            ack_key: AckKey = (pending_names[0], 'smart_sync_set')
+
+            pe[PE.ack_msg][ack_key] += 1
+
+            pair_key = st.SmartThread._get_pair_key(remote_names[0],
+                                                    pending_names[0])
+            check_pend_arg: CheckPendArg = (pending_names[0], pair_key)
+            self.add_cmd(WaitForCondition(
+                cmd_runners=self.commander_name,
+                check_rtn=self.check_sync_event_set,
+                check_args=check_pend_arg))
 
         exp_pending_flags = PendingFlags(pending_msgs=pending_msg_count,
                                          pending_wait=pending_wait_tf,
@@ -9582,15 +9605,33 @@ class ConfigVerifier:
     ####################################################################
     def check_sync_event_set(self,
                              cmd_runner: str,
-                             targets: set[str]) -> bool:
+                             check_args: CheckPendArg) -> bool:
         """Check that the sync event is set in the target.
 
         Args:
             cmd_runner: thread name doing the check
-            targets: thread names to be checked
+            check_args: target name and pair_key to be checked
         """
-        for target in targets:
-            if target in self.expected_registered
+        target = check_args[0]
+        pair_key = check_args[1]
+        if target not in self.expected_registered:
+            raise InvalidConfigurationDetected(
+                f'check_sync_event_set {target=} not in expected_registered')
+
+        if pair_key not in self.expected_pairs:
+            raise InvalidConfigurationDetected(
+                f'check_sync_event_set {pair_key=} not in expected_pairs')
+
+        if target not in self.expected_pairs[pair_key]:
+            raise InvalidConfigurationDetected(
+                f'check_sync_event_set {target=} not in expected_pairs'
+                f'with {pair_key=}')
+
+        if self.expected_pairs[pair_key][target].pending_sync:
+            return True
+
+        return False
+
     ####################################################################
     # check_pending_events
     ####################################################################
@@ -17537,9 +17578,13 @@ class ConfigVerifier:
                             - pe[PE.current_request].deadlock_remotes)
 
         for target in eligible_targets:
-            ack_key: AckKey = (target, 'smart_sync')
+            ack_key: AckKey = (target, 'smart_sync_set')
 
-            pe[PE.ack_msg][ack_key] += 2
+            pe[PE.ack_msg][ack_key] += 1
+
+            ack_key: AckKey = (target, 'smart_sync_achieved')
+
+            pe[PE.ack_msg][ack_key] += 1
 
     ####################################################################
     # handle_request_smart_sync_exit
