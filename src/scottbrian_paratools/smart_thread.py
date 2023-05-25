@@ -4109,7 +4109,7 @@ class SmartThread:
             if self._get_target_state(pk_remote) == ThreadState.Stopped:
                 request_block.stopped_remotes |= {pk_remote.remote}
                 # request_block.do_refresh = True
-                local_sb.sync_wait = False
+                # local_sb.sync_wait = False
                 return True  # we are done with this remote
             else:
                 # if not stopped, then we know remote is active
@@ -4120,12 +4120,12 @@ class SmartThread:
     # _sync_wait_error_cleanup
     ####################################################################
     def _sync_wait_error_cleanup(self,
-                                 pk_remotes: list[PairKeyRemote],
+                                 remotes: set[str],
                                  backout_request: str) -> None:
         """Cleanup a failed sync request.
 
         Args:
-            pk_remotes: names of threads that need cleanup
+            remotes: names of threads that need cleanup
             backout_request: sync or wait
 
         Notes:
@@ -4140,19 +4140,28 @@ class SmartThread:
                case which would seem rare.
         """
         logger.debug(
-            f'TestDebug {self.name} backout entry: {backout_request=}')
-        for pair_key, remote, _ in pk_remotes:
+            f'TestDebug {self.name} backout entry: {backout_request=} '
+            f'{remotes=}')
+        for remote in remotes:
+            pair_key = self._get_pair_key(self.name, remote)
+            logger.debug(
+                f'TestDebug {self.name} backout processing {pair_key=}')
             if pair_key in SmartThread._pair_array:
                 # having a pair_key in the array implies our entry
                 # exists - set local_sb for easy references
                 local_sb = SmartThread._pair_array[
                     pair_key].status_blocks[self.name]
 
+                logger.debug(
+                    f'TestDebug {self.name} backout getting lock {pair_key=}')
                 with SmartThread._pair_array[pair_key].status_lock:
                     # if we made it as far as having set the remote sync
                     # event, then we need to back that out, but only when
                     # the remote did not set out event yet
                     if backout_request == 'smart_sync' and local_sb.sync_wait:
+                        logger.debug(
+                            f'TestDebug {self.name} backout has sync_wait '
+                            f'{pair_key=}')
                         # if we are now set, then the remote did
                         # finally respond and this was a good sync,
                         # which also means the backout of the remote is
@@ -4161,7 +4170,7 @@ class SmartThread:
                         local_sb.sync_wait = False
                         if local_sb.sync_event.is_set():
                             local_sb.sync_event.clear()
-                            logger.debug(
+                            logger.info(
                                 f'{self.name} smart_sync backout reset '
                                 f'local sync_event for {remote}')
                         else:
@@ -4171,7 +4180,7 @@ class SmartThread:
                                     pair_key].status_blocks[remote]
                                 # backout the sync resume
                                 remote_sb.sync_event.clear()
-                                logger.debug(
+                                logger.info(
                                     f'{self.name} smart_sync backout reset '
                                     f'remote sync_event for {remote}')
                     if backout_request == 'smart_wait' and local_sb.wait_wait:
@@ -4352,7 +4361,7 @@ class SmartThread:
                 with sel.SELockExcl(SmartThread._registry_lock):
                     if request_block.cleanup_rtn:
                         request_block.cleanup_rtn(
-                            self.work_pk_remotes,
+                            request_block.remotes,
                             request_block.request.value)
 
                     # clear request_pending for remaining work remotes

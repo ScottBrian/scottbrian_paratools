@@ -9825,7 +9825,7 @@ class ConfigVerifier:
         active_names: list[str] = (
                 pending_names
                 + remote_names
-                + locker_names
+                # + locker_names
                 + joiner_names)
 
         self.create_config(active_names=active_names)
@@ -20207,7 +20207,8 @@ class ConfigVerifier:
                         # )
                         pe[PE.rem_status_block_msg][rem_sb_key] += 1
                         self.log_test_msg('clean_pair_array removed '
-                                          f'{pair_key=}, {name=}')
+                                          f'{pair_key=}, {name=}, '
+                                          f'{rem_sb_key=}')
                         changed = True
 
             if not pae:
