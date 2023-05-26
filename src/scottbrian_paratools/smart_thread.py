@@ -3870,113 +3870,6 @@ class SmartThread:
         # remote is not yet alive, has pending wait, or pending deadlock
         return False  # give the remote some more time
 
-    # ####################################################################
-    # # smart_sync
-    # ####################################################################
-    # def smart_sync(self, *,
-    #                targets: Iterable,
-    #                timeout: OptIntFloat = None,
-    #                log_msg: Optional[str] = None):
-    #     """Sync up with remote threads.
-    #
-    #     Args:
-    #         targets: remote threads we will sync with
-    #         timeout: number of seconds to allow for sync to happen
-    #         log_msg: additional text to append to the debug log message
-    #             that is issued on request entry and exit
-    #
-    #     Notes:
-    #         1) A deadlock will occur between two threads when they both
-    #            issue a request that waits for the other thread to
-    #            respond. The following combinations can lead to a
-    #            deadlock:
-    #
-    #              a) smart_wait vs smart_wait
-    #              b) smart_wait vs smart_recv
-    #              c) smart_wait vs smart_sync
-    #              d) smart_recv vs smart_recv
-    #              e) smart_recv vs smart_sync
-    #
-    #            Note that a smart_wait will not deadlock if the
-    #            wait_event was already resumed earlier by a smart_resume,
-    #            and a smart_recv will not deadlock is a message was
-    #            already delivered earlier by a smart_send.
-    #
-    #     Each thread that invokes ''smart_sync()'' first sets the sync
-    #     event for each target, and the waits on its corresponding sync
-    #     event for each target. This ensures that every thread has
-    #     reached the sync point before any thread moves forward from
-    #     there.
-    #
-    #     **Example 1:** Invoke ``smart_sync()`` for three threads
-    #
-    #     .. code-block:: python
-    #
-    #         from scottbrian_paratools.smart_thread import SmartThread
-    #         import time
-    #
-    #         def f1_beta(smart_thread: SmartThread) -> None:
-    #             print('f1_beta about to sync with alpha and charlie')
-    #             smart_thread.smart_sync(targets=['alpha', 'charlie'])
-    #             print('f1_beta back from sync')
-    #
-    #         def f2_charlie(smart_thread: SmartThread) -> None:
-    #             print('f2_charlie about to sync with alpha and beta')
-    #             smart_thread.smart_sync(targets=['alpha', 'beta'])
-    #             time.sleep(1)
-    #             print('f2_charlie back from sync')
-    #
-    #         print('mainline alpha entered')
-    #         alpha_smart_thread  = SmartThread(name='alpha')
-    #         beta_smart_thread = SmartThread(name='beta',
-    #                                         target=f1_beta,
-    #                                         thread_parm_name='smart_thread')
-    #         time.sleep(1)
-    #         charlie_smart_thread = SmartThread(name='charlie',
-    #                                            target=f2_charlie,
-    #                                            thread_parm_name='smart_thread')
-    #         time.sleep(1)
-    #         print('alpha about to sync with beta and charlie')
-    #         alpha_smart_thread.smart_sync(targets=['beta', 'charlie'])
-    #         time.sleep(2)
-    #         print('alpha back from sync')
-    #         alpha_smart_thread.smart_join(targets=['beta', 'charlie'])
-    #         print('mainline alpha exiting')
-    #
-    #     .. invisible-code-block: python
-    #
-    #         del SmartThread._registry['alpha']
-    #
-    #     Expected output for Example 1:
-    #
-    #         mainline alpha entered
-    #         f1_beta about to sync with alpha and charlie
-    #         f2_charlie about to sync with alpha and beta
-    #         alpha about to sync with beta and charlie
-    #         f1_beta back from sync
-    #         f2_charlie back from sync
-    #         alpha back from sync
-    #         mainline alpha exiting
-    #
-    #     """
-    #     self.request = ReqType.Smart_sync
-    #     # get RequestBlock with targets in a set and a timer object
-    #     request_block = self._request_setup(
-    #         remotes=targets,
-    #         error_stopped_target=True,
-    #         process_rtn=self._process_sync,
-    #         cleanup_rtn=self._sync_wait_error_cleanup,
-    #         get_block_lock=True,
-    #         completion_count=0,
-    #         timeout=timeout,
-    #         log_msg=log_msg)
-    #
-    #     self._request_loop(request_block=request_block)
-    #
-    #     self.request = ReqType.NoReq
-    #
-    #     logger.debug(request_block.exit_log_msg)
-
     ####################################################################
     # smart_sync
     ####################################################################
@@ -4078,149 +3971,8 @@ class SmartThread:
             timeout=timeout,
             log_msg=log_msg)
 
-        continue_request_loop = True
-        while continue_request_loop:
-            # num_start_loop_work_remotes = len(self.work_pk_remotes)
-            work_pk_remotes_copy = self.work_pk_remotes.copy()
-            for pk_remote in work_pk_remotes_copy:
-                # logger.debug(
-                #     f'TestDebug {self.name} _request_loop processing '
-                #     f'{pk_remote.remote=}, {work_pk_remotes_copy=}')
-                # determine timeout_value to use for request
-                if request_block.timer.is_specified():
-                    request_block.request_max_interval = min(
-                        self.request_max_interval,
-                        (request_block.timer.remaining_time()
-                         / len(self.work_pk_remotes))
-                    )
-                else:
-                    request_block.request_max_interval = (
-                        self.request_max_interval)
+        self._request_loop(request_block=request_block)
 
-                # we need to hold the lock to ensure the pair_array
-                # remains stable while getting local_sb. The
-                # request_pending flag in our entry will prevent our
-                # entry for being removed (but not the remote)
-                with sel.SELockShare(SmartThread._registry_lock):
-                    if self.found_pk_remotes:
-                        pk_remote = self._handle_found_pk_remotes(
-                            pk_remote=pk_remote,
-                            work_pk_remotes=work_pk_remotes_copy
-                        )
-
-                    if pk_remote.pair_key in SmartThread._pair_array:
-                        # having a pair_key in the array implies our
-                        # entry exists - set local_sb for easy
-                        # references
-                        local_sb = SmartThread._pair_array[
-                            pk_remote.pair_key].status_blocks[self.name]
-
-                        # Getting back True from the process_rtn means
-                        # we are done with this remote, either because
-                        # the command was successful or there was an
-                        # unresolvable error which will be processed
-                        # later after all remotes are processed.
-                        # Getting back False means the remote is not yet
-                        # ready to participate in the request, so we
-                        # keep it in the work list and try again until
-                        # it works (unless and until we encounter an
-                        # unresolvable error with any request, or we
-                        # eventually timeout when timeout is specified)
-                        if request_block.process_rtn(request_block,
-                                                     pk_remote,
-                                                     local_sb):
-                            self.work_pk_remotes.remove(pk_remote)
-
-                            # We may have been able to successfully
-                            # complete this request despite not yet
-                            # having an alive remote (smart_recv and wait,
-                            # for example, do not require an alive
-                            # remote if the message or wait bit was
-                            # previously delivered or set). We thus need
-                            # to make sure we remove such a remote from
-                            # the missing set to prevent its
-                            # resurrection from setting request_pending.
-                            self.missing_remotes -= {pk_remote.remote}
-                            local_sb.target_create_time = 0.0
-                            local_sb.request_pending = False
-                            if (local_sb.del_deferred
-                                    and local_sb.msg_q.empty()
-                                    and not local_sb.wait_event.is_set()
-                                    and not local_sb.sync_event.is_set()):
-                                request_block.do_refresh = True
-                            local_sb.request = ReqType.NoReq
-                            # logger.debug(
-                            #     f'TestDebug {self.name} reset '
-                            #     f'request_pending for {pk_remote.remote=}')
-
-                if request_block.do_refresh:
-                    logger.debug(
-                        f'{self.name} {self.request.value} calling refresh, '
-                        f'remaining remotes: {self.work_pk_remotes}')
-                    with sel.SELockExcl(SmartThread._registry_lock):
-                        self._clean_registry()
-                        self._clean_pair_array()
-                    request_block.do_refresh = False
-
-            # handle any error or timeout cases - don't worry about any
-            # remotes that were still pending - we need to fail the
-            # request as soon as we know about any unresolvable failures
-            if ((request_block.stopped_remotes and request_block.remotes
-                 and not (self.request == ReqType.Smart_wait
-                          and self.wait_for_any and request_block.ret_msg))
-                    or request_block.deadlock_remotes
-                    or request_block.timer.is_expired()):
-
-                # cleanup before doing the error
-                with sel.SELockExcl(SmartThread._registry_lock):
-                    if request_block.cleanup_rtn:
-                        request_block.cleanup_rtn(
-                            request_block.remotes,
-                            request_block.request.value)
-
-                    # clear request_pending for remaining work remotes
-                    for pair_key, remote, _ in self.work_pk_remotes:
-                        if pair_key in SmartThread._pair_array:
-                            # having a pair_key in the array implies our
-                            # entry exists
-                            SmartThread._pair_array[
-                                pair_key].status_blocks[
-                                self.name].request_pending = False
-                            SmartThread._pair_array[
-                                pair_key].status_blocks[
-                                self.name].request = ReqType.NoReq
-
-                    pending_remotes = [remote for pk, remote, _ in
-                                       self.work_pk_remotes]
-                    logger.debug(
-                        f'{self.name} {self.request.value} calling refresh, '
-                        f'remaining remotes: {self.work_pk_remotes}')
-                    self.work_pk_remotes = []
-                    self.missing_remotes = []
-                    self._clean_registry()
-                    self._clean_pair_array()
-
-                self._handle_loop_errors(request_block=request_block,
-                                         pending_remotes=pending_remotes)
-
-            if request_block.remotes:  # remotes were specified
-                if len(self.work_pk_remotes) <= request_block.completion_count:
-                    continue_request_loop = False
-            else:
-                if (request_block.request == ReqType.Smart_recv
-                        or request_block.request == ReqType.Smart_wait):
-                    if request_block.ret_msg:
-                        continue_request_loop = False
-                    else:  # keep looking
-                        self._set_work_pk_remotes(request_block.request)
-                        time.sleep(0.2)
-
-        ################################################################
-        # cleanup
-        ################################################################
-        if self.work_pk_remotes:
-            with sel.SELockShare(SmartThread._registry_lock):
-                self.work_pk_remotes = []
         self.request = ReqType.NoReq
 
         logger.debug(request_block.exit_log_msg)
@@ -4387,29 +4139,18 @@ class SmartThread:
                however, would seem more costly than reasonable for this
                case which would seem rare.
         """
-        logger.debug(
-            f'TestDebug {self.name} backout entry: {backout_request=} '
-            f'{remotes=}')
         for remote in remotes:
             pair_key = self._get_pair_key(self.name, remote)
-            logger.debug(
-                f'TestDebug {self.name} backout processing {pair_key=}')
             if pair_key in SmartThread._pair_array:
                 # having a pair_key in the array implies our entry
                 # exists - set local_sb for easy references
                 local_sb = SmartThread._pair_array[
                     pair_key].status_blocks[self.name]
-
-                logger.debug(
-                    f'TestDebug {self.name} backout getting lock {pair_key=}')
                 with SmartThread._pair_array[pair_key].status_lock:
                     # if we made it as far as having set the remote sync
                     # event, then we need to back that out, but only when
                     # the remote did not set out event yet
                     if backout_request == 'smart_sync' and local_sb.sync_wait:
-                        logger.debug(
-                            f'TestDebug {self.name} backout has sync_wait '
-                            f'{pair_key=}')
                         # if we are now set, then the remote did
                         # finally respond and this was a good sync,
                         # which also means the backout of the remote is
@@ -4514,23 +4255,19 @@ class SmartThread:
         """
         continue_request_loop = True
         while continue_request_loop:
-            # num_start_loop_work_remotes = len(self.work_pk_remotes)
+            # determine timeout_value to use for request
+            if request_block.timer.is_specified():
+                request_block.request_max_interval = min(
+                    self.request_max_interval,
+                    (request_block.timer.remaining_time()
+                     / len(self.work_pk_remotes))
+                )
+            else:
+                request_block.request_max_interval = (
+                    self.request_max_interval)
+
             work_pk_remotes_copy = self.work_pk_remotes.copy()
             for pk_remote in work_pk_remotes_copy:
-                # logger.debug(
-                #     f'TestDebug {self.name} _request_loop processing '
-                #     f'{pk_remote.remote=}, {work_pk_remotes_copy=}')
-                # determine timeout_value to use for request
-                if request_block.timer.is_specified():
-                    request_block.request_max_interval = min(
-                        self.request_max_interval,
-                        (request_block.timer.remaining_time()
-                         / len(self.work_pk_remotes))
-                    )
-                else:
-                    request_block.request_max_interval = (
-                        self.request_max_interval)
-
                 # we need to hold the lock to ensure the pair_array
                 # remains stable while getting local_sb. The
                 # request_pending flag in our entry will prevent our
@@ -4583,9 +4320,6 @@ class SmartThread:
                                     and not local_sb.sync_event.is_set()):
                                 request_block.do_refresh = True
                             local_sb.request = ReqType.NoReq
-                            # logger.debug(
-                            #     f'TestDebug {self.name} reset '
-                            #     f'request_pending for {pk_remote.remote=}')
 
                 if request_block.do_refresh:
                     logger.debug(
@@ -4626,13 +4360,13 @@ class SmartThread:
 
                     pending_remotes = [remote for pk, remote, _ in
                                        self.work_pk_remotes]
-                    logger.debug(
-                        f'{self.name} {self.request.value} calling refresh, '
-                        f'remaining remotes: {self.work_pk_remotes}')
+                    # logger.debug(
+                    #     f'{self.name} {self.request.value} calling refresh, '
+                    #     f'remaining remotes: {self.work_pk_remotes}')
                     self.work_pk_remotes = []
                     self.missing_remotes = []
-                    self._clean_registry()
-                    self._clean_pair_array()
+                    # self._clean_registry()
+                    # self._clean_pair_array()
 
                 self._handle_loop_errors(request_block=request_block,
                                          pending_remotes=pending_remotes)
@@ -4659,7 +4393,6 @@ class SmartThread:
     ####################################################################
     # _set_work_pk_remotes
     ####################################################################
-
     def _set_work_pk_remotes(self,
                              request: ReqType,
                              remotes: Optional[set[str]] = None) -> None:
@@ -4705,13 +4438,6 @@ class SmartThread:
                         pair_key].status_blocks[self.name]
                     local_sb.request_pending = True
                     local_sb.request = self.request
-                    logger.debug(
-                        f'TestDebug {self.name} set '
-                        f'request_pending for {remote=}')
-                    # if (remote in SmartThread._pair_array[
-                    #         pair_key].status_blocks):
-                    #     target_create_time = SmartThread._pair_array[
-                    #         pair_key].status_blocks[remote].create_time
                     local_sb.target_create_time = target_create_time
                 pk_remote = PairKeyRemote(pair_key=pair_key,
                                           remote=remote,

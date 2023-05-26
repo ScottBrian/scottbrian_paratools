@@ -9061,19 +9061,13 @@ class ConfigVerifier:
             LockVerify(cmd_runners=self.commander_name,
                        exp_positions=lock_positions.copy()))
 
-        # if (not stopped_remotes
-        #         and pending_msg_count == 0
-        #         and not pending_wait_tf):
-        #     pe = self.pending_events[pending_names[0]]
-        #     ref_key: CallRefKey = 'smart_sync'
-        #
-        #     pe[PE.calling_refresh_msg][ref_key] += 1
         if (pending_msg_count == 0
                 and not pending_wait_tf):
             pe = self.pending_events[pending_names[0]]
             ref_key: CallRefKey = 'smart_sync'
 
             pe[PE.calling_refresh_msg][ref_key] += 1
+
         ################################################################
         # locker_1 gets behind the pend_sync
         # locks held:
@@ -17706,24 +17700,11 @@ class ConfigVerifier:
                 self.set_request_pending_flag(cmd_runner=cmd_runner,
                                               targets=set(targets),
                                               pending_request_flag=True)
-            if req_start_item.stopped_remotes:
-                ref_key: CallRefKey = req_start_item.req_type.value
+            # if req_start_item.stopped_remotes:
+            #     ref_key: CallRefKey = req_start_item.req_type.value
+            #
+            #     pe[PE.calling_refresh_msg][ref_key] += 1
 
-                pe[PE.calling_refresh_msg][ref_key] += 1
-
-                # sub_key: SubProcessKey = (cmd_runner,
-                #                           req_start_item.req_type.value,
-                #                           '_clean_registry',
-                #                           'entry',
-                #                           cmd_runner)
-                # pe[PE.subprocess_msg][sub_key] += 1
-                #
-                # sub_key: SubProcessKey = (cmd_runner,
-                #                           req_start_item.req_type.value,
-                #                           '_clean_pair_array',
-                #                           'entry',
-                #                           cmd_runner)
-                # pe[PE.subprocess_msg][sub_key] += 1
         ################################################################
         # call handler for request
         ################################################################
