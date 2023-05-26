@@ -24887,10 +24887,327 @@ class TestSmartThreadExamples:
         logger.debug('mainline exiting')
 
 
+####################################################################
+# scenario_driver
+####################################################################
+def scenario_driver(
+        scenario_builder: Callable[..., None],
+        scenario_builder_args: dict[str, Any],
+        caplog_to_use: pytest.CaptureFixture[str],
+        commander_config: AppConfig = AppConfig.ScriptStyle
+) -> None:
+    """Build and run a scenario.
+
+    Args:
+        scenario_builder: the ConfigVerifier builder method to call
+        scenario_builder_args: the args to pass to the builder
+        caplog_to_use: the capsys to capture log messages
+        commander_config: specifies how the commander will run
+
+    """
+    ################################################################
+    # f1
+    ################################################################
+    def f1(f1_name: str, f1_config_ver: ConfigVerifier):
+        log_msg_f1 = f'f1 entered for {f1_name}'
+        log_ver.add_msg(log_level=logging.DEBUG,
+                        log_msg=log_msg_f1)
+        logger.debug(log_msg_f1)
+
+        f1_config_ver.f1_driver(f1_name=f1_name)
+
+        ############################################################
+        # exit
+        ############################################################
+        log_msg_f1 = f'f1 exiting for {f1_name}'
+        log_ver.add_msg(log_level=logging.DEBUG,
+                        log_msg=log_msg_f1)
+        logger.debug(log_msg_f1)
+
+    ################################################################
+    # Set up log verification and start tests
+    ################################################################
+    commander_name = 'alpha'
+    log_ver = LogVer(log_name=__name__)
+    log_ver.add_call_seq(name=commander_name,
+                         seq=get_formatted_call_sequence())
+
+    random.seed(42)
+    msgs = Msgs()
+
+    config_ver = ConfigVerifier(commander_name=commander_name,
+                                log_ver=log_ver,
+                                caplog_to_use=caplog_to_use,
+                                msgs=msgs,
+                                max_msgs=10)
+
+    config_ver.log_test_msg('mainline entered')
+    config_ver.log_test_msg(f'scenario builder: {scenario_builder}')
+    config_ver.log_test_msg(f'scenario args: {scenario_builder_args}')
+    config_ver.log_test_msg(f'{commander_config=}')
+
+    config_ver.unregistered_names -= {commander_name}
+    config_ver.active_names |= {commander_name}
+
+    scenario_builder(config_ver,
+                     **scenario_builder_args)
+
+    # config_ver.add_cmd(ValidateConfig(cmd_runners=commander_name))
+    config_ver.add_cmd(VerifyConfig(
+        cmd_runners=commander_name,
+        verify_type=VerifyType.VerifyStructures))
+
+    names = list(config_ver.active_names - {commander_name})
+    config_ver.build_exit_suite(cmd_runner=commander_name,
+                                names=names)
+
+    config_ver.build_join_suite(
+        cmd_runners=[config_ver.commander_name],
+        join_target_names=names)
+
+    def initialize_config_ver(cmd_thread: st.SmartThread,
+                              auto_start: bool,
+                              auto_start_decision: AutoStartDecision,
+                              exp_alive: bool,
+                              thread_create: st.ThreadCreate,
+                              exp_state: st.ThreadState) -> None:
+        """Set up the mock registry for the commander.
+
+        Args:
+            cmd_thread: the commander thread
+            auto_start: specifies whether auto_start was specified
+                on the init
+            auto_start_decision: specifies whether an auto start is
+                not needed, yes, or no
+            exp_alive: specifies whether the thread is expected to
+                be alive at the end of smart_init
+            thread_create: specifies which create style is done
+            exp_state: the expected state after smart_init
+
+        """
+        config_ver.all_threads[commander_name] = cmd_thread
+
+        config_ver.expected_registered[commander_name] = ThreadTracker(
+            thread=cmd_thread,
+            is_alive=False,
+            exiting=False,
+            is_auto_started=auto_start,
+            is_TargetThread=False,
+            exp_init_is_alive=exp_alive,
+            exp_init_thread_state=exp_state,
+            thread_create=thread_create,
+            auto_start_decision=auto_start_decision,
+            st_state=st.ThreadState.Unregistered,
+            found_del_pairs=defaultdict(int)
+        )
+
+        pe = config_ver.pending_events[commander_name]
+        pe[PE.start_request].append(
+            StartRequest(req_type=st.ReqType.Smart_init,
+                         targets={commander_name},
+                         unreg_remotes=set(),
+                         not_registered_remotes=set(),
+                         timeout_remotes=set(),
+                         stopped_remotes=set(),
+                         deadlock_remotes=set(),
+                         eligible_targets=set(),
+                         completed_targets=set(),
+                         first_round_completed=set(),
+                         stopped_target_threads=set()))
+
+        req_key_entry: RequestKey = ('smart_init',
+                                     'entry')
+        pe[PE.request_msg][req_key_entry] += 1
+
+        req_key_exit: RequestKey = ('smart_init',
+                                    'exit')
+        pe[PE.request_msg][req_key_exit] += 1
+
+        config_ver.commander_thread_config_built = True
+
+    ################################################################
+    # start commander
+    ################################################################
+    config_ver.monitor_pause = True
+    if commander_config == AppConfig.ScriptStyle:
+        commander_thread = st.SmartThread(
+            name=commander_name)
+
+        initialize_config_ver(
+            cmd_thread=commander_thread,
+            auto_start=True,
+            auto_start_decision=AutoStartDecision.auto_start_obviated,
+            exp_alive=True,
+            exp_state=st.ThreadState.Alive,
+            thread_create=st.ThreadCreate.Current)
+        config_ver.monitor_pause = False
+        config_ver.main_driver()
+    elif commander_config == AppConfig.CurrentThreadApp:
+        cmd_current_app = CommanderCurrentApp(
+            config_ver=config_ver,
+            name=commander_name,
+            max_msgs=10)
+
+        initialize_config_ver(
+            cmd_thread=cmd_current_app.smart_thread,
+            auto_start=False,
+            auto_start_decision=AutoStartDecision.auto_start_no,
+            exp_alive=True,
+            exp_state=st.ThreadState.Alive,
+            thread_create=st.ThreadCreate.Current)
+        config_ver.monitor_pause = False
+        cmd_current_app.run()
+    elif commander_config == AppConfig.RemoteThreadApp:
+        outer_thread_app = OuterThreadApp(
+            config_ver=config_ver,
+            name=commander_name,
+            max_msgs=10)
+
+        initialize_config_ver(
+            cmd_thread=outer_thread_app.smart_thread,
+            auto_start=False,
+            auto_start_decision=AutoStartDecision.auto_start_no,
+            exp_alive=False,
+            exp_state=st.ThreadState.Registered,
+            thread_create=st.ThreadCreate.Thread)
+        config_ver.monitor_pause = False
+
+        pe = config_ver.pending_events[commander_name]
+        pe[PE.start_request].append(
+            StartRequest(req_type=st.ReqType.Smart_start,
+                         targets={commander_name},
+                         unreg_remotes=set(),
+                         not_registered_remotes=set(),
+                         timeout_remotes=set(),
+                         stopped_remotes=set(),
+                         deadlock_remotes=set(),
+                         eligible_targets=set(),
+                         completed_targets=set(),
+                         first_round_completed=set(),
+                         stopped_target_threads=set()))
+
+        req_key_entry: RequestKey = ('smart_start',
+                                     'entry')
+
+        pe[PE.request_msg][req_key_entry] += 1
+
+        req_key_exit: RequestKey = ('smart_start',
+                                    'exit')
+        pe[PE.request_msg][req_key_exit] += 1
+
+        outer_thread_app.smart_thread.smart_start()
+        outer_thread_app.join()
+    elif commander_config == AppConfig.RemoteSmartThreadApp:
+        outer_thread_app = OuterSmartThreadApp(
+            config_ver=config_ver,
+            name=commander_name,
+            max_msgs=10)
+
+        initialize_config_ver(
+            cmd_thread=outer_thread_app,
+            auto_start=False,
+            auto_start_decision=AutoStartDecision.auto_start_no,
+            exp_alive=False,
+            exp_state=st.ThreadState.Registered,
+            thread_create=st.ThreadCreate.Thread)
+        config_ver.monitor_pause = False
+
+        pe = config_ver.pending_events[commander_name]
+        pe[PE.start_request].append(
+            StartRequest(req_type=st.ReqType.Smart_start,
+                         targets={commander_name},
+                         unreg_remotes=set(),
+                         not_registered_remotes=set(),
+                         timeout_remotes=set(),
+                         stopped_remotes=set(),
+                         deadlock_remotes=set(),
+                         eligible_targets=set(),
+                         completed_targets=set(),
+                         first_round_completed=set(),
+                         stopped_target_threads=set()))
+
+        req_key_entry: RequestKey = ('smart_start',
+                                     'entry')
+
+        pe[PE.request_msg][req_key_entry] += 1
+
+        req_key_exit: RequestKey = ('smart_start',
+                                    'exit')
+        pe[PE.request_msg][req_key_exit] += 1
+
+        outer_thread_app.smart_start(commander_name)
+        threading.Thread.join(outer_thread_app)
+    elif commander_config == AppConfig.RemoteSmartThreadApp2:
+        outer_thread_app = OuterSmartThreadApp2(
+            config_ver=config_ver,
+            name=commander_name,
+            max_msgs=10)
+
+        initialize_config_ver(
+            cmd_thread=outer_thread_app,
+            auto_start=False,
+            auto_start_decision=AutoStartDecision.auto_start_no,
+            exp_alive=False,
+            exp_state=st.ThreadState.Registered,
+            thread_create=st.ThreadCreate.Thread)
+        config_ver.monitor_pause = False
+
+        pe = config_ver.pending_events[commander_name]
+        pe[PE.start_request].append(
+            StartRequest(req_type=st.ReqType.Smart_start,
+                         targets={commander_name},
+                         unreg_remotes=set(),
+                         not_registered_remotes=set(),
+                         timeout_remotes=set(),
+                         stopped_remotes=set(),
+                         deadlock_remotes=set(),
+                         eligible_targets=set(),
+                         completed_targets=set(),
+                         first_round_completed=set(),
+                         stopped_target_threads=set()))
+
+        req_key_entry: RequestKey = ('smart_start',
+                                     'entry')
+
+        pe[PE.request_msg][req_key_entry] += 1
+
+        req_key_exit: RequestKey = ('smart_start',
+                                    'exit')
+        pe[PE.request_msg][req_key_exit] += 1
+
+        outer_thread_app.smart_start(commander_name)
+        threading.Thread.join(outer_thread_app)
+    else:
+        raise UnrecognizedCmd('scenario_driver does not recognize '
+                              f'{commander_config=}')
+
+    ################################################################
+    # check that pending events are complete
+    ################################################################
+
+    config_ver.log_test_msg('Monitor Checkpoint: check_pending_events 42')
+    config_ver.monitor_event.set()
+    config_ver.check_pending_events_complete_event.wait()
+
+    config_ver.monitor_exit = True
+    config_ver.monitor_event.set()
+    config_ver.monitor_thread.join()
+
+    ################################################################
+    # check log results
+    ################################################################
+    match_results = log_ver.get_match_results(
+        caplog=caplog_to_use)
+    log_ver.print_match_results(match_results)
+    log_ver.verify_log_results(match_results)
+
+    logger.debug('mainline exiting')
+
+
 ########################################################################
 # TestSmartThreadScenarios class
 ########################################################################
-class TestSmartThreadScenarios:
+class TestSmartThreadSmokeTest:
     """Test class for SmartThread scenarios."""
 
     ####################################################################
@@ -24911,7 +25228,7 @@ class TestSmartThreadScenarios:
         """
         args_for_scenario_builder: dict[str, Any] = {}
 
-        self.scenario_driver(
+        scenario_driver(
             scenario_builder=ConfigVerifier.build_simple_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
@@ -24957,24 +25274,27 @@ class TestSmartThreadScenarios:
             'num_stopped_2': num_stopped_2_arg,
         }
 
-        self.scenario_driver(
+        scenario_driver(
             scenario_builder=ConfigVerifier.build_config_build_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 
+
+########################################################################
+# TestSmartThreadScenarios class
+########################################################################
+class TestSmartThreadCoverage:
+    """Test class for SmartThread scenarios."""
+
     ####################################################################
     # test_send_scenarios
     ####################################################################
-    @pytest.mark.parametrize("num_senders_arg", [1, 2, 3])
-    @pytest.mark.parametrize("num_receivers_arg", [1, 2, 3])
     @pytest.mark.parametrize("num_msgs_arg", [1, 2, 3])
     @pytest.mark.parametrize("send_type_arg", [SendType.ToRemotes,
                                                SendType.Broadcast,
                                                SendType.SRMsgs])
     def test_send_scenarios(
             self,
-            num_senders_arg: int,
-            num_receivers_arg: int,
             num_msgs_arg: int,
             send_type_arg: SendType,
             caplog: pytest.CaptureFixture[str]
@@ -24982,21 +25302,19 @@ class TestSmartThreadScenarios:
         """Test meta configuration scenarios.
 
         Args:
-            num_senders_arg: number of sender threads
-            num_receivers_arg: number of receiver threads
             num_msgs_arg: number of message to send
             send_type_arg: type of send to do
             caplog: pytest fixture to capture log output
 
         """
         args_for_scenario_builder: dict[str, Any] = {
-            'num_senders': num_senders_arg,
-            'num_receivers': num_receivers_arg,
+            'num_senders': 2,
+            'num_receivers': 2,
             'num_msgs': num_msgs_arg,
             'send_type': send_type_arg,
         }
 
-        self.scenario_driver(
+        scenario_driver(
             scenario_builder=ConfigVerifier.build_send_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
@@ -25040,7 +25358,7 @@ class TestSmartThreadScenarios:
             'pending_wait_tf': pending_wait_tf_arg,
         }
 
-        self.scenario_driver(
+        scenario_driver(
             scenario_builder=ConfigVerifier.build_pending_sans_sync_scenarios,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
@@ -25074,7 +25392,7 @@ class TestSmartThreadScenarios:
             'pending_sync_tf': pending_wait_tf_arg,
         }
 
-        self.scenario_driver(
+        scenario_driver(
             scenario_builder=ConfigVerifier.build_pending_sync_only_scenarios,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
@@ -25108,7 +25426,7 @@ class TestSmartThreadScenarios:
             'pending_sync_tf': pending_sync_tf_arg,
         }
 
-        self.scenario_driver(
+        scenario_driver(
             scenario_builder=ConfigVerifier.build_remove_reasons_scenarios,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
@@ -25128,7 +25446,7 @@ class TestSmartThreadScenarios:
         """
         args_for_scenario_builder: dict[str, Any] = {}
 
-        self.scenario_driver(
+        scenario_driver(
             scenario_builder=ConfigVerifier.build_backout_sync_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
@@ -25148,10 +25466,17 @@ class TestSmartThreadScenarios:
         """
         args_for_scenario_builder: dict[str, Any] = {}
 
-        self.scenario_driver(
+        scenario_driver(
             scenario_builder=ConfigVerifier.build_backout_sync_local_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
+
+
+########################################################################
+# TestSmartThreadScenarios class
+########################################################################
+class TestSmartThreadComboScenarios:
+    """Test class for SmartThread scenarios."""
 
     ####################################################################
     # test_join_timeout_scenarios
@@ -25213,12 +25538,16 @@ class TestSmartThreadScenarios:
 
         """
         assert num_active_no_target_arg > 0
+
+        delay_arg_counts = (
+                num_no_delay_exit_arg
+                + num_delay_exit_arg
+                + num_delay_unreg_arg
+                + num_no_delay_reg_arg
+                + num_delay_reg_arg)
+
         if timeout_type_arg == TimeoutType.TimeoutNone:
-            if (num_no_delay_exit_arg
-                    + num_delay_exit_arg
-                    + num_delay_unreg_arg
-                    + num_no_delay_reg_arg
-                    + num_delay_reg_arg) == 0:
+            if delay_arg_counts == 0:
                 return
         else:
             if (num_delay_exit_arg
@@ -25235,10 +25564,14 @@ class TestSmartThreadScenarios:
             'num_delay_reg': num_delay_reg_arg
         }
 
-        self.scenario_driver(
+        command_config_num = (num_active_no_target_arg
+                              + delay_arg_counts) % num_commander_configs
+
+        scenario_driver(
             scenario_builder=ConfigVerifier.build_join_timeout_suite,
             scenario_builder_args=args_for_scenario_builder,
-            caplog_to_use=caplog)
+            caplog_to_use=caplog,
+            commander_config=commander_config[command_config_num])
 
     ####################################################################
     # test_def_del_scenarios
@@ -25255,27 +25588,17 @@ class TestSmartThreadScenarios:
             caplog: pytest fixture to capture log output
 
         """
-        command_config_num = def_del_scenario_arg.value % 5
-        if command_config_num == 0:
-            commander_config = AppConfig.ScriptStyle
-        elif command_config_num == 1:
-            commander_config = AppConfig.CurrentThreadApp
-        elif command_config_num == 2:
-            commander_config = AppConfig.RemoteThreadApp
-        elif command_config_num == 3:
-            commander_config = AppConfig.RemoteSmartThreadApp
-        else:
-            commander_config = AppConfig.RemoteSmartThreadApp2
-
         args_for_scenario_builder: dict[str, Any] = {
             'def_del_scenario': def_del_scenario_arg
         }
 
-        self.scenario_driver(
+        command_config_num = def_del_scenario_arg.value % num_commander_configs
+
+        scenario_driver(
             scenario_builder=ConfigVerifier.build_def_del_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
-            commander_config=commander_config
+            commander_config=commander_config[command_config_num]
         )
 
     ####################################################################
@@ -25347,7 +25670,6 @@ class TestSmartThreadScenarios:
                                                  def_del_reasons_d,
                                                  def_del_reasons_e,
                                                  def_del_reasons_f))
-
     def test_def_del_reasons(
             self,
             name_0_pend_arg: DefDelReasons,
@@ -25380,12 +25702,51 @@ class TestSmartThreadScenarios:
             'name_2_pend': name_2_pend_arg,
         }
 
-        self.scenario_driver(
+        scenario_driver(
             scenario_builder=ConfigVerifier.build_def_del_pending_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
             commander_config=commander_config[command_config_num]
         )
+
+    ####################################################################
+    # test_send_scenarios
+    ####################################################################
+    @pytest.mark.parametrize("num_senders_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_receivers_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_msgs_arg", [1, 2, 3])
+    @pytest.mark.parametrize("send_type_arg", [SendType.ToRemotes,
+                                               SendType.Broadcast,
+                                               SendType.SRMsgs])
+    def test_send_scenarios(
+            self,
+            num_senders_arg: int,
+            num_receivers_arg: int,
+            num_msgs_arg: int,
+            send_type_arg: SendType,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            num_senders_arg: number of sender threads
+            num_receivers_arg: number of receiver threads
+            num_msgs_arg: number of message to send
+            send_type_arg: type of send to do
+            caplog: pytest fixture to capture log output
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {
+            'num_senders': num_senders_arg,
+            'num_receivers': num_receivers_arg,
+            'num_msgs': num_msgs_arg,
+            'send_type': send_type_arg,
+        }
+
+        scenario_driver(
+            scenario_builder=ConfigVerifier.build_send_scenario,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
 
     ####################################################################
     # test_recv_msg_scenarios
@@ -25428,7 +25789,7 @@ class TestSmartThreadScenarios:
             'req1_lap': req1_lap_arg_arg
         }
 
-        self.scenario_driver(
+        scenario_driver(
             scenario_builder=ConfigVerifier.build_rotate_state_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
@@ -25461,8 +25822,6 @@ class TestSmartThreadScenarios:
             caplog: pytest fixture to capture log output
 
         """
-        commander_config = AppConfig.ScriptStyle
-
         args_for_scenario_builder: dict[str, Any] = {
             'timeout_type': timeout_type_arg,
             'recv_msg_state': recv_msg_state_arg,
@@ -25470,11 +25829,14 @@ class TestSmartThreadScenarios:
             'send_msg_lap': send_msg_lap_arg
         }
 
-        self.scenario_driver(
+        command_config_num = (timeout_type_arg.value
+                              + recv_msg_lap_arg
+                              + send_msg_lap_arg) % num_commander_configs
+        scenario_driver(
             scenario_builder=ConfigVerifier.build_recv_msg_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
-            commander_config=commander_config
+            commander_config=commander_config[command_config_num]
         )
 
     ####################################################################
@@ -25515,7 +25877,7 @@ class TestSmartThreadScenarios:
             'send_resume': send_resume_arg
         }
 
-        self.scenario_driver(
+        scenario_driver(
             scenario_builder=ConfigVerifier.build_send_rotate_state_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
@@ -25592,7 +25954,7 @@ class TestSmartThreadScenarios:
             'num_full_q_timeouts': num_full_q_timeouts_arg
         }
 
-        self.scenario_driver(
+        scenario_driver(
             scenario_builder=ConfigVerifier.build_send_msg_timeout_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
@@ -25691,7 +26053,7 @@ class TestSmartThreadScenarios:
             'num_stopped_delay': num_stopped_delay_arg
         }
 
-        self.scenario_driver(
+        scenario_driver(
             scenario_builder=ConfigVerifier.build_resume_timeout_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
@@ -25789,7 +26151,7 @@ class TestSmartThreadScenarios:
             'num_stop_after_err': num_stop_after_err_arg
         }
 
-        self.scenario_driver(
+        scenario_driver(
             scenario_builder=ConfigVerifier.build_resume_scenarios,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
@@ -25887,7 +26249,7 @@ class TestSmartThreadScenarios:
             'num_stop_after_err': num_stop_after_err_arg
         }
 
-        self.scenario_driver(
+        scenario_driver(
             scenario_builder=ConfigVerifier.build_wait_scenarios,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
@@ -25928,7 +26290,7 @@ class TestSmartThreadScenarios:
             'resume_lap': resume_lap_arg,
         }
 
-        self.scenario_driver(
+        scenario_driver(
             scenario_builder=ConfigVerifier.build_wait_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
@@ -25986,7 +26348,7 @@ class TestSmartThreadScenarios:
             'actor_list': [actor_1_arg, actor_2_arg, actor_3_arg]
         }
 
-        self.scenario_driver(
+        scenario_driver(
             scenario_builder=ConfigVerifier.build_wait_scenario_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
@@ -26048,7 +26410,7 @@ class TestSmartThreadScenarios:
             'num_timeout_syncers': num_timeout_syncers_arg,
         }
 
-        self.scenario_driver(
+        scenario_driver(
             scenario_builder=ConfigVerifier.build_sync_scenario_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
@@ -26095,7 +26457,7 @@ class TestSmartThreadScenarios:
             'num_cd_actors': num_cd_actors_arg
         }
 
-        self.scenario_driver(
+        scenario_driver(
             scenario_builder=ConfigVerifier.build_conf_dead_scenario_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
@@ -26149,7 +26511,7 @@ class TestSmartThreadScenarios:
             'num_stopped': num_stopped_arg
         }
 
-        self.scenario_driver(
+        scenario_driver(
             scenario_builder=ConfigVerifier.build_smart_start_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
@@ -26504,323 +26866,6 @@ class TestSmartThreadScenarios:
         log_ver.verify_log_results(match_results)
 
         logger.warning('mainline exiting')
-
-    ####################################################################
-    # scenario_driver
-    ####################################################################
-    @staticmethod
-    def scenario_driver(
-            scenario_builder: Callable[..., None],
-            scenario_builder_args: dict[str, Any],
-            caplog_to_use: pytest.CaptureFixture[str],
-            commander_config: AppConfig = AppConfig.ScriptStyle
-    ) -> None:
-        """Build and run a scenario.
-
-        Args:
-            scenario_builder: the ConfigVerifier builder method to call
-            scenario_builder_args: the args to pass to the builder
-            caplog_to_use: the capsys to capture log messages
-            commander_config: specifies how the commander will run
-
-        """
-        ################################################################
-        # f1
-        ################################################################
-        def f1(f1_name: str, f1_config_ver: ConfigVerifier):
-            log_msg_f1 = f'f1 entered for {f1_name}'
-            log_ver.add_msg(log_level=logging.DEBUG,
-                            log_msg=log_msg_f1)
-            logger.debug(log_msg_f1)
-
-            f1_config_ver.f1_driver(f1_name=f1_name)
-
-            ############################################################
-            # exit
-            ############################################################
-            log_msg_f1 = f'f1 exiting for {f1_name}'
-            log_ver.add_msg(log_level=logging.DEBUG,
-                            log_msg=log_msg_f1)
-            logger.debug(log_msg_f1)
-
-        ################################################################
-        # Set up log verification and start tests
-        ################################################################
-        commander_name = 'alpha'
-        log_ver = LogVer(log_name=__name__)
-        log_ver.add_call_seq(name=commander_name,
-                             seq=get_formatted_call_sequence())
-
-        random.seed(42)
-        msgs = Msgs()
-
-        config_ver = ConfigVerifier(commander_name=commander_name,
-                                    log_ver=log_ver,
-                                    caplog_to_use=caplog_to_use,
-                                    msgs=msgs,
-                                    max_msgs=10)
-
-        config_ver.log_test_msg('mainline entered')
-        config_ver.log_test_msg(f'scenario builder: {scenario_builder}')
-        config_ver.log_test_msg(f'scenario args: {scenario_builder_args}')
-        config_ver.log_test_msg(f'{commander_config=}')
-
-        config_ver.unregistered_names -= {commander_name}
-        config_ver.active_names |= {commander_name}
-
-        scenario_builder(config_ver,
-                         **scenario_builder_args)
-
-        # config_ver.add_cmd(ValidateConfig(cmd_runners=commander_name))
-        config_ver.add_cmd(VerifyConfig(
-            cmd_runners=commander_name,
-            verify_type=VerifyType.VerifyStructures))
-
-        names = list(config_ver.active_names - {commander_name})
-        config_ver.build_exit_suite(cmd_runner=commander_name,
-                                    names=names)
-
-        config_ver.build_join_suite(
-            cmd_runners=[config_ver.commander_name],
-            join_target_names=names)
-
-        def initialize_config_ver(cmd_thread: st.SmartThread,
-                                  auto_start: bool,
-                                  auto_start_decision: AutoStartDecision,
-                                  exp_alive: bool,
-                                  thread_create: st.ThreadCreate,
-                                  exp_state: st.ThreadState) -> None:
-            """Set up the mock registry for the commander.
-
-            Args:
-                cmd_thread: the commander thread
-                auto_start: specifies whether auto_start was specified
-                    on the init
-                auto_start_decision: specifies whether an auto start is
-                    not needed, yes, or no
-                exp_alive: specifies whether the thread is expected to
-                    be alive at the end of smart_init
-                thread_create: specifies which create style is done
-                exp_state: the expected state after smart_init
-
-            """
-            config_ver.all_threads[commander_name] = cmd_thread
-
-            config_ver.expected_registered[commander_name] = ThreadTracker(
-                thread=cmd_thread,
-                is_alive=False,
-                exiting=False,
-                is_auto_started=auto_start,
-                is_TargetThread=False,
-                exp_init_is_alive=exp_alive,
-                exp_init_thread_state=exp_state,
-                thread_create=thread_create,
-                auto_start_decision=auto_start_decision,
-                st_state=st.ThreadState.Unregistered,
-                found_del_pairs=defaultdict(int)
-            )
-
-            pe = config_ver.pending_events[commander_name]
-            pe[PE.start_request].append(
-                StartRequest(req_type=st.ReqType.Smart_init,
-                             targets={commander_name},
-                             unreg_remotes=set(),
-                             not_registered_remotes=set(),
-                             timeout_remotes=set(),
-                             stopped_remotes=set(),
-                             deadlock_remotes=set(),
-                             eligible_targets=set(),
-                             completed_targets=set(),
-                             first_round_completed=set(),
-                             stopped_target_threads=set()))
-
-            req_key_entry: RequestKey = ('smart_init',
-                                         'entry')
-            pe[PE.request_msg][req_key_entry] += 1
-
-            req_key_exit: RequestKey = ('smart_init',
-                                        'exit')
-            pe[PE.request_msg][req_key_exit] += 1
-
-            config_ver.commander_thread_config_built = True
-
-        ################################################################
-        # start commander
-        ################################################################
-        config_ver.monitor_pause = True
-        if commander_config == AppConfig.ScriptStyle:
-            commander_thread = st.SmartThread(
-                name=commander_name)
-
-            initialize_config_ver(
-                cmd_thread=commander_thread,
-                auto_start=True,
-                auto_start_decision=AutoStartDecision.auto_start_obviated,
-                exp_alive=True,
-                exp_state=st.ThreadState.Alive,
-                thread_create=st.ThreadCreate.Current)
-            config_ver.monitor_pause = False
-            config_ver.main_driver()
-        elif commander_config == AppConfig.CurrentThreadApp:
-            cmd_current_app = CommanderCurrentApp(
-                config_ver=config_ver,
-                name=commander_name,
-                max_msgs=10)
-
-            initialize_config_ver(
-                cmd_thread=cmd_current_app.smart_thread,
-                auto_start=False,
-                auto_start_decision=AutoStartDecision.auto_start_no,
-                exp_alive=True,
-                exp_state=st.ThreadState.Alive,
-                thread_create=st.ThreadCreate.Current)
-            config_ver.monitor_pause = False
-            cmd_current_app.run()
-        elif commander_config == AppConfig.RemoteThreadApp:
-            outer_thread_app = OuterThreadApp(
-                config_ver=config_ver,
-                name=commander_name,
-                max_msgs=10)
-
-            initialize_config_ver(
-                cmd_thread=outer_thread_app.smart_thread,
-                auto_start=False,
-                auto_start_decision=AutoStartDecision.auto_start_no,
-                exp_alive=False,
-                exp_state=st.ThreadState.Registered,
-                thread_create=st.ThreadCreate.Thread)
-            config_ver.monitor_pause = False
-
-            pe = config_ver.pending_events[commander_name]
-            pe[PE.start_request].append(
-                StartRequest(req_type=st.ReqType.Smart_start,
-                             targets={commander_name},
-                             unreg_remotes=set(),
-                             not_registered_remotes=set(),
-                             timeout_remotes=set(),
-                             stopped_remotes=set(),
-                             deadlock_remotes=set(),
-                             eligible_targets=set(),
-                             completed_targets=set(),
-                             first_round_completed=set(),
-                             stopped_target_threads=set()))
-
-            req_key_entry: RequestKey = ('smart_start',
-                                         'entry')
-
-            pe[PE.request_msg][req_key_entry] += 1
-
-            req_key_exit: RequestKey = ('smart_start',
-                                        'exit')
-            pe[PE.request_msg][req_key_exit] += 1
-
-            outer_thread_app.smart_thread.smart_start()
-            outer_thread_app.join()
-        elif commander_config == AppConfig.RemoteSmartThreadApp:
-            outer_thread_app = OuterSmartThreadApp(
-                config_ver=config_ver,
-                name=commander_name,
-                max_msgs=10)
-
-            initialize_config_ver(
-                cmd_thread=outer_thread_app,
-                auto_start=False,
-                auto_start_decision=AutoStartDecision.auto_start_no,
-                exp_alive=False,
-                exp_state=st.ThreadState.Registered,
-                thread_create=st.ThreadCreate.Thread)
-            config_ver.monitor_pause = False
-
-            pe = config_ver.pending_events[commander_name]
-            pe[PE.start_request].append(
-                StartRequest(req_type=st.ReqType.Smart_start,
-                             targets={commander_name},
-                             unreg_remotes=set(),
-                             not_registered_remotes=set(),
-                             timeout_remotes=set(),
-                             stopped_remotes=set(),
-                             deadlock_remotes=set(),
-                             eligible_targets=set(),
-                             completed_targets=set(),
-                             first_round_completed=set(),
-                             stopped_target_threads=set()))
-
-            req_key_entry: RequestKey = ('smart_start',
-                                         'entry')
-
-            pe[PE.request_msg][req_key_entry] += 1
-
-            req_key_exit: RequestKey = ('smart_start',
-                                        'exit')
-            pe[PE.request_msg][req_key_exit] += 1
-
-            outer_thread_app.smart_start(commander_name)
-            threading.Thread.join(outer_thread_app)
-        elif commander_config == AppConfig.RemoteSmartThreadApp2:
-            outer_thread_app = OuterSmartThreadApp2(
-                config_ver=config_ver,
-                name=commander_name,
-                max_msgs=10)
-
-            initialize_config_ver(
-                cmd_thread=outer_thread_app,
-                auto_start=False,
-                auto_start_decision=AutoStartDecision.auto_start_no,
-                exp_alive=False,
-                exp_state=st.ThreadState.Registered,
-                thread_create=st.ThreadCreate.Thread)
-            config_ver.monitor_pause = False
-
-            pe = config_ver.pending_events[commander_name]
-            pe[PE.start_request].append(
-                StartRequest(req_type=st.ReqType.Smart_start,
-                             targets={commander_name},
-                             unreg_remotes=set(),
-                             not_registered_remotes=set(),
-                             timeout_remotes=set(),
-                             stopped_remotes=set(),
-                             deadlock_remotes=set(),
-                             eligible_targets=set(),
-                             completed_targets=set(),
-                             first_round_completed=set(),
-                             stopped_target_threads=set()))
-
-            req_key_entry: RequestKey = ('smart_start',
-                                         'entry')
-
-            pe[PE.request_msg][req_key_entry] += 1
-
-            req_key_exit: RequestKey = ('smart_start',
-                                        'exit')
-            pe[PE.request_msg][req_key_exit] += 1
-
-            outer_thread_app.smart_start(commander_name)
-            threading.Thread.join(outer_thread_app)
-        else:
-            raise UnrecognizedCmd('scenario_driver does not recognize '
-                                  f'{commander_config=}')
-
-        ################################################################
-        # check that pending events are complete
-        ################################################################
-
-        config_ver.log_test_msg('Monitor Checkpoint: check_pending_events 42')
-        config_ver.monitor_event.set()
-        config_ver.check_pending_events_complete_event.wait()
-
-        config_ver.monitor_exit = True
-        config_ver.monitor_event.set()
-        config_ver.monitor_thread.join()
-
-        ################################################################
-        # check log results
-        ################################################################
-        match_results = log_ver.get_match_results(
-            caplog=caplog_to_use)
-        log_ver.print_match_results(match_results)
-        log_ver.verify_log_results(match_results)
-
-        logger.debug('mainline exiting')
 
     # ##################################################################
     # # test_smart_thread_scenarios
