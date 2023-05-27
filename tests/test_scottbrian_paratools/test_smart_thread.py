@@ -159,6 +159,12 @@ class SendType(Enum):
     Broadcast = auto()
     SRMsgs = auto()
 
+class RecvType(Enum):
+    NoSenders = auto()
+    PartialSenders = auto()
+    MatchSenders = auto()
+    ExtraSenders = auto()
+    UnmatchSenders = auto()
 
 class MsgType(Enum):
     Text = auto()
@@ -177,7 +183,7 @@ class SendRecvMsgs:
                  sender_names: Iterable,
                  receiver_names: Iterable,
                  num_msgs: int,
-                 send_type: SendType) -> None:
+                 send_type: SendType = SendType.ToRemotes) -> None:
         self.sender_names = get_set(sender_names)
         self.receiver_names = get_set(receiver_names)
         self.num_msgs = num_msgs
@@ -1429,6 +1435,7 @@ class RecvMsg(ConfigCmd):
     def __init__(self,
                  cmd_runners: Iterable,
                  senders: Iterable,
+                 exp_senders: Iterable,
                  exp_msgs: SendRecvMsgs,
                  stopped_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
@@ -1437,6 +1444,8 @@ class RecvMsg(ConfigCmd):
         Args:
             cmd_runners: thread names that will execute the command
             senders: thread names that will do smart_send
+            exp_senders: names of threads that are expected to send a
+                msg depending on the RcvType
             exp_msgs: messages to be sent and verified
             stopped_remotes: thread names that are stopped
             log_msg: log message to specify on the smart_recv
@@ -1446,6 +1455,8 @@ class RecvMsg(ConfigCmd):
 
         self.senders = get_set(senders)
 
+        self.exp_senders = get_set(exp_senders)
+
         self.exp_msgs = exp_msgs
 
         self.log_msg = log_msg
@@ -1453,6 +1464,7 @@ class RecvMsg(ConfigCmd):
         self.stopped_remotes = get_set(stopped_remotes)
 
         self.arg_list += ['senders',
+                          'exp_senders',
                           'stopped_remotes']
 
     def run_process(self, cmd_runner: str) -> None:
@@ -1464,6 +1476,7 @@ class RecvMsg(ConfigCmd):
         self.config_ver.handle_recv_msg(
             cmd_runner=cmd_runner,
             senders=self.senders,
+            exp_senders=self.exp_senders,
             exp_msgs=self.exp_msgs,
             stopped_remotes=self.stopped_remotes,
             timeout_type=TimeoutType.TimeoutNone,
@@ -1480,6 +1493,7 @@ class RecvMsgTimeoutFalse(RecvMsg):
     def __init__(self,
                  cmd_runners: Iterable,
                  senders: Iterable,
+                 exp_senders: Iterable,
                  exp_msgs: SendRecvMsgs,
                  timeout: IntOrFloat,
                  stopped_remotes: Optional[Iterable] = None,
@@ -1489,6 +1503,8 @@ class RecvMsgTimeoutFalse(RecvMsg):
         Args:
             cmd_runners: thread names that will execute the command
             senders: thread names that will do smart_send
+            exp_senders: names of threads that are expected to send a
+                msg depending on the RcvType
             exp_msgs: messages to be sent and verified
             timeout: value to specify on the smart_recv
             stopped_remotes: thread names that are stopped
@@ -1496,6 +1512,7 @@ class RecvMsgTimeoutFalse(RecvMsg):
         """
         super().__init__(cmd_runners=cmd_runners,
                          senders=senders,
+                         exp_senders=exp_senders,
                          exp_msgs=exp_msgs,
                          stopped_remotes=stopped_remotes,
                          log_msg=log_msg)
@@ -1514,6 +1531,7 @@ class RecvMsgTimeoutFalse(RecvMsg):
         self.config_ver.handle_recv_msg(
             cmd_runner=cmd_runner,
             senders=self.senders,
+            exp_senders=self.exp_senders,
             exp_msgs=self.exp_msgs,
             stopped_remotes=self.stopped_remotes,
             timeout_type=TimeoutType.TimeoutFalse,
@@ -1530,6 +1548,7 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
     def __init__(self,
                  cmd_runners: Iterable,
                  senders: Iterable,
+                 exp_senders: Iterable,
                  exp_msgs: SendRecvMsgs,
                  timeout: IntOrFloat,
                  timeout_names: Iterable,
@@ -1540,6 +1559,8 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
         Args:
             cmd_runners: thread names that will execute the command
             senders: thread names that will do smart_send
+            exp_senders: names of threads that are expected to send a
+                msg depending on the RcvType
             exp_msgs: messages to be sent and verified
             timeout: value to specify on the smart_recv
             timeout_names: thread names that are expected to cause a
@@ -1549,6 +1570,7 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
         """
         super().__init__(cmd_runners=cmd_runners,
                          senders=senders,
+                         exp_senders=exp_senders,
                          exp_msgs=exp_msgs,
                          timeout=timeout,
                          stopped_remotes=stopped_remotes,
@@ -1568,6 +1590,7 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
         self.config_ver.handle_recv_msg(
             cmd_runner=cmd_runner,
             senders=self.senders,
+            exp_senders=self.exp_senders,
             exp_msgs=self.exp_msgs,
             stopped_remotes=self.stopped_remotes,
             timeout_type=TimeoutType.TimeoutTrue,
@@ -4740,6 +4763,9 @@ class RequestEntryExitLogSearchItem(LogSearchItem):
         for item in target_msg:
             targets.append(item[1:-1])
 
+        if not targets:
+            targets = ['']
+
         self.config_ver.handle_request_entry_exit_log_msg(
             cmd_runner=cmd_runner,
             request_name=request_name,
@@ -6730,8 +6756,10 @@ class StartRequest:
     completed_targets: set[str]
     first_round_completed: set[str]
     stopped_target_threads: set[str]
+    exp_senders: set[str]
     timeout_type: TimeoutType = TimeoutType.TimeoutNone
     req_type: st.ReqType = st.ReqType.NoReq
+
 
 
 @dataclass
@@ -6975,7 +7003,8 @@ class ConfigVerifier:
                 eligible_targets=set(),
                 completed_targets=set(),
                 first_round_completed=set(),
-                stopped_target_threads=set()
+                stopped_target_threads=set(),
+                exp_senders=set()
             )
             self.pending_events[name][PE.save_current_request] = StartRequest(
                 req_type=st.ReqType.NoReq,
@@ -6988,7 +7017,8 @@ class ConfigVerifier:
                 eligible_targets=set(),
                 completed_targets=set(),
                 first_round_completed=set(),
-                stopped_target_threads=set()
+                stopped_target_threads=set(),
+                exp_senders=set()
             )
             self.pending_events[name][PE.num_targets_remaining] = 0
             self.pending_events[name][PE.request_msg] = defaultdict(int)
@@ -15606,7 +15636,7 @@ class ConfigVerifier:
                                    serial_number=request_serial_num)
 
     ####################################################################
-    # build_send_rotate_state_scenario
+    # build_send_scenario
     ####################################################################
     def build_send_scenario(
             self,
@@ -15670,6 +15700,126 @@ class ConfigVerifier:
                 confirm_cmd='RecvMsg',
                 confirm_serial_num=recv_msg_serial_num,
                 confirmers=receivers))
+
+    ####################################################################
+    # build_recv_scenario
+    ####################################################################
+    def build_recv_scenario(
+            self,
+            num_extra_senders: int,
+            num_msgs: int,
+            recv_type: RecvType) -> None:
+        """Add cmds to run scenario.
+
+        Args:
+            num_extra_senders: number of senders beyond what is
+                required for the recv_type_arg
+            num_msgs: number of message to send
+            recv_type: type of recv to do
+
+        """
+        if recv_type == RecvType.NoSenders:
+            num_send_senders = 1 + num_extra_senders
+            num_extra_recv_senders = 0
+        elif recv_type == RecvType.PartialSenders:
+            num_send_senders = 2 + num_extra_senders
+            num_extra_recv_senders = 0
+        elif recv_type == RecvType.MatchSenders:
+            num_send_senders = 1 + num_extra_senders
+            num_extra_recv_senders = 0
+        elif recv_type == RecvType.ExtraSenders:
+            num_send_senders = 1 + num_extra_senders
+            num_extra_recv_senders = 1 + num_extra_senders
+        elif recv_type == RecvType.UnmatchSenders:
+            num_send_senders = 1 + num_extra_senders
+            num_extra_recv_senders = 1 + num_extra_senders
+
+        send_senders: set[str] = set()
+        for idx in range(num_send_senders):
+            send_senders |= {'send_sender_' + str(idx)}
+
+        extra_recv_senders: set[str] = set()
+        for idx in range(num_extra_recv_senders):
+            extra_recv_senders |= {'extra_recv_sender_' + str(idx)}
+
+        receiver = 'receiver_1'
+
+        self.create_config(
+            active_names=send_senders | extra_recv_senders | {receiver})
+
+        self.log_name_groups()
+
+        msgs_to_send = SendRecvMsgs(sender_names=send_senders,
+                                    receiver_names=receiver,
+                                    num_msgs=num_msgs)
+
+        recv_senders: set[str] = set()
+        if recv_type == RecvType.NoSenders:
+            num_recv_senders = 0
+            exp_timeout = False
+        elif recv_type == RecvType.PartialSenders:
+            num_recv_senders = len(send_senders) // 2
+            exp_timeout = False
+        elif recv_type == RecvType.MatchSenders:
+            num_recv_senders = len(send_senders)
+            exp_timeout = False
+        elif recv_type == RecvType.ExtraSenders:
+            num_recv_senders = len(send_senders)
+            exp_timeout = False
+        else:  # recv_type == RecvType.UnmatchSenders:
+            num_recv_senders = 0
+            exp_timeout = True
+
+        for idx, sender_name in enumerate(send_senders, 1):
+            if num_recv_senders < idx:
+                break
+            recv_senders |= sender_name
+
+        for idx, sender_name in enumerate(extra_recv_senders, 1):
+            if num_extra_recv_senders < idx:
+                break
+            recv_senders |= sender_name
+
+        ################################################################
+        # send messages
+        ################################################################
+        for msg_idx in range(num_msgs):
+            send_msg_serial_num = self.add_cmd(SendMsg(
+                cmd_runners=send_senders,
+                receivers=receiver,
+                msgs_to_send=msgs_to_send,
+                msg_idx=msg_idx,
+                send_type=SendType.ToRemotes))
+            self.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=self.commander_name,
+                    confirm_cmd='SendMsg',
+                    confirm_serial_num=send_msg_serial_num,
+                    confirmers=send_senders))
+
+        ############################################################
+        # receive messages
+        ############################################################
+        if exp_timeout:
+            recv_msg_serial_num = self.add_cmd(RecvMsgTimeoutTrue(
+                cmd_runners=receiver,
+                senders=recv_senders,
+                exp_senders=send_senders,
+                timeout=1,
+                timeout_names=recv_senders,
+                exp_msgs=msgs_to_send))
+        else:
+            recv_msg_serial_num = self.add_cmd(RecvMsg(
+                cmd_runners=receiver,
+                senders=recv_senders,
+                exp_senders=send_senders,
+                exp_msgs=msgs_to_send))
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='RecvMsg',
+                confirm_serial_num=recv_msg_serial_num,
+                confirmers=receiver))
 
     ####################################################################
     # build_sync_request
@@ -17060,7 +17210,8 @@ class ConfigVerifier:
             eligible_targets=set(),
             completed_targets=set(),
             first_round_completed=set(),
-            stopped_target_threads=set()))
+            stopped_target_threads=set(),
+            exp_senders=set()))
 
         req_key_entry: RequestKey = ('smart_init',
                                      'entry')
@@ -17445,7 +17596,8 @@ class ConfigVerifier:
                          eligible_targets=set(),
                          completed_targets=set(),
                          first_round_completed=set(),
-                         stopped_target_threads=set()))
+                         stopped_target_threads=set(),
+                         exp_senders=set()))
 
         req_key_entry: RequestKey = ('smart_join',
                                      'entry')
@@ -17514,6 +17666,7 @@ class ConfigVerifier:
     def handle_recv_msg(self,
                         cmd_runner: str,
                         senders: set[str],
+                        exp_senders: set[str],
                         exp_msgs: SendRecvMsgs,
                         stopped_remotes: set[str],
                         timeout_type: TimeoutType,
@@ -17525,6 +17678,8 @@ class ConfigVerifier:
         Args:
             cmd_runner: name of thread doing the cmd
             senders: names of the senders
+            exp_senders: senders that are expected to have sent a msg
+                based on the RecvType
             exp_msgs: expected messages by sender name
             stopped_remotes: names of remotes that are stopped.
             timeout_type: None, False, or True
@@ -17535,8 +17690,8 @@ class ConfigVerifier:
 
         """
         self.log_test_msg(f'handle_recv_msg entry: {cmd_runner=}, '
-                          f'{senders=}, {stopped_remotes=}, {timeout_type=}, '
-                          f'{timeout=}, {timeout_names=}')
+                          f'{senders=}, {exp_senders=}, {stopped_remotes=}, '
+                          f'{timeout_type=}, {timeout=}, {timeout_names=}')
 
         pe = self.pending_events[cmd_runner]
         pe[PE.start_request].append(
@@ -17551,7 +17706,8 @@ class ConfigVerifier:
                          eligible_targets=set(),
                          completed_targets=set(),
                          first_round_completed=set(),
-                         stopped_target_threads=set()))
+                         stopped_target_threads=set(),
+                         exp_senders=exp_senders))
 
         req_key_entry: RequestKey = ('smart_recv',
                                      'entry')
@@ -17588,7 +17744,7 @@ class ConfigVerifier:
                 senders=senders,
                 log_msg=log_msg)
 
-            for remote in senders:
+            for remote in exp_senders:
                 assert recvd_msg[remote] == exp_msgs.exp_received_msgs[
                     cmd_runner][remote]
             # self.add_log_msg(
@@ -17602,7 +17758,7 @@ class ConfigVerifier:
                 timeout=timeout,
                 log_msg=log_msg)
 
-            for remote in senders:
+            for remote in exp_senders:
                 assert recvd_msg[remote] == exp_msgs.exp_received_msgs[
                     cmd_runner][remote]
 
@@ -17628,8 +17784,8 @@ class ConfigVerifier:
                               rtn_name='handle_recv')
 
         self.log_test_msg(f'handle_recv_msg exit: {cmd_runner=}, '
-                          f'{senders=}, {stopped_remotes=}, {timeout_type=}, '
-                          f'{timeout=}, {timeout_names=}')
+                          f'{senders=}, {exp_senders=}, {stopped_remotes=}, '
+                          f'{timeout_type=}, {timeout=}, {timeout_names=}')
 
     ####################################################################
     # handle_request_entry_exit_log_msg
@@ -17683,10 +17839,15 @@ class ConfigVerifier:
                     f'{req_start_item.req_type.value=} but instead received '
                     f'log msg: {log_msg}')
 
-            if sorted(req_start_item.targets) != sorted(targets):
+            if not req_start_item.targets:
+                sorted_targets = ['']
+            else:
+                sorted_targets = sorted(req_start_item.targets)
+
+            if sorted_targets != sorted(targets):
                 raise InvalidInputDetected(
                     'handle_request_entry_exit_log_msg expected '
-                    f'{sorted(req_start_item.targets)=} to be equal to '
+                    f'{sorted_targets=} to be equal to '
                     f'{sorted(targets)=} for '
                     f'log msg: {log_msg}')
 
@@ -17775,7 +17936,8 @@ class ConfigVerifier:
                     eligible_targets=set(),
                     completed_targets=set(),
                     first_round_completed=set(),
-                    stopped_target_threads=set())
+                    stopped_target_threads=set(),
+                    exp_senders=set())
             else:
                 pe[PE.current_request] = StartRequest(
                     req_type=st.ReqType.NoReq,
@@ -17788,7 +17950,8 @@ class ConfigVerifier:
                     eligible_targets=set(),
                     completed_targets=set(),
                     first_round_completed=set(),
-                    stopped_target_threads=set())
+                    stopped_target_threads=set(),
+                    exp_senders=set())
 
     ####################################################################
     # handle_request_smart_init_entry
@@ -18137,11 +18300,13 @@ class ConfigVerifier:
         else:
             timeout_remotes = set()
 
-        eligible_targets = (pe[PE.current_request].targets.copy()
-                            - timeout_remotes
-                            - pe[PE.current_request].stopped_remotes)
-
+        # eligible_targets = (pe[PE.current_request].targets.copy()
+        #                     - timeout_remotes
+        #                     - pe[PE.current_request].stopped_remotes)
+        eligible_targets = pe[PE.current_request].exp_senders.copy()
+        self.log_test_msg(f'handle_request_smart_recv_entry {eligible_targets=}')
         for target in eligible_targets:
+            self.log_test_msg(f'handle_request_smart_recv_entry {target=}')
             ack_key: AckKey = (target, 'smart_recv')
 
             pe[PE.ack_msg][ack_key] += 1
@@ -18543,7 +18708,8 @@ class ConfigVerifier:
                          eligible_targets=set(),
                          completed_targets=set(),
                          first_round_completed=set(),
-                         stopped_target_threads=set()))
+                         stopped_target_threads=set(),
+                         exp_senders=set()))
 
         req_key_entry: RequestKey = ('smart_resume',
                                      'entry')
@@ -18687,7 +18853,8 @@ class ConfigVerifier:
                          eligible_targets=set(),
                          completed_targets=set(),
                          first_round_completed=set(),
-                         stopped_target_threads=set()))
+                         stopped_target_threads=set(),
+                         exp_senders=set()))
 
         req_key_entry: RequestKey = ('smart_send',
                                      'entry')
@@ -19091,7 +19258,8 @@ class ConfigVerifier:
                          eligible_targets=set(),
                          completed_targets=set(),
                          first_round_completed=set(),
-                         stopped_target_threads=set()))
+                         stopped_target_threads=set(),
+                         exp_senders=set()))
 
         req_key_entry: RequestKey = ('smart_start',
                                      'entry')
@@ -19317,7 +19485,8 @@ class ConfigVerifier:
                              eligible_targets=set(),
                              completed_targets=set(),
                              first_round_completed=set(),
-                             stopped_target_threads=set()))
+                             stopped_target_threads=set(),
+                             exp_senders=set()))
 
             req_key_entry: RequestKey = ('smart_start',
                                          'entry')
@@ -19581,7 +19750,8 @@ class ConfigVerifier:
                          eligible_targets=set(),
                          completed_targets=set(),
                          first_round_completed=set(),
-                         stopped_target_threads=set()))
+                         stopped_target_threads=set(),
+                         exp_senders=set()))
 
         req_key_entry: RequestKey = ('smart_sync',
                                      'entry')
@@ -19865,7 +20035,8 @@ class ConfigVerifier:
                          eligible_targets=set(),
                          completed_targets=set(),
                          first_round_completed=set(),
-                         stopped_target_threads=set()))
+                         stopped_target_threads=set(),
+                         exp_senders=set()))
 
         req_key_entry: RequestKey = ('smart_unreg',
                                      'entry')
@@ -19971,7 +20142,8 @@ class ConfigVerifier:
                          eligible_targets=set(),
                          completed_targets=set(),
                          first_round_completed=set(),
-                         stopped_target_threads=set()))
+                         stopped_target_threads=set(),
+                         exp_senders=set()))
 
         req_key_entry: RequestKey = ('smart_wait',
                                      'entry')
@@ -25013,7 +25185,8 @@ def scenario_driver(
                          eligible_targets=set(),
                          completed_targets=set(),
                          first_round_completed=set(),
-                         stopped_target_threads=set()))
+                         stopped_target_threads=set(),
+                         exp_senders=set()))
 
         req_key_entry: RequestKey = ('smart_init',
                                      'entry')
@@ -25084,7 +25257,8 @@ def scenario_driver(
                          eligible_targets=set(),
                          completed_targets=set(),
                          first_round_completed=set(),
-                         stopped_target_threads=set()))
+                         stopped_target_threads=set(),
+                         exp_senders=set()))
 
         req_key_entry: RequestKey = ('smart_start',
                                      'entry')
@@ -25124,7 +25298,8 @@ def scenario_driver(
                          eligible_targets=set(),
                          completed_targets=set(),
                          first_round_completed=set(),
-                         stopped_target_threads=set()))
+                         stopped_target_threads=set(),
+                         exp_senders=set()))
 
         req_key_entry: RequestKey = ('smart_start',
                                      'entry')
@@ -25164,7 +25339,8 @@ def scenario_driver(
                          eligible_targets=set(),
                          completed_targets=set(),
                          first_round_completed=set(),
-                         stopped_target_threads=set()))
+                         stopped_target_threads=set(),
+                         exp_senders=set()))
 
         req_key_entry: RequestKey = ('smart_start',
                                      'entry')
@@ -25283,13 +25459,13 @@ class TestSmartThreadSmokeTest:
 ########################################################################
 # TestSmartThreadScenarios class
 ########################################################################
-class TestSmartThreadCoverage:
+class TestSmartBasicScenarios:
     """Test class for SmartThread scenarios."""
 
     ####################################################################
     # test_send_scenarios
     ####################################################################
-    @pytest.mark.parametrize("num_msgs_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_msgs_arg", [1])
     @pytest.mark.parametrize("send_type_arg", [SendType.ToRemotes,
                                                SendType.Broadcast,
                                                SendType.SRMsgs])
@@ -25320,6 +25496,44 @@ class TestSmartThreadCoverage:
             caplog_to_use=caplog)
 
     ####################################################################
+    # test_recv_basic_scenarios
+    ####################################################################
+    @pytest.mark.parametrize("num_extra_senders_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_msgs_arg", [1, 2, 3])
+    @pytest.mark.parametrize("recv_type_arg", [RecvType.NoSenders,
+                                               RecvType.PartialSenders,
+                                               RecvType.MatchSenders,
+                                               RecvType.ExtraSenders,
+                                               RecvType.UnmatchSenders])
+    def test_recv_basic_scenario(
+            self,
+            num_extra_senders_arg: int,
+            num_msgs_arg: int,
+            recv_type_arg: RecvType,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            num_extra_senders_arg: number of senders beyond what is
+                required for the recv_type_arg
+            num_msgs_arg: number of message to send
+            recv_type_arg: type of recv to do
+            caplog: pytest fixture to capture log output
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {
+            'num_extra_senders': num_extra_senders_arg,
+            'num_msgs': num_msgs_arg,
+            'recv_type': recv_type_arg,
+        }
+
+        scenario_driver(
+            scenario_builder=ConfigVerifier.build_recv_scenario,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
+
+    ####################################################################
     # test_pending_sans_sync_scenarios
     ####################################################################
     @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_send,
@@ -25330,6 +25544,7 @@ class TestSmartThreadCoverage:
     @pytest.mark.parametrize("pending_request_tf_arg", [True, False])
     @pytest.mark.parametrize("pending_msg_count_arg", [0, 1, 2])
     @pytest.mark.parametrize("pending_wait_tf_arg", [True, False])
+    @pytest.mark.cover
     def test_pending_sans_sync_scenarios(
             self,
             request_type_arg: st.ReqType,
@@ -25369,6 +25584,7 @@ class TestSmartThreadCoverage:
     @pytest.mark.parametrize("pending_msg_count_arg", [0, 1, 2])
     @pytest.mark.parametrize("pending_wait_tf_arg", [True, False])
     @pytest.mark.parametrize("pending_sync_tf_arg", [True, False])
+    @pytest.mark.cover
     def test_pending_sync_only_scenarios(
             self,
             pending_msg_count_arg: int,
@@ -28336,6 +28552,7 @@ class TestSmartThreadErrors:
     ####################################################################
     # Basic Scenario1
     ####################################################################
+    @pytest.mark.cover
     def test_smart_thread_instantiation_errors(self):
         """Test error cases for SmartThread."""
         ################################################################
@@ -28353,38 +28570,38 @@ class TestSmartThreadErrors:
         logger.debug('mainline creating bad name thread')
 
         with pytest.raises(st.SmartThreadIncorrectNameSpecified):
-            _ = st.SmartThread(name=1)  # type: ignore
+            st.SmartThread(name=1)  # type: ignore
 
         test_thread = threading.Thread(target=f1)
         with pytest.raises(
                 st.SmartThreadMutuallyExclusiveTargetThreadSpecified):
 
-            _ = st.SmartThread(name='alpha', target=f1, thread=test_thread)
+            st.SmartThread(name='alpha', target=f1, thread=test_thread)
 
         with pytest.raises(st.SmartThreadArgsSpecificationWithoutTarget):
-            _ = st.SmartThread(name='alpha', args=(1,))
+            st.SmartThread(name='alpha', args=(1,))
 
         with pytest.raises(st.SmartThreadArgsSpecificationWithoutTarget):
-            _ = st.SmartThread(name='alpha', kwargs={'arg1': 1})
+            st.SmartThread(name='alpha', kwargs={'arg1': 1})
 
         with pytest.raises(st.SmartThreadArgsSpecificationWithoutTarget):
-            _ = st.SmartThread(name='alpha', args=(1,), kwargs={'arg1': 1})
+            st.SmartThread(name='alpha', args=(1,), kwargs={'arg1': 1})
 
         alpha_thread = st.SmartThread(name='alpha')
         alpha_thread.name = 1
-        with pytest.raises(st.SmartThreadIncorrectNameSpecified):
+        with pytest.raises(st.SmartThreadErrorInRegistry):
             alpha_thread._register()
 
         # we still have alpha with name changed to 1
         # which will cause the following registry error
         # when we try to create another thread
         with pytest.raises(st.SmartThreadErrorInRegistry):
-            _ = st.SmartThread(name='alpha')
+            st.SmartThread(name='alpha')
 
         alpha_thread.name = 'alpha'  # restore name
 
         with pytest.raises(st.SmartThreadNameAlreadyInUse):
-            _ = st.SmartThread(name='alpha')
+            st.SmartThread(name='alpha')
 
         logger.debug('mainline exiting')
 

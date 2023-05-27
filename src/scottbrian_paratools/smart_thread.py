@@ -2666,10 +2666,12 @@ class SmartThread:
         message queues for all threads in the current configuration. If
         no messages are found, *smart_recv* will continue to check all
         threads in the current configuration, even as the configuration
-        changes. In this way, a thread acting as a server can issue the
+        changes. When no senders are specifies, *smart_recv* will not
+        raise an error if any of the remote threads become inactive
+        stopped. In this way, a thread acting as a server can issue the
         *smart_recv* to simply park itself on the message queues of all
-        threads and return with any request messages as soon as they
-        arrive.
+        threads currently in the configuration and return with any
+        request messages as soon as they arrive.
 
         If senders are specified, *smart_recv* will look for messages
         only on its message queues for the specified senders. Unlike
@@ -4819,7 +4821,8 @@ class SmartThread:
         if remotes:
             targets_to_use = sorted(remotes)
         else:
-            targets_to_use = 'eligible per request'
+            # targets_to_use = 'eligible per request'
+            targets_to_use = ['']
         log_msg_body = (
             f'requestor: {self.cmd_runner}, '
             f'targets: {targets_to_use} '
