@@ -375,7 +375,7 @@ Expected output for Example5::
 ########################################################################
 from collections import defaultdict
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import auto, Enum, Flag, StrEnum
 import logging
@@ -424,10 +424,14 @@ class SendMsgs:
     """Class used for a set of messages to send."""
     send_msgs: dict[str, list[Any]]
 
+def make_def_dict():
+    return defaultdict(list)
+
 @dataclass
 class RecvMsgs:
     """Class used for a set of messages to send."""
-    recv_msgs: dict[str, list[Any]] = defaultdict(list)
+    recv_msgs: dict[str, list[Any]] = field(
+        default_factory=make_def_dict)
 
 ########################################################################
 # SmartThread class exceptions
@@ -571,7 +575,8 @@ class RequestBlock:
     do_refresh: bool
     exit_log_msg: Optional[str]
     msg_to_send: Any
-    ret_msg: Any
+    ret_msg: RecvMsgs
+    ret_resume_result: Any
     stopped_remotes: set[str]
     not_registered_remotes: set[str]
     deadlock_remotes: set[str]
@@ -2608,8 +2613,8 @@ class SmartThread:
     # smart_recv
     ####################################################################
     def smart_recv(self,
-                   senders: Optional[Iterable] = None,
                    received_msgs: RecvMsgs,
+                   senders: Optional[Iterable] = None,
                    timeout: OptIntFloat = None,
                    log_msg: Optional[str] = None) -> None:
         """Receive one or more messages from remote threads.
@@ -3035,8 +3040,8 @@ class SmartThread:
         for timeout_value in (SmartThread.K_REQUEST_MIN_INTERVAL,
                               request_block.request_max_interval):
             try:
-                logger.debug(f'TestDebug {self.name} checking for message '
-                             f'from {pk_remote.remote}')
+                # logger.debug(f'TestDebug {self.name} checking for message '
+                #              f'from {pk_remote.remote}')
                 received_msgs: list[Any] = []
                 # recv message from remote
                 with SmartThread._pair_array[pk_remote.pair_key].status_lock:
@@ -3058,7 +3063,7 @@ class SmartThread:
                     local_sb.recv_wait = False
 
                 # if here, msg_q was not empty (i.e., no exception)
-                request_block.ret_msg[pk_remote.remote] = received_msgs
+                request_block.ret_msg.recv_msgs[pk_remote.remote] = received_msgs
                 logger.debug(f'TestDebug {self.name} got message '
                              f'from {pk_remote.remote}, {received_msgs=}')
                 # if we had wanted to delete an entry in the
@@ -3479,7 +3484,7 @@ class SmartThread:
             self.wait_for_any = True
             request_block.completion_count = len(request_block.remotes) - 1
 
-        request_block.ret_msg = []
+        request_block.ret_resume_result = []
 
         self._request_loop(request_block=request_block)
 
@@ -3488,7 +3493,7 @@ class SmartThread:
         self.request = ReqType.NoReq
         self.wait_for_any = False
 
-        return request_block.ret_msg
+        return request_block.ret_resume_result
 
     ####################################################################
     # _process_wait
@@ -3542,7 +3547,7 @@ class SmartThread:
                 logger.info(
                     f'{self.name} smart_wait resumed by '
                     f'{pk_remote.remote}')
-                request_block.ret_msg.append(pk_remote.remote)
+                request_block.ret_resume_result.append(pk_remote.remote)
                 return True
 
             with SmartThread._pair_array[pk_remote.pair_key].status_lock:
@@ -4344,7 +4349,8 @@ class SmartThread:
             # request as soon as we know about any unresolvable failures
             if ((request_block.stopped_remotes and request_block.remotes
                  and not (self.request == ReqType.Smart_wait
-                          and self.wait_for_any and request_block.ret_msg))
+                          and self.wait_for_any
+                          and request_block.ret_resume_result))
                     or request_block.deadlock_remotes
                     or request_block.timer.is_expired()):
 
@@ -4385,12 +4391,14 @@ class SmartThread:
                     continue_request_loop = False
             else:
                 if (request_block.request == ReqType.Smart_recv
-                        or request_block.request == ReqType.Smart_wait):
-                    if request_block.ret_msg:
-                        continue_request_loop = False
-                    else:  # keep looking
-                        self._set_work_pk_remotes(request_block.request)
-                        time.sleep(0.2)
+                        and request_block.ret_msg.recv_msgs):
+                    continue_request_loop = False
+                elif (request_block.request == ReqType.Smart_wait
+                      and request_block.ret_resume_result):
+                    continue_request_loop = False
+                else:  # keep looking
+                    self._set_work_pk_remotes(request_block.request)
+                    time.sleep(0.2)
 
         ################################################################
         # cleanup
@@ -4795,6 +4803,7 @@ class SmartThread:
             exit_log_msg=exit_log_msg,
             msg_to_send=msg_to_send,
             ret_msg=None,
+            ret_resume_result=None,
             stopped_remotes=set(),
             not_registered_remotes=set(),
             deadlock_remotes=set(),
