@@ -373,6 +373,7 @@ Expected output for Example5::
 ########################################################################
 # Standard Library
 ########################################################################
+from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
@@ -423,6 +424,10 @@ class SendMsgs:
     """Class used for a set of messages to send."""
     send_msgs: dict[str, list[Any]]
 
+@dataclass
+class RecvMsgs:
+    """Class used for a set of messages to send."""
+    recv_msgs: dict[str, list[Any]] = defaultdict(list)
 
 ########################################################################
 # SmartThread class exceptions
@@ -2604,18 +2609,18 @@ class SmartThread:
     ####################################################################
     def smart_recv(self,
                    senders: Optional[Iterable] = None,
+                   received_msgs: RecvMsgs,
                    timeout: OptIntFloat = None,
-                   log_msg: Optional[str] = None) -> dict[str, Any]:
+                   log_msg: Optional[str] = None) -> None:
         """Receive one or more messages from remote threads.
 
         Args:
             senders: thread names whose sent messages are to be received
+            received_msgs: the RecvMsgs object where messages will be
+                placed as they are received
             timeout: number of seconds to wait for message
             log_msg: additional text to append to the debug log message
                 that is issued on request entry and exit
-
-        Returns:
-            dictionary of received messages, indexed by thread name
 
         Raises:
             SmartThreadRemoteThreadNotAlive: target thread was
@@ -2654,29 +2659,33 @@ class SmartThread:
         messages in a dictionary indexed by sender thread name.
 
         When *smart_recv* gets control, it will check its message
-        queues for each of the specified senders. If one or more
-        messages are found, it will immediately return them in the
-        RecvMsgs dictionary. If no messages were initially found,
-        *smart_recv* will continue to check until one or more messages
-        arrive, at which point it will return them. If timeout is
-        specified, *smart_recv* will raise a timeout error if no
-        messages appear within the specified time.
+        queues for each of the specified senders and place any messages
+        found into the received_msgs dictionary (type RecvMsgs) and
+        then return. If no messages were initially found, *smart_recv*
+        will continue to periodically check until one or more messages
+        arrive, at which point it place then into the received_msgs and
+        return them. If timeout is specified, *smart_recv* will raise a
+        timeout error if no messages appear within the specified time.
 
         If no senders are specified, the *smart_recv* will check its
         message queues for all threads in the current configuration. If
         no messages are found, *smart_recv* will continue to check all
         threads in the current configuration, even as the configuration
         changes. When no senders are specifies, *smart_recv* will not
-        raise an error if any of the remote threads become inactive
-        stopped. In this way, a thread acting as a server can issue the
-        *smart_recv* to simply park itself on the message queues of all
-        threads currently in the configuration and return with any
-        request messages as soon as they arrive.
+        raise an error if any of the remote threads become inactive. In
+        this way, a thread acting as a server can issue the *smart_recv*
+        to simply park itself on the message queues of all threads
+        currently in the configuration and return with any messages as
+        soon as they arrive.
 
         If senders are specified, *smart_recv* will look for messages
         only on its message queues for the specified senders. Unlike
         the "no senders specified" case, *smart_recv* will raise an
         error if any of the specified senders become inactive.
+
+        If *smart_recv* raises an error, any messages that were received
+        will have been placed into *received_msgs* and will thus be
+        available to the caller during its recovery processing.
 
         Examples in this section cover the following cases:
 
@@ -2953,14 +2962,12 @@ class SmartThread:
             timeout=timeout,
             log_msg=log_msg)
 
-        request_block.ret_msg = {}
+        request_block.ret_msg = received_msgs
         self._request_loop(request_block=request_block)
 
         logger.debug(request_block.exit_log_msg)
 
         self.request = ReqType.NoReq
-
-        return request_block.ret_msg
 
     ####################################################################
     # _process_recv_msg

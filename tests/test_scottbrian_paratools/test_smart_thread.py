@@ -160,7 +160,7 @@ class SendType(Enum):
     SRMsgs = auto()
 
 class RecvType(Enum):
-    NoSenders = auto()
+    AliveSenders = auto()
     PartialSenders = auto()
     MatchSenders = auto()
     ExtraSenders = auto()
@@ -15718,7 +15718,7 @@ class ConfigVerifier:
             recv_type: type of recv to do
 
         """
-        if recv_type == RecvType.NoSenders:
+        if recv_type == RecvType.AliveSenders:
             num_send_senders = 1 + num_extra_senders
             num_extra_recv_senders = 0
         elif recv_type == RecvType.PartialSenders:
@@ -15754,7 +15754,7 @@ class ConfigVerifier:
                                     num_msgs=num_msgs)
 
         recv_senders: set[str] = set()
-        if recv_type == RecvType.NoSenders:
+        if recv_type == RecvType.AliveSenders:
             num_recv_senders = 0
             exp_timeout = False
         elif recv_type == RecvType.PartialSenders:
@@ -15773,13 +15773,17 @@ class ConfigVerifier:
         for idx, sender_name in enumerate(send_senders, 1):
             if num_recv_senders < idx:
                 break
-            recv_senders |= sender_name
+            recv_senders |= {sender_name}
 
         for idx, sender_name in enumerate(extra_recv_senders, 1):
             if num_extra_recv_senders < idx:
                 break
-            recv_senders |= sender_name
+            recv_senders |= {sender_name}
 
+        if recv_type == RecvType.AliveSenders:
+            exp_senders: set[str] = send_senders
+        else:
+            exp_senders: set[str] = send_senders & recv_senders
         ################################################################
         # send messages
         ################################################################
@@ -15804,7 +15808,7 @@ class ConfigVerifier:
             recv_msg_serial_num = self.add_cmd(RecvMsgTimeoutTrue(
                 cmd_runners=receiver,
                 senders=recv_senders,
-                exp_senders=send_senders,
+                exp_senders=exp_senders,
                 timeout=1,
                 timeout_names=recv_senders,
                 exp_msgs=msgs_to_send))
@@ -15812,7 +15816,7 @@ class ConfigVerifier:
             recv_msg_serial_num = self.add_cmd(RecvMsg(
                 cmd_runners=receiver,
                 senders=recv_senders,
-                exp_senders=send_senders,
+                exp_senders=exp_senders,
                 exp_msgs=msgs_to_send))
         self.add_cmd(
             ConfirmResponse(
@@ -17744,6 +17748,7 @@ class ConfigVerifier:
                 senders=senders,
                 log_msg=log_msg)
 
+            assert sorted(exp_senders) == sorted(recvd_msg.keys())
             for remote in exp_senders:
                 assert recvd_msg[remote] == exp_msgs.exp_received_msgs[
                     cmd_runner][remote]
@@ -17758,6 +17763,7 @@ class ConfigVerifier:
                 timeout=timeout,
                 log_msg=log_msg)
 
+            assert sorted(exp_senders) == sorted(recvd_msg.keys())
             for remote in exp_senders:
                 assert recvd_msg[remote] == exp_msgs.exp_received_msgs[
                     cmd_runner][remote]
@@ -25500,7 +25506,7 @@ class TestSmartBasicScenarios:
     ####################################################################
     @pytest.mark.parametrize("num_extra_senders_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_msgs_arg", [1, 2, 3])
-    @pytest.mark.parametrize("recv_type_arg", [RecvType.NoSenders,
+    @pytest.mark.parametrize("recv_type_arg", [RecvType.AliveSenders,
                                                RecvType.PartialSenders,
                                                RecvType.MatchSenders,
                                                RecvType.ExtraSenders,
