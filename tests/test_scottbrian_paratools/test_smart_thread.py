@@ -166,6 +166,7 @@ class RecvType(Enum):
     ExtraSenders = auto()
     UnmatchSenders = auto()
 
+
 class MsgType(Enum):
     Text = auto()
     # Int = auto()
@@ -242,56 +243,15 @@ class SendRecvMsgs:
         self.exp_received_msgs[receiver_name][sender_name].append(msg)
 
 
-# class BaseMsgs:
-#     def __init__(self,
-#                  sender_names: Iterable,
-#                  receiver_names: Iterable,
-#                  max_msgs: int = 3) -> None:
-#         self.sender_names = get_set(sender_names)
-#         self.receiver_names = get_set(receiver_names)
-#         self.max_msgs = max_msgs
-#         self.broadcast_msgs: dict[str, list[Any]] = {}
-#         self.directed_msgs: dict[str, dict[str, list[Any]]] = {}
-#         self.received_msgs: dict[str, dict[str, list[Any]]] = {}
-#         self.build_msgs()
-#
-#     def build_msgs(self):
-#         for sender_name in self.sender_names:
-#             self.broadcast_msgs[sender_name] = []
-#             for msg_idx in range(self.max_msgs):
-#                 self.broadcast_msgs[sender_name].append(
-#                     f'{sender_name} broadcast message {msg_idx}')
-#
-#             self.directed_msgs[sender_name] = {}
-#             for receiver_name in self.receiver_names:
-#                 self.directed_msgs[sender_name][receiver_name] = []
-#                 for msg_idx in range(self.max_msgs):
-#                     self.directed_msgs[sender_name][receiver_name].append(
-#                         f'{sender_name} message {msg_idx} to {receiver_name}')
-#
-#
-# @pytest.fixture(scope="class")
-# def base_msgs() -> BaseMsgs:
-#     """Build base message.
-#
-#     Returns:
-#         The message used for testing send/recv
-#     """
-#     num_senders = 6
-#     num_receivers = 6
-#     max_msgs = 3
-#     sender_names: set[str] = set()
-#     for idx in range(num_senders):
-#         sender_names |= f'sender_{idx}'
-#
-#     receiver_names: set[str] = set()
-#     for idx in range(num_receivers):
-#         receiver_names |= f'receiver_{idx}'
-#
-#     ret_base_msgs: BaseMsgs = BaseMsgs(sender_names=sender_names,
-#                                        receiver_names=receiver_names,
-#                                        max_msgs=max_msgs)
-#     return ret_base_msgs
+########################################################################
+# WaitType
+########################################################################
+class WaitType(Enum):
+    AliveResumers = auto()
+    PartialResumers = auto()
+    MatchResumers = auto()
+    ExtraResumers = auto()
+    UnmatchResumers = auto()
 
 
 ########################################################################
@@ -15726,9 +15686,9 @@ class ConfigVerifier:
                 confirmers=receivers))
 
     ####################################################################
-    # build_recv_scenario
+    # build_recv_basic_scenario
     ####################################################################
-    def build_recv_scenario(
+    def build_recv_basic_scenario(
             self,
             num_extra_senders: int,
             num_msgs: int,
@@ -15906,6 +15866,129 @@ class ConfigVerifier:
                 confirm_cmd='Wait',
                 confirm_serial_num=wait_serial_num,
                 confirmers=waiters))
+
+    ####################################################################
+    # build_wait_basic_scenario
+    ####################################################################
+    def build_wait_basic_scenario(
+            self,
+            num_extra_resumers: int,
+            wait_type: RecvType) -> None:
+        """Add cmds to run scenario.
+
+        Args:
+            num_extra_resumers: number of resumers beyond what is
+                required for the wait_type_arg
+            wait_type: type of wait to do
+
+        """
+        if wait_type == WaitType.AliveResumers:
+            num_resume_resumers = 1 + num_extra_resumers
+            num_extra_wait_resumers = 0
+        elif wait_type == WaitType.PartialResumers:
+            num_resume_resumers = 2 + num_extra_resumers
+            num_extra_wait_resumers = 0
+        elif wait_type == WaitType.MatchResumers:
+            num_resume_resumers = 1 + num_extra_resumers
+            num_extra_wait_resumers = 0
+        elif wait_type == WaitType.ExtraResumers:
+            num_resume_resumers = 1 + num_extra_resumers
+            num_extra_wait_resumers = 1 + num_extra_resumers
+        elif wait_type == WaitType.UnmatchResumers:
+            num_resume_resumers = 1 + num_extra_resumers
+            num_extra_wait_resumers = 1 + num_extra_resumers
+
+        resume_resumers: set[str] = set()
+        for idx in range(num_resume_resumers):
+            resume_resumers |= {'resume_resumer_' + str(idx)}
+
+        extra_wait_resumers: set[str] = set()
+        for idx in range(num_extra_wait_resumers):
+            extra_wait_resumers |= {'extra_wait_resumer_' + str(idx)}
+
+        waiter = 'waiter_1'
+
+        self.create_config(
+            active_names=resume_resumers | extra_wait_resumers | {waiter})
+
+        self.log_name_groups()
+
+        wait_resumers: set[str] = set()
+        if wait_type == WaitType.AliveResumers:
+            num_wait_resumers = 0
+            exp_timeout = False
+        elif wait_type == WaitType.PartialResumers:
+            num_wait_resumers = len(resume_resumers) // 2
+            exp_timeout = False
+        elif wait_type == WaitType.MatchResumers:
+            num_wait_resumers = len(resume_resumers)
+            exp_timeout = False
+        elif wait_type == WaitType.ExtraResumers:
+            num_wait_resumers = len(resume_resumers)
+            exp_timeout = True
+        else:  # wait_type == WaitType.UnmatchResumers:
+            num_wait_resumers = 0
+            exp_timeout = True
+
+        for idx, resumer_name in enumerate(resume_resumers, 1):
+            if num_wait_resumers < idx:
+                break
+            wait_resumers |= {resumer_name}
+
+        for idx, resumer_name in enumerate(extra_wait_resumers, 1):
+            if num_extra_wait_resumers < idx:
+                break
+            wait_resumers |= {resumer_name}
+
+        if wait_type == WaitType.AliveResumers:
+            exp_resumers: set[str] = resume_resumers
+        else:
+            exp_resumers: set[str] = resume_resumers & wait_resumers
+
+        ################################################################
+        # resume
+        ################################################################
+        resume_serial_num = self.add_cmd(Resume(
+            cmd_runners=resume_resumers,
+            targets=waiter))
+
+        ################################################################
+        # confirm resumes are done
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='Resume',
+                confirm_serial_num=resume_serial_num,
+                confirmers=resume_resumers))
+
+        ################################################################
+        # wait
+        ################################################################
+        if exp_timeout:
+            cmd_to_confirm = 'WaitTimeoutTrue'
+            wait_serial_num = self.add_cmd(WaitTimeoutTrue(
+                cmd_runners=waiter,
+                resumers=wait_resumers,
+                exp_resumers=exp_resumers,
+                timeout=1,
+                timeout_remotes=wait_resumers))
+        else:
+            cmd_to_confirm = 'Wait'
+            wait_serial_num = self.add_cmd(Wait(
+                cmd_runners=waiter,
+                resumers=wait_resumers,
+                exp_resumers=exp_resumers))
+
+        ################################################################
+        # confirm waits are done
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd=cmd_to_confirm,
+                confirm_serial_num=wait_serial_num,
+                confirmers=waiter))
 
     ####################################################################
     # build_sync_request
@@ -25768,7 +25851,7 @@ class TestSmartBasicScenarios:
         }
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_recv_scenario,
+            scenario_builder=ConfigVerifier.build_recv_basic_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 
@@ -25806,7 +25889,7 @@ class TestSmartBasicScenarios:
         }
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_recv_scenario,
+            scenario_builder=ConfigVerifier.build_recv_basic_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 
@@ -25866,6 +25949,75 @@ class TestSmartBasicScenarios:
 
         scenario_driver(
             scenario_builder=ConfigVerifier.build_resume_basic_scenario,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
+
+    ####################################################################
+    # test_wait_basic_scenario
+    ####################################################################
+    @pytest.mark.parametrize("num_extra_resumers_arg", [0])
+    @pytest.mark.parametrize("wait_type_arg", [WaitType.AliveResumers,
+                                               WaitType.PartialResumers,
+                                               WaitType.MatchResumers,
+                                               WaitType.ExtraResumers,
+                                               WaitType.UnmatchResumers])
+    @pytest.mark.cover
+    def test_wait_basic_scenario_cover(
+            self,
+            num_extra_resumers_arg: int,
+            wait_type_arg: WaitType,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            num_extra_resumers_arg: number of resumers beyond what is
+                required for the wait_type_arg
+            wait_type_arg: type of wait to do
+            caplog: pytest fixture to capture log output
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {
+            'num_extra_resumers': num_extra_resumers_arg,
+            'wait_type': wait_type_arg,
+        }
+
+        scenario_driver(
+            scenario_builder=ConfigVerifier.build_wait_basic_scenario,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
+
+    ####################################################################
+    # test_wait_basic_scenario
+    ####################################################################
+    @pytest.mark.parametrize("num_extra_resumers_arg", [0, 1, 2])
+    @pytest.mark.parametrize("wait_type_arg", [WaitType.AliveResumers,
+                                               WaitType.PartialResumers,
+                                               WaitType.MatchResumers,
+                                               WaitType.ExtraResumers,
+                                               WaitType.UnmatchResumers])
+    def test_wait_basic_scenario(
+            self,
+            num_extra_resumers_arg: int,
+            wait_type_arg: WaitType,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            num_extra_resumers_arg: number of resumers beyond what is
+                required for the wait_type_arg
+            wait_type_arg: type of wait to do
+            caplog: pytest fixture to capture log output
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {
+            'num_extra_resumers': num_extra_resumers_arg,
+            'wait_type': wait_type_arg,
+        }
+
+        scenario_driver(
+            scenario_builder=ConfigVerifier.build_wait_basic_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 

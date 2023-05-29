@@ -3174,11 +3174,16 @@ class SmartThread:
             resumers: names of threads that we expect to resume us
             wait_for: specifies whether to wait for only one remote or
                 for all remotes
-            resumed_by: list of thread names that the wait detected as
-                having done a resume. Note that the list is a subset of
+            resumed_by: set of thread names that the wait detected as
+                having done a resume. This is both and input and an
+                output parameter, passed in normally as an empty set by
+                the caller and modified by smart_wait as output. This is
+                done to allow the caller to recover the information in
+                an except clause in the event of an error raised by
+                smart_wait. Note that the output set will be a subset of
                 the specified *resumers*. If the *wait_for*
                 specification is WaitFor.All, then *resumed_by* will
-                be equal to *resumers*.
+                be equal to *resumers* provided there are no errors.
             timeout: number of seconds to allow for wait to be
                 resumed
             log_msg: additional text to append to the debug log message
@@ -3230,12 +3235,12 @@ class SmartThread:
                active and other threads being stopped while smart_wait
                continues to wait.
 
-        For cases 1 and 2: an error is raised if any of the specified
-        resumer threads is stopped before it issues the smart_resume.
+        For cases 1 and 2: smart_wait will raise an error if any of the
+        specified resumer threads become inactive before they issue
+        the smart_resume.
 
-        For cases 1, 2, and 3: if timeout is specified, a timeout error
-        is raised if the smart_wait is not resumed within the specified
-        time.
+        For cases 1, 2, and 3: if timeout is specified, smart_wait will
+        raise an error if not resumed within the specified time.
 
         Note that a smart_resume can be issued before the smart_wait is
         issued, in which case the smart_wait will return immediately
