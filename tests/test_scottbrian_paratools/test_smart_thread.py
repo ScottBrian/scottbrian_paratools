@@ -8498,9 +8498,9 @@ class ConfigVerifier:
                     exp_msgs=msgs_to_send))
 
     ####################################################################
-    # build_pending_sans_sync_scenarios
+    # build_pending_sans_sync_scenario
     ####################################################################
-    def build_pending_sans_sync_scenarios(
+    def build_pending_sans_sync_scenario(
             self,
             request_type: st.ReqType,
             pending_request_tf: bool,
@@ -8519,7 +8519,7 @@ class ConfigVerifier:
 
         Notes:
             There are two test cases dealing with the pending flags:
-            test_pending_sans_sync_scenarios:
+            test_pending_sans_sync_scenario:
                 this will test combinations for:
                     pending_request: True, False
                     pending_msg: count of 0, 1, 2
@@ -8530,7 +8530,7 @@ class ConfigVerifier:
                     smart_wait
                     smart_resume
 
-            test_pending_sync_only_scenarios:
+            test_pending_sync_only_scenario:
                 this will test combinations for:
                     pending_request: True
                     pending_msg: count of 0, 1, 2
@@ -8696,7 +8696,7 @@ class ConfigVerifier:
                            stopped_remotes=stopped_remotes))
             else:
                 raise InvalidInputDetected(
-                    'build_pending_sans_sync_scenarios detected invalid '
+                    'build_pending_sans_sync_scenario detected invalid '
                     f'input with {request_type=}')
 
             lock_positions.append(pending_names[0])
@@ -8937,7 +8937,7 @@ class ConfigVerifier:
 
         Notes:
             There are two test cases dealing with the pending flags:
-            test_pending_sans_sync_scenarios:
+            test_pending_sans_sync_scenario:
                 this will test combinations for:
                     pending_request: True, False
                     pending_msg: count of 0, 1, 2
@@ -8948,7 +8948,7 @@ class ConfigVerifier:
                     smart_wait
                     smart_resume
 
-            test_pending_sync_only_scenarios:
+            test_pending_sync_only_scenario:
                 this will test combinations for:
                     pending_request: True
                     pending_msg: count of 0, 1, 2
@@ -9838,9 +9838,9 @@ class ConfigVerifier:
             obtain_reg_lock=True))
 
     ####################################################################
-    # build_backout_sync_scenario
+    # build_backout_sync_remote_scenario
     ####################################################################
-    def build_backout_sync_scenario(self) -> None:
+    def build_backout_sync_remote_scenario(self) -> None:
         """Return a list of ConfigCmd items for a create."""
         pending_names = ['pending_0']
         remote_names = ['remote_0']
@@ -9991,7 +9991,7 @@ class ConfigVerifier:
             obtain_reg_lock=True))
 
     ####################################################################
-    # build_backout_sync_scenario
+    # build_backout_sync_local_scenario
     ####################################################################
     def build_backout_sync_local_scenario(self) -> None:
         """Return a list of ConfigCmd items for a create."""
@@ -15825,6 +15825,58 @@ class ConfigVerifier:
                 confirm_cmd='RecvMsg',
                 confirm_serial_num=recv_msg_serial_num,
                 confirmers=receiver))
+
+    ####################################################################
+    # build_resume_basic_scenario
+    ####################################################################
+    def build_resume_basic_scenario(
+            self,
+            num_resumers: int,
+            num_waiters: int) -> None:
+        """Add cmds to run scenario.
+
+        Args:
+            num_resumers: number of resumer threads
+            num_waiters: number of waiter threads
+
+        """
+        resumers: set[str] = set()
+        for idx in range(num_resumers):
+            resumers |= {'resumer_' + str(idx)}
+
+        waiters: set[str] = set()
+        for idx in range(num_waiters):
+            waiters |= {'waiter_' + str(idx)}
+
+        self.create_config(active_names=resumers | waiters)
+
+        self.log_name_groups()
+
+        ############################################################
+        # resume
+        ############################################################
+        resume_serial_num = self.add_cmd(Resume(
+            cmd_runners=resumers,
+            targets=waiters))
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='Resume',
+                confirm_serial_num=resume_serial_num,
+                confirmers=resumers))
+
+        ############################################################
+        # receive messages
+        ############################################################
+        # wait_serial_num = self.add_cmd(Wait(
+        #     cmd_runners=waiters,
+        #     resumers=resumers))
+        # self.add_cmd(
+        #     ConfirmResponse(
+        #         cmd_runners=self.commander_name,
+        #         confirm_cmd='Wait',
+        #         confirm_serial_num=wait_serial_num,
+        #         confirmers=waiters))
 
     ####################################################################
     # build_sync_request
@@ -25528,14 +25580,19 @@ class TestSmartBasicScenarios:
     """Test class for SmartThread scenarios."""
 
     ####################################################################
-    # test_send_scenarios
+    # test_send_scenario
     ####################################################################
+    @pytest.mark.parametrize("num_senders_arg", [1])
+    @pytest.mark.parametrize("num_receivers_arg", [1])
     @pytest.mark.parametrize("num_msgs_arg", [1])
     @pytest.mark.parametrize("send_type_arg", [SendType.ToRemotes,
                                                SendType.Broadcast,
                                                SendType.SRMsgs])
-    def test_send_scenarios(
+    @pytest.mark.cover
+    def test_send_scenario_cover(
             self,
+            num_senders_arg: int,
+            num_receivers_arg: int,
             num_msgs_arg: int,
             send_type_arg: SendType,
             caplog: pytest.CaptureFixture[str]
@@ -25543,20 +25600,97 @@ class TestSmartBasicScenarios:
         """Test meta configuration scenarios.
 
         Args:
+            num_senders_arg: number of sender threads
+            num_receivers_arg: number of receiver threads
             num_msgs_arg: number of message to send
             send_type_arg: type of send to do
             caplog: pytest fixture to capture log output
 
         """
         args_for_scenario_builder: dict[str, Any] = {
-            'num_senders': 2,
-            'num_receivers': 2,
+            'num_senders': num_senders_arg,
+            'num_receivers': num_receivers_arg,
             'num_msgs': num_msgs_arg,
             'send_type': send_type_arg,
         }
 
         scenario_driver(
             scenario_builder=ConfigVerifier.build_send_scenario,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
+
+    ####################################################################
+    # test_send_scenario
+    ####################################################################
+    @pytest.mark.parametrize("num_senders_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_receivers_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_msgs_arg", [1, 2, 3])
+    @pytest.mark.parametrize("send_type_arg", [SendType.ToRemotes,
+                                               SendType.Broadcast,
+                                               SendType.SRMsgs])
+    def test_send_scenario(
+            self,
+            num_senders_arg: int,
+            num_receivers_arg: int,
+            num_msgs_arg: int,
+            send_type_arg: SendType,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            num_senders_arg: number of sender threads
+            num_receivers_arg: number of receiver threads
+            num_msgs_arg: number of message to send
+            send_type_arg: type of send to do
+            caplog: pytest fixture to capture log output
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {
+            'num_senders': num_senders_arg,
+            'num_receivers': num_receivers_arg,
+            'num_msgs': num_msgs_arg,
+            'send_type': send_type_arg,
+        }
+
+        scenario_driver(
+            scenario_builder=ConfigVerifier.build_send_scenario,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
+
+    ####################################################################
+    # test_recv_basic_scenarios
+    ####################################################################
+    @pytest.mark.parametrize("num_extra_senders_arg", [0])
+    @pytest.mark.parametrize("num_msgs_arg", [1])
+    @pytest.mark.parametrize("recv_type_arg", [RecvType.AliveSenders,
+                                               RecvType.MatchSenders])
+    @pytest.mark.cover
+    def test_recv_basic_scenario_cover(
+            self,
+            num_extra_senders_arg: int,
+            num_msgs_arg: int,
+            recv_type_arg: RecvType,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            num_extra_senders_arg: number of senders beyond what is
+                required for the recv_type_arg
+            num_msgs_arg: number of message to send
+            recv_type_arg: type of recv to do
+            caplog: pytest fixture to capture log output
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {
+            'num_extra_senders': num_extra_senders_arg,
+            'num_msgs': num_msgs_arg,
+            'recv_type': recv_type_arg,
+        }
+
+        scenario_driver(
+            scenario_builder=ConfigVerifier.build_recv_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 
@@ -25599,18 +25733,44 @@ class TestSmartBasicScenarios:
             caplog_to_use=caplog)
 
     ####################################################################
-    # test_pending_sans_sync_scenarios
+    # test_resume_basic_scenario
     ####################################################################
-    @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_send,
-                                                  st.ReqType.Smart_recv,
-                                                  st.ReqType.Smart_wait,
-                                                  st.ReqType.Smart_resume,
+    @pytest.mark.parametrize("num_resumers_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_waiters_arg", [1, 2, 3])
+    def test_resume_basic_scenario(
+            self,
+            num_resumers_arg: int,
+            num_waiters_arg: int,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            num_resumers_arg: number of resumers
+            num_waiters_arg: number of waiters
+            caplog: pytest fixture to capture log output
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {
+            'num_resumers': num_resumers_arg,
+            'num_waiters': num_waiters_arg,
+        }
+
+        scenario_driver(
+            scenario_builder=ConfigVerifier.build_resume_basic_scenario,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
+
+    ####################################################################
+    # test_pending_sans_sync_scenario
+    ####################################################################
+    @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_send
                                                   ])
-    @pytest.mark.parametrize("pending_request_tf_arg", [True, False])
-    @pytest.mark.parametrize("pending_msg_count_arg", [0, 1, 2])
-    @pytest.mark.parametrize("pending_wait_tf_arg", [True, False])
+    @pytest.mark.parametrize("pending_request_tf_arg", [True])
+    @pytest.mark.parametrize("pending_msg_count_arg", [1])
+    @pytest.mark.parametrize("pending_wait_tf_arg", [True])
     @pytest.mark.cover
-    def test_pending_sans_sync_scenarios(
+    def test_pending_sans_sync_scenario_cover(
             self,
             request_type_arg: st.ReqType,
             pending_request_tf_arg: bool,
@@ -25639,18 +25799,62 @@ class TestSmartBasicScenarios:
         }
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_pending_sans_sync_scenarios,
+            scenario_builder=ConfigVerifier.build_pending_sans_sync_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 
     ####################################################################
-    # test_pending_sync_only_scenarios
+    # test_pending_sans_sync_scenario
     ####################################################################
+    @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_send,
+                                                  st.ReqType.Smart_recv,
+                                                  st.ReqType.Smart_wait,
+                                                  st.ReqType.Smart_resume,
+                                                  ])
+    @pytest.mark.parametrize("pending_request_tf_arg", [True, False])
     @pytest.mark.parametrize("pending_msg_count_arg", [0, 1, 2])
     @pytest.mark.parametrize("pending_wait_tf_arg", [True, False])
-    @pytest.mark.parametrize("pending_sync_tf_arg", [True, False])
+    def test_pending_sans_sync_scenario(
+            self,
+            request_type_arg: st.ReqType,
+            pending_request_tf_arg: bool,
+            pending_msg_count_arg: int,
+            pending_wait_tf_arg: bool,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            request_type_arg: request type that is to get the pending
+                flags set on it
+            pending_request_tf_arg: if True, pending_request flag is to
+                be set
+            pending_msg_count_arg: number of msgs to be placed on the
+                pending thread
+            pending_wait_tf_arg: if True, pending_wait flag is to be set
+            caplog: pytest fixture to capture log output
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {
+            'request_type': request_type_arg,
+            'pending_request_tf': pending_request_tf_arg,
+            'pending_msg_count': pending_msg_count_arg,
+            'pending_wait_tf': pending_wait_tf_arg,
+        }
+
+        scenario_driver(
+            scenario_builder=ConfigVerifier.build_pending_sans_sync_scenario,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
+
+    ####################################################################
+    # test_pending_sync_only_scenario
+    ####################################################################
+    @pytest.mark.parametrize("pending_msg_count_arg", [1])
+    @pytest.mark.parametrize("pending_wait_tf_arg", [True])
+    @pytest.mark.parametrize("pending_sync_tf_arg", [True])
     @pytest.mark.cover
-    def test_pending_sync_only_scenarios(
+    def test_pending_sync_only_scenario_cover(
             self,
             pending_msg_count_arg: int,
             pending_wait_tf_arg: bool,
@@ -25679,12 +25883,47 @@ class TestSmartBasicScenarios:
             caplog_to_use=caplog)
 
     ####################################################################
-    # test_remove_reasons_scenarios
+    # test_pending_sync_only_scenario
     ####################################################################
     @pytest.mark.parametrize("pending_msg_count_arg", [0, 1, 2])
     @pytest.mark.parametrize("pending_wait_tf_arg", [True, False])
     @pytest.mark.parametrize("pending_sync_tf_arg", [True, False])
-    def test_remove_reasons_scenarios(
+    def test_pending_sync_only_scenario(
+            self,
+            pending_msg_count_arg: int,
+            pending_wait_tf_arg: bool,
+            pending_sync_tf_arg: bool,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            pending_msg_count_arg: number of msgs to be placed on the
+                pending thread
+            pending_wait_tf_arg: if True, pending_wait flag is to be set
+            pending_sync_tf_arg: if True, pending_sync flag is to be set
+            caplog: pytest fixture to capture log output
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {
+            'pending_msg_count': pending_msg_count_arg,
+            'pending_wait_tf': pending_wait_tf_arg,
+            'pending_sync_tf': pending_wait_tf_arg,
+        }
+
+        scenario_driver(
+            scenario_builder=ConfigVerifier.build_pending_sync_only_scenarios,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
+
+    ####################################################################
+    # test_remove_reasons_scenario
+    ####################################################################
+    @pytest.mark.parametrize("pending_msg_count_arg", [1])
+    @pytest.mark.parametrize("pending_wait_tf_arg", [True])
+    @pytest.mark.parametrize("pending_sync_tf_arg", [True])
+    @pytest.mark.cover
+    def test_remove_reasons_scenario_cover(
             self,
             pending_msg_count_arg: int,
             pending_wait_tf_arg: bool,
@@ -25713,9 +25952,44 @@ class TestSmartBasicScenarios:
             caplog_to_use=caplog)
 
     ####################################################################
-    # test_backout_sync_scenario
+    # test_remove_reasons_scenario
     ####################################################################
-    def test_backout_sync_scenario(
+    @pytest.mark.parametrize("pending_msg_count_arg", [0, 1, 2])
+    @pytest.mark.parametrize("pending_wait_tf_arg", [True, False])
+    @pytest.mark.parametrize("pending_sync_tf_arg", [True, False])
+    def test_remove_reasons_scenario(
+            self,
+            pending_msg_count_arg: int,
+            pending_wait_tf_arg: bool,
+            pending_sync_tf_arg: bool,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            pending_msg_count_arg: number of msgs to be placed on the
+                pending thread
+            pending_wait_tf_arg: if True, pending_wait flag is to be set
+            pending_sync_tf_arg: if True, pending_sync flag is to be set
+            caplog: pytest fixture to capture log output
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {
+            'pending_msg_count': pending_msg_count_arg,
+            'pending_wait_tf': pending_wait_tf_arg,
+            'pending_sync_tf': pending_sync_tf_arg,
+        }
+
+        scenario_driver(
+            scenario_builder=ConfigVerifier.build_remove_reasons_scenarios,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
+
+    ####################################################################
+    # test_backout_sync_remote_scenario
+    ####################################################################
+    @pytest.mark.cover
+    def test_backout_sync_remote_scenario(
             self,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
@@ -25728,13 +26002,14 @@ class TestSmartBasicScenarios:
         args_for_scenario_builder: dict[str, Any] = {}
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_backout_sync_scenario,
+            scenario_builder=ConfigVerifier.build_backout_sync_remote_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 
     ####################################################################
-    # test_backout_sync_scenario
+    # test_backout_sync_local_scenario
     ####################################################################
+    @pytest.mark.cover
     def test_backout_sync_local_scenario(
             self,
             caplog: pytest.CaptureFixture[str]
@@ -25760,7 +26035,7 @@ class TestSmartThreadComboScenarios:
     """Test class for SmartThread scenarios."""
 
     ####################################################################
-    # test_join_timeout_scenarios
+    # test_join_timeout_scenario
     ####################################################################
     @pytest.mark.parametrize("timeout_type_arg",
                              [TimeoutType.TimeoutNone,
@@ -25772,7 +26047,7 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_delay_unreg_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_no_delay_reg_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_delay_reg_arg", [0, 1, 2])
-    def test_join_timeout_scenarios(
+    def test_join_timeout_scenario(
             self,
             timeout_type_arg: TimeoutType,
             num_active_no_target_arg: int,
@@ -25989,45 +26264,6 @@ class TestSmartThreadComboScenarios:
             caplog_to_use=caplog,
             commander_config=commander_config[command_config_num]
         )
-
-    ####################################################################
-    # test_send_scenarios
-    ####################################################################
-    @pytest.mark.parametrize("num_senders_arg", [1, 2, 3])
-    @pytest.mark.parametrize("num_receivers_arg", [1, 2, 3])
-    @pytest.mark.parametrize("num_msgs_arg", [1, 2, 3])
-    @pytest.mark.parametrize("send_type_arg", [SendType.ToRemotes,
-                                               SendType.Broadcast,
-                                               SendType.SRMsgs])
-    def test_send_scenarios(
-            self,
-            num_senders_arg: int,
-            num_receivers_arg: int,
-            num_msgs_arg: int,
-            send_type_arg: SendType,
-            caplog: pytest.CaptureFixture[str]
-    ) -> None:
-        """Test meta configuration scenarios.
-
-        Args:
-            num_senders_arg: number of sender threads
-            num_receivers_arg: number of receiver threads
-            num_msgs_arg: number of message to send
-            send_type_arg: type of send to do
-            caplog: pytest fixture to capture log output
-
-        """
-        args_for_scenario_builder: dict[str, Any] = {
-            'num_senders': num_senders_arg,
-            'num_receivers': num_receivers_arg,
-            'num_msgs': num_msgs_arg,
-            'send_type': send_type_arg,
-        }
-
-        scenario_driver(
-            scenario_builder=ConfigVerifier.build_send_scenario,
-            scenario_builder_args=args_for_scenario_builder,
-            caplog_to_use=caplog)
 
     ####################################################################
     # test_recv_msg_scenarios
