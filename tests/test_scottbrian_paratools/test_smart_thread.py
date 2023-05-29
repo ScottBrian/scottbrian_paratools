@@ -979,6 +979,9 @@ class ConfirmResponse(ConfigCmd):
         """
         start_time = time.time()
         work_confirmers = self.confirmers.copy()
+        if not work_confirmers:
+            raise InvalidInputDetected('ConfirmResponse detected an empty set '
+                                       'of confirmers')
         while work_confirmers:
             for name in work_confirmers:
                 # If the serial number is in the completed_cmds for
@@ -2777,6 +2780,7 @@ class Wait(ConfigCmd):
     def __init__(self,
                  cmd_runners: Iterable,
                  resumers: Iterable,
+                 exp_resumers: Iterable,
                  wait_for: st.WaitFor = st.WaitFor.All,
                  stopped_remotes: Optional[Iterable] = None,
                  conflict_remotes: Optional[Iterable] = None,
@@ -2787,6 +2791,8 @@ class Wait(ConfigCmd):
         Args:
             cmd_runners: thread names that will execute the command
             resumers: thread names that will resume
+            exp_resumers: thread names that the wait is expected to be
+                resumed by
             wait_for: wait for specification for smart_wait
             stopped_remotes: thread names that are stopped
             conflict_remotes: thread names that cause deadlock
@@ -2797,6 +2803,7 @@ class Wait(ConfigCmd):
         self.specified_args = locals()  # used for __repr__
 
         self.resumers = get_set(resumers)
+        self.exp_resumers = get_set(exp_resumers)
 
         self.stopped_remotes = get_set(stopped_remotes)
 
@@ -2808,6 +2815,7 @@ class Wait(ConfigCmd):
         self.log_msg = log_msg
 
         self.arg_list += ['resumers',
+                          'exp_resumers',
                           'stopped_remotes',
                           'conflict_remotes',
                           'deadlock_remotes']
@@ -2821,6 +2829,7 @@ class Wait(ConfigCmd):
         self.config_ver.handle_wait(
             cmd_runner=cmd_runner,
             resumers=self.resumers,
+            exp_resumers=self.exp_resumers,
             timeout=0,
             timeout_remotes=set(),
             stopped_remotes=self.stopped_remotes,
@@ -2839,6 +2848,7 @@ class WaitTimeoutFalse(Wait):
     def __init__(self,
                  cmd_runners: Iterable,
                  resumers: Iterable,
+                 exp_resumers: Iterable,
                  timeout: IntOrFloat,
                  wait_for: st.WaitFor = st.WaitFor.All,
                  stopped_remotes: Optional[Iterable] = None,
@@ -2850,6 +2860,8 @@ class WaitTimeoutFalse(Wait):
         Args:
             cmd_runners: thread names that will execute the command
             resumers: thread names that will do the smart_resume
+            exp_resumers: thread names that the wait is expected to be
+                resumed by
             timeout: value for smart_wait
             wait_for: WaitFor specification for smart_wait
             stopped_remotes: thread names that are stopped
@@ -2859,6 +2871,7 @@ class WaitTimeoutFalse(Wait):
         """
         super().__init__(cmd_runners=cmd_runners,
                          resumers=resumers,
+                         exp_resumers=exp_resumers,
                          stopped_remotes=stopped_remotes,
                          wait_for=wait_for,
                          conflict_remotes=conflict_remotes,
@@ -2879,6 +2892,7 @@ class WaitTimeoutFalse(Wait):
         self.config_ver.handle_wait(
             cmd_runner=cmd_runner,
             resumers=self.resumers,
+            exp_resumers=self.exp_resumers,
             timeout=self.timeout,
             timeout_remotes=set(),
             stopped_remotes=self.stopped_remotes,
@@ -2897,6 +2911,7 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
     def __init__(self,
                  cmd_runners: Iterable,
                  resumers: Iterable,
+                 exp_resumers: Iterable,
                  timeout: IntOrFloat,
                  timeout_remotes: Iterable,
                  wait_for: st.WaitFor = st.WaitFor.All,
@@ -2910,6 +2925,8 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
         Args:
             cmd_runners: thread names that will execute the command
             resumers: thread names that will do the smart_resume
+            exp_resumers: thread names that the wait is expected to be
+                resumed by
             timeout: value for smart_wait
             timeout_remotes: thread names that cause a timeout
             wait_for: WaitFor specification for smart_wait
@@ -2920,6 +2937,7 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
         """
         super().__init__(cmd_runners=cmd_runners,
                          resumers=resumers,
+                         exp_resumers=exp_resumers,
                          stopped_remotes=stopped_remotes,
                          wait_for=wait_for,
                          conflict_remotes=conflict_remotes,
@@ -2941,6 +2959,7 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
         self.config_ver.handle_wait(
             cmd_runner=cmd_runner,
             resumers=self.resumers,
+            exp_resumers=self.exp_resumers,
             timeout=self.timeout,
             timeout_remotes=self.timeout_remotes,
             stopped_remotes=self.stopped_remotes,
@@ -6461,7 +6480,8 @@ class CRunnerRaisesLogSearchItem(LogSearchItem):
             completed_targets=set(),
             first_round_completed=set(),
             stopped_target_threads=set(),
-            exp_senders=set())
+            exp_senders=set(),
+            exp_resumers=set())
 
         # self.config_ver.add_log_msg(re.escape(self.found_log_msg),
         #                             log_level=logging.ERROR)
@@ -6758,6 +6778,7 @@ class StartRequest:
     first_round_completed: set[str]
     stopped_target_threads: set[str]
     exp_senders: set[str]
+    exp_resumers: set[str]
     timeout_type: TimeoutType = TimeoutType.TimeoutNone
     req_type: st.ReqType = st.ReqType.NoReq
 
@@ -7005,7 +7026,8 @@ class ConfigVerifier:
                 completed_targets=set(),
                 first_round_completed=set(),
                 stopped_target_threads=set(),
-                exp_senders=set()
+                exp_senders=set(),
+                exp_resumers=set()
             )
             self.pending_events[name][PE.save_current_request] = StartRequest(
                 req_type=st.ReqType.NoReq,
@@ -7019,7 +7041,8 @@ class ConfigVerifier:
                 completed_targets=set(),
                 first_round_completed=set(),
                 stopped_target_threads=set(),
-                exp_senders=set()
+                exp_senders=set(),
+                exp_resumers=set()
             )
             self.pending_events[name][PE.num_targets_remaining] = 0
             self.pending_events[name][PE.request_msg] = defaultdict(int)
@@ -15852,12 +15875,24 @@ class ConfigVerifier:
 
         self.log_name_groups()
 
-        ############################################################
+        ################################################################
         # resume
-        ############################################################
+        ################################################################
         resume_serial_num = self.add_cmd(Resume(
             cmd_runners=resumers,
             targets=waiters))
+
+        ################################################################
+        # receive messages
+        ################################################################
+        wait_serial_num = self.add_cmd(Wait(
+            cmd_runners=waiters,
+            resumers=resumers,
+            exp_resumers=resumers))
+
+        ################################################################
+        # confirm response
+        ################################################################
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=self.commander_name,
@@ -15865,18 +15900,12 @@ class ConfigVerifier:
                 confirm_serial_num=resume_serial_num,
                 confirmers=resumers))
 
-        ############################################################
-        # receive messages
-        ############################################################
-        # wait_serial_num = self.add_cmd(Wait(
-        #     cmd_runners=waiters,
-        #     resumers=resumers))
-        # self.add_cmd(
-        #     ConfirmResponse(
-        #         cmd_runners=self.commander_name,
-        #         confirm_cmd='Wait',
-        #         confirm_serial_num=wait_serial_num,
-        #         confirmers=waiters))
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='Wait',
+                confirm_serial_num=wait_serial_num,
+                confirmers=waiters))
 
     ####################################################################
     # build_sync_request
@@ -17268,7 +17297,8 @@ class ConfigVerifier:
             completed_targets=set(),
             first_round_completed=set(),
             stopped_target_threads=set(),
-            exp_senders=set()))
+            exp_senders=set(),
+            exp_resumers=set()))
 
         req_key_entry: RequestKey = ('smart_init',
                                      'entry')
@@ -17654,7 +17684,8 @@ class ConfigVerifier:
                          completed_targets=set(),
                          first_round_completed=set(),
                          stopped_target_threads=set(),
-                         exp_senders=set()))
+                         exp_senders=set(),
+                         exp_resumers=set()))
 
         req_key_entry: RequestKey = ('smart_join',
                                      'entry')
@@ -17764,7 +17795,8 @@ class ConfigVerifier:
                          completed_targets=set(),
                          first_round_completed=set(),
                          stopped_target_threads=set(),
-                         exp_senders=exp_senders))
+                         exp_senders=exp_senders,
+                         exp_resumers=set()))
 
         req_key_entry: RequestKey = ('smart_recv',
                                      'entry')
@@ -18004,7 +18036,8 @@ class ConfigVerifier:
                     completed_targets=set(),
                     first_round_completed=set(),
                     stopped_target_threads=set(),
-                    exp_senders=set())
+                    exp_senders=set(),
+                    exp_resumers=set())
             else:
                 pe[PE.current_request] = StartRequest(
                     req_type=st.ReqType.NoReq,
@@ -18018,7 +18051,8 @@ class ConfigVerifier:
                     completed_targets=set(),
                     first_round_completed=set(),
                     stopped_target_threads=set(),
-                    exp_senders=set())
+                    exp_senders=set(),
+                    exp_resumers=set())
 
     ####################################################################
     # handle_request_smart_init_entry
@@ -18362,10 +18396,10 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
 
-        if pe[PE.current_request].timeout_type == TimeoutType.TimeoutTrue:
-            timeout_remotes = pe[PE.current_request].timeout_remotes
-        else:
-            timeout_remotes = set()
+        # if pe[PE.current_request].timeout_type == TimeoutType.TimeoutTrue:
+        #     timeout_remotes = pe[PE.current_request].timeout_remotes
+        # else:
+        #     timeout_remotes = set()
 
         # eligible_targets = (pe[PE.current_request].targets.copy()
         #                     - timeout_remotes
@@ -18410,16 +18444,17 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
 
-        if pe[PE.current_request].timeout_type == TimeoutType.TimeoutTrue:
-            timeout_remotes = pe[PE.current_request].timeout_remotes
-        else:
-            timeout_remotes = set()
+        # if pe[PE.current_request].timeout_type == TimeoutType.TimeoutTrue:
+        #     timeout_remotes = pe[PE.current_request].timeout_remotes
+        # else:
+        #     timeout_remotes = set()
 
-        eligible_targets = (pe[PE.current_request].targets.copy()
-                            - timeout_remotes
-                            - pe[PE.current_request].stopped_remotes
-                            - pe[PE.current_request].deadlock_remotes)
+        # eligible_targets = (pe[PE.current_request].targets.copy()
+        #                     - timeout_remotes
+        #                     - pe[PE.current_request].stopped_remotes
+        #                     - pe[PE.current_request].deadlock_remotes)
 
+        eligible_targets = pe[PE.current_request].exp_resumers.copy()
         for target in eligible_targets:
             ack_key: AckKey = (target, 'smart_wait')
 
@@ -18776,7 +18811,8 @@ class ConfigVerifier:
                          completed_targets=set(),
                          first_round_completed=set(),
                          stopped_target_threads=set(),
-                         exp_senders=set()))
+                         exp_senders=set(),
+                         exp_resumers=set()))
 
         req_key_entry: RequestKey = ('smart_resume',
                                      'entry')
@@ -18921,7 +18957,8 @@ class ConfigVerifier:
                          completed_targets=set(),
                          first_round_completed=set(),
                          stopped_target_threads=set(),
-                         exp_senders=set()))
+                         exp_senders=set(),
+                         exp_resumers=set()))
 
         req_key_entry: RequestKey = ('smart_send',
                                      'entry')
@@ -19326,7 +19363,8 @@ class ConfigVerifier:
                          completed_targets=set(),
                          first_round_completed=set(),
                          stopped_target_threads=set(),
-                         exp_senders=set()))
+                         exp_senders=set(),
+                         exp_resumers=set()))
 
         req_key_entry: RequestKey = ('smart_start',
                                      'entry')
@@ -19553,7 +19591,8 @@ class ConfigVerifier:
                              completed_targets=set(),
                              first_round_completed=set(),
                              stopped_target_threads=set(),
-                             exp_senders=set()))
+                             exp_senders=set(),
+                             exp_resumers=set()))
 
             req_key_entry: RequestKey = ('smart_start',
                                          'entry')
@@ -19818,7 +19857,8 @@ class ConfigVerifier:
                          completed_targets=set(),
                          first_round_completed=set(),
                          stopped_target_threads=set(),
-                         exp_senders=set()))
+                         exp_senders=set(),
+                         exp_resumers=set()))
 
         req_key_entry: RequestKey = ('smart_sync',
                                      'entry')
@@ -20103,7 +20143,8 @@ class ConfigVerifier:
                          completed_targets=set(),
                          first_round_completed=set(),
                          stopped_target_threads=set(),
-                         exp_senders=set()))
+                         exp_senders=set(),
+                         exp_resumers=set()))
 
         req_key_entry: RequestKey = ('smart_unreg',
                                      'entry')
@@ -20163,6 +20204,7 @@ class ConfigVerifier:
     def handle_wait(self,
                     cmd_runner: str,
                     resumers: set[str],
+                    exp_resumers: set[str],
                     timeout: IntOrFloat,
                     timeout_remotes: set[str],
                     stopped_remotes: set[str],
@@ -20176,6 +20218,8 @@ class ConfigVerifier:
         Args:
             cmd_runner: thread doing the wait
             resumers: threads doing the resume
+            exp_resumers: thread names of resumers that the wait will
+                determine did a resume
             timeout: value to use on smart_wait timeout arg
             timeout_remotes: names of threads that will cause timeout
             stopped_remotes: names of thread that will cause not_alive
@@ -20210,7 +20254,8 @@ class ConfigVerifier:
                          completed_targets=set(),
                          first_round_completed=set(),
                          stopped_target_threads=set(),
-                         exp_senders=set()))
+                         exp_senders=set(),
+                         exp_resumers=exp_resumers))
 
         req_key_entry: RequestKey = ('smart_wait',
                                      'entry')
@@ -20233,21 +20278,24 @@ class ConfigVerifier:
         if stopped_remotes:
             exp_completed_resumers -= stopped_remotes
 
-        # enter_exit = ('entry', 'exit')
+        resumed_by = set()
         if stopped_remotes:
-            # enter_exit = ('entry',)
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_wait(
                         resumers=resumers,
                         wait_for=wait_for,
+                        resumed_by=resumed_by,
                         log_msg=log_msg)
                 else:
                     self.all_threads[cmd_runner].smart_wait(
                         resumers=resumers,
                         wait_for=wait_for,
+                        resumed_by=resumed_by,
                         timeout=timeout,
                         log_msg=log_msg)
+
+            assert resumed_by == exp_resumers
 
             self.add_log_msg(
                 self.get_error_msg(
@@ -20266,13 +20314,17 @@ class ConfigVerifier:
                     self.all_threads[cmd_runner].smart_wait(
                         resumers=resumers,
                         wait_for=wait_for,
+                        resumed_by=resumed_by,
                         log_msg=log_msg)
                 else:
                     self.all_threads[cmd_runner].smart_wait(
                         resumers=resumers,
                         wait_for=wait_for,
+                        resumed_by=resumed_by,
                         timeout=timeout,
                         log_msg=log_msg)
+
+            assert resumed_by == exp_resumers
 
             self.add_log_msg(
                 self.get_error_msg(
@@ -20290,15 +20342,19 @@ class ConfigVerifier:
             self.all_threads[cmd_runner].smart_wait(
                 resumers=resumers,
                 wait_for=wait_for,
+                resumed_by=resumed_by,
                 log_msg=log_msg)
+            assert resumed_by == exp_resumers
 
         elif timeout_type == TimeoutType.TimeoutFalse:
             pe[PE.request_msg][req_key_exit] += 1
             self.all_threads[cmd_runner].smart_wait(
                 resumers=resumers,
                 wait_for=wait_for,
+                resumed_by=resumed_by,
                 timeout=timeout,
                 log_msg=log_msg)
+            assert resumed_by == exp_resumers
 
         elif timeout_type == TimeoutType.TimeoutTrue:
             # enter_exit = ('entry',)
@@ -20306,8 +20362,11 @@ class ConfigVerifier:
                 self.all_threads[cmd_runner].smart_wait(
                     resumers=resumers,
                     wait_for=wait_for,
+                    resumed_by=resumed_by,
                     timeout=timeout,
                     log_msg=log_msg)
+
+            assert resumed_by == exp_resumers
 
             self.add_log_msg(
                 self.get_error_msg(
@@ -20493,6 +20552,9 @@ class ConfigVerifier:
             cmd: ConfigCmd = self.cmd_suite.popleft()
             self.log_test_msg(f'config_cmd: {cmd}')
 
+            if not cmd.cmd_runners:
+                raise InvalidInputDetected('main_driver detected an empty '
+                                           'set of cmd_runners')
             for name in cmd.cmd_runners:
                 if name == self.commander_name:
                     continue
@@ -24784,8 +24846,10 @@ class TestSmartThreadExamples:
 
         def f1(smart_thread: SmartThread) -> None:
             print(f'f1 {smart_thread.name} about to wait')
-            resumers = smart_thread.smart_wait(resumers='alpha')
-            print(f'f1 {smart_thread.name} resumed by {resumers=}')
+            resumed_by = set()
+            smart_thread.smart_wait(resumers='alpha',
+                                    resumed_by=resumed_by)
+            print(f'f1 {smart_thread.name} resumed by {resumed_by}')
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
@@ -24801,7 +24865,7 @@ class TestSmartThreadExamples:
         expected_result = 'mainline alpha entered\n'
         expected_result += 'f1 beta about to wait\n'
         expected_result += 'alpha about to resume beta\n'
-        expected_result += "f1 beta resumed by resumers=['alpha']\n"
+        expected_result += "f1 beta resumed by {'alpha'}\n"
         expected_result += 'mainline alpha exiting\n'
 
         captured = capsys.readouterr().out
@@ -24828,8 +24892,10 @@ class TestSmartThreadExamples:
         def f1(smart_thread: SmartThread) -> None:
             time.sleep(1)  # allow time for smart_resume to be issued
             print(f'f1 {smart_thread.name} about to wait')
-            resumers = smart_thread.smart_wait(resumers='alpha')
-            print(f'f1 {smart_thread.name} resumed by {resumers=}')
+            resumed_by = set()
+            smart_thread.smart_wait(resumers='alpha',
+                                    resumed_by=resumed_by)
+            print(f'f1 {smart_thread.name} resumed by {resumed_by}')
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
@@ -24845,7 +24911,7 @@ class TestSmartThreadExamples:
         expected_result = 'mainline alpha entered\n'
         expected_result += 'alpha about to resume beta\n'
         expected_result += "f1 beta about to wait\n"
-        expected_result += "f1 beta resumed by resumers=['alpha']\n"
+        expected_result += "f1 beta resumed by {'alpha'}\n"
         expected_result += 'mainline alpha exiting\n'
 
         captured = capsys.readouterr().out
@@ -24888,10 +24954,12 @@ class TestSmartThreadExamples:
                     thread_parm_name='smart_thread')
         time.sleep(1)  # allow time for alpha to wait
         print('alpha about to wait for all threads')
-        resumers = alpha_smart_thread.smart_wait(
+        resumed_by = set()
+        alpha_smart_thread.smart_wait(
             resumers=['beta', 'charlie', 'delta'],
-            wait_for=WaitFor.All)
-        print(f'alpha resumed by resumers={sorted(resumers)}')
+            wait_for=WaitFor.All,
+            resumed_by=resumed_by)
+        print(f'alpha resumed by resumers={sorted(resumed_by)}')
 
         alpha_smart_thread.smart_join(targets=['beta', 'charlie', 'delta'])
         print('mainline alpha exiting')
@@ -24941,19 +25009,23 @@ class TestSmartThreadExamples:
                     thread_parm_name='smart_thread')
         time.sleep(1)
         print('alpha about to wait for any threads')
-        resumers = alpha_smart_thread.smart_wait(
+        resumed_by = set()
+        alpha_smart_thread.smart_wait(
             resumers=['beta', 'charlie', 'delta'],
-            wait_for=WaitFor.Any)
-        print(f'alpha resumed by resumers={sorted(resumers)}')
+            wait_for=WaitFor.Any,
+            resumed_by=resumed_by)
+        print(f'alpha resumed by resumers={sorted(resumed_by)}')
         SmartThread(name='delta',
                     target=f1,
                     thread_parm_name='smart_thread')
         time.sleep(1)  # allow time for alpha to wait
         print('alpha about to wait for any threads')
-        resumers = alpha_smart_thread.smart_wait(
+        resumed_by = set()
+        alpha_smart_thread.smart_wait(
             resumers=['beta', 'charlie', 'delta'],
-            wait_for=WaitFor.Any)
-        print(f'alpha resumed by resumers={sorted(resumers)}')
+            wait_for=WaitFor.Any,
+            resumed_by=resumed_by)
+        print(f'alpha resumed by resumers={sorted(resumed_by)}')
 
         alpha_smart_thread.smart_join(targets=['beta', 'charlie', 'delta'])
         print('mainline alpha exiting')
@@ -25004,15 +25076,17 @@ class TestSmartThreadExamples:
                     thread_parm_name='smart_thread')
         time.sleep(1)
         print('alpha about to wait for any threads')
-        resumers = alpha_smart_thread.smart_wait()
-        print(f'alpha resumed by resumers={sorted(resumers)}')
+        resumed_by = set()
+        alpha_smart_thread.smart_wait(resumed_by=resumed_by)
+        print(f'alpha resumed by resumers={sorted(resumed_by)}')
         SmartThread(name='delta',
                     target=f1,
                     thread_parm_name='smart_thread')
         time.sleep(1)  # allow time for alpha to wait
         print('alpha about to wait for any threads')
-        resumers = alpha_smart_thread.smart_wait()
-        print(f'alpha resumed by resumers={sorted(resumers)}')
+        resumed_by = set()
+        alpha_smart_thread.smart_wait(resumed_by=resumed_by)
+        print(f'alpha resumed by resumers={sorted(resumed_by)}')
 
         alpha_smart_thread.smart_join(targets=['beta', 'charlie', 'delta'])
         print('mainline alpha exiting')
@@ -25303,7 +25377,8 @@ def scenario_driver(
                          completed_targets=set(),
                          first_round_completed=set(),
                          stopped_target_threads=set(),
-                         exp_senders=set()))
+                         exp_senders=set(),
+                         exp_resumers=set()))
 
         req_key_entry: RequestKey = ('smart_init',
                                      'entry')
@@ -25375,7 +25450,8 @@ def scenario_driver(
                          completed_targets=set(),
                          first_round_completed=set(),
                          stopped_target_threads=set(),
-                         exp_senders=set()))
+                         exp_senders=set(),
+                         exp_resumers=set()))
 
         req_key_entry: RequestKey = ('smart_start',
                                      'entry')
@@ -25416,7 +25492,8 @@ def scenario_driver(
                          completed_targets=set(),
                          first_round_completed=set(),
                          stopped_target_threads=set(),
-                         exp_senders=set()))
+                         exp_senders=set(),
+                         exp_resumers=set()))
 
         req_key_entry: RequestKey = ('smart_start',
                                      'entry')
@@ -25457,7 +25534,8 @@ def scenario_driver(
                          completed_targets=set(),
                          first_round_completed=set(),
                          stopped_target_threads=set(),
-                         exp_senders=set()))
+                         exp_senders=set(),
+                         exp_resumers=set()))
 
         req_key_entry: RequestKey = ('smart_start',
                                      'entry')
@@ -25735,7 +25813,37 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_resume_basic_scenario
     ####################################################################
-    @pytest.mark.parametrize("num_resumers_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_resumers_arg", [1])
+    @pytest.mark.parametrize("num_waiters_arg", [1])
+    @pytest.mark.cover
+    def test_resume_basic_scenario_cover(
+            self,
+            num_resumers_arg: int,
+            num_waiters_arg: int,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            num_resumers_arg: number of resumers
+            num_waiters_arg: number of waiters
+            caplog: pytest fixture to capture log output
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {
+            'num_resumers': num_resumers_arg,
+            'num_waiters': num_waiters_arg,
+        }
+
+        scenario_driver(
+            scenario_builder=ConfigVerifier.build_resume_basic_scenario,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
+
+    ####################################################################
+    # test_resume_basic_scenario
+    ####################################################################
+    @pytest.mark.parametrize("num_resumers_arg", [1, 2, 3])
     @pytest.mark.parametrize("num_waiters_arg", [1, 2, 3])
     def test_resume_basic_scenario(
             self,

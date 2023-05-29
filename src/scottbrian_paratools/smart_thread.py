@@ -576,7 +576,7 @@ class RequestBlock:
     exit_log_msg: Optional[str]
     msg_to_send: Any
     ret_msg: RecvMsgs
-    ret_resume_result: Any
+    ret_resume_result: set[str]
     stopped_remotes: set[str]
     not_registered_remotes: set[str]
     deadlock_remotes: set[str]
@@ -3165,21 +3165,24 @@ class SmartThread:
     def smart_wait(self, *,
                    resumers: Optional[Iterable] = None,
                    wait_for: WaitFor = WaitFor.All,
+                   resumed_by: Optional[set[str]] = None,
                    timeout: OptIntFloat = None,
-                   log_msg: Optional[str] = None) -> list[str]:
+                   log_msg: Optional[str] = None) -> None:
         """Wait until resumed.
 
         Args:
             resumers: names of threads that we expect to resume us
             wait_for: specifies whether to wait for only one remote or
                 for all remotes
+            resumed_by: list of thread names that the wait detected as
+                having done a resume. Note that the list is a subset of
+                the specified *resumers*. If the *wait_for*
+                specification is WaitFor.All, then *resumed_by* will
+                be equal to *resumers*.
             timeout: number of seconds to allow for wait to be
                 resumed
             log_msg: additional text to append to the debug log message
                 that is issued on request entry and exit
-
-        Returns:
-            list of resumers that resumed this thread
 
         Raises:
             SmartThreadDeadlockDetected: a smart_wait specified a
@@ -3484,7 +3487,15 @@ class SmartThread:
             self.wait_for_any = True
             request_block.completion_count = len(request_block.remotes) - 1
 
-        request_block.ret_resume_result = []
+        if resumed_by is None:
+            # we will set to an empty set to make processing easier
+            request_block.ret_resume_result = set()
+        elif isinstance(resumed_by, set):
+            request_block.ret_resume_result = resumed_by
+        else:
+            raise SmartThreadInvalidInput(
+                f'{self.name} processing a smart_wait detected that'
+                f' {resumed_by=} is neither None nor a set')
 
         self._request_loop(request_block=request_block)
 
@@ -3492,8 +3503,6 @@ class SmartThread:
 
         self.request = ReqType.NoReq
         self.wait_for_any = False
-
-        return request_block.ret_resume_result
 
     ####################################################################
     # _process_wait
@@ -3547,7 +3556,7 @@ class SmartThread:
                 logger.info(
                     f'{self.name} smart_wait resumed by '
                     f'{pk_remote.remote}')
-                request_block.ret_resume_result.append(pk_remote.remote)
+                request_block.ret_resume_result |= {pk_remote.remote}
                 return True
 
             with SmartThread._pair_array[pk_remote.pair_key].status_lock:
