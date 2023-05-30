@@ -17935,21 +17935,21 @@ class ConfigVerifier:
 
         req_key_exit: RequestKey = ('smart_recv',
                                     'exit')
-        recvd_msgs = st.RecvMsgs()
 
         if stopped_remotes:
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_recv(
-                        received_msgs=recvd_msgs,
                         senders=senders,
                         log_msg=log_msg)
                 else:
                     self.all_threads[cmd_runner].smart_recv(
-                        received_msgs=recvd_msgs,
                         senders=senders,
                         timeout=timeout,
                         log_msg=log_msg)
+
+            # recover whatever message were read
+            recvd_msgs = self.all_threads[cmd_runner].recvd_msgs
 
             self.add_log_msg(
                 self.get_error_msg(
@@ -17962,41 +17962,26 @@ class ConfigVerifier:
 
         elif timeout_type == TimeoutType.TimeoutNone:
             pe[PE.request_msg][req_key_exit] += 1
-            self.all_threads[cmd_runner].smart_recv(
-                received_msgs=recvd_msgs,
+            recvd_msgs = self.all_threads[cmd_runner].smart_recv(
                 senders=senders,
                 log_msg=log_msg)
 
-            assert sorted(exp_senders) == sorted(recvd_msgs.recv_msgs.keys())
-            for remote in exp_senders:
-                assert recvd_msgs.recv_msgs[
-                           remote] == exp_msgs.exp_received_msgs[
-                    cmd_runner][remote]
-            # self.add_log_msg(
-            #     new_log_msg=f"{cmd_runner} received msg from {remote}",
-            #     log_level=logging.INFO)
-
         elif timeout_type == TimeoutType.TimeoutFalse:
             pe[PE.request_msg][req_key_exit] += 1
-            self.all_threads[cmd_runner].smart_recv(
-                received_msgs=recvd_msgs,
+            recvd_msgs = self.all_threads[cmd_runner].smart_recv(
                 senders=senders,
                 timeout=timeout,
                 log_msg=log_msg)
 
-            assert sorted(exp_senders) == sorted(recvd_msgs.recv_msgs.keys())
-            for remote in exp_senders:
-                assert recvd_msgs.recv_msgs[
-                           remote] == exp_msgs.exp_received_msgs[
-                           cmd_runner][remote]
-
         elif timeout_type == TimeoutType.TimeoutTrue:
             with pytest.raises(st.SmartThreadRequestTimedOut):
                 self.all_threads[cmd_runner].smart_recv(
-                    received_msgs=recvd_msgs,
                     senders=senders,
                     timeout=timeout,
                     log_msg=log_msg)
+
+            # recover whatever message were read
+            recvd_msgs = self.all_threads[cmd_runner].recvd_msgs
 
             self.dec_recv_timeout()
 
@@ -18008,6 +17993,12 @@ class ConfigVerifier:
                     error_str='SmartThreadRequestTimedOut',
                     stopped_remotes=stopped_remotes),
                 log_level=logging.ERROR)
+
+        assert sorted(exp_senders) == sorted(recvd_msgs.recv_msgs.keys())
+        for remote in exp_senders:
+            assert recvd_msgs.recv_msgs[
+                       remote] == exp_msgs.exp_received_msgs[
+                       cmd_runner][remote]
 
         self.wait_for_monitor(cmd_runner=cmd_runner,
                               rtn_name='handle_recv')
@@ -20509,6 +20500,7 @@ class ConfigVerifier:
                     conflict_remotes=conflict_remotes),
                 log_level=logging.ERROR)
 
+        assert resumed_by == exp_resumers
         # self.add_request_log_msg(cmd_runner=cmd_runner,
         #                          smart_request='smart_wait',
         #                          targets=resumers,
@@ -23828,7 +23820,7 @@ class TestSmartThreadExamples:
         Args:
             capsys: pytest fixture to get the print output
         """
-        from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+        from scottbrian_paratools.smart_thread import SmartThread
 
         def f1() -> None:
             print('f1 beta entered')
@@ -23843,11 +23835,8 @@ class TestSmartThreadExamples:
                                         target=f1,
                                         auto_start=False)
         beta_smart_thread.smart_start()
-        recvd_msgs = RecvMsgs()
-        alpha_smart_thread.smart_recv(
-            received_msgs=recvd_msgs,
-            senders='beta')
-        print(recvd_msgs.recv_msgs['beta'])
+        recvd_msgs = alpha_smart_thread.smart_recv(senders='beta')
+        print(recvd_msgs['beta'])
         alpha_smart_thread.smart_resume(waiters='beta')
         alpha_smart_thread.smart_join(targets='beta')
         print('mainline alpha exiting')
@@ -23879,7 +23868,7 @@ class TestSmartThreadExamples:
         Args:
             capsys: pytest fixture to get the print output
         """
-        from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+        from scottbrian_paratools.smart_thread import SmartThread
 
         def f1(smart_thread: SmartThread) -> None:
             print('f1 beta entered')
@@ -23894,11 +23883,8 @@ class TestSmartThreadExamples:
                     target=f1,
                     auto_start=True,
                     thread_parm_name='smart_thread')
-        recvd_msgs = RecvMsgs()
-        alpha_smart_thread.smart_recv(
-            received_msgs=recvd_msgs,
-            senders='beta')
-        print(recvd_msgs.recv_msgs['beta'])
+        recvd_msgs = alpha_smart_thread.smart_recv(senders='beta')
+        print(recvd_msgs['beta'])
         alpha_smart_thread.smart_resume(waiters='beta')
         alpha_smart_thread.smart_join(targets='beta')
         print('mainline alpha exiting')
@@ -23930,7 +23916,7 @@ class TestSmartThreadExamples:
         Args:
             capsys: pytest fixture to get the print output
         """
-        from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+        from scottbrian_paratools.smart_thread import SmartThread
         import threading
 
         def f1() -> None:
@@ -23945,11 +23931,8 @@ class TestSmartThreadExamples:
         alpha_smart_thread = SmartThread(name='alpha')
         beta_thread = threading.Thread(target=f1, name='beta')
         beta_thread.start()
-        recvd_msgs = RecvMsgs()
-        alpha_smart_thread.smart_recv(
-            received_msgs=recvd_msgs,
-            senders='beta')
-        print(recvd_msgs.recv_msgs['beta'])
+        recvd_msgs = alpha_smart_thread.smart_recv(senders='beta')
+        print(recvd_msgs['beta'])
         alpha_smart_thread.smart_resume(waiters='beta')
         alpha_smart_thread.smart_join(targets='beta')
         print('mainline alpha exiting')
@@ -23982,7 +23965,7 @@ class TestSmartThreadExamples:
         Args:
             capsys: pytest fixture to get the print output
         """
-        from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+        from scottbrian_paratools.smart_thread import SmartThread
         import threading
         import time
 
@@ -24016,11 +23999,8 @@ class TestSmartThreadExamples:
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
         ThreadApp(name='beta')
-        recvd_msgs = RecvMsgs()
-        alpha_smart_thread.smart_recv(
-            received_msgs=recvd_msgs,
-            senders='beta')
-        print(recvd_msgs.recv_msgs['beta'])
+        recvd_msgs = alpha_smart_thread.smart_recv(senders='beta')
+        print(recvd_msgs['beta'])
         time.sleep(2)
         print('alpha about to resume beta')
         alpha_smart_thread.smart_resume(waiters='beta')
@@ -24058,7 +24038,7 @@ class TestSmartThreadExamples:
         Args:
             capsys: pytest fixture to get the print output
         """
-        from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+        from scottbrian_paratools.smart_thread import SmartThread
         import threading
         import time
 
@@ -24091,11 +24071,8 @@ class TestSmartThreadExamples:
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
         SmartThreadApp(name='beta')
-        recvd_msgs = RecvMsgs()
-        alpha_smart_thread.smart_recv(
-            received_msgs=recvd_msgs,
-            senders='beta')
-        print(recvd_msgs.recv_msgs['beta'])
+        recvd_msgs = alpha_smart_thread.smart_recv(senders='beta')
+        print(recvd_msgs['beta'])
         time.sleep(2)
         print('alpha about to resume beta')
         alpha_smart_thread.smart_resume(waiters='beta')
@@ -24300,15 +24277,12 @@ class TestSmartThreadExamples:
         Args:
             capsys: pytest fixture to get the print output
         """
-        from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+        from scottbrian_paratools.smart_thread import SmartThread
 
         def f1(smart_thread: SmartThread) -> None:
             print('f1 beta entered')
-            recvd_msgs = RecvMsgs()
-            smart_thread.smart_recv(
-                received_msgs=recvd_msgs,
-                senders='alpha')
-            print(recvd_msgs.recv_msgs['alpha'])
+            recvd_msgs = smart_thread.smart_recv(senders='alpha')
+            print(recvd_msgs['alpha'])
             print('f1 beta exiting')
 
         print('mainline alpha entered')
@@ -24345,18 +24319,15 @@ class TestSmartThreadExamples:
         Args:
             capsys: pytest fixture to get the print output
         """
-        from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+        from scottbrian_paratools.smart_thread import SmartThread
         import time
 
         def f1(smart_thread: SmartThread) -> None:
             if smart_thread.name == 'charlie':
                 time.sleep(0.5)  # delay for non-interleaved msgs
             print(f'f1 {smart_thread.name} entered')
-            recvd_msgs = RecvMsgs()
-            smart_thread.smart_recv(
-                received_msgs=recvd_msgs,
-                senders='alpha')
-            print(recvd_msgs.recv_msgs['alpha'])
+            recvd_msgs = smart_thread.smart_recv(senders='alpha')
+            print(recvd_msgs['alpha'])
             print(f'f1 {smart_thread.name} exiting')
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
@@ -24401,7 +24372,7 @@ class TestSmartThreadExamples:
         Args:
             capsys: pytest fixture to get the print output
         """
-        from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+        from scottbrian_paratools.smart_thread import SmartThread
 
         def f1(smart_thread: SmartThread,
                wait_for: Optional[str] = None,
@@ -24409,11 +24380,8 @@ class TestSmartThreadExamples:
             if wait_for:
                 smart_thread.smart_wait(resumers=wait_for)
             print(f'f1 {smart_thread.name} entered')
-            recvd_msgs = RecvMsgs()
-            smart_thread.smart_recv(
-                received_msgs=recvd_msgs,
-                senders='alpha')
-            print(recvd_msgs.recv_msgs['alpha'])
+            recvd_msgs = smart_thread.smart_recv(senders='alpha')
+            print(recvd_msgs['alpha'])
             print(f'f1 {smart_thread.name} exiting')
             if resume_target:
                 smart_thread.smart_resume(waiters=resume_target)
@@ -24469,15 +24437,12 @@ class TestSmartThreadExamples:
         Args:
             capsys: pytest fixture to get the print output
         """
-        from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+        from scottbrian_paratools.smart_thread import SmartThread
 
         def f1(smart_thread: SmartThread) -> None:
             print(f'f1 {smart_thread.name} entered')
-            recvd_msgs = RecvMsgs()
-            smart_thread.smart_recv(
-                received_msgs=recvd_msgs,
-                senders='alpha')
-            print(recvd_msgs.recv_msgs['alpha'])
+            recvd_msgs = smart_thread.smart_recv(senders='alpha')
+            print(recvd_msgs['alpha'])
             print(f'f1 {smart_thread.name} exiting')
 
         print('mainline alpha entered')
@@ -24515,7 +24480,7 @@ class TestSmartThreadExamples:
         Args:
             capsys: pytest fixture to get the print output
         """
-        from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+        from scottbrian_paratools.smart_thread import SmartThread
 
         def f1(smart_thread: SmartThread,
                wait_for: Optional[str] = None,
@@ -24523,11 +24488,8 @@ class TestSmartThreadExamples:
             if wait_for:
                 smart_thread.smart_wait(resumers=wait_for)
             print(f'f1 {smart_thread.name} entered')
-            recvd_msgs = RecvMsgs()
-            smart_thread.smart_recv(
-                received_msgs=recvd_msgs,
-                senders='alpha')
-            print(recvd_msgs.recv_msgs['alpha'])
+            recvd_msgs = smart_thread.smart_recv(senders='alpha')
+            print(recvd_msgs['alpha'])
             print(f'f1 {smart_thread.name} exiting')
             if resume_target:
                 smart_thread.smart_resume(waiters=resume_target)
@@ -24590,8 +24552,7 @@ class TestSmartThreadExamples:
             capsys: pytest fixture to get the print output
         """
         from scottbrian_paratools.smart_thread import (SmartThread,
-                                                       SendMsgs,
-                                                       RecvMsgs)
+                                                       SendMsgs)
 
         def f1(smart_thread: SmartThread,
                wait_for: Optional[str] = None,
@@ -24600,10 +24561,8 @@ class TestSmartThreadExamples:
                 smart_thread.smart_wait(resumers=wait_for)
             print(f'f1 {smart_thread.name} entered')
             recvd_msgs = RecvMsgs()
-            smart_thread.smart_recv(
-                received_msgs=recvd_msgs,
-                senders='alpha')
-            print(recvd_msgs.recv_msgs['alpha'])
+            recvd_msgs = smart_thread.smart_recv(senders='alpha')
+            print(recvd_msgs['alpha'])
             print(f'f1 {smart_thread.name} exiting')
             if resume_target:
                 smart_thread.smart_resume(waiters=resume_target)
@@ -24665,7 +24624,7 @@ class TestSmartThreadExamples:
         Args:
             capsys: pytest fixture to get the print output
         """
-        from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+        from scottbrian_paratools.smart_thread import SmartThread
 
         def f1(smart_thread: SmartThread) -> None:
             print('f1 beta entered')
@@ -24677,11 +24636,8 @@ class TestSmartThreadExamples:
         SmartThread(name='beta',
                     target=f1,
                     thread_parm_name='smart_thread')
-        recvd_msgs = RecvMsgs()
-        alpha_smart_thread.smart_recv(
-            received_msgs=recvd_msgs,
-            senders='beta')
-        print(recvd_msgs.recv_msgs['beta'])
+        recvd_msgs = alpha_smart_thread.smart_recv(senders='beta')
+        print(recvd_msgs['beta'])
         alpha_smart_thread.smart_join(targets='beta')
         print('mainline alpha exiting')
 
@@ -24709,7 +24665,7 @@ class TestSmartThreadExamples:
         Args:
             capsys: pytest fixture to get the print output
         """
-        from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+        from scottbrian_paratools.smart_thread import SmartThread
         import time
 
         def f1(smart_thread: SmartThread) -> None:
@@ -24728,12 +24684,9 @@ class TestSmartThreadExamples:
                     target=f1,
                     thread_parm_name='smart_thread')
         time.sleep(0.2)
-        recvd_msgs = RecvMsgs()
-        alpha_smart_thread.smart_recv(
-            received_msgs=recvd_msgs,
-            senders=('beta', 'charlie'))
-        print(recvd_msgs.recv_msgs['beta'])
-        print(recvd_msgs.recv_msgs['charlie'])
+        recvd_msgs = alpha_smart_thread.smart_recv(senders=('beta', 'charlie'))
+        print(recvd_msgs['beta'])
+        print(recvd_msgs['charlie'])
         alpha_smart_thread.smart_join(targets=('beta', 'charlie'))
         print('mainline alpha exiting')
 
@@ -24765,7 +24718,7 @@ class TestSmartThreadExamples:
         Args:
             capsys: pytest fixture to get the print output
         """
-        from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+        from scottbrian_paratools.smart_thread import SmartThread
         import time
 
         def f1(greeting: str, smart_thread: SmartThread) -> None:
@@ -24791,11 +24744,10 @@ class TestSmartThreadExamples:
                     thread_parm_name='smart_thread',
                     args=('aloha',))
         time.sleep(1.5)
-        recvd_msgs = RecvMsgs()
-        alpha_smart_thread.smart_recv(received_msgs=recvd_msgs)
-        print(recvd_msgs.recv_msgs['beta'])
-        print(recvd_msgs.recv_msgs['charlie'])
-        print(recvd_msgs.recv_msgs['delta'])
+        recvd_msgs = alpha_smart_thread.smart_recv()
+        print(recvd_msgs['beta'])
+        print(recvd_msgs['charlie'])
+        print(recvd_msgs['delta'])
         alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
         print('mainline alpha exiting')
 
@@ -24829,7 +24781,7 @@ class TestSmartThreadExamples:
         Args:
             capsys: pytest fixture to get the print output
         """
-        from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+        from scottbrian_paratools.smart_thread import SmartThread
 
         def f1(greeting: str, smart_thread: SmartThread) -> None:
             print(f'f1 {smart_thread.name} entered')
@@ -24848,11 +24800,8 @@ class TestSmartThreadExamples:
                     target=f1,
                     thread_parm_name='smart_thread',
                     args=('hi',))
-        recvd_msgs = RecvMsgs()
-        alpha_smart_thread.smart_recv(
-            received_msgs=recvd_msgs,
-            senders='beta')
-        print(recvd_msgs.recv_msgs['beta'])
+        recvd_msgs = alpha_smart_thread.smart_recv(senders='beta')
+        print(recvd_msgs['beta'])
         alpha_smart_thread.smart_join(targets='beta')
         print('mainline alpha exiting')
 
@@ -24884,7 +24833,7 @@ class TestSmartThreadExamples:
         Args:
             capsys: pytest fixture to get the print output
         """
-        from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+        from scottbrian_paratools.smart_thread import SmartThread
 
         def f1(greeting: str,
                smart_thread: SmartThread,
@@ -24924,16 +24873,11 @@ class TestSmartThreadExamples:
                     kwargs={'wait_for': 'charlie',
                             'resume_target': 'alpha'})
         alpha_smart_thread.smart_wait(resumers='delta')
-        recvd_msgs = RecvMsgs()
-        alpha_smart_thread.smart_recv(
-            received_msgs=recvd_msgs,
-            senders={'beta', 'delta'})
-        print(recvd_msgs.recv_msgs['beta'])
-        print(recvd_msgs.recv_msgs['delta'])
-        alpha_smart_thread.smart_recv(
-            received_msgs=recvd_msgs,
-            senders={'charlie'})
-        print(recvd_msgs.recv_msgs['charlie'])
+        recvd_msgs = alpha_smart_thread.smart_recv(senders={'beta', 'delta'})
+        print(recvd_msgs['beta'])
+        print(recvd_msgs['delta'])
+        recvd_msgs = alpha_smart_thread.smart_recv(senders={'charlie'})
+        print(recvd_msgs['charlie'])
         alpha_smart_thread.smart_join(targets=('beta',
                                                'charlie',
                                                'delta'))
@@ -27442,10 +27386,7 @@ class TestSmartThreadComboScenarios:
 
             time.sleep(1)
 
-            recvd_msgs = st.RecvMsgs()
-            f1_st.smart_recv(
-                received_msgs=recvd_msgs,
-                senders='alpha')
+            f1_st.smart_recv(senders='alpha')
 
             f1_st.smart_wait(resumers='alpha')
 
@@ -29278,11 +29219,8 @@ class TestSmartThreadErrors:
         with pytest.raises(st.SmartThreadDetectedOpFromForeignThread):
             beta_thread.smart_send(receivers='alpha', msg='hi alpha')
 
-        recvd_msgs = st.RecvMsgs()
         with pytest.raises(st.SmartThreadDetectedOpFromForeignThread):
-            beta_thread.smart_recv(
-                received_msgs=recvd_msgs,
-                senders='alpha')
+            beta_thread.smart_recv(senders='alpha')
 
         with pytest.raises(st.SmartThreadDetectedOpFromForeignThread):
             beta_thread.smart_resume(waiters='alpha')

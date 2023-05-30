@@ -449,14 +449,14 @@ class SendMsgs:
     """Class used for a set of messages to send."""
     send_msgs: dict[str, list[Any]]
 
-def make_def_dict():
-    return defaultdict(list)
-
-@dataclass
-class RecvMsgs:
-    """Class used for a set of messages to send."""
-    recv_msgs: dict[str, list[Any]] = field(
-        default_factory=make_def_dict)
+# def make_def_dict():
+#     return defaultdict(list)
+#
+# @dataclass
+# class RecvMsgs:
+#     """Class used for a set of messages to send."""
+#     recv_msgs: dict[str, list[Any]] = field(
+#         default_factory=make_def_dict)
 
 ########################################################################
 # SmartThread class exceptions
@@ -600,7 +600,6 @@ class RequestBlock:
     do_refresh: bool
     exit_log_msg: Optional[str]
     msg_to_send: Any
-    ret_msg: RecvMsgs
     ret_resume_result: set[str]
     stopped_remotes: set[str]
     not_registered_remotes: set[str]
@@ -955,6 +954,10 @@ class SmartThread:
 
         self.max_msgs = max_msgs
         self.request_max_interval = request_max_interval
+
+        self.recvd_msgs: dict[str, list[Any]] = defaultdict(list)
+
+        self.resumed_by: set[str] = set()
 
         self.work_remotes: set[str] = set()
         self.work_pk_remotes: list[PairKeyRemote] = []
@@ -2647,19 +2650,23 @@ class SmartThread:
     # smart_recv
     ####################################################################
     def smart_recv(self,
-                   received_msgs: RecvMsgs,
                    senders: Optional[Iterable] = None,
                    timeout: OptIntFloat = None,
-                   log_msg: Optional[str] = None) -> None:
+                   log_msg: Optional[str] = None) -> dict[str, list[Any]]:
         """Receive one or more messages from remote threads.
 
         Args:
             senders: thread names whose sent messages are to be received
-            received_msgs: the RecvMsgs object where messages will be
-                placed as they are received
             timeout: number of seconds to wait for message
             log_msg: additional text to append to the debug log message
                 that is issued on request entry and exit
+
+        Returns:
+            A dictionary where the keys are the sender names, and each
+            entry contains a list off one or more received messages.
+            Note that if *smart_recv* raises an error, the messages
+            collected thus far can be recovered from the SmartThread
+            field *recvd_msgs*.
 
         Raises:
             SmartThreadRemoteThreadNotAlive: target thread was
@@ -2698,13 +2705,13 @@ class SmartThread:
         messages in a dictionary indexed by sender thread name.
 
         When *smart_recv* gets control, it will check its message
-        queues for each of the specified senders and place any messages
-        found into the received_msgs dictionary (type RecvMsgs) and
-        then return. If no messages were initially found, *smart_recv*
-        will continue to periodically check until one or more messages
-        arrive, at which point it place then into the received_msgs and
-        return them. If timeout is specified, *smart_recv* will raise a
-        timeout error if no messages appear within the specified time.
+        queues for each of the specified senders. If one or more
+        messages are found, *smart_recv* will return with them. If no
+        messages are initially found, *smart_recv* will continue to
+        periodically check until one or more messages arrive, at which
+        point it will return with them. If timeout is specified,
+        *smart_recv* will raise a timeout error if no messages appear
+        within the specified time.
 
         If no senders are specified, the *smart_recv* will check its
         message queues for all threads in the current configuration. If
@@ -2720,11 +2727,11 @@ class SmartThread:
         If senders are specified, *smart_recv* will look for messages
         only on its message queues for the specified senders. Unlike
         the "no senders specified" case, *smart_recv* will raise an
-        error if any of the specified senders become inactive.
+        error if any of the specified sender thread become not alive.
 
         If *smart_recv* raises an error, any messages that were received
-        will have been placed into *received_msgs* and will thus be
-        available to the caller during its recovery processing.
+        will be placed into the SmartThread object in field recvd_msgs
+        in case the caller need to recover them.
 
         Examples in this section cover the following cases:
 
@@ -3001,12 +3008,15 @@ class SmartThread:
             timeout=timeout,
             log_msg=log_msg)
 
-        request_block.ret_msg = received_msgs
+        self.recvd_msgs = defaultdict(list)
+
         self._request_loop(request_block=request_block)
 
         logger.debug(request_block.exit_log_msg)
 
         self.request = ReqType.NoReq
+
+        return self.recvd_msgs
 
     ####################################################################
     # _process_recv_msg
@@ -3027,67 +3037,30 @@ class SmartThread:
             True when request completed, False otherwise
 
         """
-        # We start off assuming remote is alive and we have a msg,
+        # We start off assuming the remote is alive and we have a msg,
         # meaning we make the timeout_value very small just to test
         # the msg_q. If there is no msg, we check the remote state
         # and to decide whether to fail the smart_recv (remote
         # stopped), try to retrieve the msg again with a longer
         # timeout_value (remote alive), or return False to give
-        # the remote more time (remote is not alive, but no stopped)
-        # for timeout_value in (SmartThread.K_REQUEST_MIN_INTERVAL,
-        #                       request_block.request_max_interval):
-        #     try:
-        #         # recv message from remote
-        #         request_block.ret_msg = local_sb.msg_q.get(
-        #             timeout=timeout_value)
-        #         logger.info(
-        #             f'{self.name} received msg from {pk_remote.remote}')
-        #         # if we had wanted to delete an entry in the
-        #         # pair array for this thread because the other
-        #         # thread exited, but we could not because this
-        #         # thread had a pending msg to recv, then we
-        #         # deferred the delete. If the msg_q for this
-        #         # thread is now empty as a result of this recv,
-        #         # we can go ahead and delete the pair, so
-        #         # set the flag to do a refresh
-        #         if local_sb.del_deferred and local_sb.msg_q.empty():
-        #             request_block.do_refresh = True
-        #         return True
-        #
-        #     except queue.Empty:
-        #         # The msg queue was just now empty which rules out
-        #         # that case that the pair_key is valid only because
-        #         # of a deferred delete. So, we know the remote is in
-        #         # the registry and in the status block.
-        #
-        #         remote_state = self._get_target_state(pk_remote)
-        #
-        #         if remote_state == ThreadState.Stopped:
-        #             request_block.stopped_remotes |= {pk_remote.remote}
-        #             request_block.do_refresh = True
-        #             return True  # we are done with this remote
-        #
-        #         if remote_state != ThreadState.Alive:
-        #             return False  # remote needs more time
+        # the remote more time (remote is not alive, but not stopped)
 
-        # return False
         for timeout_value in (SmartThread.K_REQUEST_MIN_INTERVAL,
                               request_block.request_max_interval):
             try:
                 # logger.debug(f'TestDebug {self.name} checking for message '
                 #              f'from {pk_remote.remote}')
-                received_msgs: list[Any] = []
                 # recv message from remote
                 with SmartThread._pair_array[pk_remote.pair_key].status_lock:
                     recvd_msg = local_sb.msg_q.get(
                         timeout=timeout_value)
-                    received_msgs.append(recvd_msg)
+                    self.recvd_msgs[pk_remote.remote].append(recvd_msg)
                     logger.info(
                         f'{self.name} smart_recv received msg from '
                         f'{pk_remote.remote}')
                     while not local_sb.msg_q.empty():
                         recvd_msg = local_sb.msg_q.get()
-                        received_msgs.append(recvd_msg)
+                        self.recvd_msgs[pk_remote.remote].append(recvd_msg)
                     # reset recv_wait after we get messages instead of
                     # before so as to avoid having the flag being
                     # momentarily False with the msg_q empty in the
@@ -3097,7 +3070,6 @@ class SmartThread:
                     local_sb.recv_wait = False
 
                 # if here, msg_q was not empty (i.e., no exception)
-                request_block.ret_msg.recv_msgs[pk_remote.remote] = received_msgs
                 logger.debug(f'TestDebug {self.name} got message '
                              f'from {pk_remote.remote}, {received_msgs=}')
                 # if we had wanted to delete an entry in the
@@ -3199,29 +3171,29 @@ class SmartThread:
     def smart_wait(self, *,
                    resumers: Optional[Iterable] = None,
                    wait_for: WaitFor = WaitFor.All,
-                   resumed_by: Optional[set[str]] = None,
                    timeout: OptIntFloat = None,
-                   log_msg: Optional[str] = None) -> None:
+                   log_msg: Optional[str] = None) -> set[str]:
         """Wait until resumed.
 
         Args:
             resumers: names of threads that we expect to resume us
             wait_for: specifies whether to wait for only one remote or
                 for all remotes
-            resumed_by: set of thread names that the wait detected as
-                having done a resume. This is both and input and an
-                output parameter, passed in normally as an empty set by
-                the caller and modified by smart_wait as output. This is
-                done to allow the caller to recover the information in
-                an except clause in the event of an error raised by
-                smart_wait. Note that the output set will be a subset of
-                the specified *resumers*. If the *wait_for*
-                specification is WaitFor.All, then *resumed_by* will
-                be equal to *resumers* provided there are no errors.
             timeout: number of seconds to allow for wait to be
                 resumed
             log_msg: additional text to append to the debug log message
                 that is issued on request entry and exit
+
+        Returns:
+            A set of thread names that *smart_wait* detects as having
+            done a resume. If WaitFor.All is specified for *wait_for*
+            then the returned set of names will match the names
+            specified for *resumers*. If WaitFor.Any is specified for
+            *wait_for*, the set of names returned will be a subset (
+            possibly equal) of the names specified for *resumers*. Note
+            that if *smart_wait* raises an error, the set of names
+            collected thus far can be recovered from the SmartThread
+            field *resumed_by*.
 
         Raises:
             SmartThreadDeadlockDetected: a smart_wait specified a
@@ -3526,15 +3498,7 @@ class SmartThread:
             self.wait_for_any = True
             request_block.completion_count = len(request_block.remotes) - 1
 
-        if resumed_by is None:
-            # we will set to an empty set to make processing easier
-            request_block.ret_resume_result = set()
-        elif isinstance(resumed_by, set):
-            request_block.ret_resume_result = resumed_by
-        else:
-            raise SmartThreadInvalidInput(
-                f'{self.name} processing a smart_wait detected that'
-                f' {resumed_by=} is neither None nor a set')
+        self.resumed_by = set()
 
         self._request_loop(request_block=request_block)
 
@@ -3542,6 +3506,8 @@ class SmartThread:
 
         self.request = ReqType.NoReq
         self.wait_for_any = False
+
+        return self.resumed_by
 
     ####################################################################
     # _process_wait
@@ -3595,7 +3561,7 @@ class SmartThread:
                 logger.info(
                     f'{self.name} smart_wait resumed by '
                     f'{pk_remote.remote}')
-                request_block.ret_resume_result |= {pk_remote.remote}
+                self.resumed_by |= {pk_remote.remote}
                 return True
 
             with SmartThread._pair_array[pk_remote.pair_key].status_lock:
@@ -4398,7 +4364,7 @@ class SmartThread:
             if ((request_block.stopped_remotes and request_block.remotes
                  and not (self.request == ReqType.Smart_wait
                           and self.wait_for_any
-                          and request_block.ret_resume_result))
+                          and self.resumed_by))
                     or request_block.deadlock_remotes
                     or request_block.timer.is_expired()):
 
@@ -4439,10 +4405,11 @@ class SmartThread:
                     continue_request_loop = False
             else:
                 if (request_block.request == ReqType.Smart_recv
-                        and request_block.ret_msg.recv_msgs):
+                        and self.recvd_msgs):
                     continue_request_loop = False
                 elif (request_block.request == ReqType.Smart_wait
-                      and request_block.ret_resume_result):
+                      and self.wait_for_any
+                      and self.resumed_by):
                     continue_request_loop = False
                 else:  # keep looking
                     self._set_work_pk_remotes(request_block.request)
