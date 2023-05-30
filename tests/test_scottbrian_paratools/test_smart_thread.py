@@ -6318,9 +6318,9 @@ class CmdWaitingLogSearchItem(LogSearchItem):
 
 
 ########################################################################
-# TestDebugLogSearchItem
+# DebugLogSearchItem
 ########################################################################
-class TestDebugLogSearchItem(LogSearchItem):
+class DebugLogSearchItem(LogSearchItem):
     """Input to search log msgs."""
 
     def __init__(self,
@@ -6345,7 +6345,7 @@ class TestDebugLogSearchItem(LogSearchItem):
     def get_found_log_item(self,
                            found_log_msg: str,
                            found_log_idx: int
-                           ) -> "TestDebugLogSearchItem":
+                           ) -> "DebugLogSearchItem":
         """Return a found log item.
 
         Args:
@@ -6355,7 +6355,7 @@ class TestDebugLogSearchItem(LogSearchItem):
         Returns:
             SyncResumedLogSearchItem containing found message and index
         """
-        return TestDebugLogSearchItem(
+        return DebugLogSearchItem(
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
@@ -6600,7 +6600,7 @@ LogSearchItems: TypeAlias = Union[
     JoinWaitingLogSearchItem,
     StoppedLogSearchItem,
     CmdWaitingLogSearchItem,
-    TestDebugLogSearchItem,
+    DebugLogSearchItem,
     RemStatusBlockEntryLogSearchItem,
     RemStatusBlockEntryDefLogSearchItem,
     CRunnerRaisesLogSearchItem,
@@ -6908,7 +6908,7 @@ class ConfigVerifier:
             JoinWaitingLogSearchItem(config_ver=self),
             StoppedLogSearchItem(config_ver=self),
             CmdWaitingLogSearchItem(config_ver=self),
-            TestDebugLogSearchItem(config_ver=self),
+            DebugLogSearchItem(config_ver=self),
             RemStatusBlockEntryLogSearchItem(config_ver=self),
             RemStatusBlockEntryDefLogSearchItem(config_ver=self),
             CRunnerRaisesLogSearchItem(config_ver=self),
@@ -15677,6 +15677,7 @@ class ConfigVerifier:
         recv_msg_serial_num = self.add_cmd(RecvMsg(
             cmd_runners=receivers,
             senders=senders,
+            exp_senders=senders,
             exp_msgs=msgs_to_send))
         self.add_cmd(
             ConfirmResponse(
@@ -15989,6 +15990,50 @@ class ConfigVerifier:
                 confirm_cmd=cmd_to_confirm,
                 confirm_serial_num=wait_serial_num,
                 confirmers=waiter))
+
+    ####################################################################
+    # build_sync_basic_scenario
+    ####################################################################
+    def build_sync_basic_scenario(
+            self,
+            num_syncers: int,
+            num_extras: int) -> None:
+        """Add cmds to run scenario.
+
+        Args:
+            num_syncers: number of threads doing sync
+            num_extras: number of extra threads not involved in the
+                sync request
+
+        """
+        syncers: set[str] = set()
+        for idx in range(num_syncers):
+            syncers |= {'syncer_' + str(idx)}
+
+        extras: set[str] = set()
+        for idx in range(num_extras):
+            extras |= {'extra_' + str(idx)}
+
+        self.create_config(active_names=syncers | extras)
+
+        self.log_name_groups()
+
+        ################################################################
+        # resume
+        ################################################################
+        sync_serial_num = self.add_cmd(Sync(
+            cmd_runners=syncers,
+            targets=syncers))
+
+        ################################################################
+        # confirm response
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='Sync',
+                confirm_serial_num=sync_serial_num,
+                confirmers=syncers))
 
     ####################################################################
     # build_sync_request
@@ -16761,6 +16806,7 @@ class ConfigVerifier:
         recv_msg_serial_num = self.add_cmd(
             RecvMsg(cmd_runners=['alpha', 'beta', 'charlie'],
                     senders=['delta', 'echo'],
+                    exp_senders=['delta', 'echo'],
                     exp_msgs=msgs_to_send,
                     log_msg='RecvMsg test log message 2'))
 
@@ -16779,6 +16825,7 @@ class ConfigVerifier:
         self.add_cmd(
             Wait(cmd_runners='beta',
                  resumers='charlie',
+                 exp_resumers='charlie',
                  stopped_remotes=set(),
                  wait_for=st.WaitFor.All,
                  log_msg='Wait test log message 3'))
@@ -26018,6 +26065,36 @@ class TestSmartBasicScenarios:
 
         scenario_driver(
             scenario_builder=ConfigVerifier.build_wait_basic_scenario,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
+
+    ####################################################################
+    # test_sync_basic_scenario
+    ####################################################################
+    @pytest.mark.parametrize("num_syncers_arg", [2, 3, 4])
+    @pytest.mark.parametrize("num_extras_arg", [0, 1, 2])
+    def test_sync_basic_scenario(
+            self,
+            num_syncers_arg: int,
+            num_extras_arg: int,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            num_syncers_arg: number of threads doing sync
+            num_extras_arg: number of extra threads not involved in the
+                sync request
+            caplog: pytest fixture to capture log output
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {
+            'num_syncers': num_syncers_arg,
+            'num_extras':num_extras_arg
+        }
+
+        scenario_driver(
+            scenario_builder=ConfigVerifier.build_sync_basic_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 

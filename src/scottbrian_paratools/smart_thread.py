@@ -149,24 +149,29 @@ instance with the same SmartThread name.
 
 .. code-block:: python
 
-    from scottbrian_paratools.smart_thread import SmartThread
+    from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+
     def f1() -> None:
         print('f1 beta entered')
         beta_smart_thread.smart_send(receivers='alpha',
                                      msg='hi alpha, this is beta')
         beta_smart_thread.smart_wait(resumers='alpha')
         print('f1 beta exiting')
+
     print('mainline alpha entered')
     alpha_smart_thread = SmartThread(name='alpha')
     beta_smart_thread = SmartThread(name='beta',
                                     target=f1,
                                     auto_start=False)
     beta_smart_thread.smart_start()
-    msg_from_beta = alpha_smart_thread.smart_recv(senders='beta')
-    print(msg_from_beta)
+    recvd_msgs = RecvMsgs()
+    alpha_smart_thread.smart_recv(
+        received_msgs=recvd_msgs,
+        senders='beta')
+    print(recvd_msgs.recv_msgs['beta'])
     alpha_smart_thread.smart_resume(waiters='beta')
     alpha_smart_thread.smart_join(targets='beta')
-    print('mainline exiting')
+    print('mainline alpha exiting')
 
 .. invisible-code-block: python
 
@@ -174,9 +179,9 @@ instance with the same SmartThread name.
 
 Expected output for Example 1::
 
-    mainline entered
-    f1 beta entered
-    {'beta': ['hi alpha, this is beta']}
+    mainline alpha entered
+    f1 beta entered\
+    ['hi alpha, this is beta']
     f1 beta exiting
     mainline alpha exiting
 
@@ -188,24 +193,29 @@ Expected output for Example 1::
 
 .. code-block:: python
 
-    from scottbrian_paratools.smart_thread import SmartThread
+    from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+
     def f1(smart_thread: SmartThread) -> None:
         print('f1 beta entered')
         smart_thread.smart_send(receivers='alpha',
                                 msg='hi alpha, this is beta')
         smart_thread.smart_wait(resumers='alpha')
         print('f1 beta exiting')
+
     print('mainline alpha entered')
     alpha_smart_thread = SmartThread(name='alpha')
-    beta_smart_thread = SmartThread(name='beta',
-                              target=f1,
-                              auto_start=True,
-                              thread_parm_name='smart_thread')
-    msg_from_beta = alpha_smart_thread.smart_recv(senders='beta')
-    print(msg_from_beta)
+    SmartThread(name='beta',
+                target=f1,
+                auto_start=True,
+                thread_parm_name='smart_thread')
+    recvd_msgs = RecvMsgs()
+    alpha_smart_thread.smart_recv(
+        received_msgs=recvd_msgs,
+        senders='beta')
+    print(recvd_msgs.recv_msgs['beta'])
     alpha_smart_thread.smart_resume(waiters='beta')
     alpha_smart_thread.smart_join(targets='beta')
-    print('mainline exiting')
+    print('mainline alpha exiting')
 
 .. invisible-code-block: python
 
@@ -215,7 +225,7 @@ Expected output for Example 2::
 
     mainline alpha entered
     f1 beta entered
-    {'beta': ['hi alpha, this is beta']}
+    ['hi alpha, this is beta']
     f1 beta exiting
     mainline alpha exiting
 
@@ -228,8 +238,9 @@ Expected output for Example 2::
 
 .. code-block:: python
 
-    from scottbrian_paratools.smart_thread import SmartThread
+    from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
     import threading
+
     def f1() -> None:
         print('f1 beta entered')
         beta_smart_thread = SmartThread(name='beta')
@@ -237,12 +248,16 @@ Expected output for Example 2::
                                      msg='hi alpha, this is beta')
         beta_smart_thread.smart_wait(resumers='alpha')
         print('f1 beta exiting')
+
     print('mainline alpha entered')
     alpha_smart_thread = SmartThread(name='alpha')
     beta_thread = threading.Thread(target=f1, name='beta')
     beta_thread.start()
-    msg_from_beta = alpha_smart_thread.smart_recv(senders='beta')
-    print(msg_from_beta)
+    recvd_msgs = RecvMsgs()
+    alpha_smart_thread.smart_recv(
+        received_msgs=recvd_msgs,
+        senders='beta')
+    print(recvd_msgs.recv_msgs['beta'])
     alpha_smart_thread.smart_resume(waiters='beta')
     alpha_smart_thread.smart_join(targets='beta')
     print('mainline alpha exiting')
@@ -253,9 +268,9 @@ Expected output for Example 2::
 
 Expected output for Example 3::
 
-    mainline entered
+    mainline alpha entered
     f1 beta entered
-    {'beta': ['hi alpha, this is beta']}
+    ['hi alpha, this is beta']
     f1 beta exiting
     mainline alpha exiting
 
@@ -269,17 +284,19 @@ Expected output for Example 3::
 
 .. code-block:: python
 
-    from scottbrian_paratools.smart_thread import SmartThread
+    from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
     import threading
     import time
 
     class ThreadApp(threading.Thread):
         def __init__(self, name: str) -> None:
             super().__init__(name=name)
-            self.smart_thread = SmartThread(name=name,
-                                            thread=self,
-                                            auto_start=False)
+            self.smart_thread = SmartThread(
+                name=name,
+                thread=self,
+                auto_start=False)
             self.smart_thread.smart_start()
+
         def run(self) -> None:
             print(f'{self.smart_thread.name} entry to run method')
             self.smart_thread.smart_send(msg='hi alpha, this is beta',
@@ -291,9 +308,12 @@ Expected output for Example 3::
 
     print('mainline alpha entered')
     alpha_smart_thread = SmartThread(name='alpha')
-    thread_app = ThreadApp(name='beta')
-    my_msg = alpha_smart_thread.smart_recv(senders='beta')
-    print(my_msg)
+    ThreadApp(name='beta')
+    recvd_msgs = RecvMsgs()
+    alpha_smart_thread.smart_recv(
+        received_msgs=recvd_msgs,
+        senders='beta')
+    print(recvd_msgs.recv_msgs['beta'])
     time.sleep(2)
     print('alpha about to resume beta')
     alpha_smart_thread.smart_resume(waiters='beta')
@@ -308,7 +328,7 @@ Expected output for Example 4::
 
     mainline alpha entered
     beta entry to run method
-    {'beta': ['hi alpha, this is beta']}
+    ['hi alpha, this is beta']
     beta about to wait
     alpha about to resume beta
     beta exiting run method
@@ -324,9 +344,10 @@ Expected output for Example 4::
 
 .. code-block:: python
 
-    from scottbrian_paratools.smart_thread import SmartThread
+    from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
     import threading
     import time
+
     class SmartThreadApp(threading.Thread, SmartThread):
         def __init__(self, name: str) -> None:
             threading.Thread.__init__(self, name=name)
@@ -334,6 +355,7 @@ Expected output for Example 4::
                                  name=name,
                                  thread=self,
                                  auto_start=True)
+
         def run(self) -> None:
             print(f'{self.name} entry to run method')
             self.smart_send(msg='hi alpha, this is beta',
@@ -345,9 +367,12 @@ Expected output for Example 4::
 
     print('mainline alpha entered')
     alpha_smart_thread = SmartThread(name='alpha')
-    thread_app = SmartThreadApp(name='beta')
-    my_msg = alpha_smart_thread.smart_recv(senders='beta')
-    print(my_msg)
+    SmartThreadApp(name='beta')
+    recvd_msgs = RecvMsgs()
+    alpha_smart_thread.smart_recv(
+        received_msgs=recvd_msgs,
+        senders='beta')
+    print(recvd_msgs.recv_msgs['beta'])
     time.sleep(2)
     print('alpha about to resume beta')
     alpha_smart_thread.smart_resume(waiters='beta')
@@ -362,7 +387,7 @@ Expected output for Example5::
 
     mainline alpha entered
     beta entry to run method
-    {'beta': ['hi alpha, this is beta']}
+    ['hi alpha, this is beta']
     beta about to wait
     alpha about to resume beta
     beta exiting run method
@@ -2183,19 +2208,23 @@ class SmartThread:
 
         .. code-block:: python
 
-            from scottbrian_paratools.smart_thread import SmartThread
+            from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
 
             def f1(smart_thread: SmartThread) -> None:
                 print('f1 beta entered')
-                my_msg = smart_thread.smart_recv(senders='alpha')
-                print(my_msg)
+                recvd_msgs = RecvMsgs()
+                smart_thread.smart_recv(
+                    received_msgs=recvd_msgs,
+                    senders='alpha')
+                print(recvd_msgs.recv_msgs['alpha'])
                 print('f1 beta exiting')
 
             print('mainline alpha entered')
+            logger.debug('mainline entered')
             alpha_smart_thread = SmartThread(name='alpha')
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread')
+            SmartThread(name='beta',
+                        target=f1,
+                        thread_parm_name='smart_thread')
             alpha_smart_thread.smart_send(msg='hello beta', receivers='beta')
             alpha_smart_thread.smart_join(targets='beta')
             print('mainline alpha exiting')
@@ -2208,7 +2237,7 @@ class SmartThread:
 
             mainline alpha entered
             f1 beta entered
-            {'alpha': 'hello beta'}
+            ['hello beta']
             f1 beta exiting
             mainline alpha exiting
 
@@ -2216,25 +2245,27 @@ class SmartThread:
 
         .. code-block:: python
 
-            from scottbrian_paratools.smart_thread import SmartThread
+            from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
             import time
 
             def f1(smart_thread: SmartThread) -> None:
                 if smart_thread.name == 'charlie':
                     time.sleep(0.5)  # delay for non-interleaved msgs
                 print(f'f1 {smart_thread.name} entered')
-                my_msg = smart_thread.smart_recv(senders='alpha')
-                print(my_msg)
+                recvd_msgs = RecvMsgs()
+                smart_thread.smart_recv(
+                    received_msgs=recvd_msgs,
+                    senders='alpha')
+                print(recvd_msgs.recv_msgs['alpha'])
                 print(f'f1 {smart_thread.name} exiting')
-
             print('mainline alpha entered')
             alpha_smart_thread = SmartThread(name='alpha')
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread')
-            charlie_smart_thread = SmartThread(name='charlie',
-                                               target=f1,
-                                             thread_parm_name='smart_thread')
+            SmartThread(name='beta',
+                        target=f1,
+                        thread_parm_name='smart_thread')
+            SmartThread(name='charlie',
+                        target=f1,
+                        thread_parm_name='smart_thread')
             alpha_smart_thread.smart_send(msg='hello remotes',
                                           receivers=('beta', 'charlie'))
             alpha_smart_thread.smart_join(targets=('beta', 'charlie'))
@@ -2248,10 +2279,10 @@ class SmartThread:
 
             mainline alpha entered
             f1 beta entered
-            {'alpha': ['hello remotes']}
+            ['hello remotes']
             f1 beta exiting
             f1 charlie entered
-            {'alpha': ['hello remotes']}
+            ['hello remotes']
             f1 charlie exiting
             mainline alpha exiting
 
@@ -2263,7 +2294,7 @@ class SmartThread:
 
         .. code-block:: python
 
-            from scottbrian_paratools.smart_thread import SmartThread
+            from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
 
             def f1(smart_thread: SmartThread,
                    wait_for: Optional[str] = None,
@@ -2271,31 +2302,31 @@ class SmartThread:
                 if wait_for:
                     smart_thread.smart_wait(resumers=wait_for)
                 print(f'f1 {smart_thread.name} entered')
-                my_msg = smart_thread.smart_recv(senders='alpha')
-                print(my_msg)
+                recvd_msgs = RecvMsgs()
+                smart_thread.smart_recv(
+                    received_msgs=recvd_msgs,
+                    senders='alpha')
+                print(recvd_msgs.recv_msgs['alpha'])
                 print(f'f1 {smart_thread.name} exiting')
                 if resume_target:
                     smart_thread.smart_resume(waiters=resume_target)
 
             print('mainline alpha entered')
             alpha_smart_thread = SmartThread(name='alpha')
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread',
-                                            kwargs={
-                                                'resume_target':'charlie'})
-            charlie_smart_thread = SmartThread(name='charlie',
-                                               target=f1,
-                                               thread_parm_name='smart_thread',
-                                               kwargs={
-                                                   'wait_for': 'beta',
-                                                   'resume_target': 'delta'})
-            delta_smart_thread = SmartThread(name='delta',
-                                             target=f1,
-                                             thread_parm_name='smart_thread',
-                                             kwargs={
-                                                 'wait_for': 'charlie',
-                                                 'resume_target': 'alpha'})
+            SmartThread(name='beta',
+                        target=f1,
+                        thread_parm_name='smart_thread',
+                        kwargs={'resume_target': 'charlie'})
+            SmartThread(name='charlie',
+                        target=f1,
+                        thread_parm_name='smart_thread',
+                        kwargs={'wait_for': 'beta',
+                                'resume_target': 'delta'})
+            SmartThread(name='delta',
+                        target=f1,
+                        thread_parm_name='smart_thread',
+                        kwargs={'wait_for': 'charlie',
+                                'resume_target': 'alpha'})
             alpha_smart_thread.smart_send(msg='hello remotes')
             alpha_smart_thread.smart_wait(resumers='delta')
             alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
@@ -2309,13 +2340,13 @@ class SmartThread:
 
             mainline alpha entered
             f1 beta entered
-            {'alpha': ['hello remotes']}
+            ['hello remotes']
             f1 beta exiting
             f1 charlie entered
-            {'alpha': ['hello remotes']}
+            ['hello remotes']
             f1 charlie exiting
             f1 delta entered
-            {'alpha': ['hello remotes']}
+            ['hello remotes']
             f1 delta exiting
             mainline alpha exiting
 
@@ -2323,21 +2354,24 @@ class SmartThread:
 
         .. code-block:: python
 
-            from scottbrian_paratools.smart_thread import SmartThread
+            from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
 
             def f1(smart_thread: SmartThread) -> None:
                 print(f'f1 {smart_thread.name} entered')
-                my_msg = smart_thread.smart_recv(senders='alpha')
-                print(my_msg)
+                recvd_msgs = RecvMsgs()
+                smart_thread.smart_recv(
+                    received_msgs=recvd_msgs,
+                    senders='alpha')
+                print(recvd_msgs.recv_msgs['alpha'])
                 print(f'f1 {smart_thread.name} exiting')
 
             print('mainline alpha entered')
             alpha_smart_thread = SmartThread(name='alpha')
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread')
+            SmartThread(name='beta',
+                        target=f1,
+                        thread_parm_name='smart_thread')
             alpha_smart_thread.smart_send(msg=('hello beta',
-                                               'have a great day', 42))
+                                          'have a great day', 42))
             alpha_smart_thread.smart_join(targets='beta')
             print('mainline alpha exiting')
 
@@ -2349,7 +2383,7 @@ class SmartThread:
 
             mainline alpha entered
             f1 beta entered
-            {'alpha': [('hello beta', 'have a great day', 42)]}
+            [('hello beta', 'have a great day', 42)]
             f1 beta exiting
             mainline alpha exiting
 
@@ -2357,7 +2391,7 @@ class SmartThread:
 
         .. code-block:: python
 
-            from scottbrian_paratools.smart_thread import SmartThread
+            from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
 
             def f1(smart_thread: SmartThread,
                    wait_for: Optional[str] = None,
@@ -2365,36 +2399,34 @@ class SmartThread:
                 if wait_for:
                     smart_thread.smart_wait(resumers=wait_for)
                 print(f'f1 {smart_thread.name} entered')
-                my_msg = smart_thread.smart_recv(senders='alpha')
-                print(my_msg)
+                recvd_msgs = RecvMsgs()
+                smart_thread.smart_recv(
+                    received_msgs=recvd_msgs,
+                    senders='alpha')
+                print(recvd_msgs.recv_msgs['alpha'])
                 print(f'f1 {smart_thread.name} exiting')
                 if resume_target:
                     smart_thread.smart_resume(waiters=resume_target)
 
             print('mainline alpha entered')
             alpha_smart_thread = SmartThread(name='alpha')
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread',
-                                            kwargs={
-                                                'resume_target':'charlie'})
-            charlie_smart_thread = SmartThread(name='charlie',
-                                               target=f1,
-                                               thread_parm_name='smart_thread',
-                                               kwargs={
-                                                   'wait_for': 'beta',
-                                                   'resume_target': 'delta'})
-            delta_smart_thread = SmartThread(name='delta',
-                                             target=f1,
-                                             thread_parm_name='smart_thread',
-                                             kwargs={
-                                                 'wait_for': 'charlie',
-                                                 'resume_target': 'alpha'})
-            alpha_smart_thread.smart_send(msg=['hello remotes',
-                                               'have a great day', 42],
-                                          receivers=['beta',
-                                                     'charlie',
-                                                     'delta'])
+            SmartThread(name='beta',
+                        target=f1,
+                        thread_parm_name='smart_thread',
+                        kwargs={'resume_target': 'charlie'})
+            SmartThread(name='charlie',
+                        target=f1,
+                        thread_parm_name='smart_thread',
+                        kwargs={'wait_for': 'beta',
+                                'resume_target': 'delta'})
+            SmartThread(name='delta',
+                        target=f1,
+                        thread_parm_name='smart_thread',
+                        kwargs={'wait_for': 'charlie',
+                                'resume_target': 'alpha'})
+            alpha_smart_thread.smart_send(
+                msg=['hello remotes', 'have a great day', 42],
+                receivers=['beta', 'charlie', 'delta'])
             alpha_smart_thread.smart_wait(resumers='delta')
             alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
             print('mainline alpha exiting')
@@ -2407,13 +2439,13 @@ class SmartThread:
 
             mainline alpha entered
             f1 beta entered
-            {'alpha': [['hello remotes', 'have a great day', 42]]}
+            [['hello remotes', 'have a great day', 42]]
             f1 beta exiting
             f1 charlie entered
-            {'alpha': [['hello remotes', 'have a great day', 42]]}
+            [['hello remotes', 'have a great day', 42]]
             f1 charlie exiting
             f1 delta entered
-            {'alpha': [['hello remotes', 'have a great day', 42]]}
+            [['hello remotes', 'have a great day', 42]]
             f1 delta exiting
             mainline alpha exiting
 
@@ -2422,7 +2454,9 @@ class SmartThread:
 
         .. code-block:: python
 
-            from scottbrian_paratools.smart_thread import SmartThread
+            from scottbrian_paratools.smart_thread import (SmartThread,
+                                                           SendMsgs,
+                                                           RecvMsgs)
 
             def f1(smart_thread: SmartThread,
                    wait_for: Optional[str] = None,
@@ -2430,32 +2464,32 @@ class SmartThread:
                 if wait_for:
                     smart_thread.smart_wait(resumers=wait_for)
                 print(f'f1 {smart_thread.name} entered')
-                my_msg = smart_thread.smart_recv(senders='alpha')
-                print(my_msg)
+                recvd_msgs = RecvMsgs()
+                smart_thread.smart_recv(
+                    received_msgs=recvd_msgs,
+                    senders='alpha')
+                print(recvd_msgs.recv_msgs['alpha'])
                 print(f'f1 {smart_thread.name} exiting')
                 if resume_target:
                     smart_thread.smart_resume(waiters=resume_target)
 
             print('mainline alpha entered')
             alpha_smart_thread = SmartThread(name='alpha')
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread',
-                                            kwargs={
-                                                'resume_target':'charlie'})
-            charlie_smart_thread = SmartThread(name='charlie',
-                                               target=f1,
-                                               thread_parm_name='smart_thread',
-                                               kwargs={
-                                                   'wait_for': 'beta',
-                                                   'resume_target': 'delta'})
-            delta_smart_thread = SmartThread(name='delta',
-                                             target=f1,
-                                             thread_parm_name='smart_thread',
-                                             kwargs={
-                                                 'wait_for': 'charlie',
-                                                 'resume_target': 'alpha'})
-            msgs_to_send = SendMsgs(send_msgs= {
+            SmartThread(name='beta',
+                        target=f1,
+                        thread_parm_name='smart_thread',
+                        kwargs={'resume_target': 'charlie'})
+            SmartThread(name='charlie',
+                        target=f1,
+                        thread_parm_name='smart_thread',
+                        kwargs={'wait_for': 'beta',
+                                'resume_target': 'delta'})
+            SmartThread(name='delta',
+                        target=f1,
+                        thread_parm_name='smart_thread',
+                        kwargs={'wait_for': 'charlie',
+                                'resume_target': 'alpha'})
+            msgs_to_send = SendMsgs(send_msgs={
                 'beta': 'hi beta',
                 'charlie': ('hi charlie', 'have a great day'),
                 'delta': [42, 'hi delta', {'nums': (1, 2, 3)}]})
@@ -2472,13 +2506,13 @@ class SmartThread:
 
             mainline alpha entered
             f1 beta entered
-            {'alpha': 'hi beta'}
+            ['hi beta']
             f1 beta exiting
             f1 charlie entered
-            {'alpha': [('hi charlie', 'have a great day')]}
+            [('hi charlie', 'have a great day')]
             f1 charlie exiting
             f1 delta entered
-            {'alpha': [[42, 'hi delta', {'nums': (1, 2, 3)}]]}
+            [[42, 'hi delta', {'nums': (1, 2, 3)}]]
             f1 delta exiting
             mainline alpha exiting
 
