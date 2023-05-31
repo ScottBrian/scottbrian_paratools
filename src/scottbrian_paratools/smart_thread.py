@@ -2133,7 +2133,7 @@ class SmartThread:
                    msg: Any,
                    receivers: Optional[Iterable] = None,
                    timeout: OptIntFloat = None,
-                   log_msg: Optional[str] = None) -> None:
+                   log_msg: Optional[str] = None) -> set[str]:
         """Send one or more messages to remote threads.
 
         Args:
@@ -2147,6 +2147,13 @@ class SmartThread:
             log_msg: additional text to append to the debug log message
                 that is issued on request entry and exit
 
+        Returns:
+            A set of the thread names that were sent a message. Note
+            that if *smart_send* raises an error, the thread names that
+            were sent a message thus far can be recovered from field
+            *sent_targets* in the SmartThread object that issued the
+            *smart_send*.
+
         Raises:
             SmartThreadRemoteThreadNotAlive: target thread was
                 stopped.
@@ -2158,13 +2165,11 @@ class SmartThread:
 
         .. # noqa: DAR402
 
-        :rtype: None
-
         *smart_send* can be used to send a single message or multiple
         messages to a single remote thread, to multiple remote threads,
         or to every active remote thread in the configuration. A message
-        is any type (e.g., text, int, float, list, set, or
-        class object).
+        is any type (e.g., text, int, float, list, set, dict, or
+        class object). Note that the item being sent is not copied.
 
         The *msg* arg species the message or messages to be sent. A
         special case exists where the message can be specified as an
@@ -2180,21 +2185,26 @@ class SmartThread:
             1) when a SendMsgs object is specified for the *msgs* arg.
             2) when a broadcast message is to be sent to all remote
                threads in the configuration that are currently active
-               when the *smart_send* is issued.
+               when the *smart_send* is issued. Note that if there are
+               no active threads then the smart_send completes without
+               sending anything. Also, a timeout will not occur for a
+               broadcast message.
 
         The thread names specified for *receivers* or in a SendMsgs
         object may be in states unregistered, registered, or alive.
         *smart_send* will complete the send for any *receivers* that are
         in the unregistered or registered state as soon as they go to
         the alive state. If timeout is specified, a timeout error will
-        be raised if any threads did not become alive with the
+        be raised if any threads did not become alive within the
         specified amount of time.
 
-        An error will be raised if any receivers are stopped before the
-        message can be sent to them. This is true for receivers that are
-        specified as an argument for *receivers*, specified in the
-        SendMsgs object, or chosen for a broadcast message because they
-        were alive at the time of the *send_msg*.
+        An error will be raised if any specifies receivers are stopped
+        before the message can be sent to them. This is true only for
+        receivers that are specified as an argument for *receivers* or
+        specified in the SendMsgs object. Threads that were alive at the
+        start of a broadcast message (i.e., *receivers* not specifies)
+        but are stopped during smart_send processing will not result in
+        an error.
 
 
         Examples in this section cover the following cases:
@@ -2206,7 +2216,7 @@ class SmartThread:
             4) send multiple messages to a single remote thread
             5) send multiple messages to multiple remote threads
             6) send any mixture of single and multiple messages
-               individually to each remote thread
+               individually to each remote thread using a SendMsg object
 
         **Example 1:** send a single message to a single remote thread
 
@@ -2454,13 +2464,12 @@ class SmartThread:
             mainline alpha exiting
 
         **Example 6:** send any mixture of single and multiple messages
-        individually to each remote thread
+        individually to each remote thread using a SendMsg object
 
         .. code-block:: python
 
             from scottbrian_paratools.smart_thread import (SmartThread,
-                                                           SendMsgs,
-                                                           RecvMsgs)
+                                                           SendMsgs)
 
             def f1(smart_thread: SmartThread,
                    wait_for: Optional[str] = None,
@@ -2530,7 +2539,7 @@ class SmartThread:
                 completion_count = len(work_targets)
             else:
                 work_targets = set()
-                completion_count = 1
+                completion_count = 0  # we are done even without actives
                 with sel.SELockShare(SmartThread._registry_lock):
                     for remote in SmartThread._registry:
                         if (remote != self.name and
@@ -2570,6 +2579,8 @@ class SmartThread:
         self.request = ReqType.NoReq
 
         logger.debug(request_block.exit_log_msg)
+
+        return self.sent_targets
 
     ####################################################################
     # _process_send_msg
@@ -2671,8 +2682,8 @@ class SmartThread:
             A dictionary where the keys are the sender names, and each
             entry contains a list off one or more received messages.
             Note that if *smart_recv* raises an error, the messages
-            collected thus far can be recovered from the SmartThread
-            field *recvd_msgs*.
+            collected thus far can be recovered from field *recvd_msgs*
+            in the SmartThread object that issued the *smart_recv*.
 
         Raises:
             SmartThreadRemoteThreadNotAlive: target thread was
@@ -3197,7 +3208,7 @@ class SmartThread:
         Returns:
             A set of thread names that *smart_wait* detects as having
             done a resume. If *smart_wait* raises an error, the set of
-            names collected thus far can be recovered field
+            names collected thus far can be recovered from field
             *resumed_by* in the SmartThread object that issued the
             *smart_wait*.
 
@@ -3429,6 +3440,8 @@ class SmartThread:
 
         """
         self.request = ReqType.Smart_wait
+        logger.debug(
+            f'TestDebug {self.name} {self.request=}')
         self.resumed_by = set()
 
         if resume_count is None:
@@ -3578,7 +3591,7 @@ class SmartThread:
     def smart_resume(self, *,
                      waiters: Iterable,
                      timeout: OptIntFloat = None,
-                     log_msg: Optional[str] = None) -> None:
+                     log_msg: Optional[str] = None) -> set[str]:
         """Resume a waiting or soon to be waiting thread.
 
         Args:
@@ -3588,6 +3601,13 @@ class SmartThread:
             log_msg: additional text to append to the debug log message
                 that is issued on request entry and exit
 
+        Returns:
+            A set of the thread names that were resumed. Note that if
+            *smart_resume* raises an error, the thread names that
+            were resumed thus far can be recovered from field
+            *resumed_targets* in the SmartThread object that issued the
+            *smart_resume*.
+
         Raises:
             SmartThreadRemoteThreadNotAlive: waiter thread was
                 stopped.
@@ -3595,8 +3615,6 @@ class SmartThread:
                 being resumed.
 
         .. # noqa: DAR402
-
-        :rtype: None
 
         **Notes:**
 
@@ -3794,6 +3812,8 @@ class SmartThread:
 
         logger.debug(request_block.exit_log_msg)
 
+        return self.resumed_targets
+
     ####################################################################
     # _process_resume
     ####################################################################
@@ -3861,7 +3881,7 @@ class SmartThread:
     def smart_sync(self, *,
                    targets: Iterable,
                    timeout: OptIntFloat = None,
-                   log_msg: Optional[str] = None):
+                   log_msg: Optional[str] = None) -> set[str]:
         """Sync up with remote threads.
 
         Args:
@@ -3869,6 +3889,13 @@ class SmartThread:
             timeout: number of seconds to allow for sync to happen
             log_msg: additional text to append to the debug log message
                 that is issued on request entry and exit
+
+        Returns:
+            A set of the thread names that were synced. Note that if
+            *smart_sync* raises an error, the thread names that
+            were synced thus far can be recovered from field
+            *synced_targets* in the SmartThread object that issued the
+            *smart_sync*.
 
         Notes:
             1) A deadlock will occur between two threads when they both
@@ -3962,6 +3989,8 @@ class SmartThread:
         self.request = ReqType.NoReq
 
         logger.debug(request_block.exit_log_msg)
+
+        return self.synced_targets
 
     ####################################################################
     # _process_sync
@@ -4316,6 +4345,10 @@ class SmartThread:
                         self._clean_pair_array()
                     request_block.do_refresh = False
 
+            logger.debug(
+                f'TestDebug {self.name} {self.request=}, '
+                f'{request_block.completion_count=}, '
+                f'{self.resumed_by=}')
             if ((self.request == ReqType.Smart_send
                     and request_block.completion_count
                     <= len(self.sent_targets))
