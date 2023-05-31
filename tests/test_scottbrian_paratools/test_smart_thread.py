@@ -2741,7 +2741,7 @@ class Wait(ConfigCmd):
                  cmd_runners: Iterable,
                  resumers: Iterable,
                  exp_resumers: Iterable,
-                 wait_for: st.WaitFor = st.WaitFor.All,
+                 resume_count: Optional[int] = None,
                  stopped_remotes: Optional[Iterable] = None,
                  conflict_remotes: Optional[Iterable] = None,
                  deadlock_remotes: Optional[Iterable] = None,
@@ -2753,7 +2753,8 @@ class Wait(ConfigCmd):
             resumers: thread names that will resume
             exp_resumers: thread names that the wait is expected to be
                 resumed by
-            wait_for: wait for specification for smart_wait
+            resume_count: specification for smart_wait for how many
+                resumes are needed to satisfy the smart_wait
             stopped_remotes: thread names that are stopped
             conflict_remotes: thread names that cause deadlock
             deadlock_remotes: thread names that cause deadlock
@@ -2771,11 +2772,13 @@ class Wait(ConfigCmd):
 
         self.deadlock_remotes = get_set(deadlock_remotes)
 
-        self.wait_for = wait_for
+        self.resume_count = resume_count
+
         self.log_msg = log_msg
 
         self.arg_list += ['resumers',
                           'exp_resumers',
+                          'resume_count',
                           'stopped_remotes',
                           'conflict_remotes',
                           'deadlock_remotes']
@@ -2796,7 +2799,7 @@ class Wait(ConfigCmd):
             conflict_remotes=self.conflict_remotes,
             deadlock_remotes=self.deadlock_remotes,
             timeout_type=TimeoutType.TimeoutNone,
-            wait_for=self.wait_for,
+            resume_count=self.resume_count,
             log_msg=self.log_msg)
 
 
@@ -2810,7 +2813,7 @@ class WaitTimeoutFalse(Wait):
                  resumers: Iterable,
                  exp_resumers: Iterable,
                  timeout: IntOrFloat,
-                 wait_for: st.WaitFor = st.WaitFor.All,
+                 resume_count: Optional[int] = None,
                  stopped_remotes: Optional[Iterable] = None,
                  conflict_remotes: Optional[Iterable] = None,
                  deadlock_remotes: Optional[Iterable] = None,
@@ -2823,7 +2826,8 @@ class WaitTimeoutFalse(Wait):
             exp_resumers: thread names that the wait is expected to be
                 resumed by
             timeout: value for smart_wait
-            wait_for: WaitFor specification for smart_wait
+            resume_count: specification for smart_wait for how many
+                resumes are needed to satisfy the smart_wait
             stopped_remotes: thread names that are stopped
             conflict_remotes: thread names that are deadlocked
             deadlock_remotes: thread names that are deadlocked
@@ -2833,7 +2837,7 @@ class WaitTimeoutFalse(Wait):
                          resumers=resumers,
                          exp_resumers=exp_resumers,
                          stopped_remotes=stopped_remotes,
-                         wait_for=wait_for,
+                         resume_count=resume_count,
                          conflict_remotes=conflict_remotes,
                          deadlock_remotes=deadlock_remotes,
                          log_msg=log_msg)
@@ -2859,7 +2863,7 @@ class WaitTimeoutFalse(Wait):
             conflict_remotes=self.conflict_remotes,
             deadlock_remotes=self.deadlock_remotes,
             timeout_type=TimeoutType.TimeoutFalse,
-            wait_for=self.wait_for,
+            resume_count=self.resume_count,
             log_msg=self.log_msg)
 
 
@@ -2874,7 +2878,7 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
                  exp_resumers: Iterable,
                  timeout: IntOrFloat,
                  timeout_remotes: Iterable,
-                 wait_for: st.WaitFor = st.WaitFor.All,
+                 resume_count: Optional[int] = None,
                  stopped_remotes: Optional[Iterable] = None,
                  conflict_remotes: Optional[Iterable] = None,
                  deadlock_remotes: Optional[Iterable] = None,
@@ -2889,7 +2893,8 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
                 resumed by
             timeout: value for smart_wait
             timeout_remotes: thread names that cause a timeout
-            wait_for: WaitFor specification for smart_wait
+            resume_count: specification for smart_wait for how many
+                resumes are needed to satisfy the smart_wait
             stopped_remotes: thread names that are stopped
             conflict_remotes: thread names that are deadlocked
             deadlock_remotes: thread names that are deadlocked
@@ -2899,7 +2904,7 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
                          resumers=resumers,
                          exp_resumers=exp_resumers,
                          stopped_remotes=stopped_remotes,
-                         wait_for=wait_for,
+                         resume_count=resume_count,
                          conflict_remotes=conflict_remotes,
                          deadlock_remotes=deadlock_remotes,
                          timeout=timeout,
@@ -2926,7 +2931,7 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
             conflict_remotes=self.conflict_remotes,
             deadlock_remotes=self.deadlock_remotes,
             timeout_type=TimeoutType.TimeoutTrue,
-            wait_for=self.wait_for,
+            resume_count=self.resume_count,
             log_msg=self.log_msg)
 
 
@@ -7370,7 +7375,6 @@ class ConfigVerifier:
             Wait(cmd_runners=waiters,
                  resumers=resumers,
                  stopped_remotes=set(),
-                 wait_for=st.WaitFor.All,
                  log_msg='cd normal resume wait test'))
         self.add_cmd(
             ConfirmResponse(
@@ -7418,7 +7422,6 @@ class ConfigVerifier:
             Wait(cmd_runners=waiters,
                  resumers=resumers,
                  stopped_remotes=set(),
-                 wait_for=st.WaitFor.All,
                  log_msg='cd resume sync sync wait test'))
         self.add_cmd(
             ConfirmResponse(
@@ -7460,7 +7463,6 @@ class ConfigVerifier:
                  resumers=syncers,
                  stopped_remotes=set(),
                  conflict_remotes=set(syncers),
-                 wait_for=st.WaitFor.All,
                  log_msg='cd resume sync conflict test'))
 
         self.add_cmd(
@@ -7497,7 +7499,6 @@ class ConfigVerifier:
                  resumers=waiters2,
                  stopped_remotes=set(),
                  deadlock_remotes=set(waiters2),
-                 wait_for=st.WaitFor.All,
                  log_msg='cd wait deadlock test'))
 
         wait_serial_num_2 = self.add_cmd(
@@ -7505,7 +7506,6 @@ class ConfigVerifier:
                  resumers=waiters1,
                  stopped_remotes=set(),
                  deadlock_remotes=set(waiters1),
-                 wait_for=st.WaitFor.All,
                  log_msg='cd wait deadlock test'))
 
         self.add_cmd(
@@ -10789,7 +10789,6 @@ class ConfigVerifier:
                 Wait(cmd_runners=wait_0_name,
                      resumers=resumer_names[0],
                      stopped_remotes=set(),
-                     wait_for=st.WaitFor.All,
                      log_msg='def_del_wait_test_0'))
             if not single_request:
                 first_cmd_lock_pos = wait_0_name
@@ -10853,7 +10852,6 @@ class ConfigVerifier:
                     Wait(cmd_runners=wait_1_name,
                          resumers=resumer_names[0],
                          stopped_remotes=set(),
-                         wait_for=st.WaitFor.All,
                          log_msg='def_del_wait_test_1'))
                 second_cmd_lock_pos = wait_1_name
                 lock_positions.append(wait_1_name)
@@ -11343,7 +11341,6 @@ class ConfigVerifier:
                 Wait(cmd_runners=wait_0_name,
                      resumers=resumer_names[0],
                      stopped_remotes=set(),
-                     wait_for=st.WaitFor.All,
                      log_msg='def_del_wait_test_0'))
             if not single_request:
                 first_cmd_lock_pos = wait_0_name
@@ -11408,7 +11405,6 @@ class ConfigVerifier:
                     Wait(cmd_runners=wait_1_name,
                          resumers=resumer_names[0],
                          stopped_remotes=set(),
-                         wait_for=st.WaitFor.All,
                          log_msg='def_del_wait_test_1'))
                 second_cmd_lock_pos = wait_1_name
                 lock_positions.append(wait_1_name)
@@ -12553,7 +12549,6 @@ class ConfigVerifier:
                         wait_serial_num = self.add_cmd(
                             Wait(cmd_runners=waiter_name,
                                  resumers=resumer_name,
-                                 wait_for=st.WaitFor.All,
                                  stopped_remotes=stopped_remotes,
                                  log_msg=log_msg))
                     elif timeout_type == TimeoutType.TimeoutFalse:
@@ -12563,7 +12558,6 @@ class ConfigVerifier:
                             WaitTimeoutFalse(
                                 cmd_runners=waiter_name,
                                 resumers=resumer_name,
-                                wait_for=st.WaitFor.All,
                                 timeout=timeout_time,
                                 stopped_remotes=stopped_remotes,
                                 log_msg=log_msg))
@@ -12577,7 +12571,6 @@ class ConfigVerifier:
                             WaitTimeoutTrue(
                                 cmd_runners=waiter_name,
                                 resumers=resumer_name,
-                                wait_for=st.WaitFor.All,
                                 timeout=timeout_time,
                                 timeout_remotes=resumer_name,
                                 stopped_remotes=stopped_remotes,
@@ -12653,8 +12646,7 @@ class ConfigVerifier:
                         cmd_runners=target_names,
                         resumers=actor_names,
                         stopped_remotes=set(),
-                        timeout=timeout_time,
-                        wait_for=st.WaitFor.All))
+                        timeout=timeout_time))
 
                 self.add_cmd(
                     ConfirmResponse(
@@ -12677,8 +12669,7 @@ class ConfigVerifier:
                         resumers=actor_names,
                         stopped_remotes=set(),
                         timeout=timeout_time,
-                        timeout_remotes=set(actor_names),
-                        wait_for=st.WaitFor.All))
+                        timeout_remotes=set(actor_names)))
 
                 self.add_cmd(
                     ConfirmResponse(
@@ -12717,8 +12708,7 @@ class ConfigVerifier:
                         cmd_runners=list(target_names),
                         resumers=actor_names,
                         stopped_remotes=set(),
-                        timeout=timeout_time,
-                        wait_for=st.WaitFor.All))
+                        timeout=timeout_time))
 
                 resume_cmd_serial_num = self.add_cmd(
                     Resume(cmd_runners=actor_names,
@@ -12752,8 +12742,7 @@ class ConfigVerifier:
                         resumers=actor_names,
                         stopped_remotes=set(),
                         timeout=timeout_time,
-                        timeout_remotes=set(actor_names),
-                        wait_for=st.WaitFor.All))
+                        timeout_remotes=set(actor_names)))
                 self.add_cmd(
                     ConfirmResponse(
                         cmd_runners=[self.commander_name],
@@ -12821,8 +12810,7 @@ class ConfigVerifier:
                         cmd_runners=target_names,
                         resumers=actor_names,
                         stopped_remotes=set(),
-                        timeout=timeout_time,
-                        wait_for=st.WaitFor.All))
+                        timeout=timeout_time))
                 self.add_cmd(
                     ConfirmResponse(
                         cmd_runners=[self.commander_name],
@@ -12859,8 +12847,7 @@ class ConfigVerifier:
                         resumers=actor_names,
                         stopped_remotes=set(),
                         timeout=timeout_time,
-                        timeout_remotes=set(actor_names),
-                        wait_for=st.WaitFor.All))
+                        timeout_remotes=set(actor_names)))
                 self.add_cmd(
                     ConfirmResponse(
                         cmd_runners=[self.commander_name],
@@ -12903,8 +12890,7 @@ class ConfigVerifier:
                         cmd_runners=target_names,
                         resumers=actor_names,
                         stopped_remotes=stopped_remotes,
-                        timeout=timeout_time,
-                        wait_for=st.WaitFor.All))
+                        timeout=timeout_time))
 
                 if stopped_remotes:
                     self.build_exit_suite(cmd_runner=self.commander_name,
@@ -12981,8 +12967,7 @@ class ConfigVerifier:
                         resumers=actor_names,
                         stopped_remotes=stopped_remotes,
                         timeout=timeout_time,
-                        timeout_remotes=set(actor_names),
-                        wait_for=st.WaitFor.All))
+                        timeout_remotes=set(actor_names)))
                 self.add_cmd(
                     ConfirmResponse(
                         cmd_runners=[self.commander_name],
@@ -13048,8 +13033,7 @@ class ConfigVerifier:
                     Wait(
                         cmd_runners=target_names,
                         resumers=actor_names,
-                        stopped_remotes=set(),
-                        wait_for=st.WaitFor.All))
+                        stopped_remotes=set()))
 
                 ########################################################
                 # get actors into active state
@@ -13144,8 +13128,7 @@ class ConfigVerifier:
                     Wait(
                         cmd_runners=target_names,
                         resumers=actor_names,
-                        stopped_remotes=set(),
-                        wait_for=st.WaitFor.All))
+                        stopped_remotes=set()))
 
                 ########################################################
                 # get actors into active state
@@ -13352,8 +13335,7 @@ class ConfigVerifier:
                 wait_serial_num = self.add_cmd(
                     Wait(cmd_runners=waiter,
                          resumers=resumer_names,
-                         stopped_remotes=set(),
-                         wait_for=st.WaitFor.All))
+                         stopped_remotes=set()))
                 wait_confirms.append(
                     ConfirmResponse(
                         cmd_runners=[self.commander_name],
@@ -13453,8 +13435,7 @@ class ConfigVerifier:
             wait_serial_num = self.add_cmd(
                 Wait(cmd_runners=waiter,
                      resumers=resumer_names,
-                     stopped_remotes=set(),
-                     wait_for=st.WaitFor.All))
+                     stopped_remotes=set()))
             wait_confirms.append(
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
@@ -14069,8 +14050,7 @@ class ConfigVerifier:
             wait_active_target_serial_num = self.add_cmd(
                 Wait(cmd_runners=active_target_names,
                      resumers=resumer_names,
-                     stopped_remotes=set(),
-                     wait_for=st.WaitFor.All))
+                     stopped_remotes=set()))
 
         ################################################################
         # start registered_names_before issue smart_wait
@@ -14082,8 +14062,7 @@ class ConfigVerifier:
             wait_reg_before_target_serial_num = self.add_cmd(
                 Wait(cmd_runners=registered_names_before,
                      resumers=resumer_names,
-                     stopped_remotes=set(),
-                     wait_for=st.WaitFor.All))
+                     stopped_remotes=set()))
 
         ################################################################
         # issue smart_resume
@@ -14145,8 +14124,7 @@ class ConfigVerifier:
             wait_unreg_no_delay_serial_num = self.add_cmd(
                 Wait(cmd_runners=unreg_no_delay_names,
                      resumers=resumer_names,
-                     stopped_remotes=set(),
-                     wait_for=st.WaitFor.All))
+                     stopped_remotes=set()))
 
         ################################################################
         # build stopped_no_delay_targets smart_wait
@@ -14183,8 +14161,7 @@ class ConfigVerifier:
             wait_stopped_no_delay_serial_num = self.add_cmd(
                 Wait(cmd_runners=stopped_no_delay_targets,
                      resumers=resumer_names,
-                     stopped_remotes=set(),
-                     wait_for=st.WaitFor.All))
+                     stopped_remotes=set()))
 
         ################################################################
         # wait for resume timeouts to be known
@@ -14208,8 +14185,7 @@ class ConfigVerifier:
             wait_reg_after_target_serial_num = self.add_cmd(
                 Wait(cmd_runners=registered_names_after,
                      resumers=resumer_names,
-                     stopped_remotes=set(),
-                     wait_for=st.WaitFor.All))
+                     stopped_remotes=set()))
 
         ################################################################
         # build unreg_delay_names smart_wait
@@ -14266,8 +14242,7 @@ class ConfigVerifier:
             wait_stopped_delay_serial_num = self.add_cmd(
                 Wait(cmd_runners=stopped_delay_targets,
                      resumers=resumer_names,
-                     stopped_remotes=set(),
-                     wait_for=st.WaitFor.All))
+                     stopped_remotes=set()))
 
         ################################################################
         # build unreg_delay_names smart_wait
@@ -14277,8 +14252,7 @@ class ConfigVerifier:
             wait_unreg_delay_serial_num = self.add_cmd(
                 Wait(cmd_runners=unreg_delay_names,
                      resumers=resumer_names,
-                     stopped_remotes=set(),
-                     wait_for=st.WaitFor.All))
+                     stopped_remotes=set()))
 
         ####################################################
         # confirm the active target waits
@@ -14733,8 +14707,7 @@ class ConfigVerifier:
                             elif send_resume == 'resume':
                                 self.add_cmd(
                                     Wait(cmd_runners=receiver_name,
-                                         resumers=sender_name,
-                                         wait_for=st.WaitFor.All))
+                                         resumers=sender_name))
                             else:
                                 self.add_cmd(
                                     Sync(cmd_runners=receiver_name,
@@ -14753,7 +14726,6 @@ class ConfigVerifier:
                                     WaitTimeoutTrue(
                                         cmd_runners=receiver_name,
                                         resumers=sender_name,
-                                        wait_for=st.WaitFor.All,
                                         timeout=0.5,
                                         timeout_remotes=sender_name))
                             else:
@@ -16827,7 +16799,6 @@ class ConfigVerifier:
                  resumers='charlie',
                  exp_resumers='charlie',
                  stopped_remotes=set(),
-                 wait_for=st.WaitFor.All,
                  log_msg='Wait test log message 3'))
         ################################################################
         # resume
@@ -17994,11 +17965,10 @@ class ConfigVerifier:
                     stopped_remotes=stopped_remotes),
                 log_level=logging.ERROR)
 
-        assert sorted(exp_senders) == sorted(recvd_msgs.recv_msgs.keys())
+        assert sorted(exp_senders) == sorted(recvd_msgs.keys())
         for remote in exp_senders:
-            assert recvd_msgs.recv_msgs[
-                       remote] == exp_msgs.exp_received_msgs[
-                       cmd_runner][remote]
+            assert recvd_msgs[remote] == exp_msgs.exp_received_msgs[
+                cmd_runner][remote]
 
         self.wait_for_monitor(cmd_runner=cmd_runner,
                               rtn_name='handle_recv')
@@ -20332,7 +20302,7 @@ class ConfigVerifier:
                     conflict_remotes: set[str],
                     deadlock_remotes: set[str],
                     timeout_type: TimeoutType,
-                    wait_for: st.WaitFor,
+                    resume_count: int,
                     log_msg: Optional[str] = None) -> None:
         """Wait for a resume.
 
@@ -20347,7 +20317,7 @@ class ConfigVerifier:
             conflict_remotes: names of threads that will cause conflict
             deadlock_remotes: names of threads that will cause deadlock
             timeout_type: specifies None, False, or True
-            wait_for: specifies how many resumers to wait for
+            resume_count: number of resumes needed to satisfy smart_wait
             log_msg: optional log message to specify on the smart_wait
 
         """
@@ -20405,12 +20375,12 @@ class ConfigVerifier:
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_wait(
                         resumers=resumers,
-                        wait_for=wait_for,
+                        resume_count=resume_count,
                         log_msg=log_msg)
                 else:
                     self.all_threads[cmd_runner].smart_wait(
                         resumers=resumers,
-                        wait_for=wait_for,
+                        resume_count=resume_count,
                         timeout=timeout,
                         log_msg=log_msg)
 
@@ -20432,12 +20402,12 @@ class ConfigVerifier:
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_wait(
                         resumers=resumers,
-                        wait_for=wait_for,
+                        resume_count=resume_count,
                         log_msg=log_msg)
                 else:
                     self.all_threads[cmd_runner].smart_wait(
                         resumers=resumers,
-                        wait_for=wait_for,
+                        resume_count=resume_count,
                         timeout=timeout,
                         log_msg=log_msg)
 
@@ -20458,14 +20428,14 @@ class ConfigVerifier:
             pe[PE.request_msg][req_key_exit] += 1
             resumed_by = self.all_threads[cmd_runner].smart_wait(
                 resumers=resumers,
-                wait_for=wait_for,
+                resume_count=resume_count,
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutFalse:
             pe[PE.request_msg][req_key_exit] += 1
             resumed_by = self.all_threads[cmd_runner].smart_wait(
                 resumers=resumers,
-                wait_for=wait_for,
+                resume_count=resume_count,
                 timeout=timeout,
                 log_msg=log_msg)
 
@@ -20474,7 +20444,7 @@ class ConfigVerifier:
             with pytest.raises(st.SmartThreadRequestTimedOut):
                 self.all_threads[cmd_runner].smart_wait(
                     resumers=resumers,
-                    wait_for=wait_for,
+                    resume_count=resume_count,
                     timeout=timeout,
                     log_msg=log_msg)
 
@@ -25015,8 +24985,7 @@ class TestSmartThreadExamples:
         time.sleep(1)  # allow time for alpha to wait
         print('alpha about to wait for all threads')
         resumed_by = alpha_smart_thread.smart_wait(
-            resumers=['beta', 'charlie', 'delta'],
-            wait_for=WaitFor.All)
+            resumers=['beta', 'charlie', 'delta'])
         print(f'alpha resumed by resumers={sorted(resumed_by)}')
 
         alpha_smart_thread.smart_join(targets=['beta', 'charlie', 'delta'])
@@ -25069,7 +25038,7 @@ class TestSmartThreadExamples:
         print('alpha about to wait for any threads')
         resumed_by = alpha_smart_thread.smart_wait(
             resumers=['beta', 'charlie', 'delta'],
-            wait_for=WaitFor.Any)
+            resume_count=1)
         print(f'alpha resumed by resumers={sorted(resumed_by)}')
         SmartThread(name='delta',
                     target=f1,
@@ -25078,7 +25047,7 @@ class TestSmartThreadExamples:
         print('alpha about to wait for any threads')
         resumed_by = alpha_smart_thread.smart_wait(
             resumers=['beta', 'charlie', 'delta'],
-            wait_for=WaitFor.Any)
+            resume_count=1)
         print(f'alpha resumed by resumers={sorted(resumed_by)}')
 
         alpha_smart_thread.smart_join(targets=['beta', 'charlie', 'delta'])
