@@ -600,7 +600,6 @@ class RequestBlock:
     do_refresh: bool
     exit_log_msg: Optional[str]
     msg_to_send: Any
-    ret_resume_result: set[str]
     stopped_remotes: set[str]
     not_registered_remotes: set[str]
     deadlock_remotes: set[str]
@@ -987,7 +986,6 @@ class SmartThread:
                     f'{self.st_state}, {extra_text}.')
 
         self.request: ReqType = ReqType.NoReq
-        self.wait_for_any = False
 
         if self.auto_started:
             self.smart_start(self.name)
@@ -2523,6 +2521,7 @@ class SmartThread:
         self.request = ReqType.Smart_send
         work_targets: set[str]
         if not receivers:
+            completion_count = 0
             if isinstance(msg, SendMsgs):
                 work_targets = set(msg.send_msgs.keys())
             else:
@@ -2534,6 +2533,7 @@ class SmartThread:
                             work_targets |= {remote}
         else:
             work_targets = self._get_set(receivers)
+            completion_count = len(work_targets)
 
         if not work_targets:
             raise SmartThreadNoRemoteTargets(
@@ -2555,7 +2555,7 @@ class SmartThread:
             process_rtn=self._process_send_msg,
             cleanup_rtn=None,
             get_block_lock=False,
-            completion_count=0,
+            completion_count=completion_count,
             timeout=timeout,
             msg_to_send=work_msgs,
             log_msg=log_msg)
@@ -3070,8 +3070,7 @@ class SmartThread:
                     local_sb.recv_wait = False
 
                 # if here, msg_q was not empty (i.e., no exception)
-                logger.debug(f'TestDebug {self.name} got message '
-                             f'from {pk_remote.remote}, {received_msgs=}')
+
                 # if we had wanted to delete an entry in the
                 # pair array for this thread because the other
                 # thread exited, but we could not because this
@@ -3169,16 +3168,21 @@ class SmartThread:
     # wait
     ####################################################################
     def smart_wait(self, *,
-                   resumers: Optional[Iterable] = None,
-                   wait_for: WaitFor = WaitFor.All,
+                   resumers: Iterable,
+                   resume_count: Optional[int] = None,
                    timeout: OptIntFloat = None,
                    log_msg: Optional[str] = None) -> set[str]:
         """Wait until resumed.
 
         Args:
-            resumers: names of threads that we expect to resume us
-            wait_for: specifies whether to wait for only one remote or
-                for all remotes
+            resumers: thread names that we expect to resume us
+            resume_count: If not specified, all *resumers* must issue a
+                matching smart_resume to satisfy the *smart_wait*. If
+                specified, *resume_count* is the number of *resumers*
+                that must issue a matching *smart_resume* to satisfy the
+                *smart_wait*. The value specified must be an integer
+                between 1 and the number of specified *resumers*,
+                inclusive.
             timeout: number of seconds to allow for wait to be
                 resumed
             log_msg: additional text to append to the debug log message
@@ -3186,14 +3190,10 @@ class SmartThread:
 
         Returns:
             A set of thread names that *smart_wait* detects as having
-            done a resume. If WaitFor.All is specified for *wait_for*
-            then the returned set of names will match the names
-            specified for *resumers*. If WaitFor.Any is specified for
-            *wait_for*, the set of names returned will be a subset (
-            possibly equal) of the names specified for *resumers*. Note
-            that if *smart_wait* raises an error, the set of names
-            collected thus far can be recovered from the SmartThread
-            field *resumed_by*.
+            done a resume. If *smart_wait* raises an error, the set of
+            names collected thus far can be recovered field
+            *resumed_by* in the SmartThread object that issued the
+            *smart_wait*.
 
         Raises:
             SmartThreadDeadlockDetected: a smart_wait specified a
@@ -3229,24 +3229,18 @@ class SmartThread:
                argument for the *resumers* parameter and will then wait
                until that resumer issues a matching smart_resume.
             2) smart_wait can provide multiple remote thread names as an
-               argument for the *resumers* parameter and:
-               a) with *wait_for* specified as WaitFor.All, wait for all
-               resumers to issue a matching smart_resume.
-               b) with *wait_for* specified as WaitFor.Any, wait until
-               at least one resumer issues a matching smart_resume.
-            3) smart_wait can omit the specification of *resumers*. In
-               this case, smart_wait will wait until at least one thread
-               in the configuration does a matching smart_resume. The
-               configuration can change with new threads becoming
-               active and other threads being stopped while smart_wait
-               continues to wait.
+               argument for the *resumers* parameter and will then wait
+               for:
+               a) at least the number of resumes specified for
+                  *resume_count*
+               b) all specified *resumers* if *resume_count* is not
+                  specified
 
-        For cases 1 and 2: smart_wait will raise an error if any of the
-        specified resumer threads become inactive before they issue
-        the smart_resume.
+        *smart_wait* will raise an error if any of the specified
+        *resumers* become inactive before the *smart_wait* is satisfied.
 
-        For cases 1, 2, and 3: if timeout is specified, smart_wait will
-        raise an error if not resumed within the specified time.
+        If timeout is specified, *smart_wait* will raise an error if not
+        satisfied within the specified time.
 
         Note that a smart_resume can be issued before the smart_wait is
         issued, in which case the smart_wait will return immediately
@@ -3256,9 +3250,8 @@ class SmartThread:
 
             1) smart_wait followed by smart_resume
             2) smart_wait preceded by smart_resume
-            3) smart_wait for multiple resumers with WaitFor.All
-            4) smart_wait for multiple resumers with WaitFor.Any
-            5) smart_wait for any resumers in configuration
+            3) smart_wait for multiple resumers
+            4) smart_wait for multiple resumers with resume_count
 
         **Example 1:** smart_wait followed by smart_resume
 
@@ -3330,7 +3323,7 @@ class SmartThread:
             f1 beta resumed by resumers=['alpha']
             mainline alpha exiting
 
-        **Example 3:** smart_wait for multiple resumers with WaitFor.All
+        **Example 3:** smart_wait for multiple resumers
 
         .. code-block:: python
 
@@ -3357,8 +3350,7 @@ class SmartThread:
             time.sleep(1)  # allow time for alpha to wait
             print('alpha about to wait for all threads')
             resumers = alpha_smart_thread.smart_wait(
-                resumers=['beta', 'charlie', 'delta'],
-                wait_for=WaitFor.All)
+                resumers=['beta', 'charlie', 'delta'])
             print(f'f1 alpha resumed by resumers={sorted(resumers)}')
             alpha_smart_thread.smart_join(targets=['beta', 'charlie', 'delta'])
             print('mainline alpha exiting')
@@ -3400,8 +3392,7 @@ class SmartThread:
             time.sleep(1)
             print('alpha about to wait for any threads')
             resumers = alpha_smart_thread.smart_wait(
-                resumers=['beta', 'charlie', 'delta'],
-                wait_for=WaitFor.Any)
+                resumers=['beta', 'charlie', 'delta'])
             print(f'alpha resumed by resumers={sorted(resumers)}')
             delta_smart_thread = SmartThread(name='delta',
                                              target=f1,
@@ -3409,8 +3400,7 @@ class SmartThread:
             time.sleep(1)  # allow time for alpha to wait
             print('alpha about to wait for any threads')
             resumers = alpha_smart_thread.smart_wait(
-                resumers=['beta', 'charlie', 'delta'],
-                wait_for=WaitFor.Any)
+                resumers=['beta', 'charlie', 'delta'])
             print(f'alpha resumed by resumers={sorted(resumers)}')
             alpha_smart_thread.smart_join(targets=['beta', 'charlie', 'delta'])
             print('mainline alpha exiting')
@@ -3431,58 +3421,23 @@ class SmartThread:
             alpha resumed by resumers=['delta']
             mainline alpha exiting
 
-        **Example 5:** smart_wait for any resumers in configuration
-
-        .. code-block:: python
-
-            from scottbrian_paratools.smart_thread import SmartThread, WaitFor
-            import time
-
-            def f1(smart_thread: SmartThread) -> None:
-                print(f'f1 {smart_thread.name} about to resume alpha')
-                smart_thread.smart_resume(waiters='alpha')
-
-            print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(name='alpha')
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread')
-            time.sleep(1)
-            charlie_smart_thread = SmartThread(name='charlie',
-                                               target=f1,
-                                               thread_parm_name='smart_thread')
-            time.sleep(1)
-            print('alpha about to wait for any threads')
-            resumers = alpha_smart_thread.smart_wait()
-            print(f'alpha resumed by resumers={sorted(resumers)}')
-            delta_smart_thread = SmartThread(name='delta',
-                                             target=f1,
-                                             thread_parm_name='smart_thread')
-            time.sleep(1)  # allow time for alpha to wait
-            print('alpha about to wait for any threads')
-            resumers = alpha_smart_thread.smart_wait()
-            print(f'alpha resumed by resumers={sorted(resumers)}')
-            alpha_smart_thread.smart_join(targets=['beta', 'charlie', 'delta'])
-            print('mainline alpha exiting')
-
-        .. invisible-code-block: python
-
-            del SmartThread._registry['alpha']
-
-        Expected output for Example 5::
-
-            mainline alpha entered
-            f1 beta about to resume alpha
-            f1 charlie about to resume alpha
-            alpha about to wait for any threads
-            alpha resumed by resumers=['beta', 'charlie']
-            f1 delta about to resume alpha
-            alpha about to wait for any threads
-            alpha resumed by resumers=['delta']
-            mainline alpha exiting
-
         """
         self.request = ReqType.Smart_wait
+
+        if resume_count is None:
+            completion_count = len(resumers)
+        else:
+            if (not isinstance(resume_count, int)
+                    or resume_count < 1
+                    or len(resumers) < resume_count):
+                raise SmartThreadInvalidInput(
+                    f'smart_wait issued by {self.name} incorrectly specified '
+                    f'a value for {resume_count=}. The value must be an '
+                    f'integer between 1 and the number of specified resumers, '
+                    f'inclusive.'
+                )
+            completion_count = resume_count
+
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
             remotes=resumers,
@@ -3490,13 +3445,9 @@ class SmartThread:
             process_rtn=self._process_wait,
             cleanup_rtn=self._sync_wait_error_cleanup,
             get_block_lock=True,
-            completion_count=0,
+            completion_count=completion_count,
             timeout=timeout,
             log_msg=log_msg)
-
-        if wait_for == WaitFor.Any:
-            self.wait_for_any = True
-            request_block.completion_count = len(request_block.remotes) - 1
 
         self.resumed_by = set()
 
@@ -3505,7 +3456,6 @@ class SmartThread:
         logger.debug(request_block.exit_log_msg)
 
         self.request = ReqType.NoReq
-        self.wait_for_any = False
 
         return self.resumed_by
 
@@ -4358,13 +4308,17 @@ class SmartThread:
                         self._clean_pair_array()
                     request_block.do_refresh = False
 
+            if request_block.remotes:  # remotes were specified
+                if (request_block.completion_count
+                        <= (len(request_block.remotes)
+                            - len(self.work_pk_remotes))):
+                    continue_request_loop = False
             # handle any error or timeout cases - don't worry about any
             # remotes that were still pending - we need to fail the
             # request as soon as we know about any unresolvable failures
             if ((request_block.stopped_remotes and request_block.remotes
                  and not (self.request == ReqType.Smart_wait
-                          and self.wait_for_any
-                          and self.resumed_by))
+                          and self.wait_for_any))
                     or request_block.deadlock_remotes
                     or request_block.timer.is_expired()):
 
@@ -4404,6 +4358,9 @@ class SmartThread:
                 if len(self.work_pk_remotes) <= request_block.completion_count:
                     continue_request_loop = False
             else:
+                logger.debug(
+                    f'TestDebug {self.name} {request_block.request=}, '
+                    f'{self.wait_for_any=}, {self.resumed_by=}')
                 if (request_block.request == ReqType.Smart_recv
                         and self.recvd_msgs):
                     continue_request_loop = False
@@ -4817,8 +4774,6 @@ class SmartThread:
             do_refresh=False,
             exit_log_msg=exit_log_msg,
             msg_to_send=msg_to_send,
-            ret_msg=None,
-            ret_resume_result=None,
             stopped_remotes=set(),
             not_registered_remotes=set(),
             deadlock_remotes=set(),

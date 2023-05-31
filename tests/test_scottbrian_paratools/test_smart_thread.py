@@ -20399,24 +20399,22 @@ class ConfigVerifier:
         if stopped_remotes:
             exp_completed_resumers -= stopped_remotes
 
-        resumed_by = set()
+        resumed_by: set[str] = set()
         if stopped_remotes:
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_wait(
                         resumers=resumers,
                         wait_for=wait_for,
-                        resumed_by=resumed_by,
                         log_msg=log_msg)
                 else:
                     self.all_threads[cmd_runner].smart_wait(
                         resumers=resumers,
                         wait_for=wait_for,
-                        resumed_by=resumed_by,
                         timeout=timeout,
                         log_msg=log_msg)
 
-            assert resumed_by == exp_resumers
+            resumed_by = self.all_threads[cmd_runner].resumed_by
 
             self.add_log_msg(
                 self.get_error_msg(
@@ -20435,17 +20433,15 @@ class ConfigVerifier:
                     self.all_threads[cmd_runner].smart_wait(
                         resumers=resumers,
                         wait_for=wait_for,
-                        resumed_by=resumed_by,
                         log_msg=log_msg)
                 else:
                     self.all_threads[cmd_runner].smart_wait(
                         resumers=resumers,
                         wait_for=wait_for,
-                        resumed_by=resumed_by,
                         timeout=timeout,
                         log_msg=log_msg)
 
-            assert resumed_by == exp_resumers
+            resumed_by = self.all_threads[cmd_runner].resumed_by
 
             self.add_log_msg(
                 self.get_error_msg(
@@ -20460,22 +20456,18 @@ class ConfigVerifier:
 
         elif timeout_type == TimeoutType.TimeoutNone:
             pe[PE.request_msg][req_key_exit] += 1
-            self.all_threads[cmd_runner].smart_wait(
+            resumed_by = self.all_threads[cmd_runner].smart_wait(
                 resumers=resumers,
                 wait_for=wait_for,
-                resumed_by=resumed_by,
                 log_msg=log_msg)
-            assert resumed_by == exp_resumers
 
         elif timeout_type == TimeoutType.TimeoutFalse:
             pe[PE.request_msg][req_key_exit] += 1
-            self.all_threads[cmd_runner].smart_wait(
+            resumed_by = self.all_threads[cmd_runner].smart_wait(
                 resumers=resumers,
                 wait_for=wait_for,
-                resumed_by=resumed_by,
                 timeout=timeout,
                 log_msg=log_msg)
-            assert resumed_by == exp_resumers
 
         elif timeout_type == TimeoutType.TimeoutTrue:
             # enter_exit = ('entry',)
@@ -20483,11 +20475,10 @@ class ConfigVerifier:
                 self.all_threads[cmd_runner].smart_wait(
                     resumers=resumers,
                     wait_for=wait_for,
-                    resumed_by=resumed_by,
                     timeout=timeout,
                     log_msg=log_msg)
 
-            assert resumed_by == exp_resumers
+            resumed_by = self.all_threads[cmd_runner].resumed_by
 
             self.add_log_msg(
                 self.get_error_msg(
@@ -24560,7 +24551,6 @@ class TestSmartThreadExamples:
             if wait_for:
                 smart_thread.smart_wait(resumers=wait_for)
             print(f'f1 {smart_thread.name} entered')
-            recvd_msgs = RecvMsgs()
             recvd_msgs = smart_thread.smart_recv(senders='alpha')
             print(recvd_msgs['alpha'])
             print(f'f1 {smart_thread.name} exiting')
@@ -24920,9 +24910,7 @@ class TestSmartThreadExamples:
 
         def f1(smart_thread: SmartThread) -> None:
             print(f'f1 {smart_thread.name} about to wait')
-            resumed_by = set()
-            smart_thread.smart_wait(resumers='alpha',
-                                    resumed_by=resumed_by)
+            resumed_by = smart_thread.smart_wait(resumers='alpha')
             print(f'f1 {smart_thread.name} resumed by {resumed_by}')
 
         print('mainline alpha entered')
@@ -24966,9 +24954,7 @@ class TestSmartThreadExamples:
         def f1(smart_thread: SmartThread) -> None:
             time.sleep(1)  # allow time for smart_resume to be issued
             print(f'f1 {smart_thread.name} about to wait')
-            resumed_by = set()
-            smart_thread.smart_wait(resumers='alpha',
-                                    resumed_by=resumed_by)
+            resumed_by = smart_thread.smart_wait(resumers='alpha')
             print(f'f1 {smart_thread.name} resumed by {resumed_by}')
 
         print('mainline alpha entered')
@@ -25028,11 +25014,9 @@ class TestSmartThreadExamples:
                     thread_parm_name='smart_thread')
         time.sleep(1)  # allow time for alpha to wait
         print('alpha about to wait for all threads')
-        resumed_by = set()
-        alpha_smart_thread.smart_wait(
+        resumed_by = alpha_smart_thread.smart_wait(
             resumers=['beta', 'charlie', 'delta'],
-            wait_for=WaitFor.All,
-            resumed_by=resumed_by)
+            wait_for=WaitFor.All)
         print(f'alpha resumed by resumers={sorted(resumed_by)}')
 
         alpha_smart_thread.smart_join(targets=['beta', 'charlie', 'delta'])
@@ -25083,22 +25067,18 @@ class TestSmartThreadExamples:
                     thread_parm_name='smart_thread')
         time.sleep(1)
         print('alpha about to wait for any threads')
-        resumed_by = set()
-        alpha_smart_thread.smart_wait(
+        resumed_by = alpha_smart_thread.smart_wait(
             resumers=['beta', 'charlie', 'delta'],
-            wait_for=WaitFor.Any,
-            resumed_by=resumed_by)
+            wait_for=WaitFor.Any)
         print(f'alpha resumed by resumers={sorted(resumed_by)}')
         SmartThread(name='delta',
                     target=f1,
                     thread_parm_name='smart_thread')
         time.sleep(1)  # allow time for alpha to wait
         print('alpha about to wait for any threads')
-        resumed_by = set()
-        alpha_smart_thread.smart_wait(
+        resumed_by = alpha_smart_thread.smart_wait(
             resumers=['beta', 'charlie', 'delta'],
-            wait_for=WaitFor.Any,
-            resumed_by=resumed_by)
+            wait_for=WaitFor.Any)
         print(f'alpha resumed by resumers={sorted(resumed_by)}')
 
         alpha_smart_thread.smart_join(targets=['beta', 'charlie', 'delta'])
@@ -25150,16 +25130,14 @@ class TestSmartThreadExamples:
                     thread_parm_name='smart_thread')
         time.sleep(1)
         print('alpha about to wait for any threads')
-        resumed_by = set()
-        alpha_smart_thread.smart_wait(resumed_by=resumed_by)
+        resumed_by = alpha_smart_thread.smart_wait()
         print(f'alpha resumed by resumers={sorted(resumed_by)}')
         SmartThread(name='delta',
                     target=f1,
                     thread_parm_name='smart_thread')
         time.sleep(1)  # allow time for alpha to wait
         print('alpha about to wait for any threads')
-        resumed_by = set()
-        alpha_smart_thread.smart_wait(resumed_by=resumed_by)
+        resumed_by = alpha_smart_thread.smart_wait()
         print(f'alpha resumed by resumers={sorted(resumed_by)}')
 
         alpha_smart_thread.smart_join(targets=['beta', 'charlie', 'delta'])
