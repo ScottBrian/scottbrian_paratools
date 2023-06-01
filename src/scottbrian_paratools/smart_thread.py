@@ -537,6 +537,16 @@ class SmartThreadIncorrectData(SmartThreadError):
     pass
 
 
+class SmartThreadAlreadyStarted(SmartThreadError):
+    """SmartThread exception for smart_start already started."""
+    pass
+
+
+class SmartThreadMultipleTargetsForSelfStart(SmartThreadError):
+    """SmartThread exception for smart_start with multiple targets."""
+    pass
+
+
 ########################################################################
 # ReqType
 # contains the type of request
@@ -954,6 +964,9 @@ class SmartThread:
         self.max_msgs = max_msgs
         self.request_max_interval = request_max_interval
 
+        self.started_targets: set[str] = set()
+        self.unreged_targets: set[str] = set()
+        self.joined_targets: set[str] = set()
         self.recvd_msgs: dict[str, list[Any]] = defaultdict(list)
         self.sent_targets: set[str] = set()
         self.resumed_by: set[str] = set()
@@ -1592,13 +1605,16 @@ class SmartThread:
     ####################################################################
     def smart_start(self,
                     targets: Optional[Iterable] = None,
-                    log_msg: Optional[str] = None) -> None:
+                    log_msg: Optional[str] = None) -> set[str]:
         """Start the smart thread.
 
         Args:
             targets: names of smart threads to be started
             log_msg: additional text to append to the debug log message
                 that is issued on request entry and exit
+
+        Returns:
+            A set of thread names that were successfully started.
 
         **Example 1:** Create and start a SmartThread
 
@@ -1673,9 +1689,33 @@ class SmartThread:
 
         """
         # get RequestBlock with targets in a set and a timer object
-        self.request = ReqType.Smart_start
+        # self.request = ReqType.Smart_start
+
         if not targets:
-            targets = self.name
+            targets = {self.name}
+        else:
+            targets = self._get_set(targets)
+        if self.name in targets:
+            if len(targets) > 1:
+                raise SmartThreadMultipleTargetsForSelfStart(
+                    f'{self.name} smart_start can not be done for multiple '
+                    'threads when one of the targets is for itself. '
+                    f'{targets=}, {len(targets)=}')
+            with sel.SELockExcl(SmartThread._registry_lock):
+                if self.thread.is_alive():
+                    raise SmartThreadAlreadyStarted(
+                        f'{self.name} smart_start request unable to start '
+                        'since thread has already been started.')
+                if self._get_state(self.name) != ThreadState.Registered:
+                    error_msg = (
+                        f'{self.name} raising '
+                        'SmartThreadRemoteThreadNotRegistered')
+                    logger.error(error_msg)
+                    raise SmartThreadRemoteThreadNotRegistered(error_msg)
+
+        # the smart_start is legal
+        self.request = ReqType.Smart_start
+        self.started_targets = set()
         request_block = self._request_setup(
             remotes=targets,
             error_stopped_target=True,
@@ -1687,11 +1727,27 @@ class SmartThread:
             timeout=0,
             log_msg=log_msg)
 
-        self._config_cmd_loop(request_block=request_block)
+        # self._config_cmd_loop(request_block=request_block)
+        with self.cmd_lock:
+            self.work_remotes: set[str] = request_block.remotes.copy()
+            for remote in self.work_remotes.copy():
+                with sel.SELockExcl(SmartThread._registry_lock):
+                    if request_block.process_rtn(request_block,
+                                                 remote):
+                        self.work_remotes -= {remote}
 
-        self.request = ReqType.NoReq
+            if request_block.not_registered_remotes:
+                self._handle_loop_errors(request_block=request_block,
+                                         pending_remotes=[])
+
+        if self.name not in targets:
+            # we can clear the request only if we did not start ourself
+            # because once we start ourself we might do a request
+            self.request = ReqType.NoReq
 
         logger.debug(request_block.exit_log_msg)
+
+        return self.started_targets
 
     ####################################################################
     # _process_start
@@ -1731,14 +1787,17 @@ class SmartThread:
             # still show it as alive. This is not a problem since the
             # _get_state method will detect that case and return stopped
             # as the state
-            if SmartThread._registry[remote].thread.is_alive():
-                self._set_state(
-                    target_thread=SmartThread._registry[remote],
-                    new_state=ThreadState.Alive)
-            else:  # start failed or thread finished already
-                self._set_state(
-                    target_thread=SmartThread._registry[remote],
-                    new_state=ThreadState.Stopped)
+            # if SmartThread._registry[remote].thread.is_alive():
+
+            # better to just say alive for now
+            self._set_state(
+                target_thread=SmartThread._registry[remote],
+                new_state=ThreadState.Alive)
+            self.started_targets |= {remote}
+            # else:  # start failed or thread finished already
+            #     self._set_state(
+            #         target_thread=SmartThread._registry[remote],
+            #         new_state=ThreadState.Stopped)
         else:
             # if here, the remote is not registered
             request_block.not_registered_remotes |= {remote}
@@ -1750,13 +1809,16 @@ class SmartThread:
     ####################################################################
     def smart_unreg(self, *,
                     targets: Iterable,
-                    log_msg: Optional[str] = None) -> None:
+                    log_msg: Optional[str] = None) -> set[str]:
         """Unregister threads that were never started.
 
         Args:
             targets: thread names that are to be unregistered
             log_msg: additional text to append to the debug log message
                 that is issued on request entry and exit
+
+        Returns:
+            A set of thread names that were successfully unregistered.
 
         Notes:
             1) A thread that is created but not started remains in the
@@ -1802,7 +1864,9 @@ class SmartThread:
             mainline alpha exiting
 
         """
+        self._verify_thread_is_current()
         self.request = ReqType.Smart_unreg
+        self.unreged_targets = set()
         request_block = self._request_setup(
             remotes=targets,
             error_stopped_target=False,
@@ -1816,7 +1880,6 @@ class SmartThread:
 
         # self._config_cmd_loop(request_block=request_block)
 
-        unreged_remotes: set[str] = set()
         # @sbt what is this doing for us? it only locks the thread
         # against itself
         with self.cmd_lock:
@@ -1832,16 +1895,16 @@ class SmartThread:
                             new_state=ThreadState.Stopped)
 
                         self.work_remotes -= {remote}
-                        unreged_remotes |= {remote}
+                        self.unreged_targets |= {remote}
 
                 # remove threads from the registry
                 self._clean_registry()
                 self._clean_pair_array()
 
-                if unreged_remotes:
+                if self.unreged_targets:
                     logger.info(
                         f'{self.name} did successful smart_unreg of '
-                        f'{sorted(unreged_remotes)}.')
+                        f'{sorted(self.unreged_targets)}.')
 
                 if (request_block.error_not_registered_target
                         and request_block.not_registered_remotes):
@@ -1853,6 +1916,8 @@ class SmartThread:
         self.request = ReqType.NoReq
 
         logger.debug(request_block.exit_log_msg)
+
+        return self.unreged_targets
 
     ####################################################################
     # _process_unregister
@@ -1894,7 +1959,7 @@ class SmartThread:
     def smart_join(self, *,
                    targets: Iterable,
                    timeout: OptIntFloat = None,
-                   log_msg: Optional[str] = None) -> None:
+                   log_msg: Optional[str] = None) -> set[str]:
         """Wait for target thread to end.
 
         Args:
@@ -1902,6 +1967,9 @@ class SmartThread:
             timeout: timeout to use instead of default timeout
             log_msg: additional text to append to the debug log message
                 that is issued on request entry and exit
+
+        Returns:
+            A set of thread names that were successfully joined.
 
         Raises:
             SmartThreadRequestTimedOut: join timed out waiting for
@@ -1946,7 +2014,9 @@ class SmartThread:
 
 
         """
+        self._verify_thread_is_current()
         self.request = ReqType.Smart_join
+        self.joined_targets = set()
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
             remotes=targets,
@@ -1960,7 +2030,7 @@ class SmartThread:
 
         # self._config_cmd_loop(request_block=request_block)
         with self.cmd_lock:
-            completed_targets: set[str] = set()
+            self.joined_targets: set[str] = set()
             self.work_remotes: set[str] = request_block.remotes.copy()
             while self.work_remotes:
                 joined_remotes: set[str] = set()
@@ -1980,7 +2050,7 @@ class SmartThread:
 
                     # remove threads from the registry
                     if joined_remotes:
-                        completed_targets |= joined_remotes
+                        self.joined_targets |= joined_remotes
                         # must remain under lock for these two calls
                         self._clean_registry()
                         self._clean_pair_array()
@@ -1989,7 +2059,7 @@ class SmartThread:
                             f'{sorted(joined_remotes)}.')
                         logger.info(
                             f'{self.name} smart_join completed targets: '
-                            f'{sorted(completed_targets)}, pending '
+                            f'{sorted(self.joined_targets)}, pending '
                             f'targets: {sorted(self.work_remotes)}')
                     else:  # no progress was made
                         time.sleep(0.2)
@@ -2001,6 +2071,8 @@ class SmartThread:
         self.request = ReqType.NoReq
 
         logger.debug(request_block.exit_log_msg)
+
+        return self.joined_targets
 
     ####################################################################
     # _process_smart_join
@@ -2530,6 +2602,7 @@ class SmartThread:
             mainline alpha exiting
 
         """
+        self._verify_thread_is_current()
         self.request = ReqType.Smart_send
         self.sent_targets = set()
         work_targets: set[str]
@@ -3013,6 +3086,7 @@ class SmartThread:
             mainline alpha exiting
 
         """
+        self._verify_thread_is_current()
         self.request = ReqType.Smart_recv
         self.recvd_msgs = defaultdict(list)
 
@@ -3439,9 +3513,8 @@ class SmartThread:
             mainline alpha exiting
 
         """
+        self._verify_thread_is_current()
         self.request = ReqType.Smart_wait
-        logger.debug(
-            f'TestDebug {self.name} {self.request=}')
         self.resumed_by = set()
 
         if resume_count is None:
@@ -3506,6 +3579,9 @@ class SmartThread:
         # stopped), try again with a longer
         # timeout_value (remote alive), or return False to give
         # the remote more time (remote is not alive, but no stopped)
+        logger.debug(
+            f'TestDebug {self.name} enter _process_wait '
+            f' {self.request=}')
         for timeout_value in (SmartThread.K_REQUEST_MIN_INTERVAL,
                               request_block.request_max_interval):
             if local_sb.wait_event.wait(timeout=timeout_value):
@@ -3530,6 +3606,10 @@ class SmartThread:
                     f'{self.name} smart_wait resumed by '
                     f'{pk_remote.remote}')
                 self.resumed_by |= {pk_remote.remote}
+
+                logger.debug(
+                    f'TestDebug {self.name} return from _process_wait '
+                    f' {self.request=}')
                 return True
 
             with SmartThread._pair_array[pk_remote.pair_key].status_lock:
@@ -3793,6 +3873,7 @@ class SmartThread:
         #              sync
         #                                           wait
         ###############################################################
+        self._verify_thread_is_current()
         self.request = ReqType.Smart_resume
         self.resumed_targets = set()
         # get RequestBlock with targets in a set and a timer object
@@ -3971,6 +4052,7 @@ class SmartThread:
             mainline alpha exiting
 
         """
+        self._verify_thread_is_current()
         self.request = ReqType.Smart_sync
         self.synced_targets = set()
         # get RequestBlock with targets in a set and a timer object
@@ -4268,6 +4350,8 @@ class SmartThread:
                cleanup that is needed for a failed request
 
         """
+        logger.debug(
+            f'TestDebug {self.name} top of req_loop {self.request=}')
         continue_request_loop = True
         while continue_request_loop:
             # determine timeout_value to use for request
@@ -4317,6 +4401,9 @@ class SmartThread:
                                                      local_sb):
                             self.work_pk_remotes.remove(pk_remote)
 
+                            logger.debug(
+                                f'TestDebug {self.name} process return '
+                                f' {self.request=}')
                             # We may have been able to successfully
                             # complete this request despite not yet
                             # having an alive remote (smart_recv and wait,
@@ -4334,7 +4421,7 @@ class SmartThread:
                                     and not local_sb.wait_event.is_set()
                                     and not local_sb.sync_event.is_set()):
                                 request_block.do_refresh = True
-                            local_sb.request = ReqType.NoReq
+                            # local_sb.request = None
 
                 if request_block.do_refresh:
                     logger.debug(
@@ -4780,7 +4867,7 @@ class SmartThread:
         if self.request not in (ReqType.Smart_start,
                                 ReqType.Smart_unreg,
                                 ReqType.Smart_join):
-            self.verify_thread_is_current()
+            self._verify_thread_is_current()
 
         if (remotes and self.request != ReqType.Smart_start
                 and self.cmd_runner in remotes):
@@ -4863,9 +4950,9 @@ class SmartThread:
         return exit_log_msg
 
     ####################################################################
-    # verify_thread_is_current
+    # _verify_thread_is_current
     ####################################################################
-    def verify_thread_is_current(self) -> None:
+    def _verify_thread_is_current(self) -> None:
         """Verify that SmartThread is running under the current thread.
 
         Raises:
@@ -4886,7 +4973,7 @@ class SmartThread:
             raise SmartThreadDetectedOpFromForeignThread(error_msg)
 
     ####################################################################
-    # verify_thread_is_current
+    # _connection_block_lock
     ####################################################################
     # @contextmanager
     # def _connection_block_lock(*args, **kwds) -> None:

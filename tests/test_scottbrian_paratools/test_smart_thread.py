@@ -23796,6 +23796,7 @@ class TestSmartThreadExamples:
                                         target=f1,
                                         auto_start=False)
         beta_smart_thread.smart_start()
+
         recvd_msgs = alpha_smart_thread.smart_recv(senders='beta')
         print(recvd_msgs['beta'])
         alpha_smart_thread.smart_resume(waiters='beta')
