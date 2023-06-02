@@ -19018,15 +19018,16 @@ class ConfigVerifier:
             seq='test_smart_thread.py::ConfigVerifier.handle_send_msg')
 
         if send_type == SendType.Broadcast:
-            true_receivers = set()
-            receivers = set()
+            receivers_to_use = set()
+            exp_receivers = set()
             for remote, thread_tracker in self.expected_registered.items():
                 if remote == cmd_runner:
                     continue
                 if thread_tracker.st_state == st.ThreadState.Alive:
-                    receivers |= {remote}
+                    exp_receivers |= {remote}
         else:
-            true_receivers = receivers
+            receivers_to_use = receivers.copy()
+            exp_receivers = receivers.copy()
 
         timeout_remotes = set()
         if unreg_timeout_names:
@@ -19034,11 +19035,16 @@ class ConfigVerifier:
         if fullq_timeout_names:
             timeout_remotes |= fullq_timeout_names.copy()
 
+        exp_receivers -= timeout_remotes
+
+        if stopped_remotes:
+            exp_receivers -= stopped_remotes
+
         pe = self.pending_events[cmd_runner]
         pe[PE.start_request].append(
             StartRequest(req_type=st.ReqType.Smart_send,
                          timeout_type=timeout_type,
-                         targets=receivers,
+                         targets=receivers_to_use,
                          unreg_remotes=set(),
                          not_registered_remotes=set(),
                          timeout_remotes=timeout_remotes,
@@ -19078,36 +19084,38 @@ class ConfigVerifier:
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_send(
-                        receivers=true_receivers,
+                        receivers=receivers_to_use,
                         msg=send_msg,
                         log_msg=log_msg)
                 else:
                     self.all_threads[cmd_runner].smart_send(
-                        receivers=true_receivers,
+                        receivers=receivers_to_use,
                         msg=send_msg,
                         timeout=timeout,
                         log_msg=log_msg)
+
+            sent_targets = self.all_threads[cmd_runner].sent_targets
 
             self.add_log_msg(
                 self.get_error_msg(
                     cmd_runner=cmd_runner,
                     smart_request='smart_send',
-                    targets=true_receivers,
+                    targets=receivers_to_use,
                     error_str='SmartThreadRemoteThreadNotAlive',
                     stopped_remotes=stopped_remotes),
                 log_level=logging.ERROR)
 
         elif timeout_type == TimeoutType.TimeoutNone:
             pe[PE.request_msg][req_key_exit] += 1
-            self.all_threads[cmd_runner].smart_send(
-                receivers=true_receivers,
+            sent_targets = self.all_threads[cmd_runner].smart_send(
+                receivers=receivers_to_use,
                 msg=send_msg,
                 log_msg=log_msg)
             elapsed_time += (time.time() - start_time)
         elif timeout_type == TimeoutType.TimeoutFalse:
             pe[PE.request_msg][req_key_exit] += 1
-            self.all_threads[cmd_runner].smart_send(
-                receivers=true_receivers,
+            sent_targets = self.all_threads[cmd_runner].smart_send(
+                receivers=receivers_to_use,
                 msg=send_msg,
                 timeout=timeout,
                 log_msg=log_msg)
@@ -19115,19 +19123,24 @@ class ConfigVerifier:
         elif timeout_type == TimeoutType.TimeoutTrue:
             with pytest.raises(st.SmartThreadRequestTimedOut):
                 self.all_threads[cmd_runner].smart_send(
-                    receivers=true_receivers,
+                    receivers=receivers_to_use,
                     msg=send_msg,
                     timeout=timeout,
                     log_msg=log_msg)
             elapsed_time += (time.time() - start_time)
+
+            sent_targets = self.all_threads[cmd_runner].sent_targets
+
             self.add_log_msg(
                 self.get_error_msg(
                     cmd_runner=cmd_runner,
                     smart_request='smart_send',
-                    targets=true_receivers,
+                    targets=receivers_to_use,
                     error_str='SmartThreadRequestTimedOut',
                     stopped_remotes=set(stopped_remotes)),
                 log_level=logging.ERROR)
+
+        assert sent_targets == exp_receivers
 
         mean_elapsed_time = elapsed_time / len(receivers)
         self.log_test_msg(f'handle_send exit: {cmd_runner=} '
@@ -25159,13 +25172,13 @@ class TestSmartThreadExamples:
             print('f2_charlie back from wait')
 
         def f3_delta(smart_thread: SmartThread) -> None:
-            time.sleep(4)
+            time.sleep(5)
             print('f3_delta about to wait')
             smart_thread.smart_wait(resumers='alpha')
             print('f3_delta back from wait')
 
         def f4_echo(smart_thread: SmartThread) -> None:
-            time.sleep(5)
+            time.sleep(7)
             print('f4_echo about to wait')
             smart_thread.smart_wait(resumers='alpha')
             print('f4_echo back from wait')

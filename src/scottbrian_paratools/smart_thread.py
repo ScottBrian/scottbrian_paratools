@@ -2223,10 +2223,16 @@ class SmartThread:
 
         Args:
             msg: the msg to be sent. This may be a single item or a
-                collection of items in any type of data structure.
+                collection of items in any type of data structure. It
+                may also be an instance of class SendMsgs which
+                names each receiver and the message to be sent.
             receivers: names of remote threads to send the message to.
                 If None, the message will be sent to all remote
-                threads that are alive.
+                threads that are alive or to the receivers specified in
+                a SendMsg object when supplied as the *msg*. If
+                *receivers* is not specified and not receivers are
+                alive, the *smart_send* returns without sending any
+                messages.
             timeout: number of seconds to wait for the targets to become
                 alive and ready to accept messages
             log_msg: additional text to append to the debug log message
@@ -2619,9 +2625,14 @@ class SmartThread:
         self.request = ReqType.Smart_send
         self.sent_targets = set()
         work_targets: set[str]
+        remotes_for_log_msg: set[str] = set()
         if not receivers:
             if isinstance(msg, SendMsgs):
                 work_targets = set(msg.send_msgs.keys())
+                if not work_targets:
+                    raise SmartThreadNoRemoteTargets(
+                        f'{self.name} issued a smart_send request with an '
+                        'empty SendMsgs object')
                 completion_count = len(work_targets)
             else:
                 work_targets = set()
@@ -2634,11 +2645,7 @@ class SmartThread:
         else:
             work_targets = self._get_set(receivers)
             completion_count = len(work_targets)
-
-        if not work_targets:
-            raise SmartThreadNoRemoteTargets(
-                f'{self.name} issued a smart_send request but there are '
-                'no remote receivers in the configuration to send to')
+            remotes_for_log_msg = work_targets.copy()
 
         work_msgs: SendMsgs
         if isinstance(msg, SendMsgs):
@@ -2658,9 +2665,14 @@ class SmartThread:
             completion_count=completion_count,
             timeout=timeout,
             msg_to_send=work_msgs,
-            log_msg=log_msg)
+            log_msg=log_msg,
+            remotes_for_log_msg=remotes_for_log_msg)
 
-        self._request_loop(request_block=request_block)
+        # We here and there are no targets, then we will simply return.
+        # This can only happen when receivers was not specified and
+        # there are no active threads in the configuration.
+        if work_targets:
+            self._request_loop(request_block=request_block)
 
         self.request = ReqType.NoReq
 
@@ -2759,14 +2771,19 @@ class SmartThread:
         """Receive one or more messages from remote threads.
 
         Args:
-            senders: thread names whose sent messages are to be received
+            senders: thread names whose sent messages are to be
+                received. If *senders* is not specified, then
+                *smart_recv* will look for messages from each of the
+                smart threads in the configuration. Whether *senders* is
+                specified, *smart_recv* will return as soon as at least
+                any one message is found.
             timeout: number of seconds to wait for message
             log_msg: additional text to append to the debug log message
                 that is issued on request entry and exit
 
         Returns:
             A dictionary where the keys are the sender names, and each
-            entry contains a list off one or more received messages.
+            entry contains a list of one or more received messages.
             Note that if *smart_recv* raises an error, the messages
             collected thus far can be recovered from field *recvd_msgs*
             in the SmartThread object that issued the *smart_recv*.
@@ -3110,7 +3127,7 @@ class SmartThread:
             process_rtn=self._process_recv_msg,
             cleanup_rtn=None,
             get_block_lock=False,
-            completion_count=0,
+            completion_count=1,
             timeout=timeout,
             log_msg=log_msg)
 
@@ -3272,29 +3289,39 @@ class SmartThread:
     # wait
     ####################################################################
     def smart_wait(self, *,
-                   resumers: Iterable,
+                   resumers: Optional[Iterable] = None,
                    resume_count: Optional[int] = None,
                    timeout: OptIntFloat = None,
                    log_msg: Optional[str] = None) -> set[str]:
         """Wait until resumed.
 
         Args:
-            resumers: thread names that we expect to resume us
-            resume_count: If not specified, all *resumers* must issue a
-                matching smart_resume to satisfy the *smart_wait*. If
-                specified, *resume_count* is the number of *resumers*
-                that must issue a matching *smart_resume* to satisfy the
-                *smart_wait*. The value specified must be an integer
-                between 1 and the number of specified *resumers*,
-                inclusive.
-            timeout: number of seconds to allow for wait to be
-                resumed
+            resumers: thread names that the *smart_wait* expects to
+                provide matching *smart_resume*. If *resumers* is not
+                specified, *smart_wait* will wait for any smart thread
+                in the configuration to provide a matching
+                *smart_resume*. If *resumers* is not specified, then the
+                *resume_count* must not be specified and will be
+                considered to be a value of 1.
+            resume_count: the least number of *resumers* that must
+                provide a matching *smart_resume*. If *resumers* is not
+                specified then *resume_count* must not be specified and
+                will be considered to be a value of 1. If *resumers* is
+                specified and *resume_count* is not specified, then
+                *resume_count* will default to the number of *resumers*.
+                The value specified for *resume_count* must be an
+                integer between 1 and the number of specified
+                *resumers*, inclusive.
+            timeout: number of seconds to allow for *smart_wait* to be
+                resumed.
             log_msg: additional text to append to the debug log message
                 that is issued on request entry and exit
 
         Returns:
             A set of thread names that *smart_wait* detects as having
-            done a resume. If *smart_wait* raises an error, the set of
+            provided a matching *smart_resume*. The number of names in
+            the set may be larger than the value specified for
+            *resume_count*. If *smart_wait* raises an error, the set of
             names collected thus far can be recovered from field
             *resumed_by* in the SmartThread object that issued the
             *smart_wait*.
@@ -3530,8 +3557,17 @@ class SmartThread:
         self.request = ReqType.Smart_wait
         self.resumed_by = set()
 
+        if resumers is None and resume_count is not None:
+            raise SmartThreadInvalidInput(
+                f'{self.name} smart_wait detected invalid specification: '
+                f'resume_count must not be specified when resumers is not '
+                f'specified. ')
+
         if resume_count is None:
-            completion_count = len(self._get_set(resumers))
+            if resumers is None:
+                completion_count = 1
+            else:
+                completion_count = len(self._get_set(resumers))
         else:
             if (not isinstance(resume_count, int)
                     or resume_count < 1
@@ -4467,8 +4503,23 @@ class SmartThread:
 
             # handle any error or timeout cases - don't worry about any
             # remotes that were still pending - we need to fail the
-            # request as soon as we know about any unresolvable failures
-            if ((request_block.stopped_remotes and request_block.remotes)
+            # request as soon as we know about any unresolvable
+            # failures. Note that we ignore stopped_remotes when no
+            # remotes are specified. This will be the case when recv
+            # had no remotes and is looking for any message from any
+            # thread in the configuration, or wait had no remotes and is
+            # looking for  a resume from any thread in the
+            # configuration. In those two cases, we will refresh our
+            # list of threads to try and keep trying. For send, though,
+            # no remotes means either a broadcast to any and all active
+            # threads or a SendMsgs was provided. For broadcast, we are
+            # done after one loop regardless of whether there were any
+            # active threads and we will thus not reach the following
+            # code. For the SendMsg case, we do need to raise an error
+            # for stopped targets.
+            if ((request_block.stopped_remotes
+                 and (request_block.remotes
+                      or self.request == ReqType.Smart_send))
                     or request_block.deadlock_remotes
                     or request_block.timer.is_expired()):
 
@@ -4532,8 +4583,10 @@ class SmartThread:
         pk_remotes: list[PairKeyRemote] = []
 
         with sel.SELockExcl(SmartThread._registry_lock):
-            if not remotes:
-                remotes: set[str] = set()
+            work_remotes: set[str] = set()
+            if remotes:
+                work_remotes = remotes.copy()
+            else:
                 for pair_key, item in SmartThread._pair_array.items():
                     if self.name not in pair_key:
                         continue
@@ -4545,12 +4598,12 @@ class SmartThread:
                             or (request == ReqType.Smart_wait
                                 and local_sb.wait_event.is_set())):
                         if self.name == pair_key[0]:
-                            remotes |= {pair_key[1]}
+                            work_remotes |= {pair_key[1]}
                         else:
-                            remotes |= {pair_key[0]}
+                            work_remotes |= {pair_key[0]}
 
             self.missing_remotes: set[str] = set()
-            for remote in remotes:
+            for remote in work_remotes:
                 if remote in SmartThread._registry:
                     target_create_time = SmartThread._registry[
                         remote].create_time
@@ -4827,6 +4880,7 @@ class SmartThread:
                        timeout: OptIntFloat = None,
                        log_msg: Optional[str] = None,
                        msg_to_send: Optional[SendMsgs] = None,
+                       remotes_for_log_msg: Optional[set[str]] = None
                        ) -> RequestBlock:
         """Do common setup for each request.
 
@@ -4861,7 +4915,8 @@ class SmartThread:
         self.cmd_runner = threading.current_thread().name
 
         if not remotes:
-            if self.request not in (ReqType.Smart_recv, ReqType.Smart_send):
+            if self.request not in (ReqType.Smart_recv,
+                                    ReqType.Smart_wait):
                 raise SmartThreadInvalidInput(
                     f'{self.name} {self.request.value} '
                     'request with no targets specified.')
@@ -4871,9 +4926,11 @@ class SmartThread:
             else:
                 remotes = set(remotes)
 
+        if remotes_for_log_msg is None:
+            remotes_for_log_msg = remotes
         exit_log_msg = self._issue_entry_log_msg(
             request=self.request,
-            remotes=remotes,
+            remotes=remotes_for_log_msg,
             timeout_value=timer.timeout_value(),
             log_msg=log_msg)
 
