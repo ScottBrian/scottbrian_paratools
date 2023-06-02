@@ -24286,7 +24286,7 @@ class TestSmartThreadExamples:
 
         def f1(smart_thread: SmartThread) -> None:
             if smart_thread.name == 'charlie':
-                time.sleep(0.5)  # delay for non-interleaved msgs
+                time.sleep(1)  # delay to control msg interleaving
             print(f'f1 {smart_thread.name} entered')
             recvd_msgs = smart_thread.smart_recv(senders='alpha')
             print(recvd_msgs['alpha'])
@@ -24761,6 +24761,7 @@ class TestSmartThreadExamples:
                     target=f1,
                     thread_parm_name='smart_thread',
                     args=('hi',))
+        time.sleep(1)  # give enough time to allow all sends to complete
         recvd_msgs = alpha_smart_thread.smart_recv(senders='beta')
         print(recvd_msgs['beta'])
         alpha_smart_thread.smart_join(targets='beta')

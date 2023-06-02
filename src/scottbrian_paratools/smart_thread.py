@@ -1005,6 +1005,12 @@ class SmartThread:
 
         if self.auto_started:
             self.smart_start(self.name)
+            # We are running under some other thread than the one
+            # that was started and we are using that started threads
+            # smart_thread instance to do the start. The newly started
+            # thread could issue a request using this same instance. So,
+            # we need to be careful and not make any changes that could
+            # affect the new thread.
 
         logger.debug(exit_log_msg)
 
@@ -1609,7 +1615,7 @@ class SmartThread:
         """Start the smart thread.
 
         Args:
-            targets: names of smart threads to be started
+            targets: thread names to be started
             log_msg: additional text to append to the debug log message
                 that is issued on request entry and exit
 
@@ -1688,47 +1694,49 @@ class SmartThread:
             mainline alpha exiting
 
         """
-        # get RequestBlock with targets in a set and a timer object
-        # self.request = ReqType.Smart_start
-
-        if not targets:
-            targets = {self.name}
-        else:
-            targets = self._get_set(targets)
-        if self.name in targets:
-            if len(targets) > 1:
-                raise SmartThreadMultipleTargetsForSelfStart(
-                    f'{self.name} smart_start can not be done for multiple '
-                    'threads when one of the targets is for itself. '
-                    f'{targets=}, {len(targets)=}')
-            with sel.SELockExcl(SmartThread._registry_lock):
-                if self.thread.is_alive():
-                    raise SmartThreadAlreadyStarted(
-                        f'{self.name} smart_start request unable to start '
-                        'since thread has already been started.')
-                if self._get_state(self.name) != ThreadState.Registered:
-                    error_msg = (
-                        f'{self.name} raising '
-                        'SmartThreadRemoteThreadNotRegistered')
-                    logger.error(error_msg)
-                    raise SmartThreadRemoteThreadNotRegistered(error_msg)
-
-        # the smart_start is legal
-        self.request = ReqType.Smart_start
-        self.started_targets = set()
-        request_block = self._request_setup(
-            remotes=targets,
-            error_stopped_target=True,
-            error_not_registered_target=True,
-            process_rtn=self._process_start,
-            cleanup_rtn=None,
-            get_block_lock=False,
-            completion_count=0,
-            timeout=0,
-            log_msg=log_msg)
-
-        # self._config_cmd_loop(request_block=request_block)
+        # smart_start is the only cmd that can be issued with itself as
+        # the target running under any other thread. That means two or
+        # more threads could be doing smart_start again the same
+        # smart_thread instance. We use the self.cmd_lock to prevent
+        # more than start at a time. The first start will work, the
+        # others will fail with an already started error.
         with self.cmd_lock:
+            if not targets:
+                targets = {self.name}
+            else:
+                targets = self._get_set(targets)
+
+            if self.name in targets:
+                if len(targets) > 1:
+                    raise SmartThreadMultipleTargetsForSelfStart(
+                        f'{self.name} smart_start can not be done for multiple '
+                        'threads when one of the targets is for itself. '
+                        f'{targets=}, {len(targets)=}')
+                with sel.SELockExcl(SmartThread._registry_lock):
+                    if self.thread.is_alive():
+                        raise SmartThreadAlreadyStarted(
+                            f'{self.name} smart_start request unable to start '
+                            'since thread has already been started.')
+                    if self._get_state(self.name) != ThreadState.Registered:
+                        error_msg = (
+                            f'{self.name} raising '
+                            'SmartThreadRemoteThreadNotRegistered')
+                        logger.error(error_msg)
+                        raise SmartThreadRemoteThreadNotRegistered(error_msg)
+
+            self.request = ReqType.Smart_start
+            self.started_targets = set()
+            request_block = self._request_setup(
+                remotes=targets,
+                error_stopped_target=True,
+                error_not_registered_target=True,
+                process_rtn=self._process_start,
+                cleanup_rtn=None,
+                get_block_lock=False,
+                completion_count=0,
+                timeout=0,
+                log_msg=log_msg)
+
             self.work_remotes: set[str] = request_block.remotes.copy()
             for remote in self.work_remotes.copy():
                 with sel.SELockExcl(SmartThread._registry_lock):
@@ -1740,14 +1748,19 @@ class SmartThread:
                 self._handle_loop_errors(request_block=request_block,
                                          pending_remotes=[])
 
-        if self.name not in targets:
-            # we can clear the request only if we did not start ourself
-            # because once we start ourself we might do a request
-            self.request = ReqType.NoReq
+            if self.name not in targets:
+                # We are running under some other thread than the one
+                # that was started. If we used a smart_thread instance
+                # that is also the target, then we can't clear the
+                # request because the started thread might do a request
+                # under its thread using this same instance. So, we need
+                # to be careful to not make any changes that could
+                # affect the new thread.
+                self.request = ReqType.NoReq
 
-        logger.debug(request_block.exit_log_msg)
+            logger.debug(request_block.exit_log_msg)
 
-        return self.started_targets
+            return self.started_targets
 
     ####################################################################
     # _process_start
@@ -4864,9 +4877,11 @@ class SmartThread:
             timeout_value=timer.timeout_value(),
             log_msg=log_msg)
 
-        if self.request not in (ReqType.Smart_start,
-                                ReqType.Smart_unreg,
-                                ReqType.Smart_join):
+        # if self.request not in (ReqType.Smart_start,
+        #                         ReqType.Smart_unreg,
+        #                         ReqType.Smart_join):
+        #     self._verify_thread_is_current()
+        if not (self.request == ReqType.Smart_start and self.name in remotes):
             self._verify_thread_is_current()
 
         if (remotes and self.request != ReqType.Smart_start
