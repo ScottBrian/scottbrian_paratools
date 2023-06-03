@@ -2774,10 +2774,10 @@ class SmartThread:
             senders: thread names whose sent messages are to be
                 received. If *senders* is not specified, then
                 *smart_recv* will look for messages from each of the
-                smart threads in the configuration. Whether *senders* is
-                specified, *smart_recv* will return as soon as at least
-                any one message is found.
-            timeout: number of seconds to wait for message
+                smart threads in the configuration. Note that
+                *smart_recv* will return as soon as at least one message
+                from any of the possible senders is found.
+            timeout: number of seconds to wait for messages
             log_msg: additional text to append to the debug log message
                 that is issued on request entry and exit
 
@@ -2831,7 +2831,9 @@ class SmartThread:
         periodically check until one or more messages arrive, at which
         point it will return with them. If timeout is specified,
         *smart_recv* will raise a timeout error if no messages appear
-        within the specified time.
+        within the specified time. If *senders* is specified, and any of
+        the *senders* is stopped before a message is found, *smart_recv*
+        will raise an error.
 
         If no senders are specified, the *smart_recv* will check its
         message queues for all threads in the current configuration. If
@@ -2847,11 +2849,11 @@ class SmartThread:
         If senders are specified, *smart_recv* will look for messages
         only on its message queues for the specified senders. Unlike
         the "no senders specified" case, *smart_recv* will raise an
-        error if any of the specified sender thread become not alive.
+        error if any of the specified sender threads is stopped.
 
         If *smart_recv* raises an error, any messages that were received
         will be placed into the SmartThread object in field recvd_msgs
-        in case the caller need to recover them.
+        in case the caller needs to recover them.
 
         Examples in this section cover the following cases:
 
@@ -4470,7 +4472,7 @@ class SmartThread:
                                     and not local_sb.wait_event.is_set()
                                     and not local_sb.sync_event.is_set()):
                                 request_block.do_refresh = True
-                            # local_sb.request = None
+                            local_sb.request = ReqType.NoReq
 
                 if request_block.do_refresh:
                     logger.debug(
@@ -4481,10 +4483,6 @@ class SmartThread:
                         self._clean_pair_array()
                     request_block.do_refresh = False
 
-            logger.debug(
-                f'TestDebug {self.name} {self.request=}, '
-                f'{request_block.completion_count=}, '
-                f'{self.resumed_by=}')
             if ((self.request == ReqType.Smart_send
                     and request_block.completion_count
                     <= len(self.sent_targets))
@@ -4517,9 +4515,7 @@ class SmartThread:
             # active threads and we will thus not reach the following
             # code. For the SendMsg case, we do need to raise an error
             # for stopped targets.
-            if ((request_block.stopped_remotes
-                 and (request_block.remotes
-                      or self.request == ReqType.Smart_send))
+            if ((request_block.stopped_remotes and request_block.remotes)
                     or request_block.deadlock_remotes
                     or request_block.timer.is_expired()):
 

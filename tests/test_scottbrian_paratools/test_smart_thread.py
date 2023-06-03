@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from collections import deque, defaultdict
 from collections.abc import Iterable
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
 from itertools import combinations, chain, product
@@ -6732,18 +6732,19 @@ class PaLogMsgsFound:
 
 @dataclass
 class StartRequest:
-    targets: set[str]
-    unreg_remotes: set[str]
-    not_registered_remotes: set[str]
-    timeout_remotes: set[str]
-    stopped_remotes: set[str]
-    deadlock_remotes: set[str]
-    eligible_targets: set[str]
-    completed_targets: set[str]
-    first_round_completed: set[str]
-    stopped_target_threads: set[str]
-    exp_senders: set[str]
-    exp_resumers: set[str]
+    targets: set[str] = field(default_factory=set)
+    unreg_remotes: set[str] = field(default_factory=set)
+    not_registered_remotes: set[str] = field(default_factory=set)
+    timeout_remotes: set[str] = field(default_factory=set)
+    stopped_remotes: set[str] = field(default_factory=set)
+    deadlock_remotes: set[str] = field(default_factory=set)
+    eligible_targets: set[str] = field(default_factory=set)
+    completed_targets: set[str] = field(default_factory=set)
+    first_round_completed: set[str] = field(default_factory=set)
+    stopped_target_threads: set[str] = field(default_factory=set)
+    exp_senders: set[str] = field(default_factory=set)
+    exp_resumers: set[str] = field(default_factory=set)
+    exp_receivers: set[str] = field(default_factory=set)
     timeout_type: TimeoutType = TimeoutType.TimeoutNone
     req_type: st.ReqType = st.ReqType.NoReq
 
@@ -15663,33 +15664,32 @@ class ConfigVerifier:
     ####################################################################
     def build_recv_basic_scenario(
             self,
-            num_extra_senders: int,
+            num_senders: int,
             num_msgs: int,
             recv_type: RecvType) -> None:
         """Add cmds to run scenario.
 
         Args:
-            num_extra_senders: number of senders beyond what is
-                required for the recv_type_arg
+            num_senders: number of senders
             num_msgs: number of message to send
             recv_type: type of recv to do
 
         """
         if recv_type == RecvType.AliveSenders:
-            num_send_senders = 1 + num_extra_senders
+            num_send_senders = 1 + num_senders
             num_extra_recv_senders = 0
         elif recv_type == RecvType.PartialSenders:
-            num_send_senders = 2 + num_extra_senders
+            num_send_senders = 2 + num_senders
             num_extra_recv_senders = 0
         elif recv_type == RecvType.MatchSenders:
-            num_send_senders = 1 + num_extra_senders
+            num_send_senders = 1 + num_senders
             num_extra_recv_senders = 0
         elif recv_type == RecvType.ExtraSenders:
-            num_send_senders = 1 + num_extra_senders
-            num_extra_recv_senders = 1 + num_extra_senders
-        elif recv_type == RecvType.UnmatchSenders:
-            num_send_senders = 1 + num_extra_senders
-            num_extra_recv_senders = 1 + num_extra_senders
+            num_send_senders = 1 + num_senders
+            num_extra_recv_senders = 1 + num_senders
+        else:  # recv_type == RecvType.UnmatchSenders:
+            num_send_senders = 1 + num_senders
+            num_extra_recv_senders = 1 + num_senders
 
         send_senders: set[str] = set()
         for idx in range(num_send_senders):
@@ -15722,7 +15722,7 @@ class ConfigVerifier:
             exp_timeout = False
         elif recv_type == RecvType.ExtraSenders:
             num_recv_senders = len(send_senders)
-            exp_timeout = True
+            exp_timeout = False
         else:  # recv_type == RecvType.UnmatchSenders:
             num_recv_senders = 0
             exp_timeout = True
@@ -18441,16 +18441,16 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
 
-        if pe[PE.current_request].timeout_type == TimeoutType.TimeoutTrue:
-            timeout_remotes = pe[PE.current_request].timeout_remotes
-        else:
-            timeout_remotes = set()
+        # if pe[PE.current_request].timeout_type == TimeoutType.TimeoutTrue:
+        #     timeout_remotes = pe[PE.current_request].timeout_remotes
+        # else:
+        #     timeout_remotes = set()
+        #
+        # eligible_targets = (pe[PE.current_request].targets.copy()
+        #                     - timeout_remotes
+        #                     - pe[PE.current_request].stopped_remotes)
 
-        eligible_targets = (pe[PE.current_request].targets.copy()
-                            - timeout_remotes
-                            - pe[PE.current_request].stopped_remotes)
-
-        for target in eligible_targets:
+        for target in pe[PE.current_request].exp_receivers:
             ack_key: AckKey = (target, 'smart_send')
 
             pe[PE.ack_msg][ack_key] += 1
@@ -19030,10 +19030,10 @@ class ConfigVerifier:
             exp_receivers = receivers.copy()
 
         timeout_remotes = set()
-        if unreg_timeout_names:
-            timeout_remotes = unreg_timeout_names.copy()
+        if timeout_type == TimeoutType.TimeoutTrue and unreg_timeout_names:
+            timeout_remotes |= unreg_timeout_names
         if fullq_timeout_names:
-            timeout_remotes |= fullq_timeout_names.copy()
+            timeout_remotes |= fullq_timeout_names
 
         exp_receivers -= timeout_remotes
 
@@ -19045,17 +19045,9 @@ class ConfigVerifier:
             StartRequest(req_type=st.ReqType.Smart_send,
                          timeout_type=timeout_type,
                          targets=receivers_to_use,
-                         unreg_remotes=set(),
-                         not_registered_remotes=set(),
                          timeout_remotes=timeout_remotes,
                          stopped_remotes=stopped_remotes.copy(),
-                         deadlock_remotes=set(),
-                         eligible_targets=set(),
-                         completed_targets=set(),
-                         first_round_completed=set(),
-                         stopped_target_threads=set(),
-                         exp_senders=set(),
-                         exp_resumers=set()))
+                         exp_receivers=exp_receivers))
 
         req_key_entry: RequestKey = ('smart_send',
                                      'entry')
@@ -25775,43 +25767,7 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_recv_basic_scenarios
     ####################################################################
-    @pytest.mark.parametrize("num_extra_senders_arg", [0])
-    @pytest.mark.parametrize("num_msgs_arg", [1])
-    @pytest.mark.parametrize("recv_type_arg", [RecvType.AliveSenders,
-                                               RecvType.MatchSenders])
-    @pytest.mark.cover
-    def test_recv_basic_scenario_cover(
-            self,
-            num_extra_senders_arg: int,
-            num_msgs_arg: int,
-            recv_type_arg: RecvType,
-            caplog: pytest.CaptureFixture[str]
-    ) -> None:
-        """Test meta configuration scenarios.
-
-        Args:
-            num_extra_senders_arg: number of senders beyond what is
-                required for the recv_type_arg
-            num_msgs_arg: number of message to send
-            recv_type_arg: type of recv to do
-            caplog: pytest fixture to capture log output
-
-        """
-        args_for_scenario_builder: dict[str, Any] = {
-            'num_extra_senders': num_extra_senders_arg,
-            'num_msgs': num_msgs_arg,
-            'recv_type': recv_type_arg,
-        }
-
-        scenario_driver(
-            scenario_builder=ConfigVerifier.build_recv_basic_scenario,
-            scenario_builder_args=args_for_scenario_builder,
-            caplog_to_use=caplog)
-
-    ####################################################################
-    # test_recv_basic_scenarios
-    ####################################################################
-    @pytest.mark.parametrize("num_extra_senders_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_senders_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_msgs_arg", [1, 2, 3])
     @pytest.mark.parametrize("recv_type_arg", [RecvType.AliveSenders,
                                                RecvType.PartialSenders,
@@ -25820,7 +25776,7 @@ class TestSmartBasicScenarios:
                                                RecvType.UnmatchSenders])
     def test_recv_basic_scenario(
             self,
-            num_extra_senders_arg: int,
+            num_senders_arg: int,
             num_msgs_arg: int,
             recv_type_arg: RecvType,
             caplog: pytest.CaptureFixture[str]
@@ -25828,51 +25784,20 @@ class TestSmartBasicScenarios:
         """Test meta configuration scenarios.
 
         Args:
-            num_extra_senders_arg: number of senders beyond what is
-                required for the recv_type_arg
+            num_senders_arg: number of senders
             num_msgs_arg: number of message to send
             recv_type_arg: type of recv to do
             caplog: pytest fixture to capture log output
 
         """
         args_for_scenario_builder: dict[str, Any] = {
-            'num_extra_senders': num_extra_senders_arg,
+            'num_senders': num_senders_arg,
             'num_msgs': num_msgs_arg,
             'recv_type': recv_type_arg,
         }
 
         scenario_driver(
             scenario_builder=ConfigVerifier.build_recv_basic_scenario,
-            scenario_builder_args=args_for_scenario_builder,
-            caplog_to_use=caplog)
-
-    ####################################################################
-    # test_resume_basic_scenario
-    ####################################################################
-    @pytest.mark.parametrize("num_resumers_arg", [1])
-    @pytest.mark.parametrize("num_waiters_arg", [1])
-    @pytest.mark.cover
-    def test_resume_basic_scenario_cover(
-            self,
-            num_resumers_arg: int,
-            num_waiters_arg: int,
-            caplog: pytest.CaptureFixture[str]
-    ) -> None:
-        """Test meta configuration scenarios.
-
-        Args:
-            num_resumers_arg: number of resumers
-            num_waiters_arg: number of waiters
-            caplog: pytest fixture to capture log output
-
-        """
-        args_for_scenario_builder: dict[str, Any] = {
-            'num_resumers': num_resumers_arg,
-            'num_waiters': num_waiters_arg,
-        }
-
-        scenario_driver(
-            scenario_builder=ConfigVerifier.build_resume_basic_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 
@@ -25902,41 +25827,6 @@ class TestSmartBasicScenarios:
 
         scenario_driver(
             scenario_builder=ConfigVerifier.build_resume_basic_scenario,
-            scenario_builder_args=args_for_scenario_builder,
-            caplog_to_use=caplog)
-
-    ####################################################################
-    # test_wait_basic_scenario
-    ####################################################################
-    @pytest.mark.parametrize("num_extra_resumers_arg", [0])
-    @pytest.mark.parametrize("wait_type_arg", [WaitType.AliveResumers,
-                                               WaitType.PartialResumers,
-                                               WaitType.MatchResumers,
-                                               WaitType.ExtraResumers,
-                                               WaitType.UnmatchResumers])
-    @pytest.mark.cover
-    def test_wait_basic_scenario_cover(
-            self,
-            num_extra_resumers_arg: int,
-            wait_type_arg: WaitType,
-            caplog: pytest.CaptureFixture[str]
-    ) -> None:
-        """Test meta configuration scenarios.
-
-        Args:
-            num_extra_resumers_arg: number of resumers beyond what is
-                required for the wait_type_arg
-            wait_type_arg: type of wait to do
-            caplog: pytest fixture to capture log output
-
-        """
-        args_for_scenario_builder: dict[str, Any] = {
-            'num_extra_resumers': num_extra_resumers_arg,
-            'wait_type': wait_type_arg,
-        }
-
-        scenario_driver(
-            scenario_builder=ConfigVerifier.build_wait_basic_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 
