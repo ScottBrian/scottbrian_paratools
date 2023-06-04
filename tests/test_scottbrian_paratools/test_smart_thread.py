@@ -15737,9 +15737,9 @@ class ConfigVerifier:
                         confirm_serial_num=send_msg_serial_num,
                         confirmers=senders))
 
-        ############################################################
+        ################################################################
         # receive messages
-        ############################################################
+        ################################################################
         if exp_senders:
             recv_msg_serial_num = self.add_cmd(RecvMsg(
                 cmd_runners=receiver,
@@ -15824,100 +15824,92 @@ class ConfigVerifier:
     ####################################################################
     def build_wait_basic_scenario(
             self,
-            num_extra_resumers: int,
+            num_resumers: int,
+            resume_count: int,
             wait_type: RecvType) -> None:
         """Add cmds to run scenario.
 
         Args:
-            num_extra_resumers: number of resumers beyond what is
+            num_resumers: number of resumers beyond what is
                 required for the wait_type_arg
+            resume_count: resume_count specification for smart_wait
             wait_type: type of wait to do
 
         """
-        if wait_type == WaitType.AliveResumers:
-            num_resume_resumers = 1 + num_extra_resumers
-            num_extra_wait_resumers = 0
-        elif wait_type == WaitType.PartialResumers:
-            num_resume_resumers = 2 + num_extra_resumers
-            num_extra_wait_resumers = 0
-        elif wait_type == WaitType.MatchResumers:
-            num_resume_resumers = 1 + num_extra_resumers
-            num_extra_wait_resumers = 0
-        elif wait_type == WaitType.ExtraResumers:
-            num_resume_resumers = 1 + num_extra_resumers
-            num_extra_wait_resumers = 1 + num_extra_resumers
-        elif wait_type == WaitType.UnmatchResumers:
-            num_resume_resumers = 1 + num_extra_resumers
-            num_extra_wait_resumers = 1 + num_extra_resumers
+        resumers: set[str] = set()
+        for idx in range(num_resumers):
+            resumers |= {'resume_' + str(idx)}
 
-        resume_resumers: set[str] = set()
-        for idx in range(num_resume_resumers):
-            resume_resumers |= {'resume_resumer_' + str(idx)}
-
-        extra_wait_resumers: set[str] = set()
-        for idx in range(num_extra_wait_resumers):
-            extra_wait_resumers |= {'extra_wait_resumer_' + str(idx)}
+        non_resumers: set[str] = set()
+        for idx in range(3):
+            non_resumers |= {'non_resumer_' + str(idx)}
 
         waiter = 'waiter_1'
 
         self.create_config(
-            active_names=resume_resumers | extra_wait_resumers | {waiter})
+            active_names=resumers | non_resumers | {waiter})
 
         self.log_name_groups()
 
         wait_resumers: set[str] = set()
         if wait_type == WaitType.AliveResumers:
             num_wait_resumers = 0
-            exp_timeout = False
         elif wait_type == WaitType.PartialResumers:
-            num_wait_resumers = len(resume_resumers) // 2
-            exp_timeout = False
+            num_wait_resumers = len(resumers) // 2
         elif wait_type == WaitType.MatchResumers:
-            num_wait_resumers = len(resume_resumers)
-            exp_timeout = False
+            num_wait_resumers = len(resumers)
         elif wait_type == WaitType.ExtraResumers:
-            num_wait_resumers = len(resume_resumers)
-            exp_timeout = True
+            num_wait_resumers = len(resumers)
+            wait_resumers |= non_resumers
         else:  # wait_type == WaitType.UnmatchResumers:
             num_wait_resumers = 0
-            exp_timeout = True
+            wait_resumers |= non_resumers
 
-        for idx, resumer_name in enumerate(resume_resumers, 1):
-            if num_wait_resumers < idx:
+        for idx, resumer_name in enumerate(resumers):
+            if num_wait_resumers <= idx:
                 break
             wait_resumers |= {resumer_name}
 
-        for idx, resumer_name in enumerate(extra_wait_resumers, 1):
-            if num_extra_wait_resumers < idx:
-                break
-            wait_resumers |= {resumer_name}
-
-        if wait_type == WaitType.AliveResumers:
-            exp_resumers: set[str] = resume_resumers
+        wait_resume_count: Optional[int] = None
+        if wait_resumers:
+            exp_resumers: set[str] = resumers & wait_resumers
+            if resume_count > 0:
+                wait_resume_count = resume_count
         else:
-            exp_resumers: set[str] = resume_resumers & wait_resumers
+            exp_resumers: set[str] = resumers
+            wait_resume_count = 1
 
         ################################################################
         # resume
         ################################################################
-        resume_serial_num = self.add_cmd(Resume(
-            cmd_runners=resume_resumers,
-            targets=waiter))
+        if resumers:
+            resume_serial_num = self.add_cmd(Resume(
+                cmd_runners=resumers,
+                targets=waiter))
 
-        ################################################################
-        # confirm resumes are done
-        ################################################################
-        self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=self.commander_name,
-                confirm_cmd='Resume',
-                confirm_serial_num=resume_serial_num,
-                confirmers=resume_resumers))
+            ############################################################
+            # confirm resumes are done
+            ############################################################
+            self.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=self.commander_name,
+                    confirm_cmd='Resume',
+                    confirm_serial_num=resume_serial_num,
+                    confirmers=resumers))
 
         ################################################################
         # wait
         ################################################################
-        if exp_timeout:
+        if (exp_resumers
+                and wait_resume_count is not None
+                and wait_resume_count <= len(exp_resumers)):
+            cmd_to_confirm = 'Wait'
+
+            wait_serial_num = self.add_cmd(Wait(
+                cmd_runners=waiter,
+                resumers=wait_resumers,
+                exp_resumers=exp_resumers))
+        else:
             cmd_to_confirm = 'WaitTimeoutTrue'
             wait_serial_num = self.add_cmd(WaitTimeoutTrue(
                 cmd_runners=waiter,
@@ -15925,12 +15917,6 @@ class ConfigVerifier:
                 exp_resumers=exp_resumers,
                 timeout=1,
                 timeout_remotes=wait_resumers))
-        else:
-            cmd_to_confirm = 'Wait'
-            wait_serial_num = self.add_cmd(Wait(
-                cmd_runners=waiter,
-                resumers=wait_resumers,
-                exp_resumers=exp_resumers))
 
         ################################################################
         # confirm waits are done
@@ -25752,7 +25738,7 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_recv_basic_scenarios
     ####################################################################
-    @pytest.mark.parametrize("num_senders_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_senders_arg", [0, 1, 2, 3])
     @pytest.mark.parametrize("num_msgs_arg", [1, 2, 3])
     @pytest.mark.parametrize("recv_type_arg", [RecvType.AliveSenders,
                                                RecvType.PartialSenders,
@@ -25821,7 +25807,8 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_wait_basic_scenario
     ####################################################################
-    @pytest.mark.parametrize("num_extra_resumers_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_resumers_arg", [0, 1, 2, 3])
+    @pytest.mark.parametrize("resume_count_arg", [0, 1, 2, 3])
     @pytest.mark.parametrize("wait_type_arg", [WaitType.AliveResumers,
                                                WaitType.PartialResumers,
                                                WaitType.MatchResumers,
@@ -25829,21 +25816,24 @@ class TestSmartBasicScenarios:
                                                WaitType.UnmatchResumers])
     def test_wait_basic_scenario(
             self,
-            num_extra_resumers_arg: int,
+            num_resumers_arg: int,
+            resume_count_arg: int,
             wait_type_arg: WaitType,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
         """Test meta configuration scenarios.
 
         Args:
-            num_extra_resumers_arg: number of resumers beyond what is
+            num_resumers_arg: number of resumers beyond what is
                 required for the wait_type_arg
+            resume_count_arg: resume_count specification for smart_wait
             wait_type_arg: type of wait to do
             caplog: pytest fixture to capture log output
 
         """
         args_for_scenario_builder: dict[str, Any] = {
-            'num_extra_resumers': num_extra_resumers_arg,
+            'num_resumers': num_resumers_arg,
+            'resume_count': resume_count_arg,
             'wait_type': wait_type_arg,
         }
 
