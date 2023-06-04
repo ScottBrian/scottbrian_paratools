@@ -247,7 +247,6 @@ class SendRecvMsgs:
 # WaitType
 ########################################################################
 class WaitType(Enum):
-    AliveResumers = auto()
     PartialResumers = auto()
     MatchResumers = auto()
     ExtraResumers = auto()
@@ -15852,9 +15851,7 @@ class ConfigVerifier:
         self.log_name_groups()
 
         wait_resumers: set[str] = set()
-        if wait_type == WaitType.AliveResumers:
-            num_wait_resumers = 0
-        elif wait_type == WaitType.PartialResumers:
+        if wait_type == WaitType.PartialResumers:
             num_wait_resumers = len(resumers) // 2
         elif wait_type == WaitType.MatchResumers:
             num_wait_resumers = len(resumers)
@@ -15870,14 +15867,17 @@ class ConfigVerifier:
                 break
             wait_resumers |= {resumer_name}
 
+        # make sure we have a non-empty set for smart_wait in case
+        # num_resumers is zero or too small for PartialResumers to get
+        # at least 1 resumer
+        if not wait_resumers:
+            wait_resumers |= non_resumers
+        exp_resumers: set[str] = resumers & wait_resumers
+
         wait_resume_count: Optional[int] = None
-        if wait_resumers:
-            exp_resumers: set[str] = resumers & wait_resumers
-            if resume_count > 0:
-                wait_resume_count = resume_count
-        else:
-            exp_resumers: set[str] = resumers
-            wait_resume_count = 1
+        if resume_count > 0:  # if we want resume_count
+            # make sure we specify a legal value
+            wait_resume_count = min(resume_count, len(wait_resumers))
 
         ################################################################
         # resume
@@ -15900,23 +15900,34 @@ class ConfigVerifier:
         ################################################################
         # wait
         ################################################################
-        if (exp_resumers
-                and wait_resume_count is not None
-                and wait_resume_count <= len(exp_resumers)):
-            cmd_to_confirm = 'Wait'
+        timeout: int = 0
+        timeout_remotes: set[str] = (wait_resumers - exp_resumers)
+        if exp_resumers:
+            if wait_resume_count:
+                if len(exp_resumers) < wait_resume_count:
+                    timeout = 1
+            else:
+                if wait_resumers != exp_resumers:
+                    timeout = 1
+        else:
+            timeout = 1
 
+        if timeout == 0:
+            cmd_to_confirm = 'Wait'
             wait_serial_num = self.add_cmd(Wait(
                 cmd_runners=waiter,
                 resumers=wait_resumers,
+                resume_count=wait_resume_count,
                 exp_resumers=exp_resumers))
         else:
             cmd_to_confirm = 'WaitTimeoutTrue'
             wait_serial_num = self.add_cmd(WaitTimeoutTrue(
                 cmd_runners=waiter,
                 resumers=wait_resumers,
+                resume_count=wait_resume_count,
                 exp_resumers=exp_resumers,
                 timeout=1,
-                timeout_remotes=wait_resumers))
+                timeout_remotes=timeout_remotes))
 
         ################################################################
         # confirm waits are done
@@ -20298,7 +20309,7 @@ class ConfigVerifier:
 
         """
         self.log_test_msg(f'handle_wait entry for {cmd_runner=}, '
-                          f'{resumers=}, {stopped_remotes=}, '
+                          f'{resumers=}, {resume_count=}, {stopped_remotes=}, '
                           f'{timeout_remotes=}, {conflict_remotes=} '
                           f'{deadlock_remotes=}')
 
@@ -20311,17 +20322,10 @@ class ConfigVerifier:
             StartRequest(req_type=st.ReqType.Smart_wait,
                          timeout_type=timeout_type,
                          targets=resumers,
-                         unreg_remotes=set(),
-                         not_registered_remotes=set(),
                          timeout_remotes=timeout_remotes.copy(),
                          stopped_remotes=stopped_remotes.copy(),
                          deadlock_remotes=(conflict_remotes.copy() |
                                            deadlock_remotes.copy()),
-                         eligible_targets=set(),
-                         completed_targets=set(),
-                         first_round_completed=set(),
-                         stopped_target_threads=set(),
-                         exp_senders=set(),
                          exp_resumers=exp_resumers))
 
         req_key_entry: RequestKey = ('smart_wait',
@@ -20452,7 +20456,7 @@ class ConfigVerifier:
         #         new_log_msg=f'{cmd_runner} smart_wait resumed by {resumer}',
         #         log_level=logging.INFO)
 
-        if exp_completed_resumers:
+        if exp_resumers:
             self.wait_for_monitor(cmd_runner=cmd_runner,
                                   rtn_name='handle_wait')
 
@@ -25809,8 +25813,7 @@ class TestSmartBasicScenarios:
     ####################################################################
     @pytest.mark.parametrize("num_resumers_arg", [0, 1, 2, 3])
     @pytest.mark.parametrize("resume_count_arg", [0, 1, 2, 3])
-    @pytest.mark.parametrize("wait_type_arg", [WaitType.AliveResumers,
-                                               WaitType.PartialResumers,
+    @pytest.mark.parametrize("wait_type_arg", [WaitType.PartialResumers,
                                                WaitType.MatchResumers,
                                                WaitType.ExtraResumers,
                                                WaitType.UnmatchResumers])

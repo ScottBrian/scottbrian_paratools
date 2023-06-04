@@ -3294,47 +3294,13 @@ class SmartThread:
 
         Args:
             resumers: thread names that the *smart_wait* expects to
-                provide matching *smart_resume* requests. If no names
-                are provided (meaning *resumers* was not specified, or
-                an empty iterable was supplied), *resumers* will default
-                to the set of all remote names in the configuration and
-                will change dynamically as remote threads are added to
-                or subtracted from the configuration until the
-                *smart_wait* is satisfied.
+                provide matching *smart_resume* requests.
             resume_count: the least number of *resumers* that must
                 provide a matching *smart_resume* to satisfy the
-                *smart_wait*. Following are the cases for whether
-                *resume_count* is specified and whether names were
-                provided for *resumers*:
-
-                    1) If *resume_count* is not specified:
-
-                       a) if names were not provided for *resumers*,
-                          *resume_count* will default to the number of
-                          remote threads in the configuration and will
-                          increase or decrease dynamically as remote
-                          threads are respectively added to or
-                          subtracted from the configuration dynamically.
-                       b) if names were provided for *resumers*,
-                          *resume_count* will default to the number of
-                          specified names.
-                    2) If *resume_count* is specified:
-
-                       a) if names were not provided for *resumers*,
-                          the specified value for *resume_count* must be
-                          an integer of at least 1. Note that a value
-                          greater than the number of remote threads will
-                          mean that the *smart_wait* will not be
-                          satisfied unless and until enough remote
-                          threads are added to the configuration and
-                          that along with the exiting threads provide
-                          enough matching *smart_resume* request to
-                          match *resume_count*.
-                       b) if names were provided for *resumers*,
-                          *resume_count* must be an integer value
-                          between 1 and the number of specified
-                          *resumers*, inclusive.
-
+                *smart_wait*. If not specified, *resume_count* will
+                default to the number of names specified for *resumers*.
+                If specified, *resume_count^ must be an integer between
+                1 and the number of *resumers*, inclusive.
             timeout: number of seconds to allow for *smart_wait* to be
                 resumed.
             log_msg: additional text to append to the debug log message
@@ -3580,19 +3546,8 @@ class SmartThread:
         self.request = ReqType.Smart_wait
         self.resumed_by = set()
 
-        if not resumers and resume_count is not None:
-            raise SmartThreadInvalidInput(
-                f'{self.name} smart_wait detected invalid specification: '
-                f'resume_count must not be specified when resumers is not '
-                f'specified. ')
-
-        logger.debug(
-            f'TestDebug {self.name} wait {resume_count=}, {resumers=}')
         if resume_count is None:
-            if resumers:
-                completion_count = len(self._get_set(resumers))
-            else:
-                completion_count = 1
+            completion_count = len(self._get_set(resumers))
         else:
             if (not isinstance(resume_count, int)
                     or resume_count < 1
@@ -3605,8 +3560,6 @@ class SmartThread:
                 )
             completion_count = resume_count
 
-        logger.debug(
-            f'TestDebug {self.name} wait {completion_count=}')
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
             remotes=resumers,
@@ -4612,19 +4565,14 @@ class SmartThread:
                     if self.name not in pair_key:
                         continue
 
-                    if self.name == pair_key[0]:
-                        remote = pair_key[1]
-                    else:
-                        remote = pair_key[0]
-
                     local_sb = SmartThread._pair_array[
                             pair_key].status_blocks[self.name]
-                    if ((request == ReqType.Smart_recv
-                            and not local_sb.msg_q.empty())
-                            or (request == ReqType.Smart_wait
-                                and local_sb.wait_event.is_set()
-                                and remote not in self.resumed_by)):
-                        work_remotes |= {remote}
+                    if (request == ReqType.Smart_recv
+                            and not local_sb.msg_q.empty()):
+                        if self.name == pair_key[0]:
+                            work_remotes |= {pair_key[1]}
+                        else:
+                            work_remotes |= {pair_key[0]}
 
             self.missing_remotes: set[str] = set()
             for remote in work_remotes:
