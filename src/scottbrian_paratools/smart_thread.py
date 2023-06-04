@@ -1534,9 +1534,6 @@ class SmartThread:
                 SmartThread._pair_array[pair_key].status_blocks[
                     existing_name].request = SmartThread._registry[
                             existing_name].request
-                logger.debug(
-                    f'TestDebug {self.cmd_runner} set request_pending in '
-                    f'refresh for {pair_key=}, {existing_name=}')
 
         if changed:
             SmartThread._pair_array_last_update = datetime.utcnow()
@@ -3171,8 +3168,6 @@ class SmartThread:
         for timeout_value in (SmartThread.K_REQUEST_MIN_INTERVAL,
                               request_block.request_max_interval):
             try:
-                # logger.debug(f'TestDebug {self.name} checking for message '
-                #              f'from {pk_remote.remote}')
                 # recv message from remote
                 with SmartThread._pair_array[pk_remote.pair_key].status_lock:
                     recvd_msg = local_sb.msg_q.get(
@@ -3630,9 +3625,6 @@ class SmartThread:
         # stopped), try again with a longer
         # timeout_value (remote alive), or return False to give
         # the remote more time (remote is not alive, but no stopped)
-        logger.debug(
-            f'TestDebug {self.name} enter _process_wait '
-            f' {self.request=}')
         for timeout_value in (SmartThread.K_REQUEST_MIN_INTERVAL,
                               request_block.request_max_interval):
             if local_sb.wait_event.wait(timeout=timeout_value):
@@ -3658,9 +3650,6 @@ class SmartThread:
                     f'{pk_remote.remote}')
                 self.resumed_by |= {pk_remote.remote}
 
-                logger.debug(
-                    f'TestDebug {self.name} return from _process_wait '
-                    f' {self.request=}')
                 return True
 
             with SmartThread._pair_array[pk_remote.pair_key].status_lock:
@@ -4401,8 +4390,6 @@ class SmartThread:
                cleanup that is needed for a failed request
 
         """
-        logger.debug(
-            f'TestDebug {self.name} top of req_loop {self.request=}')
         continue_request_loop = True
         while continue_request_loop:
             # determine timeout_value to use for request
@@ -4410,7 +4397,7 @@ class SmartThread:
                 request_block.request_max_interval = min(
                     self.request_max_interval,
                     (request_block.timer.remaining_time()
-                     / len(self.work_pk_remotes))
+                     / max(1, len(self.work_pk_remotes)))
                 )
             else:
                 request_block.request_max_interval = (
@@ -4452,9 +4439,6 @@ class SmartThread:
                                                      local_sb):
                             self.work_pk_remotes.remove(pk_remote)
 
-                            logger.debug(
-                                f'TestDebug {self.name} process return '
-                                f' {self.request=}')
                             # We may have been able to successfully
                             # complete this request despite not yet
                             # having an alive remote (smart_recv and wait,
@@ -4497,6 +4481,17 @@ class SmartThread:
                     or (self.request == ReqType.Smart_sync
                         and request_block.completion_count
                         <= len(self.synced_targets))):
+                # clear request_pending for remaining work remotes
+                for pair_key, remote, _ in self.work_pk_remotes:
+                    if pair_key in SmartThread._pair_array:
+                        # having a pair_key in the array implies our
+                        # entry exists
+                        SmartThread._pair_array[
+                            pair_key].status_blocks[
+                            self.name].request_pending = False
+                        SmartThread._pair_array[
+                            pair_key].status_blocks[
+                            self.name].request = ReqType.NoReq
                 break
 
             # handle any error or timeout cases - don't worry about any
