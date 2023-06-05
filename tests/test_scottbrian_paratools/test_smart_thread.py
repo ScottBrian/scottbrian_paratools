@@ -1569,6 +1569,7 @@ class Resume(ConfigCmd):
     def __init__(self,
                  cmd_runners: Iterable,
                  targets: Iterable,
+                 exp_resumed_targets: Iterable,
                  stopped_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
@@ -1576,6 +1577,7 @@ class Resume(ConfigCmd):
         Args:
             cmd_runners: thread names that will execute the command
             targets: thread names to resume
+            exp_resumed_targets: thread names expected to be resumed
             stopped_remotes: thread names that are stopped
             log_msg: log msg for smart_resume
         """
@@ -1584,11 +1586,14 @@ class Resume(ConfigCmd):
 
         self.targets = get_set(targets)
 
+        self.exp_resumed_targets = exp_resumed_targets
+
         self.stopped_remotes = get_set(stopped_remotes)
 
         self.log_msg = log_msg
 
         self.arg_list += ['targets',
+                          'exp_resumed_targets',
                           'stopped_remotes']
 
     def run_process(self, cmd_runner: str) -> None:
@@ -1600,6 +1605,7 @@ class Resume(ConfigCmd):
         self.config_ver.handle_resume(
             cmd_runner=cmd_runner,
             targets=self.targets,
+            exp_resumed_targets=self.exp_resumed_targets,
             stopped_remotes=self.stopped_remotes,
             timeout=0,
             timeout_names=set(),
@@ -1615,6 +1621,7 @@ class ResumeTimeoutFalse(Resume):
     def __init__(self,
                  cmd_runners: Iterable,
                  targets: Iterable,
+                 exp_resumed_targets: Iterable,
                  timeout: IntOrFloat,
                  stopped_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
@@ -1623,12 +1630,14 @@ class ResumeTimeoutFalse(Resume):
         Args:
             cmd_runners: thread names that will execute the command
             targets: thread names to resume
+            exp_resumed_targets: thread names expected to be resumed
             stopped_remotes: thread names that are stopped
             timeout: value for smart_resume
             log_msg: log msg for smart_resume
         """
         super().__init__(cmd_runners=cmd_runners,
                          targets=targets,
+                         exp_resumed_targets=exp_resumed_targets,
                          stopped_remotes=stopped_remotes,
                          log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
@@ -1646,6 +1655,7 @@ class ResumeTimeoutFalse(Resume):
         self.config_ver.handle_resume(
             cmd_runner=cmd_runner,
             targets=self.targets,
+            exp_resumed_targets=self.exp_resumed_targets,
             stopped_remotes=self.stopped_remotes,
             timeout=self.timeout,
             timeout_names=set(),
@@ -1661,6 +1671,7 @@ class ResumeTimeoutTrue(ResumeTimeoutFalse):
     def __init__(self,
                  cmd_runners: Iterable,
                  targets: Iterable,
+                 exp_resumed_targets: Iterable,
                  timeout: IntOrFloat,
                  timeout_names: Iterable,
                  stopped_remotes: Optional[Iterable] = None,
@@ -1670,6 +1681,7 @@ class ResumeTimeoutTrue(ResumeTimeoutFalse):
         Args:
             cmd_runners: thread names that will execute the command
             targets: thread names to resume
+            exp_resumed_targets: thread names expected to be resumed
             stopped_remotes: thread names that are stopped
             timeout: value for smart_resume
             timeout_names: thread names expected to cause timeout
@@ -1677,6 +1689,7 @@ class ResumeTimeoutTrue(ResumeTimeoutFalse):
         """
         super().__init__(cmd_runners=cmd_runners,
                          targets=targets,
+                         exp_resumed_targets=exp_resumed_targets,
                          stopped_remotes=stopped_remotes,
                          timeout=timeout,
                          log_msg=log_msg)
@@ -1695,6 +1708,7 @@ class ResumeTimeoutTrue(ResumeTimeoutFalse):
         self.config_ver.handle_resume(
             cmd_runner=cmd_runner,
             targets=self.targets,
+            exp_resumed_targets=self.exp_resumed_targets,
             stopped_remotes=self.stopped_remotes,
             timeout=self.timeout,
             timeout_names=self.timeout_names,
@@ -3224,20 +3238,20 @@ def log_level_arg(request: Any) -> int:
     return cast(int, request.param)
 
 
-###############################################################################
-# def_del_scenario_arg
-###############################################################################
-@pytest.fixture(params=def_del_scenario_arg_list)  # type: ignore
-def def_del_scenario_arg(request: Any) -> DefDelScenario:
-    """Type of deferred delete to do.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(DefDelScenario, request.param)
+# ###############################################################################
+# # def_del_scenario_arg
+# ###############################################################################
+# @pytest.fixture(params=def_del_scenario_arg_list)  # type: ignore
+# def def_del_scenario_arg(request: Any) -> DefDelScenario:
+#     """Type of deferred delete to do.
+#
+#     Args:
+#         request: special fixture that returns the fixture params
+#
+#     Returns:
+#         The params values are returned one at a time
+#     """
+#     return cast(DefDelScenario, request.param)
 
 
 ###############################################################################
@@ -6744,6 +6758,7 @@ class StartRequest:
     exp_senders: set[str] = field(default_factory=set)
     exp_resumers: set[str] = field(default_factory=set)
     exp_receivers: set[str] = field(default_factory=set)
+    exp_resumed_targets: set[str] = field(default_factory=set)
     timeout_type: TimeoutType = TimeoutType.TimeoutNone
     req_type: st.ReqType = st.ReqType.NoReq
 
@@ -7363,6 +7378,7 @@ class ConfigVerifier:
         resume_serial_num = self.add_cmd(
             Resume(cmd_runners=resumers,
                    targets=waiters,
+                   exp_resumed_targets=waiters,
                    stopped_remotes=[],
                    log_msg='cd normal resume wait test'))
         self.add_cmd(
@@ -7401,6 +7417,7 @@ class ConfigVerifier:
         resume_serial_num = self.add_cmd(
             Resume(cmd_runners=resumers,
                    targets=waiters,
+                   exp_resumed_targets=waiters,
                    stopped_remotes=[],
                    log_msg='cd resume sync sync wait test'))
         self.add_cmd(
@@ -8478,6 +8495,7 @@ class ConfigVerifier:
         self.add_cmd(
             RecvMsg(cmd_runners=to_names,
                     senders=from_names,
+                    exp_senders=from_names,
                     exp_msgs=msgs_to_send))
 
     ####################################################################
@@ -8595,7 +8613,8 @@ class ConfigVerifier:
         if pending_wait_tf:
             resume_serial_num = self.add_cmd(Resume(
                 cmd_runners=remote_names,
-                targets=pending_names))
+                targets=pending_names,
+                exp_resumed_targets=pending_names))
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=self.commander_name,
@@ -8685,6 +8704,7 @@ class ConfigVerifier:
                 pend_req_serial_num = self.add_cmd(
                     Resume(cmd_runners=pending_names[0],
                            targets=remote_names[0],
+                           exp_resumed_targets=remote_names[0],
                            stopped_remotes=stopped_remotes))
             else:
                 raise InvalidInputDetected(
@@ -9023,7 +9043,8 @@ class ConfigVerifier:
         if pending_wait_tf:
             resume_serial_num = self.add_cmd(Resume(
                 cmd_runners=remote_names,
-                targets=pending_names))
+                targets=pending_names,
+                exp_resumed_targets=pending_names,))
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=self.commander_name,
@@ -9532,6 +9553,7 @@ class ConfigVerifier:
         if pending_wait_tf:
             resume_serial_num = self.add_cmd(Resume(
                 cmd_runners=remote_name,
+                exp_resumed_targets=remote_name,
                 targets=pending_name))
             self.add_cmd(
                 ConfirmResponse(
@@ -9934,6 +9956,16 @@ class ConfigVerifier:
         pe[PE.ack_msg][ack_key] += 1
 
         ################################################################
+        # confirm the sync is done
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='Sync',
+                confirm_serial_num=sync_serial_num,
+                confirmers=remote_name))
+
+        ################################################################
         # do smart_join
         ################################################################
         join_serial_num = self.add_cmd(
@@ -9953,16 +9985,6 @@ class ConfigVerifier:
                                 def_del_reasons)
 
         pe[PE.notify_rem_status_block_msg][rem_sb_key] += 1
-
-        ################################################################
-        # confirm the sync is done
-        ################################################################
-        self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=self.commander_name,
-                confirm_cmd='Sync',
-                confirm_serial_num=sync_serial_num,
-                confirmers=remote_name))
 
         ################################################################
         # confirm the join is done
@@ -10715,6 +10737,7 @@ class ConfigVerifier:
             resume_serial_num_0 = self.add_cmd(
                 Resume(cmd_runners=resumer_names[0],
                        targets=waiters,
+                       exp_resumed_targets=waiters,
                        stopped_remotes=[]))
             self.add_cmd(
                 ConfirmResponse(
@@ -10788,6 +10811,7 @@ class ConfigVerifier:
             cmd_0_serial_num = self.add_cmd(
                 RecvMsg(cmd_runners=recv_0_name,
                         senders=sender_names[0],
+                        exp_senders=sender_names[0],
                         exp_msgs=sender_msgs,
                         log_msg='def_del_recv_test_0'))
             if not single_request:
@@ -10851,6 +10875,7 @@ class ConfigVerifier:
                 cmd_1_serial_num = self.add_cmd(
                     RecvMsg(cmd_runners=recv_1_name,
                             senders=sender_names[0],
+                            exp_senders=sender_names[0],
                             exp_msgs=sender_msgs,
                             log_msg='def_del_recv_test_1'))
                 second_cmd_lock_pos = recv_1_name
@@ -11266,6 +11291,7 @@ class ConfigVerifier:
             resume_serial_num_0 = self.add_cmd(
                 Resume(cmd_runners=resumer_names[0],
                        targets=waiters,
+                       exp_resumed_targets=waiters,
                        stopped_remotes=[]))
             self.add_cmd(
                 ConfirmResponse(
@@ -11340,6 +11366,7 @@ class ConfigVerifier:
                 RecvMsg(cmd_runners=recv_0_name,
                         senders=sender_names[0],
                         exp_msgs=sender_msgs,
+                        exp_senders=sender_names[0],
                         log_msg='def_del_recv_test_0'))
             if not single_request:
                 first_cmd_lock_pos = recv_0_name
@@ -11349,6 +11376,7 @@ class ConfigVerifier:
             cmd_0_serial_num = self.add_cmd(
                 Wait(cmd_runners=wait_0_name,
                      resumers=resumer_names[0],
+                     exp_resumers=resumer_names[0],
                      stopped_remotes=set(),
                      log_msg='def_del_wait_test_0'))
             if not single_request:
@@ -11403,6 +11431,7 @@ class ConfigVerifier:
                 cmd_1_serial_num = self.add_cmd(
                     RecvMsg(cmd_runners=recv_1_name,
                             senders=sender_names[0],
+                            exp_senders=sender_names[0],
                             exp_msgs=sender_msgs,
                             log_msg='def_del_recv_test_1'))
                 second_cmd_lock_pos = recv_1_name
@@ -11413,6 +11442,7 @@ class ConfigVerifier:
                 cmd_1_serial_num = self.add_cmd(
                     Wait(cmd_runners=wait_1_name,
                          resumers=resumer_names[0],
+                         exp_resumers=resumer_names[0],
                          stopped_remotes=set(),
                          log_msg='def_del_wait_test_1'))
                 second_cmd_lock_pos = wait_1_name
@@ -11976,6 +12006,7 @@ class ConfigVerifier:
                         recv_msg_serial_num = self.add_cmd(
                             RecvMsg(cmd_runners=receiver_name,
                                     senders=sender_name,
+                                    exp_senders=sender_name,
                                     exp_msgs=sender_msgs,
                                     stopped_remotes=stopped_remotes,
                                     log_msg=log_msg))
@@ -11986,6 +12017,7 @@ class ConfigVerifier:
                             RecvMsgTimeoutFalse(
                                 cmd_runners=receiver_name,
                                 senders=sender_name,
+                                exp_senders=sender_name,
                                 exp_msgs=sender_msgs,
                                 timeout=timeout_time,
                                 stopped_remotes=stopped_remotes,
@@ -12216,6 +12248,7 @@ class ConfigVerifier:
             recv_msg_serial_num = self.add_cmd(
                 RecvMsg(cmd_runners=receiver_names,
                         senders=all_sender_names,
+                        exp_senders=all_sender_names,
                         exp_msgs=sender_msgs,
                         log_msg=log_msg))
         elif timeout_type == TimeoutType.TimeoutFalse:
@@ -12224,6 +12257,7 @@ class ConfigVerifier:
                 RecvMsgTimeoutFalse(
                     cmd_runners=receiver_names,
                     senders=all_sender_names,
+                    exp_senders=all_sender_names,
                     exp_msgs=sender_msgs,
                     timeout=2,
                     log_msg=log_msg))
@@ -12530,6 +12564,7 @@ class ConfigVerifier:
                         self.add_cmd(
                             Resume(cmd_runners=resumer_name,
                                    targets=waiter_name,
+                                   exp_resumed_targets=waiter_name,
                                    stopped_remotes=[]))
                 ########################################################
                 # do stop to make resumer stopped
@@ -12641,6 +12676,7 @@ class ConfigVerifier:
                 resume_cmd_serial_num = self.add_cmd(
                     Resume(cmd_runners=actor_names,
                            targets=target_names,
+                           exp_resumed_targets=target_names,
                            stopped_remotes=[]))
                 self.add_cmd(
                     ConfirmResponse(
@@ -12722,6 +12758,7 @@ class ConfigVerifier:
                 resume_cmd_serial_num = self.add_cmd(
                     Resume(cmd_runners=actor_names,
                            targets=list(target_names),
+                           exp_resumed_targets=list(target_names),
                            stopped_remotes=[]))
                 self.add_cmd(
                     ConfirmResponse(
@@ -12787,6 +12824,7 @@ class ConfigVerifier:
                 resume_cmd_serial_num = self.add_cmd(
                     Resume(cmd_runners=actor_names,
                            targets=target_names,
+                           exp_resumed_targets=target_names,
                            stopped_remotes=[]))
 
                 self.add_cmd(
@@ -12939,6 +12977,7 @@ class ConfigVerifier:
                     resume_cmd_serial_num = self.add_cmd(
                         Resume(cmd_runners=actor_names,
                                targets=target_names,
+                               exp_resumed_targets=target_names,
                                stopped_remotes=[]))
 
                     self.add_cmd(
@@ -13068,6 +13107,7 @@ class ConfigVerifier:
                 resume_cmd_serial_num = self.add_cmd(
                     Resume(cmd_runners=actor_names,
                            targets=target_names,
+                           exp_resumed_targets=target_names,
                            stopped_remotes=[]))
 
                 self.add_cmd(
@@ -13150,6 +13190,7 @@ class ConfigVerifier:
                 resume_cmd_serial_num = self.add_cmd(
                     Resume(cmd_runners=actor_names,
                            targets=target_names,
+                           exp_resumed_targets=target_names,
                            stopped_remotes=[]))
 
                 self.add_cmd(
@@ -13398,6 +13439,7 @@ class ConfigVerifier:
         resume_serial_num_1 = self.add_cmd(
             Resume(cmd_runners=resumer_names,
                    targets=all_targets,
+                   exp_resumed_targets=all_targets,
                    stopped_remotes=stopped_remotes))
 
         ################################################################
@@ -13421,6 +13463,7 @@ class ConfigVerifier:
                 resume_serial_num_2 = self.add_cmd(
                     Resume(cmd_runners=resumer_names,
                            targets=after_targets,
+                           exp_resumed_targets=after_targets,
                            stopped_remotes=stopped_remotes))
 
         ################################################################
@@ -13692,6 +13735,7 @@ class ConfigVerifier:
                 resume_serial_num = self.add_cmd(
                     Resume(cmd_runners=resumer,
                            targets=waiter_names,
+                           exp_resumed_targets=waiter_names,
                            stopped_remotes=set()))
                 resume_confirms_before.append(
                     ConfirmResponse(
@@ -13794,6 +13838,7 @@ class ConfigVerifier:
             resume_serial_num = self.add_cmd(
                 Resume(cmd_runners=resumer,
                        targets=waiter_names,
+                       exp_resumed_targets=waiter_names,
                        stopped_remotes=set()))
             resume_confirms_after.append(
                 ConfirmResponse(
@@ -14081,6 +14126,7 @@ class ConfigVerifier:
             resume_serial_num = self.add_cmd(
                 Resume(cmd_runners=resumer_names,
                        targets=all_targets,
+                       exp_resumed_targets=all_targets,
                        stopped_remotes=stopped_remotes))
         elif timeout_type == TimeoutType.TimeoutFalse:
             resume_to_confirm = 'ResumeTimeoutFalse'
@@ -14088,14 +14134,19 @@ class ConfigVerifier:
                 ResumeTimeoutFalse(
                     cmd_runners=resumer_names,
                     targets=all_targets,
+                    exp_resumed_targets=all_targets,
                     stopped_remotes=stopped_remotes,
                     timeout=timeout_time))
         else:
             resume_to_confirm = 'ResumeTimeoutTrue'
+            exp_resumed_targets = (set(all_targets)
+                                   - set(stopped_remotes)
+                                   - set(timeout_names))
             resume_serial_num = self.add_cmd(
                 ResumeTimeoutTrue(
                     cmd_runners=resumer_names,
                     targets=all_targets,
+                    exp_resumed_targets=exp_resumed_targets,
                     stopped_remotes=stopped_remotes,
                     timeout=timeout_time,
                     timeout_names=timeout_names))
@@ -14302,6 +14353,7 @@ class ConfigVerifier:
                     ResumeTimeoutFalse(
                         cmd_runners=resumer_names,
                         targets=registered_names_after,
+                        exp_resumed_targets=registered_names_after,
                         stopped_remotes=[],
                         timeout=0.5))
                 self.add_cmd(
@@ -14334,6 +14386,7 @@ class ConfigVerifier:
                     ResumeTimeoutFalse(
                         cmd_runners=resumer_names,
                         targets=unreg_no_delay_names,
+                        exp_resumed_targets=unreg_no_delay_names,
                         stopped_remotes=[],
                         timeout=0.5))
                 self.add_cmd(
@@ -14366,6 +14419,7 @@ class ConfigVerifier:
                     ResumeTimeoutFalse(
                         cmd_runners=resumer_names,
                         targets=unreg_delay_names,
+                        exp_resumed_targets=unreg_delay_names,
                         stopped_remotes=[],
                         timeout=0.5))
                 self.add_cmd(
@@ -14397,6 +14451,7 @@ class ConfigVerifier:
                     ResumeTimeoutFalse(
                         cmd_runners=resumer_names,
                         targets=stopped_no_delay_targets,
+                        exp_resumed_targets=stopped_no_delay_targets,
                         stopped_remotes=[],
                         timeout=0.5))
                 self.add_cmd(
@@ -14430,6 +14485,7 @@ class ConfigVerifier:
                     ResumeTimeoutFalse(
                         cmd_runners=resumer_names,
                         targets=stopped_delay_targets,
+                        exp_resumed_targets=stopped_delay_targets,
                         stopped_remotes=[],
                         timeout=0.5))
                 self.add_cmd(
@@ -14712,6 +14768,7 @@ class ConfigVerifier:
                                 self.add_cmd(
                                     RecvMsg(cmd_runners=receiver_name,
                                             senders=sender_name,
+                                            exp_senders=sender_name,
                                             exp_msgs=sender_msgs))
                             elif send_resume == 'resume':
                                 self.add_cmd(
@@ -14782,6 +14839,7 @@ class ConfigVerifier:
                                 Resume(
                                     cmd_runners=sender_name,
                                     targets=receiver_name,
+                                    exp_resumed_targets=receiver_name,
                                     stopped_remotes=stopped_remotes,
                                     log_msg=log_msg))
                         elif (send_resume == 'sync'
@@ -14813,6 +14871,7 @@ class ConfigVerifier:
                                 ResumeTimeoutFalse(
                                     cmd_runners=sender_name,
                                     targets=receiver_name,
+                                    exp_resumed_targets=receiver_name,
                                     timeout=timeout_time,
                                     stopped_remotes=stopped_remotes,
                                     log_msg=log_msg))
@@ -14847,6 +14906,7 @@ class ConfigVerifier:
                                 ResumeTimeoutTrue(
                                     cmd_runners=sender_name,
                                     targets=receiver_name,
+                                    exp_resumed_targets=set(),
                                     timeout=timeout_time,
                                     timeout_names=receiver_name,
                                     stopped_remotes=stopped_remotes,
@@ -15518,6 +15578,7 @@ class ConfigVerifier:
                 RecvMsg(
                     cmd_runners=cmd_runner,
                     senders=target,
+                    exp_senders=target,
                     exp_msgs=request_specific_args['sender_msgs'],
                     stopped_remotes=stopped_remotes))
         elif timeout_type == TimeoutType.TimeoutFalse:
@@ -15527,6 +15588,7 @@ class ConfigVerifier:
                 RecvMsgTimeoutFalse(
                     cmd_runners=cmd_runner,
                     senders=target,
+                    exp_senders=target,
                     exp_msgs=request_specific_args['sender_msgs'],
                     timeout=timeout_time,
                     stopped_remotes=stopped_remotes))
@@ -15537,6 +15599,7 @@ class ConfigVerifier:
                 RecvMsgTimeoutTrue(
                     cmd_runners=cmd_runner,
                     senders=target,
+                    exp_senders=set(),
                     exp_msgs=request_specific_args['sender_msgs'],
                     timeout=timeout_time,
                     timeout_names=target,
@@ -15576,6 +15639,7 @@ class ConfigVerifier:
                 Resume(
                     cmd_runners=cmd_runner,
                     targets=target,
+                    exp_resumed_targets=target,
                     stopped_remotes=stopped_remotes))
         elif timeout_type == TimeoutType.TimeoutFalse:
             confirm_request_name = 'ResumeTimeoutFalse'
@@ -15584,6 +15648,7 @@ class ConfigVerifier:
                 ResumeTimeoutFalse(
                     cmd_runners=cmd_runner,
                     targets=target,
+                    exp_resumed_targets=target,
                     timeout=timeout_time,
                     stopped_remotes=stopped_remotes))
         else:  # timeout_type == TimeoutType.TimeoutTrue
@@ -15593,6 +15658,7 @@ class ConfigVerifier:
                 ResumeTimeoutTrue(
                     cmd_runners=cmd_runner,
                     targets=target,
+                    exp_resumed_targets=set(),
                     timeout=timeout_time,
                     timeout_names=target,
                     stopped_remotes=stopped_remotes))
@@ -15758,7 +15824,7 @@ class ConfigVerifier:
             recv_msg_serial_num = self.add_cmd(RecvMsgTimeoutTrue(
                 cmd_runners=receiver,
                 senders=recv_senders,
-                exp_senders=exp_senders,
+                exp_senders=set(),
                 timeout=1,
                 timeout_names=recv_senders,
                 exp_msgs=msgs_to_send))
@@ -15800,7 +15866,8 @@ class ConfigVerifier:
         ################################################################
         resume_serial_num = self.add_cmd(Resume(
             cmd_runners=resumers,
-            targets=waiters))
+            targets=waiters,
+            exp_resumed_targets=waiters))
 
         ################################################################
         # receive messages
@@ -15894,7 +15961,8 @@ class ConfigVerifier:
         if resumers:
             resume_serial_num = self.add_cmd(Resume(
                 cmd_runners=resumers,
-                targets=waiter))
+                targets=waiter,
+                exp_resumed_targets=waiter))
 
             ############################################################
             # confirm resumes are done
@@ -16489,6 +16557,7 @@ class ConfigVerifier:
                     self.add_cmd(
                         RecvMsg(cmd_runners=full_q_names,
                                 senders=sender_names,
+                                exp_senders=sender_names,
                                 exp_msgs=sender_msgs))
 
             final_recv_names = all_targets
@@ -16512,6 +16581,7 @@ class ConfigVerifier:
             recv_msg_serial_num = self.add_cmd(
                 RecvMsg(cmd_runners=final_recv_names,
                         senders=sender_names,
+                        exp_senders=sender_names,
                         exp_msgs=sender_msgs,
                         log_msg=log_msg))
 
@@ -16533,6 +16603,7 @@ class ConfigVerifier:
                     recv_msg_serial_num = self.add_cmd(
                         RecvMsg(cmd_runners=sender_names[1],
                                 senders=exit_name,
+                                exp_senders=exit_name,
                                 exp_msgs=sender_1_msg_1))
 
                     ####################################################
@@ -16549,6 +16620,7 @@ class ConfigVerifier:
                     recv_msg_serial_num = self.add_cmd(
                         RecvMsg(cmd_runners=sender_names[2],
                                 senders=exit_name,
+                                exp_senders=exit_name,
                                 exp_msgs=sender_2_msg_1))
 
                     ####################################################
@@ -16563,6 +16635,7 @@ class ConfigVerifier:
                     recv_msg_serial_num = self.add_cmd(
                         RecvMsg(cmd_runners=sender_names[2],
                                 senders=exit_name,
+                                exp_senders=exit_name,
                                 exp_msgs=sender_2_msg_2))
 
                     ####################################################
@@ -16791,6 +16864,7 @@ class ConfigVerifier:
         self.add_cmd(
             Resume(cmd_runners='charlie',
                    targets='beta',
+                   exp_resumed_targets='beta',
                    stopped_remotes=[],
                    log_msg='Resume test log message 4'))
 
@@ -18574,16 +18648,16 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
 
-        if pe[PE.current_request].timeout_type == TimeoutType.TimeoutTrue:
-            timeout_remotes = pe[PE.current_request].timeout_remotes
-        else:
-            timeout_remotes = set()
+        # if pe[PE.current_request].timeout_type == TimeoutType.TimeoutTrue:
+        #     timeout_remotes = pe[PE.current_request].timeout_remotes
+        # else:
+        #     timeout_remotes = set()
+        #
+        # eligible_targets = (pe[PE.current_request].targets.copy()
+        #                     - timeout_remotes
+        #                     - pe[PE.current_request].stopped_remotes)
 
-        eligible_targets = (pe[PE.current_request].targets.copy()
-                            - timeout_remotes
-                            - pe[PE.current_request].stopped_remotes)
-
-        for target in eligible_targets:
+        for target in pe[PE.current_request].expected_resumed_targets:
             ack_key: AckKey = (target, 'smart_resume')
 
             pe[PE.ack_msg][ack_key] += 1
@@ -18854,6 +18928,7 @@ class ConfigVerifier:
     def handle_resume(self,
                       cmd_runner: str,
                       targets: set[str],
+                      exp_resumed_targets: set[str],
                       stopped_remotes: set[str],
                       timeout: IntOrFloat,
                       timeout_names: set[str],
@@ -18864,6 +18939,7 @@ class ConfigVerifier:
         Args:
             cmd_runner: thread doing the wait
             targets: names of threads to be resumed
+            exp_resumed_targets: thread names that are expected to be resumed
             stopped_remotes: threads that are stopped and will result in
                 a not alive error being raised
             timeout: timeout value for smart_resume
@@ -18884,17 +18960,9 @@ class ConfigVerifier:
             StartRequest(req_type=st.ReqType.Smart_resume,
                          timeout_type=timeout_type,
                          targets=targets,
-                         unreg_remotes=set(),
-                         not_registered_remotes=set(),
                          timeout_remotes=timeout_names,
                          stopped_remotes=stopped_remotes.copy(),
-                         deadlock_remotes=set(),
-                         eligible_targets=set(),
-                         completed_targets=set(),
-                         first_round_completed=set(),
-                         stopped_target_threads=set(),
-                         exp_senders=set(),
-                         exp_resumers=set()))
+                         exp_resumed_targets=exp_resumed_targets))
 
         req_key_entry: RequestKey = ('smart_resume',
                                      'entry')
@@ -18916,6 +18984,8 @@ class ConfigVerifier:
                         timeout=timeout,
                         log_msg=log_msg)
 
+            resumed_targets = self.all_threads[cmd_runner].resumed_targets
+
             self.add_log_msg(
                 self.get_error_msg(
                     cmd_runner=cmd_runner,
@@ -18927,13 +18997,13 @@ class ConfigVerifier:
 
         elif timeout_type == TimeoutType.TimeoutNone:
             pe[PE.request_msg][req_key_exit] += 1
-            self.all_threads[cmd_runner].smart_resume(
+            resumed_targets = self.all_threads[cmd_runner].smart_resume(
                 waiters=targets,
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutFalse:
             pe[PE.request_msg][req_key_exit] += 1
-            self.all_threads[cmd_runner].smart_resume(
+            resumed_targets = self.all_threads[cmd_runner].smart_resume(
                 waiters=targets,
                 timeout=timeout,
                 log_msg=log_msg)
@@ -18945,6 +19015,8 @@ class ConfigVerifier:
                     timeout=timeout,
                     log_msg=log_msg)
 
+            resumed_targets = self.all_threads[cmd_runner].resumed_targets
+
             self.add_log_msg(
                 self.get_error_msg(
                     cmd_runner=cmd_runner,
@@ -18954,6 +19026,7 @@ class ConfigVerifier:
                     stopped_remotes=stopped_remotes),
                 log_level=logging.ERROR)
 
+        assert exp_resumed_targets == resumed_targets
         # self.add_request_log_msg(cmd_runner=cmd_runner,
         #                          smart_request='smart_resume',
         #                          targets=targets,
@@ -26143,6 +26216,7 @@ class TestSmartThreadComboScenarios:
     ####################################################################
     # test_def_del_scenarios
     ####################################################################
+    @pytest.mark.parametrize("def_del_scenario_arg", def_del_scenario_arg_list)
     def test_def_del_scenarios(
             self,
             def_del_scenario_arg: DefDelScenario,
@@ -26168,116 +26242,116 @@ class TestSmartThreadComboScenarios:
             commander_config=commander_config[command_config_num]
         )
 
+    # ####################################################################
+    # # test_def_del_reasons
+    # ####################################################################
+    # def_del_reasons_0 = DefDelReasons(False, False, False, False)
+    # def_del_reasons_1 = DefDelReasons(False, False, False, True)
+    # def_del_reasons_2 = DefDelReasons(False, False, True, False)
+    # def_del_reasons_3 = DefDelReasons(False, False, True, True)
+    # def_del_reasons_4 = DefDelReasons(False, True, False, False)
+    # def_del_reasons_5 = DefDelReasons(False, True, False, True)
+    # def_del_reasons_6 = DefDelReasons(False, True, True, False)
+    # def_del_reasons_7 = DefDelReasons(False, True, True, True)
+    # def_del_reasons_8 = DefDelReasons(True, False, False, False)
+    # def_del_reasons_9 = DefDelReasons(True, False, False, True)
+    # def_del_reasons_a = DefDelReasons(True, False, True, False)
+    # def_del_reasons_b = DefDelReasons(True, False, True, True)
+    # def_del_reasons_c = DefDelReasons(True, True, False, True)
+    # def_del_reasons_d = DefDelReasons(True, True, False, False)
+    # def_del_reasons_e = DefDelReasons(True, True, True, True)
+    # def_del_reasons_f = DefDelReasons(True, True, True, False)
+    #
+    #
+    # @pytest.mark.parametrize("name_0_pend_arg", (def_del_reasons_0,
+    #                                              def_del_reasons_1,
+    #                                              def_del_reasons_2,
+    #                                              def_del_reasons_3,
+    #                                              def_del_reasons_4,
+    #                                              def_del_reasons_5,
+    #                                              def_del_reasons_6,
+    #                                              def_del_reasons_7,
+    #                                              def_del_reasons_8,
+    #                                              def_del_reasons_9,
+    #                                              def_del_reasons_a,
+    #                                              def_del_reasons_b,
+    #                                              def_del_reasons_c,
+    #                                              def_del_reasons_d,
+    #                                              def_del_reasons_e,
+    #                                              def_del_reasons_f))
+    # @pytest.mark.parametrize("name_1_pend_arg", (def_del_reasons_0,
+    #                                              def_del_reasons_1,
+    #                                              def_del_reasons_2,
+    #                                              def_del_reasons_3,
+    #                                              def_del_reasons_4,
+    #                                              def_del_reasons_5,
+    #                                              def_del_reasons_6,
+    #                                              def_del_reasons_7,
+    #                                              def_del_reasons_8,
+    #                                              def_del_reasons_9,
+    #                                              def_del_reasons_a,
+    #                                              def_del_reasons_b,
+    #                                              def_del_reasons_c,
+    #                                              def_del_reasons_d,
+    #                                              def_del_reasons_e,
+    #                                              def_del_reasons_f))
+    # @pytest.mark.parametrize("name_2_pend_arg", (def_del_reasons_0,
+    #                                              def_del_reasons_1,
+    #                                              def_del_reasons_2,
+    #                                              def_del_reasons_3,
+    #                                              def_del_reasons_4,
+    #                                              def_del_reasons_5,
+    #                                              def_del_reasons_6,
+    #                                              def_del_reasons_7,
+    #                                              def_del_reasons_8,
+    #                                              def_del_reasons_9,
+    #                                              def_del_reasons_a,
+    #                                              def_del_reasons_b,
+    #                                              def_del_reasons_c,
+    #                                              def_del_reasons_d,
+    #                                              def_del_reasons_e,
+    #                                              def_del_reasons_f))
+    # def test_def_del_reasons(
+    #         self,
+    #         name_0_pend_arg: DefDelReasons,
+    #         name_1_pend_arg: DefDelReasons,
+    #         name_2_pend_arg: DefDelReasons,
+    #         caplog: pytest.CaptureFixture[str]
+    # ) -> None:
+    #     """Test pending reasons.
+    #
+    #     Args:
+    #         name_0_pend_arg: reasons for name 0
+    #         name_1_pend_arg: reasons for name 1
+    #         name_2_pend_arg: reasons for name 2
+    #         caplog: pytest fixture to capture log output
+    #
+    #     """
+    #     command_config_num = ((name_0_pend_arg.pending_request
+    #                            + name_0_pend_arg.pending_msg
+    #                            + name_0_pend_arg.pending_wait
+    #                            + name_0_pend_arg.pending_sync
+    #                            + name_1_pend_arg.pending_request
+    #                            + name_1_pend_arg.pending_msg
+    #                            + name_1_pend_arg.pending_wait
+    #                            + name_1_pend_arg.pending_sync)
+    #                           % num_commander_configs)
+    #
+    #     args_for_scenario_builder: dict[str, Any] = {
+    #         'name_0_pend': name_0_pend_arg,
+    #         'name_1_pend': name_1_pend_arg,
+    #         'name_2_pend': name_2_pend_arg,
+    #     }
+    #
+    #     scenario_driver(
+    #         scenario_builder=ConfigVerifier.build_def_del_pending_scenario,
+    #         scenario_builder_args=args_for_scenario_builder,
+    #         caplog_to_use=caplog,
+    #         commander_config=commander_config[command_config_num]
+    #     )
+
     ####################################################################
-    # test_def_del_reasons
-    ####################################################################
-    def_del_reasons_0 = DefDelReasons(False, False, False, False)
-    def_del_reasons_1 = DefDelReasons(False, False, False, True)
-    def_del_reasons_2 = DefDelReasons(False, False, True, False)
-    def_del_reasons_3 = DefDelReasons(False, False, True, True)
-    def_del_reasons_4 = DefDelReasons(False, True, False, False)
-    def_del_reasons_5 = DefDelReasons(False, True, False, True)
-    def_del_reasons_6 = DefDelReasons(False, True, True, False)
-    def_del_reasons_7 = DefDelReasons(False, True, True, True)
-    def_del_reasons_8 = DefDelReasons(True, False, False, False)
-    def_del_reasons_9 = DefDelReasons(True, False, False, True)
-    def_del_reasons_a = DefDelReasons(True, False, True, False)
-    def_del_reasons_b = DefDelReasons(True, False, True, True)
-    def_del_reasons_c = DefDelReasons(True, True, False, True)
-    def_del_reasons_d = DefDelReasons(True, True, False, False)
-    def_del_reasons_e = DefDelReasons(True, True, True, True)
-    def_del_reasons_f = DefDelReasons(True, True, True, False)
-
-
-    @pytest.mark.parametrize("name_0_pend_arg", (def_del_reasons_0,
-                                                 def_del_reasons_1,
-                                                 def_del_reasons_2,
-                                                 def_del_reasons_3,
-                                                 def_del_reasons_4,
-                                                 def_del_reasons_5,
-                                                 def_del_reasons_6,
-                                                 def_del_reasons_7,
-                                                 def_del_reasons_8,
-                                                 def_del_reasons_9,
-                                                 def_del_reasons_a,
-                                                 def_del_reasons_b,
-                                                 def_del_reasons_c,
-                                                 def_del_reasons_d,
-                                                 def_del_reasons_e,
-                                                 def_del_reasons_f))
-    @pytest.mark.parametrize("name_1_pend_arg", (def_del_reasons_0,
-                                                 def_del_reasons_1,
-                                                 def_del_reasons_2,
-                                                 def_del_reasons_3,
-                                                 def_del_reasons_4,
-                                                 def_del_reasons_5,
-                                                 def_del_reasons_6,
-                                                 def_del_reasons_7,
-                                                 def_del_reasons_8,
-                                                 def_del_reasons_9,
-                                                 def_del_reasons_a,
-                                                 def_del_reasons_b,
-                                                 def_del_reasons_c,
-                                                 def_del_reasons_d,
-                                                 def_del_reasons_e,
-                                                 def_del_reasons_f))
-    @pytest.mark.parametrize("name_2_pend_arg", (def_del_reasons_0,
-                                                 def_del_reasons_1,
-                                                 def_del_reasons_2,
-                                                 def_del_reasons_3,
-                                                 def_del_reasons_4,
-                                                 def_del_reasons_5,
-                                                 def_del_reasons_6,
-                                                 def_del_reasons_7,
-                                                 def_del_reasons_8,
-                                                 def_del_reasons_9,
-                                                 def_del_reasons_a,
-                                                 def_del_reasons_b,
-                                                 def_del_reasons_c,
-                                                 def_del_reasons_d,
-                                                 def_del_reasons_e,
-                                                 def_del_reasons_f))
-    def test_def_del_reasons(
-            self,
-            name_0_pend_arg: DefDelReasons,
-            name_1_pend_arg: DefDelReasons,
-            name_2_pend_arg: DefDelReasons,
-            caplog: pytest.CaptureFixture[str]
-    ) -> None:
-        """Test pending reasons.
-
-        Args:
-            name_0_pend_arg: reasons for name 0
-            name_1_pend_arg: reasons for name 1
-            name_2_pend_arg: reasons for name 2
-            caplog: pytest fixture to capture log output
-
-        """
-        command_config_num = ((name_0_pend_arg.pending_request
-                               + name_0_pend_arg.pending_msg
-                               + name_0_pend_arg.pending_wait
-                               + name_0_pend_arg.pending_sync
-                               + name_1_pend_arg.pending_request
-                               + name_1_pend_arg.pending_msg
-                               + name_1_pend_arg.pending_wait
-                               + name_1_pend_arg.pending_sync)
-                              % num_commander_configs)
-
-        args_for_scenario_builder: dict[str, Any] = {
-            'name_0_pend': name_0_pend_arg,
-            'name_1_pend': name_1_pend_arg,
-            'name_2_pend': name_2_pend_arg,
-        }
-
-        scenario_driver(
-            scenario_builder=ConfigVerifier.build_def_del_pending_scenario,
-            scenario_builder_args=args_for_scenario_builder,
-            caplog_to_use=caplog,
-            commander_config=commander_config[command_config_num]
-        )
-
-    ####################################################################
-    # test_recv_msg_scenarios
+    # test_rotate_state_scenarios
     ####################################################################
     def test_rotate_state_scenarios(
             self,
