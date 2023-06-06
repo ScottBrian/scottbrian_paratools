@@ -2212,26 +2212,45 @@ class SmartThread:
     # smart_send
     ####################################################################
     def smart_send(self,
-                   msg: Any,
+                   msg: Optional[Any] = None,
                    receivers: Optional[Iterable] = None,
+                   msg_dict: Optional[dict[str, Any]] = None,
                    timeout: OptIntFloat = None,
                    log_msg: Optional[str] = None) -> set[str]:
         """Send one or more messages to remote threads.
 
         Args:
             msg: the msg to be sent. This may be a single item or a
-                collection of items in any type of data structure. It
-                may also be an instance of class SendMsgs which
-                names each receiver and the message to be sent.
+                collection of items in any type of data structure.
+                *receivers* is required when *msg* is specified. *msg*
+                is mutually exclusive with *msg_dict*. The same message
+                in *msg* is sent to every thread named in *receivers*.
+                For separate messages, use *msg_dict* instead.
             receivers: names of remote threads to send the message to.
-                If None, the message will be sent to all remote
-                threads that are alive or to the receivers specified in
-                a SendMsg object when supplied as the *msg*. If
-                *receivers* is not specified and not receivers are
-                alive, the *smart_send* returns without sending any
-                messages.
-            timeout: number of seconds to wait for the targets to become
-                alive and ready to accept messages
+                *msgs* is required when *receivers* is specified.
+                *receivers* is mutually exclusive with *msg_dict*.
+            msg_dict: a dictionary of messages to be sent, keyed by the
+                names of the remote threads to receive them. Using
+                *msg_dict* allows different message to be sent to each
+                thread. *msg_dict* is mutually exclusive with *msg* and
+                *receivers*.
+            timeout: number of seconds allowed for the *smart_send* to
+                complete. The *smart_send* will send messages to the
+                remote threads only when they are alive. If any of the
+                threads to be sent messages to are in states
+                ThreadState.Unregistered, ThreadState.Initializing,
+                ThreadState.Registered, or ThreadState.Starting, then
+                *smart_send* will wait and send the message to the
+                thread as soon as it enters state ThreadState.Alive.
+                *smart_send* will raise an error if any one target
+                thread fails to achieve state ThreadState.Alive within
+                the number of seconds specified in *timeout*.
+                If *timeout* is not specified, *smart_send* will
+                continue to wait and will not raise a timeout error.
+                Note that is any target thread enters the state
+                ThreadState.Stopped, *smart_send* will raise an error
+                regardless of whether *timeout* was specified and
+                regardless of how much time has passed.
             log_msg: additional text to append to the debug log message
                 that is issued on request entry and exit
 
@@ -2254,57 +2273,18 @@ class SmartThread:
         .. # noqa: DAR402
 
         *smart_send* can be used to send a single message or multiple
-        messages to a single remote thread, to multiple remote threads,
-        or to every active remote thread in the configuration. A message
-        is any type (e.g., text, int, float, list, set, dict, or
+        messages to single or to multiple remote threads. A message can
+        be of any type (e.g., text, int, float, list, set, dict, or
         class object). Note that the item being sent is not copied.
-
-        The *msg* arg species the message or messages to be sent. A
-        special case exists where the message can be specified as an
-        instance of the SendMsgs class where the messages for one or
-        more targets are placed into a dictionary indexed by the target
-        names. The *receiver* arg must be omitted when a SendMsgs object
-        is specified.
-
-        The *receivers* arg specifies the names of remote threads that
-        the message is to be sent to. There are two cases where
-        *receivers* is not specified:
-
-            1) when a SendMsgs object is specified for the *msgs* arg.
-            2) when a broadcast message is to be sent to all remote
-               threads in the configuration that are currently active
-               when the *smart_send* is issued. Note that if there are
-               no active threads then the smart_send completes without
-               sending anything. Also, a timeout will not occur for a
-               broadcast message.
-
-        The thread names specified for *receivers* or in a SendMsgs
-        object may be in states unregistered, registered, or alive.
-        *smart_send* will complete the send for any *receivers* that are
-        in the unregistered or registered state as soon as they go to
-        the alive state. If timeout is specified, a timeout error will
-        be raised if any threads did not become alive within the
-        specified amount of time.
-
-        An error will be raised if any specifies receivers are stopped
-        before the message can be sent to them. This is true only for
-        receivers that are specified as an argument for *receivers* or
-        specified in the SendMsgs object. Threads that were alive at the
-        start of a broadcast message (i.e., *receivers* not specifies)
-        but are stopped during smart_send processing will not result in
-        an error.
-
 
         Examples in this section cover the following cases:
 
             1) send a single message to a single remote thread
             2) send a single message to multiple remote threads
-            3) send a single message to all remote threads in the
-               configuration
-            4) send multiple messages to a single remote thread
-            5) send multiple messages to multiple remote threads
+            3) send multiple messages to a single remote thread
+            4) send multiple messages to multiple remote threads
             6) send any mixture of single and multiple messages
-               individually to each remote thread using a SendMsg object
+               individually to each remote thread via *msg_dict*.
 
         **Example 1:** send a single message to a single remote thread
 
@@ -2388,71 +2368,8 @@ class SmartThread:
             f1 charlie exiting
             mainline alpha exiting
 
-        **Example 3:** send a single message to all alive remote threads
-        in the configuration as a broadcast (by simply omitting the
-        *receivers* argument). Note the use of smart_wait and
-        smart_resume being used here to make sure the print output
-        is in the expected ordered.
 
-        .. code-block:: python
-
-            from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
-
-            def f1(smart_thread: SmartThread,
-                   wait_for: Optional[str] = None,
-                   resume_target: Optional[str] = None) -> None:
-                if wait_for:
-                    smart_thread.smart_wait(resumers=wait_for)
-                print(f'f1 {smart_thread.name} entered')
-                recvd_msgs = RecvMsgs()
-                smart_thread.smart_recv(
-                    received_msgs=recvd_msgs,
-                    senders='alpha')
-                print(recvd_msgs.recv_msgs['alpha'])
-                print(f'f1 {smart_thread.name} exiting')
-                if resume_target:
-                    smart_thread.smart_resume(waiters=resume_target)
-
-            print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(name='alpha')
-            SmartThread(name='beta',
-                        target=f1,
-                        thread_parm_name='smart_thread',
-                        kwargs={'resume_target': 'charlie'})
-            SmartThread(name='charlie',
-                        target=f1,
-                        thread_parm_name='smart_thread',
-                        kwargs={'wait_for': 'beta',
-                                'resume_target': 'delta'})
-            SmartThread(name='delta',
-                        target=f1,
-                        thread_parm_name='smart_thread',
-                        kwargs={'wait_for': 'charlie',
-                                'resume_target': 'alpha'})
-            alpha_smart_thread.smart_send(msg='hello remotes')
-            alpha_smart_thread.smart_wait(resumers='delta')
-            alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
-            print('mainline alpha exiting')
-
-        .. invisible-code-block: python
-
-            del SmartThread._registry['alpha']
-
-        Expected output for Example 3::
-
-            mainline alpha entered
-            f1 beta entered
-            ['hello remotes']
-            f1 beta exiting
-            f1 charlie entered
-            ['hello remotes']
-            f1 charlie exiting
-            f1 delta entered
-            ['hello remotes']
-            f1 delta exiting
-            mainline alpha exiting
-
-        **Example 4:** send multiple messages to a single remote thread
+        **Example 3:** send multiple messages to a single remote thread
 
         .. code-block:: python
 
@@ -2481,7 +2398,7 @@ class SmartThread:
 
             del SmartThread._registry['alpha']
 
-        Expected output for Example 4::
+        Expected output for Example 3::
 
             mainline alpha entered
             f1 beta entered
@@ -2489,7 +2406,7 @@ class SmartThread:
             f1 beta exiting
             mainline alpha exiting
 
-        **Example 5:** send multiple messages to multiple remote threads
+        **Example 4:** send multiple messages to multiple remote threads
 
         .. code-block:: python
 
@@ -2537,7 +2454,7 @@ class SmartThread:
 
             del SmartThread._registry['alpha']
 
-        Expected output for Example 5::
+        Expected output for Example 4::
 
             mainline alpha entered
             f1 beta entered
@@ -2551,7 +2468,7 @@ class SmartThread:
             f1 delta exiting
             mainline alpha exiting
 
-        **Example 6:** send any mixture of single and multiple messages
+        **Example 5:** send any mixture of single and multiple messages
         individually to each remote thread using a SendMsg object
 
         .. code-block:: python
@@ -2603,7 +2520,7 @@ class SmartThread:
 
             del SmartThread._registry['alpha']
 
-        Expected output for Example 6::
+        Expected output for Example 5::
 
             mainline alpha entered
             f1 beta entered
@@ -2621,55 +2538,51 @@ class SmartThread:
         self._verify_thread_is_current()
         self.request = ReqType.Smart_send
         self.sent_targets = set()
-        work_targets: set[str]
-        remotes_for_log_msg: set[str] = set()
-        if not receivers:
-            if isinstance(msg, SendMsgs):
-                work_targets = set(msg.send_msgs.keys())
-                if not work_targets:
-                    raise SmartThreadNoRemoteTargets(
-                        f'{self.name} issued a smart_send request with an '
-                        'empty SendMsgs object')
-                completion_count = len(work_targets)
-            else:
-                work_targets = set()
-                completion_count = 0  # we are done even without actives
-                with sel.SELockShare(SmartThread._registry_lock):
-                    for remote in SmartThread._registry:
-                        if (remote != self.name and
-                                self._get_state(remote) == ThreadState.Alive):
-                            work_targets |= {remote}
-        else:
-            work_targets = self._get_set(receivers)
-            completion_count = len(work_targets)
-            remotes_for_log_msg = work_targets.copy()
+        remotes: set[str]
+        work_msgs: dict[str, Any]
 
-        work_msgs: SendMsgs
-        if isinstance(msg, SendMsgs):
-            work_msgs = msg
+        if msg and receivers:
+            if msg_dict:
+                raise SmartThreadInvalidInput(
+                    f'smart_send issued by {self.name} specified msg but '
+                    f'also specified mutually exclusive msg_dict.')
+            remotes = self._get_set(receivers)
+            if not remotes:
+                raise SmartThreadNoRemoteTargets(
+                    f'{self.name} issued a smart_send request with '
+                    f'an empty receivers argument.')
+            work_msgs = {}
+            for remote in remotes:
+                work_msgs[remote] = msg
+        elif msg_dict:
+            if msg or receivers:
+                raise SmartThreadInvalidInput(
+                    f'smart_send issued by {self.name} specified msg_dict but '
+                    f'also specified mutually exclusive msg and/or receivers.')
+            remotes = set(msg_dict.keys())
+            if not remotes:
+                raise SmartThreadNoRemoteTargets(
+                    f'{self.name} issued a smart_send request with an '
+                    'empty msg_dict')
+            work_msgs = msg_dict
         else:
-            work_msgs = SendMsgs({})
-            for target in work_targets:
-                work_msgs.send_msgs[target] = msg
+            raise SmartThreadInvalidInput(
+                f'smart_send issued by {self.name} failed to specify '
+                f'msg_dict, or failed to specify both msg and receivers.')
 
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
-            remotes=work_targets,
+            remotes=remotes,
             error_stopped_target=True,
             process_rtn=self._process_send_msg,
             cleanup_rtn=None,
             get_block_lock=False,
-            completion_count=completion_count,
+            completion_count=len(remotes),
             timeout=timeout,
             msg_to_send=work_msgs,
-            log_msg=log_msg,
-            remotes_for_log_msg=remotes_for_log_msg)
+            log_msg=log_msg)
 
-        # We here and there are no targets, then we will simply return.
-        # This can only happen when receivers was not specified and
-        # there are no active threads in the configuration.
-        if work_targets:
-            self._request_loop(request_block=request_block)
+        self._request_loop(request_block=request_block)
 
         self.request = ReqType.NoReq
 
@@ -2737,7 +2650,7 @@ class SmartThread:
                 # put the msg on the target msg_q
                 ########################################################
                 try:
-                    remote_sb.msg_q.put(request_block.msg_to_send.send_msgs[
+                    remote_sb.msg_q.put(request_block.msg_to_send[
                                             pk_remote.remote],
                                         timeout=0.01)
                     logger.info(
@@ -4854,8 +4767,7 @@ class SmartThread:
                        completion_count: int = 0,
                        timeout: OptIntFloat = None,
                        log_msg: Optional[str] = None,
-                       msg_to_send: Optional[SendMsgs] = None,
-                       remotes_for_log_msg: Optional[set[str]] = None
+                       msg_to_send: Optional[dict[str, Any]] = None
                        ) -> RequestBlock:
         """Do common setup for each request.
 
@@ -4901,11 +4813,9 @@ class SmartThread:
             else:
                 remotes = set(remotes)
 
-        if remotes_for_log_msg is None:
-            remotes_for_log_msg = remotes
         exit_log_msg = self._issue_entry_log_msg(
             request=self.request,
-            remotes=remotes_for_log_msg,
+            remotes=remotes,
             timeout_value=timer.timeout_value(),
             log_msg=log_msg)
 

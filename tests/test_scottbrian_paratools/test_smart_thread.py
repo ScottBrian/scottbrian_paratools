@@ -99,6 +99,8 @@ RemSbKey: TypeAlias = tuple[str, tuple[str, str], DefDelReasons]
 
 RemPaeKey: TypeAlias = tuple[str, tuple[str, str]]
 
+
+
 ########################################################################
 # text units
 ########################################################################
@@ -156,7 +158,6 @@ class SendRecvPacket:
 
 class SendType(Enum):
     ToRemotes = auto()
-    Broadcast = auto()
     SRMsgs = auto()
 
 
@@ -226,11 +227,11 @@ class SendRecvMsgs:
     def get_send_msgs(self,
                       sender_name: str,
                       receiver_names: Iterable,
-                      msg_idx: int) -> st.SendMsgs:
-        send_msgs: st.SendMsgs = st.SendMsgs(send_msgs={})
+                      msg_idx: int) -> dict[str, Any]:
+        send_msgs: dict[str, Any] = {}
         for receiver_name in receiver_names:
             msg = self.directed_msgs[msg_idx][sender_name][receiver_name]
-            send_msgs.send_msgs[receiver_name] = msg
+            send_msgs[receiver_name] = msg
             self.add_exp_msg_received(receiver_name=receiver_name,
                                       sender_name=sender_name,
                                       msg=msg)
@@ -1603,7 +1604,7 @@ class Resume(ConfigCmd):
 
         self.targets = get_set(targets)
 
-        self.exp_resumed_targets = exp_resumed_targets
+        self.exp_resumed_targets = get_set(exp_resumed_targets)
 
         self.stopped_remotes = get_set(stopped_remotes)
 
@@ -4674,6 +4675,12 @@ list_of_sub_processes = ('(_register'
                          '|_clean_registry'
                          '|_clean_pair_array'
                          '|_add_to_pair_array)')
+
+smart_reqs = ('smart_send',
+              'smart_recv',
+              'smart_wait',
+              'smart_resume',
+              'smart_sync')
 
 
 ########################################################################
@@ -15019,14 +15026,6 @@ class ConfigVerifier:
             receiver_names=[req0_name, req1_name],
             num_msgs=1,
             send_type=SendType.ToRemotes)
-        # if req0 == SmartRequestType.SendMsg:
-        #     sr_key: SrKeyMsgKey = SrKeyMsgKey(sender=req0_name, receiver=req1_name)
-        #     sender_msgs.send_msgs[sr_key] = [f'send test: {req0_name} sending '
-        #                                      f'msg at {get_ptime()}']
-        # if req1 == SmartRequestType.SendMsg:
-        #     sr_key: SrKeyMsgKey = SrKeyMsgKey(sender=req1_name, receiver=req0_name)
-        #     sender_msgs.send_msgs[sr_key] = [f'send test: {req1_name} sending '
-        #                                      f'msg at {get_ptime()}']
 
         req0_conflict_remotes: set[str] = set()
         req0_deadlock_remotes: set[str] = set()
@@ -15238,6 +15237,7 @@ class ConfigVerifier:
         }
 
         req_flags = request_table[(req0, req1)]
+        req1_delay_confirm: bool = False
 
         self.log_test_msg(f'{req_flags=}')
 
@@ -15318,6 +15318,8 @@ class ConfigVerifier:
                                 if (req_flags.req1_category !=
                                         ReqCategory.Throw):
                                     req1_timeout_type = TimeoutType.TimeoutTrue
+                            else:
+                                req1_delay_confirm = True
                         else:
                             if not req_flags.req_matched:
                                 req0_stopped_remotes = {req1_name}
@@ -15447,14 +15449,15 @@ class ConfigVerifier:
                                     target=req0_name,
                                     stopped_remotes=req1_stopped_remotes,
                                     request_specific_args=req1_specific_args)
-                            self.add_cmd(
-                                ConfirmResponse(
-                                    cmd_runners=self.commander_name,
-                                    confirm_cmd=(
-                                        req1_confirm_parms.request_name),
-                                    confirm_serial_num=(
-                                        req1_confirm_parms.serial_number),
-                                    confirmers=req1_name))
+                            if not req1_delay_confirm:
+                                self.add_cmd(
+                                    ConfirmResponse(
+                                        cmd_runners=self.commander_name,
+                                        confirm_cmd=(
+                                            req1_confirm_parms.request_name),
+                                        confirm_serial_num=(
+                                            req1_confirm_parms.serial_number),
+                                        confirmers=req1_name))
 
                         if supress_req1:  # or not req0_requires_ack:
                             req1_pause_time = 1
@@ -15501,6 +15504,19 @@ class ConfigVerifier:
                 confirm_cmd=req0_confirm_parms.request_name,
                 confirm_serial_num=req0_confirm_parms.serial_number,
                 confirmers=req0_name))
+
+        ################################################################
+        # confirm req1 is done if delay confirm needed
+        ################################################################
+        if req1_delay_confirm and not supress_req1:
+            self.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=self.commander_name,
+                    confirm_cmd=(
+                        req1_confirm_parms.request_name),
+                    confirm_serial_num=(
+                        req1_confirm_parms.serial_number),
+                    confirmers=req1_name))
 
     ####################################################################
     # build_send_msg_request
@@ -15861,10 +15877,10 @@ class ConfigVerifier:
             recv_msg_serial_num = self.add_cmd(RecvMsgTimeoutTrue(
                 cmd_runners=receiver,
                 senders=recv_senders,
-                exp_senders=set(),
+                exp_senders=exp_senders,
                 sender_count=recv_sender_count,
                 timeout=1,
-                timeout_names=recv_senders,
+                timeout_names=timeout_remotes,
                 exp_msgs=msgs_to_send))
         self.add_cmd(
             ConfirmResponse(
@@ -17987,17 +18003,9 @@ class ConfigVerifier:
             StartRequest(req_type=st.ReqType.Smart_recv,
                          timeout_type=timeout_type,
                          targets=senders,
-                         unreg_remotes=set(),
-                         not_registered_remotes=set(),
                          timeout_remotes=timeout_names,
                          stopped_remotes=stopped_remotes.copy(),
-                         deadlock_remotes=set(),
-                         eligible_targets=set(),
-                         completed_targets=set(),
-                         first_round_completed=set(),
-                         stopped_target_threads=set(),
-                         exp_senders=exp_senders,
-                         exp_resumers=set()))
+                         exp_senders=exp_senders))
 
         req_key_entry: RequestKey = ('smart_recv',
                                      'entry')
@@ -18149,11 +18157,18 @@ class ConfigVerifier:
 
             pe[PE.current_request] = req_start_item
 
+            self.log_test_msg(
+                'handle_request_entry_exit_log_msg looking at '
+                f'{req_start_item.req_type.value=}')
             if req_start_item.req_type.value in ('smart_send',
                                                  'smart_recv',
                                                  'smart_wait',
                                                  'smart_resume',
                                                  'smart_sync'):
+                self.log_test_msg(
+                    'handle_request_entry_exit_log_msg calling '
+                    f'set_request_pending_flag for {cmd_runner=}, '
+                    f'{targets=}, {set(targets)=}')
                 self.set_request_pending_flag(cmd_runner=cmd_runner,
                                               targets=set(targets),
                                               pending_request_flag=True)
@@ -18227,34 +18242,10 @@ class ConfigVerifier:
             if pe[PE.save_current_request].req_type != st.ReqType.NoReq:
                 pe[PE.current_request] = pe[PE.save_current_request]
                 pe[PE.save_current_request] = StartRequest(
-                    req_type=st.ReqType.NoReq,
-                    targets=set(),
-                    unreg_remotes=set(),
-                    not_registered_remotes=set(),
-                    timeout_remotes=set(),
-                    stopped_remotes=set(),
-                    deadlock_remotes=set(),
-                    eligible_targets=set(),
-                    completed_targets=set(),
-                    first_round_completed=set(),
-                    stopped_target_threads=set(),
-                    exp_senders=set(),
-                    exp_resumers=set())
+                    req_type=st.ReqType.NoReq)
             else:
                 pe[PE.current_request] = StartRequest(
-                    req_type=st.ReqType.NoReq,
-                    targets=set(),
-                    unreg_remotes=set(),
-                    not_registered_remotes=set(),
-                    timeout_remotes=set(),
-                    stopped_remotes=set(),
-                    deadlock_remotes=set(),
-                    eligible_targets=set(),
-                    completed_targets=set(),
-                    first_round_completed=set(),
-                    stopped_target_threads=set(),
-                    exp_senders=set(),
-                    exp_resumers=set())
+                    req_type=st.ReqType.NoReq)
 
     ####################################################################
     # handle_request_smart_init_entry
@@ -18695,16 +18686,7 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
 
-        # if pe[PE.current_request].timeout_type == TimeoutType.TimeoutTrue:
-        #     timeout_remotes = pe[PE.current_request].timeout_remotes
-        # else:
-        #     timeout_remotes = set()
-        #
-        # eligible_targets = (pe[PE.current_request].targets.copy()
-        #                     - timeout_remotes
-        #                     - pe[PE.current_request].stopped_remotes)
-
-        for target in pe[PE.current_request].expected_resumed_targets:
+        for target in pe[PE.current_request].exp_resumed_targets:
             ack_key: AckKey = (target, 'smart_resume')
 
             pe[PE.ack_msg][ack_key] += 1
@@ -19128,17 +19110,8 @@ class ConfigVerifier:
             name='smart_send',
             seq='test_smart_thread.py::ConfigVerifier.handle_send_msg')
 
-        if send_type == SendType.Broadcast:
-            receivers_to_use = set()
-            exp_receivers = set()
-            for remote, thread_tracker in self.expected_registered.items():
-                if remote == cmd_runner:
-                    continue
-                if thread_tracker.st_state == st.ThreadState.Alive:
-                    exp_receivers |= {remote}
-        else:
-            receivers_to_use = receivers.copy()
-            exp_receivers = receivers.copy()
+        receivers_to_use = receivers.copy()
+        exp_receivers = receivers.copy()
 
         timeout_remotes = set()
         if timeout_type == TimeoutType.TimeoutTrue and unreg_timeout_names:
@@ -19172,8 +19145,8 @@ class ConfigVerifier:
         start_time = time.time()
 
         if send_type == SendType.SRMsgs:
-            # for a smart_send using the SendMsgs option, we need to
-            # build a SendMsgs dict from the SendRecvMsgs test messages
+            # for a smart_send using the msg_dict option, we need to
+            # build a dict from the SendRecvMsgs test messages
             send_msg = msgs_to_send.get_send_msgs(sender_name=cmd_runner,
                                                   receiver_names=receivers,
                                                   msg_idx=msg_idx)
@@ -19186,17 +19159,27 @@ class ConfigVerifier:
         if stopped_remotes:
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
-                    self.all_threads[cmd_runner].smart_send(
-                        receivers=receivers_to_use,
-                        msg=send_msg,
-                        log_msg=log_msg)
+                    if send_type == SendType.SRMsgs:
+                        self.all_threads[cmd_runner].smart_send(
+                            msg_dict=send_msg,
+                            log_msg=log_msg)
+                    else:
+                        self.all_threads[cmd_runner].smart_send(
+                            receivers=receivers_to_use,
+                            msg=send_msg,
+                            log_msg=log_msg)
                 else:
-                    self.all_threads[cmd_runner].smart_send(
-                        receivers=receivers_to_use,
-                        msg=send_msg,
-                        timeout=timeout,
-                        log_msg=log_msg)
-
+                    if send_type == SendType.SRMsgs:
+                        self.all_threads[cmd_runner].smart_send(
+                            msg_dict=send_msg,
+                            timeout=timeout,
+                            log_msg=log_msg)
+                    else:
+                        self.all_threads[cmd_runner].smart_send(
+                            receivers=receivers_to_use,
+                            msg=send_msg,
+                            timeout=timeout,
+                            log_msg=log_msg)
             sent_targets = self.all_threads[cmd_runner].sent_targets
 
             self.add_log_msg(
@@ -19210,26 +19193,43 @@ class ConfigVerifier:
 
         elif timeout_type == TimeoutType.TimeoutNone:
             pe[PE.request_msg][req_key_exit] += 1
-            sent_targets = self.all_threads[cmd_runner].smart_send(
-                receivers=receivers_to_use,
-                msg=send_msg,
-                log_msg=log_msg)
+            if send_type == SendType.SRMsgs:
+                sent_targets = self.all_threads[cmd_runner].smart_send(
+                    msg_dict=send_msg,
+                    log_msg=log_msg)
+            else:
+                sent_targets = self.all_threads[cmd_runner].smart_send(
+                    receivers=receivers_to_use,
+                    msg=send_msg,
+                    log_msg=log_msg)
             elapsed_time += (time.time() - start_time)
         elif timeout_type == TimeoutType.TimeoutFalse:
             pe[PE.request_msg][req_key_exit] += 1
-            sent_targets = self.all_threads[cmd_runner].smart_send(
-                receivers=receivers_to_use,
-                msg=send_msg,
-                timeout=timeout,
-                log_msg=log_msg)
-            elapsed_time += (time.time() - start_time)
-        elif timeout_type == TimeoutType.TimeoutTrue:
-            with pytest.raises(st.SmartThreadRequestTimedOut):
-                self.all_threads[cmd_runner].smart_send(
+            if send_type == SendType.SRMsgs:
+                sent_targets = self.all_threads[cmd_runner].smart_send(
+                    msg_dict=send_msg,
+                    timeout=timeout,
+                    log_msg=log_msg)
+            else:
+                sent_targets = self.all_threads[cmd_runner].smart_send(
                     receivers=receivers_to_use,
                     msg=send_msg,
                     timeout=timeout,
                     log_msg=log_msg)
+            elapsed_time += (time.time() - start_time)
+        elif timeout_type == TimeoutType.TimeoutTrue:
+            with pytest.raises(st.SmartThreadRequestTimedOut):
+                if send_type == SendType.SRMsgs:
+                    self.all_threads[cmd_runner].smart_send(
+                        msg_dict=send_msg,
+                        timeout=timeout,
+                        log_msg=log_msg)
+                else:
+                    self.all_threads[cmd_runner].smart_send(
+                        receivers=receivers_to_use,
+                        msg=send_msg,
+                        timeout=timeout,
+                        log_msg=log_msg)
             elapsed_time += (time.time() - start_time)
 
             sent_targets = self.all_threads[cmd_runner].sent_targets
@@ -20055,17 +20055,9 @@ class ConfigVerifier:
             StartRequest(req_type=st.ReqType.Smart_sync,
                          timeout_type=timeout_type,
                          targets=targets,
-                         unreg_remotes=set(),
-                         not_registered_remotes=set(),
                          timeout_remotes=timeout_remotes,
                          stopped_remotes=stopped_remotes.copy(),
-                         deadlock_remotes=conflict_remotes,
-                         eligible_targets=set(),
-                         completed_targets=set(),
-                         first_round_completed=set(),
-                         stopped_target_threads=set(),
-                         exp_senders=set(),
-                         exp_resumers=set()))
+                         deadlock_remotes=conflict_remotes))
 
         req_key_entry: RequestKey = ('smart_sync',
                                      'entry')
@@ -20074,14 +20066,12 @@ class ConfigVerifier:
         req_key_exit: RequestKey = ('smart_sync',
                                     'exit')
 
-        assert targets
         exp_completed_syncs: set[str] = targets.copy()
         # enter_exit = ('entry', 'exit')
         if stopped_remotes:
             exp_completed_syncs -= stopped_remotes
             exp_completed_syncs -= timeout_remotes
-            # enter_exit = ('entry',)
-            assert targets
+
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_sync(
@@ -20092,6 +20082,8 @@ class ConfigVerifier:
                         targets=targets,
                         timeout=timeout,
                         log_msg=log_msg)
+
+            synced_targets = self.all_threads[cmd_runner].synced_targets
 
             self.add_log_msg(
                 self.get_error_msg(
@@ -20116,6 +20108,8 @@ class ConfigVerifier:
                         timeout=timeout,
                         log_msg=log_msg)
 
+            synced_targets = self.all_threads[cmd_runner].synced_targets
+
             self.add_log_msg(
                 self.get_error_msg(
                     cmd_runner=cmd_runner,
@@ -20128,13 +20122,13 @@ class ConfigVerifier:
 
         elif timeout_type == TimeoutType.TimeoutNone:
             pe[PE.request_msg][req_key_exit] += 1
-            self.all_threads[cmd_runner].smart_sync(
+            synced_targets = self.all_threads[cmd_runner].smart_sync(
                 targets=targets,
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutFalse:
             pe[PE.request_msg][req_key_exit] += 1
-            self.all_threads[cmd_runner].smart_sync(
+            synced_targets = self.all_threads[cmd_runner].smart_sync(
                 targets=targets,
                 timeout=timeout,
                 log_msg=log_msg)
@@ -20149,6 +20143,8 @@ class ConfigVerifier:
                     timeout=timeout,
                     log_msg=log_msg)
 
+            synced_targets = self.all_threads[cmd_runner].synced_targets
+
             self.add_log_msg(
                 self.get_error_msg(
                     cmd_runner=cmd_runner,
@@ -20159,6 +20155,8 @@ class ConfigVerifier:
                     stopped_remotes=stopped_remotes,
                     conflict_remotes=conflict_remotes),
                 log_level=logging.ERROR)
+
+        assert exp_completed_syncs == synced_targets
 
         # self.add_request_log_msg(cmd_runner=cmd_runner,
         #                          smart_request='smart_sync',
@@ -20915,6 +20913,15 @@ class ConfigVerifier:
                                                          pair_key,
                                                          pair_name)
                     pe[PE.add_status_block_msg][add_status_key] += 1
+                ########################################################
+                # determine whether we have pending cmd for new thread
+                ########################################################
+                other_pe = self.pending_events[other_name]
+                if (other_pe[PE.current_request].req_type.value in smart_reqs
+                        and add_name in other_pe[PE.current_request].targets):
+                    self.set_request_pending_flag(cmd_runner=other_name,
+                                                  targets={add_name},
+                                                  pending_request_flag=True)
 
             # if pair_key already exists, we need to add name
             # as a resurrected thread
@@ -24436,74 +24443,6 @@ class TestSmartThreadExamples:
                                   capsys: Any) -> None:
         """Test smart_send example 3.
 
-        send a single message to all alive remote threads in the
-        configuration as a broadcast (by simply omitting the *receivers*
-        argument). Note the use of smart_wait and smart_resume to
-        coordinate the actions for ordered and consistent print output.
-
-        Args:
-            capsys: pytest fixture to get the print output
-        """
-        from scottbrian_paratools.smart_thread import SmartThread
-
-        def f1(smart_thread: SmartThread,
-               wait_for: Optional[str] = None,
-               resume_target: Optional[str] = None) -> None:
-            if wait_for:
-                smart_thread.smart_wait(resumers=wait_for)
-            print(f'f1 {smart_thread.name} entered')
-            recvd_msgs = smart_thread.smart_recv(senders='alpha')
-            print(recvd_msgs['alpha'])
-            print(f'f1 {smart_thread.name} exiting')
-            if resume_target:
-                smart_thread.smart_resume(waiters=resume_target)
-
-        print('mainline alpha entered')
-        alpha_smart_thread = SmartThread(name='alpha')
-        SmartThread(name='beta',
-                    target=f1,
-                    thread_parm_name='smart_thread',
-                    kwargs={'resume_target': 'charlie'})
-        SmartThread(name='charlie',
-                    target=f1,
-                    thread_parm_name='smart_thread',
-                    kwargs={'wait_for': 'beta',
-                            'resume_target': 'delta'})
-        SmartThread(name='delta',
-                    target=f1,
-                    thread_parm_name='smart_thread',
-                    kwargs={'wait_for': 'charlie',
-                            'resume_target': 'alpha'})
-        alpha_smart_thread.smart_send(msg='hello remotes')
-        alpha_smart_thread.smart_wait(resumers='delta')
-        alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
-        print('mainline alpha exiting')
-
-        expected_result = 'mainline alpha entered\n'
-        expected_result += 'f1 beta entered\n'
-        expected_result += "['hello remotes']\n"
-        expected_result += 'f1 beta exiting\n'
-        expected_result += 'f1 charlie entered\n'
-        expected_result += "['hello remotes']\n"
-        expected_result += 'f1 charlie exiting\n'
-        expected_result += 'f1 delta entered\n'
-        expected_result += "['hello remotes']\n"
-        expected_result += 'f1 delta exiting\n'
-        expected_result += 'mainline alpha exiting\n'
-
-        captured = capsys.readouterr().out
-
-        assert captured == expected_result
-
-        logger.debug('mainline exiting')
-
-    ####################################################################
-    # test_smart_send_example_4
-    ####################################################################
-    def test_smart_send_example_4(self,
-                                  capsys: Any) -> None:
-        """Test smart_send example 4.
-
         send multiple messages to a single remote thread
 
         Args:
@@ -24541,11 +24480,11 @@ class TestSmartThreadExamples:
         logger.debug('mainline exiting')
 
     ####################################################################
-    # test_smart_send_example_5
+    # test_smart_send_example_4
     ####################################################################
-    def test_smart_send_example_5(self,
+    def test_smart_send_example_4(self,
                                   capsys: Any) -> None:
-        """Test smart_send example 5.
+        """Test smart_send example 4.
 
         send multiple messages to multiple remote threads
 
@@ -24611,11 +24550,11 @@ class TestSmartThreadExamples:
         logger.debug('mainline exiting')
 
     ####################################################################
-    # test_smart_send_example_6
+    # test_smart_send_example_5
     ####################################################################
-    def test_smart_send_example_6(self,
+    def test_smart_send_example_5(self,
                                   capsys: Any) -> None:
-        """Test smart_send example 6.
+        """Test smart_send example 5.
 
         send any mixture of single and multiple messages individually to
         each remote thread
@@ -24623,8 +24562,7 @@ class TestSmartThreadExamples:
         Args:
             capsys: pytest fixture to get the print output
         """
-        from scottbrian_paratools.smart_thread import (SmartThread,
-                                                       SendMsgs)
+        from scottbrian_paratools.smart_thread import SmartThread
 
         def f1(smart_thread: SmartThread,
                wait_for: Optional[str] = None,
@@ -24654,10 +24592,10 @@ class TestSmartThreadExamples:
                     thread_parm_name='smart_thread',
                     kwargs={'wait_for': 'charlie',
                             'resume_target': 'alpha'})
-        msgs_to_send = SendMsgs(send_msgs={
+        msgs_to_send = {
             'beta': 'hi beta',
             'charlie': ('hi charlie', 'have a great day'),
-            'delta': [42, 'hi delta', {'nums': (1, 2, 3)}]})
+            'delta': [42, 'hi delta', {'nums': (1, 2, 3)}]}
         alpha_smart_thread.smart_send(msg=msgs_to_send)
         alpha_smart_thread.smart_wait(resumers='delta')
         alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
@@ -25793,51 +25731,10 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_send_scenario
     ####################################################################
-    @pytest.mark.parametrize("num_senders_arg", [1])
-    @pytest.mark.parametrize("num_receivers_arg", [1])
-    @pytest.mark.parametrize("num_msgs_arg", [1])
-    @pytest.mark.parametrize("send_type_arg", [SendType.ToRemotes,
-                                               SendType.Broadcast,
-                                               SendType.SRMsgs])
-    @pytest.mark.cover
-    def test_send_scenario_cover(
-            self,
-            num_senders_arg: int,
-            num_receivers_arg: int,
-            num_msgs_arg: int,
-            send_type_arg: SendType,
-            caplog: pytest.CaptureFixture[str]
-    ) -> None:
-        """Test meta configuration scenarios.
-
-        Args:
-            num_senders_arg: number of sender threads
-            num_receivers_arg: number of receiver threads
-            num_msgs_arg: number of message to send
-            send_type_arg: type of send to do
-            caplog: pytest fixture to capture log output
-
-        """
-        args_for_scenario_builder: dict[str, Any] = {
-            'num_senders': num_senders_arg,
-            'num_receivers': num_receivers_arg,
-            'num_msgs': num_msgs_arg,
-            'send_type': send_type_arg,
-        }
-
-        scenario_driver(
-            scenario_builder=ConfigVerifier.build_send_scenario,
-            scenario_builder_args=args_for_scenario_builder,
-            caplog_to_use=caplog)
-
-    ####################################################################
-    # test_send_scenario
-    ####################################################################
     @pytest.mark.parametrize("num_senders_arg", [1, 2, 3])
     @pytest.mark.parametrize("num_receivers_arg", [1, 2, 3])
     @pytest.mark.parametrize("num_msgs_arg", [1, 2, 3])
     @pytest.mark.parametrize("send_type_arg", [SendType.ToRemotes,
-                                               SendType.Broadcast,
                                                SendType.SRMsgs])
     def test_send_scenario(
             self,
