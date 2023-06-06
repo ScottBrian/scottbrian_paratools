@@ -2762,18 +2762,21 @@ class SmartThread:
     # smart_recv
     ####################################################################
     def smart_recv(self,
-                   senders: Optional[Iterable] = None,
+                   senders: Iterable,
+                   sender_count: Optional[int] = None,
                    timeout: OptIntFloat = None,
                    log_msg: Optional[str] = None) -> dict[str, list[Any]]:
         """Receive one or more messages from remote threads.
 
         Args:
             senders: thread names whose sent messages are to be
-                received. If *senders* is not specified, then
-                *smart_recv* will look for messages from each of the
-                smart threads in the configuration. Note that
-                *smart_recv* will return as soon as at least one message
-                from any of the possible senders is found.
+                received.
+            sender_count: the least number of *senders* that must
+                send a message to satisfy the *smart_recv*. If not
+                specified, *sender_count* will default to the number of
+                names specified for *senders*. If specified,
+                *sender_count* must be an integer between
+                1 and the number of *senders*, inclusive.
             timeout: number of seconds to wait for messages
             log_msg: additional text to append to the debug log message
                 that is issued on request entry and exit
@@ -2811,42 +2814,27 @@ class SmartThread:
 
                Note that a smart_wait will not deadlock if the
                wait_event was already resumed earlier by a smart_resume,
-               and a smart_recv will not deadlock is a message was
+               and a smart_recv will not deadlock if a message was
                already delivered earlier by a smart_send.
 
         For *smart_recv*, a message is any type (e.g., text, lists,
         sets, class objects). *smart_recv* can be used to receive a
         single message or multiple messages from a single remote
-        thread, from multiple remote threads, or from every remote
-        thread in the configuration. *smart_recv* will return
-        messages in a dictionary indexed by sender thread name.
+        thread, or from multiple remote threads. *smart_recv* will
+        return messages in a dictionary indexed by sender thread name.
 
         When *smart_recv* gets control, it will check its message
-        queues for each of the specified senders. If one or more
-        messages are found, *smart_recv* will return with them. If no
-        messages are initially found, *smart_recv* will continue to
-        periodically check until one or more messages arrive, at which
-        point it will return with them. If timeout is specified,
-        *smart_recv* will raise a timeout error if no messages appear
-        within the specified time. If *senders* is specified, and any of
-        the *senders* is stopped before a message is found, *smart_recv*
-        will raise an error.
-
-        If no senders are specified, the *smart_recv* will check its
-        message queues for all threads in the current configuration. If
-        no messages are found, *smart_recv* will continue to check all
-        threads in the current configuration, even as the configuration
-        changes. When no senders are specifies, *smart_recv* will not
-        raise an error if any of the remote threads become inactive. In
-        this way, a thread acting as a server can issue the *smart_recv*
-        to simply park itself on the message queues of all threads
-        currently in the configuration and return with any messages as
-        soon as they arrive.
-
-        If senders are specified, *smart_recv* will look for messages
-        only on its message queues for the specified senders. Unlike
-        the "no senders specified" case, *smart_recv* will raise an
-        error if any of the specified sender threads is stopped.
+        queues for each of the specified senders. If *sender_count* is
+        specified, *smart_recv* will return with any found messages as
+        soon as the number of threads named in *senders* equals or
+        exceeds the *sender_count*. If *sender_count* is not specified,
+        *smart_recv* will return with any found messages as soon as all
+        *senders* have sent at least one message. If timeout is
+        specified, *smart_recv* will raise a timeout error if the
+        required number of senders has not yet been achieved within the
+        specified time. If any of the specified *senders* are stopped
+        before the *smart_recv* has completed, *smart_recv* will raise
+        an error.
 
         If *smart_recv* raises an error, any messages that were received
         will be placed into the SmartThread object in field recvd_msgs
@@ -3119,6 +3107,20 @@ class SmartThread:
         self.request = ReqType.Smart_recv
         self.recvd_msgs = defaultdict(list)
 
+        if sender_count is None:
+            completion_count = len(self._get_set(senders))
+        else:
+            if (not isinstance(sender_count, int)
+                    or sender_count < 1
+                    or len(self._get_set(senders)) < sender_count):
+                raise SmartThreadInvalidInput(
+                    f'smart_recv issued by {self.name} incorrectly specified '
+                    f'a value for {sender_count=}. The value must be an '
+                    f'integer between 1 and the number of specified senders, '
+                    f'inclusive.'
+                )
+            completion_count = sender_count
+
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
             remotes=senders,
@@ -3126,7 +3128,7 @@ class SmartThread:
             process_rtn=self._process_recv_msg,
             cleanup_rtn=None,
             get_block_lock=False,
-            completion_count=1,
+            completion_count=completion_count,
             timeout=timeout,
             log_msg=log_msg)
 
@@ -3287,7 +3289,7 @@ class SmartThread:
     ####################################################################
     def smart_wait(self, *,
                    resumers: Optional[Iterable] = None,
-                   resume_count: Optional[int] = None,
+                   resumer_count: Optional[int] = None,
                    timeout: OptIntFloat = None,
                    log_msg: Optional[str] = None) -> set[str]:
         """Wait until resumed.
@@ -3295,11 +3297,11 @@ class SmartThread:
         Args:
             resumers: thread names that the *smart_wait* expects to
                 provide matching *smart_resume* requests.
-            resume_count: the least number of *resumers* that must
+            resumer_count: the least number of *resumers* that must
                 provide a matching *smart_resume* to satisfy the
-                *smart_wait*. If not specified, *resume_count* will
+                *smart_wait*. If not specified, *resumer_count* will
                 default to the number of names specified for *resumers*.
-                If specified, *resume_count^ must be an integer between
+                If specified, *resumer_count* must be an integer between
                 1 and the number of *resumers*, inclusive.
             timeout: number of seconds to allow for *smart_wait* to be
                 resumed.
@@ -3310,7 +3312,7 @@ class SmartThread:
             A set of thread names that *smart_wait* detects as having
             provided a matching *smart_resume*. The number of names in
             the set may be larger than the value specified for
-            *resume_count*. If *smart_wait* raises an error, the set of
+            *resumer_count*. If *smart_wait* raises an error, the set of
             names collected thus far can be recovered from field
             *resumed_by* in the SmartThread object that issued the
             *smart_wait*.
@@ -3340,7 +3342,7 @@ class SmartThread:
 
                Note that a smart_wait will not deadlock if the
                wait_event was already resumed earlier by a smart_resume,
-               and a smart_recv will not deadlock is a message was
+               and a smart_recv will not deadlock if a message was
                already delivered earlier by a smart_send.
 
         smart_wait waits until it is resumed. These are the cases:
@@ -3352,8 +3354,8 @@ class SmartThread:
                argument for the *resumers* parameter and will then wait
                for:
                a) at least the number of resumes specified for
-                  *resume_count*
-               b) all specified *resumers* if *resume_count* is not
+                  *resumer_count*
+               b) all specified *resumers* if *resumer_count* is not
                   specified
 
         *smart_wait* will raise an error if any of the specified
@@ -3371,7 +3373,7 @@ class SmartThread:
             1) smart_wait followed by smart_resume
             2) smart_wait preceded by smart_resume
             3) smart_wait for multiple resumers
-            4) smart_wait for multiple resumers with resume_count
+            4) smart_wait for multiple resumers with resumer_count
 
         **Example 1:** smart_wait followed by smart_resume
 
@@ -3546,19 +3548,19 @@ class SmartThread:
         self.request = ReqType.Smart_wait
         self.resumed_by = set()
 
-        if resume_count is None:
+        if resumer_count is None:
             completion_count = len(self._get_set(resumers))
         else:
-            if (not isinstance(resume_count, int)
-                    or resume_count < 1
-                    or len(self._get_set(resumers)) < resume_count):
+            if (not isinstance(resumer_count, int)
+                    or resumer_count < 1
+                    or len(self._get_set(resumers)) < resumer_count):
                 raise SmartThreadInvalidInput(
                     f'smart_wait issued by {self.name} incorrectly specified '
-                    f'a value for {resume_count=}. The value must be an '
+                    f'a value for {resumer_count=}. The value must be an '
                     f'integer between 1 and the number of specified resumers, '
                     f'inclusive.'
                 )
-            completion_count = resume_count
+            completion_count = resumer_count
 
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
@@ -4015,7 +4017,7 @@ class SmartThread:
 
                Note that a smart_wait will not deadlock if the
                wait_event was already resumed earlier by a smart_resume,
-               and a smart_recv will not deadlock is a message was
+               and a smart_recv will not deadlock if a message was
                already delivered earlier by a smart_send.
 
         Each thread that invokes ''smart_sync()'' first sets the sync
@@ -4454,7 +4456,8 @@ class SmartThread:
                     and request_block.completion_count
                     <= len(self.sent_targets))
                     or (self.request == ReqType.Smart_recv
-                        and self.recvd_msgs)
+                        and request_block.completion_count
+                        <= len(self.recvd_msgs.keys()))
                     or (self.request == ReqType.Smart_resume
                         and request_block.completion_count
                         <= len(self.resumed_targets))

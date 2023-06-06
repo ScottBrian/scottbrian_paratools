@@ -159,8 +159,8 @@ class SendType(Enum):
     Broadcast = auto()
     SRMsgs = auto()
 
+
 class RecvType(Enum):
-    AliveSenders = auto()
     PartialSenders = auto()
     MatchSenders = auto()
     ExtraSenders = auto()
@@ -1399,6 +1399,7 @@ class RecvMsg(ConfigCmd):
                  senders: Iterable,
                  exp_senders: Iterable,
                  exp_msgs: SendRecvMsgs,
+                 sender_count: Optional[int] = None,
                  stopped_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
@@ -1409,6 +1410,8 @@ class RecvMsg(ConfigCmd):
             exp_senders: names of threads that are expected to send a
                 msg depending on the RcvType
             exp_msgs: messages to be sent and verified
+            sender_count: specification for smart_recv for how many
+                senders are needed to satisfy the smart_recv
             stopped_remotes: thread names that are stopped
             log_msg: log message to specify on the smart_recv
         """
@@ -1421,12 +1424,15 @@ class RecvMsg(ConfigCmd):
 
         self.exp_msgs = exp_msgs
 
+        self.sender_count = sender_count
+
         self.log_msg = log_msg
 
         self.stopped_remotes = get_set(stopped_remotes)
 
         self.arg_list += ['senders',
                           'exp_senders',
+                          'sender_count',
                           'stopped_remotes']
 
     def run_process(self, cmd_runner: str) -> None:
@@ -1440,6 +1446,7 @@ class RecvMsg(ConfigCmd):
             senders=self.senders,
             exp_senders=self.exp_senders,
             exp_msgs=self.exp_msgs,
+            sender_count=self.sender_count,
             stopped_remotes=self.stopped_remotes,
             timeout_type=TimeoutType.TimeoutNone,
             timeout=0,
@@ -1458,6 +1465,7 @@ class RecvMsgTimeoutFalse(RecvMsg):
                  exp_senders: Iterable,
                  exp_msgs: SendRecvMsgs,
                  timeout: IntOrFloat,
+                 sender_count: Optional[int] = None,
                  stopped_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
@@ -1469,6 +1477,8 @@ class RecvMsgTimeoutFalse(RecvMsg):
                 msg depending on the RcvType
             exp_msgs: messages to be sent and verified
             timeout: value to specify on the smart_recv
+            sender_count: specification for smart_recv for how many
+                senders are needed to satisfy the smart_recv
             stopped_remotes: thread names that are stopped
             log_msg: log message to specify on the smart_recv
         """
@@ -1476,6 +1486,7 @@ class RecvMsgTimeoutFalse(RecvMsg):
                          senders=senders,
                          exp_senders=exp_senders,
                          exp_msgs=exp_msgs,
+                         sender_count=sender_count,
                          stopped_remotes=stopped_remotes,
                          log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
@@ -1495,6 +1506,7 @@ class RecvMsgTimeoutFalse(RecvMsg):
             senders=self.senders,
             exp_senders=self.exp_senders,
             exp_msgs=self.exp_msgs,
+            sender_count=self.sender_count,
             stopped_remotes=self.stopped_remotes,
             timeout_type=TimeoutType.TimeoutFalse,
             timeout=self.timeout,
@@ -1514,6 +1526,7 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
                  exp_msgs: SendRecvMsgs,
                  timeout: IntOrFloat,
                  timeout_names: Iterable,
+                 sender_count: Optional[int] = None,
                  stopped_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
@@ -1527,6 +1540,8 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
             timeout: value to specify on the smart_recv
             timeout_names: thread names that are expected to cause a
                 timeout
+            sender_count: specification for smart_recv for how many
+                senders are needed to satisfy the smart_recv
             stopped_remotes: thread names that are stopped
             log_msg: log message to specify on the smart_recv
         """
@@ -1535,6 +1550,7 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
                          exp_senders=exp_senders,
                          exp_msgs=exp_msgs,
                          timeout=timeout,
+                         sender_count=sender_count,
                          stopped_remotes=stopped_remotes,
                          log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
@@ -1554,6 +1570,7 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
             senders=self.senders,
             exp_senders=self.exp_senders,
             exp_msgs=self.exp_msgs,
+            sender_count=self.sender_count,
             stopped_remotes=self.stopped_remotes,
             timeout_type=TimeoutType.TimeoutTrue,
             timeout=self.timeout,
@@ -2754,7 +2771,7 @@ class Wait(ConfigCmd):
                  cmd_runners: Iterable,
                  resumers: Iterable,
                  exp_resumers: Iterable,
-                 resume_count: Optional[int] = None,
+                 resumer_count: Optional[int] = None,
                  stopped_remotes: Optional[Iterable] = None,
                  conflict_remotes: Optional[Iterable] = None,
                  deadlock_remotes: Optional[Iterable] = None,
@@ -2766,7 +2783,7 @@ class Wait(ConfigCmd):
             resumers: thread names that will resume
             exp_resumers: thread names that the wait is expected to be
                 resumed by
-            resume_count: specification for smart_wait for how many
+            resumer_count: specification for smart_wait for how many
                 resumes are needed to satisfy the smart_wait
             stopped_remotes: thread names that are stopped
             conflict_remotes: thread names that cause deadlock
@@ -2785,13 +2802,13 @@ class Wait(ConfigCmd):
 
         self.deadlock_remotes = get_set(deadlock_remotes)
 
-        self.resume_count = resume_count
+        self.resumer_count = resumer_count
 
         self.log_msg = log_msg
 
         self.arg_list += ['resumers',
                           'exp_resumers',
-                          'resume_count',
+                          'resumer_count',
                           'stopped_remotes',
                           'conflict_remotes',
                           'deadlock_remotes']
@@ -2812,7 +2829,7 @@ class Wait(ConfigCmd):
             conflict_remotes=self.conflict_remotes,
             deadlock_remotes=self.deadlock_remotes,
             timeout_type=TimeoutType.TimeoutNone,
-            resume_count=self.resume_count,
+            resumer_count=self.resumer_count,
             log_msg=self.log_msg)
 
 
@@ -2826,7 +2843,7 @@ class WaitTimeoutFalse(Wait):
                  resumers: Iterable,
                  exp_resumers: Iterable,
                  timeout: IntOrFloat,
-                 resume_count: Optional[int] = None,
+                 resumer_count: Optional[int] = None,
                  stopped_remotes: Optional[Iterable] = None,
                  conflict_remotes: Optional[Iterable] = None,
                  deadlock_remotes: Optional[Iterable] = None,
@@ -2839,7 +2856,7 @@ class WaitTimeoutFalse(Wait):
             exp_resumers: thread names that the wait is expected to be
                 resumed by
             timeout: value for smart_wait
-            resume_count: specification for smart_wait for how many
+            resumer_count: specification for smart_wait for how many
                 resumes are needed to satisfy the smart_wait
             stopped_remotes: thread names that are stopped
             conflict_remotes: thread names that are deadlocked
@@ -2850,7 +2867,7 @@ class WaitTimeoutFalse(Wait):
                          resumers=resumers,
                          exp_resumers=exp_resumers,
                          stopped_remotes=stopped_remotes,
-                         resume_count=resume_count,
+                         resumer_count=resumer_count,
                          conflict_remotes=conflict_remotes,
                          deadlock_remotes=deadlock_remotes,
                          log_msg=log_msg)
@@ -2876,7 +2893,7 @@ class WaitTimeoutFalse(Wait):
             conflict_remotes=self.conflict_remotes,
             deadlock_remotes=self.deadlock_remotes,
             timeout_type=TimeoutType.TimeoutFalse,
-            resume_count=self.resume_count,
+            resumer_count=self.resumer_count,
             log_msg=self.log_msg)
 
 
@@ -2891,7 +2908,7 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
                  exp_resumers: Iterable,
                  timeout: IntOrFloat,
                  timeout_remotes: Iterable,
-                 resume_count: Optional[int] = None,
+                 resumer_count: Optional[int] = None,
                  stopped_remotes: Optional[Iterable] = None,
                  conflict_remotes: Optional[Iterable] = None,
                  deadlock_remotes: Optional[Iterable] = None,
@@ -2906,7 +2923,7 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
                 resumed by
             timeout: value for smart_wait
             timeout_remotes: thread names that cause a timeout
-            resume_count: specification for smart_wait for how many
+            resumer_count: specification for smart_wait for how many
                 resumes are needed to satisfy the smart_wait
             stopped_remotes: thread names that are stopped
             conflict_remotes: thread names that are deadlocked
@@ -2917,7 +2934,7 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
                          resumers=resumers,
                          exp_resumers=exp_resumers,
                          stopped_remotes=stopped_remotes,
-                         resume_count=resume_count,
+                         resumer_count=resumer_count,
                          conflict_remotes=conflict_remotes,
                          deadlock_remotes=deadlock_remotes,
                          timeout=timeout,
@@ -2944,7 +2961,7 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
             conflict_remotes=self.conflict_remotes,
             deadlock_remotes=self.deadlock_remotes,
             timeout_type=TimeoutType.TimeoutTrue,
-            resume_count=self.resume_count,
+            resumer_count=self.resumer_count,
             log_msg=self.log_msg)
 
 
@@ -15740,12 +15757,14 @@ class ConfigVerifier:
             self,
             num_senders: int,
             num_msgs: int,
+            sender_count: int,
             recv_type: RecvType) -> None:
         """Add cmds to run scenario.
 
         Args:
             num_senders: number of senders
             num_msgs: number of message to send
+            sender_count: number of senders needed to satisfy smart_recv
             recv_type: type of recv to do
 
         """
@@ -15770,9 +15789,7 @@ class ConfigVerifier:
                                     num_msgs=num_msgs)
 
         recv_senders: set[str] = set()
-        if recv_type == RecvType.AliveSenders:
-            num_recv_senders = 0
-        elif recv_type == RecvType.PartialSenders:
+        if recv_type == RecvType.PartialSenders:
             num_recv_senders = len(senders) // 2
         elif recv_type == RecvType.MatchSenders:
             num_recv_senders = len(senders)
@@ -15788,10 +15805,17 @@ class ConfigVerifier:
                 break
             recv_senders |= {sender_name}
 
-        if recv_senders:
-            exp_senders: set[str] = senders & recv_senders
-        else:
-            exp_senders: set[str] = senders
+        # make sure we have a non-empty set for smart_recv in case
+        # num_senders is zero or too small for PartialResumers to get
+        # at least 1 sender
+        if not recv_senders:
+            recv_senders |= non_senders
+        exp_senders: set[str] = senders & recv_senders
+
+        recv_sender_count: Optional[int] = None
+        if sender_count > 0:  # if we want sender_count
+            # make sure we specify a legal value
+            recv_sender_count = min(sender_count, len(recv_senders))
 
         ################################################################
         # send messages
@@ -15814,17 +15838,31 @@ class ConfigVerifier:
         ################################################################
         # receive messages
         ################################################################
+        timeout: int = 0
+        timeout_remotes: set[str] = (recv_senders - exp_senders)
         if exp_senders:
+            if recv_sender_count:
+                if len(exp_senders) < recv_sender_count:
+                    timeout = 1
+            else:
+                if recv_senders != exp_senders:
+                    timeout = 1
+        else:
+            timeout = 1
+
+        if timeout == 0:
             recv_msg_serial_num = self.add_cmd(RecvMsg(
                 cmd_runners=receiver,
                 senders=recv_senders,
                 exp_senders=exp_senders,
+                sender_count=recv_sender_count,
                 exp_msgs=msgs_to_send))
         else:
             recv_msg_serial_num = self.add_cmd(RecvMsgTimeoutTrue(
                 cmd_runners=receiver,
                 senders=recv_senders,
                 exp_senders=set(),
+                sender_count=recv_sender_count,
                 timeout=1,
                 timeout_names=recv_senders,
                 exp_msgs=msgs_to_send))
@@ -15900,14 +15938,14 @@ class ConfigVerifier:
     def build_wait_basic_scenario(
             self,
             num_resumers: int,
-            resume_count: int,
+            resumer_count: int,
             wait_type: RecvType) -> None:
         """Add cmds to run scenario.
 
         Args:
             num_resumers: number of resumers beyond what is
                 required for the wait_type_arg
-            resume_count: resume_count specification for smart_wait
+            resumer_count: resumer_count specification for smart_wait
             wait_type: type of wait to do
 
         """
@@ -15950,10 +15988,10 @@ class ConfigVerifier:
             wait_resumers |= non_resumers
         exp_resumers: set[str] = resumers & wait_resumers
 
-        wait_resume_count: Optional[int] = None
-        if resume_count > 0:  # if we want resume_count
+        wait_resumer_count: Optional[int] = None
+        if resumer_count > 0:  # if we want resumer_count
             # make sure we specify a legal value
-            wait_resume_count = min(resume_count, len(wait_resumers))
+            wait_resumer_count = min(resumer_count, len(wait_resumers))
 
         ################################################################
         # resume
@@ -15980,8 +16018,8 @@ class ConfigVerifier:
         timeout: int = 0
         timeout_remotes: set[str] = (wait_resumers - exp_resumers)
         if exp_resumers:
-            if wait_resume_count:
-                if len(exp_resumers) < wait_resume_count:
+            if wait_resumer_count:
+                if len(exp_resumers) < wait_resumer_count:
                     timeout = 1
             else:
                 if wait_resumers != exp_resumers:
@@ -15994,14 +16032,14 @@ class ConfigVerifier:
             wait_serial_num = self.add_cmd(Wait(
                 cmd_runners=waiter,
                 resumers=wait_resumers,
-                resume_count=wait_resume_count,
+                resumer_count=wait_resumer_count,
                 exp_resumers=exp_resumers))
         else:
             cmd_to_confirm = 'WaitTimeoutTrue'
             wait_serial_num = self.add_cmd(WaitTimeoutTrue(
                 cmd_runners=waiter,
                 resumers=wait_resumers,
-                resume_count=wait_resume_count,
+                resumer_count=wait_resumer_count,
                 exp_resumers=exp_resumers,
                 timeout=1,
                 timeout_remotes=timeout_remotes))
@@ -17920,7 +17958,8 @@ class ConfigVerifier:
                         timeout_type: TimeoutType,
                         timeout: IntOrFloat,
                         timeout_names: set[str],
-                        log_msg: str) -> None:
+                        sender_count: Optional[int] = None,
+                        log_msg: Optional[str] = None) -> None:
         """Handle the send_recv_cmd execution and log msgs.
 
         Args:
@@ -17934,12 +17973,14 @@ class ConfigVerifier:
             timeout: value to use for timeout
             timeout_names: names of remotes that fail to send a message
                 within the timeout time.
-            log_msg: log message to isee on smart_recv
+            sender_count: number of senders needed to satisfy smart_recv
+            log_msg: log message to issue on smart_recv
 
         """
         self.log_test_msg(f'handle_recv_msg entry: {cmd_runner=}, '
-                          f'{senders=}, {exp_senders=}, {stopped_remotes=}, '
-                          f'{timeout_type=}, {timeout=}, {timeout_names=}')
+                          f'{senders=}, {sender_count=}, {exp_senders=},'
+                          f' {stopped_remotes=}, {timeout_type=}, '
+                          f'{timeout=}, {timeout_names=}')
 
         pe = self.pending_events[cmd_runner]
         pe[PE.start_request].append(
@@ -17971,10 +18012,12 @@ class ConfigVerifier:
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_recv(
                         senders=senders,
+                        sender_count=sender_count,
                         log_msg=log_msg)
                 else:
                     self.all_threads[cmd_runner].smart_recv(
                         senders=senders,
+                        sender_count=sender_count,
                         timeout=timeout,
                         log_msg=log_msg)
 
@@ -17994,12 +18037,14 @@ class ConfigVerifier:
             pe[PE.request_msg][req_key_exit] += 1
             recvd_msgs = self.all_threads[cmd_runner].smart_recv(
                 senders=senders,
+                sender_count=sender_count,
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutFalse:
             pe[PE.request_msg][req_key_exit] += 1
             recvd_msgs = self.all_threads[cmd_runner].smart_recv(
                 senders=senders,
+                sender_count=sender_count,
                 timeout=timeout,
                 log_msg=log_msg)
 
@@ -18007,6 +18052,7 @@ class ConfigVerifier:
             with pytest.raises(st.SmartThreadRequestTimedOut):
                 self.all_threads[cmd_runner].smart_recv(
                     senders=senders,
+                    sender_count=sender_count,
                     timeout=timeout,
                     log_msg=log_msg)
 
@@ -18033,8 +18079,9 @@ class ConfigVerifier:
                               rtn_name='handle_recv')
 
         self.log_test_msg(f'handle_recv_msg exit: {cmd_runner=}, '
-                          f'{senders=}, {exp_senders=}, {stopped_remotes=}, '
-                          f'{timeout_type=}, {timeout=}, {timeout_names=}')
+                          f'{senders=}, {sender_count=}, {exp_senders=},'
+                          f' {stopped_remotes=}, {timeout_type=}, '
+                          f'{timeout=}, {timeout_names=}')
 
     ####################################################################
     # handle_request_entry_exit_log_msg
@@ -20371,7 +20418,7 @@ class ConfigVerifier:
                     conflict_remotes: set[str],
                     deadlock_remotes: set[str],
                     timeout_type: TimeoutType,
-                    resume_count: int,
+                    resumer_count: Optional[int] = None,
                     log_msg: Optional[str] = None) -> None:
         """Wait for a resume.
 
@@ -20386,12 +20433,13 @@ class ConfigVerifier:
             conflict_remotes: names of threads that will cause conflict
             deadlock_remotes: names of threads that will cause deadlock
             timeout_type: specifies None, False, or True
-            resume_count: number of resumes needed to satisfy smart_wait
+            resumer_count: number of resumes needed to satisfy
+                smart_wait
             log_msg: optional log message to specify on the smart_wait
 
         """
         self.log_test_msg(f'handle_wait entry for {cmd_runner=}, '
-                          f'{resumers=}, {resume_count=}, {stopped_remotes=}, '
+                          f'{resumers=}, {resumer_count=}, {stopped_remotes=}, '
                           f'{timeout_remotes=}, {conflict_remotes=} '
                           f'{deadlock_remotes=}')
 
@@ -20437,12 +20485,12 @@ class ConfigVerifier:
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_wait(
                         resumers=resumers,
-                        resume_count=resume_count,
+                        resumer_count=resumer_count,
                         log_msg=log_msg)
                 else:
                     self.all_threads[cmd_runner].smart_wait(
                         resumers=resumers,
-                        resume_count=resume_count,
+                        resumer_count=resumer_count,
                         timeout=timeout,
                         log_msg=log_msg)
 
@@ -20464,12 +20512,12 @@ class ConfigVerifier:
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_wait(
                         resumers=resumers,
-                        resume_count=resume_count,
+                        resumer_count=resumer_count,
                         log_msg=log_msg)
                 else:
                     self.all_threads[cmd_runner].smart_wait(
                         resumers=resumers,
-                        resume_count=resume_count,
+                        resumer_count=resumer_count,
                         timeout=timeout,
                         log_msg=log_msg)
 
@@ -20490,14 +20538,14 @@ class ConfigVerifier:
             pe[PE.request_msg][req_key_exit] += 1
             resumed_by = self.all_threads[cmd_runner].smart_wait(
                 resumers=resumers,
-                resume_count=resume_count,
+                resumer_count=resumer_count,
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutFalse:
             pe[PE.request_msg][req_key_exit] += 1
             resumed_by = self.all_threads[cmd_runner].smart_wait(
                 resumers=resumers,
-                resume_count=resume_count,
+                resumer_count=resumer_count,
                 timeout=timeout,
                 log_msg=log_msg)
 
@@ -20506,7 +20554,7 @@ class ConfigVerifier:
             with pytest.raises(st.SmartThreadRequestTimedOut):
                 self.all_threads[cmd_runner].smart_wait(
                     resumers=resumers,
-                    resume_count=resume_count,
+                    resumer_count=resumer_count,
                     timeout=timeout,
                     log_msg=log_msg)
 
@@ -25102,7 +25150,7 @@ class TestSmartThreadExamples:
         print('alpha about to wait for any threads')
         resumed_by = alpha_smart_thread.smart_wait(
             resumers=['beta', 'charlie', 'delta'],
-            resume_count=1)
+            resumer_count=1)
         print(f'alpha resumed by resumers={sorted(resumed_by)}')
         SmartThread(name='delta',
                     target=f1,
@@ -25111,7 +25159,7 @@ class TestSmartThreadExamples:
         print('alpha about to wait for any threads')
         resumed_by = alpha_smart_thread.smart_wait(
             resumers=['beta', 'charlie', 'delta'],
-            resume_count=1)
+            resumer_count=1)
         print(f'alpha resumed by resumers={sorted(resumed_by)}')
 
         alpha_smart_thread.smart_join(targets=['beta', 'charlie', 'delta'])
@@ -25826,8 +25874,8 @@ class TestSmartBasicScenarios:
     ####################################################################
     @pytest.mark.parametrize("num_senders_arg", [0, 1, 2, 3])
     @pytest.mark.parametrize("num_msgs_arg", [1, 2, 3])
-    @pytest.mark.parametrize("recv_type_arg", [RecvType.AliveSenders,
-                                               RecvType.PartialSenders,
+    @pytest.mark.parametrize("sender_count_arg", [0, 1, 2, 3])
+    @pytest.mark.parametrize("recv_type_arg", [RecvType.PartialSenders,
                                                RecvType.MatchSenders,
                                                RecvType.ExtraSenders,
                                                RecvType.UnmatchSenders])
@@ -25838,6 +25886,7 @@ class TestSmartBasicScenarios:
             self,
             num_senders_arg: int,
             num_msgs_arg: int,
+            sender_count_arg: int,
             recv_type_arg: RecvType,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
@@ -25846,6 +25895,7 @@ class TestSmartBasicScenarios:
         Args:
             num_senders_arg: number of senders
             num_msgs_arg: number of message to send
+            sender_count_arg: number senders needed to satify smart_recv
             recv_type_arg: type of recv to do
             caplog: pytest fixture to capture log output
 
@@ -25853,6 +25903,7 @@ class TestSmartBasicScenarios:
         args_for_scenario_builder: dict[str, Any] = {
             'num_senders': num_senders_arg,
             'num_msgs': num_msgs_arg,
+            'sender_count': sender_count_arg,
             'recv_type': recv_type_arg,
         }
 
@@ -25894,7 +25945,7 @@ class TestSmartBasicScenarios:
     # test_wait_basic_scenario
     ####################################################################
     @pytest.mark.parametrize("num_resumers_arg", [0, 1, 2, 3])
-    @pytest.mark.parametrize("resume_count_arg", [0, 1, 2, 3])
+    @pytest.mark.parametrize("resumer_count_arg", [0, 1, 2, 3])
     @pytest.mark.parametrize("wait_type_arg", [WaitType.PartialResumers,
                                                WaitType.MatchResumers,
                                                WaitType.ExtraResumers,
@@ -25902,7 +25953,7 @@ class TestSmartBasicScenarios:
     def test_wait_basic_scenario(
             self,
             num_resumers_arg: int,
-            resume_count_arg: int,
+            resumer_count_arg: int,
             wait_type_arg: WaitType,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
@@ -25911,14 +25962,14 @@ class TestSmartBasicScenarios:
         Args:
             num_resumers_arg: number of resumers beyond what is
                 required for the wait_type_arg
-            resume_count_arg: resume_count specification for smart_wait
+            resumer_count_arg: resumer_count specification for smart_wait
             wait_type_arg: type of wait to do
             caplog: pytest fixture to capture log output
 
         """
         args_for_scenario_builder: dict[str, Any] = {
             'num_resumers': num_resumers_arg,
-            'resume_count': resume_count_arg,
+            'resumer_count': resumer_count_arg,
             'wait_type': wait_type_arg,
         }
 
@@ -29040,7 +29091,7 @@ class TestSmartThreadErrors:
                        target=f1,
                        kwargs={'f1_name': 'charlie'})
 
-        beta_thread.smart_start(targets='charlie')
+        alpha_thread.smart_start(targets='charlie')
 
         # error_msg = (f'alpha raising '
         #              'SmartThreadDetectedOpFromForeignThread. '
@@ -29086,7 +29137,7 @@ class TestSmartThreadErrors:
                                      target=f1,
                                      kwargs={'f1_name': 'beta'})
         with pytest.raises(st.SmartThreadRemoteThreadNotRegistered):
-            beta_thread.smart_unreg(targets='beta')
+            alpha_thread.smart_unreg(targets='beta')
 
         msgs.queue_msg('beta')
         alpha_thread.smart_join(targets='beta')
