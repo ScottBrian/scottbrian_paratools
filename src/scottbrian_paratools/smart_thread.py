@@ -458,6 +458,7 @@ class SendMsgs:
 #     recv_msgs: dict[str, list[Any]] = field(
 #         default_factory=make_def_dict)
 
+
 ########################################################################
 # SmartThread class exceptions
 ########################################################################

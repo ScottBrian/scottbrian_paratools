@@ -1402,6 +1402,7 @@ class RecvMsg(ConfigCmd):
                  exp_msgs: SendRecvMsgs,
                  sender_count: Optional[int] = None,
                  stopped_remotes: Optional[Iterable] = None,
+                 deadlock_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
@@ -1414,6 +1415,7 @@ class RecvMsg(ConfigCmd):
             sender_count: specification for smart_recv for how many
                 senders are needed to satisfy the smart_recv
             stopped_remotes: thread names that are stopped
+            deadlock_remotes: thread names that cause deadlock
             log_msg: log message to specify on the smart_recv
         """
         super().__init__(cmd_runners=cmd_runners)
@@ -1431,10 +1433,13 @@ class RecvMsg(ConfigCmd):
 
         self.stopped_remotes = get_set(stopped_remotes)
 
+        self.deadlock_remotes = get_set(deadlock_remotes)
+
         self.arg_list += ['senders',
                           'exp_senders',
                           'sender_count',
-                          'stopped_remotes']
+                          'stopped_remotes',
+                          'deadlock_remotes']
 
     def run_process(self, cmd_runner: str) -> None:
         """Run the command.
@@ -1449,6 +1454,7 @@ class RecvMsg(ConfigCmd):
             exp_msgs=self.exp_msgs,
             sender_count=self.sender_count,
             stopped_remotes=self.stopped_remotes,
+            deadlock_remotes=self.deadlock_remotes,
             timeout_type=TimeoutType.TimeoutNone,
             timeout=0,
             timeout_names=set(),
@@ -1468,6 +1474,7 @@ class RecvMsgTimeoutFalse(RecvMsg):
                  timeout: IntOrFloat,
                  sender_count: Optional[int] = None,
                  stopped_remotes: Optional[Iterable] = None,
+                 deadlock_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
@@ -1481,6 +1488,7 @@ class RecvMsgTimeoutFalse(RecvMsg):
             sender_count: specification for smart_recv for how many
                 senders are needed to satisfy the smart_recv
             stopped_remotes: thread names that are stopped
+            deadlock_remotes: thread names that cause deadlock
             log_msg: log message to specify on the smart_recv
         """
         super().__init__(cmd_runners=cmd_runners,
@@ -1489,6 +1497,7 @@ class RecvMsgTimeoutFalse(RecvMsg):
                          exp_msgs=exp_msgs,
                          sender_count=sender_count,
                          stopped_remotes=stopped_remotes,
+                         deadlock_remotes=deadlock_remotes,
                          log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
 
@@ -1509,6 +1518,7 @@ class RecvMsgTimeoutFalse(RecvMsg):
             exp_msgs=self.exp_msgs,
             sender_count=self.sender_count,
             stopped_remotes=self.stopped_remotes,
+            deadlock_remotes=self.deadlock_remotes,
             timeout_type=TimeoutType.TimeoutFalse,
             timeout=self.timeout,
             timeout_names=set(),
@@ -1529,6 +1539,7 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
                  timeout_names: Iterable,
                  sender_count: Optional[int] = None,
                  stopped_remotes: Optional[Iterable] = None,
+                 deadlock_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
@@ -1544,6 +1555,7 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
             sender_count: specification for smart_recv for how many
                 senders are needed to satisfy the smart_recv
             stopped_remotes: thread names that are stopped
+            deadlock_remotes: thread names that cause deadlock
             log_msg: log message to specify on the smart_recv
         """
         super().__init__(cmd_runners=cmd_runners,
@@ -1553,6 +1565,7 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
                          timeout=timeout,
                          sender_count=sender_count,
                          stopped_remotes=stopped_remotes,
+                         deadlock_remotes=deadlock_remotes,
                          log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
 
@@ -1573,6 +1586,7 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
             exp_msgs=self.exp_msgs,
             sender_count=self.sender_count,
             stopped_remotes=self.stopped_remotes,
+            deadlock_remotes=self.deadlock_remotes,
             timeout_type=TimeoutType.TimeoutTrue,
             timeout=self.timeout,
             timeout_names=self.timeout_names,
@@ -2016,7 +2030,7 @@ class Sync(ConfigCmd):
                  timeout: IntOrFloat = 0,
                  timeout_remotes: Optional[Iterable] = None,
                  stopped_remotes: Optional[Iterable] = None,
-                 conflict_remotes: Optional[Iterable] = None,
+                 deadlock_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
@@ -2026,7 +2040,7 @@ class Sync(ConfigCmd):
             timeout: value for smart_sync
             timeout_remotes: thread names that cause timeout
             stopped_remotes: thread names that are stopped
-            conflict_remotes: thread names that cause deadlock
+            deadlock_remotes: thread names that cause deadlock
             log_msg: log message for smart_sync
         """
         super().__init__(cmd_runners=cmd_runners)
@@ -2040,7 +2054,7 @@ class Sync(ConfigCmd):
 
         self.stopped_remotes = get_set(stopped_remotes)
 
-        self.conflict_remotes = get_set(conflict_remotes)
+        self.deadlock_remotes = get_set(deadlock_remotes)
 
         self.log_msg = log_msg
 
@@ -2048,7 +2062,7 @@ class Sync(ConfigCmd):
                           'timeout',
                           'stopped_remotes',
                           'timeout_remotes',
-                          'conflict_remotes']
+                          'deadlock_remotes']
 
     def run_process(self, cmd_runner: str) -> None:
         """Run the command.
@@ -2063,7 +2077,7 @@ class Sync(ConfigCmd):
             timeout=self.timeout,
             timeout_remotes=self.timeout_remotes,
             stopped_remotes=self.stopped_remotes,
-            conflict_remotes=self.conflict_remotes,
+            deadlock_remotes=self.deadlock_remotes,
             timeout_type=TimeoutType.TimeoutNone,
             log_msg=self.log_msg)
 
@@ -2079,7 +2093,7 @@ class SyncTimeoutFalse(Sync):
                  timeout: IntOrFloat,
                  stopped_remotes: Optional[Iterable] = None,
                  timeout_remotes: Optional[Iterable] = None,
-                 conflict_remotes: Optional[Iterable] = None,
+                 deadlock_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
@@ -2089,7 +2103,7 @@ class SyncTimeoutFalse(Sync):
             timeout: value for smart_sync
             timeout_remotes: thread names that cause timeout
             stopped_remotes: thread names that are stopped
-            conflict_remotes: thread names that cause deadlock
+            deadlock_remotes: thread names that cause deadlock
             log_msg: log message for smart_sync
         """
         super().__init__(cmd_runners=cmd_runners,
@@ -2097,7 +2111,7 @@ class SyncTimeoutFalse(Sync):
                          timeout=timeout,
                          timeout_remotes=timeout_remotes,
                          stopped_remotes=stopped_remotes,
-                         conflict_remotes=conflict_remotes,
+                         deadlock_remotes=deadlock_remotes,
                          log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
 
@@ -2116,7 +2130,7 @@ class SyncTimeoutFalse(Sync):
             timeout=self.timeout,
             timeout_remotes=self.timeout_remotes,
             stopped_remotes=self.stopped_remotes,
-            conflict_remotes=self.conflict_remotes,
+            deadlock_remotes=self.deadlock_remotes,
             timeout_type=TimeoutType.TimeoutFalse,
             log_msg=self.log_msg)
 
@@ -2132,7 +2146,7 @@ class SyncTimeoutTrue(SyncTimeoutFalse):
                  timeout: IntOrFloat,
                  timeout_remotes: Iterable,
                  stopped_remotes: Optional[Iterable] = None,
-                 conflict_remotes: Optional[Iterable] = None,
+                 deadlock_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
@@ -2142,7 +2156,7 @@ class SyncTimeoutTrue(SyncTimeoutFalse):
             timeout: value for smart_sync
             timeout_remotes: thread names that cause timeout
             stopped_remotes: thread names that are stopped
-            conflict_remotes: thread names that cause deadlock
+            deadlock_remotes: thread names that cause deadlock
             log_msg: log message for smart_sync
         """
         super().__init__(cmd_runners=cmd_runners,
@@ -2150,7 +2164,7 @@ class SyncTimeoutTrue(SyncTimeoutFalse):
                          timeout=timeout,
                          timeout_remotes=timeout_remotes,
                          stopped_remotes=stopped_remotes,
-                         conflict_remotes=conflict_remotes,
+                         deadlock_remotes=deadlock_remotes,
                          log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
 
@@ -2167,7 +2181,7 @@ class SyncTimeoutTrue(SyncTimeoutFalse):
             timeout=self.timeout,
             timeout_remotes=self.timeout_remotes,
             stopped_remotes=self.stopped_remotes,
-            conflict_remotes=self.conflict_remotes,
+            deadlock_remotes=self.deadlock_remotes,
             timeout_type=TimeoutType.TimeoutTrue,
             log_msg=self.log_msg)
 
@@ -2774,7 +2788,6 @@ class Wait(ConfigCmd):
                  exp_resumers: Iterable,
                  resumer_count: Optional[int] = None,
                  stopped_remotes: Optional[Iterable] = None,
-                 conflict_remotes: Optional[Iterable] = None,
                  deadlock_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
@@ -2787,7 +2800,6 @@ class Wait(ConfigCmd):
             resumer_count: specification for smart_wait for how many
                 resumes are needed to satisfy the smart_wait
             stopped_remotes: thread names that are stopped
-            conflict_remotes: thread names that cause deadlock
             deadlock_remotes: thread names that cause deadlock
             log_msg: log message for the smart_resume
         """
@@ -2799,8 +2811,6 @@ class Wait(ConfigCmd):
 
         self.stopped_remotes = get_set(stopped_remotes)
 
-        self.conflict_remotes = get_set(conflict_remotes)
-
         self.deadlock_remotes = get_set(deadlock_remotes)
 
         self.resumer_count = resumer_count
@@ -2811,7 +2821,6 @@ class Wait(ConfigCmd):
                           'exp_resumers',
                           'resumer_count',
                           'stopped_remotes',
-                          'conflict_remotes',
                           'deadlock_remotes']
 
     def run_process(self, cmd_runner: str) -> None:
@@ -2827,7 +2836,6 @@ class Wait(ConfigCmd):
             timeout=0,
             timeout_remotes=set(),
             stopped_remotes=self.stopped_remotes,
-            conflict_remotes=self.conflict_remotes,
             deadlock_remotes=self.deadlock_remotes,
             timeout_type=TimeoutType.TimeoutNone,
             resumer_count=self.resumer_count,
@@ -2846,7 +2854,6 @@ class WaitTimeoutFalse(Wait):
                  timeout: IntOrFloat,
                  resumer_count: Optional[int] = None,
                  stopped_remotes: Optional[Iterable] = None,
-                 conflict_remotes: Optional[Iterable] = None,
                  deadlock_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
@@ -2860,7 +2867,6 @@ class WaitTimeoutFalse(Wait):
             resumer_count: specification for smart_wait for how many
                 resumes are needed to satisfy the smart_wait
             stopped_remotes: thread names that are stopped
-            conflict_remotes: thread names that are deadlocked
             deadlock_remotes: thread names that are deadlocked
             log_msg: log message for smart_wait
         """
@@ -2869,7 +2875,6 @@ class WaitTimeoutFalse(Wait):
                          exp_resumers=exp_resumers,
                          stopped_remotes=stopped_remotes,
                          resumer_count=resumer_count,
-                         conflict_remotes=conflict_remotes,
                          deadlock_remotes=deadlock_remotes,
                          log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
@@ -2891,7 +2896,6 @@ class WaitTimeoutFalse(Wait):
             timeout=self.timeout,
             timeout_remotes=set(),
             stopped_remotes=self.stopped_remotes,
-            conflict_remotes=self.conflict_remotes,
             deadlock_remotes=self.deadlock_remotes,
             timeout_type=TimeoutType.TimeoutFalse,
             resumer_count=self.resumer_count,
@@ -2911,7 +2915,6 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
                  timeout_remotes: Iterable,
                  resumer_count: Optional[int] = None,
                  stopped_remotes: Optional[Iterable] = None,
-                 conflict_remotes: Optional[Iterable] = None,
                  deadlock_remotes: Optional[Iterable] = None,
                  log_msg: Optional[str] = None
                  ) -> None:
@@ -2927,7 +2930,6 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
             resumer_count: specification for smart_wait for how many
                 resumes are needed to satisfy the smart_wait
             stopped_remotes: thread names that are stopped
-            conflict_remotes: thread names that are deadlocked
             deadlock_remotes: thread names that are deadlocked
             log_msg: log message for smart_wait
         """
@@ -2936,7 +2938,6 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
                          exp_resumers=exp_resumers,
                          stopped_remotes=stopped_remotes,
                          resumer_count=resumer_count,
-                         conflict_remotes=conflict_remotes,
                          deadlock_remotes=deadlock_remotes,
                          timeout=timeout,
                          log_msg=log_msg)
@@ -2959,7 +2960,6 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
             timeout=self.timeout,
             timeout_remotes=self.timeout_remotes,
             stopped_remotes=self.stopped_remotes,
-            conflict_remotes=self.conflict_remotes,
             deadlock_remotes=self.deadlock_remotes,
             timeout_type=TimeoutType.TimeoutTrue,
             resumer_count=self.resumer_count,
@@ -7490,7 +7490,7 @@ class ConfigVerifier:
         sync_serial_num = self.add_cmd(
             Sync(cmd_runners=syncers,
                  targets=set(actor_names),
-                 conflict_remotes=set(waiters),
+                 deadlock_remotes=set(waiters),
                  log_msg='cd resume sync conflict test'))
 
         self.add_cmd(
@@ -7503,7 +7503,7 @@ class ConfigVerifier:
             Wait(cmd_runners=waiters,
                  resumers=syncers,
                  stopped_remotes=set(),
-                 conflict_remotes=set(syncers),
+                 deadlock_remotes=set(syncers),
                  log_msg='cd resume sync conflict test'))
 
         self.add_cmd(
@@ -15027,21 +15027,17 @@ class ConfigVerifier:
             num_msgs=1,
             send_type=SendType.ToRemotes)
 
-        req0_conflict_remotes: set[str] = set()
         req0_deadlock_remotes: set[str] = set()
 
-        req1_conflict_remotes: set[str] = set()
         req1_deadlock_remotes: set[str] = set()
 
         req0_specific_args: dict[str, Any] = {
             'sender_msgs': sender_msgs,
-            'conflict_remotes': req0_conflict_remotes,
             'deadlock_remotes': req0_deadlock_remotes,
         }
 
         req1_specific_args: dict[str, Any] = {
             'sender_msgs': sender_msgs,
-            'conflict_remotes': req1_conflict_remotes,
             'deadlock_remotes': req1_deadlock_remotes,
         }
 
@@ -15074,7 +15070,6 @@ class ConfigVerifier:
             req0_category: ReqCategory
             req1_category: ReqCategory
             req_matched: bool
-            req_conflict: bool
             req_deadlock: bool
 
         request_table: dict[
@@ -15084,155 +15079,130 @@ class ConfigVerifier:
                 ReqFlags(req0_category=ReqCategory.Throw,
                          req1_category=ReqCategory.Throw,
                          req_matched=False,
-                         req_conflict=False,
                          req_deadlock=False),
             (SmartRequestType.SendMsg, SmartRequestType.RecvMsg):
                 ReqFlags(req0_category=ReqCategory.Throw,
                          req1_category=ReqCategory.Catch,
                          req_matched=True,
-                         req_conflict=False,
                          req_deadlock=False),
             (SmartRequestType.SendMsg, SmartRequestType.Resume):
                 ReqFlags(req0_category=ReqCategory.Throw,
                          req1_category=ReqCategory.Throw,
                          req_matched=False,
-                         req_conflict=False,
                          req_deadlock=False),
             (SmartRequestType.SendMsg, SmartRequestType.Sync):
                 ReqFlags(req0_category=ReqCategory.Throw,
                          req1_category=ReqCategory.Handshake,
                          req_matched=False,
-                         req_conflict=False,
                          req_deadlock=False),
             (SmartRequestType.SendMsg, SmartRequestType.Wait):
                 ReqFlags(req0_category=ReqCategory.Throw,
                          req1_category=ReqCategory.Catch,
                          req_matched=False,
-                         req_conflict=False,
                          req_deadlock=False),
 
             (SmartRequestType.RecvMsg, SmartRequestType.RecvMsg):
                 ReqFlags(req0_category=ReqCategory.Catch,
                          req1_category=ReqCategory.Catch,
                          req_matched=False,
-                         req_conflict=False,
-                         req_deadlock=False),
+                         req_deadlock=True),
             (SmartRequestType.RecvMsg, SmartRequestType.SendMsg):
                 ReqFlags(req0_category=ReqCategory.Catch,
                          req1_category=ReqCategory.Throw,
                          req_matched=True,
-                         req_conflict=False,
                          req_deadlock=False),
             (SmartRequestType.RecvMsg, SmartRequestType.Resume):
                 ReqFlags(req0_category=ReqCategory.Catch,
                          req1_category=ReqCategory.Throw,
                          req_matched=False,
-                         req_conflict=False,
                          req_deadlock=False),
             (SmartRequestType.RecvMsg, SmartRequestType.Sync):
                 ReqFlags(req0_category=ReqCategory.Catch,
                          req1_category=ReqCategory.Handshake,
                          req_matched=False,
-                         req_conflict=False,
-                         req_deadlock=False),
+                         req_deadlock=True),
             (SmartRequestType.RecvMsg, SmartRequestType.Wait):
                 ReqFlags(req0_category=ReqCategory.Catch,
                          req1_category=ReqCategory.Catch,
                          req_matched=False,
-                         req_conflict=False,
-                         req_deadlock=False),
+                         req_deadlock=True),
 
             (SmartRequestType.Resume, SmartRequestType.SendMsg):
                 ReqFlags(req0_category=ReqCategory.Throw,
                          req1_category=ReqCategory.Throw,
                          req_matched=False,
-                         req_conflict=False,
                          req_deadlock=False),
             (SmartRequestType.Resume, SmartRequestType.RecvMsg):
                 ReqFlags(req0_category=ReqCategory.Throw,
                          req1_category=ReqCategory.Catch,
                          req_matched=False,
-                         req_conflict=False,
                          req_deadlock=False),
             (SmartRequestType.Resume, SmartRequestType.Resume):
                 ReqFlags(req0_category=ReqCategory.Throw,
                          req1_category=ReqCategory.Throw,
                          req_matched=False,
-                         req_conflict=False,
                          req_deadlock=False),
             (SmartRequestType.Resume, SmartRequestType.Sync):
                 ReqFlags(req0_category=ReqCategory.Throw,
                          req1_category=ReqCategory.Handshake,
                          req_matched=False,
-                         req_conflict=False,
                          req_deadlock=False),
             (SmartRequestType.Resume, SmartRequestType.Wait):
                 ReqFlags(req0_category=ReqCategory.Throw,
                          req1_category=ReqCategory.Catch,
                          req_matched=True,
-                         req_conflict=False,
                          req_deadlock=False),
 
             (SmartRequestType.Sync, SmartRequestType.SendMsg):
                 ReqFlags(req0_category=ReqCategory.Handshake,
                          req1_category=ReqCategory.Throw,
                          req_matched=False,
-                         req_conflict=False,
                          req_deadlock=False),
             (SmartRequestType.Sync, SmartRequestType.RecvMsg):
                 ReqFlags(req0_category=ReqCategory.Handshake,
                          req1_category=ReqCategory.Catch,
                          req_matched=False,
-                         req_conflict=False,
-                         req_deadlock=False),
+                         req_deadlock=True),
             (SmartRequestType.Sync, SmartRequestType.Resume):
                 ReqFlags(req0_category=ReqCategory.Handshake,
                          req1_category=ReqCategory.Throw,
                          req_matched=False,
-                         req_conflict=False,
                          req_deadlock=False),
             (SmartRequestType.Sync, SmartRequestType.Sync):
                 ReqFlags(req0_category=ReqCategory.Handshake,
                          req1_category=ReqCategory.Handshake,
                          req_matched=True,
-                         req_conflict=False,
                          req_deadlock=False),
             (SmartRequestType.Sync, SmartRequestType.Wait):
                 ReqFlags(req0_category=ReqCategory.Handshake,
                          req1_category=ReqCategory.Catch,
                          req_matched=False,
-                         req_conflict=True,
-                         req_deadlock=False),
+                         req_deadlock=True),
 
             (SmartRequestType.Wait, SmartRequestType.SendMsg):
                 ReqFlags(req0_category=ReqCategory.Catch,
                          req1_category=ReqCategory.Throw,
                          req_matched=False,
-                         req_conflict=False,
                          req_deadlock=False),
             (SmartRequestType.Wait, SmartRequestType.RecvMsg):
                 ReqFlags(req0_category=ReqCategory.Catch,
                          req1_category=ReqCategory.Catch,
                          req_matched=False,
-                         req_conflict=False,
-                         req_deadlock=False),
+                         req_deadlock=True),
             (SmartRequestType.Wait, SmartRequestType.Resume):
                 ReqFlags(req0_category=ReqCategory.Catch,
                          req1_category=ReqCategory.Throw,
                          req_matched=True,
-                         req_conflict=False,
                          req_deadlock=False),
             (SmartRequestType.Wait, SmartRequestType.Sync):
                 ReqFlags(req0_category=ReqCategory.Catch,
                          req1_category=ReqCategory.Handshake,
                          req_matched=False,
-                         req_conflict=True,
-                         req_deadlock=False),
+                         req_deadlock=True),
             (SmartRequestType.Wait, SmartRequestType.Wait):
                 ReqFlags(req0_category=ReqCategory.Catch,
                          req1_category=ReqCategory.Catch,
                          req_matched=False,
-                         req_conflict=False,
                          req_deadlock=True),
         }
 
@@ -15255,9 +15225,6 @@ class ConfigVerifier:
                     if req_flags.req_deadlock:
                         req0_specific_args['deadlock_remotes'] = {req1_name}
                         req1_specific_args['deadlock_remotes'] = {req0_name}
-                    elif req_flags.req_conflict:
-                        req0_specific_args['conflict_remotes'] = {req1_name}
-                        req1_specific_args['conflict_remotes'] = {req0_name}
                     elif req_flags.req0_category == ReqCategory.Throw:
                         timeout_type = TimeoutType.TimeoutNone
                     elif (req_flags.req1_category != ReqCategory.Throw
@@ -15289,6 +15256,10 @@ class ConfigVerifier:
                 if req0_when_req1_lap == req1_lap:
                     req0_stopped_remotes = {req1_name}
                     if req_flags.req1_category != ReqCategory.Throw:
+                        # since req0 will raise stopped error it will
+                        # not be replying to req1 when req1 eventually
+                        # gets active and does its request. So, req1
+                        # will need to use timeout to prevent hang
                         req1_timeout_type = TimeoutType.TimeoutTrue
                 elif req0_when_req1_lap < req1_lap:
                     req0_stopped_remotes = {req1_name}
@@ -15297,8 +15268,21 @@ class ConfigVerifier:
                 elif req1_lap < req0_when_req1_lap:
                     if req_flags.req1_category != ReqCategory.Throw:
                         req1_timeout_type = TimeoutType.TimeoutTrue
+                        # since req1 will issue its request during lap0
+                        # and req0 will issue its request in lap1,
+                        # req1 will timeout, and then continue to
+                        # rotate into lap1 on through active where it
+                        # will not issue a request and then to stopped.
+                        # So, req0 will issue its request and then see
+                        # that req1 went to stopped state.
                         req0_stopped_remotes = {req1_name}
                     else:
+                        # if req1 issues throw request and then stops,
+                        # the request will remain pending for req0 when
+                        # it issues its matching request (e.g., req1
+                        # does resume, req0 eventually does a wait). So,
+                        # it not a matched request, req0 will see req1
+                        # go to stopped state.
                         if not req_flags.req_matched:
                             req0_stopped_remotes = {req1_name}
 
@@ -15309,9 +15293,6 @@ class ConfigVerifier:
                     if req_flags.req_deadlock:
                         req0_specific_args['deadlock_remotes'] = {req1_name}
                         req1_specific_args['deadlock_remotes'] = {req0_name}
-                    elif req_flags.req_conflict:
-                        req0_specific_args['conflict_remotes'] = {req1_name}
-                        req1_specific_args['conflict_remotes'] = {req0_name}
                     else:
                         if req_flags.req0_category == ReqCategory.Throw:
                             if not req_flags.req_matched:
@@ -16146,7 +16127,7 @@ class ConfigVerifier:
                     cmd_runners=cmd_runner,
                     targets=target,
                     stopped_remotes=stopped_remotes,
-                    conflict_remotes=request_specific_args['conflict_remotes']
+                    deadlock_remotes=request_specific_args['deadlock_remotes']
                 ))
         elif timeout_type == TimeoutType.TimeoutFalse:
             confirm_request_name = 'SyncTimeoutFalse'
@@ -16157,7 +16138,7 @@ class ConfigVerifier:
                     targets=target,
                     timeout=timeout_time,
                     stopped_remotes=stopped_remotes,
-                    conflict_remotes=request_specific_args['conflict_remotes']
+                    deadlock_remotes=request_specific_args['deadlock_remotes']
                 ))
         else:  # timeout_type == TimeoutType.TimeoutTrue
             timeout_time = 0.5
@@ -16169,7 +16150,7 @@ class ConfigVerifier:
                     timeout=timeout_time,
                     timeout_remotes=target,
                     stopped_remotes=stopped_remotes,
-                    conflict_remotes=request_specific_args['conflict_remotes']
+                    deadlock_remotes=request_specific_args['deadlock_remotes']
                 ))
 
         return RequestConfirmParms(request_name=confirm_request_name,
@@ -16207,7 +16188,6 @@ class ConfigVerifier:
                     cmd_runners=cmd_runner,
                     resumers=target,
                     stopped_remotes=stopped_remotes,
-                    conflict_remotes=request_specific_args['conflict_remotes'],
                     deadlock_remotes=request_specific_args['deadlock_remotes']
                 ))
         elif timeout_type == TimeoutType.TimeoutFalse:
@@ -16219,7 +16199,6 @@ class ConfigVerifier:
                     resumers=target,
                     timeout=timeout_time,
                     stopped_remotes=stopped_remotes,
-                    conflict_remotes=request_specific_args['conflict_remotes'],
                     deadlock_remotes=request_specific_args['deadlock_remotes']
                 ))
         else:  # timeout_type == TimeoutType.TimeoutTrue
@@ -16232,7 +16211,6 @@ class ConfigVerifier:
                     timeout=timeout_time,
                     timeout_remotes=target,
                     stopped_remotes=stopped_remotes,
-                    conflict_remotes=request_specific_args['conflict_remotes'],
                     deadlock_remotes=request_specific_args['deadlock_remotes']
                 ))
 
@@ -17971,6 +17949,7 @@ class ConfigVerifier:
                         exp_senders: set[str],
                         exp_msgs: SendRecvMsgs,
                         stopped_remotes: set[str],
+                        deadlock_remotes: set[str],
                         timeout_type: TimeoutType,
                         timeout: IntOrFloat,
                         timeout_names: set[str],
@@ -17985,6 +17964,7 @@ class ConfigVerifier:
                 based on the RecvType
             exp_msgs: expected messages by sender name
             stopped_remotes: names of remotes that are stopped.
+            deadlock_remotes: thread names that will cause a deadlock
             timeout_type: None, False, or True
             timeout: value to use for timeout
             timeout_names: names of remotes that fail to send a message
@@ -17994,9 +17974,9 @@ class ConfigVerifier:
 
         """
         self.log_test_msg(f'handle_recv_msg entry: {cmd_runner=}, '
-                          f'{senders=}, {sender_count=}, {exp_senders=},'
-                          f' {stopped_remotes=}, {timeout_type=}, '
-                          f'{timeout=}, {timeout_names=}')
+                          f'{senders=}, {sender_count=}, {exp_senders=}, '
+                          f'{stopped_remotes=}, {deadlock_remotes=}, '
+                          f'{timeout_type=}, {timeout=}, {timeout_names=}')
 
         pe = self.pending_events[cmd_runner]
         pe[PE.start_request].append(
@@ -18040,6 +18020,20 @@ class ConfigVerifier:
                     error_str='SmartThreadRemoteThreadNotAlive',
                     stopped_remotes=stopped_remotes),
                 log_level=logging.ERROR)
+
+        elif deadlock_remotes:
+            with pytest.raises(st.SmartThreadDeadlockDetected):
+                if timeout_type == TimeoutType.TimeoutNone:
+                    self.all_threads[cmd_runner].smart_recv(
+                        senders=senders,
+                        sender_count=sender_count,
+                        log_msg=log_msg)
+                else:
+                    self.all_threads[cmd_runner].smart_recv(
+                        senders=senders,
+                        sender_count=sender_count,
+                        timeout=timeout,
+                        log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutNone:
             pe[PE.request_msg][req_key_exit] += 1
@@ -18087,9 +18081,9 @@ class ConfigVerifier:
                               rtn_name='handle_recv')
 
         self.log_test_msg(f'handle_recv_msg exit: {cmd_runner=}, '
-                          f'{senders=}, {sender_count=}, {exp_senders=},'
-                          f' {stopped_remotes=}, {timeout_type=}, '
-                          f'{timeout=}, {timeout_names=}')
+                          f'{senders=}, {sender_count=}, {exp_senders=}, '
+                          f'{stopped_remotes=}, {deadlock_remotes=}, '
+                          f'{timeout_type=}, {timeout=}, {timeout_names=}')
 
     ####################################################################
     # handle_request_entry_exit_log_msg
@@ -20025,7 +20019,7 @@ class ConfigVerifier:
                     timeout: IntOrFloat,
                     timeout_remotes: set[str],
                     stopped_remotes: set[str],
-                    conflict_remotes: set[str],
+                    deadlock_remotes: set[str],
                     timeout_type: TimeoutType,
                     log_msg: Optional[str] = None) -> None:
         """Issue smart_sync.
@@ -20036,15 +20030,15 @@ class ConfigVerifier:
             timeout: value to use for timeout
             timeout_remotes: names of threads that cause timeout
             stopped_remotes: remotes that will cause a not alive error
-            conflict_remotes: remotes that are doing a wait instead
-                of a sync which will cause a deadlock
+            deadlock_remotes: remotes that are doing a recv or wait
+                instead of a sync which will cause a deadlock
             timeout_type: specifies whether timeout is None, False, or
                 True
             log_msg: log msg to be specified with the sync request
         """
         self.log_test_msg(f'{cmd_runner=} handle_sync entry for '
                           f'{targets=}, {timeout_type=}, {timeout_remotes=}, '
-                          f'{stopped_remotes=}, {conflict_remotes=}')
+                          f'{stopped_remotes=}, {deadlock_remotes=}')
 
         self.log_ver.add_call_seq(
             name='smart_sync',
@@ -20057,7 +20051,7 @@ class ConfigVerifier:
                          targets=targets,
                          timeout_remotes=timeout_remotes,
                          stopped_remotes=stopped_remotes.copy(),
-                         deadlock_remotes=conflict_remotes))
+                         deadlock_remotes=deadlock_remotes))
 
         req_key_entry: RequestKey = ('smart_sync',
                                      'entry')
@@ -20092,12 +20086,12 @@ class ConfigVerifier:
                     targets=targets,
                     error_str='SmartThreadRemoteThreadNotAlive',
                     stopped_remotes=stopped_remotes,
-                    conflict_remotes=conflict_remotes),
+                    deadlock_remotes=deadlock_remotes),
                 log_level=logging.ERROR)
 
-        elif conflict_remotes:
+        elif deadlock_remotes:
             # enter_exit = ('entry',)
-            with pytest.raises(st.SmartThreadConflictDeadlockDetected):
+            with pytest.raises(st.SmartThreadDeadlockDetected):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_sync(
                         targets=targets,
@@ -20115,9 +20109,9 @@ class ConfigVerifier:
                     cmd_runner=cmd_runner,
                     smart_request='smart_sync',
                     targets=targets,
-                    error_str='SmartThreadConflictDeadlockDetected',
+                    error_str='SmartThreadDeadlockDetected',
                     stopped_remotes=stopped_remotes,
-                    conflict_remotes=conflict_remotes),
+                    deadlock_remotes=deadlock_remotes),
                 log_level=logging.ERROR)
 
         elif timeout_type == TimeoutType.TimeoutNone:
@@ -20153,7 +20147,7 @@ class ConfigVerifier:
                     error_str='SmartThreadRequestTimedOut',
                     pending_remotes=timeout_remotes,
                     stopped_remotes=stopped_remotes,
-                    conflict_remotes=conflict_remotes),
+                    deadlock_remotes=deadlock_remotes),
                 log_level=logging.ERROR)
 
         assert exp_completed_syncs == synced_targets
@@ -20225,7 +20219,6 @@ class ConfigVerifier:
                       pending_remotes: Optional[set[str]] = None,
                       stopped_remotes: Optional[set[str]] = None,
                       unreg_remotes: Optional[set[str]] = None,
-                      conflict_remotes: Optional[set[str]] = None,
                       deadlock_remotes: Optional[set[str]] = None,
                       full_send_q_remotes: Optional[set[str]] = None
                       ) -> str:
@@ -20239,7 +20232,6 @@ class ConfigVerifier:
             pending_remotes: names of threads that are pending
             stopped_remotes: names of threads that are stopped
             unreg_remotes: names of threads that are not registered
-            conflict_remotes: names of sync/wait deadlock threads
             deadlock_remotes: names of wait/wait deadlock threads
             full_send_q_remotes: names threads whose send_q is full
 
@@ -20284,9 +20276,9 @@ class ConfigVerifier:
         else:
             unreg_msg = ''
 
-        if deadlock_remotes or conflict_remotes:
+        if deadlock_remotes:
             dr_search = r"\[(,| "
-            for name in deadlock_remotes | conflict_remotes:
+            for name in deadlock_remotes:
                 dr_search += "|'" + name + "'"
             dr_search += r")+\]"
             deadlock_msg = (f' Remotes doing a smart_wait '
@@ -20413,7 +20405,6 @@ class ConfigVerifier:
                     timeout: IntOrFloat,
                     timeout_remotes: set[str],
                     stopped_remotes: set[str],
-                    conflict_remotes: set[str],
                     deadlock_remotes: set[str],
                     timeout_type: TimeoutType,
                     resumer_count: Optional[int] = None,
@@ -20428,7 +20419,6 @@ class ConfigVerifier:
             timeout: value to use on smart_wait timeout arg
             timeout_remotes: names of threads that will cause timeout
             stopped_remotes: names of thread that will cause not_alive
-            conflict_remotes: names of threads that will cause conflict
             deadlock_remotes: names of threads that will cause deadlock
             timeout_type: specifies None, False, or True
             resumer_count: number of resumes needed to satisfy
@@ -20438,8 +20428,7 @@ class ConfigVerifier:
         """
         self.log_test_msg(f'handle_wait entry for {cmd_runner=}, '
                           f'{resumers=}, {resumer_count=}, {stopped_remotes=}, '
-                          f'{timeout_remotes=}, {conflict_remotes=} '
-                          f'{deadlock_remotes=}')
+                          f'{timeout_remotes=}, {deadlock_remotes=}')
 
         self.log_ver.add_call_seq(
             name='smart_wait',
@@ -20452,8 +20441,7 @@ class ConfigVerifier:
                          targets=resumers,
                          timeout_remotes=timeout_remotes.copy(),
                          stopped_remotes=stopped_remotes.copy(),
-                         deadlock_remotes=(conflict_remotes.copy() |
-                                           deadlock_remotes.copy()),
+                         deadlock_remotes=deadlock_remotes.copy(),
                          exp_resumers=exp_resumers))
 
         req_key_entry: RequestKey = ('smart_wait',
@@ -20467,9 +20455,6 @@ class ConfigVerifier:
 
         if timeout_remotes:
             exp_completed_resumers -= timeout_remotes
-
-        if conflict_remotes:
-            exp_completed_resumers -= conflict_remotes
 
         if deadlock_remotes:
             exp_completed_resumers -= deadlock_remotes
@@ -20501,10 +20486,10 @@ class ConfigVerifier:
                     targets=resumers,
                     error_str='SmartThreadRemoteThreadNotAlive',
                     stopped_remotes=stopped_remotes,
-                    conflict_remotes=conflict_remotes),
+                    deadlock_remotes=deadlock_remotes),
                 log_level=logging.ERROR)
 
-        elif conflict_remotes or deadlock_remotes:
+        elif deadlock_remotes:
             # enter_exit = ('entry',)
             with pytest.raises(st.SmartThreadDeadlockDetected):
                 if timeout_type == TimeoutType.TimeoutNone:
@@ -20526,9 +20511,8 @@ class ConfigVerifier:
                     cmd_runner=cmd_runner,
                     smart_request='smart_wait',
                     targets=resumers,
-                    error_str='SmartThreadConflictDeadlockDetected',
+                    error_str='SmartThreadDeadlockDetected',
                     stopped_remotes=stopped_remotes,
-                    conflict_remotes=conflict_remotes,
                     deadlock_remotes=deadlock_remotes),
                 log_level=logging.ERROR)
 
@@ -20566,7 +20550,7 @@ class ConfigVerifier:
                     error_str='SmartThreadRequestTimedOut',
                     pending_remotes=timeout_remotes,
                     stopped_remotes=stopped_remotes,
-                    conflict_remotes=conflict_remotes),
+                    deadlock_remotes=deadlock_remotes),
                 log_level=logging.ERROR)
 
         assert resumed_by == exp_resumers
