@@ -15055,18 +15055,24 @@ class ConfigVerifier:
             'sender_msgs': sender_msgs,
             'deadlock_remotes': req0_deadlock_remotes,
             'sync_set_ack_remotes': set(),
-            'exp_resumers': set(),
             'exp_senders': set(),
-            'exp_receivers': set()
+            'exp_receivers': set(),
+            'exp_resumed_targets': set(),
+            'exp_resumers': set(),
+            'exp_syncers': set()
+
         }
 
         req1_specific_args: dict[str, Any] = {
             'sender_msgs': sender_msgs,
             'deadlock_remotes': req1_deadlock_remotes,
             'sync_set_ack_remotes': req0_name,
-            'exp_resumers': set(),
             'exp_senders': set(),
-            'exp_receivers': set()
+            'exp_receivers': set(),
+            'exp_resumed_targets': set(),
+            'exp_resumers': set(),
+            'exp_syncers': set()
+
         }
 
         ################################################################
@@ -15307,46 +15313,58 @@ class ConfigVerifier:
                     else:
                         # if req1 issues throw request and then stops,
                         # the request will remain pending for req0 when
-                        # it issues its matching request (e.g., req1
-                        # does resume, req0 eventually does a wait). So,
-                        # it not a matched request, req0 will see req1
-                        # go to stopped state.
-                        if not req_flags.req_matched:
+                        # it issues its request. So, if req0 request
+                        # matches, then req0 will succeed. If not
+                        # matched, req0 will see req1 go to stopped
+                        # state.
+                        if req_flags.req_matched:
+                            if req0 == SmartRequestType.RecvMsg:
+                                req0_specific_args[
+                                    'exp_senders'] = req1_name
+                            elif req0 == SmartRequestType.Wait:
+                                req0_specific_args[
+                                    'exp_resumers'] = req1_name
+                        else:
                             req0_stopped_remotes = {req1_name}
+                if req0_stopped_remotes:
+                    pe = self.pending_events[req0_name]
+                    ref_key: CallRefKey = req0.value
+                    pe[PE.calling_refresh_msg][ref_key] += 1
 
             elif (req0_when_req1_state[0] == st.ThreadState.Unregistered
                   or req0_when_req1_state[0] == st.ThreadState.Registered
                   or req0_when_req1_state[0] == st.ThreadState.Alive):
                 if req0 == SmartRequestType.Sync:
                     req0_specific_args['sync_set_ack_remotes'] = req1_name
+                # if req1 is alive or will be alive before being
+                # stopped, a throw req0 will always work regardless of
+                # lap and regardless of whether the requests are matched
+                if req_flags.req0_category == ReqCategory.Throw:
+                    if req0 == SmartRequestType.SendMsg:
+                        req0_specific_args[
+                            'exp_receivers'] = req1_name
+                    elif req0 == SmartRequestType.Resume:
+                        req0_specific_args[
+                            'exp_resumed_targets'] = req1_name
+
                 if req0_when_req1_lap == req1_lap:
                     if req_flags.req_deadlock:
                         req0_specific_args['deadlock_remotes'] = {req1_name}
                         req1_specific_args['deadlock_remotes'] = {req0_name}
                     else:
                         if req_flags.req0_category == ReqCategory.Throw:
-                            if req_flags.req_matched:
-                                if req0 == SmartRequestType.SendMsg:
-                                    req0_specific_args[
-                                        'exp_receivers'] = req1_name
-                                    req1_specific_args[
-                                        'exp_senders'] = req0_name
-                                elif req0 == SmartRequestType.RecvMsg:
-                                    req0_specific_args[
-                                        'exp_senders'] = req1_name
-                                    req1_specific_args[
-                                        'exp_receivers'] = req0_name
-                            else:
+                            if not req_flags.req_matched:
                                 if (req_flags.req1_category !=
                                         ReqCategory.Throw):
                                     req1_timeout_type = TimeoutType.TimeoutTrue
                         else:
                             if req_flags.req_matched:
-                                if req0 == SmartRequestType.Sync:
+                                if req0 == SmartRequestType.RecvMsg:
+                                    req0_specific_args[
+                                        'exp_senders'] = req1_name
+                                elif req0 == SmartRequestType.Wait:
                                     req0_specific_args[
                                         'exp_resumers'] = req1_name
-                                    req1_specific_args[
-                                        'exp_resumers'] = req0_name
                             else:
                                 req0_stopped_remotes = {req1_name}
                                 if (req_flags.req1_category
@@ -15369,7 +15387,15 @@ class ConfigVerifier:
 
                 else:  # req1_lap < req0_when_req1_lap
                     if req_flags.req1_category == ReqCategory.Throw:
-                        if not req_flags.req_matched:
+                        # req1 throw will persist
+                        if req_flags.req_matched:
+                            if req0 == SmartRequestType.RecvMsg:
+                                req0_specific_args[
+                                    'exp_senders'] = req1_name
+                            elif req0 == SmartRequestType.Wait:
+                                req0_specific_args[
+                                    'exp_resumers'] = req1_name
+                        else:
                             if req_flags.req0_category != ReqCategory.Throw:
                                 req0_stopped_remotes = {req1_name}
                     else:
@@ -15474,6 +15500,34 @@ class ConfigVerifier:
 
                     if req1_lap == lap:
                         if not supress_req1:
+                            if req_flags.req1_category == ReqCategory.Throw:
+                                # regardless of lap and regardless of
+                                # whether the requests are matched, a
+                                # throw from req1 to req0 will always
+                                # complete successfully since req0 is
+                                # always alive
+                                if req1 == SmartRequestType.SendMsg:
+                                    req1_specific_args[
+                                        'exp_receivers'] = req0_name
+                                elif req1 == SmartRequestType.Resume:
+                                    req1_specific_args[
+                                        'exp_resumed_targets'] = req0_name
+                            elif req1_timeout_type != TimeoutType.TimeoutTrue:
+                                # req1 is doing a catch or handshake and
+                                # if timeout was not requested then it
+                                # will work
+                                if req1 == SmartRequestType.RecvMsg:
+                                    req1_specific_args[
+                                        'exp_senders'] = req0_name
+                                elif req1 == SmartRequestType.Wait:
+                                    req1_specific_args[
+                                        'exp_resumer'] = req0_name
+                                else:
+                                    # exp_syncers not really used yet
+                                    # but we will code a placeholder
+                                    # here is case we do use it later
+                                    req1_specific_args[
+                                        'exp_syncers'] = req0_name
                             req1_confirm_parms = request_build_rtns[req1](
                                     timeout_type=req1_timeout_type,
                                     cmd_runner=req1_name,
@@ -15703,7 +15757,8 @@ class ConfigVerifier:
                 Resume(
                     cmd_runners=cmd_runner,
                     targets=target,
-                    exp_resumed_targets=target,
+                    exp_resumed_targets=request_specific_args[
+                        'exp_resumed_targets'],
                     stopped_remotes=stopped_remotes))
         elif timeout_type == TimeoutType.TimeoutFalse:
             confirm_request_name = 'ResumeTimeoutFalse'
@@ -15712,7 +15767,8 @@ class ConfigVerifier:
                 ResumeTimeoutFalse(
                     cmd_runners=cmd_runner,
                     targets=target,
-                    exp_resumed_targets=target,
+                    exp_resumed_targets=request_specific_args[
+                        'exp_resumed_targets'],
                     timeout=timeout_time,
                     stopped_remotes=stopped_remotes))
         else:  # timeout_type == TimeoutType.TimeoutTrue
@@ -15722,7 +15778,8 @@ class ConfigVerifier:
                 ResumeTimeoutTrue(
                     cmd_runners=cmd_runner,
                     targets=target,
-                    exp_resumed_targets=set(),
+                    exp_resumed_targets=request_specific_args[
+                        'exp_resumed_targets'],
                     timeout=timeout_time,
                     timeout_names=target,
                     stopped_remotes=stopped_remotes))
@@ -18225,18 +18282,18 @@ class ConfigVerifier:
 
             pe[PE.current_request] = req_start_item
 
-            self.log_test_msg(
-                'handle_request_entry_exit_log_msg looking at '
-                f'{req_start_item.req_type.value=}')
+            # self.log_test_msg(
+            #     'handle_request_entry_exit_log_msg looking at '
+            #     f'{req_start_item.req_type.value=}')
             if req_start_item.req_type.value in ('smart_send',
                                                  'smart_recv',
                                                  'smart_wait',
                                                  'smart_resume',
                                                  'smart_sync'):
-                self.log_test_msg(
-                    'handle_request_entry_exit_log_msg calling '
-                    f'set_request_pending_flag for {cmd_runner=}, '
-                    f'{targets=}, {set(targets)=}')
+                # self.log_test_msg(
+                #     'handle_request_entry_exit_log_msg calling '
+                #     f'set_request_pending_flag for {cmd_runner=}, '
+                #     f'{targets=}, {set(targets)=}')
                 self.set_request_pending_flag(cmd_runner=cmd_runner,
                                               targets=set(targets),
                                               pending_request_flag=True)
