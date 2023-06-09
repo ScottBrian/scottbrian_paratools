@@ -599,35 +599,35 @@ resume_lap_arg_list = [0, 1]
 ########################################################################
 # Test settings for test_rotate_state_scenarios
 ########################################################################
-class SmartRequestType(Enum):
-    """SmartThread requests."""
-    Start = auto()
-    Unreg = auto()
-    Join = auto()
-    SendMsg = auto()
-    RecvMsg = auto()
-    Resume = auto()
-    Sync = auto()
-    Wait = auto()
+# class SmartRequestType(Enum):
+#     """SmartThread requests."""
+#     Start = auto()
+#     Unreg = auto()
+#     Join = auto()
+#     SendMsg = auto()
+#     RecvMsg = auto()
+#     Resume = auto()
+#     Sync = auto()
+#     Wait = auto()
 
 
 req0_arg_list = [
-    SmartRequestType.SendMsg,
-    SmartRequestType.RecvMsg,
-    SmartRequestType.Resume,
-    SmartRequestType.Sync,
-    SmartRequestType.Wait]
+    st.ReqType.Smart_send,
+    st.ReqType.Smart_recv,
+    st.ReqType.Smart_resume,
+    st.ReqType.Smart_sync,
+    st.ReqType.Smart_wait]
 
-# req0_arg_list = [SmartRequestType.Sync]
+# req0_arg_list = [st.ReqType.Smart_sync]
 
 req1_arg_list = [
-    SmartRequestType.SendMsg,
-    SmartRequestType.RecvMsg,
-    SmartRequestType.Resume,
-    SmartRequestType.Sync,
-    SmartRequestType.Wait]
+    st.ReqType.Smart_send,
+    st.ReqType.Smart_recv,
+    st.ReqType.Smart_resume,
+    st.ReqType.Smart_sync,
+    st.ReqType.Smart_wait]
 
-# req1_arg_list = [SmartRequestType.RecvMsg]
+# req1_arg_list = [st.ReqType.Smart_recv]
 
 req0_when_req1_state_arg_list = [
     (st.ThreadState.Unregistered, 0),
@@ -3528,7 +3528,7 @@ def num_senders_arg(request: Any) -> int:
 # req0_arg
 ###############################################################################
 @pytest.fixture(params=req0_arg_list)  # type: ignore
-def req0_arg(request: Any) -> SmartRequestType:
+def req0_arg(request: Any) -> st.ReqType:
     """State of sender when smart_recv is to be issued.
 
     Args:
@@ -3537,14 +3537,14 @@ def req0_arg(request: Any) -> SmartRequestType:
     Returns:
         The params values are returned one at a time
     """
-    return cast(SmartRequestType, request.param)
+    return cast(st.ReqType, request.param)
 
 
 ###############################################################################
 # req1_arg
 ###############################################################################
 @pytest.fixture(params=req1_arg_list)  # type: ignore
-def req1_arg(request: Any) -> SmartRequestType:
+def req1_arg(request: Any) -> st.ReqType:
     """State of sender when smart_recv is to be issued.
 
     Args:
@@ -3553,7 +3553,7 @@ def req1_arg(request: Any) -> SmartRequestType:
     Returns:
         The params values are returned one at a time
     """
-    return cast(SmartRequestType, request.param)
+    return cast(st.ReqType, request.param)
 
 
 ###############################################################################
@@ -14985,8 +14985,8 @@ class ConfigVerifier:
     def build_rotate_state_scenario(
             self,
             timeout_type: TimeoutType,
-            req0: SmartRequestType,
-            req1: SmartRequestType,
+            req0: st.ReqType,
+            req1: st.ReqType,
             req0_when_req1_state: tuple[st.ThreadState, int],
             req0_when_req1_lap: int,
             req1_lap: int) -> None:
@@ -15078,13 +15078,13 @@ class ConfigVerifier:
         ################################################################
         # request rtns
         ################################################################
-        request_build_rtns: dict[SmartRequestType,
+        request_build_rtns: dict[st.ReqType,
                                  Callable[..., RequestConfirmParms]] = {
-            SmartRequestType.SendMsg: self.build_send_msg_request,
-            SmartRequestType.RecvMsg: self.build_recv_msg_request,
-            SmartRequestType.Resume: self.build_resume_request,
-            SmartRequestType.Sync: self.build_sync_request,
-            SmartRequestType.Wait: self.build_wait_request,
+            st.ReqType.Smart_send: self.build_send_msg_request,
+            st.ReqType.Smart_recv: self.build_recv_msg_request,
+            st.ReqType.Smart_resume: self.build_resume_request,
+            st.ReqType.Smart_sync: self.build_sync_request,
+            st.ReqType.Smart_wait: self.build_wait_request,
         }
 
         req0_stopped_remotes = set()
@@ -15107,133 +15107,133 @@ class ConfigVerifier:
             req_deadlock: bool
 
         request_table: dict[
-            tuple[SmartRequestType, SmartRequestType], ReqFlags] = {
+            tuple[st.ReqType, st.ReqType], ReqFlags] = {
 
-            (SmartRequestType.SendMsg, SmartRequestType.SendMsg):
+            (st.ReqType.Smart_send, st.ReqType.Smart_send):
                 ReqFlags(req0_category=ReqCategory.Throw,
                          req1_category=ReqCategory.Throw,
                          req_matched=False,
                          req_deadlock=False),
-            (SmartRequestType.SendMsg, SmartRequestType.RecvMsg):
+            (st.ReqType.Smart_send, st.ReqType.Smart_recv):
                 ReqFlags(req0_category=ReqCategory.Throw,
                          req1_category=ReqCategory.Catch,
                          req_matched=True,
                          req_deadlock=False),
-            (SmartRequestType.SendMsg, SmartRequestType.Resume):
+            (st.ReqType.Smart_send, st.ReqType.Smart_resume):
                 ReqFlags(req0_category=ReqCategory.Throw,
                          req1_category=ReqCategory.Throw,
                          req_matched=False,
                          req_deadlock=False),
-            (SmartRequestType.SendMsg, SmartRequestType.Sync):
+            (st.ReqType.Smart_send, st.ReqType.Smart_sync):
                 ReqFlags(req0_category=ReqCategory.Throw,
                          req1_category=ReqCategory.Handshake,
                          req_matched=False,
                          req_deadlock=False),
-            (SmartRequestType.SendMsg, SmartRequestType.Wait):
+            (st.ReqType.Smart_send, st.ReqType.Smart_wait):
                 ReqFlags(req0_category=ReqCategory.Throw,
                          req1_category=ReqCategory.Catch,
                          req_matched=False,
                          req_deadlock=False),
 
-            (SmartRequestType.RecvMsg, SmartRequestType.RecvMsg):
+            (st.ReqType.Smart_recv, st.ReqType.Smart_recv):
                 ReqFlags(req0_category=ReqCategory.Catch,
                          req1_category=ReqCategory.Catch,
                          req_matched=False,
                          req_deadlock=True),
-            (SmartRequestType.RecvMsg, SmartRequestType.SendMsg):
+            (st.ReqType.Smart_recv, st.ReqType.Smart_send):
                 ReqFlags(req0_category=ReqCategory.Catch,
                          req1_category=ReqCategory.Throw,
                          req_matched=True,
                          req_deadlock=False),
-            (SmartRequestType.RecvMsg, SmartRequestType.Resume):
+            (st.ReqType.Smart_recv, st.ReqType.Smart_resume):
                 ReqFlags(req0_category=ReqCategory.Catch,
                          req1_category=ReqCategory.Throw,
                          req_matched=False,
                          req_deadlock=False),
-            (SmartRequestType.RecvMsg, SmartRequestType.Sync):
+            (st.ReqType.Smart_recv, st.ReqType.Smart_sync):
                 ReqFlags(req0_category=ReqCategory.Catch,
                          req1_category=ReqCategory.Handshake,
                          req_matched=False,
                          req_deadlock=True),
-            (SmartRequestType.RecvMsg, SmartRequestType.Wait):
+            (st.ReqType.Smart_recv, st.ReqType.Smart_wait):
                 ReqFlags(req0_category=ReqCategory.Catch,
                          req1_category=ReqCategory.Catch,
                          req_matched=False,
                          req_deadlock=True),
 
-            (SmartRequestType.Resume, SmartRequestType.SendMsg):
+            (st.ReqType.Smart_resume, st.ReqType.Smart_send):
                 ReqFlags(req0_category=ReqCategory.Throw,
                          req1_category=ReqCategory.Throw,
                          req_matched=False,
                          req_deadlock=False),
-            (SmartRequestType.Resume, SmartRequestType.RecvMsg):
+            (st.ReqType.Smart_resume, st.ReqType.Smart_recv):
                 ReqFlags(req0_category=ReqCategory.Throw,
                          req1_category=ReqCategory.Catch,
                          req_matched=False,
                          req_deadlock=False),
-            (SmartRequestType.Resume, SmartRequestType.Resume):
+            (st.ReqType.Smart_resume, st.ReqType.Smart_resume):
                 ReqFlags(req0_category=ReqCategory.Throw,
                          req1_category=ReqCategory.Throw,
                          req_matched=False,
                          req_deadlock=False),
-            (SmartRequestType.Resume, SmartRequestType.Sync):
+            (st.ReqType.Smart_resume, st.ReqType.Smart_sync):
                 ReqFlags(req0_category=ReqCategory.Throw,
                          req1_category=ReqCategory.Handshake,
                          req_matched=False,
                          req_deadlock=False),
-            (SmartRequestType.Resume, SmartRequestType.Wait):
+            (st.ReqType.Smart_resume, st.ReqType.Smart_wait):
                 ReqFlags(req0_category=ReqCategory.Throw,
                          req1_category=ReqCategory.Catch,
                          req_matched=True,
                          req_deadlock=False),
 
-            (SmartRequestType.Sync, SmartRequestType.SendMsg):
+            (st.ReqType.Smart_sync, st.ReqType.Smart_send):
                 ReqFlags(req0_category=ReqCategory.Handshake,
                          req1_category=ReqCategory.Throw,
                          req_matched=False,
                          req_deadlock=False),
-            (SmartRequestType.Sync, SmartRequestType.RecvMsg):
+            (st.ReqType.Smart_sync, st.ReqType.Smart_recv):
                 ReqFlags(req0_category=ReqCategory.Handshake,
                          req1_category=ReqCategory.Catch,
                          req_matched=False,
                          req_deadlock=True),
-            (SmartRequestType.Sync, SmartRequestType.Resume):
+            (st.ReqType.Smart_sync, st.ReqType.Smart_resume):
                 ReqFlags(req0_category=ReqCategory.Handshake,
                          req1_category=ReqCategory.Throw,
                          req_matched=False,
                          req_deadlock=False),
-            (SmartRequestType.Sync, SmartRequestType.Sync):
+            (st.ReqType.Smart_sync, st.ReqType.Smart_sync):
                 ReqFlags(req0_category=ReqCategory.Handshake,
                          req1_category=ReqCategory.Handshake,
                          req_matched=True,
                          req_deadlock=False),
-            (SmartRequestType.Sync, SmartRequestType.Wait):
+            (st.ReqType.Smart_sync, st.ReqType.Smart_wait):
                 ReqFlags(req0_category=ReqCategory.Handshake,
                          req1_category=ReqCategory.Catch,
                          req_matched=False,
                          req_deadlock=True),
 
-            (SmartRequestType.Wait, SmartRequestType.SendMsg):
+            (st.ReqType.Smart_wait, st.ReqType.Smart_send):
                 ReqFlags(req0_category=ReqCategory.Catch,
                          req1_category=ReqCategory.Throw,
                          req_matched=False,
                          req_deadlock=False),
-            (SmartRequestType.Wait, SmartRequestType.RecvMsg):
+            (st.ReqType.Smart_wait, st.ReqType.Smart_recv):
                 ReqFlags(req0_category=ReqCategory.Catch,
                          req1_category=ReqCategory.Catch,
                          req_matched=False,
                          req_deadlock=True),
-            (SmartRequestType.Wait, SmartRequestType.Resume):
+            (st.ReqType.Smart_wait, st.ReqType.Smart_resume):
                 ReqFlags(req0_category=ReqCategory.Catch,
                          req1_category=ReqCategory.Throw,
                          req_matched=True,
                          req_deadlock=False),
-            (SmartRequestType.Wait, SmartRequestType.Sync):
+            (st.ReqType.Smart_wait, st.ReqType.Smart_sync):
                 ReqFlags(req0_category=ReqCategory.Catch,
                          req1_category=ReqCategory.Handshake,
                          req_matched=False,
                          req_deadlock=True),
-            (SmartRequestType.Wait, SmartRequestType.Wait):
+            (st.ReqType.Smart_wait, st.ReqType.Smart_wait):
                 ReqFlags(req0_category=ReqCategory.Catch,
                          req1_category=ReqCategory.Catch,
                          req_matched=False,
@@ -15241,6 +15241,8 @@ class ConfigVerifier:
         }
 
         req_flags = request_table[(req0, req1)]
+        req0_confirm_at_unreg: bool = False
+        req0_request_issued: bool = False
         req1_delay_confirm: bool = True
 
         self.log_test_msg(f'{req_flags=}')
@@ -15318,10 +15320,10 @@ class ConfigVerifier:
                         # matched, req0 will see req1 go to stopped
                         # state.
                         if req_flags.req_matched:
-                            if req0 == SmartRequestType.RecvMsg:
+                            if req0 == st.ReqType.Smart_recv:
                                 req0_specific_args[
                                     'exp_senders'] = req1_name
-                            elif req0 == SmartRequestType.Wait:
+                            elif req0 == st.ReqType.Smart_wait:
                                 req0_specific_args[
                                     'exp_resumers'] = req1_name
                         else:
@@ -15330,20 +15332,25 @@ class ConfigVerifier:
                     pe = self.pending_events[req0_name]
                     ref_key: CallRefKey = req0.value
                     pe[PE.calling_refresh_msg][ref_key] += 1
+                    # self.log_test_msg(
+                    #     f'build_rotate set '
+                    #     f'{pe[PE.calling_refresh_msg][ref_key]=} using '
+                    #     f'{req0_name=}, {req0.value=}')
+                    req0_confirm_at_unreg = True
 
             elif (req0_when_req1_state[0] == st.ThreadState.Unregistered
                   or req0_when_req1_state[0] == st.ThreadState.Registered
                   or req0_when_req1_state[0] == st.ThreadState.Alive):
-                if req0 == SmartRequestType.Sync:
+                if req0 == st.ReqType.Smart_sync:
                     req0_specific_args['sync_set_ack_remotes'] = req1_name
                 # if req1 is alive or will be alive before being
                 # stopped, a throw req0 will always work regardless of
                 # lap and regardless of whether the requests are matched
                 if req_flags.req0_category == ReqCategory.Throw:
-                    if req0 == SmartRequestType.SendMsg:
+                    if req0 == st.ReqType.Smart_send:
                         req0_specific_args[
                             'exp_receivers'] = req1_name
-                    elif req0 == SmartRequestType.Resume:
+                    elif req0 == st.ReqType.Smart_resume:
                         req0_specific_args[
                             'exp_resumed_targets'] = req1_name
 
@@ -15359,10 +15366,10 @@ class ConfigVerifier:
                                     req1_timeout_type = TimeoutType.TimeoutTrue
                         else:
                             if req_flags.req_matched:
-                                if req0 == SmartRequestType.RecvMsg:
+                                if req0 == st.ReqType.Smart_recv:
                                     req0_specific_args[
                                         'exp_senders'] = req1_name
-                                elif req0 == SmartRequestType.Wait:
+                                elif req0 == st.ReqType.Smart_wait:
                                     req0_specific_args[
                                         'exp_resumers'] = req1_name
                             else:
@@ -15389,10 +15396,10 @@ class ConfigVerifier:
                     if req_flags.req1_category == ReqCategory.Throw:
                         # req1 throw will persist
                         if req_flags.req_matched:
-                            if req0 == SmartRequestType.RecvMsg:
+                            if req0 == st.ReqType.Smart_recv:
                                 req0_specific_args[
                                     'exp_senders'] = req1_name
-                            elif req0 == SmartRequestType.Wait:
+                            elif req0 == st.ReqType.Smart_wait:
                                 req0_specific_args[
                                     'exp_resumers'] = req1_name
                         else:
@@ -15458,6 +15465,16 @@ class ConfigVerifier:
                             unregister_targets=req1_name))
                         self.unregistered_names |= {req1_name}
                         state_iteration = 1
+
+                        if req0_confirm_at_unreg and req0_request_issued:
+                            self.add_cmd(
+                                ConfirmResponse(
+                                    cmd_runners=[self.commander_name],
+                                    confirm_cmd=req0_confirm_parms.request_name,
+                                    confirm_serial_num=req0_confirm_parms.
+                                    serial_number,
+                                    confirmers=req0_name))
+
                     elif current_req1_state == st.ThreadState.Stopped:
                         # pause to allow req0 to recognize that req1 is
                         # stopped so that it will have time to issue
@@ -15506,20 +15523,20 @@ class ConfigVerifier:
                                 # throw from req1 to req0 will always
                                 # complete successfully since req0 is
                                 # always alive
-                                if req1 == SmartRequestType.SendMsg:
+                                if req1 == st.ReqType.Smart_send:
                                     req1_specific_args[
                                         'exp_receivers'] = req0_name
-                                elif req1 == SmartRequestType.Resume:
+                                elif req1 == st.ReqType.Smart_resume:
                                     req1_specific_args[
                                         'exp_resumed_targets'] = req0_name
                             elif req1_timeout_type != TimeoutType.TimeoutTrue:
                                 # req1 is doing a catch or handshake and
                                 # if timeout was not requested then it
                                 # will work
-                                if req1 == SmartRequestType.RecvMsg:
+                                if req1 == st.ReqType.Smart_recv:
                                     req1_specific_args[
                                         'exp_senders'] = req0_name
-                                elif req1 == SmartRequestType.Wait:
+                                elif req1 == st.ReqType.Smart_wait:
                                     req1_specific_args[
                                         'exp_resumer'] = req0_name
                                 else:
@@ -15577,9 +15594,12 @@ class ConfigVerifier:
                         stopped_remotes=req0_stopped_remotes,
                         request_specific_args=req0_specific_args)
 
+                    req0_request_issued = True
+
                     self.add_cmd(
                         Pause(cmd_runners=self.commander_name,
                               pause_seconds=pause_time))
+
         ################################################################
         # finally, confirm req0 is done
         ################################################################
@@ -26436,8 +26456,8 @@ class TestSmartThreadComboScenarios:
     def test_rotate_state_scenarios(
             self,
             timeout_type_arg: TimeoutType,
-            req0_arg: SmartRequestType,
-            req1_arg: SmartRequestType,
+            req0_arg: st.ReqType,
+            req1_arg: st.ReqType,
             req0_when_req1_state_arg: tuple[st.ThreadState, int],
             req0_when_req1_lap_arg: int,
             req1_lap_arg_arg: int,
