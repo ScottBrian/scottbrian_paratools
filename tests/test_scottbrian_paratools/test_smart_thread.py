@@ -15242,7 +15242,11 @@ class ConfigVerifier:
 
         req_flags = request_table[(req0, req1)]
         req0_confirm_at_unreg: bool = False
+        req0_confirm_immediately: bool = False
+        req0_will_do_refresh: bool = False
         req0_request_issued: bool = False
+        req0_pending_catch: bool = False
+
         req1_delay_confirm: bool = True
 
         self.log_test_msg(f'{req_flags=}')
@@ -15291,6 +15295,7 @@ class ConfigVerifier:
                     and req0_when_req1_state[1] == 0):
                 if req0_when_req1_lap == req1_lap:
                     req0_stopped_remotes = {req1_name}
+                    req0_will_do_refresh = True
                     if req_flags.req1_category != ReqCategory.Throw:
                         # since req0 will raise stopped error it will
                         # not be replying to req1 when req1 eventually
@@ -15299,6 +15304,7 @@ class ConfigVerifier:
                         req1_timeout_type = TimeoutType.TimeoutTrue
                 elif req0_when_req1_lap < req1_lap:
                     req0_stopped_remotes = {req1_name}
+                    req0_will_do_refresh = True
                     if req_flags.req1_category != ReqCategory.Throw:
                         req1_timeout_type = TimeoutType.TimeoutTrue
                 elif req1_lap < req0_when_req1_lap:
@@ -15312,6 +15318,7 @@ class ConfigVerifier:
                         # So, req0 will issue its request and then see
                         # that req1 went to stopped state.
                         req0_stopped_remotes = {req1_name}
+                        req0_will_do_refresh = True
                     else:
                         # if req1 issues throw request and then stops,
                         # the request will remain pending for req0 when
@@ -15320,6 +15327,29 @@ class ConfigVerifier:
                         # matched, req0 will see req1 go to stopped
                         # state.
                         if req_flags.req_matched:
+                            # if req1 is not registered then the del
+                            # deferred flag will not be off
+                            if (req0_when_req1_state[0]
+                                    != st.ThreadState.Registered):
+                                # req0 will do the refresh because its
+                                # delete was deferred in lap0 and now
+                                # that it has satisfied its request in
+                                # lap1 and cleared its pending reasons
+                                # before req0 is registered (which
+                                # clears the deferred delete flag in
+                                # req0), it sees that it can do the
+                                # refresh
+                                req0_will_do_refresh = True
+
+                            # we also need to confirm immediately before
+                            # req1 is registered since that will clear
+                            # the deferred delete flag and prevent req0
+                            # from doing the refresh, or if already
+                            # registered then we want to complete the
+                            # request before req1 is stopped to avoid
+                            # having del deferred being set on
+                            req0_confirm_immediately = True
+
                             if req0 == st.ReqType.Smart_recv:
                                 req0_specific_args[
                                     'exp_senders'] = req1_name
@@ -15328,10 +15358,13 @@ class ConfigVerifier:
                                     'exp_resumers'] = req1_name
                         else:
                             req0_stopped_remotes = {req1_name}
-                if req0_stopped_remotes:
+                            req0_pending_catch = True
+                if req0_will_do_refresh:
                     pe = self.pending_events[req0_name]
                     ref_key: CallRefKey = req0.value
+
                     pe[PE.calling_refresh_msg][ref_key] += 1
+
                     # self.log_test_msg(
                     #     f'build_rotate set '
                     #     f'{pe[PE.calling_refresh_msg][ref_key]=} using '
@@ -15595,6 +15628,14 @@ class ConfigVerifier:
                         request_specific_args=req0_specific_args)
 
                     req0_request_issued = True
+                    if req0_confirm_immediately:
+                        self.add_cmd(
+                            ConfirmResponse(
+                                cmd_runners=[self.commander_name],
+                                confirm_cmd=req0_confirm_parms.request_name,
+                                confirm_serial_num=req0_confirm_parms.
+                                serial_number,
+                                confirmers=req0_name))
 
                     self.add_cmd(
                         Pause(cmd_runners=self.commander_name,
