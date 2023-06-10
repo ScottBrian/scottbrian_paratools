@@ -15242,6 +15242,7 @@ class ConfigVerifier:
 
         req_flags = request_table[(req0, req1)]
         req0_confirm_at_unreg: bool = False
+        req0_confirm_at_active: bool = False
         req0_confirm_immediately: bool = False
         req0_will_do_refresh: bool = False
         req0_request_issued: bool = False
@@ -15399,6 +15400,7 @@ class ConfigVerifier:
                                     req1_timeout_type = TimeoutType.TimeoutTrue
                         else:
                             if req_flags.req_matched:
+                                req0_confirm_at_active = True
                                 if req0 == st.ReqType.Smart_recv:
                                     req0_specific_args[
                                         'exp_senders'] = req1_name
@@ -15429,6 +15431,28 @@ class ConfigVerifier:
                     if req_flags.req1_category == ReqCategory.Throw:
                         # req1 throw will persist
                         if req_flags.req_matched:
+                            # if req1 is not registered then the del
+                            # deferred flag will not be off
+                            if (req0_when_req1_state[0]
+                                    == st.ThreadState.Unregistered):
+                                # req0 will do the refresh because its
+                                # delete was deferred in lap0 and now
+                                # that it has satisfied its request in
+                                # lap1 and cleared its pending reasons
+                                # before req0 is registered (which
+                                # clears the deferred delete flag in
+                                # req0), it sees that it can do the
+                                # refresh
+                                req0_will_do_refresh = True
+
+                            # we also need to confirm immediately before
+                            # req1 is registered since that will clear
+                            # the deferred delete flag and prevent req0
+                            # from doing the refresh, or if already
+                            # registered then we want to complete the
+                            # request before req1 is stopped to avoid
+                            # having del deferred being set on
+                            req0_confirm_immediately = True
                             if req0 == st.ReqType.Smart_recv:
                                 req0_specific_args[
                                     'exp_senders'] = req1_name
@@ -15442,7 +15466,17 @@ class ConfigVerifier:
                         req1_timeout_type = TimeoutType.TimeoutTrue
                         if req_flags.req0_category != ReqCategory.Throw:
                             req0_stopped_remotes = {req1_name}
+                if req0_will_do_refresh:
+                    pe = self.pending_events[req0_name]
+                    ref_key: CallRefKey = req0.value
 
+                    pe[PE.calling_refresh_msg][ref_key] += 1
+
+                    # self.log_test_msg(
+                    #     f'build_rotate set '
+                    #     f'{pe[PE.calling_refresh_msg][ref_key]=} using '
+                    #     f'{req0_name=}, {req0.value=}')
+                    # req0_confirm_at_unreg = True
         if req0_when_req1_state[0] == st.ThreadState.Stopped:
             if req0_when_req1_lap == req1_lap:
                 if req_flags.req1_category == ReqCategory.Throw:
@@ -15593,7 +15627,15 @@ class ConfigVerifier:
                                         confirm_serial_num=(
                                             req1_confirm_parms.serial_number),
                                         confirmers=req1_name))
-
+                            if req0_confirm_at_active and req0_request_issued:
+                                self.add_cmd(
+                                    ConfirmResponse(
+                                        cmd_runners=[self.commander_name],
+                                        confirm_cmd=req0_confirm_parms.
+                                        request_name,
+                                        confirm_serial_num=req0_confirm_parms.
+                                        serial_number,
+                                        confirmers=req0_name))
                         if supress_req1:  # or not req0_requires_ack:
                             req1_pause_time = 1
                             self.add_cmd(
