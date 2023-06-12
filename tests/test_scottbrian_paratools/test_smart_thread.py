@@ -595,53 +595,6 @@ wait_lap_arg_list = [0, 1]
 
 resume_lap_arg_list = [0, 1]
 
-
-########################################################################
-# Test settings for test_rotate_state_scenarios
-########################################################################
-# class SmartRequestType(Enum):
-#     """SmartThread requests."""
-#     Start = auto()
-#     Unreg = auto()
-#     Join = auto()
-#     SendMsg = auto()
-#     RecvMsg = auto()
-#     Resume = auto()
-#     Sync = auto()
-#     Wait = auto()
-
-
-req0_arg_list = [
-    st.ReqType.Smart_send,
-    st.ReqType.Smart_recv,
-    st.ReqType.Smart_resume,
-    st.ReqType.Smart_sync,
-    st.ReqType.Smart_wait]
-
-# req0_arg_list = [st.ReqType.Smart_sync]
-
-req1_arg_list = [
-    st.ReqType.Smart_send,
-    st.ReqType.Smart_recv,
-    st.ReqType.Smart_resume,
-    st.ReqType.Smart_sync,
-    st.ReqType.Smart_wait]
-
-# req1_arg_list = [st.ReqType.Smart_recv]
-
-req0_when_req1_state_arg_list = [
-    (st.ThreadState.Unregistered, 0),
-    (st.ThreadState.Registered, 0),
-    (st.ThreadState.Unregistered, 1),
-    (st.ThreadState.Registered, 1),
-    (st.ThreadState.Alive, 0),
-    (st.ThreadState.Stopped, 0)]
-
-# req0_when_req1_state_arg_list = [(st.ThreadState.Alive, 0)]
-
-req0_when_req1_lap_arg_list = [0, 1]
-
-req1_lap_arg_list = [0, 1]
 ########################################################################
 # Test settings for test_recv_timeout_scenarios
 ########################################################################
@@ -3525,86 +3478,6 @@ def num_senders_arg(request: Any) -> int:
 
 
 ###############################################################################
-# req0_arg
-###############################################################################
-@pytest.fixture(params=req0_arg_list)  # type: ignore
-def req0_arg(request: Any) -> st.ReqType:
-    """State of sender when smart_recv is to be issued.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(st.ReqType, request.param)
-
-
-###############################################################################
-# req1_arg
-###############################################################################
-@pytest.fixture(params=req1_arg_list)  # type: ignore
-def req1_arg(request: Any) -> st.ReqType:
-    """State of sender when smart_recv is to be issued.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(st.ReqType, request.param)
-
-
-###############################################################################
-# req0_when_req1_state_arg
-###############################################################################
-@pytest.fixture(params=req0_when_req1_state_arg_list)  # type: ignore
-def req0_when_req1_state_arg(request: Any) -> tuple[st.ThreadState, int]:
-    """State of sender when smart_recv is to be issued.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(tuple[st.ThreadState, int], request.param)
-
-
-###############################################################################
-# req0_when_req1_lap_arg
-###############################################################################
-@pytest.fixture(params=req0_when_req1_lap_arg_list)  # type: ignore
-def req0_when_req1_lap_arg(request: Any) -> int:
-    """Lap of sender when smart_recv is to be issued.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# req1_lap_arg
-###############################################################################
-@pytest.fixture(params=req1_lap_arg_list)  # type: ignore
-def req1_lap_arg_arg(request: Any) -> int:
-    """Lap of sender when smart_recv is to be issued.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
 # recv_msg_state_arg
 ###############################################################################
 @pytest.fixture(params=recv_msg_state_arg_list)  # type: ignore
@@ -6449,6 +6322,7 @@ class CRunnerRaisesLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         list_of_errors = ('(SmartThreadRemoteThreadNotAlive'
+                          '|SmartThreadDeadlockDetected'
                           '|SmartThreadRequestTimedOut)')
         super().__init__(
             search_str=(f"[a-z0-9_]+ raising {list_of_errors} while processing "
@@ -6493,94 +6367,10 @@ class CRunnerRaisesLogSearchItem(LogSearchItem):
 
         pe = self.config_ver.pending_events[cmd_runner]
         pe[PE.current_request] = StartRequest(
-            req_type=st.ReqType.NoReq,
-            targets=set(),
-            unreg_remotes=set(),
-            not_registered_remotes=set(),
-            timeout_remotes=set(),
-            stopped_remotes=set(),
-            deadlock_remotes=set(),
-            eligible_targets=set(),
-            completed_targets=set(),
-            first_round_completed=set(),
-            stopped_target_threads=set(),
-            exp_senders=set(),
-            exp_resumers=set())
+            req_type=st.ReqType.NoReq)
 
         # self.config_ver.add_log_msg(re.escape(self.found_log_msg),
         #                             log_level=logging.ERROR)
-
-        # self.config_ver.log_test_msg(f'request msg parse {handle_name=}, '
-        #                              f'{cmd_runner=}')
-
-        # self.config_ver.handle_request_exit_log_msg(
-        #     cmd_runner=cmd_runner)
-        # self.config_ver.log_test_msg('request_pending reset for '
-        #                              f'{cmd_runner=} raises error')
-
-########################################################################
-# MonDelLogSearchItem
-########################################################################
-# class MonDelLogSearchItem(LogSearchItem):
-#     """Input to search log msgs."""
-#
-#     def __init__(self,
-#                  config_ver: "ConfigVerifier",
-#                  found_log_msg: str = '',
-#                  found_log_idx: int = 0,
-#                  ) -> None:
-#         """Initialize the LogItem.
-#
-#         Args:
-#             config_ver: configuration verifier
-#             found_log_msg: log msg that was found
-#             found_log_idx: index in the log where message was found
-#         """
-#         super().__init__(
-#             search_str='monitor found del keys',
-#             config_ver=config_ver,
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx
-#         )
-#
-#     def get_found_log_item(self,
-#                            found_log_msg: str,
-#                            found_log_idx: int
-#                            ) -> "MonDelLogSearchItem":
-#         """Return a found log item.
-#
-#         Args:
-#             found_log_msg: log msg that was found
-#             found_log_idx: index in the log where message was found
-#
-#         Returns:
-#             SyncResumedLogSearchItem containing found message and index
-#         """
-#         return MonDelLogSearchItem(
-#             found_log_msg=found_log_msg,
-#             found_log_idx=found_log_idx,
-#             config_ver=self.config_ver)
-#
-#     def run_process(self):
-#         """Run the process to handle the log message."""
-#         split_msg = self.found_log_msg.split()
-#         cmd_runner = split_msg[-1]
-#         target_msg = self.found_log_msg.split('[')[1].split(']')[0].split(', ')
-#
-#         targets: list[str] = []
-#         for item in target_msg:
-#             targets.append(item[1:-1])
-#
-#         # self.config_ver.log_test_msg(f'request msg parse {cmd_runner=}, '
-#         #                              f'{target=}')
-#
-#         # self.config_ver.handle_request_exit_log_msg(
-#         #     cmd_runner=cmd_runner,
-#         #     targets=targets)
-#
-#         self.config_ver.log_test_msg('request_pending reset for '
-#                                      f'{cmd_runner=} via mon del '
-#                                      f'{targets=}')
 
 
 ########################################################################
@@ -10340,9 +10130,20 @@ class ConfigVerifier:
         ################################################################
         # We also need to set the ack message for the backout.
         ################################################################
+        pe = self.pending_events[remote_name]
         ack_key: AckKey = (pending_name, 'smart_sync_backout_local')
 
         pe[PE.ack_msg][ack_key] += 1
+
+        ################################################################
+        # The entry request sync code sets up the ack message for
+        # backout of the remote, but in this test case we manipulate the
+        # timing with locks and get the pending thread to complete the
+        # sync. So, we need to undo the ack for the remote backout.
+        ################################################################
+        ack_key: AckKey = (pending_name, 'smart_sync_backout_remote')
+
+        pe[PE.ack_msg][ack_key] -= 1
 
         ################################################################
         # wait for the pending_sync flag to be set in mock structures
@@ -15262,6 +15063,8 @@ class ConfigVerifier:
                         supress_req1 = True
 
             elif req0_when_req1_state[0] == st.ThreadState.Alive:
+                if req0 == st.ReqType.Smart_sync:
+                    req0_specific_args['sync_set_ack_remotes'] = req1_name
                 if req0_when_req1_lap == req1_lap:
                     if req_flags.req_deadlock:
                         req0_specific_args['deadlock_remotes'] = {req1_name}
@@ -15480,11 +15283,17 @@ class ConfigVerifier:
         if req0_when_req1_state[0] == st.ThreadState.Stopped:
             if req0_when_req1_lap == req1_lap:
                 if req_flags.req1_category == ReqCategory.Throw:
-                    if not req_flags.req_matched:
+                    if req_flags.req_matched:
+                        if req0 == st.ReqType.Smart_recv:
+                            req0_specific_args[
+                                'exp_senders'] = req1_name
+                        elif req0 == st.ReqType.Smart_wait:
+                            req0_specific_args[
+                                'exp_resumers'] = req1_name
+                        if timeout_type == TimeoutType.TimeoutTrue:
+                            timeout_type = TimeoutType.TimeoutNone
+                    else:
                         req0_stopped_remotes = {req1_name}
-                    # else:
-                    #     if timeout_type == TimeoutType.TimeoutTrue:
-                    #         timeout_type = TimeoutType.TimeoutNone
                 else:
                     req1_timeout_type = TimeoutType.TimeoutTrue
                     req0_stopped_remotes = {req1_name}
@@ -15494,13 +15303,19 @@ class ConfigVerifier:
                     req1_timeout_type = TimeoutType.TimeoutTrue
             else:  # req1_lap < req0_when_req1_lap
                 if req_flags.req1_category == ReqCategory.Throw:
-                    if not req_flags.req_matched:
+                    if req_flags.req_matched:
+                        if req0 == st.ReqType.Smart_recv:
+                            req0_specific_args[
+                                'exp_senders'] = req1_name
+                        elif req0 == st.ReqType.Smart_wait:
+                            req0_specific_args[
+                                'exp_resumers'] = req1_name
+                        if timeout_type == TimeoutType.TimeoutTrue:
+                            timeout_type = TimeoutType.TimeoutNone
+                    else:
                         req0_stopped_remotes = {req1_name}
-                    # else:
-                    #     if timeout_type == TimeoutType.TimeoutTrue:
-                    #         timeout_type = TimeoutType.TimeoutNone
                 else:
-                    req1_timeout_type = TimeoutType.TimeoutTrue  # @sbt
+                    req1_timeout_type = TimeoutType.TimeoutTrue
                     req0_stopped_remotes = {req1_name}
 
         ################################################################
@@ -15551,10 +15366,19 @@ class ConfigVerifier:
                         # start deleting req1 from the pair_array so
                         # that we determine the correct log messages to
                         # add for log verification
-                        if req0_stopped_remotes:
+                        # if req0_stopped_remotes:
+                        #     self.add_cmd(
+                        #         Pause(cmd_runners=self.commander_name,
+                        #               pause_seconds=1))
+                        if req0_request_issued:
                             self.add_cmd(
-                                Pause(cmd_runners=self.commander_name,
-                                      pause_seconds=1))
+                                ConfirmResponse(
+                                    cmd_runners=[self.commander_name],
+                                    confirm_cmd=req0_confirm_parms.
+                                    request_name,
+                                    confirm_serial_num=req0_confirm_parms.
+                                    serial_number,
+                                    confirmers=req0_name))
                         self.build_join_suite(
                             cmd_runners=self.commander_name,
                             join_target_names=req1_name,
@@ -15596,7 +15420,8 @@ class ConfigVerifier:
                                 elif req1 == st.ReqType.Smart_resume:
                                     req1_specific_args[
                                         'exp_resumed_targets'] = req0_name
-                            elif req1_timeout_type != TimeoutType.TimeoutTrue:
+                            elif (req1_timeout_type != TimeoutType.TimeoutTrue
+                                  and not req_flags.req_deadlock):
                                 # req1 is doing a catch or handshake and
                                 # if timeout was not requested then it
                                 # will work
@@ -15605,7 +15430,7 @@ class ConfigVerifier:
                                         'exp_senders'] = req0_name
                                 elif req1 == st.ReqType.Smart_wait:
                                     req1_specific_args[
-                                        'exp_resumer'] = req0_name
+                                        'exp_resumers'] = req0_name
                                 else:
                                     # exp_syncers not really used yet
                                     # but we will code a placeholder
@@ -15801,7 +15626,9 @@ class ConfigVerifier:
                     senders=target,
                     exp_senders=request_specific_args['exp_senders'],
                     exp_msgs=request_specific_args['sender_msgs'],
-                    stopped_remotes=stopped_remotes))
+                    stopped_remotes=stopped_remotes,
+                    deadlock_remotes=request_specific_args[
+                        'deadlock_remotes']))
         elif timeout_type == TimeoutType.TimeoutFalse:
             confirm_request_name = 'RecvMsgTimeoutFalse'
             timeout_time = 6
@@ -15812,7 +15639,9 @@ class ConfigVerifier:
                     exp_senders=request_specific_args['exp_senders'],
                     exp_msgs=request_specific_args['sender_msgs'],
                     timeout=timeout_time,
-                    stopped_remotes=stopped_remotes))
+                    stopped_remotes=stopped_remotes,
+                    deadlock_remotes=request_specific_args[
+                        'deadlock_remotes']))
         else:  # timeout_type == TimeoutType.TimeoutTrue
             timeout_time = 0.5
             confirm_request_name = 'RecvMsgTimeoutTrue'
@@ -15824,7 +15653,9 @@ class ConfigVerifier:
                     exp_msgs=request_specific_args['sender_msgs'],
                     timeout=timeout_time,
                     timeout_names=target,
-                    stopped_remotes=stopped_remotes))
+                    stopped_remotes=stopped_remotes,
+                    deadlock_remotes=request_specific_args[
+                        'deadlock_remotes']))
 
         return RequestConfirmParms(request_name=confirm_request_name,
                                    serial_number=request_serial_num)
@@ -18268,6 +18099,17 @@ class ConfigVerifier:
                         sender_count=sender_count,
                         timeout=timeout,
                         log_msg=log_msg)
+            recvd_msgs = self.all_threads[cmd_runner].recvd_msgs
+
+            self.add_log_msg(
+                self.get_error_msg(
+                    cmd_runner=cmd_runner,
+                    smart_request='smart_recv',
+                    targets=senders,
+                    error_str='SmartThreadDeadlockDetected',
+                    stopped_remotes=stopped_remotes,
+                    deadlock_remotes=deadlock_remotes),
+                log_level=logging.ERROR)
 
         elif timeout_type == TimeoutType.TimeoutNone:
             pe[PE.request_msg][req_key_exit] += 1
@@ -18450,17 +18292,11 @@ class ConfigVerifier:
         actions[(request_name, entry_exit)](cmd_runner=cmd_runner)
 
         if entry_exit == 'exit':
-            self.log_test_msg('handle_req_entry_exit for exit with '
-                              f'{pe[PE.current_request].req_type.value=}')
-
             if pe[PE.current_request].req_type.value in ('smart_send',
                                                          'smart_recv',
                                                          'smart_wait',
                                                          'smart_resume',
                                                          'smart_sync'):
-                self.log_test_msg('handle_req_entry_exit calling set_pend '
-                                  f'{cmd_runner=}, {targets=}, '
-                                  f'{set(targets)=}')
                 self.set_request_pending_flag(cmd_runner=cmd_runner,
                                               targets=set(targets),
                                               pending_request_flag=False)
@@ -20312,11 +20148,11 @@ class ConfigVerifier:
                                     'exit')
 
         exp_completed_syncs: set[str] = targets.copy()
-        # enter_exit = ('entry', 'exit')
-        if stopped_remotes:
-            exp_completed_syncs -= stopped_remotes
-            exp_completed_syncs -= timeout_remotes
+        exp_completed_syncs -= stopped_remotes
+        exp_completed_syncs -= timeout_remotes
+        exp_completed_syncs -= deadlock_remotes
 
+        if stopped_remotes:
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_sync(
@@ -20341,7 +20177,6 @@ class ConfigVerifier:
                 log_level=logging.ERROR)
 
         elif deadlock_remotes:
-            # enter_exit = ('entry',)
             with pytest.raises(st.SmartThreadDeadlockDetected):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_sync(
@@ -20379,9 +20214,6 @@ class ConfigVerifier:
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutTrue:
-            exp_completed_syncs -= stopped_remotes
-            exp_completed_syncs -= timeout_remotes
-            # enter_exit = ('entry',)
             with pytest.raises(st.SmartThreadRequestTimedOut):
                 self.all_threads[cmd_runner].smart_sync(
                     targets=targets,
@@ -20532,8 +20364,7 @@ class ConfigVerifier:
             for name in deadlock_remotes:
                 dr_search += "|'" + name + "'"
             dr_search += r")+\]"
-            deadlock_msg = (f' Remotes doing a smart_wait '
-                            'request that are deadlocked: '
+            deadlock_msg = (f' Remotes that are deadlocked: '
                             f'{dr_search}.')
         else:
             deadlock_msg = ''
@@ -26536,6 +26367,37 @@ class TestSmartThreadComboScenarios:
     ####################################################################
     # test_rotate_state_scenarios
     ####################################################################
+    @pytest.mark.parametrize("timeout_type_arg",
+                             [TimeoutType.TimeoutNone,
+                              TimeoutType.TimeoutFalse,
+                              TimeoutType.TimeoutTrue])
+    @pytest.mark.parametrize("req0_arg", [st.ReqType.Smart_send,
+                                          st.ReqType.Smart_recv,
+                                          st.ReqType.Smart_resume,
+                                          st.ReqType.Smart_sync,
+                                          st.ReqType.Smart_wait])
+    @pytest.mark.parametrize("req1_arg", [st.ReqType.Smart_send,
+                                          st.ReqType.Smart_recv,
+                                          st.ReqType.Smart_resume,
+                                          st.ReqType.Smart_sync,
+                                          st.ReqType.Smart_wait])
+    @pytest.mark.parametrize("req0_when_req1_state_arg",
+                             [(st.ThreadState.Unregistered, 0),
+                              (st.ThreadState.Registered, 0),
+                              (st.ThreadState.Unregistered, 1),
+                              (st.ThreadState.Registered, 1),
+                              (st.ThreadState.Alive, 0),
+                              (st.ThreadState.Stopped, 0)])
+    @pytest.mark.parametrize("req0_when_req1_lap_arg", [0, 1])
+    @pytest.mark.parametrize("req1_lap_arg_arg", [0, 1])
+    # @pytest.mark.parametrize("timeout_type_arg",
+    #                          [TimeoutType.TimeoutTrue])
+    # @pytest.mark.parametrize("req0_arg", [st.ReqType.Smart_sync])
+    # @pytest.mark.parametrize("req1_arg", [st.ReqType.Smart_send])
+    # @pytest.mark.parametrize("req0_when_req1_state_arg",
+    #                          [(st.ThreadState.Alive, 0)])
+    # @pytest.mark.parametrize("req0_when_req1_lap_arg", [0])
+    # @pytest.mark.parametrize("req1_lap_arg_arg", [0])
     def test_rotate_state_scenarios(
             self,
             timeout_type_arg: TimeoutType,

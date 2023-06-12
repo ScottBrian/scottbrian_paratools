@@ -4132,6 +4132,9 @@ class SmartThread:
                             pk_remote)
                             == ThreadState.Stopped):
                         remote_sb.sync_event.clear()
+                        logger.info(
+                            f'{self.name} smart_sync backout reset '
+                            f'remote sync_event for {pk_remote.remote}')
                         # request_block.do_refresh = True
 
             if local_sb.deadlock:
@@ -4204,10 +4207,13 @@ class SmartThread:
                                 remote_sb = SmartThread._pair_array[
                                     pair_key].status_blocks[remote]
                                 # backout the sync resume
-                                remote_sb.sync_event.clear()
-                                logger.info(
-                                    f'{self.name} smart_sync backout reset '
-                                    f'remote sync_event for {remote}')
+                                if remote_sb.sync_event.is_set():
+                                    remote_sb.sync_event.clear()
+                                    logger.info(
+                                        f'{self.name} smart_sync backout '
+                                        'reset remote sync_event for '
+                                        f'{remote}')
+
                     if backout_request == 'smart_wait' and local_sb.wait_wait:
                         local_sb.wait_wait = False
                         local_sb.wait_event.clear()
@@ -4426,12 +4432,13 @@ class SmartThread:
                         if pair_key in SmartThread._pair_array:
                             # having a pair_key in the array implies our
                             # entry exists
-                            SmartThread._pair_array[
-                                pair_key].status_blocks[
-                                self.name].request_pending = False
-                            SmartThread._pair_array[
-                                pair_key].status_blocks[
-                                self.name].request = ReqType.NoReq
+                            local_sb = SmartThread._pair_array[
+                                pair_key].status_blocks[self.name]
+                            local_sb.request_pending = False
+                            local_sb.request = ReqType.NoReq
+                            local_sb.recv_wait = False
+                            local_sb.wait_wait = False
+                            local_sb.sync_wait = False
 
                     pending_remotes = [remote for pk, remote, _ in
                                        self.work_pk_remotes]
@@ -4748,7 +4755,7 @@ class SmartThread:
                 local_sb.deadlock = True
                 local_sb.remote_deadlock_request = ReqType.Smart_recv
                 logger.debug(
-                    f'TestDebug {self.name} wait '
+                    f'TestDebug {self.name} recv '
                     f'set remote and local '
                     f'deadlock flags {remote_sb.name=}')
 
