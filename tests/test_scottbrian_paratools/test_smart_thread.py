@@ -185,11 +185,13 @@ class SendRecvMsgs:
                  sender_names: Iterable,
                  receiver_names: Iterable,
                  num_msgs: int,
-                 send_type: SendType = SendType.ToRemotes) -> None:
+                 text: str = '') -> None:
         self.sender_names = get_set(sender_names)
         self.receiver_names = get_set(receiver_names)
         self.num_msgs = num_msgs
-        self.send_type = send_type
+
+        self.text = text
+
         self.broadcast_msgs: list[dict[str, Any]] = []
         self.directed_msgs: list[dict[str, dict[str, Any]]] = []
         self.exp_received_msgs: dict[
@@ -203,14 +205,14 @@ class SendRecvMsgs:
             for sender_name in self.sender_names:
                 self.broadcast_msgs[msg_idx][
                     sender_name] = (f'{sender_name} broadcast message'
-                                    f' {msg_idx}')
+                                    f' {self.text} {msg_idx}')
 
                 self.directed_msgs.append(
                     defaultdict(lambda: defaultdict(str)))
                 for receiver_name in self.receiver_names:
                     self.directed_msgs[msg_idx][sender_name][
-                        receiver_name] = (f'{sender_name} message {msg_idx} '
-                                          f'to {receiver_name}')
+                        receiver_name] = (f'{sender_name} message {self.text} '
+                                          f'{msg_idx} to {receiver_name}')
 
     def get_broadcast_msg(self,
                           sender_name: str,
@@ -242,6 +244,16 @@ class SendRecvMsgs:
                              sender_name: str,
                              msg: Any):
         self.exp_received_msgs[receiver_name][sender_name].append(msg)
+
+    def clear_exp_msgs_received(self,
+                                receiver_name: str,
+                                sender_names: set[str]):
+        for sender in sender_names:
+            for idx in range(10):
+                if self.exp_received_msgs[receiver_name][sender]:
+                    self.exp_received_msgs[receiver_name][sender].pop(0)
+                else:
+                    break
 
 
 ########################################################################
@@ -562,24 +574,6 @@ num_active_2_arg_list = [1, 2, 3]
 
 num_stopped_2_arg_list = [0, 1, 2]
 # num_stopped_2_arg_list = [0]
-
-
-########################################################################
-# Test settings for test_recv_msg_scenarios
-########################################################################
-recv_msg_state_arg_list = [
-    (st.ThreadState.Unregistered, 0),
-    (st.ThreadState.Unregistered, 1),
-    (st.ThreadState.Registered, 0),
-    (st.ThreadState.Registered, 1),
-    (st.ThreadState.Alive, 0),
-    (st.ThreadState.Stopped, 0)]
-
-recv_msg_lap_arg_list = [0, 1]
-
-send_msg_lap_arg_list = [0, 1]
-
-send_resume_arg_list = ['send', 'resume', 'sync', 'sync_send']
 
 
 ########################################################################
@@ -3478,86 +3472,6 @@ def num_senders_arg(request: Any) -> int:
 
 
 ###############################################################################
-# recv_msg_state_arg
-###############################################################################
-@pytest.fixture(params=recv_msg_state_arg_list)  # type: ignore
-def recv_msg_state_arg(request: Any) -> tuple[st.ThreadState, int]:
-    """State of sender when smart_recv is to be issued.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(tuple[st.ThreadState, int], request.param)
-
-
-###############################################################################
-# send_msg_state_arg
-###############################################################################
-# @pytest.fixture(params=send_msg_state_arg_list)  # type: ignore
-# def send_msg_state_arg(request: Any) -> tuple[st.ThreadState, int]:
-#     """State of sender when smart_recv is to be issued.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return cast(tuple[st.ThreadState, int], request.param)
-
-
-###############################################################################
-# recv_msg_lap_arg
-###############################################################################
-@pytest.fixture(params=recv_msg_lap_arg_list)  # type: ignore
-def recv_msg_lap_arg(request: Any) -> int:
-    """Lap of sender when smart_recv is to be issued.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# send_msg_lap_arg
-###############################################################################
-@pytest.fixture(params=send_msg_lap_arg_list)  # type: ignore
-def send_msg_lap_arg(request: Any) -> int:
-    """Lap of sender when smart_recv is to be issued.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# send_resume_arg
-###############################################################################
-@pytest.fixture(params=send_resume_arg_list)  # type: ignore
-def send_resume_arg(request: Any) -> str:
-    """Specifies whether send or resume is to be tested.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(str, request.param)
-
-
-###############################################################################
 # wait_state_arg
 ###############################################################################
 @pytest.fixture(params=wait_state_arg_list)  # type: ignore
@@ -3846,260 +3760,6 @@ def timeout_arg2(request: Any) -> Any:
         The params values are returned one at a time
     """
     return request.param
-
-
-# ###############################################################################
-# # num_resumers_arg
-# ###############################################################################
-# @pytest.fixture(params=num_resumers_arg_list)  # type: ignore
-# def num_resumers_arg(request: Any) -> int:
-#     """Number of threads the do resumes.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return cast(int, request.param)
-#
-#
-# ###############################################################################
-# # num_start_before_arg
-# ###############################################################################
-# @pytest.fixture(params=num_start_before_arg_list)  # type: ignore
-# def num_start_before_arg(request: Any) -> int:
-#     """Number of threads the do resumes.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return cast(int, request.param)
-#
-#
-# ###############################################################################
-# # num_unreg_before_arg
-# ###############################################################################
-# @pytest.fixture(params=num_unreg_before_arg_list)  # type: ignore
-# def num_unreg_before_arg(request: Any) -> int:
-#     """Number of threads the do resumes.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return cast(int, request.param)
-#
-#
-# ###############################################################################
-# # num_stop_before_arg
-# ###############################################################################
-# @pytest.fixture(params=num_stop_before_arg_list)  # type: ignore
-# def num_stop_before_arg(request: Any) -> int:
-#     """Number of threads the do resumes.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return cast(int, request.param)
-#
-#
-# ###############################################################################
-# # num_started_after_arg
-# ###############################################################################
-# @pytest.fixture(params=num_started_after_arg_list)  # type: ignore
-# def num_started_after_arg(request: Any) -> int:
-#     """Number of threads the do resumes.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return cast(int, request.param)
-#
-#
-# ###############################################################################
-# # num_started_delay_arg
-# ###############################################################################
-# @pytest.fixture(params=num_started_delay_arg_list)  # type: ignore
-# def num_started_delay_arg(request: Any) -> int:
-#     """Number of threads the do resumes.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return cast(int, request.param)
-#
-#
-# ###############################################################################
-# # num_unreg_after_arg
-# ###############################################################################
-# @pytest.fixture(params=num_unreg_after_arg_list)  # type: ignore
-# def num_unreg_after_arg(request: Any) -> int:
-#     """Number of threads the do resumes.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return cast(int, request.param)
-#
-#
-# ###############################################################################
-# # num_stop_after_ok_arg
-# ###############################################################################
-# @pytest.fixture(params=num_stop_after_ok_arg_list)  # type: ignore
-# def num_stop_after_ok_arg(request: Any) -> int:
-#     """Number of threads the do resumes.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return cast(int, request.param)
-#
-#
-# ###############################################################################
-# # num_stop_after_err_arg
-# ###############################################################################
-# @pytest.fixture(params=num_stop_after_err_arg_list)  # type: ignore
-# def num_stop_after_err_arg(request: Any) -> int:
-#     """Number of threads the do resumes.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return cast(int, request.param)
-#
-# ###############################################################################
-# # num_active_arg
-# ###############################################################################
-# @pytest.fixture(params=num_active_arg_list)  # type: ignore
-# def num_active_arg(request: Any) -> int:
-#     """Number of active threads.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return cast(int, request.param)
-#
-#
-# ###############################################################################
-# # num_registered_before_arg
-# ###############################################################################
-# @pytest.fixture(params=num_registered_before_arg_list)  # type: ignore
-# def num_registered_before_arg(request: Any) -> int:
-#     """Number opf registered threads.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return cast(int, request.param)
-#
-#
-# ###############################################################################
-# # num_registered_after_arg
-# ###############################################################################
-# @pytest.fixture(params=num_registered_after_arg_list)  # type: ignore
-# def num_registered_after_arg(request: Any) -> int:
-#     """Number opf registered threads.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return cast(int, request.param)
-#
-#
-# ###############################################################################
-# # num_unreg_no_delay_arg
-# ###############################################################################
-# @pytest.fixture(params=num_unreg_no_delay_arg_list)  # type: ignore
-# def num_unreg_no_delay_arg(request: Any) -> int:
-#     """Number unregistered threads quickly created and started.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return cast(int, request.param)
-#
-# ###############################################################################
-# # num_unreg_delay_arg
-# ###############################################################################
-# @pytest.fixture(params=num_unreg_delay_arg_list)  # type: ignore
-# def num_unreg_delay_arg(request: Any) -> int:
-#     """Number unregistered threads slowly created and started.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return cast(int, request.param)
-#
-#
-# ###############################################################################
-# # num_stopped_no_delay_arg
-# ###############################################################################
-# @pytest.fixture(params=num_stopped_no_delay_arg_list)  # type: ignore
-# def num_stopped_no_delay_arg(request: Any) -> int:
-#     """Number stopped threads.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return cast(int, request.param)
-#
-#
-# ###############################################################################
-# # num_stopped_delay_arg
-# ###############################################################################
-# @pytest.fixture(params=num_stopped_delay_arg_list)  # type: ignore
-# def num_stopped_delay_arg(request: Any) -> int:
-#     """Number stopped threads quickly joined, created, and started.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return cast(int, request.param)
 
 
 ########################################################################
@@ -8324,7 +7984,7 @@ class ConfigVerifier:
             sender_names=from_names,
             receiver_names=to_names,
             num_msgs=1,
-            send_type=SendType.ToRemotes)
+            text='build_msg_suite')
 
         self.add_cmd(
             SendMsg(cmd_runners=from_names,
@@ -8422,7 +8082,7 @@ class ConfigVerifier:
             sender_names=remote_names,
             receiver_names=pending_names,
             num_msgs=max(1, pending_msg_count),
-            send_type=SendType.ToRemotes)
+            text='build_pending_sans_sync_scenario')
 
         for idx in range(pending_msg_count):
             send_msg_serial_num = self.add_cmd(SendMsg(
@@ -8508,7 +8168,7 @@ class ConfigVerifier:
                     sender_names=pending_names,
                     receiver_names=remote_names,
                     num_msgs=1,
-                    send_type=SendType.ToRemotes)
+                    text='build_pending_sans_sync_scenario')
                 pend_req_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=pending_names[0],
                             receivers=remote_names[0],
@@ -8852,7 +8512,7 @@ class ConfigVerifier:
             sender_names=remote_names,
             receiver_names=pending_names,
             num_msgs=max(1, pending_msg_count),
-            send_type=SendType.ToRemotes)
+            text='build_pending_sync_only_scenarios')
 
         for idx in range(pending_msg_count):
             send_msg_serial_num = self.add_cmd(SendMsg(
@@ -9366,7 +9026,7 @@ class ConfigVerifier:
             sender_names=remote_name,
             receiver_names=pending_name,
             num_msgs=max(1, pending_msg_count),
-            send_type=SendType.ToRemotes)
+            text='build_remove_reasons_scenarios')
 
         for idx in range(pending_msg_count):
             send_msg_serial_num = self.add_cmd(SendMsg(
@@ -10562,7 +10222,7 @@ class ConfigVerifier:
                 sender_names=sender_names,
                 receiver_names=receivers,
                 num_msgs=1,
-                send_type=SendType.ToRemotes)
+                text='build_def_del_pending_scenario')
             send_msg_serial_num_0 = self.add_cmd(
                 SendMsg(cmd_runners=sender_names[0],
                         receivers=receivers,
@@ -11116,7 +10776,7 @@ class ConfigVerifier:
                 sender_names=sender_names,
                 receiver_names=receivers,
                 num_msgs=1,
-                send_type=SendType.ToRemotes)
+                text='build_def_del_suite')
             send_msg_serial_num_0 = self.add_cmd(
                 SendMsg(cmd_runners=sender_names[0],
                         receivers=receivers,
@@ -11701,205 +11361,6 @@ class ConfigVerifier:
                        exp_positions=lock_positions.copy()))
 
     ####################################################################
-    # build_recv_msg_suite
-    ####################################################################
-    def build_recv_msg_suite(
-            self,
-            timeout_type: TimeoutType,
-            recv_msg_state: tuple[st.ThreadState, int],
-            recv_msg_lap: int,
-            send_msg_lap: int) -> None:
-        """Add cmds to run scenario.
-
-        Args:
-            timeout_type: specifies whether the smart_recv should
-                be coded with timeout, and whether it be False or True
-            recv_msg_state: sender state when smart_recv is to be issued
-            recv_msg_lap: lap 0 or 1 when the smart_recv is to be issued
-            send_msg_lap: lap 0 or 1 when the smart_send is to be issued
-
-        """
-        # Make sure we have enough threads. Each of the scenarios will
-        # require one thread for the commander, one thread for the
-        # sender, and one thread for the receiver, for a total of three.
-        assert 3 <= len(self.unregistered_names)
-
-        self.build_config(
-            cmd_runner=self.commander_name,
-            num_active=2)  # one for commander and one for receiver
-
-        self.log_name_groups()
-
-        active_names_copy = self.active_names - {self.commander_name}
-
-        ################################################################
-        # choose receiver_names
-        ################################################################
-        receiver_names = self.choose_names(
-            name_collection=active_names_copy,
-            num_names_needed=1,
-            update_collection=True,
-            var_name_for_log='receiver_names')
-
-        ################################################################
-        # choose sender_names
-        ################################################################
-        sender_names = self.choose_names(
-            name_collection=self.unregistered_names,
-            num_names_needed=1,
-            update_collection=False,
-            var_name_for_log='sender_names')
-
-        log_msg = f'smart_recv log test: {get_ptime()}'
-
-        ################################################################
-        # setup the messages to send
-        ################################################################
-        receiver_name = receiver_names[0]
-        sender_name = sender_names[0]
-
-        sender_msgs = SendRecvMsgs(
-            sender_names=sender_name,
-            receiver_names=receiver_name,
-            num_msgs=1,
-            send_type=SendType.ToRemotes)
-        confirm_cmd_to_use = 'RecvMsg'
-        recv_msg_serial_num = 0
-        ################################################################
-        # lap loop
-        ################################################################
-        current_state = st.ThreadState.Unregistered
-        reg_iteration = 0
-        for lap in range(2):
-            ############################################################
-            # start loop to advance sender through the config states
-            ############################################################
-            for state in (
-                    st.ThreadState.Unregistered,
-                    st.ThreadState.Registered,
-                    st.ThreadState.Unregistered,
-                    st.ThreadState.Registered,
-                    st.ThreadState.Alive,
-                    st.ThreadState.Stopped):
-                state_iteration = 0
-                ########################################################
-                # do join to make sender unregistered
-                ########################################################
-                if state == st.ThreadState.Unregistered:
-                    if current_state == st.ThreadState.Registered:
-                        self.add_cmd(Unregister(
-                            cmd_runners='alpha',
-                            unregister_targets=sender_name))
-                        state_iteration = 1
-                    elif current_state == st.ThreadState.Stopped:
-                        self.build_join_suite(
-                            cmd_runners=self.commander_name,
-                            join_target_names=sender_name,
-                            validate_config=False)
-                    current_state = st.ThreadState.Unregistered
-                ########################################################
-                # do create to make sender registered
-                ########################################################
-                elif state == st.ThreadState.Registered:
-                    state_iteration = reg_iteration % 2
-                    reg_iteration += 1
-                    self.build_create_suite(
-                        f1_create_items=[
-                            F1CreateItem(name=sender_name,
-                                         auto_start=False,
-                                         target_rtn=outer_f1,
-                                         app_config=AppConfig.ScriptStyle)],
-                        validate_config=False)
-                    current_state = st.ThreadState.Registered
-                ########################################################
-                # do start to make sender alive
-                ########################################################
-                elif state == st.ThreadState.Alive:
-                    self.build_start_suite(
-                        start_names=sender_name,
-                        validate_config=False)
-                    if (send_msg_lap == lap
-                            and timeout_type != TimeoutType.TimeoutTrue):
-                        self.add_cmd(
-                            SendMsg(cmd_runners=sender_name,
-                                    receivers=receiver_name,
-                                    msgs_to_send=sender_msgs,
-                                    msg_idx=0))
-                    current_state = st.ThreadState.Alive
-                ########################################################
-                # do stop to make sender stopped
-                ########################################################
-                else:  # state == st.ThreadState.Stopped:
-                    self.build_exit_suite(
-                        cmd_runner=self.commander_name,
-                        names=sender_name,
-                        validate_config=False)
-                    current_state = st.ThreadState.Stopped
-                ########################################################
-                # issue smart_recv
-                ########################################################
-                pause_time = 0
-                if (recv_msg_state[0] == state
-                        and recv_msg_state[1] == state_iteration
-                        and recv_msg_lap == lap):
-                    stopped_remotes = set()
-                    if ((lap == 0 and send_msg_lap == 1)
-                            or timeout_type == TimeoutType.TimeoutTrue):
-                        stopped_remotes = {sender_name}
-                        pause_time = 1
-                    if timeout_type == TimeoutType.TimeoutNone:
-                        recv_msg_serial_num = self.add_cmd(
-                            RecvMsg(cmd_runners=receiver_name,
-                                    senders=sender_name,
-                                    exp_senders=sender_name,
-                                    exp_msgs=sender_msgs,
-                                    stopped_remotes=stopped_remotes,
-                                    log_msg=log_msg))
-                    elif timeout_type == TimeoutType.TimeoutFalse:
-                        timeout_time = 6
-                        confirm_cmd_to_use = 'RecvMsgTimeoutFalse'
-                        recv_msg_serial_num = self.add_cmd(
-                            RecvMsgTimeoutFalse(
-                                cmd_runners=receiver_name,
-                                senders=sender_name,
-                                exp_senders=sender_name,
-                                exp_msgs=sender_msgs,
-                                timeout=timeout_time,
-                                stopped_remotes=stopped_remotes,
-                                log_msg=log_msg))
-
-                    else:  # TimeoutType.TimeoutTrue
-                        timeout_time = 0.5
-                        pause_time = 1  # ensure timeout
-                        if state != st.ThreadState.Stopped:
-                            stopped_remotes = set()
-                            self.set_recv_timeout(num_timeouts=1)
-
-                        confirm_cmd_to_use = 'RecvMsgTimeoutTrue'
-                        recv_msg_serial_num = self.add_cmd(
-                            RecvMsgTimeoutTrue(
-                                cmd_runners=receiver_name,
-                                senders=sender_name,
-                                exp_msgs=sender_msgs,
-                                timeout=timeout_time,
-                                timeout_names=sender_name,
-                                stopped_remotes=stopped_remotes,
-                                log_msg=log_msg))
-                    if pause_time > 0:
-                        self.add_cmd(
-                            Pause(cmd_runners=self.commander_name,
-                                  pause_seconds=pause_time))
-        ################################################################
-        # finally, confirm the smart_recv is done
-        ################################################################
-        self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=[self.commander_name],
-                confirm_cmd=confirm_cmd_to_use,
-                confirm_serial_num=recv_msg_serial_num,
-                confirmers=receiver_names))
-
-    ####################################################################
     # build_recv_msg_timeout_suite
     ####################################################################
     def build_recv_msg_timeout_suite(
@@ -12086,7 +11547,7 @@ class ConfigVerifier:
             sender_names=all_sender_names,
             receiver_names=receiver_names,
             num_msgs=1,
-            send_type=SendType.ToRemotes)
+            text='build_recv_msg_timeout_suite')
 
         if timeout_type == TimeoutType.TimeoutNone:
             confirm_cmd_to_use = 'RecvMsg'
@@ -14358,428 +13819,6 @@ class ConfigVerifier:
                     confirm_serial_num=resume_serial_num,
                     confirmers=resumer_names))
 
-    # ####################################################################
-    # # build_send_rotate_state_scenario
-    # ####################################################################
-    # def build_send_rotate_state_scenario(
-    #         self,
-    #         timeout_type: TimeoutType,
-    #         send_msg_state: tuple[st.ThreadState, int],
-    #         send_msg_lap: int,
-    #         recv_msg_lap: int,
-    #         send_resume: str = 'send') -> None:
-    #     """Add cmds to run scenario.
-    #
-    #     Args:
-    #         timeout_type: specifies whether the smart_recv should
-    #             be coded with timeout, and whether it be False or True
-    #         send_msg_state: receiver state when smart_send is to be issued
-    #         send_msg_lap: lap 0 or 1 when the smart_send is to be issued
-    #         recv_msg_lap: lap 0 or 1 when the smart_recv is to be issued
-    #         send_resume: 'send' or 'resume'
-    #
-    #     """
-    #     # Make sure we have enough threads. Each of the scenarios will
-    #     # require one thread for the commander, one thread for the
-    #     # sender, and one thread for the receiver, for a total of three.
-    #     assert 3 <= len(self.unregistered_names)
-    #
-    #     self.build_config(
-    #         cmd_runner=self.commander_name,
-    #         num_active=2)  # one for commander and two for senders
-    #     self.log_name_groups()
-    #
-    #     active_names_copy = self.active_names - {self.commander_name}
-    #
-    #     ################################################################
-    #     # choose receiver_names
-    #     ################################################################
-    #     sender_names = self.choose_names(
-    #         name_collection=active_names_copy,
-    #         num_names_needed=1,
-    #         update_collection=True,
-    #         var_name_for_log='sender_names')
-    #
-    #     ################################################################
-    #     # choose receiver_names
-    #     ################################################################
-    #     receiver_names = self.choose_names(
-    #         name_collection=self.unregistered_names,
-    #         num_names_needed=1,
-    #         update_collection=False,
-    #         var_name_for_log='receiver_names')
-    #
-    #     log_msg = f'smart_send log test: {get_ptime()}'
-    #
-    #     ################################################################
-    #     # setup the messages to send
-    #     ################################################################
-    #     receiver_name = receiver_names[0]
-    #     sender_name = sender_names[0]
-    #
-    #     sender_msgs = SendRecvMsgs(
-    #         sender_names=sender_name,
-    #         receiver_names=receiver_name,
-    #         num_msgs=1,
-    #         send_type=SendType.ToRemotes)
-    #
-    #     receiver_msgs = SendRecvMsgs(
-    #         sender_names=receiver_name,
-    #         receiver_names=sender_name,
-    #         num_msgs=1,
-    #         send_type=SendType.ToRemotes)
-    #
-    #     confirm_cmd_to_use = 'SendMsg'
-    #     send_msg_serial_num = 0
-    #
-    #     recv_msg_ok = False
-    #     reset_ops_count = False
-    #
-    #     stopped_remotes = set()
-    #
-    #     if (send_msg_state[0] == st.ThreadState.Unregistered
-    #             and send_msg_state[1] == 0):
-    #         if timeout_type != TimeoutType.TimeoutTrue:
-    #             stopped_remotes = {receiver_name}
-    #
-    #     if (send_msg_state[0] == st.ThreadState.Registered
-    #             and send_msg_state[1] == 0):
-    #         if timeout_type != TimeoutType.TimeoutTrue:
-    #             stopped_remotes = {receiver_name}
-    #             # if send_msg_lap == recv_msg_lap:
-    #             #     # recv_msg_ok = True
-    #             #     stopped_remotes = {receiver_name}
-    #             # else:
-    #             #     if (send_resume == 'sync'
-    #             #             or send_resume == 'sync_send'):
-    #             #         if send_msg_lap < recv_msg_lap:
-    #             #             stopped_remotes = {receiver_name}
-    #             #         elif send_msg_lap > recv_msg_lap:
-    #             #             timeout_type = TimeoutType.TimeoutTrue
-    #             #     else:
-    #             #         reset_ops_count = True
-    #
-    #     # if (send_msg_state[0] == st.ThreadState.Unregistered
-    #     #         and send_msg_state[1] == 1):
-    #     #     if timeout_type != TimeoutType.TimeoutTrue:
-    #     #         if send_msg_lap == recv_msg_lap:
-    #     #             recv_msg_ok = True
-    #     #         else:
-    #     #             stopped_remotes = {receiver_name}
-    #
-    #     if (send_msg_state[0] == st.ThreadState.Registered
-    #             and send_msg_state[1] == 1):
-    #         if timeout_type != TimeoutType.TimeoutTrue:
-    #             if send_msg_lap == recv_msg_lap:
-    #                 recv_msg_ok = True
-    #             elif (send_resume == 'sync'
-    #                     or send_resume == 'sync_send'):
-    #                 if send_msg_lap < recv_msg_lap:
-    #                     stopped_remotes = {receiver_name}
-    #                 elif send_msg_lap > recv_msg_lap:
-    #                     timeout_type = TimeoutType.TimeoutTrue
-    #             elif send_msg_lap > recv_msg_lap:
-    #                 stopped_remotes = {receiver_name}
-    #
-    #     if (send_msg_state[0] == st.ThreadState.Unregistered
-    #             and send_msg_state[1] == 1):
-    #         if timeout_type != TimeoutType.TimeoutTrue:
-    #             if send_msg_lap == recv_msg_lap:
-    #                 recv_msg_ok = True
-    #             else:
-    #                 if (send_resume == 'sync'
-    #                         or send_resume == 'sync_send'):
-    #                     if send_msg_lap < recv_msg_lap:
-    #                         stopped_remotes = {receiver_name}
-    #                     elif send_msg_lap > recv_msg_lap:
-    #                         timeout_type = TimeoutType.TimeoutTrue
-    #                 else:
-    #                     reset_ops_count = True
-    #
-    #     if send_msg_state[0] == st.ThreadState.Alive:
-    #         if timeout_type != TimeoutType.TimeoutTrue:
-    #             if send_msg_lap == recv_msg_lap:
-    #                 recv_msg_ok = True
-    #             else:
-    #                 stopped_remotes = {receiver_name}
-    #
-    #     # if (send_msg_state[0] == st.ThreadState.Registered
-    #     #         or send_msg_state[0] == st.ThreadState.Alive):
-    #     #     if timeout_type == TimeoutType.TimeoutTrue:
-    #     #         timeout_type = TimeoutType.TimeoutNone
-    #     #
-    #     #     if send_msg_lap == recv_msg_lap:
-    #     #         recv_msg_ok = True
-    #     #     else:
-    #     #         if (send_resume == 'sync'
-    #     #                 or send_resume == 'sync_send'):
-    #     #             if send_msg_lap < recv_msg_lap:
-    #     #                 stopped_remotes = {receiver_name}
-    #     #             elif send_msg_lap > recv_msg_lap:
-    #     #                 timeout_type = TimeoutType.TimeoutTrue
-    #     #         else:
-    #     #             reset_ops_count = True
-    #
-    #     if send_msg_state[0] == st.ThreadState.Stopped:
-    #         stopped_remotes = {receiver_name}
-    #         # else:
-    #         #     if send_msg_lap == 1:
-    #         #         timeout_type = TimeoutType.TimeoutTrue
-    #         #     else:
-    #         #         if (send_resume == 'sync'
-    #         #                 or send_resume == 'sync_send'):
-    #         #             if send_msg_lap == recv_msg_lap:
-    #         #                 timeout_type = TimeoutType.TimeoutTrue
-    #         #             else:
-    #         #                 if timeout_type != TimeoutType.TimeoutTrue:
-    #         #                     recv_msg_ok = True
-    #         #         elif (send_msg_lap != recv_msg_lap
-    #         #                 and timeout_type != TimeoutType.TimeoutTrue):
-    #         #             recv_msg_ok = True
-    #
-    #     ################################################################
-    #     # lap loop
-    #     ################################################################
-    #     current_state = st.ThreadState.Unregistered
-    #     reg_iteration = 0
-    #     for lap in range(2):
-    #         ############################################################
-    #         # start loop to advance receiver through the config states
-    #         ############################################################
-    #         for state in (
-    #                 st.ThreadState.Unregistered,
-    #                 st.ThreadState.Registered,
-    #                 st.ThreadState.Unregistered,
-    #                 st.ThreadState.Registered,
-    #                 st.ThreadState.Alive,
-    #                 st.ThreadState.Stopped):
-    #             state_iteration = 0
-    #             ########################################################
-    #             # do join to make receiver unregistered
-    #             ########################################################
-    #             if state == st.ThreadState.Unregistered:
-    #                 if current_state == st.ThreadState.Registered:
-    #                     self.add_cmd(Unregister(
-    #                         cmd_runners=self.commander_name,
-    #                         unregister_targets=receiver_name))
-    #                     self.unregistered_names |= {receiver_name}
-    #                     state_iteration = 1
-    #                 elif current_state == st.ThreadState.Stopped:
-    #                     self.build_join_suite(
-    #                         cmd_runners=self.commander_name,
-    #                         join_target_names=receiver_name,
-    #                         validate_config=False)
-    #                 current_state = st.ThreadState.Unregistered
-    #             ########################################################
-    #             # do create to make receiver registered
-    #             ########################################################
-    #             elif state == st.ThreadState.Registered:
-    #                 state_iteration = reg_iteration % 2
-    #                 reg_iteration += 1
-    #                 self.build_create_suite(
-    #                     f1_create_items=[
-    #                         F1CreateItem(name=receiver_name,
-    #                                      auto_start=False,
-    #                                      target_rtn=outer_f1,
-    #                                      app_config=AppConfig.ScriptStyle)],
-    #                     validate_config=False)
-    #                 current_state = st.ThreadState.Registered
-    #             ########################################################
-    #             # do start to make receiver alive
-    #             ########################################################
-    #             elif state == st.ThreadState.Alive:
-    #                 self.build_start_suite(
-    #                     start_names=receiver_name,
-    #                     validate_config=False)
-    #
-    #                 if send_resume == 'sync_send':
-    #                     send_msg_serial_num2 = self.add_cmd(
-    #                         SendMsg(
-    #                             cmd_runners=receiver_name,
-    #                             receivers=sender_name,
-    #                             msgs_to_send=receiver_msgs,
-    #                             msg_idx=0,
-    #                             stopped_remotes=set(),
-    #                             log_msg=log_msg))
-    #                     self.add_cmd(
-    #                         ConfirmResponse(
-    #                             cmd_runners=self.commander_name,
-    #                             confirm_cmd='SendMsg',
-    #                             confirm_serial_num=send_msg_serial_num2,
-    #                             confirmers=receiver_name))
-    #                 if recv_msg_lap == lap:
-    #                     if recv_msg_ok:
-    #                         if send_resume == 'send':
-    #                             self.add_cmd(
-    #                                 RecvMsg(cmd_runners=receiver_name,
-    #                                         senders=sender_name,
-    #                                         exp_senders=sender_name,
-    #                                         exp_msgs=sender_msgs))
-    #                         elif send_resume == 'resume':
-    #                             self.add_cmd(
-    #                                 Wait(cmd_runners=receiver_name,
-    #                                      resumers=sender_name))
-    #                         else:
-    #                             self.add_cmd(
-    #                                 Sync(cmd_runners=receiver_name,
-    #                                      targets=sender_name))
-    #                     else:
-    #                         if send_resume == 'send':
-    #                             self.add_cmd(
-    #                                 RecvMsgTimeoutTrue(
-    #                                     cmd_runners=receiver_name,
-    #                                     senders=sender_name,
-    #                                     timeout=0.5,
-    #                                     timeout_names=sender_name,
-    #                                     exp_msgs=sender_msgs))
-    #                         elif send_resume == 'resume':
-    #                             self.add_cmd(
-    #                                 WaitTimeoutTrue(
-    #                                     cmd_runners=receiver_name,
-    #                                     resumers=sender_name,
-    #                                     timeout=0.5,
-    #                                     timeout_remotes=sender_name))
-    #                         else:
-    #                             self.add_cmd(
-    #                                 SyncTimeoutTrue(
-    #                                     cmd_runners=receiver_name,
-    #                                     targets=sender_name,
-    #                                     timeout=0.5,
-    #                                     timeout_remotes=sender_name))
-    #                         self.add_cmd(
-    #                             Pause(cmd_runners=self.commander_name,
-    #                                   pause_seconds=1))
-    #                 current_state = st.ThreadState.Alive
-    #             ########################################################
-    #             # do stop to make receiver stopped
-    #             ########################################################
-    #             else:  # state == st.ThreadState.Stopped:
-    #                 self.build_exit_suite(
-    #                     cmd_runner=self.commander_name,
-    #                     names=receiver_name,
-    #                     validate_config=False,
-    #                     reset_ops_count=reset_ops_count)
-    #                 current_state = st.ThreadState.Stopped
-    #             ########################################################
-    #             # issue smart_send
-    #             ########################################################
-    #             if (send_msg_state[0] == state
-    #                     and send_msg_state[1] == state_iteration
-    #                     and send_msg_lap == lap):
-    #                 pause_time = 1
-    #                 if timeout_type == TimeoutType.TimeoutNone:
-    #                     if send_resume == 'send':
-    #                         confirm_cmd_to_use = 'SendMsg'
-    #                         send_msg_serial_num = self.add_cmd(
-    #                             SendMsg(
-    #                                 cmd_runners=sender_name,
-    #                                 receivers=receiver_name,
-    #                                 msgs_to_send=sender_msgs,
-    #                                 msg_idx=0,
-    #                                 stopped_remotes=stopped_remotes,
-    #                                 log_msg=log_msg))
-    #                     elif send_resume == 'resume':
-    #                         confirm_cmd_to_use = 'Resume'
-    #                         send_msg_serial_num = self.add_cmd(
-    #                             Resume(
-    #                                 cmd_runners=sender_name,
-    #                                 targets=receiver_name,
-    #                                 exp_resumed_targets=receiver_name,
-    #                                 stopped_remotes=stopped_remotes,
-    #                                 log_msg=log_msg))
-    #                     elif (send_resume == 'sync'
-    #                           or send_resume == 'sync_send'):
-    #                         confirm_cmd_to_use = 'Sync'
-    #                         send_msg_serial_num = self.add_cmd(
-    #                             Sync(
-    #                                 cmd_runners=sender_name,
-    #                                 targets=receiver_name,
-    #                                 stopped_remotes=stopped_remotes,
-    #                                 log_msg=log_msg))
-    #
-    #                 elif timeout_type == TimeoutType.TimeoutFalse:
-    #                     timeout_time = 6
-    #                     if send_resume == 'send':
-    #                         confirm_cmd_to_use = 'SendMsgTimeoutFalse'
-    #                         send_msg_serial_num = self.add_cmd(
-    #                             SendMsgTimeoutFalse(
-    #                                 cmd_runners=sender_name,
-    #                                 receivers=receiver_name,
-    #                                 msgs_to_send=sender_msgs,
-    #                                 msg_idx=0,
-    #                                 timeout=timeout_time,
-    #                                 stopped_remotes=stopped_remotes,
-    #                                 log_msg=log_msg))
-    #                     elif send_resume == 'resume':
-    #                         confirm_cmd_to_use = 'ResumeTimeoutFalse'
-    #                         send_msg_serial_num = self.add_cmd(
-    #                             ResumeTimeoutFalse(
-    #                                 cmd_runners=sender_name,
-    #                                 targets=receiver_name,
-    #                                 exp_resumed_targets=receiver_name,
-    #                                 timeout=timeout_time,
-    #                                 stopped_remotes=stopped_remotes,
-    #                                 log_msg=log_msg))
-    #                     elif (send_resume == 'sync'
-    #                           or send_resume == 'sync_send'):
-    #                         confirm_cmd_to_use = 'SyncTimeoutFalse'
-    #                         send_msg_serial_num = self.add_cmd(
-    #                             SyncTimeoutFalse(
-    #                                 cmd_runners=sender_name,
-    #                                 targets=receiver_name,
-    #                                 timeout=timeout_time,
-    #                                 stopped_remotes=stopped_remotes,
-    #                                 log_msg=log_msg))
-    #                 else:  # timeout_type == TimeoutType.TimeoutTrue
-    #                     timeout_time = 0.5
-    #                     if send_resume == 'send':
-    #                         confirm_cmd_to_use = 'SendMsgTimeoutTrue'
-    #                         send_msg_serial_num = self.add_cmd(
-    #                             SendMsgTimeoutTrue(
-    #                                 cmd_runners=sender_name,
-    #                                 receivers=receiver_name,
-    #                                 msgs_to_send=sender_msgs,
-    #                                 msg_idx=0,
-    #                                 timeout=timeout_time,
-    #                                 unreg_timeout_names=receiver_name,
-    #                                 fullq_timeout_names=[],
-    #                                 stopped_remotes=stopped_remotes,
-    #                                 log_msg=log_msg))
-    #                     elif send_resume == 'resume':
-    #                         confirm_cmd_to_use = 'ResumeTimeoutTrue'
-    #                         send_msg_serial_num = self.add_cmd(
-    #                             ResumeTimeoutTrue(
-    #                                 cmd_runners=sender_name,
-    #                                 targets=receiver_name,
-    #                                 exp_resumed_targets=set(),
-    #                                 timeout=timeout_time,
-    #                                 timeout_names=receiver_name,
-    #                                 stopped_remotes=stopped_remotes,
-    #                                 log_msg=log_msg))
-    #                     elif (send_resume == 'sync'
-    #                           or send_resume == 'sync_send'):
-    #                         confirm_cmd_to_use = 'SyncTimeoutTrue'
-    #                         send_msg_serial_num = self.add_cmd(
-    #                             SyncTimeoutTrue(
-    #                                 cmd_runners=sender_name,
-    #                                 targets=receiver_name,
-    #                                 timeout=timeout_time,
-    #                                 timeout_remotes=receiver_name,
-    #                                 stopped_remotes=stopped_remotes,
-    #                                 log_msg=log_msg))
-    #                 self.add_cmd(
-    #                     Pause(cmd_runners=self.commander_name,
-    #                           pause_seconds=pause_time))
-    #     ################################################################
-    #     # finally, confirm the smart_recv is done
-    #     ################################################################
-    #     self.add_cmd(
-    #         ConfirmResponse(
-    #             cmd_runners=[self.commander_name],
-    #             confirm_cmd=confirm_cmd_to_use,
-    #             confirm_serial_num=send_msg_serial_num,
-    #             confirmers=sender_name))
-
     ####################################################################
     # build_rotate_state_scenario
     ####################################################################
@@ -14846,7 +13885,7 @@ class ConfigVerifier:
             sender_names=[req0_name, req1_name],
             receiver_names=[req0_name, req1_name],
             num_msgs=1,
-            send_type=SendType.ToRemotes)
+            text='build_rotate_state_scenario')
 
         req0_deadlock_remotes: set[str] = set()
 
@@ -15754,7 +14793,7 @@ class ConfigVerifier:
         msgs_to_send = SendRecvMsgs(sender_names=senders,
                                     receiver_names=receivers,
                                     num_msgs=num_msgs,
-                                    send_type=send_type)
+                                    text='build_send_scenario')
 
         ############################################################
         # send messages
@@ -15824,7 +14863,8 @@ class ConfigVerifier:
         # build msgs for non_senders since we might have no senders
         msgs_to_send = SendRecvMsgs(sender_names=senders | non_senders,
                                     receiver_names=receiver,
-                                    num_msgs=num_msgs)
+                                    num_msgs=num_msgs,
+                                    text='build_recv_basic_scenario')
 
         recv_senders: set[str] = set()
         if recv_type == RecvType.PartialSenders:
@@ -16269,7 +15309,7 @@ class ConfigVerifier:
                                    serial_number=request_serial_num)
 
     ####################################################################
-    # build_msg_timeout_suite
+    # build_send_msg_timeout_suite
     ####################################################################
     def build_send_msg_timeout_suite(self,
                                      timeout_type: TimeoutType,
@@ -16284,13 +15324,11 @@ class ConfigVerifier:
 
         Args:
             timeout_type: specifies whether to issue the send_cmd with
-                timeout, and is so whether the send_cmd should timeout
+                timeout, and if so whether the send_cmd should timeout
                 or, by starting exited threads in time, not timeout
             num_senders: specifies number of threads that will send msg
             num_active_targets: specifies number of threads to receive
-                the msg,
-                including those that are registered only or expected to
-                cause the timeout
+                the msg
             num_registered_targets: specifies the number of targets that
                 should be registered only (i.e., not yet started)
             num_unreg_timeouts: specifies the number of threads that
@@ -16415,14 +15453,14 @@ class ConfigVerifier:
         sender_msgs = SendRecvMsgs(
             sender_names=sender_names,
             receiver_names=all_targets,
-            num_msgs=1,
-            send_type=SendType.ToRemotes)
+            num_msgs=self.max_msgs,
+            text='sender_msgs')
 
         sender_1_msg_1 = SendRecvMsgs(
             sender_names=exit_names,
-            receiver_names=sender_names[1],
+            receiver_names=sender_names,
             num_msgs=1,
-            send_type=SendType.ToRemotes)
+            text='sender_1_msg_1')
         if exit_names and num_senders >= 2:
             for exit_name in exit_names:
                 log_msg = f'log test: {get_ptime()}'
@@ -16445,15 +15483,15 @@ class ConfigVerifier:
 
         sender_2_msg_1 = SendRecvMsgs(
             sender_names=exit_names,
-            receiver_names=sender_names[2],
+            receiver_names=sender_names,
             num_msgs=1,
-            send_type=SendType.ToRemotes)
+            text='sender_2_msg_1')
 
         sender_2_msg_2 = SendRecvMsgs(
             sender_names=exit_names,
-            receiver_names=sender_names[2],
+            receiver_names=sender_names,
             num_msgs=1,
-            send_type=SendType.ToRemotes)
+            text='sender_2_msg_2')
 
         if exit_names and num_senders == 3:
             for exit_name in exit_names:
@@ -16502,7 +15540,7 @@ class ConfigVerifier:
                     SendMsg(cmd_runners=sender_names,
                             receivers=full_q_names,
                             msgs_to_send=sender_msgs,
-                            msg_idx=0))
+                            msg_idx=idx))
 
                 ########################################################
                 # confirm the smart_send
@@ -16636,12 +15674,11 @@ class ConfigVerifier:
             # tell the fullq threads to read the stacked up msgs
             # so that the smart_send will complete
             if full_q_names:
-                for idx in range(self.max_msgs):
-                    self.add_cmd(
-                        RecvMsg(cmd_runners=full_q_names,
-                                senders=sender_names,
-                                exp_senders=sender_names,
-                                exp_msgs=sender_msgs))
+                self.add_cmd(
+                    RecvMsg(cmd_runners=full_q_names,
+                            senders=sender_names,
+                            exp_senders=sender_names,
+                            exp_msgs=sender_msgs))
 
             final_recv_names = all_targets
 
@@ -16896,7 +15933,7 @@ class ConfigVerifier:
             sender_names=['delta', 'echo'],
             receiver_names=['alpha', 'beta', 'charlie'],
             num_msgs=1,
-            send_type=SendType.ToRemotes)
+            text='build_simple_scenario')
 
         send_msg_serial_num = self.add_cmd(
             SendMsg(cmd_runners=['delta', 'echo'],
@@ -18150,8 +17187,18 @@ class ConfigVerifier:
 
         assert sorted(exp_senders) == sorted(recvd_msgs.keys())
         for remote in exp_senders:
-            assert recvd_msgs[remote] == exp_msgs.exp_received_msgs[
-                cmd_runner][remote]
+            if len(exp_msgs.exp_received_msgs[
+                    cmd_runner][remote]) > self.max_msgs:
+                msgs_to_check: list[Any] = exp_msgs.exp_received_msgs[
+                    cmd_runner][remote][0:9]
+
+            else:
+                msgs_to_check: list[Any] = exp_msgs.exp_received_msgs[
+                    cmd_runner][remote].copy()
+
+            assert recvd_msgs[remote] == msgs_to_check
+            exp_msgs.clear_exp_msgs_received(receiver_name=cmd_runner,
+                                             sender_names=exp_senders)
 
         self.wait_for_monitor(cmd_runner=cmd_runner,
                               rtn_name='handle_recv')
@@ -26442,94 +25489,6 @@ class TestSmartThreadComboScenarios:
             caplog_to_use=caplog,
             commander_config=commander_config
         )
-
-    ####################################################################
-    # test_recv_msg_scenarios
-    ####################################################################
-    def test_recv_msg_scenarios(
-            self,
-            timeout_type_arg: TimeoutType,
-            recv_msg_state_arg: tuple[st.ThreadState, int],
-            recv_msg_lap_arg: int,
-            send_msg_lap_arg: int,
-            caplog: pytest.CaptureFixture[str]
-    ) -> None:
-        """Test meta configuration scenarios.
-
-        Args:
-            timeout_type_arg: specifies whether the smart_recv should
-                be coded with timeout and whether the smart_recv should
-                succeed or fail with a timeout
-            recv_msg_state_arg: sender state when smart_recv is to be
-                issued
-            recv_msg_lap_arg: lap 0 or 1 when the smart_recv is to be
-                issued
-            send_msg_lap_arg: lap 0 or 1 when the smart_send is to be
-                issued
-            caplog: pytest fixture to capture log output
-
-        """
-        args_for_scenario_builder: dict[str, Any] = {
-            'timeout_type': timeout_type_arg,
-            'recv_msg_state': recv_msg_state_arg,
-            'recv_msg_lap': recv_msg_lap_arg,
-            'send_msg_lap': send_msg_lap_arg
-        }
-
-        command_config_num = (timeout_type_arg.value
-                              + recv_msg_lap_arg
-                              + send_msg_lap_arg) % num_commander_configs
-        scenario_driver(
-            scenario_builder=ConfigVerifier.build_recv_msg_suite,
-            scenario_builder_args=args_for_scenario_builder,
-            caplog_to_use=caplog,
-            commander_config=commander_config[command_config_num]
-        )
-
-    # ####################################################################
-    # # test_send_rotate_state_scenarios
-    # ####################################################################
-    # def test_send_rotate_state_scenarios(
-    #         self,
-    #         timeout_type_arg: TimeoutType,
-    #         send_msg_state_arg: tuple[st.ThreadState, int],
-    #         send_msg_lap_arg: int,
-    #         recv_msg_lap_arg: int,
-    #         send_resume_arg: str,
-    #         caplog: pytest.CaptureFixture[str]
-    # ) -> None:
-    #     """Test meta configuration scenarios.
-    #
-    #     Args:
-    #         timeout_type_arg: specifies whether the smart_recv should
-    #             be coded with timeout and whether the smart_recv should
-    #             succeed or fail with a timeout
-    #         send_msg_state_arg: sender state when smart_send is to be
-    #             issued
-    #         send_msg_lap_arg: lap 0 or 1 when the smart_send is to be
-    #             issued
-    #         recv_msg_lap_arg: lap 0 or 1 when the smart_recv is to be
-    #             issued
-    #         send_resume_arg: specifies whether to test send or resume
-    #         caplog: pytest fixture to capture log output
-    #
-    #     """
-    #     commander_config = AppConfig.ScriptStyle
-    #
-    #     args_for_scenario_builder: dict[str, Any] = {
-    #         'timeout_type': timeout_type_arg,
-    #         'send_msg_state': send_msg_state_arg,
-    #         'send_msg_lap': send_msg_lap_arg,
-    #         'recv_msg_lap': recv_msg_lap_arg,
-    #         'send_resume': send_resume_arg
-    #     }
-    #
-    #     scenario_driver(
-    #         scenario_builder=ConfigVerifier.build_send_rotate_state_scenario,
-    #         scenario_builder_args=args_for_scenario_builder,
-    #         caplog_to_use=caplog,
-    #         commander_config=commander_config
-    #     )
 
     ####################################################################
     # test_send_msg_timeout_scenarios
