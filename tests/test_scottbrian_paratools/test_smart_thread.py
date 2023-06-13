@@ -613,40 +613,6 @@ num_unreg_senders_arg_list = [0, 1]
 num_reg_senders_arg_list = [0, 1]
 # num_reg_senders_arg_list = [2]  # .75 .06
 
-########################################################################
-# Test settings for test_send_msg_timeout_scenarios
-########################################################################
-num_senders_arg_list = [1, 2, 3]
-# num_senders_arg_list = [2]
-
-num_active_targets_arg_list = [0, 1, 2]
-# num_active_targets_arg_list = [3]  # 0.12
-
-num_registered_targets_arg_list = [0, 1, 2]
-# num_registered_targets_arg_list = [3]  # 0.11
-
-num_unreg_timeouts_arg_list = [0, 1, 2]
-# num_unreg_timeouts_arg_list = [3]  # 0.15
-
-num_exit_timeouts_arg_list = [0, 1, 2]
-# num_exit_timeouts_arg_list = [1]  # 0.11
-
-num_full_q_timeouts_arg_list = [0, 1, 2]
-# num_full_q_timeouts_arg_list = [3]  # 0.11
-
-
-# ########################################################################
-# # Test settings for test_resume_timeout_scenarios
-# ########################################################################
-# # num_resumers_arg_list = [1, 2, 3]
-# num_active_arg_list = [0, 1, 2]
-# num_registered_before_arg_list = [0, 1, 2]
-# num_registered_after_arg_list = [0, 1, 2]
-# num_unreg_no_delay_arg_list = [0, 1, 2]
-# num_unreg_delay_arg_list = [0, 1, 2]
-# num_stopped_no_delay_arg_list = [0, 1, 2]
-# num_stopped_delay_arg_list = [0, 1, 2]
-
 
 ########################################################################
 # Test settings for test_wait_timeout_scenarios
@@ -3456,22 +3422,6 @@ def timeout_type_arg(request: Any) -> TimeoutType:
 
 
 ###############################################################################
-# num_senders_arg
-###############################################################################
-@pytest.fixture(params=num_senders_arg_list)  # type: ignore
-def num_senders_arg(request: Any) -> int:
-    """Number of threads to send msg.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
 # wait_state_arg
 ###############################################################################
 @pytest.fixture(params=wait_state_arg_list)  # type: ignore
@@ -3621,86 +3571,6 @@ def num_unreg_senders_arg(request: Any) -> int:
 @pytest.fixture(params=num_reg_senders_arg_list)  # type: ignore
 def num_reg_senders_arg(request: Any) -> int:
     """Number of threads to be registered and send msg after start.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_active_targets_arg
-###############################################################################
-@pytest.fixture(params=num_active_targets_arg_list)  # type: ignore
-def num_active_targets_arg(request: Any) -> int:
-    """Number of threads to be active at time of send.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_registered_targets_arg
-###############################################################################
-@pytest.fixture(params=num_registered_targets_arg_list)  # type: ignore
-def num_registered_targets_arg(request: Any) -> int:
-    """Number of threads to be registered at time of send.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-########################################################################
-# num_exit_timeouts_arg
-########################################################################
-@pytest.fixture(params=num_exit_timeouts_arg_list)  # type: ignore
-def num_exit_timeouts_arg(request: Any) -> int:
-    """Number of threads to exit before msg is sent.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-########################################################################
-# num_unreg_timeouts_arg
-########################################################################
-@pytest.fixture(params=num_unreg_timeouts_arg_list)  # type: ignore
-def num_unreg_timeouts_arg(request: Any) -> int:
-    """Number of threads to be unregistered at time of send.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-########################################################################
-# num_full_q_timeouts_arg
-########################################################################
-@pytest.fixture(params=num_full_q_timeouts_arg_list)  # type: ignore
-def num_full_q_timeouts_arg(request: Any) -> int:
-    """Number of threads to have full queue at time of send.
 
     Args:
         request: special fixture that returns the fixture params
@@ -5477,7 +5347,7 @@ class RequestAckLogSearchItem(LogSearchItem):
             'smart_sync': 'smart_sync achieved with'
         }
         list_of_acks = ('(smart_send sent message to'
-                        '|smart_recv received msg from'
+                        '|smart_recv received [0-9]+ msg[s]* from'
                         '|smart_wait resumed by'
                         '|smart_resume resumed'
                         '|smart_sync set event for'
@@ -17190,7 +17060,7 @@ class ConfigVerifier:
             if len(exp_msgs.exp_received_msgs[
                     cmd_runner][remote]) > self.max_msgs:
                 msgs_to_check: list[Any] = exp_msgs.exp_received_msgs[
-                    cmd_runner][remote][0:9]
+                    cmd_runner][remote][0:self.max_msgs]
 
             else:
                 msgs_to_check: list[Any] = exp_msgs.exp_received_msgs[
@@ -21232,8 +21102,8 @@ class ConfigVerifier:
         ################################################################
         # get first smart_recv log msg
         ################################################################
-        search_msg = (f'{receiver_names[0]} smart_recv received msg from '
-                      f'{sender_names[0]}')
+        search_msg = (f'{receiver_names[0]} smart_recv received [0-9]+ '
+                      f'msg[s]* from {sender_names[0]}')
 
         recv_0_log_msg, recv_0_log_pos = self.get_log_msg(
             search_msg=search_msg,
@@ -21256,8 +21126,8 @@ class ConfigVerifier:
         ################################################################
         # get second smart_recv log msg
         ################################################################
-        search_msg = (f'{receiver_names[1]} smart_recv received msg from '
-                      f'{sender_names[0]}')
+        search_msg = (f'{receiver_names[1]} smart_recv received [0 - 9]+ '
+                      f'msg[s]* from {sender_names[0]}')
 
         recv_1_log_msg, recv_1_log_pos = self.get_log_msg(
             search_msg=search_msg,
@@ -25437,14 +25307,6 @@ class TestSmartThreadComboScenarios:
                               (st.ThreadState.Stopped, 0)])
     @pytest.mark.parametrize("req0_when_req1_lap_arg", [0, 1])
     @pytest.mark.parametrize("req1_lap_arg_arg", [0, 1])
-    # @pytest.mark.parametrize("timeout_type_arg",
-    #                          [TimeoutType.TimeoutTrue])
-    # @pytest.mark.parametrize("req0_arg", [st.ReqType.Smart_sync])
-    # @pytest.mark.parametrize("req1_arg", [st.ReqType.Smart_send])
-    # @pytest.mark.parametrize("req0_when_req1_state_arg",
-    #                          [(st.ThreadState.Alive, 0)])
-    # @pytest.mark.parametrize("req0_when_req1_lap_arg", [0])
-    # @pytest.mark.parametrize("req1_lap_arg_arg", [0])
     def test_rotate_state_scenarios(
             self,
             timeout_type_arg: TimeoutType,
@@ -25493,6 +25355,24 @@ class TestSmartThreadComboScenarios:
     ####################################################################
     # test_send_msg_timeout_scenarios
     ####################################################################
+    @pytest.mark.parametrize("timeout_type_arg",
+                             [TimeoutType.TimeoutNone,
+                              TimeoutType.TimeoutFalse,
+                              TimeoutType.TimeoutTrue])
+    @pytest.mark.parametrize("num_senders_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_active_targets_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_registered_targets_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_unreg_timeouts_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_exit_timeouts_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_full_q_timeouts_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("timeout_type_arg",
+    #                          [TimeoutType.TimeoutNone])
+    # @pytest.mark.parametrize("num_senders_arg", [1])
+    # @pytest.mark.parametrize("num_active_targets_arg", [0])
+    # @pytest.mark.parametrize("num_registered_targets_arg", [0])
+    # @pytest.mark.parametrize("num_unreg_timeouts_arg", [0])
+    # @pytest.mark.parametrize("num_exit_timeouts_arg", [0])
+    # @pytest.mark.parametrize("num_full_q_timeouts_arg", [1])
     def test_send_msg_timeout_scenarios(
             self,
             timeout_type_arg: TimeoutType,

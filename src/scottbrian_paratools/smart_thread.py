@@ -2663,7 +2663,7 @@ class SmartThread:
                 except queue.Full:
                     # We fail this request when the msg_q is full
                     request_block.full_send_q_remotes |= {pk_remote.remote}
-                    return True  # we are done with this target
+                    return False  # give the remote some more time
         else:
             if remote_state == ThreadState.Stopped:
                 request_block.stopped_remotes |= {pk_remote.remote}
@@ -3089,12 +3089,18 @@ class SmartThread:
                     recvd_msg = local_sb.msg_q.get(
                         timeout=timeout_value)
                     self.recvd_msgs[pk_remote.remote].append(recvd_msg)
-                    logger.info(
-                        f'{self.name} smart_recv received msg from '
-                        f'{pk_remote.remote}')
                     while not local_sb.msg_q.empty():
                         recvd_msg = local_sb.msg_q.get()
                         self.recvd_msgs[pk_remote.remote].append(recvd_msg)
+
+                    num_msgs = len(self.recvd_msgs[pk_remote.remote])
+                    if num_msgs > 1:
+                        msg_msgs = 'msgs'
+                    else:
+                        msg_msgs = 'msg'
+                    logger.info(
+                        f'{self.name} smart_recv received {num_msgs} '
+                        f'{msg_msgs} from {pk_remote.remote}')
                     # reset recv_wait after we get messages instead of
                     # before so as to avoid having the flag being
                     # momentarily False with the msg_q empty in the
