@@ -231,12 +231,13 @@ class SendRecvMsgs:
                       receiver_names: Iterable,
                       msg_idx: int) -> dict[str, Any]:
         send_msgs: dict[str, Any] = {}
-        for receiver_name in receiver_names:
-            msg = self.directed_msgs[msg_idx][sender_name][receiver_name]
-            send_msgs[receiver_name] = msg
-            self.add_exp_msg_received(receiver_name=receiver_name,
-                                      sender_name=sender_name,
-                                      msg=msg)
+        with self.msg_lock:
+            for receiver_name in receiver_names:
+                msg = self.directed_msgs[msg_idx][sender_name][receiver_name]
+                send_msgs[receiver_name] = msg
+                self.add_exp_msg_received(receiver_name=receiver_name,
+                                          sender_name=sender_name,
+                                          msg=msg)
         return send_msgs
 
     def add_exp_msg_received(self,
@@ -247,13 +248,15 @@ class SendRecvMsgs:
 
     def clear_exp_msgs_received(self,
                                 receiver_name: str,
-                                sender_names: set[str]):
-        for sender in sender_names:
-            for idx in range(10):
-                if self.exp_received_msgs[receiver_name][sender]:
-                    self.exp_received_msgs[receiver_name][sender].pop(0)
-                else:
-                    break
+                                sender_names: set[str],
+                                num_msgs: int):
+        with self.msg_lock:
+            for sender in sender_names:
+                for idx in range(num_msgs):
+                    if self.exp_received_msgs[receiver_name][sender]:
+                        self.exp_received_msgs[receiver_name][sender].pop(0)
+                    else:
+                        break
 
 
 ########################################################################
@@ -732,6 +735,24 @@ class FailedDefDelVerify(ErrorTstSmartThread):
 class RemainingPendingEvents(ErrorTstSmartThread):
     """There are remaining pending events."""
     pass
+
+
+########################################################################
+# get_names
+########################################################################
+def get_names(stem: str,
+              count: int) -> set[str]:
+    """Create a set of names give stem and count.
+
+    Args:
+        stem: base of name to which index will be added
+        count: number of names to create
+
+    Returns:
+        A set of names
+
+    """
+    return {stem + str(i) for i in range(count)}
 
 
 ########################################################################
@@ -7080,6 +7101,8 @@ class ConfigVerifier:
                 cmd_runners=cmd_runner,
                 num_to_join=num_active_to_join)
 
+        self.log_name_groups()
+
         # verify the counts
         self.add_cmd(VerifyCounts(cmd_runners=cmd_runner,
                                   exp_num_registered=num_registered,
@@ -7104,7 +7127,7 @@ class ConfigVerifier:
             stopped_names: thread names to be in the stopped pool
 
         """
-        self.thread_names: list[str] = ['alpha']
+        self.thread_names: list[str] = [self.commander_name]
         if unreg_names:
             self.thread_names.extend(unreg_names)
 
@@ -7117,6 +7140,7 @@ class ConfigVerifier:
 
         self.unregistered_names: set[str] = set(self.thread_names)
         self.setup_pending_events()
+        self.unregistered_names -= {self.commander_name}
 
         if reg_names:
             names: list[str] = sorted(reg_names)
@@ -7171,6 +7195,8 @@ class ConfigVerifier:
 
             self.build_exit_suite(cmd_runner=self.commander_name,
                                   names=names)
+
+        self.log_name_groups()
 
     ####################################################################
     # build_config_build_suite
@@ -7620,8 +7646,6 @@ class ConfigVerifier:
             num_registered=num_registered_needed,
             num_active=num_active_needed)
 
-        self.log_name_groups()
-
         unregistered_names_copy = self.unregistered_names.copy()
         registered_names_copy = self.registered_names.copy()
         active_names_copy = self.active_names - {self.commander_name}
@@ -7926,8 +7950,6 @@ class ConfigVerifier:
                 + joiner_names)
 
         self.create_config(active_names=active_names)
-
-        self.log_name_groups()
 
         lock_positions: list[str] = []
         pend_req_serial_num: int = 0
@@ -8356,8 +8378,6 @@ class ConfigVerifier:
                 + joiner_names)
 
         self.create_config(active_names=active_names)
-
-        self.log_name_groups()
 
         lock_positions: list[str] = []
         pend_req_serial_num: int = 0
@@ -8867,8 +8887,6 @@ class ConfigVerifier:
 
         self.create_config(active_names=active_names)
 
-        self.log_name_groups()
-
         pending_name = pending_names[0]
         remote_name = remote_names[0]
         joiner_name = joiner_names[0]
@@ -9244,8 +9262,6 @@ class ConfigVerifier:
 
         self.create_config(active_names=active_names)
 
-        self.log_name_groups()
-
         pending_name = pending_names[0]
         remote_name = remote_names[0]
         joiner_name = joiner_names[0]
@@ -9397,8 +9413,6 @@ class ConfigVerifier:
                 + joiner_names)
 
         self.create_config(active_names=active_names)
-
-        self.log_name_groups()
 
         pending_name = pending_names[0]
         remote_name = remote_names[0]
@@ -9868,8 +9882,6 @@ class ConfigVerifier:
         self.build_config(
             cmd_runner=self.commander_name,
             num_active=num_active_needed)
-
-        self.log_name_groups()
 
         active_names_copy = self.active_names - {self.commander_name}
 
@@ -10416,8 +10428,6 @@ class ConfigVerifier:
         self.build_config(
             cmd_runner=self.commander_name,
             num_active=num_active_needed)
-
-        self.log_name_groups()
 
         active_names_copy = self.active_names - {self.commander_name}
 
@@ -11319,8 +11329,6 @@ class ConfigVerifier:
             num_registered=num_reg_senders,
             num_active=num_active_needed)
 
-        self.log_name_groups()
-
         active_names_copy = self.active_names - {self.commander_name}
 
         ################################################################
@@ -11615,8 +11623,6 @@ class ConfigVerifier:
             cmd_runner=self.commander_name,
             num_active=num_active_threads_needed)
 
-        self.log_name_groups()
-
         active_names_copy = self.active_names - {self.commander_name}
 
         waiter_names = self.choose_names(
@@ -11662,8 +11668,6 @@ class ConfigVerifier:
         self.build_config(
             cmd_runner=self.commander_name,
             num_active=2)  # one for commander and one for receiver
-
-        self.log_name_groups()
 
         active_names_copy = self.active_names - {self.commander_name}
 
@@ -12443,8 +12447,6 @@ class ConfigVerifier:
             num_active=num_active_needed,
         )
 
-        self.log_name_groups()
-
         # remove commander
         active_names_copy = self.active_names - {self.commander_name}
 
@@ -12790,8 +12792,6 @@ class ConfigVerifier:
             cmd_runner=self.commander_name,
             num_active=num_active_needed,
         )
-
-        self.log_name_groups()
 
         # remove commander
         active_names_copy = self.active_names - {self.commander_name}
@@ -13173,8 +13173,6 @@ class ConfigVerifier:
             num_active=num_active_needed,
             num_stopped=num_stopped_no_delay + num_stopped_delay
         )
-
-        self.log_name_groups()
 
         # remove commander
         active_names_copy = self.active_names - {self.commander_name}
@@ -13723,7 +13721,6 @@ class ConfigVerifier:
         self.build_config(
             cmd_runner=self.commander_name,
             num_active=2)  # one for commander and one for req0
-        self.log_name_groups()
 
         active_names_copy = self.active_names - {self.commander_name}
 
@@ -14648,17 +14645,11 @@ class ConfigVerifier:
             send_type: type of send to do
 
         """
-        senders: set[str] = set()
-        for idx in range(num_senders):
-            senders |= {'sender_' + str(idx)}
+        senders = {'sender_' + str(i) for i in range(num_senders)}
 
-        receivers: set[str] = set()
-        for idx in range(num_receivers):
-            receivers |= {'receiver_' + str(idx)}
+        receivers = {'receiver_' + str(i) for i in range(num_receivers)}
 
         self.create_config(active_names=senders | receivers)
-
-        self.log_name_groups()
 
         msgs_to_send = SendRecvMsgs(sender_names=senders,
                                     receiver_names=receivers,
@@ -14727,8 +14718,6 @@ class ConfigVerifier:
 
         self.create_config(
             active_names=senders | non_senders | {receiver})
-
-        self.log_name_groups()
 
         # build msgs for non_senders since we might have no senders
         msgs_to_send = SendRecvMsgs(sender_names=senders | non_senders,
@@ -14845,8 +14834,6 @@ class ConfigVerifier:
 
         self.create_config(active_names=resumers | waiters)
 
-        self.log_name_groups()
-
         ################################################################
         # resume
         ################################################################
@@ -14909,8 +14896,6 @@ class ConfigVerifier:
 
         self.create_config(
             active_names=resumers | non_resumers | {waiter})
-
-        self.log_name_groups()
 
         wait_resumers: set[str] = set()
         if wait_type == WaitType.PartialResumers:
@@ -15026,8 +15011,6 @@ class ConfigVerifier:
             extras |= {'extra_' + str(idx)}
 
         self.create_config(active_names=syncers | extras)
-
-        self.log_name_groups()
 
         ################################################################
         # sync
@@ -15179,17 +15162,18 @@ class ConfigVerifier:
                                    serial_number=request_serial_num)
 
     ####################################################################
-    # build_send_msg_timeout_suite
+    # build_send_msg_timeout_scenario
     ####################################################################
-    def build_send_msg_timeout_suite(self,
-                                     timeout_type: TimeoutType,
-                                     num_senders: Optional[int] = 1,
-                                     num_active_targets: Optional[int] = 1,
-                                     num_registered_targets: Optional[int] = 0,
-                                     num_unreg_timeouts: Optional[int] = 0,
-                                     num_exit_timeouts: Optional[int] = 1,
-                                     num_full_q_timeouts: Optional[int] = 0
-                                     ) -> None:
+    def build_send_msg_timeout_scenario(
+            self,
+            timeout_type: TimeoutType,
+            num_senders: Optional[int] = 1,
+            num_active_targets: Optional[int] = 1,
+            num_registered_targets: Optional[int] = 0,
+            num_unreg_timeouts: Optional[int] = 0,
+            num_exit_timeouts: Optional[int] = 1,
+            num_full_q_timeouts: Optional[int] = 0
+            ) -> None:
         """Return a list of ConfigCmd items for a msg timeout.
 
         Args:
@@ -15244,68 +15228,29 @@ class ConfigVerifier:
         elif timeout_type == TimeoutType.TimeoutTrue:
             timeout_time *= 0.5  # force timeout
 
-        self.build_config(
-            cmd_runner=self.commander_name,
-            num_registered=num_registered_targets,
-            num_active=num_active_needed)
+        sender_names = get_names('sender_', num_senders)
 
-        self.log_name_groups()
+        active_target_names = get_names('active_target_name_',
+                                        num_active_targets)
 
-        active_names_copy = self.active_names - {self.commander_name}
+        registered_target_names = get_names('registered_target_name_',
+                                            num_registered_targets)
 
-        ################################################################
-        # choose sender_names
-        ################################################################
-        sender_names = self.choose_names(
-            name_collection=active_names_copy,
-            num_names_needed=num_senders,
-            update_collection=True,
-            var_name_for_log='sender_names')
+        unreg_timeout_names = get_names('unreg_timeout_name_',
+                                        num_unreg_timeouts)
 
-        ################################################################
-        # choose active_target_names
-        ################################################################
-        active_target_names = self.choose_names(
-            name_collection=active_names_copy,
-            num_names_needed=num_active_targets,
-            update_collection=True,
-            var_name_for_log='active_target_names')
+        exit_names = get_names('exit_name_', num_exit_timeouts)
 
-        ################################################################
-        # choose registered_target_names
-        ################################################################
-        registered_target_names = self.choose_names(
-            name_collection=self.registered_names,
-            num_names_needed=num_registered_targets,
-            update_collection=False,
-            var_name_for_log='registered_target_names')
+        full_q_names = get_names('full_q_name_',
+                                 num_full_q_timeouts)
 
-        ################################################################
-        # choose unreg_timeout_names
-        ################################################################
-        unreg_timeout_names = self.choose_names(
-            name_collection=self.unregistered_names,
-            num_names_needed=num_unreg_timeouts,
-            update_collection=False,
-            var_name_for_log='unreg_timeout_names')
-
-        ################################################################
-        # choose exit_names
-        ################################################################
-        exit_names = self.choose_names(
-            name_collection=active_names_copy,
-            num_names_needed=num_exit_timeouts,
-            update_collection=True,
-            var_name_for_log='exit_names')
-
-        ################################################################
-        # choose full_q_names
-        ################################################################
-        full_q_names = self.choose_names(
-            name_collection=active_names_copy,
-            num_names_needed=num_full_q_timeouts,
-            update_collection=True,
-            var_name_for_log='full_q_names')
+        self.create_config(unreg_names=unreg_timeout_names,
+                           reg_names=registered_target_names,
+                           active_names=(
+                                   sender_names
+                                   | active_target_names
+                                   | exit_names
+                                   | full_q_names))
 
         ################################################################
         # send msgs to senders so we have some on their queues so we
@@ -15314,11 +15259,11 @@ class ConfigVerifier:
         ################################################################
         # setup the messages to send
         ################################################################
-        all_targets: list[str] = (active_target_names
-                                  + registered_target_names
-                                  + unreg_timeout_names
-                                  + exit_names
-                                  + full_q_names)
+        all_targets: set[str] = (active_target_names
+                                 | registered_target_names
+                                 | unreg_timeout_names
+                                 | exit_names
+                                 | full_q_names)
 
         sender_msgs = SendRecvMsgs(
             sender_names=sender_names,
@@ -15337,7 +15282,7 @@ class ConfigVerifier:
 
                 send_msg_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=exit_name,
-                            receivers=sender_names[1],
+                            receivers='sender_name_1',
                             msgs_to_send=sender_1_msg_1,
                             msg_idx=0,
                             log_msg=log_msg))
@@ -15367,7 +15312,7 @@ class ConfigVerifier:
             for exit_name in exit_names:
                 send_msg_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=exit_name,
-                            receivers=sender_names[2],
+                            receivers='sender_name_2',
                             msgs_to_send=sender_2_msg_1,
                             msg_idx=0))
 
@@ -15384,7 +15329,7 @@ class ConfigVerifier:
 
                 send_msg_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=exit_name,
-                            receivers=sender_names[2],
+                            receivers='sender_name_2',
                             msgs_to_send=sender_2_msg_2,
                             msg_idx=0,
                             log_msg=log_msg))
@@ -15432,7 +15377,7 @@ class ConfigVerifier:
                     log_msg = f'log test: {get_ptime()}'
                     send_msg_serial_num = self.add_cmd(
                         SendMsg(cmd_runners=sender_names,
-                                receivers=exit_names[idx],
+                                receivers='exit_name_' + str(idx),
                                 msgs_to_send=sender_msgs,
                                 msg_idx=0,
                                 log_msg=log_msg))
@@ -15453,36 +15398,25 @@ class ConfigVerifier:
                 join_target_names=exit_names)
 
             for exit_name in exit_names:
-                # self.add_cmd(VerifyPairedNot(
-                #     cmd_runners=self.commander_name,
-                #     exp_not_paired_names=[exit_name, sender_names[0]]))
                 self.add_cmd(VerifyConfig(
                     cmd_runners=self.commander_name,
                     verify_type=VerifyType.VerifyNotPaired,
-                    names_to_check=[exit_name, sender_names[0]]))
+                    names_to_check=[exit_name, 'sender_name_0']))
 
             if num_senders >= 2:
                 for exit_name in exit_names:
-                    # self.add_cmd(VerifyPairedHalf(
-                    #     cmd_runners=self.commander_name,
-                    #     removed_names=exit_name,
-                    #     exp_half_paired_names=sender_names[1]))
                     self.add_cmd(VerifyConfig(
                         cmd_runners=self.commander_name,
                         verify_type=VerifyType.VerifyHalfPaired,
-                        names_to_check=sender_names[1],
+                        names_to_check='sender_name_1',
                         aux_names=exit_name))
 
             if num_senders == 3:
                 for exit_name in exit_names:
-                    # self.add_cmd(VerifyPairedHalf(
-                    #     cmd_runners=self.commander_name,
-                    #     removed_names=exit_name,
-                    #     exp_half_paired_names=sender_names[2]))
                     self.add_cmd(VerifyConfig(
                         cmd_runners=self.commander_name,
                         verify_type=VerifyType.VerifyHalfPaired,
-                        names_to_check=sender_names[2],
+                        names_to_check='sender_name_2',
                         aux_names=exit_name))
 
         if timeout_type == TimeoutType.TimeoutTrue:
@@ -15493,11 +15427,11 @@ class ConfigVerifier:
                     msgs_to_send=sender_msgs,
                     msg_idx=0,
                     timeout=timeout_time,
-                    unreg_timeout_names=unreg_timeout_names+exit_names,
+                    unreg_timeout_names=unreg_timeout_names | exit_names,
                     fullq_timeout_names=full_q_names))
 
             confirm_cmd_to_use = 'SendMsgTimeoutTrue'
-            final_recv_names = active_target_names + registered_target_names
+            final_recv_names = active_target_names | registered_target_names
         else:
             if timeout_type == TimeoutType.TimeoutFalse:
                 send_msg_serial_num = self.add_cmd(
@@ -15520,14 +15454,14 @@ class ConfigVerifier:
             self.add_cmd(WaitForRequestTimeouts(
                 cmd_runners=self.commander_name,
                 actor_names=sender_names,
-                timeout_names=unreg_timeout_names + exit_names))
+                timeout_names=unreg_timeout_names | exit_names))
 
             # restore config by adding back the exited threads and
             # creating the un_reg threads so smart_send will complete
             # before timing out
             if unreg_timeout_names or exit_names:
                 f1_create_items: list[F1CreateItem] = []
-                for idx, name in enumerate(unreg_timeout_names + exit_names):
+                for idx, name in enumerate(unreg_timeout_names | exit_names):
                     if idx % 2:
                         app_config = AppConfig.ScriptStyle
                     else:
@@ -15551,15 +15485,6 @@ class ConfigVerifier:
                             exp_msgs=sender_msgs))
 
             final_recv_names = all_targets
-
-        ################################################################
-        # confirm the smart_send
-        ################################################################
-        self.add_cmd(
-            ConfirmResponse(cmd_runners=[self.commander_name],
-                            confirm_cmd=confirm_cmd_to_use,
-                            confirm_serial_num=send_msg_serial_num,
-                            confirmers=sender_names))
 
         # start any registered threads
         if registered_target_names:
@@ -15591,7 +15516,7 @@ class ConfigVerifier:
             if num_senders >= 2:
                 for exit_name in exit_names:
                     recv_msg_serial_num = self.add_cmd(
-                        RecvMsg(cmd_runners=sender_names[1],
+                        RecvMsg(cmd_runners='sender_name_1',
                                 senders=exit_name,
                                 exp_senders=exit_name,
                                 exp_msgs=sender_1_msg_1))
@@ -15603,12 +15528,12 @@ class ConfigVerifier:
                         ConfirmResponse(cmd_runners=[self.commander_name],
                                         confirm_cmd='RecvMsg',
                                         confirm_serial_num=recv_msg_serial_num,
-                                        confirmers=[sender_names[1]]))
+                                        confirmers=['sender_name_1']))
 
             if num_senders == 3:
                 for exit_name in exit_names:
                     recv_msg_serial_num = self.add_cmd(
-                        RecvMsg(cmd_runners=sender_names[2],
+                        RecvMsg(cmd_runners='sender_name_1',
                                 senders=exit_name,
                                 exp_senders=exit_name,
                                 exp_msgs=sender_2_msg_1))
@@ -15620,10 +15545,10 @@ class ConfigVerifier:
                         ConfirmResponse(cmd_runners=[self.commander_name],
                                         confirm_cmd='RecvMsg',
                                         confirm_serial_num=recv_msg_serial_num,
-                                        confirmers=[sender_names[2]]))
+                                        confirmers=['sender_name_2']))
 
                     recv_msg_serial_num = self.add_cmd(
-                        RecvMsg(cmd_runners=sender_names[2],
+                        RecvMsg(cmd_runners='sender_names_2',
                                 senders=exit_name,
                                 exp_senders=exit_name,
                                 exp_msgs=sender_2_msg_2))
@@ -15635,7 +15560,7 @@ class ConfigVerifier:
                         ConfirmResponse(cmd_runners=[self.commander_name],
                                         confirm_cmd='RecvMsg',
                                         confirm_serial_num=recv_msg_serial_num,
-                                        confirmers=[sender_names[2]]))
+                                        confirmers=['sender_name_2']))
 
             # exit the exit names again after senders have read their
             # pending messages, and then verify exit names and senders
@@ -15648,7 +15573,7 @@ class ConfigVerifier:
                     join_target_names=exit_names)
 
             for sender_name in sender_names:
-                exp_not_paired = [sender_name] + exit_names
+                exp_not_paired = {sender_name} | exit_names
                 # self.add_cmd(VerifyPairedNot(
                 #     cmd_runners=self.commander_name,
                 #     exp_not_paired_names=exp_not_paired))
@@ -15657,6 +15582,14 @@ class ConfigVerifier:
                     verify_type=VerifyType.VerifyNotPaired,
                     names_to_check=exp_not_paired))
 
+        ################################################################
+        # confirm the smart_send
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(cmd_runners=[self.commander_name],
+                            confirm_cmd=confirm_cmd_to_use,
+                            confirm_serial_num=send_msg_serial_num,
+                            confirmers=sender_names))
     ####################################################################
     # build_simple_scenario
     ####################################################################
@@ -15954,8 +15887,6 @@ class ConfigVerifier:
             num_active=num_alt_cmd_runners + num_auto_start + num_alive + 1,
             num_stopped=num_stopped)
 
-        self.log_name_groups()
-
         active_names_copy = self.active_names - {self.commander_name}
 
         ################################################################
@@ -16145,8 +16076,6 @@ class ConfigVerifier:
             num_registered=num_timeout_syncers,
             num_active=num_syncers + 1,
             num_stopped=num_stopped_syncers)
-
-        self.log_name_groups()
 
         active_names_copy = self.active_names - {self.commander_name}
 
@@ -17067,8 +16996,10 @@ class ConfigVerifier:
                     cmd_runner][remote].copy()
 
             assert recvd_msgs[remote] == msgs_to_check
-            exp_msgs.clear_exp_msgs_received(receiver_name=cmd_runner,
-                                             sender_names=exp_senders)
+
+        exp_msgs.clear_exp_msgs_received(receiver_name=cmd_runner,
+                                         sender_names=exp_senders,
+                                         num_msgs=len(msgs_to_check))
 
         self.wait_for_monitor(cmd_runner=cmd_runner,
                               rtn_name='handle_recv')
@@ -19684,15 +19615,15 @@ class ConfigVerifier:
         self.log_ver.add_msg(log_msg=re.escape(log_msg))
         logger.debug(log_msg)
 
-        log_msg = f'registered_names: {sorted(self.registered_names)}'
+        log_msg = f'registered_names:   {sorted(self.registered_names)}'
         self.log_ver.add_msg(log_msg=re.escape(log_msg))
         logger.debug(log_msg)
 
-        log_msg = f'active_names: {sorted(self.active_names)}'
+        log_msg = f'active_names:       {sorted(self.active_names)}'
         self.log_ver.add_msg(log_msg=re.escape(log_msg))
         logger.debug(log_msg)
 
-        log_msg = f'stopped_remotes: {sorted(self.stopped_remotes)}'
+        log_msg = f'stopped_remotes:    {sorted(self.stopped_remotes)}'
         self.log_ver.add_msg(log_msg=re.escape(log_msg))
         logger.debug(log_msg)
 
@@ -25334,8 +25265,6 @@ class TestSmartThreadComboScenarios:
             caplog: pytest fixture to capture log output
 
         """
-        commander_config = AppConfig.ScriptStyle
-
         args_for_scenario_builder: dict[str, Any] = {
             'timeout_type': timeout_type_arg,
             'req0': req0_arg,
@@ -25349,7 +25278,7 @@ class TestSmartThreadComboScenarios:
             scenario_builder=ConfigVerifier.build_rotate_state_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
-            commander_config=commander_config
+            commander_config=AppConfig.ScriptStyle
         )
 
     ####################################################################
@@ -25418,18 +25347,6 @@ class TestSmartThreadComboScenarios:
                     + num_full_q_timeouts_arg) == 0:
                 return
 
-        command_config_num = total_arg_counts % 5
-        if command_config_num == 0:
-            commander_config = AppConfig.ScriptStyle
-        elif command_config_num == 1:
-            commander_config = AppConfig.CurrentThreadApp
-        elif command_config_num == 2:
-            commander_config = AppConfig.RemoteThreadApp
-        elif command_config_num == 3:
-            commander_config = AppConfig.RemoteSmartThreadApp
-        else:
-            commander_config = AppConfig.RemoteSmartThreadApp2
-
         args_for_scenario_builder: dict[str, Any] = {
             'timeout_type': timeout_type_arg,
             'num_senders': num_senders_arg,
@@ -25441,10 +25358,11 @@ class TestSmartThreadComboScenarios:
         }
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_send_msg_timeout_suite,
+            scenario_builder=ConfigVerifier.build_send_msg_timeout_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
-            commander_config=commander_config)
+            commander_config=commander_config[total_arg_counts
+                                              % num_commander_configs])
 
     ####################################################################
     # test_resume_timeout_scenarios

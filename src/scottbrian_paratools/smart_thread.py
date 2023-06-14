@@ -3093,8 +3093,8 @@ class SmartThread:
                         recvd_msg = local_sb.msg_q.get()
                         self.recvd_msgs[pk_remote.remote].append(recvd_msg)
 
-                    num_msgs = len(self.recvd_msgs[pk_remote.remote])
-                    if num_msgs > 1:
+                    if ((num_msgs := len(self.recvd_msgs[pk_remote.remote]))
+                            > 1):
                         msg_msgs = 'msgs'
                     else:
                         msg_msgs = 'msg'
