@@ -618,45 +618,6 @@ num_reg_senders_arg_list = [0, 1]
 
 
 ########################################################################
-# Test settings for test_wait_timeout_scenarios
-########################################################################
-num_waiters_arg_list = [1, 2, 3]
-# num_waiters_arg_list = [1]
-
-num_actors_arg_list = [1, 2, 3]
-# num_actors_arg_list = [1, 2]
-
-actor_1_arg_list = [Actors.ActiveBeforeActor,
-                    Actors.ActiveAfterActor,
-                    Actors.ActionExitActor,
-                    Actors.ExitActionActor,
-                    Actors.UnregActor,
-                    Actors.RegActor]
-# actor_1_arg_list = [Actors.ActiveAfterActor, Actors.ActionExitActor]
-
-num_actor_1_arg_list = [1, 2, 3]
-
-actor_2_arg_list = [Actors.ActiveBeforeActor,
-                    Actors.ActiveAfterActor,
-                    Actors.ActionExitActor,
-                    Actors.ExitActionActor,
-                    Actors.UnregActor,
-                    Actors.RegActor]
-# actor_2_arg_list = [Actors.ExitActionActor, Actors.UnregActor]
-
-num_actor_2_arg_list = [1, 2, 3]
-
-actor_3_arg_list = [Actors.ActiveBeforeActor,
-                    Actors.ActiveAfterActor,
-                    Actors.ActionExitActor,
-                    Actors.ExitActionActor,
-                    Actors.UnregActor,
-                    Actors.RegActor]
-# actor_3_arg_list = [Actors.ExitActionActor, Actors.UnregActor]
-num_actor_3_arg_list = [1, 2, 3]
-
-
-########################################################################
 # Test settings for test_sync_scenarios
 ########################################################################
 num_syncers_arg_list = [1, 2, 3, 16]
@@ -1923,7 +1884,8 @@ class StopThread(ConfigCmd):
     def __init__(self,
                  cmd_runners: Iterable,
                  stop_names: Iterable,
-                 reset_ops_count: bool = False) -> None:
+                 reset_ops_count: bool = False,
+                 send_recv_msgs: Optional[SendRecvMsgs] = None) -> None:
         """Initialize the instance.
 
         Args:
@@ -1939,6 +1901,8 @@ class StopThread(ConfigCmd):
 
         self.reset_ops_count = reset_ops_count
 
+        self.send_recv_msgs = send_recv_msgs
+
         self.arg_list += ['stop_names',
                           'reset_ops_count']
 
@@ -1950,7 +1914,8 @@ class StopThread(ConfigCmd):
         """
         self.config_ver.stop_thread(cmd_runner=cmd_runner,
                                     stop_names=self.stop_names,
-                                    reset_ops_count=self.reset_ops_count)
+                                    reset_ops_count=self.reset_ops_count,
+                                    send_recv_msgs=self.send_recv_msgs)
 
 
 ########################################################################
@@ -3654,22 +3619,6 @@ def timeout_arg2(request: Any) -> Any:
 
 
 ########################################################################
-# num_waiters_arg
-########################################################################
-@pytest.fixture(params=num_waiters_arg_list)  # type: ignore
-def num_waiters_arg(request: Any) -> int:
-    """Number stopped threads quickly joined, created, and started.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-########################################################################
 # num_syncers_arg
 ########################################################################
 @pytest.fixture(params=num_syncers_arg_list)  # type: ignore
@@ -3718,22 +3667,6 @@ def num_timeout_syncers_arg(request: Any) -> int:
 
 
 ########################################################################
-# num_actors_arg
-########################################################################
-@pytest.fixture(params=num_actors_arg_list)  # type: ignore
-def num_actors_arg(request: Any) -> int:
-    """Number stopped threads quickly joined, created, and started.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-########################################################################
 # num_cd_actors_arg
 ########################################################################
 @pytest.fixture(params=num_cd_actors_arg_list)  # type: ignore
@@ -3747,198 +3680,6 @@ def num_cd_actors_arg(request: Any) -> int:
         The params values are returned one at a time
     """
     return cast(int, request.param)
-
-
-########################################################################
-# actor_1_arg
-########################################################################
-@pytest.fixture(params=actor_1_arg_list)  # type: ignore
-def actor_1_arg(request: Any) -> Actors:
-    """Type of actor tpo perfom the cmd.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(Actors, request.param)
-
-
-########################################################################
-# num_actor_1_arg
-########################################################################
-@pytest.fixture(params=num_actor_1_arg_list)  # type: ignore
-def num_actor_1_arg(request: Any) -> int:
-    """Number of actors for actor style 1.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-########################################################################
-# actor_2_arg
-########################################################################
-@pytest.fixture(params=actor_2_arg_list)  # type: ignore
-def actor_2_arg(request: Any) -> Actors:
-    """Type of actor tpo perfom the cmd.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(Actors, request.param)
-
-
-########################################################################
-# num_actor_2_arg
-########################################################################
-@pytest.fixture(params=num_actor_2_arg_list)  # type: ignore
-def num_actor_2_arg(request: Any) -> int:
-    """Number of actors for actor style 1.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-########################################################################
-# actor_3_arg
-########################################################################
-@pytest.fixture(params=actor_3_arg_list)  # type: ignore
-def actor_3_arg(request: Any) -> Actors:
-    """Type of actor tpo perfom the cmd.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(Actors, request.param)
-
-
-########################################################################
-# num_actor_3_arg
-########################################################################
-@pytest.fixture(params=num_actor_3_arg_list)  # type: ignore
-def num_actor_3_arg(request: Any) -> int:
-    """Number of actors for actor style 1.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-# ########################################################################
-# # num_active_no_delay_resumers_arg
-# ########################################################################
-# @pytest.fixture(params=num_active_no_delay_resumers_arg_list)  # type: ignore
-# def num_active_no_delay_resumers_arg(request: Any) -> int:
-#     """Number stopped threads quickly joined, created, and started.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return cast(int, request.param)
-#
-#
-# ########################################################################
-# # num_active_delay_resumers_arg
-# ########################################################################
-# @pytest.fixture(params=num_active_delay_resumers_arg_list)  # type: ignore
-# def num_active_delay_resumers_arg(request: Any) -> int:
-#     """Number stopped threads quickly joined, created, and started.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return cast(int, request.param)
-#
-#
-# ########################################################################
-# # num_resume_exit_arg
-# ########################################################################
-# @pytest.fixture(params=num_resume_exit_arg_list)  # type: ignore
-# def num_resume_exit_arg(request: Any) -> int:
-#     """Number stopped threads quickly joined, created, and started.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return cast(int, request.param)
-#
-#
-# ########################################################################
-# # num_noresume_exit_arg
-# ########################################################################
-# @pytest.fixture(params=num_noresume_exit_arg_list)  # type: ignore
-# def num_noresume_exit_arg(request: Any) -> int:
-#     """Number stopped threads quickly joined, created, and started.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return cast(int, request.param)
-#
-#
-# ########################################################################
-# # num_unreg_resumers_arg
-# ########################################################################
-# @pytest.fixture(params=num_unreg_resumers_arg_list)  # type: ignore
-# def num_unreg_resumers_arg(request: Any) -> int:
-#     """Number stopped threads quickly joined, created, and started.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return cast(int, request.param)
-#
-#
-# ########################################################################
-# # num_reg_resumers_arg
-# ########################################################################
-# @pytest.fixture(params=num_reg_resumers_arg_list)  # type: ignore
-# def num_reg_resumers_arg(request: Any) -> int:
-#     """Number stopped threads quickly joined, created, and started.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return cast(int, request.param)
 
 
 ###############################################################################
@@ -7330,7 +7071,8 @@ class ConfigVerifier:
                          cmd_runner: str,
                          names: Iterable,
                          validate_config: bool = True,
-                         reset_ops_count: bool = False
+                         reset_ops_count: bool = False,
+                         send_recv_msgs: Optional[SendRecvMsgs] = None
                          ) -> None:
         """Add ConfigCmd items for an exit.
 
@@ -7341,6 +7083,7 @@ class ConfigVerifier:
                 configuration
             reset_ops_count: specifies that the pending_ops_count is to
                 be set to zero
+            send_recv_msgs: contains messages sent to the names
 
         """
         names = get_set(names)
@@ -7353,7 +7096,8 @@ class ConfigVerifier:
         if names:
             self.add_cmd(StopThread(cmd_runners=cmd_runner,
                                     stop_names=names,
-                                    reset_ops_count=reset_ops_count))
+                                    reset_ops_count=reset_ops_count,
+                                    send_recv_msgs=send_recv_msgs))
             if validate_config:
                 self.add_cmd(Pause(cmd_runners=cmd_runner,
                                    pause_seconds=.2))
@@ -11644,178 +11388,6 @@ class ConfigVerifier:
                            actor_names=actor_names)
 
     ####################################################################
-    # build_wait_suite
-    ####################################################################
-    def build_wait_suite(
-            self,
-            timeout_type: TimeoutType,
-            wait_state: st.ThreadState,
-            wait_lap: int,
-            resume_lap: int) -> None:
-        """Add cmds to run scenario.
-
-        Args:
-            timeout_type: specifies whether the smart_recv should
-                be coded with timeout, and whether it be False or True
-            wait_state: resume state when wait is to be issued
-            wait_lap: lap 0 or 1 when the wait is to be issued
-            resume_lap: lap 0 or 1 when the resume is to be issued
-
-        """
-        # Make sure we have enough threads. Each of the scenarios will
-        # require one thread for the commander, one thread for the
-        # sender, and one thread for the receiver, for a total of three.
-        assert 3 <= len(self.unregistered_names)
-
-        self.build_config(
-            cmd_runner=self.commander_name,
-            num_active=2)  # one for commander and one for receiver
-
-        active_names_copy = self.active_names - {self.commander_name}
-
-        ################################################################
-        # choose receiver_names
-        ################################################################
-        waiter_names = self.choose_names(
-            name_collection=active_names_copy,
-            num_names_needed=1,
-            update_collection=True,
-            var_name_for_log='waiter_names')
-
-        ################################################################
-        # choose sender_names
-        ################################################################
-        resumer_names = self.choose_names(
-            name_collection=self.unregistered_names,
-            num_names_needed=1,
-            update_collection=False,
-            var_name_for_log='resumer_names')
-
-        log_msg = f'wait log test: {get_ptime()}'
-
-        ################################################################
-        # setup the names
-        ################################################################
-        waiter_name = waiter_names[0]
-        resumer_name = resumer_names[0]
-
-        confirm_cmd_to_use = 'Wait'
-        wait_serial_num = 0
-        ################################################################
-        # lap loop
-        ################################################################
-        for lap in range(2):
-            ############################################################
-            # start loop to advance resumer through the config states
-            ############################################################
-            for state in (
-                    st.ThreadState.Unregistered,
-                    st.ThreadState.Registered,
-                    st.ThreadState.Alive,
-                    st.ThreadState.Stopped):
-                ########################################################
-                # do join to make resumer unregistered
-                ########################################################
-                if state == st.ThreadState.Unregistered:
-                    if lap == 1:  # resumer already unregistered lap 0
-                        self.build_join_suite(
-                            cmd_runners=self.commander_name,
-                            join_target_names=resumer_name,
-                            validate_config=False)
-
-                ########################################################
-                # do create to make resumer registered
-                ########################################################
-                elif state == st.ThreadState.Registered:
-                    self.build_create_suite(
-                        f1_create_items=[
-                            F1CreateItem(name=resumer_name,
-                                         auto_start=False,
-                                         target_rtn=outer_f1,
-                                         app_config=AppConfig.ScriptStyle)],
-                        validate_config=False)
-                ########################################################
-                # do start to make resumer alive
-                ########################################################
-                elif state == st.ThreadState.Alive:
-                    self.build_start_suite(
-                        start_names=resumer_name,
-                        validate_config=False)
-                    if (resume_lap == lap
-                            and timeout_type != TimeoutType.TimeoutTrue):
-                        self.add_cmd(
-                            Resume(cmd_runners=resumer_name,
-                                   targets=waiter_name,
-                                   exp_resumed_targets=waiter_name,
-                                   stopped_remotes=[]))
-                ########################################################
-                # do stop to make resumer stopped
-                ########################################################
-                else:  # state == st.ThreadState.Stopped:
-                    self.build_exit_suite(
-                        cmd_runner=self.commander_name,
-                        names=resumer_name,
-                        validate_config=False)
-                ########################################################
-                # issue wait
-                ########################################################
-                pause_time = 0
-                if wait_state == state and wait_lap == lap:
-                    stopped_remotes = set()
-                    if (wait_lap == 0 and resume_lap == 1
-                            and timeout_type != TimeoutType.TimeoutTrue):
-                        stopped_remotes = {resumer_name}
-                        pause_time = 1
-                    if (timeout_type == TimeoutType.TimeoutTrue
-                            and wait_state == st.ThreadState.Stopped):
-                        stopped_remotes = {resumer_name}
-                        pause_time = 1
-
-                    if timeout_type == TimeoutType.TimeoutNone:
-                        wait_serial_num = self.add_cmd(
-                            Wait(cmd_runners=waiter_name,
-                                 resumers=resumer_name,
-                                 stopped_remotes=stopped_remotes,
-                                 log_msg=log_msg))
-                    elif timeout_type == TimeoutType.TimeoutFalse:
-                        timeout_time = 6
-                        confirm_cmd_to_use = 'WaitTimeoutFalse'
-                        wait_serial_num = self.add_cmd(
-                            WaitTimeoutFalse(
-                                cmd_runners=waiter_name,
-                                resumers=resumer_name,
-                                timeout=timeout_time,
-                                stopped_remotes=stopped_remotes,
-                                log_msg=log_msg))
-
-                    else:  # TimeoutType.TimeoutTrue
-                        timeout_time = 0.5
-                        pause_time = 1  # ensure timeout
-
-                        confirm_cmd_to_use = 'WaitTimeoutTrue'
-                        wait_serial_num = self.add_cmd(
-                            WaitTimeoutTrue(
-                                cmd_runners=waiter_name,
-                                resumers=resumer_name,
-                                timeout=timeout_time,
-                                timeout_remotes=resumer_name,
-                                stopped_remotes=stopped_remotes,
-                                log_msg=log_msg))
-                    if pause_time > 0:
-                        self.add_cmd(
-                            Pause(cmd_runners=self.commander_name,
-                                  pause_seconds=pause_time))
-        ################################################################
-        # finally, confirm the smart_recv is done
-        ################################################################
-        self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=[self.commander_name],
-                confirm_cmd=confirm_cmd_to_use,
-                confirm_serial_num=wait_serial_num,
-                confirmers=waiter_names))
-
-    ####################################################################
     # powerset
     ####################################################################
     @staticmethod
@@ -15372,7 +14944,8 @@ class ConfigVerifier:
                                         confirmers=sender_names))
 
             self.build_exit_suite(cmd_runner=self.commander_name,
-                                  names=exit_names)
+                                  names=exit_names,
+                                  send_recv_msgs=sender_msgs)
             self.build_join_suite(
                 cmd_runners=self.commander_name,
                 join_target_names=exit_names)
@@ -15524,7 +15097,7 @@ class ConfigVerifier:
             if num_senders == 3:
                 for exit_name in exit_names:
                     recv_msg_serial_num = self.add_cmd(
-                        RecvMsg(cmd_runners='sender_names_2',
+                        RecvMsg(cmd_runners='sender_2',
                                 senders=exit_name,
                                 exp_senders=exit_name,
                                 exp_msgs=exit_msgs))
@@ -19686,7 +19259,8 @@ class ConfigVerifier:
     def stop_thread(self,
                     cmd_runner: str,
                     stop_names: set[str],
-                    reset_ops_count: bool = False) -> None:
+                    reset_ops_count: bool = False,
+                    send_recv_msgs: Optional[SendRecvMsgs] = None) -> None:
         """Start the named thread.
 
         Args:
@@ -19694,6 +19268,7 @@ class ConfigVerifier:
             stop_names: names of the threads to stop
             reset_ops_count: specifies whether to set the
                 pending_ops_count to zero
+            send_recv_msgs: contains messages sent to stop_names
         """
         self.log_test_msg(f'{cmd_runner=} stop_thread entry for {stop_names=}')
 
@@ -19727,6 +19302,8 @@ class ConfigVerifier:
                     self.log_test_msg(f'{stop_name} has been stopped by '
                                       f'{cmd_runner}')
                     self.monitor_event.set()
+                    if send_recv_msgs:
+                        @sbt
                     if reset_ops_count:
                         with self.ops_lock:
                             for pair_key in self.expected_pairs.keys():
@@ -24559,7 +24136,6 @@ class TestSmartThreadSmokeTest:
         Args:
             caplog: pytest fixture to capture log output
             commander_config_arg: specifies the config for the commander
-            log_level_arg: specifies the log level
 
         """
         args_for_scenario_builder: dict[str, Any] = {}
@@ -24670,9 +24246,6 @@ class TestSmartBasicScenarios:
                                                RecvType.MatchSenders,
                                                RecvType.ExtraSenders,
                                                RecvType.UnmatchSenders])
-    # @pytest.mark.parametrize("num_senders_arg", [0])
-    # @pytest.mark.parametrize("num_msgs_arg", [1])
-    # @pytest.mark.parametrize("recv_type_arg", [RecvType.ExtraSenders])
     def test_recv_basic_scenario(
             self,
             num_senders_arg: int,
@@ -25046,14 +24619,13 @@ class TestSmartThreadComboScenarios:
             'num_delay_reg': num_delay_reg_arg
         }
 
-        command_config_num = (num_active_no_target_arg
-                              + delay_arg_counts) % num_commander_configs
-
         scenario_driver(
             scenario_builder=ConfigVerifier.build_join_timeout_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
-            commander_config=commander_config[command_config_num])
+            commander_config=commander_config[
+                (num_active_no_target_arg + delay_arg_counts)
+                % num_commander_configs])
 
     ####################################################################
     # test_def_del_scenarios
@@ -25075,13 +24647,12 @@ class TestSmartThreadComboScenarios:
             'def_del_scenario': def_del_scenario_arg
         }
 
-        command_config_num = def_del_scenario_arg.value % num_commander_configs
-
         scenario_driver(
             scenario_builder=ConfigVerifier.build_def_del_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
-            commander_config=commander_config[command_config_num]
+            commander_config=commander_config[def_del_scenario_arg.value
+                                              % num_commander_configs]
         )
 
     # ####################################################################
@@ -25264,24 +24835,24 @@ class TestSmartThreadComboScenarios:
     ####################################################################
     # test_send_msg_timeout_scenarios
     ####################################################################
-    @pytest.mark.parametrize("timeout_type_arg",
-                             [TimeoutType.TimeoutNone,
-                              TimeoutType.TimeoutFalse,
-                              TimeoutType.TimeoutTrue])
-    @pytest.mark.parametrize("num_senders_arg", [1, 2, 3])
-    @pytest.mark.parametrize("num_active_targets_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_registered_targets_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_unreg_timeouts_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_exit_timeouts_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_full_q_timeouts_arg", [0, 1, 2])
     # @pytest.mark.parametrize("timeout_type_arg",
-    #                          [TimeoutType.TimeoutTrue])
-    # @pytest.mark.parametrize("num_senders_arg", [2])
-    # @pytest.mark.parametrize("num_active_targets_arg", [0])
-    # @pytest.mark.parametrize("num_registered_targets_arg", [0])
-    # @pytest.mark.parametrize("num_unreg_timeouts_arg", [0])
-    # @pytest.mark.parametrize("num_exit_timeouts_arg", [1])
-    # @pytest.mark.parametrize("num_full_q_timeouts_arg", [0])
+    #                          [TimeoutType.TimeoutNone,
+    #                           TimeoutType.TimeoutFalse,
+    #                           TimeoutType.TimeoutTrue])
+    # @pytest.mark.parametrize("num_senders_arg", [1, 2, 3])
+    # @pytest.mark.parametrize("num_active_targets_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_registered_targets_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_unreg_timeouts_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_exit_timeouts_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_full_q_timeouts_arg", [0, 1, 2])
+    @pytest.mark.parametrize("timeout_type_arg",
+                             [TimeoutType.TimeoutNone])
+    @pytest.mark.parametrize("num_senders_arg", [1])
+    @pytest.mark.parametrize("num_active_targets_arg", [0])
+    @pytest.mark.parametrize("num_registered_targets_arg", [0])
+    @pytest.mark.parametrize("num_unreg_timeouts_arg", [0])
+    @pytest.mark.parametrize("num_exit_timeouts_arg", [2])
+    @pytest.mark.parametrize("num_full_q_timeouts_arg", [0])
     def test_send_msg_timeout_scenarios(
             self,
             timeout_type_arg: TimeoutType,
@@ -25413,18 +24984,6 @@ class TestSmartThreadComboScenarios:
             if (num_unreg_delay_arg + num_stopped_delay_arg) == 0:
                 return
 
-        command_config_num = total_arg_counts % 5
-        if command_config_num == 0:
-            commander_config = AppConfig.ScriptStyle
-        elif command_config_num == 1:
-            commander_config = AppConfig.CurrentThreadApp
-        elif command_config_num == 2:
-            commander_config = AppConfig.RemoteThreadApp
-        elif command_config_num == 3:
-            commander_config = AppConfig.RemoteSmartThreadApp
-        else:
-            commander_config = AppConfig.RemoteSmartThreadApp2
-
         args_for_scenario_builder: dict[str, Any] = {
             'timeout_type': timeout_type_arg,
             'num_resumers': num_resumers_arg,
@@ -25441,7 +25000,8 @@ class TestSmartThreadComboScenarios:
             scenario_builder=ConfigVerifier.build_resume_timeout_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
-            commander_config=commander_config)
+            commander_config=commander_config[total_arg_counts
+                                              % num_commander_configs])
 
     ####################################################################
     # test_resume_scenarios
@@ -25513,18 +25073,6 @@ class TestSmartThreadComboScenarios:
         if total_arg_counts - num_resumers_arg == 0:
             return
 
-        command_config_num = total_arg_counts % 5
-        if command_config_num == 0:
-            commander_config = AppConfig.ScriptStyle
-        elif command_config_num == 1:
-            commander_config = AppConfig.CurrentThreadApp
-        elif command_config_num == 2:
-            commander_config = AppConfig.RemoteThreadApp
-        elif command_config_num == 3:
-            commander_config = AppConfig.RemoteSmartThreadApp
-        else:
-            commander_config = AppConfig.RemoteSmartThreadApp2
-
         args_for_scenario_builder: dict[str, Any] = {
             'num_resumers': num_resumers_arg,
             'num_start_before': num_start_before_arg,
@@ -25539,7 +25087,8 @@ class TestSmartThreadComboScenarios:
             scenario_builder=ConfigVerifier.build_resume_scenarios,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
-            commander_config=commander_config)
+            commander_config=commander_config[total_arg_counts
+                                              % num_commander_configs])
 
     ####################################################################
     # test_wait_scenarios
@@ -25611,18 +25160,6 @@ class TestSmartThreadComboScenarios:
         if total_arg_counts - num_waiters_arg == 0:
             return
 
-        command_config_num = total_arg_counts % 5
-        if command_config_num == 0:
-            commander_config = AppConfig.ScriptStyle
-        elif command_config_num == 1:
-            commander_config = AppConfig.CurrentThreadApp
-        elif command_config_num == 2:
-            commander_config = AppConfig.RemoteThreadApp
-        elif command_config_num == 3:
-            commander_config = AppConfig.RemoteSmartThreadApp
-        else:
-            commander_config = AppConfig.RemoteSmartThreadApp2
-
         args_for_scenario_builder: dict[str, Any] = {
             'num_waiters': num_waiters_arg,
             'num_start_before': num_start_before_arg,
@@ -25637,53 +25174,32 @@ class TestSmartThreadComboScenarios:
             scenario_builder=ConfigVerifier.build_wait_scenarios,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
-            commander_config=commander_config)
-
-    ####################################################################
-    # test_recv_msg_scenarios
-    ####################################################################
-    def test_wait_scenarios2(
-            self,
-            timeout_type_arg: TimeoutType,
-            wait_state_arg: st.ThreadState,
-            wait_lap_arg: int,
-            resume_lap_arg: int,
-            caplog: pytest.CaptureFixture[str]
-    ) -> None:
-        """Test meta configuration scenarios.
-
-        Args:
-            timeout_type_arg: specifies whether the smart_recv should
-                be coded with timeout and whether the smart_recv should
-                succeed or fail with a timeout
-            wait_state_arg: resumer state when wait is to be
-                issued
-            wait_lap_arg: lap 0 or 1 when the wait is to be
-                issued
-            resume_lap_arg: lap 0 or 1 when the resume is to be
-                issued
-            caplog: pytest fixture to capture log output
-
-        """
-        commander_config = AppConfig.ScriptStyle
-
-        args_for_scenario_builder: dict[str, Any] = {
-            'timeout_type': timeout_type_arg,
-            'wait_state': wait_state_arg,
-            'wait_lap': wait_lap_arg,
-            'resume_lap': resume_lap_arg,
-        }
-
-        scenario_driver(
-            scenario_builder=ConfigVerifier.build_wait_suite,
-            scenario_builder_args=args_for_scenario_builder,
-            caplog_to_use=caplog,
-            commander_config=commander_config
-        )
+            commander_config=commander_config[total_arg_counts
+                                              % num_commander_configs])
 
     ####################################################################
     # test_wait_timeout_scenarios
     ####################################################################
+    @pytest.mark.parametrize("num_waiters_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_actors_arg", [1, 2, 3])
+    @pytest.mark.parametrize("actor_1_arg", [Actors.ActiveBeforeActor,
+                                             Actors.ActiveAfterActor,
+                                             Actors.ActionExitActor,
+                                             Actors.ExitActionActor,
+                                             Actors.UnregActor,
+                                             Actors.RegActor])
+    @pytest.mark.parametrize("actor_2_arg", [Actors.ActiveBeforeActor,
+                                             Actors.ActiveAfterActor,
+                                             Actors.ActionExitActor,
+                                             Actors.ExitActionActor,
+                                             Actors.UnregActor,
+                                             Actors.RegActor])
+    @pytest.mark.parametrize("actor_3_arg", [Actors.ActiveBeforeActor,
+                                             Actors.ActiveAfterActor,
+                                             Actors.ActionExitActor,
+                                             Actors.ExitActionActor,
+                                             Actors.UnregActor,
+                                             Actors.RegActor])
     def test_wait_scenarios3(
             self,
             num_waiters_arg: int,
@@ -25708,24 +25224,6 @@ class TestSmartThreadComboScenarios:
                 num_waiters_arg
                 + num_actors_arg)
 
-        command_config_num = total_arg_counts % 5
-        if command_config_num == 0:
-            commander_config = AppConfig.ScriptStyle
-        elif command_config_num == 1:
-            commander_config = AppConfig.CurrentThreadApp
-        elif command_config_num == 2:
-            commander_config = AppConfig.RemoteThreadApp
-        elif command_config_num == 3:
-            commander_config = AppConfig.RemoteSmartThreadApp
-        else:
-            commander_config = AppConfig.RemoteSmartThreadApp2
-
-        # args_for_scenario_builder: dict[str, Any] = {
-        #     'num_waiters': num_waiters_arg,
-        #     'actor_list': [(actor_1_arg, num_actor_1_arg),
-        #                    (actor_2_arg, num_actor_2_arg),
-        #                    (actor_3_arg, num_actor_3_arg)]
-        # }
         args_for_scenario_builder: dict[str, Any] = {
             'num_waiters': num_waiters_arg,
             'num_actors': num_actors_arg,
@@ -25736,7 +25234,8 @@ class TestSmartThreadComboScenarios:
             scenario_builder=ConfigVerifier.build_wait_scenario_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
-            commander_config=commander_config
+            commander_config=commander_config[total_arg_counts
+                                              % num_commander_configs]
         )
 
     ####################################################################
@@ -25775,18 +25274,6 @@ class TestSmartThreadComboScenarios:
                 and (num_timeout_syncers_arg == 0)):
             return
 
-        command_config_num = total_arg_counts % 5
-        if command_config_num == 0:
-            commander_config = AppConfig.ScriptStyle
-        elif command_config_num == 1:
-            commander_config = AppConfig.CurrentThreadApp
-        elif command_config_num == 2:
-            commander_config = AppConfig.RemoteThreadApp
-        elif command_config_num == 3:
-            commander_config = AppConfig.RemoteSmartThreadApp
-        else:
-            commander_config = AppConfig.RemoteSmartThreadApp2
-
         args_for_scenario_builder: dict[str, Any] = {
             'timeout_type': timeout_type_arg,
             'num_syncers': num_syncers_arg,
@@ -25798,7 +25285,8 @@ class TestSmartThreadComboScenarios:
             scenario_builder=ConfigVerifier.build_sync_scenario_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
-            commander_config=commander_config
+            commander_config=commander_config[total_arg_counts
+                                              % num_commander_configs]
         )
 
     ####################################################################
@@ -25822,18 +25310,6 @@ class TestSmartThreadComboScenarios:
             caplog: pytest fixture to capture log output
 
         """
-        command_config_num = num_cd_actors_arg % 5
-        if command_config_num == 0:
-            commander_config = AppConfig.ScriptStyle
-        elif command_config_num == 1:
-            commander_config = AppConfig.CurrentThreadApp
-        elif command_config_num == 2:
-            commander_config = AppConfig.RemoteThreadApp
-        elif command_config_num == 3:
-            commander_config = AppConfig.RemoteSmartThreadApp
-        else:
-            commander_config = AppConfig.RemoteSmartThreadApp2
-
         args_for_scenario_builder: dict[str, Any] = {
             'scenario_list': [conflict_deadlock_1_arg,
                               conflict_deadlock_2_arg,
@@ -25845,7 +25321,8 @@ class TestSmartThreadComboScenarios:
             scenario_builder=ConfigVerifier.build_conf_dead_scenario_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
-            commander_config=commander_config
+            commander_config=commander_config[num_cd_actors_arg
+                                              % num_commander_configs]
         )
 
     ####################################################################
@@ -25899,8 +25376,8 @@ class TestSmartThreadComboScenarios:
             scenario_builder=ConfigVerifier.build_smart_start_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
-            commander_config=commander_configs[
-                total_num_targets % len(commander_configs)]
+            commander_config=commander_configs[total_num_targets
+                                               % num_commander_configs]
         )
 
     ####################################################################
