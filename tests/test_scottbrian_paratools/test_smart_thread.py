@@ -6503,6 +6503,9 @@ class ConfigVerifier:
         for target in targets:
             pair_key = st.SmartThread._get_pair_key(cmd_runner, target)
             if pair_key not in self.expected_pairs:
+                # self.log_test_msg(
+                #     f'set_request_pending_flag continue {cmd_runner=}, '
+                #     f'{target=}, {pair_key=}, {self.expected_pairs=}')
                 continue
 
             pae = self.expected_pairs[pair_key]
@@ -9122,7 +9125,6 @@ class ConfigVerifier:
             self.add_cmd(
                 LockVerify(cmd_runners=self.commander_name,
                            exp_positions=lock_positions.copy()))
-
 
             pair_key = st.SmartThread._get_pair_key(remote_name,
                                                     pending_name)
@@ -14075,10 +14077,6 @@ class ConfigVerifier:
 
                     pe[PE.calling_refresh_msg][ref_key] += 1
 
-                    # self.log_test_msg(
-                    #     f'build_rotate set '
-                    #     f'{pe[PE.calling_refresh_msg][ref_key]=} using '
-                    #     f'{req0_name=}, {req0.value=}')
                     req0_confirm_at_unreg = True
 
             elif (req0_when_req1_state[0] == st.ThreadState.Unregistered
@@ -14181,11 +14179,6 @@ class ConfigVerifier:
 
                     pe[PE.calling_refresh_msg][ref_key] += 1
 
-                    # self.log_test_msg(
-                    #     f'build_rotate set '
-                    #     f'{pe[PE.calling_refresh_msg][ref_key]=} using '
-                    #     f'{req0_name=}, {req0.value=}')
-                    # req0_confirm_at_unreg = True
         if req0_when_req1_state[0] == st.ThreadState.Stopped:
             if req0_when_req1_lap == req1_lap:
                 if req_flags.req1_category == ReqCategory.Throw:
@@ -15233,8 +15226,7 @@ class ConfigVerifier:
         active_target_names = get_names('active_target_name_',
                                         num_active_targets)
 
-        registered_target_names = get_names('registered_target_name_',
-                                            num_registered_targets)
+        reg_names = get_names('reg_name_', num_registered_targets)
 
         unreg_timeout_names = get_names('unreg_timeout_name_',
                                         num_unreg_timeouts)
@@ -15245,7 +15237,7 @@ class ConfigVerifier:
                                  num_full_q_timeouts)
 
         self.create_config(unreg_names=unreg_timeout_names,
-                           reg_names=registered_target_names,
+                           reg_names=reg_names,
                            active_names=(
                                    sender_names
                                    | active_target_names
@@ -15260,7 +15252,7 @@ class ConfigVerifier:
         # setup the messages to send
         ################################################################
         all_targets: set[str] = (active_target_names
-                                 | registered_target_names
+                                 | reg_names
                                  | unreg_timeout_names
                                  | exit_names
                                  | full_q_names)
@@ -15271,19 +15263,19 @@ class ConfigVerifier:
             num_msgs=self.max_msgs,
             text='sender_msgs')
 
-        sender_1_msg_1 = SendRecvMsgs(
+        exit_msgs = SendRecvMsgs(
             sender_names=exit_names,
             receiver_names=sender_names,
-            num_msgs=1,
-            text='sender_1_msg_1')
+            num_msgs=3,
+            text='exit_msgs')
         if exit_names and num_senders >= 2:
             for exit_name in exit_names:
                 log_msg = f'log test: {get_ptime()}'
 
                 send_msg_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=exit_name,
-                            receivers='sender_name_1',
-                            msgs_to_send=sender_1_msg_1,
+                            receivers='sender_1',
+                            msgs_to_send=exit_msgs,
                             msg_idx=0,
                             log_msg=log_msg))
 
@@ -15296,25 +15288,13 @@ class ConfigVerifier:
                                     confirm_serial_num=send_msg_serial_num,
                                     confirmers=[exit_name]))
 
-        sender_2_msg_1 = SendRecvMsgs(
-            sender_names=exit_names,
-            receiver_names=sender_names,
-            num_msgs=1,
-            text='sender_2_msg_1')
-
-        sender_2_msg_2 = SendRecvMsgs(
-            sender_names=exit_names,
-            receiver_names=sender_names,
-            num_msgs=1,
-            text='sender_2_msg_2')
-
         if exit_names and num_senders == 3:
             for exit_name in exit_names:
                 send_msg_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=exit_name,
-                            receivers='sender_name_2',
-                            msgs_to_send=sender_2_msg_1,
-                            msg_idx=0))
+                            receivers='sender_2',
+                            msgs_to_send=exit_msgs,
+                            msg_idx=1))
 
                 ########################################################
                 # confirm the smart_send
@@ -15329,9 +15309,9 @@ class ConfigVerifier:
 
                 send_msg_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=exit_name,
-                            receivers='sender_name_2',
-                            msgs_to_send=sender_2_msg_2,
-                            msg_idx=0,
+                            receivers='sender_2',
+                            msgs_to_send=exit_msgs,
+                            msg_idx=2,
                             log_msg=log_msg))
 
                 ########################################################
@@ -15401,14 +15381,14 @@ class ConfigVerifier:
                 self.add_cmd(VerifyConfig(
                     cmd_runners=self.commander_name,
                     verify_type=VerifyType.VerifyNotPaired,
-                    names_to_check=[exit_name, 'sender_name_0']))
+                    names_to_check=[exit_name, 'sender_0']))
 
             if num_senders >= 2:
                 for exit_name in exit_names:
                     self.add_cmd(VerifyConfig(
                         cmd_runners=self.commander_name,
                         verify_type=VerifyType.VerifyHalfPaired,
-                        names_to_check='sender_name_1',
+                        names_to_check='sender_1',
                         aux_names=exit_name))
 
             if num_senders == 3:
@@ -15416,7 +15396,7 @@ class ConfigVerifier:
                     self.add_cmd(VerifyConfig(
                         cmd_runners=self.commander_name,
                         verify_type=VerifyType.VerifyHalfPaired,
-                        names_to_check='sender_name_2',
+                        names_to_check='sender_2',
                         aux_names=exit_name))
 
         if timeout_type == TimeoutType.TimeoutTrue:
@@ -15431,7 +15411,7 @@ class ConfigVerifier:
                     fullq_timeout_names=full_q_names))
 
             confirm_cmd_to_use = 'SendMsgTimeoutTrue'
-            final_recv_names = active_target_names | registered_target_names
+            final_recv_names = active_target_names | reg_names
         else:
             if timeout_type == TimeoutType.TimeoutFalse:
                 send_msg_serial_num = self.add_cmd(
@@ -15454,7 +15434,10 @@ class ConfigVerifier:
             self.add_cmd(WaitForRequestTimeouts(
                 cmd_runners=self.commander_name,
                 actor_names=sender_names,
-                timeout_names=unreg_timeout_names | exit_names))
+                timeout_names=(unreg_timeout_names
+                               | reg_names
+                               | exit_names
+                               | full_q_names)))
 
             # restore config by adding back the exited threads and
             # creating the un_reg threads so smart_send will complete
@@ -15487,8 +15470,8 @@ class ConfigVerifier:
             final_recv_names = all_targets
 
         # start any registered threads
-        if registered_target_names:
-            self.build_start_suite(start_names=registered_target_names)
+        if reg_names:
+            self.build_start_suite(start_names=reg_names)
 
         # do RecvMsg to verify the SendMsg for receivers
         if final_recv_names:
@@ -15516,10 +15499,10 @@ class ConfigVerifier:
             if num_senders >= 2:
                 for exit_name in exit_names:
                     recv_msg_serial_num = self.add_cmd(
-                        RecvMsg(cmd_runners='sender_name_1',
+                        RecvMsg(cmd_runners='sender_1',
                                 senders=exit_name,
                                 exp_senders=exit_name,
-                                exp_msgs=sender_1_msg_1))
+                                exp_msgs=exit_msgs))
 
                     ####################################################
                     # confirm the smart_recv
@@ -15528,30 +15511,23 @@ class ConfigVerifier:
                         ConfirmResponse(cmd_runners=[self.commander_name],
                                         confirm_cmd='RecvMsg',
                                         confirm_serial_num=recv_msg_serial_num,
-                                        confirmers=['sender_name_1']))
+                                        confirmers=['sender_1']))
+
+                    ####################################################
+                    # we expect a refresh for del def on msg
+                    ####################################################
+                    if timeout_type == TimeoutType.TimeoutTrue:
+                        pe = self.pending_events['sender_1']
+                        ref_key: CallRefKey = 'smart_recv'
+                        pe[PE.calling_refresh_msg][ref_key] += 1
 
             if num_senders == 3:
                 for exit_name in exit_names:
                     recv_msg_serial_num = self.add_cmd(
-                        RecvMsg(cmd_runners='sender_name_1',
-                                senders=exit_name,
-                                exp_senders=exit_name,
-                                exp_msgs=sender_2_msg_1))
-
-                    ####################################################
-                    # confirm the smart_recv
-                    ####################################################
-                    self.add_cmd(
-                        ConfirmResponse(cmd_runners=[self.commander_name],
-                                        confirm_cmd='RecvMsg',
-                                        confirm_serial_num=recv_msg_serial_num,
-                                        confirmers=['sender_name_2']))
-
-                    recv_msg_serial_num = self.add_cmd(
                         RecvMsg(cmd_runners='sender_names_2',
                                 senders=exit_name,
                                 exp_senders=exit_name,
-                                exp_msgs=sender_2_msg_2))
+                                exp_msgs=exit_msgs))
 
                     ####################################################
                     # confirm the smart_recv
@@ -15560,7 +15536,15 @@ class ConfigVerifier:
                         ConfirmResponse(cmd_runners=[self.commander_name],
                                         confirm_cmd='RecvMsg',
                                         confirm_serial_num=recv_msg_serial_num,
-                                        confirmers=['sender_name_2']))
+                                        confirmers=['sender_2']))
+
+                    ####################################################
+                    # we expect a refresh for del def on msg
+                    ####################################################
+                    if timeout_type == TimeoutType.TimeoutTrue:
+                        pe = self.pending_events['sender_2']
+                        ref_key: CallRefKey = 'smart_recv'
+                        pe[PE.calling_refresh_msg][ref_key] += 1
 
             # exit the exit names again after senders have read their
             # pending messages, and then verify exit names and senders
@@ -17090,10 +17074,6 @@ class ConfigVerifier:
                 self.set_request_pending_flag(cmd_runner=cmd_runner,
                                               targets=set(targets),
                                               pending_request_flag=True)
-            # if req_start_item.stopped_remotes:
-            #     ref_key: CallRefKey = req_start_item.req_type.value
-            #
-            #     pe[PE.calling_refresh_msg][ref_key] += 1
 
         ################################################################
         # call handler for request
@@ -25295,13 +25275,13 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_exit_timeouts_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_full_q_timeouts_arg", [0, 1, 2])
     # @pytest.mark.parametrize("timeout_type_arg",
-    #                          [TimeoutType.TimeoutNone])
-    # @pytest.mark.parametrize("num_senders_arg", [1])
+    #                          [TimeoutType.TimeoutTrue])
+    # @pytest.mark.parametrize("num_senders_arg", [2])
     # @pytest.mark.parametrize("num_active_targets_arg", [0])
     # @pytest.mark.parametrize("num_registered_targets_arg", [0])
     # @pytest.mark.parametrize("num_unreg_timeouts_arg", [0])
-    # @pytest.mark.parametrize("num_exit_timeouts_arg", [0])
-    # @pytest.mark.parametrize("num_full_q_timeouts_arg", [1])
+    # @pytest.mark.parametrize("num_exit_timeouts_arg", [1])
+    # @pytest.mark.parametrize("num_full_q_timeouts_arg", [0])
     def test_send_msg_timeout_scenarios(
             self,
             timeout_type_arg: TimeoutType,
