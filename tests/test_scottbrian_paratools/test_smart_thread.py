@@ -31,7 +31,6 @@ from scottbrian_utils.msgs import Msgs
 from scottbrian_utils.log_verifier import LogVer
 from scottbrian_utils.diag_msg import (get_formatted_call_sequence,
                                        get_caller_info)
-from scottbrian_locking import se_lock as sel
 
 ########################################################################
 # Local
@@ -100,16 +99,9 @@ RemSbKey: TypeAlias = tuple[str, tuple[str, str], DefDelReasons]
 RemPaeKey: TypeAlias = tuple[str, tuple[str, str]]
 
 
-
 ########################################################################
 # text units
 ########################################################################
-list_of_extra_texts = ('(auto_start requested but not needed since '
-                               'thread is already alive'
-                               '|auto_start requested and will now be done'
-                               '|auto_start was not requested)')
-
-
 class AutoStartDecision(Enum):
     auto_start_obviated = auto()
     auto_start_yes = auto()
@@ -141,21 +133,6 @@ def get_ptime() -> str:
 ########################################################################
 # SendRecvMsgs
 ########################################################################
-# SrMsgKey: TypeAlias = tuple[str, str]
-class SrMsgKey(NamedTuple):
-    sender: str
-    receiver: str
-
-
-BaseMsgKey: TypeAlias = tuple[int, SrMsgKey, str]
-BaseMsgs: TypeAlias = dict[BaseMsgKey, list[Any]]
-
-
-@dataclass
-class SendRecvPacket:
-    msgs_to_send: list[Any]
-
-
 class SendType(Enum):
     ToRemotes = auto()
     SRMsgs = auto()
@@ -166,18 +143,6 @@ class RecvType(Enum):
     MatchSenders = auto()
     ExtraSenders = auto()
     UnmatchSenders = auto()
-
-
-class MsgType(Enum):
-    Text = auto()
-    # Int = auto()
-    # Object = auto()
-
-
-class MsgCollectionType(Enum):
-    Simple = auto()
-    List = auto()
-    # Dict = auto()
 
 
 class SendRecvMsgs:
@@ -257,6 +222,12 @@ class SendRecvMsgs:
                         self.exp_received_msgs[receiver_name][sender].pop(0)
                     else:
                         break
+    def clear_all_exp_msgs_received(self,
+                                    receiver_name: str):
+        with self.msg_lock:
+            senders = list(self.exp_received_msgs[receiver_name].keys())
+            for sender in senders:
+                self.exp_received_msgs[receiver_name][sender].clear()
 
 
 ########################################################################
@@ -307,29 +278,12 @@ class VerifyData:
     obtain_reg_lock: bool
 
 
-# @dataclass
-# class VerifyActiveData:
-#     cmd_runner: str
-#     exp_active_names: set[str]
-
-
 @dataclass
 class VerifyCountsData:
     num_registered: int
     num_active: int
     num_stopped: int
     obtain_reg_lock: bool = True
-
-# @dataclass
-# class VerifyStateData:
-#     cmd_runner: str
-#     check_state_names: set[str]
-#     expected_state: st.ThreadState
-
-
-VerifyDataItems: TypeAlias = Union[
-    VerifyData,
-    VerifyCountsData]
 
 
 @dataclass
@@ -379,17 +333,6 @@ def conditional_registry_lock(*args, **kwds) -> None:
         # release the lock if it was obtained
         if kwds['obtain_tf']:
             kwds['lock'].release()
-
-
-########################################################################
-# Log level arg list
-########################################################################
-log_level_arg_list = [logging.DEBUG,
-                      logging.INFO,
-                      logging.WARNING,
-                      logging.ERROR,
-                      logging.CRITICAL,
-                      logging.NOTSET]
 
 
 ########################################################################
@@ -461,53 +404,6 @@ class RequestConfirmParms:
 
 
 ########################################################################
-# Test settings for conflict_deadlock_scenarios
-########################################################################
-conflict_deadlock_arg_list = [
-    ConflictDeadlockScenario.NormalSync,
-    ConflictDeadlockScenario.NormalResumeWait,
-    ConflictDeadlockScenario.ResumeSyncSyncWait,
-    ConflictDeadlockScenario.SyncConflict,
-    ConflictDeadlockScenario.WaitDeadlock,
-]
-# conflict_deadlock_arg_list = [ConflictDeadlockScenario.WaitDeadlock]
-
-conflict_deadlock_arg_list2 = [
-    ConflictDeadlockScenario.NormalSync,
-    ConflictDeadlockScenario.NormalResumeWait,
-    ConflictDeadlockScenario.ResumeSyncSyncWait,
-    ConflictDeadlockScenario.SyncConflict,
-    ConflictDeadlockScenario.WaitDeadlock,
-]
-# conflict_deadlock_arg_list2 = [ConflictDeadlockScenario.NormalResumeWait]
-
-conflict_deadlock_arg_list3 = [
-    ConflictDeadlockScenario.NormalSync,
-    ConflictDeadlockScenario.NormalResumeWait,
-    ConflictDeadlockScenario.ResumeSyncSyncWait,
-    ConflictDeadlockScenario.SyncConflict,
-    ConflictDeadlockScenario.WaitDeadlock,
-]
-# conflict_deadlock_arg_list3 = [ConflictDeadlockScenario.SyncConflict]
-
-num_cd_actors_arg_list = [3, 4, 5, 6, 7, 8, 9]
-
-# num_cd_actors_arg_list = [6]
-
-
-########################################################################
-# Test settings
-########################################################################
-commander_config_arg_list = [AppConfig.ScriptStyle,
-                             AppConfig.CurrentThreadApp,
-                             AppConfig.RemoteThreadApp,
-                             AppConfig.RemoteSmartThreadApp,
-                             AppConfig.RemoteSmartThreadApp2]
-
-# commander_config_arg_list = [AppConfig.ScriptStyle]
-
-
-########################################################################
 # timeout_type used to specify whether to use timeout on various cmds
 ########################################################################
 class TimeoutType(Enum):
@@ -515,114 +411,6 @@ class TimeoutType(Enum):
     TimeoutNone = auto()
     TimeoutFalse = auto()
     TimeoutTrue = auto()
-
-
-########################################################################
-# Test settings
-########################################################################
-timeout_type_arg_list = [TimeoutType.TimeoutNone,
-                         TimeoutType.TimeoutFalse,
-                         TimeoutType.TimeoutTrue]
-# timeout_type_arg_list = [TimeoutType.TimeoutTrue]
-
-########################################################################
-# Test settings for test_def_del_scenarios
-########################################################################
-def_del_scenario_arg_list = [
-    DefDelScenario.NormalRecv,
-    DefDelScenario.NormalWait,
-    DefDelScenario.ResurrectionRecv,
-    DefDelScenario.ResurrectionWait,
-    DefDelScenario.Recv0Recv1,
-    DefDelScenario.Recv1Recv0,
-    DefDelScenario.Wait0Wait1,
-    DefDelScenario.Wait1Wait0,
-    DefDelScenario.RecvWait,
-    DefDelScenario.WaitRecv,
-    DefDelScenario.RecvDel,
-    DefDelScenario.RecvAdd,
-    DefDelScenario.WaitDel,
-    DefDelScenario.WaitAdd
-]
-# def_del_scenario_arg_list = [DefDelScenario.Recv0Recv1]
-
-
-########################################################################
-# Test settings for test_smart_start_scenarios
-########################################################################
-num_auto_start_arg_list = [0, 1, 2]
-num_manual_start_arg_list = [0, 1, 2]
-num_unreg_arg_list = [0, 1, 2]
-num_alive_arg_list = [0, 1, 2]
-num_stopped_arg_list = [0, 1, 2]
-
-
-########################################################################
-# Test settings for test_config_build_scenarios
-########################################################################
-num_registered_1_arg_list = [0, 1, 2]
-# num_registered_1_arg_list = [0, 0, 0]
-
-num_active_1_arg_list = [1, 2, 3]
-# num_active_1_arg_list = [2]
-
-num_stopped_1_arg_list = [0, 1, 2]
-# num_stopped_1_arg_list = [2]
-
-num_registered_2_arg_list = [0, 1, 2]
-# num_registered_2_arg_list = [2]
-
-num_active_2_arg_list = [1, 2, 3]
-# num_active_2_arg_list = [1]
-
-num_stopped_2_arg_list = [0, 1, 2]
-# num_stopped_2_arg_list = [0]
-
-
-########################################################################
-# Test settings for test_wait_scenarios2
-########################################################################
-wait_state_arg_list = [
-    st.ThreadState.Unregistered,
-    st.ThreadState.Registered,
-    st.ThreadState.Alive,
-    st.ThreadState.Stopped]
-
-wait_lap_arg_list = [0, 1]
-
-resume_lap_arg_list = [0, 1]
-
-########################################################################
-# Test settings for test_recv_timeout_scenarios
-########################################################################
-num_receivers_arg_list = [1]
-# num_receivers_arg_list = [2]
-
-num_active_no_delay_senders_arg_list = [0, 1]
-# num_active_no_delay_senders_arg_list = [1]  # .001
-
-num_active_delay_senders_arg_list = [0, 1]
-# num_active_delay_senders_arg_list = [1]  # .65  0.0005
-
-num_send_exit_senders_arg_list = [0, 1]
-# num_send_exit_senders_arg_list = [2]  # .65  0.0007
-
-num_nosend_exit_senders_arg_list = [0, 1]
-# num_nosend_exit_senders_arg_list = [2]  # 1.05  0.50
-
-num_unreg_senders_arg_list = [0, 1]
-# num_unreg_senders_arg_list = [2]  # .75 0.15
-
-num_reg_senders_arg_list = [0, 1]
-# num_reg_senders_arg_list = [2]  # .75 .06
-
-
-########################################################################
-# Test settings for test_sync_scenarios
-########################################################################
-num_syncers_arg_list = [1, 2, 3, 16]
-num_stopped_syncers_arg_list = [0, 1, 2, 3]
-num_timeout_syncers_arg_list = [0, 1, 2, 3]
 
 
 ########################################################################
@@ -2245,101 +2033,6 @@ class VerifyConfig(ConfigCmd):
         self.config_ver.verify_config_complete_event.wait()
         self.config_ver.verify_config_complete_event.clear()
 
-########################################################################
-# VerifyAlive
-########################################################################
-# class VerifyAlive(ConfigCmd):
-#     """Verify that the threads are alive."""
-#     def __init__(self,
-#                  cmd_runners: Iterable,
-#                  exp_alive_names: Iterable) -> None:
-#         """Initialize the instance.
-#
-#         Args:
-#             cmd_runners: thread names that will execute the command
-#             exp_alive_names: thread names expected to be alive
-#         """
-#         super().__init__(cmd_runners=cmd_runners)
-#         self.specified_args = locals()  # used for __repr__
-#
-#         self.exp_alive_names = get_set(exp_alive_names)
-#
-#         self.arg_list += ['exp_alive_names']
-#
-#     def run_process(self, cmd_runner: str) -> None:
-#         """Run the command.
-#
-#         Args:
-#             cmd_runner: name of thread running the command
-#         """
-#         self.config_ver.verify_is_alive(names=self.exp_alive_names)
-
-
-########################################################################
-# VerifyAliveNot
-########################################################################
-# class VerifyAliveNot(ConfigCmd):
-#     """Verify that the threads are not alive."""
-#     def __init__(self,
-#                  cmd_runners: Iterable,
-#                  exp_not_alive_names: Iterable) -> None:
-#         """Initialize the instance.
-#
-#         Args:
-#             cmd_runners: thread names that will execute the command
-#             exp_not_alive_names: thread names expected to be not alive
-#         """
-#         super().__init__(cmd_runners=cmd_runners)
-#         self.specified_args = locals()  # used for __repr__
-#
-#         self.exp_not_alive_names = get_set(exp_not_alive_names)
-#
-#         self.arg_list += ['exp_not_alive_names']
-#
-#     def run_process(self, cmd_runner: str) -> None:
-#         """Run the command.
-#
-#         Args:
-#             cmd_runner: name of thread running the command
-#         """
-#         self.config_ver.verify_is_alive_not(names=self.exp_not_alive_names)
-
-
-########################################################################
-# VerifyActive
-########################################################################
-# class VerifyActive(ConfigCmd):
-#     """Verify that the threads are in the alive state."""
-#     def __init__(self,
-#                  cmd_runners: Iterable,
-#                  exp_active_names: Iterable) -> None:
-#         """Initialize the instance.
-#
-#         Args:
-#             cmd_runners: thread names that will execute the command
-#             exp_active_names: thread names expected to be active
-#         """
-#         super().__init__(cmd_runners=cmd_runners)
-#         self.specified_args = locals()  # used for __repr__
-#
-#         self.exp_active_names = get_set(exp_active_names)
-#
-#         self.arg_list += ['exp_active_names']
-#
-#     def run_process(self, cmd_runner: str) -> None:
-#         """Run the command.
-#
-#         Args:
-#             cmd_runner: name of thread running the command
-#         """
-#         verify_active_data: VerifyActiveData = VerifyActiveData(
-#             cmd_runner=cmd_runner,
-#             exp_active_names=self.exp_active_names
-#         )
-#         self.config_ver.create_snapshot_data(verify_name='verify_active',
-#                                              verify_idx=self.serial_num,
-#                                              verify_data=verify_active_data)
-
 
 ########################################################################
 # VerifyCounts
@@ -2451,251 +2144,6 @@ class VerifyDefDel(ConfigCmd):
             deleter_names=self.deleter_names,
             adder_names=self.adder_names
         )
-
-
-########################################################################
-# VerifyInRegistry
-########################################################################
-# class VerifyInRegistry(ConfigCmd):
-#     """Verify that threads are in the registry."""
-#     def __init__(self,
-#                  cmd_runners: Iterable,
-#                  exp_in_registry_names: Iterable) -> None:
-#         """Initialize the instance.
-#
-#         Args:
-#             cmd_runners: thread names that will execute the command
-#             exp_in_registry_names: thread names expected to be in the
-#                 registry
-#         """
-#         super().__init__(cmd_runners=cmd_runners)
-#         self.specified_args = locals()  # used for __repr__
-#
-#         self.exp_in_registry_names = get_set(exp_in_registry_names)
-#
-#         self.arg_list += ['exp_in_registry_names']
-#
-#     def run_process(self, cmd_runner: str) -> None:
-#         """Run the command.
-#
-#         Args:
-#             cmd_runner: name of thread running the command
-#         """
-#         self.config_ver.verify_in_registry(
-#             cmd_runner=cmd_runner,
-#             exp_in_registry_names=self.exp_in_registry_names)
-
-
-########################################################################
-# VerifyInRegistryNot
-########################################################################
-# class VerifyInRegistryNot(ConfigCmd):
-#     """Verify that threads are not in the registry."""
-#     def __init__(self,
-#                  cmd_runners: Iterable,
-#                  exp_not_in_registry_names: Iterable) -> None:
-#         """Initialize the instance.
-#
-#         Args:
-#             cmd_runners: thread names that will execute the command
-#             exp_not_in_registry_names: thread names expected to not be
-#                 in the registry
-#         """
-#         super().__init__(cmd_runners=cmd_runners)
-#         self.specified_args = locals()  # used for __repr__
-#
-#         self.exp_not_in_registry_names = get_set(exp_not_in_registry_names)
-#
-#         self.arg_list += ['exp_not_in_registry_names']
-#
-#     def run_process(self, cmd_runner: str) -> None:
-#         """Run the command.
-#
-#         Args:
-#             cmd_runner: name of thread running the command
-#         """
-#         self.config_ver.verify_in_registry_not(
-#             cmd_runner=cmd_runner,
-#             exp_not_in_registry_names=self.exp_not_in_registry_names)
-
-
-########################################################################
-# VerifyRegistered
-########################################################################
-# class VerifyRegistered(ConfigCmd):
-#     """Verify that threads are in the registered state."""
-#     def __init__(self,
-#                  cmd_runners: Iterable,
-#                  exp_registered_names: Iterable) -> None:
-#         """Initialize the instance.
-#
-#         Args:
-#             cmd_runners: thread names that will execute the command
-#             exp_registered_names: thread names expected to be in
-#                 registered state
-#         """
-#         super().__init__(cmd_runners=cmd_runners)
-#         self.specified_args = locals()  # used for __repr__
-#
-#         self.exp_registered_names = get_set(exp_registered_names)
-#
-#         self.arg_list += ['exp_registered_names']
-#
-#     def run_process(self, cmd_runner: str) -> None:
-#         """Run the command.
-#
-#         Args:
-#             cmd_runner: name of thread running the command
-#         """
-#         self.config_ver.verify_is_registered(
-#             cmd_runner=cmd_runner,
-#             exp_registered_names=self.exp_registered_names)
-
-
-########################################################################
-# VerifyPaired
-########################################################################
-# class VerifyPaired(ConfigCmd):
-#     """Verify that threads are paired."""
-#     def __init__(self,
-#                  cmd_runners: Iterable,
-#                  exp_paired_names: Iterable) -> None:
-#         """Initialize the instance.
-#
-#         Args:
-#             cmd_runners: thread names that will execute the command
-#             exp_paired_names: thread names expected to be paired
-#         """
-#         super().__init__(cmd_runners=cmd_runners)
-#         self.specified_args = locals()  # used for __repr__
-#
-#         self.exp_paired_names = get_set(exp_paired_names)
-#
-#         self.arg_list += ['exp_paired_names']
-#
-#     def run_process(self, cmd_runner: str) -> None:
-#         """Run the command.
-#
-#         Args:
-#             cmd_runner: name of thread running the command
-#         """
-#         self.config_ver.verify_paired(
-#             cmd_runner=cmd_runner,
-#             exp_paired_names=self.exp_paired_names)
-
-
-########################################################################
-# VerifyPairedHalf
-########################################################################
-# class VerifyPairedHalf(ConfigCmd):
-#     """Verify that only one thread is in a pair array status block."""
-#     def __init__(self,
-#                  cmd_runners: Iterable,
-#                  removed_names: Iterable,
-#                  exp_half_paired_names: Iterable) -> None:
-#         """Initialize the instance.
-#
-#         Args:
-#             cmd_runners: thread names that will execute the command
-#             removed_names: threads names that are no longer in the pair
-#             exp_half_paired_names: thread names expected to be a single
-#                 entry in the pair array
-#         """
-#         super().__init__(cmd_runners=cmd_runners)
-#         self.specified_args = locals()  # used for __repr__
-#
-#         self.removed_names = get_set(removed_names)
-#
-#         self.exp_half_paired_names = get_set(exp_half_paired_names)
-#
-#         self.arg_list += ['removed_names',
-#                           'exp_half_paired_names']
-#
-#     def run_process(self, cmd_runner: str) -> None:
-#         """Run the command.
-#
-#         Args:
-#             cmd_runner: name of thread running the command
-#         """
-#         self.config_ver.verify_paired_half(
-#             cmd_runner=cmd_runner,
-#             removed_names=self.removed_names,
-#             exp_half_paired_names=self.exp_half_paired_names)
-
-
-########################################################################
-# VerifyPairedNot
-########################################################################
-# class VerifyPairedNot(ConfigCmd):
-#     """Verify that threads are not paired."""
-#     def __init__(self,
-#                  cmd_runners: Iterable,
-#                  exp_not_paired_names: Iterable) -> None:
-#         """Initialize the instance.
-#
-#         Args:
-#             cmd_runners: thread names that will execute the command
-#             exp_not_paired_names: thread names expected to be not paired
-#         """
-#         super().__init__(cmd_runners=cmd_runners)
-#         self.specified_args = locals()  # used for __repr__
-#
-#         self.exp_not_paired_names = get_set(exp_not_paired_names)
-#
-#         self.arg_list += ['exp_not_paired_names']
-#
-#     def run_process(self, cmd_runner: str) -> None:
-#         """Run the command.
-#
-#         Args:
-#             cmd_runner: name of thread running the command
-#         """
-#         self.config_ver.verify_paired_not(
-#             cmd_runner=cmd_runner,
-#             exp_not_paired_names=self.exp_not_paired_names)
-
-
-########################################################################
-# VerifyState
-########################################################################
-# class VerifyState(ConfigCmd):
-#     """Verify the thread state."""
-#     def __init__(self,
-#                  cmd_runners: Iterable,
-#                  check_state_names: Iterable,
-#                  expected_state: st.ThreadState
-#                  ) -> None:
-#         """Initialize the instance.
-#
-#         Args:
-#             cmd_runners: thread names that will execute the command
-#             check_state_names: thread names to verify state
-#             expected_state: expected state
-#         """
-#         super().__init__(cmd_runners=cmd_runners)
-#         self.specified_args = locals()  # used for __repr__
-#
-#         self.check_state_names = get_set(check_state_names)
-#
-#         self.expected_state = expected_state
-#
-#         self.arg_list += ['check_state_names',
-#                           'expected_state']
-#
-#     def run_process(self, cmd_runner: str) -> None:
-#         """Run the command.
-#
-#         Args:
-#             cmd_runner: name of thread running the command
-#         """
-#         verify_state_data: VerifyStateData = VerifyStateData(
-#             cmd_runner=cmd_runner,
-#             check_state_names=self.check_state_names,
-#             expected_state=self.expected_state)
-#
-#         self.config_ver.create_snapshot_data(verify_name='verify_state',
-#                                              verify_idx=self.serial_num,
-#                                              verify_data=verify_state_data)
 
 
 ########################################################################
@@ -3001,768 +2449,6 @@ class WaitForRequestTimeouts(ConfigCmd):
             timeout_names=self.timeout_names,
             use_work_remotes=self.use_work_remotes,
             as_subset=self.as_subset)
-
-
-# ###############################################################################
-# # Cmd Constants
-# ###############################################################################
-# Cmd = Enum('Cmd', 'Wait Wait_TOT Wait_TOF Wait_Clear Resume Sync Exit '
-#                   'Next_Action')
-#
-# ###############################################################################
-# # Action
-# ###############################################################################
-# Action = Enum('Action',
-#               'MainWait '
-#               'MainSync MainSync_TOT MainSync_TOF '
-#               'MainResume MainResume_TOT MainResume_TOF '
-#               'ThreadWait ThreadWait_TOT ThreadWait_TOF '
-#               'ThreadResume ')
-#
-# ###############################################################################
-# # action_arg fixtures
-# ###############################################################################
-# action_arg_list = [Action.MainWait,
-#                    Action.MainSync,
-#                    Action.MainSync_TOT,
-#                    Action.MainSync_TOF,
-#                    Action.MainResume,
-#                    Action.MainResume_TOT,
-#                    Action.MainResume_TOF,
-#                    Action.ThreadWait,
-#                    Action.ThreadWait_TOT,
-#                    Action.ThreadWait_TOF,
-#                    Action.ThreadResume]
-#
-# action_arg_list1 = [Action.MainWait
-#                     # Action.MainResume,
-#                     # Action.MainResume_TOT,
-#                     # Action.MainResume_TOF,
-#                     # Action.ThreadWait,
-#                     # Action.ThreadWait_TOT,
-#                     # Action.ThreadWait_TOF,
-#                     # Action.ThreadResume
-#                     ]
-#
-# action_arg_list2 = [  # Action.MainWait,
-#                     # Action.MainResume,
-#                     # Action.MainResume_TOT,
-#                     Action.MainResume_TOF
-#                     # Action.ThreadWait,
-#                     # Action.ThreadWait_TOT,
-#                     # Action.ThreadWait_TOF,
-#                     # Action.ThreadResume
-#                     ]
-#
-#
-# @pytest.fixture(params=action_arg_list)  # type: ignore
-# def action_arg1(request: Any) -> Any:
-#     """Using different reply messages.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return request.param
-#
-#
-# @pytest.fixture(params=action_arg_list)  # type: ignore
-# def action_arg2(request: Any) -> Any:
-#     """Using different reply messages.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return request.param
-
-
-###############################################################################
-# num_auto_start_arg
-###############################################################################
-@pytest.fixture(params=num_auto_start_arg_list)  # type: ignore
-def num_auto_start_arg(request: Any) -> int:
-    """Number of threads to auto start.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_manual_start_arg
-###############################################################################
-@pytest.fixture(params=num_manual_start_arg_list)  # type: ignore
-def num_manual_start_arg(request: Any) -> int:
-    """Number of threads to manually start.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_unreg_arg
-###############################################################################
-@pytest.fixture(params=num_unreg_arg_list)  # type: ignore
-def num_unreg_arg(request: Any) -> int:
-    """Number of threads to be unregistered for smart_start test.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_alive_arg
-###############################################################################
-@pytest.fixture(params=num_alive_arg_list)  # type: ignore
-def num_alive_arg(request: Any) -> int:
-    """Number of threads to be alive for smart_start test.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_stopped_arg
-###############################################################################
-@pytest.fixture(params=num_stopped_arg_list)  # type: ignore
-def num_stopped_arg(request: Any) -> int:
-    """Number of threads to be stopped for smart_start test.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# log_level_arg
-###############################################################################
-@pytest.fixture(params=log_level_arg_list)  # type: ignore
-def log_level_arg(request: Any) -> int:
-    """Type of deferred delete to do.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-# ###############################################################################
-# # def_del_scenario_arg
-# ###############################################################################
-# @pytest.fixture(params=def_del_scenario_arg_list)  # type: ignore
-# def def_del_scenario_arg(request: Any) -> DefDelScenario:
-#     """Type of deferred delete to do.
-#
-#     Args:
-#         request: special fixture that returns the fixture params
-#
-#     Returns:
-#         The params values are returned one at a time
-#     """
-#     return cast(DefDelScenario, request.param)
-
-
-###############################################################################
-# conflict_deadlock_1_arg
-###############################################################################
-@pytest.fixture(params=conflict_deadlock_arg_list)  # type: ignore
-def conflict_deadlock_1_arg(request: Any) -> ConflictDeadlockScenario:
-    """Type of deferred delete to do.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(ConflictDeadlockScenario, request.param)
-
-
-###############################################################################
-# conflict_deadlock_2_arg
-###############################################################################
-@pytest.fixture(params=conflict_deadlock_arg_list2)  # type: ignore
-def conflict_deadlock_2_arg(request: Any) -> ConflictDeadlockScenario:
-    """Type of deferred delete to do.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(ConflictDeadlockScenario, request.param)
-
-
-###############################################################################
-# conflict_deadlock_3_arg
-###############################################################################
-@pytest.fixture(params=conflict_deadlock_arg_list3)  # type: ignore
-def conflict_deadlock_3_arg(request: Any) -> ConflictDeadlockScenario:
-    """Type of deferred delete to do.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(ConflictDeadlockScenario, request.param)
-
-
-###############################################################################
-# random_seed_arg
-###############################################################################
-random_seed_arg_list = [1, 2, 3]
-
-
-@pytest.fixture(params=random_seed_arg_list)  # type: ignore
-def random_seed_arg(request: Any) -> int:
-    """Using different random seeds.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return request.param
-
-
-###############################################################################
-# num_threads_arg
-###############################################################################
-num_threads_arg_list = [3, 8, 16]
-
-
-@pytest.fixture(params=num_threads_arg_list)  # type: ignore
-def num_threads_arg(request: Any) -> int:
-    """Number of threads to create.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return request.param
-
-
-###############################################################################
-# num_registered_1_arg
-###############################################################################
-@pytest.fixture(params=num_registered_1_arg_list)  # type: ignore
-def num_registered_1_arg(request: Any) -> int:
-    """Number of threads to configur as registered.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_active_1_arg
-###############################################################################
-@pytest.fixture(params=num_active_1_arg_list)  # type: ignore
-def num_active_1_arg(request: Any) -> int:
-    """Number of threads to configur as registered.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_stopped_1_arg
-###############################################################################
-@pytest.fixture(params=num_stopped_1_arg_list)  # type: ignore
-def num_stopped_1_arg(request: Any) -> int:
-    """Number of threads to configur as registered.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_registered_2_arg
-###############################################################################
-@pytest.fixture(params=num_registered_2_arg_list)  # type: ignore
-def num_registered_2_arg(request: Any) -> int:
-    """Number of threads to configur as registered.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_active_2_arg
-###############################################################################
-@pytest.fixture(params=num_active_2_arg_list)  # type: ignore
-def num_active_2_arg(request: Any) -> int:
-    """Number of threads to configur as registered.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_stopped_2_arg
-###############################################################################
-@pytest.fixture(params=num_stopped_2_arg_list)  # type: ignore
-def num_stopped_2_arg(request: Any) -> int:
-    """Number of threads to configur as registered.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# commander_config_arg
-###############################################################################
-@pytest.fixture(params=commander_config_arg_list)  # type: ignore
-def commander_config_arg(request: Any) -> AppConfig:
-    """Type of smart_send timeout to test.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(AppConfig, request.param)
-
-
-###############################################################################
-# timeout_type_arg
-###############################################################################
-@pytest.fixture(params=timeout_type_arg_list)  # type: ignore
-def timeout_type_arg(request: Any) -> TimeoutType:
-    """Type of smart_send timeout to test.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(TimeoutType, request.param)
-
-
-###############################################################################
-# wait_state_arg
-###############################################################################
-@pytest.fixture(params=wait_state_arg_list)  # type: ignore
-def wait_state_arg(request: Any) -> st.ThreadState:
-    """State of sender when smart_recv is to be issued.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(st.ThreadState, request.param)
-
-
-###############################################################################
-# recv_msg_lap_arg
-###############################################################################
-@pytest.fixture(params=wait_lap_arg_list)  # type: ignore
-def wait_lap_arg(request: Any) -> int:
-    """Lap of sender when smart_recv is to be issued.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# resume_lap_arg
-###############################################################################
-@pytest.fixture(params=resume_lap_arg_list)  # type: ignore
-def resume_lap_arg(request: Any) -> int:
-    """Lap of sender when smart_recv is to be issued.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_receivers_arg
-###############################################################################
-@pytest.fixture(params=num_receivers_arg_list)  # type: ignore
-def num_receivers_arg(request: Any) -> int:
-    """Number of threads to receive msgs.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_active_no_delay_senders_arg
-###############################################################################
-@pytest.fixture(params=num_active_no_delay_senders_arg_list)  # type: ignore
-def num_active_no_delay_senders_arg(request: Any) -> int:
-    """Number of threads to send msg immediately.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_active_delay_senders_arg
-###############################################################################
-@pytest.fixture(params=num_active_delay_senders_arg_list)  # type: ignore
-def num_active_delay_senders_arg(request: Any) -> int:
-    """Number of threads to send msg after a delay.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_senders_exit_before_arg
-###############################################################################
-@pytest.fixture(params=num_send_exit_senders_arg_list)  # type: ignore
-def num_send_exit_senders_arg(request: Any) -> int:
-    """Number of threads to send msg and then exit.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-########################################################################
-# num_senders_exit_before_arg
-########################################################################
-@pytest.fixture(params=num_nosend_exit_senders_arg_list)  # type: ignore
-def num_nosend_exit_senders_arg(request: Any) -> int:
-    """Number of threads to exit and send msg after create (resurrect).
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_unreg_senders_arg
-###############################################################################
-@pytest.fixture(params=num_unreg_senders_arg_list)  # type: ignore
-def num_unreg_senders_arg(request: Any) -> int:
-    """Number of threads to be unregistered and send msg after create.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# num_reg_senders_arg
-###############################################################################
-@pytest.fixture(params=num_reg_senders_arg_list)  # type: ignore
-def num_reg_senders_arg(request: Any) -> int:
-    """Number of threads to be registered and send msg after start.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# recv_msg_after_join_arg
-###############################################################################
-recv_msg_after_join_arg_list = [1, 2, 3]
-
-
-@pytest.fixture(params=recv_msg_after_join_arg_list)  # type: ignore
-def recv_msg_after_join_arg(request: Any) -> int:
-    """Which threads should exit before alpha recvs msg.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return request.param
-
-
-###############################################################################
-# timeout_arg fixtures
-###############################################################################
-timeout_arg_list = [None, 'TO_False', 'TO_True']
-
-
-@pytest.fixture(params=timeout_arg_list)  # type: ignore
-def timeout_arg1(request: Any) -> Any:
-    """Using different requests.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return request.param
-
-
-@pytest.fixture(params=timeout_arg_list)  # type: ignore
-def timeout_arg2(request: Any) -> Any:
-    """Using different requests.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return request.param
-
-
-########################################################################
-# num_syncers_arg
-########################################################################
-@pytest.fixture(params=num_syncers_arg_list)  # type: ignore
-def num_syncers_arg(request: Any) -> int:
-    """Number stopped threads quickly joined, created, and started.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-########################################################################
-# num_stopped_syncers_arg
-########################################################################
-@pytest.fixture(params=num_stopped_syncers_arg_list)  # type: ignore
-def num_stopped_syncers_arg(request: Any) -> int:
-    """Number stopped threads quickly joined, created, and started.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-########################################################################
-# num_timeout_syncers_arg
-########################################################################
-@pytest.fixture(params=num_timeout_syncers_arg_list)  # type: ignore
-def num_timeout_syncers_arg(request: Any) -> int:
-    """Number stopped threads quickly joined, created, and started.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-########################################################################
-# num_cd_actors_arg
-########################################################################
-@pytest.fixture(params=num_cd_actors_arg_list)  # type: ignore
-def num_cd_actors_arg(request: Any) -> int:
-    """Number stopped threads quickly joined, created, and started.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# code fixtures
-###############################################################################
-code_arg_list = [None, 42]
-
-
-@pytest.fixture(params=code_arg_list)  # type: ignore
-def code_arg1(request: Any) -> Any:
-    """Using different codes.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-@pytest.fixture(params=code_arg_list)  # type: ignore
-def code_arg2(request: Any) -> Any:
-    """Using different codes.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# log_msg fixtures
-###############################################################################
-log_msg_arg_list = [None, 'log msg1']
-
-
-@pytest.fixture(params=log_msg_arg_list)  # type: ignore
-def log_msg_arg1(request: Any) -> Any:
-    """Using different log messages.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-@pytest.fixture(params=log_msg_arg_list)  # type: ignore
-def log_msg_arg2(request: Any) -> Any:
-    """Using different log messages.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(int, request.param)
-
-
-###############################################################################
-# log_enabled fixtures
-###############################################################################
-log_enabled_list = [True, False]
-
-
-@pytest.fixture(params=log_enabled_list)  # type: ignore
-def log_enabled_arg(request: Any) -> bool:
-    """Using different log messages.
-
-    Args:
-        request: special fixture that returns the fixture params
-
-    Returns:
-        The params values are returned one at a time
-    """
-    return cast(bool, request.param)
 
 
 ########################################################################
@@ -19303,7 +17989,7 @@ class ConfigVerifier:
                                       f'{cmd_runner}')
                     self.monitor_event.set()
                     if send_recv_msgs:
-                        @sbt
+                        send_recv_msgs.clear_all_exp_msgs_received(stop_name)
                     if reset_ops_count:
                         with self.ops_lock:
                             for pair_key in self.expected_pairs.keys():
@@ -24126,6 +22812,12 @@ class TestSmartThreadSmokeTest:
     ####################################################################
     # test_smart_thread_simple_scenarios
     ####################################################################
+    @pytest.mark.parametrize("commander_config_arg",
+                             [AppConfig.ScriptStyle,
+                              AppConfig.CurrentThreadApp,
+                              AppConfig.RemoteThreadApp,
+                              AppConfig.RemoteSmartThreadApp,
+                              AppConfig.RemoteSmartThreadApp2])
     def test_smart_thread_simple_scenarios(
             self,
             caplog: pytest.CaptureFixture[str],
@@ -24149,6 +22841,12 @@ class TestSmartThreadSmokeTest:
     ####################################################################
     # test_config_build_scenarios
     ####################################################################
+    @pytest.mark.parametrize("num_registered_1_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_active_1_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_stopped_1_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_registered_2_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_active_2_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_stopped_2_arg", [0, 1, 2])
     def test_config_build_scenarios(
             self,
             num_registered_1_arg: int,
@@ -24630,6 +23328,23 @@ class TestSmartThreadComboScenarios:
     ####################################################################
     # test_def_del_scenarios
     ####################################################################
+    def_del_scenario_arg_list = [
+        DefDelScenario.NormalRecv,
+        DefDelScenario.NormalWait,
+        DefDelScenario.ResurrectionRecv,
+        DefDelScenario.ResurrectionWait,
+        DefDelScenario.Recv0Recv1,
+        DefDelScenario.Recv1Recv0,
+        DefDelScenario.Wait0Wait1,
+        DefDelScenario.Wait1Wait0,
+        DefDelScenario.RecvWait,
+        DefDelScenario.WaitRecv,
+        DefDelScenario.RecvDel,
+        DefDelScenario.RecvAdd,
+        DefDelScenario.WaitDel,
+        DefDelScenario.WaitAdd
+    ]
+
     @pytest.mark.parametrize("def_del_scenario_arg", def_del_scenario_arg_list)
     def test_def_del_scenarios(
             self,
@@ -24835,24 +23550,24 @@ class TestSmartThreadComboScenarios:
     ####################################################################
     # test_send_msg_timeout_scenarios
     ####################################################################
-    # @pytest.mark.parametrize("timeout_type_arg",
-    #                          [TimeoutType.TimeoutNone,
-    #                           TimeoutType.TimeoutFalse,
-    #                           TimeoutType.TimeoutTrue])
-    # @pytest.mark.parametrize("num_senders_arg", [1, 2, 3])
-    # @pytest.mark.parametrize("num_active_targets_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_registered_targets_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_unreg_timeouts_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_exit_timeouts_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_full_q_timeouts_arg", [0, 1, 2])
     @pytest.mark.parametrize("timeout_type_arg",
-                             [TimeoutType.TimeoutNone])
-    @pytest.mark.parametrize("num_senders_arg", [1])
-    @pytest.mark.parametrize("num_active_targets_arg", [0])
-    @pytest.mark.parametrize("num_registered_targets_arg", [0])
-    @pytest.mark.parametrize("num_unreg_timeouts_arg", [0])
-    @pytest.mark.parametrize("num_exit_timeouts_arg", [2])
-    @pytest.mark.parametrize("num_full_q_timeouts_arg", [0])
+                             [TimeoutType.TimeoutNone,
+                              TimeoutType.TimeoutFalse,
+                              TimeoutType.TimeoutTrue])
+    @pytest.mark.parametrize("num_senders_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_active_targets_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_registered_targets_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_unreg_timeouts_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_exit_timeouts_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_full_q_timeouts_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("timeout_type_arg",
+    #                          [TimeoutType.TimeoutNone])
+    # @pytest.mark.parametrize("num_senders_arg", [1])
+    # @pytest.mark.parametrize("num_active_targets_arg", [0])
+    # @pytest.mark.parametrize("num_registered_targets_arg", [0])
+    # @pytest.mark.parametrize("num_unreg_timeouts_arg", [0])
+    # @pytest.mark.parametrize("num_exit_timeouts_arg", [2])
+    # @pytest.mark.parametrize("num_full_q_timeouts_arg", [0])
     def test_send_msg_timeout_scenarios(
             self,
             timeout_type_arg: TimeoutType,
@@ -24914,6 +23629,91 @@ class TestSmartThreadComboScenarios:
             caplog_to_use=caplog,
             commander_config=commander_config[total_arg_counts
                                               % num_commander_configs])
+
+    ####################################################################
+    # test_recv_msg_timeout_scenarios
+    ####################################################################
+    @pytest.mark.parametrize("timeout_type_arg", [TimeoutType.TimeoutNone,
+                                                  TimeoutType.TimeoutFalse,
+                                                  TimeoutType.TimeoutTrue])
+    @pytest.mark.parametrize("num_receivers_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_active_no_delay_senders_arg", [0, 1])
+    @pytest.mark.parametrize("num_active_delay_senders_arg", [0, 1])
+    @pytest.mark.parametrize("num_send_exit_senders_arg", [0, 1])
+    @pytest.mark.parametrize("num_nosend_exit_senders_arg", [0, 1])
+    @pytest.mark.parametrize("num_unreg_senders_arg", [0, 1])
+    @pytest.mark.parametrize("num_reg_senders_arg", [0, 1])
+    def test_recv_msg_timeout_scenarios(
+            self,
+            timeout_type_arg: TimeoutType,
+            num_receivers_arg: int,
+            num_active_no_delay_senders_arg: int,
+            num_active_delay_senders_arg: int,
+            num_send_exit_senders_arg: int,
+            num_nosend_exit_senders_arg: int,
+            num_unreg_senders_arg: int,
+            num_reg_senders_arg: int,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            timeout_type_arg: specifies whether the recv_msg should
+                be coded with timeout and whether the recv_msg should
+                succeed or fail with a timeout
+            num_receivers_arg: number of threads that will do the
+                recv_msg
+            num_active_no_delay_senders_arg: number of threads that are
+                active and will do the send_msg immediately
+            num_active_delay_senders_arg: number of threads that are
+                active and will do the send_msg after a delay
+            num_send_exit_senders_arg: number of threads that are active
+                and will do the send_msg and then exit
+            num_nosend_exit_senders_arg: number of threads that are
+                active and will not do the send_msg and then exit
+            num_unreg_senders_arg: number of threads that are
+                unregistered and will be created and started and then
+                do the send_msg
+            num_reg_senders_arg: number of threads that are registered
+                and will be started and then do the send_msg
+            caplog: pytest fixture to capture log output
+
+        """
+        total_arg_counts = (
+                num_active_no_delay_senders_arg
+                + num_active_delay_senders_arg
+                + num_send_exit_senders_arg
+                + num_nosend_exit_senders_arg
+                + num_unreg_senders_arg
+                + num_reg_senders_arg)
+        if timeout_type_arg == TimeoutType.TimeoutNone:
+            if total_arg_counts == 0:
+                return
+        else:
+            if (num_active_delay_senders_arg
+                    + num_nosend_exit_senders_arg
+                    + num_unreg_senders_arg
+                    + num_reg_senders_arg) == 0:
+                return
+
+        args_for_scenario_builder: dict[str, Any] = {
+            'timeout_type': timeout_type_arg,
+            'num_receivers': num_receivers_arg,
+            'num_active_no_delay_senders': num_active_no_delay_senders_arg,
+            'num_active_delay_senders': num_active_delay_senders_arg,
+            'num_send_exit_senders': num_send_exit_senders_arg,
+            'num_nosend_exit_senders': num_nosend_exit_senders_arg,
+            'num_unreg_senders': num_unreg_senders_arg,
+            'num_reg_senders': num_reg_senders_arg
+        }
+
+        self.scenario_driver(
+            scenario_builder=ConfigVerifier.build_recv_msg_timeout_suite,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog,
+            commander_config=commander_config[total_arg_counts
+                                              % num_commander_configs]
+        )
 
     ####################################################################
     # test_resume_timeout_scenarios
@@ -25241,6 +24041,13 @@ class TestSmartThreadComboScenarios:
     ####################################################################
     # test_sync_scenarios
     ####################################################################
+    @pytest.mark.parametrize("timeout_type_arg",
+                             [TimeoutType.TimeoutNone,
+                              TimeoutType.TimeoutFalse,
+                              TimeoutType.TimeoutTrue])
+    @pytest.mark.parametrize("num_syncers_arg", [1, 2, 3, 16])
+    @pytest.mark.parametrize("num_stopped_syncers_arg", [0, 1, 2, 3])
+    @pytest.mark.parametrize("num_timeout_syncers_arg", [0, 1, 2, 3])
     def test_sync_scenarios(
             self,
             timeout_type_arg: TimeoutType,
@@ -25292,6 +24099,35 @@ class TestSmartThreadComboScenarios:
     ####################################################################
     # test_deadlock_conflict_scenarios
     ####################################################################
+    deadlock_arg_list = [
+        ConflictDeadlockScenario.NormalSync,
+        ConflictDeadlockScenario.NormalResumeWait,
+        ConflictDeadlockScenario.ResumeSyncSyncWait,
+        ConflictDeadlockScenario.SyncConflict,
+        ConflictDeadlockScenario.WaitDeadlock]
+
+    # @pytest.mark.parametrize("conflict_deadlock_1_arg", [
+    #     ConflictDeadlockScenario.NormalSync,
+    #     ConflictDeadlockScenario.NormalResumeWait,
+    #     ConflictDeadlockScenario.ResumeSyncSyncWait,
+    #     ConflictDeadlockScenario.SyncConflict,
+    #     ConflictDeadlockScenario.WaitDeadlock])
+    # @pytest.mark.parametrize("conflict_deadlock_2_arg", [
+    #     ConflictDeadlockScenario.NormalSync,
+    #     ConflictDeadlockScenario.NormalResumeWait,
+    #     ConflictDeadlockScenario.ResumeSyncSyncWait,
+    #     ConflictDeadlockScenario.SyncConflict,
+    #     ConflictDeadlockScenario.WaitDeadlock])
+    # @pytest.mark.parametrize("conflict_deadlock_3_arg", [
+    #     ConflictDeadlockScenario.NormalSync,
+    #     ConflictDeadlockScenario.NormalResumeWait,
+    #     ConflictDeadlockScenario.ResumeSyncSyncWait,
+    #     ConflictDeadlockScenario.SyncConflict,
+    #     ConflictDeadlockScenario.WaitDeadlock])
+    @pytest.mark.parametrize("conflict_deadlock_1_arg", deadlock_arg_list)
+    @pytest.mark.parametrize("conflict_deadlock_2_arg", deadlock_arg_list)
+    @pytest.mark.parametrize("conflict_deadlock_3_arg", deadlock_arg_list)
+    @pytest.mark.parametrize("num_cd_actors_arg", [3, 4, 5, 6, 7, 8, 9])
     def test_conflict_deadlock_scenarios(
             self,
             conflict_deadlock_1_arg: ConflictDeadlockScenario,
@@ -25328,6 +24164,11 @@ class TestSmartThreadComboScenarios:
     ####################################################################
     # test_smart_start_scenarios
     ####################################################################
+    @pytest.mark.parametrize("num_auto_start_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_manual_start_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_unreg_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_alive_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_stopped_arg", [0, 1, 2])
     def test_smart_start_scenarios(
             self,
             num_auto_start_arg: int,
@@ -25383,6 +24224,12 @@ class TestSmartThreadComboScenarios:
     ####################################################################
     # test_smart_thread_log_msg
     ####################################################################
+    @pytest.mark.parametrize("log_level_arg", [logging.DEBUG,
+                                               logging.INFO,
+                                               logging.WARNING,
+                                               logging.ERROR,
+                                               logging.CRITICAL,
+                                               logging.NOTSET])
     def test_smart_thread_log_msg(
             self,
             log_level_arg: int,
@@ -25731,6 +24578,7 @@ class TestSmartThreadComboScenarios:
     # ##################################################################
     # # test_smart_thread_scenarios
     # ##################################################################
+    # @pytest.mark.parametrize("random_seed_arg", [1, 2, 3])
     # def test_smart_thread_random_scenarios(
     #         self,
     #         random_seed_arg: int,
@@ -27351,5 +26199,3 @@ class TestSmartThreadErrors:
         alpha_thread.smart_join(targets='beta')
 
         logger.debug('mainline exit')
-
-
