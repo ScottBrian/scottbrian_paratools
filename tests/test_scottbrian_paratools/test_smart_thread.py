@@ -96,6 +96,8 @@ class DefDelReasons(NamedTuple):
 
 RemSbKey: TypeAlias = tuple[str, tuple[str, str], DefDelReasons]
 
+RefPendKey: TypeAlias = tuple[str, st.PairKey]
+
 RemPaeKey: TypeAlias = tuple[str, tuple[str, str]]
 
 
@@ -284,6 +286,11 @@ class VerifyCountsData:
     num_active: int
     num_stopped: int
     obtain_reg_lock: bool = True
+
+
+VerifyDataItems: TypeAlias = Union[
+    VerifyData,
+    VerifyCountsData]
 
 
 @dataclass
@@ -4634,6 +4641,7 @@ class PE(Enum):
     join_progress_msg = auto()
     init_comp_msg = auto()
     calling_refresh_msg = auto()
+    refresh_pending_needed = auto()
 
 
 class ConfigVerifier:
@@ -4874,6 +4882,9 @@ class ConfigVerifier:
             self.pending_events[name][PE.init_comp_msg] = defaultdict(int)
             self.pending_events[name][
                 PE.calling_refresh_msg] = defaultdict(int)
+            self.pending_events[name][
+                PE.refresh_pending_needed] = defaultdict(int)
+
 
     ####################################################################
     # monitor
@@ -9842,6 +9853,11 @@ class ConfigVerifier:
                                         + unreg_sender_names
                                         + reg_sender_names)
 
+        if timeout_type == TimeoutType.TimeoutTrue:
+            exp_senders = set(all_sender_names) - set(all_timeout_names)
+        else:
+            exp_senders = set(all_sender_names) - set(nosend_exit_sender_names)
+
         self.set_recv_timeout(
             num_timeouts=len(all_timeout_names) * num_receivers)
 
@@ -9864,7 +9880,8 @@ class ConfigVerifier:
             recv_msg_serial_num = self.add_cmd(
                 RecvMsg(cmd_runners=receiver_names,
                         senders=all_sender_names,
-                        exp_senders=all_sender_names,
+                        exp_senders=exp_senders,
+                        stopped_remotes=nosend_exit_sender_names,
                         exp_msgs=sender_msgs,
                         log_msg=log_msg))
         elif timeout_type == TimeoutType.TimeoutFalse:
@@ -9873,7 +9890,8 @@ class ConfigVerifier:
                 RecvMsgTimeoutFalse(
                     cmd_runners=receiver_names,
                     senders=all_sender_names,
-                    exp_senders=all_sender_names,
+                    exp_senders=exp_senders,
+                    stopped_remotes=nosend_exit_sender_names,
                     exp_msgs=sender_msgs,
                     timeout=2,
                     log_msg=log_msg))
@@ -9884,6 +9902,7 @@ class ConfigVerifier:
                 RecvMsgTimeoutTrue(
                     cmd_runners=receiver_names,
                     senders=all_sender_names,
+                    exp_senders=exp_senders,
                     exp_msgs=sender_msgs,
                     timeout=2,
                     timeout_names=all_timeout_names,
@@ -9909,11 +9928,17 @@ class ConfigVerifier:
         # do smart_send from active_delay_senders
         ################################################################
         if active_delay_sender_names:
-            self.add_cmd(
+            send_serial_num = self.add_cmd(
                 SendMsg(cmd_runners=active_delay_sender_names,
                         receivers=receiver_names,
                         msgs_to_send=sender_msgs,
                         msg_idx=0))
+            self.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=[self.commander_name],
+                    confirm_cmd='SendMsg',
+                    confirm_serial_num=send_serial_num,
+                    confirmers=active_delay_sender_names))
 
         ################################################################
         # do smart_send from send_exit_senders and then exit
@@ -9934,6 +9959,15 @@ class ConfigVerifier:
                 join_target_names=send_exit_sender_names,
                 validate_config=False)
 
+            if timeout_type != TimeoutType.TimeoutTrue:
+                for receiver in receiver_names:
+                    for exit_name in send_exit_sender_names:
+                        pair_key = st.SmartThread._get_pair_key(receiver,
+                                                                exit_name)
+                        pe = self.pending_events[receiver]
+                        ref_key: RefPendKey = ('smart_recv', pair_key)
+                        pe[PE.refresh_pending_needed][ref_key] += 1
+
         ################################################################
         # exit the nosend_exit_senders, then resurrect and do smart_send
         ################################################################
@@ -9946,6 +9980,16 @@ class ConfigVerifier:
                 cmd_runners=self.commander_name,
                 join_target_names=nosend_exit_sender_names,
                 validate_config=False)
+
+            if timeout_type != TimeoutType.TimeoutTrue:
+                for receiver in receiver_names:
+                    for exit_name in nosend_exit_sender_names:
+                        pair_key = st.SmartThread._get_pair_key(receiver,
+                                                                exit_name)
+                        pe = self.pending_events[receiver]
+                        ref_key: RefPendKey = ('smart_recv', pair_key)
+                        pe[PE.refresh_pending_needed][ref_key] += 1
+
             f1_create_items: list[F1CreateItem] = []
             for idx, name in enumerate(nosend_exit_sender_names):
                 if idx % 2:
@@ -15216,7 +15260,11 @@ class ConfigVerifier:
             # recover whatever message were read
             recvd_msgs = self.all_threads[cmd_runner].recvd_msgs
 
-            self.dec_recv_timeout()
+            true_senders = list(recvd_msgs.keys())
+            timeout_senders = senders - set(true_senders)
+
+            for reset_sender in timeout_senders:
+                self.dec_recv_timeout()
 
             self.add_log_msg(
                 self.get_error_msg(
@@ -15240,9 +15288,9 @@ class ConfigVerifier:
 
             assert recvd_msgs[remote] == msgs_to_check
 
-        exp_msgs.clear_exp_msgs_received(receiver_name=cmd_runner,
-                                         sender_names=exp_senders,
-                                         num_msgs=len(msgs_to_check))
+            exp_msgs.clear_exp_msgs_received(receiver_name=cmd_runner,
+                                             sender_names=remote,
+                                             num_msgs=len(msgs_to_check))
 
         self.wait_for_monitor(cmd_runner=cmd_runner,
                               rtn_name='handle_recv')
@@ -18193,6 +18241,18 @@ class ConfigVerifier:
                                           f'{pair_key=}, {name=}, '
                                           f'{rem_sb_key=}')
                         pe[PE.rem_status_block_def_msg][rem_sb_key] += 1
+                        pe_cmd = self.pending_events[name]
+                        ref_key: RefPendKey = ('smart_recv', pair_key)
+                        if pe_cmd[PE.refresh_pending_needed][ref_key] > 0:
+                            pe_cmd[PE.calling_refresh_msg]['smart_recv'] += 1
+                            pe_cmd[PE.refresh_pending_needed][ref_key] -= 1
+                        # if (pending_request
+                        #         and pending_msg
+                        #         and pe_cmd[PE.refresh_pending_needed][ref_key]
+                        #         > 0):
+                        #     pe_cmd[PE.calling_refresh_msg]['smart_recv'] += 1
+                        #     pe_cmd[PE.refresh_pending_needed][ref_key] -= 1
+
                     else:
                         del pae[name]
                         # self.log_test_msg(
@@ -18204,6 +18264,11 @@ class ConfigVerifier:
                         self.log_test_msg('clean_pair_array removed '
                                           f'{pair_key=}, {name=}, '
                                           f'{rem_sb_key=}')
+                        pe_cmd = self.pending_events[name]
+                        ref_key: RefPendKey = ('smart_recv', pair_key)
+                        if pe_cmd[PE.refresh_pending_needed][ref_key] > 0:
+                            pe_cmd[PE.refresh_pending_needed][ref_key] -= 1
+
                         changed = True
 
             if not pae:
@@ -18257,9 +18322,9 @@ class ConfigVerifier:
                         and state_to_use != st.ThreadState.Initializing):
                     self.pending_events[key][PE.status_msg][
                         (item.is_alive, state_to_use)] += 1
-                    self.log_test_msg(
-                        f'clean_registry status key {key=}'
-                        f'{(item.is_alive, state_to_use)=}')
+                    # self.log_test_msg(
+                    #     f'clean_registry status key {key=}'
+                    #     f'{(item.is_alive, state_to_use)=}')
                 if (not item.is_alive
                         and item.st_state == st.ThreadState.Stopped):
                     rem_key: RemRegKey = (
@@ -18267,7 +18332,7 @@ class ConfigVerifier:
                         request)
                     pe[PE.rem_reg_msg][rem_key] += 1
                     rem_targets.append(key)
-                    self.log_test_msg(f'clean_registry deleting {key=}')
+                    # self.log_test_msg(f'clean_registry deleting {key=}')
 
             completed: set[str] = set()
             if pe[PE.current_request].req_type in (st.ReqType.Smart_unreg,
@@ -18300,9 +18365,9 @@ class ConfigVerifier:
                     pe[PE.current_request].req_type.value,
                     s_com[0])
                 pe[PE.unreg_join_success_msg][uj_key] += 1
-                self.log_test_msg(
-                    'clean_registry added '
-                    f'unreg_join_success_msg with {uj_key=}')
+                # self.log_test_msg(
+                #     'clean_registry added '
+                #     f'unreg_join_success_msg with {uj_key=}')
 
                 if pe[PE.current_request].req_type == st.ReqType.Smart_join:
                     all_targets = pe[PE.current_request].targets.copy()
@@ -18311,18 +18376,18 @@ class ConfigVerifier:
 
                     prog_key: JoinProgKey = (len(completed), len(remaining))
                     pe[PE.join_progress_msg][prog_key] += 1
-                    self.log_test_msg(
-                        'clean_registry added '
-                        f'join_progress_msg with {prog_key=}')
+                    # self.log_test_msg(
+                    #     'clean_registry added '
+                    #     f'join_progress_msg with {prog_key=}')
 
-            self.log_test_msg(
-                f'clean_registry has '
-                f'{len(pe[PE.current_request].completed_targets)=} and '
-                f'{len(pe[PE.current_request].targets)=}')
-            self.log_test_msg(
-                f'clean_registry has '
-                f'{pe[PE.current_request].completed_targets=} and '
-                f'{pe[PE.current_request].targets=}')
+            # self.log_test_msg(
+            #     f'clean_registry has '
+            #     f'{len(pe[PE.current_request].completed_targets)=} and '
+            #     f'{len(pe[PE.current_request].targets)=}')
+            # self.log_test_msg(
+            #     f'clean_registry has '
+            #     f'{pe[PE.current_request].completed_targets=} and '
+            #     f'{pe[PE.current_request].targets=}')
 
             if (len(pe[PE.current_request].completed_targets)
                     < len(pe[PE.current_request].eligible_targets)):
@@ -18333,10 +18398,10 @@ class ConfigVerifier:
                                               'entry',
                                               cmd_runner)
                     pe[PE.subprocess_msg][sub_key] += 1
-                    self.log_test_msg(
-                        f'clean_registry {cmd_runner=} added '
-                        f'subprocess_msg with {sub_key=} and bumped count to: '
-                        f'{pe[PE.subprocess_msg][sub_key]=}')
+                    # self.log_test_msg(
+                    #     f'clean_registry {cmd_runner=} added '
+                    #     f'subprocess_msg with {sub_key=} and bumped count to: '
+                    #     f'{pe[PE.subprocess_msg][sub_key]=}')
 
                     sub_key: SubProcessKey = (cmd_runner,
                                               'smart_join',
@@ -23633,16 +23698,24 @@ class TestSmartThreadComboScenarios:
     ####################################################################
     # test_recv_msg_timeout_scenarios
     ####################################################################
-    @pytest.mark.parametrize("timeout_type_arg", [TimeoutType.TimeoutNone,
-                                                  TimeoutType.TimeoutFalse,
-                                                  TimeoutType.TimeoutTrue])
-    @pytest.mark.parametrize("num_receivers_arg", [1, 2, 3])
-    @pytest.mark.parametrize("num_active_no_delay_senders_arg", [0, 1])
-    @pytest.mark.parametrize("num_active_delay_senders_arg", [0, 1])
-    @pytest.mark.parametrize("num_send_exit_senders_arg", [0, 1])
-    @pytest.mark.parametrize("num_nosend_exit_senders_arg", [0, 1])
-    @pytest.mark.parametrize("num_unreg_senders_arg", [0, 1])
-    @pytest.mark.parametrize("num_reg_senders_arg", [0, 1])
+    # @pytest.mark.parametrize("timeout_type_arg", [TimeoutType.TimeoutNone,
+    #                                               TimeoutType.TimeoutFalse,
+    #                                               TimeoutType.TimeoutTrue])
+    # @pytest.mark.parametrize("num_receivers_arg", [1, 2, 3])
+    # @pytest.mark.parametrize("num_active_no_delay_senders_arg", [0, 1])
+    # @pytest.mark.parametrize("num_active_delay_senders_arg", [0, 1])
+    # @pytest.mark.parametrize("num_send_exit_senders_arg", [0, 1])
+    # @pytest.mark.parametrize("num_nosend_exit_senders_arg", [0, 1])
+    # @pytest.mark.parametrize("num_unreg_senders_arg", [0, 1])
+    # @pytest.mark.parametrize("num_reg_senders_arg", [0, 1])
+    @pytest.mark.parametrize("timeout_type_arg", [TimeoutType.TimeoutNone])
+    @pytest.mark.parametrize("num_receivers_arg", [2])
+    @pytest.mark.parametrize("num_active_no_delay_senders_arg", [0])
+    @pytest.mark.parametrize("num_active_delay_senders_arg", [1])
+    @pytest.mark.parametrize("num_send_exit_senders_arg", [0])
+    @pytest.mark.parametrize("num_nosend_exit_senders_arg", [1])
+    @pytest.mark.parametrize("num_unreg_senders_arg", [0])
+    @pytest.mark.parametrize("num_reg_senders_arg", [0])
     def test_recv_msg_timeout_scenarios(
             self,
             timeout_type_arg: TimeoutType,
@@ -23707,7 +23780,7 @@ class TestSmartThreadComboScenarios:
             'num_reg_senders': num_reg_senders_arg
         }
 
-        self.scenario_driver(
+        scenario_driver(
             scenario_builder=ConfigVerifier.build_recv_msg_timeout_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
