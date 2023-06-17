@@ -3906,6 +3906,78 @@ class RequestAckLogSearchItem(LogSearchItem):
 
 
 ########################################################################
+# DetectedStoppedRemoteLogSearchItem
+########################################################################
+class DetectedStoppedRemoteLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+        """
+        super().__init__(
+            search_str=f"[a-z0-9_]+ {list_of_smart_requests} detected remote "
+                       f"[a-z0-9_]+ is stopped",
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int
+                           ) -> "DetectedStoppedRemoteLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            SyncResumedLogSearchItem containing found message and index
+        """
+        return DetectedStoppedRemoteLogSearchItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+    def run_process(self):
+        """Run the process to handle the log message."""
+        split_msg = self.found_log_msg.split()
+        cmd_runner = split_msg[0]
+        request = split_msg[1]
+        remote = split_msg[4]
+
+        # pe = self.config_ver.pending_events[cmd_runner]
+
+        # ack_key: AckKey = (remote, request)
+
+        self.config_ver.set_request_pending_flag(
+            cmd_runner=cmd_runner,
+            targets={remote},
+            pending_request_flag=False)
+
+        # if pe[PE.ack_msg][ack_key] <= 0:
+        #     raise UnexpectedEvent(
+        #         f'DetectedStoppedRemoteLogSearchItem using {ack_key=} detected '
+        #         f'unexpected log msg: {self.found_log_msg}'
+        #     )
+        #
+        # pe[PE.ack_msg][ack_key] -= 1
+
+        self.config_ver.add_log_msg(re.escape(self.found_log_msg),
+                                    log_level=logging.DEBUG)
+
+
+########################################################################
 # RequestRefreshLogSearchItem
 ########################################################################
 class RequestRefreshLogSearchItem(LogSearchItem):
@@ -4434,6 +4506,7 @@ LogSearchItems: TypeAlias = Union[
     F1AppExitLogSearchItem,
     AlreadyUnregLogSearchItem,
     RequestAckLogSearchItem,
+    DetectedStoppedRemoteLogSearchItem,
     RequestRefreshLogSearchItem,
     UnregJoinSuccessLogSearchItem,
     JoinWaitingLogSearchItem,
@@ -4746,6 +4819,7 @@ class ConfigVerifier:
             F1AppExitLogSearchItem(config_ver=self),
             AlreadyUnregLogSearchItem(config_ver=self),
             RequestAckLogSearchItem(config_ver=self),
+            DetectedStoppedRemoteLogSearchItem(config_ver=self),
             RequestRefreshLogSearchItem(config_ver=self),
             UnregJoinSuccessLogSearchItem(config_ver=self),
             JoinWaitingLogSearchItem(config_ver=self),
@@ -9857,6 +9931,10 @@ class ConfigVerifier:
             exp_senders = set(all_sender_names) - set(all_timeout_names)
         else:
             exp_senders = set(all_sender_names) - set(nosend_exit_sender_names)
+
+        if nosend_exit_sender_names:
+            exp_senders -= set(unreg_sender_names)
+            exp_senders -= set(reg_sender_names)
 
         self.set_recv_timeout(
             num_timeouts=len(all_timeout_names) * num_receivers)
@@ -23698,24 +23776,24 @@ class TestSmartThreadComboScenarios:
     ####################################################################
     # test_recv_msg_timeout_scenarios
     ####################################################################
-    # @pytest.mark.parametrize("timeout_type_arg", [TimeoutType.TimeoutNone,
-    #                                               TimeoutType.TimeoutFalse,
-    #                                               TimeoutType.TimeoutTrue])
-    # @pytest.mark.parametrize("num_receivers_arg", [1, 2, 3])
-    # @pytest.mark.parametrize("num_active_no_delay_senders_arg", [0, 1])
-    # @pytest.mark.parametrize("num_active_delay_senders_arg", [0, 1])
-    # @pytest.mark.parametrize("num_send_exit_senders_arg", [0, 1])
-    # @pytest.mark.parametrize("num_nosend_exit_senders_arg", [0, 1])
-    # @pytest.mark.parametrize("num_unreg_senders_arg", [0, 1])
-    # @pytest.mark.parametrize("num_reg_senders_arg", [0, 1])
-    @pytest.mark.parametrize("timeout_type_arg", [TimeoutType.TimeoutNone])
-    @pytest.mark.parametrize("num_receivers_arg", [2])
-    @pytest.mark.parametrize("num_active_no_delay_senders_arg", [0])
-    @pytest.mark.parametrize("num_active_delay_senders_arg", [1])
-    @pytest.mark.parametrize("num_send_exit_senders_arg", [0])
-    @pytest.mark.parametrize("num_nosend_exit_senders_arg", [1])
-    @pytest.mark.parametrize("num_unreg_senders_arg", [0])
-    @pytest.mark.parametrize("num_reg_senders_arg", [0])
+    @pytest.mark.parametrize("timeout_type_arg", [TimeoutType.TimeoutNone,
+                                                  TimeoutType.TimeoutFalse,
+                                                  TimeoutType.TimeoutTrue])
+    @pytest.mark.parametrize("num_receivers_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_active_no_delay_senders_arg", [0, 1])
+    @pytest.mark.parametrize("num_active_delay_senders_arg", [0, 1])
+    @pytest.mark.parametrize("num_send_exit_senders_arg", [0, 1])
+    @pytest.mark.parametrize("num_nosend_exit_senders_arg", [0, 1])
+    @pytest.mark.parametrize("num_unreg_senders_arg", [0, 1])
+    @pytest.mark.parametrize("num_reg_senders_arg", [0, 1])
+    # @pytest.mark.parametrize("timeout_type_arg", [TimeoutType.TimeoutNone])
+    # @pytest.mark.parametrize("num_receivers_arg", [1])
+    # @pytest.mark.parametrize("num_active_no_delay_senders_arg", [0])
+    # @pytest.mark.parametrize("num_active_delay_senders_arg", [0])
+    # @pytest.mark.parametrize("num_send_exit_senders_arg", [0])
+    # @pytest.mark.parametrize("num_nosend_exit_senders_arg", [1])
+    # @pytest.mark.parametrize("num_unreg_senders_arg", [0])
+    # @pytest.mark.parametrize("num_reg_senders_arg", [0])
     def test_recv_msg_timeout_scenarios(
             self,
             timeout_type_arg: TimeoutType,

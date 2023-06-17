@@ -2667,6 +2667,9 @@ class SmartThread:
         else:
             if remote_state == ThreadState.Stopped:
                 request_block.stopped_remotes |= {pk_remote.remote}
+                logger.debug(
+                    f'{self.name} smart_send detected remote '
+                    f'{pk_remote.remote} is stopped')
                 # request_block.do_refresh = True
                 return True  # we are done with this remote
 
@@ -3196,6 +3199,9 @@ class SmartThread:
                     if self._get_target_state(
                             pk_remote) == ThreadState.Stopped:
                         request_block.stopped_remotes |= {pk_remote.remote}
+                        logger.debug(
+                            f'{self.name} smart_recv detected remote '
+                            f'{pk_remote.remote} is stopped')
                         # request_block.do_refresh = True
                         local_sb.recv_wait = False
                         return True  # we are done with this remote
@@ -3602,6 +3608,9 @@ class SmartThread:
 
                 if self._get_target_state(pk_remote) == ThreadState.Stopped:
                     request_block.stopped_remotes |= {pk_remote.remote}
+                    logger.debug(
+                        f'{self.name} smart_wait detected remote '
+                        f'{pk_remote.remote} is stopped')
                     # request_block.do_refresh = True
                     local_sb.wait_wait = False
                     return True  # we are done with this remote
@@ -3895,6 +3904,9 @@ class SmartThread:
         else:
             if remote_state == ThreadState.Stopped:
                 request_block.stopped_remotes |= {pk_remote.remote}
+                logger.debug(
+                    f'{self.name} smart_resume detected remote '
+                    f'{pk_remote.remote} is stopped')
                 # request_block.do_refresh = True
                 return True  # we are done with this remote
 
@@ -4046,6 +4058,9 @@ class SmartThread:
             if remote_state != ThreadState.Alive:
                 if remote_state == ThreadState.Stopped:
                     request_block.stopped_remotes |= {pk_remote.remote}
+                    logger.debug(
+                        f'{self.name} smart_sync detected remote '
+                        f'{pk_remote.remote} is stopped')
                     # request_block.do_refresh = True
                     return True  # we are done with this remote
                 else:
@@ -4153,6 +4168,9 @@ class SmartThread:
 
             if self._get_target_state(pk_remote) == ThreadState.Stopped:
                 request_block.stopped_remotes |= {pk_remote.remote}
+                logger.debug(
+                    f'{self.name} smart_sync detected remote '
+                    f'{pk_remote.remote} is stopped')
                 # request_block.do_refresh = True
                 # local_sb.sync_wait = False
                 return True  # we are done with this remote
