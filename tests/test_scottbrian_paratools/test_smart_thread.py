@@ -11509,14 +11509,13 @@ class ConfigVerifier:
                                    num_registered_after: int,
                                    num_unreg_no_delay: int,
                                    num_unreg_delay: int,
-                                   num_stopped_no_delay: int,
-                                   num_stopped_delay: int
+                                   num_stopped: int
                                    ) -> None:
         """Add ConfigCmd items for smart_resume timeout scenarios.
 
         Args:
             timeout_type: specifies whether to issue the send_cmd with
-                timeout, and is so whether the send_cmd should timeout
+                timeout, and if so whether the send_cmd should timeout
                 or, by starting exited threads in time, not timeout
             num_resumers: number of threads doing resumes
             num_active: number threads active that will wait before the
@@ -11542,10 +11541,10 @@ class ConfigVerifier:
             num_unreg_delay: number threads unregistered before the
                 resume is done, and are then created and started after
                 the allowed timeout
-            num_stopped_no_delay: number of threads stopped before the
-                resume and are resurrected before a timeout
-            num_stopped_delay: number of threads stopped before
-                the resume and are resurrected after a timeout
+            num_stopped: number of threads stopped before the
+                resume and are resurrected after the resume. This should
+                cause the resume to fail with a NotAlive error, and the
+                stopped threads will wait and will need a new resume.
 
         """
         # Make sure we have enough threads
@@ -11555,23 +11554,16 @@ class ConfigVerifier:
                 + num_registered_after
                 + num_unreg_no_delay
                 + num_unreg_delay
-                + num_stopped_no_delay
-                + num_stopped_delay) <= len(self.unregistered_names)
+                + num_stopped) <= len(self.unregistered_names)
 
         assert num_resumers > 0
-
-        num_active_needed = (
-                num_resumers
-                + num_active
-                + 1)  # plus 1 for commander
 
         timeout_time = ((num_active * 0.16)
                         + (num_registered_before * 0.16)
                         + (num_registered_after * 0.16)
                         + (num_unreg_no_delay * 0.32)
                         + (num_unreg_delay * 0.16)
-                        + (num_stopped_no_delay * 0.32)
-                        + (num_stopped_delay * 0.16))
+                        + (num_stopped * 0.32))
 
         pause_time = 0.5
         if timeout_type == TimeoutType.TimeoutFalse:
@@ -11581,130 +11573,67 @@ class ConfigVerifier:
             # timeout_time *= 0.5  # force timeout
             pause_time = timeout_time * 2
 
-        self.build_config(
-            cmd_runner=self.commander_name,
-            num_registered=num_registered_before + num_registered_after,
-            num_active=num_active_needed,
-            num_stopped=num_stopped_no_delay + num_stopped_delay
-        )
+        resumers = get_names('resumer_', num_resumers)
 
-        # remove commander
-        active_names_copy = self.active_names - {self.commander_name}
+        active_waiters = get_names('active_waiter_', num_active)
 
-        ################################################################
-        # choose resumer_names
-        ################################################################
-        resumer_names = self.choose_names(
-            name_collection=active_names_copy,
-            num_names_needed=num_resumers,
-            update_collection=True,
-            var_name_for_log='resumer_names')
+        reg_waiters = get_names('reg_waiter_', num_registered_before)
 
-        ################################################################
-        # choose active_target_names
-        ################################################################
-        active_target_names = self.choose_names(
-            name_collection=active_names_copy,
-            num_names_needed=num_active,
-            update_collection=True,
-            var_name_for_log='active_target_names')
+        reg_delay_waiters = get_names('reg_delay_waiter_',
+                                      num_registered_after)
 
-        ################################################################
-        # choose registered_names_before
-        ################################################################
-        registered_names_copy = self.registered_names.copy()
-        registered_names_before = self.choose_names(
-            name_collection=registered_names_copy,
-            num_names_needed=num_registered_before,
-            update_collection=True,
-            var_name_for_log='registered_names_before')
+        unreg_waiters = get_names('unreg_waiter_',
+                                  num_unreg_no_delay)
 
-        ################################################################
-        # choose registered_names_after
-        ################################################################
-        registered_names_after = self.choose_names(
-            name_collection=registered_names_copy,
-            num_names_needed=num_registered_after,
-            update_collection=True,
-            var_name_for_log='registered_names_after')
+        unreg_delay_waiters = get_names('unreg_delay_waiter_',
+                                        num_unreg_delay)
+
+        stopped_waiters = get_names('stopped_waiter_', num_stopped)
+
+        self.create_config(unreg_names=unreg_waiters | unreg_delay_waiters,
+                           reg_names=reg_waiters | reg_delay_waiters,
+                           active_names=resumers | active_waiters,
+                           stopped_names=stopped_waiters)
+
+        all_targets: set[str] = (active_waiters
+                                 | reg_waiters
+                                 | reg_delay_waiters
+                                 | unreg_waiters
+                                 | unreg_delay_waiters
+                                 | stopped_waiters)
+
+        timeout_names = unreg_delay_waiters | reg_delay_waiters
+
+        if stopped_waiters:
+            exp_resumed_targets = active_waiters | reg_waiters
+        else:
+            if timeout_type != TimeoutType.TimeoutTrue:
+                exp_resumed_targets = all_targets
+            else:
+                exp_resumed_targets = (active_waiters
+                                       | reg_waiters
+                                       | unreg_waiters)
 
         ################################################################
-        # choose unreg_no_delay_names
+        # issue smart_wait for active_waiters
         ################################################################
-        unregistered_names_copy = self.unregistered_names.copy()
-        unreg_no_delay_names = self.choose_names(
-            name_collection=unregistered_names_copy,
-            num_names_needed=num_unreg_no_delay,
-            update_collection=True,
-            var_name_for_log='unreg_no_delay_names')
-
-        ################################################################
-        # choose unreg_delay_names
-        ################################################################
-        unreg_delay_names = self.choose_names(
-            name_collection=unregistered_names_copy,
-            num_names_needed=num_unreg_delay,
-            update_collection=True,
-            var_name_for_log='unreg_delay_names')
-
-        ################################################################
-        # choose stopped_no_delay_targets
-        ################################################################
-        stopped_remotes_copy = self.stopped_remotes.copy()
-        stopped_no_delay_targets = self.choose_names(
-            name_collection=stopped_remotes_copy,
-            num_names_needed=num_stopped_no_delay,
-            update_collection=True,
-            var_name_for_log='stopped_no_delay_targets')
-
-        ################################################################
-        # choose stopped_delay_targets
-        ################################################################
-        stopped_delay_targets = self.choose_names(
-            name_collection=stopped_remotes_copy,
-            num_names_needed=num_stopped_delay,
-            update_collection=True,
-            var_name_for_log='stopped_delay_targets')
-
-        all_targets: list[str] = (active_target_names
-                                  + registered_names_before
-                                  + registered_names_after
-                                  + unreg_no_delay_names
-                                  + unreg_delay_names
-                                  + stopped_no_delay_targets
-                                  + stopped_delay_targets)
-
-        # timeout_names = unreg_delay_names  + stopped_delay_targets
-        timeout_names = unreg_delay_names + registered_names_after
-
-        # if len(all_targets) % 2:
-        #     error_stopped_target = True
-        #     stopped_remotes = stopped_no_delay_targets
-        #     + stopped_delay_targets
-        # else:
-        #     error_stopped_target = False
-        #     stopped_remotes = stopped_delay_targets
-        stopped_remotes = stopped_no_delay_targets + stopped_delay_targets
-        ################################################################
-        # issue smart_wait for active_target_names
-        ################################################################
-        if active_target_names:
+        if active_waiters:
             wait_active_target_serial_num = self.add_cmd(
-                Wait(cmd_runners=active_target_names,
-                     resumers=resumer_names,
-                     stopped_remotes=set()))
+                Wait(cmd_runners=active_waiters,
+                     resumers=resumers,
+                     exp_resumers=resumers))
 
         ################################################################
-        # start registered_names_before issue smart_wait
+        # start reg_waiters issue smart_wait
         # This provides a variation where a configuration change (start)
         # is done while the above wait for active targets is in progress
         ################################################################
-        if registered_names_before:
-            self.build_start_suite(start_names=registered_names_before)
+        if reg_waiters:
+            self.build_start_suite(start_names=reg_waiters)
             wait_reg_before_target_serial_num = self.add_cmd(
-                Wait(cmd_runners=registered_names_before,
-                     resumers=resumer_names,
-                     stopped_remotes=set()))
+                Wait(cmd_runners=reg_waiters,
+                     resumers=resumers,
+                     exp_resumers=resumers))
 
         ################################################################
         # issue smart_resume
@@ -11712,50 +11641,46 @@ class ConfigVerifier:
         if timeout_type == TimeoutType.TimeoutNone:
             resume_to_confirm = 'Resume'
             resume_serial_num = self.add_cmd(
-                Resume(cmd_runners=resumer_names,
+                Resume(cmd_runners=resumers,
                        targets=all_targets,
-                       exp_resumed_targets=all_targets,
-                       stopped_remotes=stopped_remotes))
+                       exp_resumed_targets=exp_resumed_targets,
+                       stopped_remotes=stopped_waiters))
         elif timeout_type == TimeoutType.TimeoutFalse:
             resume_to_confirm = 'ResumeTimeoutFalse'
             resume_serial_num = self.add_cmd(
                 ResumeTimeoutFalse(
-                    cmd_runners=resumer_names,
+                    cmd_runners=resumers,
                     targets=all_targets,
-                    exp_resumed_targets=all_targets,
-                    stopped_remotes=stopped_remotes,
+                    exp_resumed_targets=exp_resumed_targets,
+                    stopped_remotes=stopped_waiters,
                     timeout=timeout_time))
         else:
             resume_to_confirm = 'ResumeTimeoutTrue'
-            exp_resumed_targets = (set(all_targets)
-                                   - set(stopped_remotes)
-                                   - set(timeout_names))
             resume_serial_num = self.add_cmd(
                 ResumeTimeoutTrue(
-                    cmd_runners=resumer_names,
+                    cmd_runners=resumers,
                     targets=all_targets,
                     exp_resumed_targets=exp_resumed_targets,
-                    stopped_remotes=stopped_remotes,
+                    stopped_remotes=stopped_waiters,
                     timeout=timeout_time,
                     timeout_names=timeout_names))
 
         ################################################################
-        # prevent stopped_no_delay from getting started too soon
+        # prevent stopped_waiters from getting started too soon
         ################################################################
-        # if error_stopped_target and stopped_remotes:
-        if stopped_remotes:
+        if stopped_waiters:
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
                     confirm_cmd=resume_to_confirm,
                     confirm_serial_num=resume_serial_num,
-                    confirmers=resumer_names))
+                    confirmers=resumers))
         ################################################################
-        # create and start unreg_no_delay_names and build smart_wait
+        # create and start unreg_waiters and build smart_wait
         ################################################################
-        if unreg_no_delay_names:
+        if unreg_waiters:
             f1_create_items: list[F1CreateItem] = []
-            for idx, name in enumerate(unreg_no_delay_names):
+            for idx, name in enumerate(unreg_waiters):
                 if idx % 2:
                     app_config = AppConfig.ScriptStyle
                 else:
@@ -11770,19 +11695,19 @@ class ConfigVerifier:
                 validate_config=False)
 
             wait_unreg_no_delay_serial_num = self.add_cmd(
-                Wait(cmd_runners=unreg_no_delay_names,
-                     resumers=resumer_names,
-                     stopped_remotes=set()))
+                Wait(cmd_runners=unreg_waiters,
+                     resumers=resumers,
+                     exp_resumers=resumers))
 
         ################################################################
-        # build stopped_no_delay_targets smart_wait
+        # build stopped_waiters smart_wait
         ################################################################
-        if stopped_no_delay_targets:
+        if stopped_waiters:
             self.build_join_suite(
                 cmd_runners=self.commander_name,
-                join_target_names=stopped_no_delay_targets)
+                join_target_names=stopped_waiters)
 
-            for stopped_no_delay_name in stopped_no_delay_targets:
+            for stopped_no_delay_name in stopped_waiters:
                 # self.add_cmd(VerifyPairedNot(
                 #     cmd_runners=self.commander_name,
                 #     exp_not_paired_names=stopped_no_delay_name))
@@ -11792,7 +11717,7 @@ class ConfigVerifier:
                     names_to_check=stopped_no_delay_name))
 
             f1_create_items: list[F1CreateItem] = []
-            for idx, name in enumerate(stopped_no_delay_targets):
+            for idx, name in enumerate(stopped_waiters):
                 if idx % 2:
                     app_config = AppConfig.ScriptStyle
                 else:
@@ -11807,299 +11732,225 @@ class ConfigVerifier:
                 validate_config=False)
 
             wait_stopped_no_delay_serial_num = self.add_cmd(
-                Wait(cmd_runners=stopped_no_delay_targets,
-                     resumers=resumer_names,
-                     stopped_remotes=set()))
+                Wait(cmd_runners=stopped_waiters,
+                     resumers=resumers,
+                     exp_resumers=resumers))
 
         ################################################################
         # wait for resume timeouts to be known
         ################################################################
-        # if not (error_stopped_target and stopped_remotes):
-        if not stopped_remotes:
-            self.add_cmd(WaitForRequestTimeouts(
-                cmd_runners=self.commander_name,
-                actor_names=resumer_names,
-                timeout_names=timeout_names))
+        # if not stopped_waiters:
+        self.add_cmd(WaitForRequestTimeouts(
+            cmd_runners=self.commander_name,
+            actor_names=resumers,
+            timeout_names=timeout_names))
 
         self.add_cmd(Pause(
-            cmd_runners='alpha',
+            cmd_runners=self.commander_name,
             pause_seconds=pause_time))
 
         ################################################################
-        # start registered_names_after and issue smart_wait
+        # start reg_delay_waiters and issue smart_wait
         ################################################################
-        if registered_names_after:
-            self.build_start_suite(start_names=registered_names_after)
+        if reg_delay_waiters:
+            self.build_start_suite(start_names=reg_delay_waiters)
             wait_reg_after_target_serial_num = self.add_cmd(
-                Wait(cmd_runners=registered_names_after,
-                     resumers=resumer_names,
-                     stopped_remotes=set()))
+                Wait(cmd_runners=reg_delay_waiters,
+                     resumers=resumers,
+                     exp_resumers=resumers))
 
         ################################################################
-        # build unreg_delay_names smart_wait
+        # build unreg_delay_waiters smart_wait
         ################################################################
-        if unreg_delay_names:
+        if unreg_delay_waiters:
             f1_create_items: list[F1CreateItem] = []
-            for idx, name in enumerate(unreg_delay_names):
+            for idx, name in enumerate(unreg_delay_waiters):
                 if idx % 2:
                     app_config = AppConfig.ScriptStyle
                 else:
                     app_config = AppConfig.RemoteThreadApp
 
                 f1_create_items.append(F1CreateItem(name=name,
-                                                    auto_start=False,
+                                                    auto_start=True,
                                                     target_rtn=outer_f1,
                                                     app_config=app_config))
             self.build_create_suite(
                 f1_create_items=f1_create_items,
                 validate_config=False)
 
-        ################################################################
-        # build stopped_delay_targets smart_wait
-        ################################################################
-        if stopped_delay_targets:
-            self.build_join_suite(
-                cmd_runners=self.commander_name,
-                join_target_names=stopped_delay_targets)
-
-            for stopped_delay_name in stopped_delay_targets:
-                # self.add_cmd(VerifyPairedNot(
-                #     cmd_runners=self.commander_name,
-                #     exp_not_paired_names=stopped_delay_name))
-                self.add_cmd(VerifyConfig(
-                    cmd_runners=self.commander_name,
-                    verify_type=VerifyType.VerifyNotPaired,
-                    names_to_check=stopped_delay_name))
-
-            f1_create_items: list[F1CreateItem] = []
-            for idx, name in enumerate(stopped_delay_targets):
-                if idx % 2:
-                    app_config = AppConfig.ScriptStyle
-                else:
-                    app_config = AppConfig.RemoteThreadApp
-
-                f1_create_items.append(F1CreateItem(name=name,
-                                                    auto_start=False,
-                                                    target_rtn=outer_f1,
-                                                    app_config=app_config))
-            self.build_create_suite(
-                f1_create_items=f1_create_items,
-                validate_config=False)
-
-            self.build_start_suite(start_names=stopped_delay_targets)
-            wait_stopped_delay_serial_num = self.add_cmd(
-                Wait(cmd_runners=stopped_delay_targets,
-                     resumers=resumer_names,
-                     stopped_remotes=set()))
-
-        ################################################################
-        # build unreg_delay_names smart_wait
-        ################################################################
-        if unreg_delay_names:
-            self.build_start_suite(start_names=unreg_delay_names)
             wait_unreg_delay_serial_num = self.add_cmd(
-                Wait(cmd_runners=unreg_delay_names,
-                     resumers=resumer_names,
-                     stopped_remotes=set()))
+                Wait(cmd_runners=unreg_delay_waiters,
+                     resumers=resumers,
+                     exp_resumers=resumers))
+
+        ################################################################
+        # build unreg_delay_waiters smart_wait
+        ################################################################
+        # if unreg_delay_waiters:
+        #     self.build_start_suite(start_names=unreg_delay_waiters)
+        #     wait_unreg_delay_serial_num = self.add_cmd(
+        #         Wait(cmd_runners=unreg_delay_waiters,
+        #              resumers=resumers,
+        #              exp_resumers=resumers))
 
         ####################################################
         # confirm the active target waits
         ####################################################
-        if active_target_names:
+        if active_waiters:
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
                     confirm_cmd='Wait',
                     confirm_serial_num=wait_active_target_serial_num,
-                    confirmers=active_target_names))
+                    confirmers=active_waiters))
 
         ####################################################
         # confirm the registered target waits
         ####################################################
-        if registered_names_before:
+        if reg_waiters:
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
                     confirm_cmd='Wait',
                     confirm_serial_num=wait_reg_before_target_serial_num,
-                    confirmers=registered_names_before))
+                    confirmers=reg_waiters))
 
         ####################################################
         # confirm the registered target waits
         ####################################################
-        if registered_names_after:
+        if reg_delay_waiters:
             if (timeout_type == TimeoutType.TimeoutTrue
-                    or stopped_remotes):
+                    or stopped_waiters):
                 self.add_cmd(
                     ConfirmResponseNot(
                         cmd_runners=[self.commander_name],
                         confirm_cmd='Wait',
                         confirm_serial_num=wait_reg_after_target_serial_num,
-                        confirmers=registered_names_after))
+                        confirmers=reg_delay_waiters))
 
                 resume_serial_num2 = self.add_cmd(
                     ResumeTimeoutFalse(
-                        cmd_runners=resumer_names,
-                        targets=registered_names_after,
-                        exp_resumed_targets=registered_names_after,
-                        stopped_remotes=[],
+                        cmd_runners=resumers,
+                        targets=reg_delay_waiters,
+                        exp_resumed_targets=reg_delay_waiters,
                         timeout=0.5))
                 self.add_cmd(
                     ConfirmResponse(
                         cmd_runners=[self.commander_name],
                         confirm_cmd='ResumeTimeoutFalse',
                         confirm_serial_num=resume_serial_num2,
-                        confirmers=resumer_names))
+                        confirmers=resumers))
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
                     confirm_cmd='Wait',
                     confirm_serial_num=wait_reg_after_target_serial_num,
-                    confirmers=registered_names_after))
+                    confirmers=reg_delay_waiters))
 
         ####################################################
-        # confirm the unreg_no_delay_names
+        # confirm the unreg_waiters
         ####################################################
-        if unreg_no_delay_names:
-            # if error_stopped_target and stopped_remotes:
-            if stopped_remotes:
+        if unreg_waiters:
+            # if error_stopped_target and stopped_waiters:
+            if stopped_waiters:
                 self.add_cmd(
                     ConfirmResponseNot(
                         cmd_runners=[self.commander_name],
                         confirm_cmd='Wait',
                         confirm_serial_num=wait_unreg_no_delay_serial_num,
-                        confirmers=unreg_no_delay_names))
+                        confirmers=unreg_waiters))
 
                 resume_serial_num2 = self.add_cmd(
                     ResumeTimeoutFalse(
-                        cmd_runners=resumer_names,
-                        targets=unreg_no_delay_names,
-                        exp_resumed_targets=unreg_no_delay_names,
-                        stopped_remotes=[],
+                        cmd_runners=resumers,
+                        targets=unreg_waiters,
+                        exp_resumed_targets=unreg_waiters,
+                        stopped_waiters=[],
                         timeout=0.5))
                 self.add_cmd(
                     ConfirmResponse(
                         cmd_runners=[self.commander_name],
                         confirm_cmd='ResumeTimeoutFalse',
                         confirm_serial_num=resume_serial_num2,
-                        confirmers=resumer_names))
+                        confirmers=resumers))
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
                     confirm_cmd='Wait',
                     confirm_serial_num=wait_unreg_no_delay_serial_num,
-                    confirmers=unreg_no_delay_names))
+                    confirmers=unreg_waiters))
         ####################################################
-        # confirm the unreg_delay_names
+        # confirm the unreg_delay_waiters
         ####################################################
-        if unreg_delay_names:
-            if (timeout_type == TimeoutType.TimeoutTrue
-                    # or (error_stopped_target and stopped_remotes)):
-                    or stopped_remotes):
+        if unreg_delay_waiters:
+            if timeout_type == TimeoutType.TimeoutTrue or stopped_waiters:
                 self.add_cmd(
                     ConfirmResponseNot(
                         cmd_runners=[self.commander_name],
                         confirm_cmd='Wait',
                         confirm_serial_num=wait_unreg_delay_serial_num,
-                        confirmers=unreg_delay_names))
+                        confirmers=unreg_delay_waiters))
 
                 resume_serial_num2 = self.add_cmd(
                     ResumeTimeoutFalse(
-                        cmd_runners=resumer_names,
-                        targets=unreg_delay_names,
-                        exp_resumed_targets=unreg_delay_names,
-                        stopped_remotes=[],
+                        cmd_runners=resumers,
+                        targets=unreg_delay_waiters,
+                        exp_resumed_targets=unreg_delay_waiters,
                         timeout=0.5))
                 self.add_cmd(
                     ConfirmResponse(
                         cmd_runners=[self.commander_name],
                         confirm_cmd='ResumeTimeoutFalse',
                         confirm_serial_num=resume_serial_num2,
-                        confirmers=resumer_names))
+                        confirmers=resumers))
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
                     confirm_cmd='Wait',
                     confirm_serial_num=wait_unreg_delay_serial_num,
-                    confirmers=unreg_delay_names))
+                    confirmers=unreg_delay_waiters))
         ####################################################
-        # confirm the stopped_no_delay_targets
+        # confirm the stopped_waiters
         ####################################################
-        if stopped_no_delay_targets:
-            # if error_stopped_target and stopped_remotes:
-            if stopped_remotes:
+        if stopped_waiters:
+            # if error_stopped_target and stopped_waiters:
+            if stopped_waiters:
                 self.add_cmd(
                     ConfirmResponseNot(
                         cmd_runners=[self.commander_name],
                         confirm_cmd='Wait',
                         confirm_serial_num=wait_stopped_no_delay_serial_num,
-                        confirmers=stopped_no_delay_targets))
+                        confirmers=stopped_waiters))
 
                 resume_serial_num2 = self.add_cmd(
                     ResumeTimeoutFalse(
-                        cmd_runners=resumer_names,
-                        targets=stopped_no_delay_targets,
-                        exp_resumed_targets=stopped_no_delay_targets,
-                        stopped_remotes=[],
+                        cmd_runners=resumers,
+                        targets=stopped_waiters,
+                        exp_resumed_targets=stopped_waiters,
                         timeout=0.5))
                 self.add_cmd(
                     ConfirmResponse(
                         cmd_runners=[self.commander_name],
                         confirm_cmd='ResumeTimeoutFalse',
                         confirm_serial_num=resume_serial_num2,
-                        confirmers=resumer_names))
+                        confirmers=resumers))
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
                     confirm_cmd='Wait',
                     confirm_serial_num=wait_stopped_no_delay_serial_num,
-                    confirmers=stopped_no_delay_targets))
+                    confirmers=stopped_waiters))
 
         ####################################################
-        # confirm the stopped_remotes
+        # confirm the resumers
         ####################################################
-        if stopped_delay_targets:
-            if (timeout_type == TimeoutType.TimeoutTrue
-                    # or (error_stopped_target and stopped_remotes)):
-                    or stopped_remotes):
-                self.add_cmd(
-                    ConfirmResponseNot(
-                        cmd_runners=[self.commander_name],
-                        confirm_cmd='Wait',
-                        confirm_serial_num=wait_stopped_delay_serial_num,
-                        confirmers=stopped_delay_targets))
-
-                resume_serial_num2 = self.add_cmd(
-                    ResumeTimeoutFalse(
-                        cmd_runners=resumer_names,
-                        targets=stopped_delay_targets,
-                        exp_resumed_targets=stopped_delay_targets,
-                        stopped_remotes=[],
-                        timeout=0.5))
-                self.add_cmd(
-                    ConfirmResponse(
-                        cmd_runners=[self.commander_name],
-                        confirm_cmd='ResumeTimeoutFalse',
-                        confirm_serial_num=resume_serial_num2,
-                        confirmers=resumer_names))
-            self.add_cmd(
-                ConfirmResponse(
-                    cmd_runners=[self.commander_name],
-                    confirm_cmd='Wait',
-                    confirm_serial_num=wait_stopped_delay_serial_num,
-                    confirmers=stopped_delay_targets))
-
-        ####################################################
-        # confirm the resumer_names
-        ####################################################
-        # if not (error_stopped_target and stopped_remotes):
-        if not stopped_remotes:
+        if not stopped_waiters:
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
                     confirm_cmd=resume_to_confirm,
                     confirm_serial_num=resume_serial_num,
-                    confirmers=resumer_names))
+                    confirmers=resumers))
 
     ####################################################################
     # build_rotate_state_scenario
@@ -23953,8 +23804,7 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_registered_after_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_unreg_no_delay_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_unreg_delay_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_stopped_no_delay_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_stopped_delay_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_stopped_arg", [0, 1, 2])
     def test_resume_timeout_scenarios(
             self,
             timeout_type_arg: TimeoutType,
@@ -23964,8 +23814,7 @@ class TestSmartThreadComboScenarios:
             num_registered_after_arg: int,
             num_unreg_no_delay_arg: int,
             num_unreg_delay_arg: int,
-            num_stopped_no_delay_arg: int,
-            num_stopped_delay_arg: int,
+            num_stopped_arg: int,
             caplog: pytest.CaptureFixture[str]
     ) -> None:
         """Test meta configuration scenarios.
@@ -23986,11 +23835,8 @@ class TestSmartThreadComboScenarios:
             num_unreg_delay_arg: number threads unregistered before the
                 resume is done, and are then created and started after
                 the allowed timeout
-            num_stopped_no_delay_arg: number of threads stopped before
+            num_stopped_arg: number of threads stopped before
                 the resume and cause a timeout
-            num_stopped_delay_arg: number of threads stopped
-                before the resume and are then joined, created, and
-                started within the allowed timeout
             caplog: pytest fixture to capture log output
 
         """
@@ -24000,14 +23846,14 @@ class TestSmartThreadComboScenarios:
                 + num_registered_after_arg
                 + num_unreg_no_delay_arg
                 + num_unreg_delay_arg
-                + num_stopped_no_delay_arg
-                + num_stopped_delay_arg)
-        if timeout_type_arg == TimeoutType.TimeoutNone:
-            if total_arg_counts == 0:
-                return
-        else:
-            if (num_unreg_delay_arg + num_stopped_delay_arg) == 0:
-                return
+                + num_stopped_arg)
+
+        if total_arg_counts == 0:
+            return
+
+        if (timeout_type_arg == TimeoutType.TimeoutTrue
+                and num_unreg_delay_arg == 0):
+            return
 
         args_for_scenario_builder: dict[str, Any] = {
             'timeout_type': timeout_type_arg,
@@ -24017,8 +23863,7 @@ class TestSmartThreadComboScenarios:
             'num_registered_after': num_registered_after_arg,
             'num_unreg_no_delay': num_unreg_no_delay_arg,
             'num_unreg_delay': num_unreg_delay_arg,
-            'num_stopped_no_delay': num_stopped_no_delay_arg,
-            'num_stopped_delay': num_stopped_delay_arg
+            'num_stopped': num_stopped_arg
         }
 
         scenario_driver(
