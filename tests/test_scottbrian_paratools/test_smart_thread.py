@@ -86,6 +86,8 @@ PendEvents: TypeAlias = dict["PE", Any]
 
 CheckPendArg: TypeAlias = tuple[str, st.PairKey]
 
+PotentialDefDelKey: TypeAlias = tuple[st.PairKey, str]
+
 
 class DefDelReasons(NamedTuple):
     pending_request: bool = False
@@ -4836,6 +4838,9 @@ class ConfigVerifier:
         self.log_found_items: deque[LogSearchItem] = deque()
 
         self.pending_events: dict[str, PendEvents] = {}
+        self.auto_calling_refresh_msg = True
+        self.potential_def_del_pairs: dict[
+            PotentialDefDelKey, int] = defaultdict(int)
         self.setup_pending_events()
 
         self.snap_shot_data: dict[int, SnapShotDataItem] = {}
@@ -5023,6 +5028,19 @@ class ConfigVerifier:
             pae = self.expected_pairs[pair_key]
 
             cb = pae[cmd_runner]
+            pot_key: PotentialDefDelKey = (pair_key, cmd_runner)
+            if (self.auto_calling_refresh_msg
+                    and cb.pending_request
+                    and not pending_request_flag
+                    and cb.pending_msg_count == 0
+                    and not cb.pending_wait
+                    and not cb.pending_sync
+                    and self.potential_def_del_pairs[pot_key] > 0):
+                pe = self.pending_events[cmd_runner]
+                req_type = pe[PE.current_request].req_type
+                pe[PE.calling_refresh_msg][req_type.value] = 1
+                self.potential_def_del_pairs[pot_key] = 0
+
             self.log_test_msg(f'set_request_pending_flag {cmd_runner=}, '
                               f'{pair_key=}, {target=}, updating from '
                               f'{cb.pending_request=} to '
@@ -6456,6 +6474,7 @@ class ConfigVerifier:
             pending_sync can only be set with smart_sync, and
             only with pending_request also set.
         """
+        self.auto_calling_refresh_msg = False
         pending_names = ['pending_0']
         remote_names = ['remote_0']
         locker_names = ['locker_0', 'locker_1', 'locker_2']
@@ -6883,6 +6902,7 @@ class ConfigVerifier:
             pending_sync can only be set with smart_sync, and
             only with pending_request also set.
         """
+        self.auto_calling_refresh_msg = False
         pending_names = ['pending_0']
         remote_names = ['remote_0']
         locker_names = ['locker_0', 'locker_1', 'locker_2',
@@ -7392,6 +7412,7 @@ class ConfigVerifier:
             pending_sync_tf: if True, pending_sync flag is to be set
 
         """
+        self.auto_calling_refresh_msg = False
         pending_names = ['pending_0']
         remote_names = ['remote_0']
         locker_names = ['locker_0', 'locker_1', 'locker_2']
@@ -8916,6 +8937,7 @@ class ConfigVerifier:
             def_del_scenario: specifies type of test to do
 
         """
+        self.auto_calling_refresh_msg = False
         num_receivers = 2
         num_senders = 1
 
@@ -10037,19 +10059,19 @@ class ConfigVerifier:
                 join_target_names=send_exit_sender_names,
                 validate_config=False)
 
-            if timeout_type != TimeoutType.TimeoutTrue:
-                for receiver in receiver_names:
-                    for exit_name in send_exit_sender_names:
-                        pair_key = st.SmartThread._get_pair_key(receiver,
-                                                                exit_name)
-                        pe = self.pending_events[receiver]
-                        ref_key: RefPendKey = ('smart_recv', pair_key)
-                        pe[PE.refresh_pending_needed][ref_key] += 1
-                        self.log_test_msg(
-                            'build_recv_msg_timeout_suite '
-                            f'{send_exit_sender_names=} set '
-                            f'refresh_pending_needed for {pair_key=} '
-                            f'{pe[PE.refresh_pending_needed][ref_key]=}')
+            # if timeout_type != TimeoutType.TimeoutTrue:
+            #     for receiver in receiver_names:
+            #         for exit_name in send_exit_sender_names:
+            #             pair_key = st.SmartThread._get_pair_key(receiver,
+            #                                                     exit_name)
+            #             pe = self.pending_events[receiver]
+            #             ref_key: RefPendKey = ('smart_recv', pair_key)
+            #             pe[PE.refresh_pending_needed][ref_key] += 1
+            #             self.log_test_msg(
+            #                 'build_recv_msg_timeout_suite '
+            #                 f'{send_exit_sender_names=} set '
+            #                 f'refresh_pending_needed for {pair_key=} '
+            #                 f'{pe[PE.refresh_pending_needed][ref_key]=}')
 
         ################################################################
         # exit the nosend_exit_senders, then resurrect and do smart_send
@@ -10064,19 +10086,19 @@ class ConfigVerifier:
                 join_target_names=nosend_exit_sender_names,
                 validate_config=False)
 
-            if timeout_type != TimeoutType.TimeoutTrue:
-                for receiver in receiver_names:
-                    for exit_name in nosend_exit_sender_names:
-                        pair_key = st.SmartThread._get_pair_key(receiver,
-                                                                exit_name)
-                        pe = self.pending_events[receiver]
-                        ref_key: RefPendKey = ('smart_recv', pair_key)
-                        pe[PE.refresh_pending_needed][ref_key] += 1
-                        self.log_test_msg(
-                            'build_recv_msg_timeout_suite '
-                            f'{nosend_exit_sender_names=} set '
-                            f'refresh_pending_needed for {pair_key=} '
-                            f'{pe[PE.refresh_pending_needed][ref_key]=}')
+            # if timeout_type != TimeoutType.TimeoutTrue:
+            #     for receiver in receiver_names:
+            #         for exit_name in nosend_exit_sender_names:
+            #             pair_key = st.SmartThread._get_pair_key(receiver,
+            #                                                     exit_name)
+            #             pe = self.pending_events[receiver]
+            #             ref_key: RefPendKey = ('smart_recv', pair_key)
+            #             pe[PE.refresh_pending_needed][ref_key] += 1
+            #             self.log_test_msg(
+            #                 'build_recv_msg_timeout_suite '
+            #                 f'{nosend_exit_sender_names=} set '
+            #                 f'refresh_pending_needed for {pair_key=} '
+            #                 f'{pe[PE.refresh_pending_needed][ref_key]=}')
 
             f1_create_items: list[F1CreateItem] = []
             for idx, name in enumerate(nosend_exit_sender_names):
@@ -12110,6 +12132,7 @@ class ConfigVerifier:
         # and one thread for req1, for a total of three.
         assert 3 <= len(self.unregistered_names)
 
+        self.auto_calling_refresh_msg = False
         self.build_config(
             cmd_runner=self.commander_name,
             num_active=2)  # one for commander and one for req0
@@ -13576,6 +13599,7 @@ class ConfigVerifier:
                 should cause timeout by having a full msg queue
 
         """
+        self.auto_calling_refresh_msg = False
         # Make sure we have enough threads
         assert (num_senders
                 + num_active_targets
@@ -18248,15 +18272,21 @@ class ConfigVerifier:
                                                      add_name)
                 pe[PE.add_status_block_msg][add_status_key] += 1
 
-                pe_other = self.pending_events[other_name]
-                cr_keys = list(pe_other[PE.calling_refresh_msg].keys())
-                for cr_key in cr_keys:
-                    if pe_other[PE.calling_refresh_msg][cr_key] > 0:
-                        pe_other[PE.calling_refresh_msg][cr_key] -= 1
-                        self.log_test_msg(
-                            f'add_to_pair_array {cmd_runner=}, {add_name=}, '
-                            f'{other_name=}, decremented for {cr_key=}, '
-                            f'{pe_other[PE.calling_refresh_msg][cr_key]=}')
+                if self.auto_calling_refresh_msg:
+                    pot_key: PotentialDefDelKey = (pair_key, other_name)
+                    self.potential_def_del_pairs[pot_key] = 0
+
+                # pe_other = self.pending_events[other_name]
+                # cr_keys = list(pe_other[PE.calling_refresh_msg].keys())
+                # for cr_key in cr_keys:
+                #     if pe_other[PE.calling_refresh_msg][cr_key] > 0:
+                #         pe_other[PE.calling_refresh_msg][cr_key] -= 1
+                #         self.log_test_msg(
+                #             f'add_to_pair_array {cmd_runner=}, {add_name=}, '
+                #             f'{other_name=}, decremented for {cr_key=}, '
+                #             f'{pe_other[PE.calling_refresh_msg][cr_key]=}')
+
+
 
                 # self.log_test_msg(f'{cmd_runner} '
                 #                   'resurrected expected_pairs '
@@ -18339,17 +18369,22 @@ class ConfigVerifier:
                                           f'{pair_key=}, {name=}, '
                                           f'{rem_sb_key=}')
                         pe[PE.rem_status_block_def_msg][rem_sb_key] += 1
-                        pe_cmd = self.pending_events[name]
-                        ref_key: RefPendKey = ('smart_recv', pair_key)
-                        if pe_cmd[PE.refresh_pending_needed][ref_key] > 0:
-                            pe_cmd[PE.calling_refresh_msg]['smart_recv'] += 1
-                            pe_cmd[PE.refresh_pending_needed][ref_key] -= 1
-                            self.log_test_msg(
-                                'clean_pair_array defer set '
-                                f'calling_refresh_msg for {name=}, '
-                                f'{pair_key=} '
-                                f'{pe_cmd[PE.refresh_pending_needed][ref_key]=}'
-                                f"{pe_cmd[PE.calling_refresh_msg]['smart_recv']=}")
+
+                        if self.auto_calling_refresh_msg:
+                            pot_key: PotentialDefDelKey = (pair_key, name)
+                            self.potential_def_del_pairs[pot_key] = 1
+
+                        # pe_cmd = self.pending_events[name]
+                        # ref_key: RefPendKey = ('smart_recv', pair_key)
+                        # if pe_cmd[PE.refresh_pending_needed][ref_key] > 0:
+                        #     pe_cmd[PE.calling_refresh_msg]['smart_recv'] += 1
+                        #     pe_cmd[PE.refresh_pending_needed][ref_key] -= 1
+                        #     self.log_test_msg(
+                        #         'clean_pair_array defer set '
+                        #         f'calling_refresh_msg for {name=}, '
+                        #         f'{pair_key=} '
+                        #         f'{pe_cmd[PE.refresh_pending_needed][ref_key]=}'
+                        #         f"{pe_cmd[PE.calling_refresh_msg]['smart_recv']=}")
                         # if (pending_request
                         #         and pending_msg
                         #         and pe_cmd[PE.refresh_pending_needed][ref_key]
@@ -18368,15 +18403,18 @@ class ConfigVerifier:
                         self.log_test_msg('clean_pair_array removed '
                                           f'{pair_key=}, {name=}, '
                                           f'{rem_sb_key=}')
-                        pe_cmd = self.pending_events[name]
-                        ref_key: RefPendKey = ('smart_recv', pair_key)
-                        if pe_cmd[PE.refresh_pending_needed][ref_key] > 0:
-                            pe_cmd[PE.refresh_pending_needed][ref_key] -= 1
-                            self.log_test_msg(
-                                'clean_pair_array non-defer reset '
-                                f'refresh_pending_needed for {name=}, '
-                                f'{pair_key=} '
-                                f'{pe_cmd[PE.refresh_pending_needed][ref_key]=}')
+
+
+                        # pe_cmd = self.pending_events[name]
+                        # ref_key: RefPendKey = ('smart_recv', pair_key)
+                        # if pe_cmd[PE.refresh_pending_needed][ref_key] > 0:
+                        #     pe_cmd[PE.refresh_pending_needed][ref_key] -= 1
+                        #     self.log_test_msg(
+                        #         'clean_pair_array non-defer reset '
+                        #         f'refresh_pending_needed for {name=}, '
+                        #         f'{pair_key=} '
+                        #         f'{pe_cmd[PE.refresh_pending_needed][
+                        #         ref_key]=}')
 
                         changed = True
 
