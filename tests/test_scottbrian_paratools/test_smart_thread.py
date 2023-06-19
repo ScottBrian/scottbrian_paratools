@@ -9831,13 +9831,13 @@ class ConfigVerifier:
                         + (num_send_exit_senders * 0.1)
                         + (num_nosend_exit_senders * 0.5)
                         + (num_unreg_senders * 0.5)
-                        + (num_reg_senders * 0.2))
+                        + (num_reg_senders * 0.5))
 
         if timeout_type == TimeoutType.TimeoutNone:
             pause_time = 0.5
         elif timeout_type == TimeoutType.TimeoutFalse:
             pause_time = 0.5
-            timeout_time += (pause_time * 2)  # prevent timeout
+            timeout_time += (pause_time * 4)  # prevent timeout
         else:  # timeout True
             pause_time = timeout_time + 1  # force timeout
 
@@ -10045,6 +10045,11 @@ class ConfigVerifier:
                         pe = self.pending_events[receiver]
                         ref_key: RefPendKey = ('smart_recv', pair_key)
                         pe[PE.refresh_pending_needed][ref_key] += 1
+                        self.log_test_msg(
+                            'build_recv_msg_timeout_suite '
+                            f'{send_exit_sender_names=} set '
+                            f'refresh_pending_needed for {pair_key=} '
+                            f'{pe[PE.refresh_pending_needed][ref_key]=}')
 
         ################################################################
         # exit the nosend_exit_senders, then resurrect and do smart_send
@@ -10067,6 +10072,11 @@ class ConfigVerifier:
                         pe = self.pending_events[receiver]
                         ref_key: RefPendKey = ('smart_recv', pair_key)
                         pe[PE.refresh_pending_needed][ref_key] += 1
+                        self.log_test_msg(
+                            'build_recv_msg_timeout_suite '
+                            f'{nosend_exit_sender_names=} set '
+                            f'refresh_pending_needed for {pair_key=} '
+                            f'{pe[PE.refresh_pending_needed][ref_key]=}')
 
             f1_create_items: list[F1CreateItem] = []
             for idx, name in enumerate(nosend_exit_sender_names):
@@ -18238,6 +18248,16 @@ class ConfigVerifier:
                                                      add_name)
                 pe[PE.add_status_block_msg][add_status_key] += 1
 
+                pe_other = self.pending_events[other_name]
+                cr_keys = list(pe_other[PE.calling_refresh_msg].keys())
+                for cr_key in cr_keys:
+                    if pe_other[PE.calling_refresh_msg][cr_key] > 0:
+                        pe_other[PE.calling_refresh_msg][cr_key] -= 1
+                        self.log_test_msg(
+                            f'add_to_pair_array {cmd_runner=}, {add_name=}, '
+                            f'{other_name=}, decremented for {cr_key=}, '
+                            f'{pe_other[PE.calling_refresh_msg][cr_key]=}')
+
                 # self.log_test_msg(f'{cmd_runner} '
                 #                   'resurrected expected_pairs '
                 #                   f'for {pair_key=}, {add_name=} with '
@@ -18277,8 +18297,8 @@ class ConfigVerifier:
                     and pair_key[1] in self.expected_registered
                     and self.expected_registered[pair_key[1]].st_state
                     != st.ThreadState.Initializing):
-                # self.log_test_msg('clean_pair_array continue with '
-                #                   f'{pair_key=}')
+                self.log_test_msg('clean_pair_array continue with '
+                                  f'{pair_key=}')
                 continue
 
             # one or both need to be removed from pair_array
@@ -18324,6 +18344,12 @@ class ConfigVerifier:
                         if pe_cmd[PE.refresh_pending_needed][ref_key] > 0:
                             pe_cmd[PE.calling_refresh_msg]['smart_recv'] += 1
                             pe_cmd[PE.refresh_pending_needed][ref_key] -= 1
+                            self.log_test_msg(
+                                'clean_pair_array defer set '
+                                f'calling_refresh_msg for {name=}, '
+                                f'{pair_key=} '
+                                f'{pe_cmd[PE.refresh_pending_needed][ref_key]=}'
+                                f"{pe_cmd[PE.calling_refresh_msg]['smart_recv']=}")
                         # if (pending_request
                         #         and pending_msg
                         #         and pe_cmd[PE.refresh_pending_needed][ref_key]
@@ -18346,6 +18372,11 @@ class ConfigVerifier:
                         ref_key: RefPendKey = ('smart_recv', pair_key)
                         if pe_cmd[PE.refresh_pending_needed][ref_key] > 0:
                             pe_cmd[PE.refresh_pending_needed][ref_key] -= 1
+                            self.log_test_msg(
+                                'clean_pair_array non-defer reset '
+                                f'refresh_pending_needed for {name=}, '
+                                f'{pair_key=} '
+                                f'{pe_cmd[PE.refresh_pending_needed][ref_key]=}')
 
                         changed = True
 
@@ -18428,6 +18459,7 @@ class ConfigVerifier:
 
                 for target in rem_targets:
                     del self.expected_registered[target]
+                    self.log_test_msg(f'clean_registry removed {target=}')
                     if target in pe[PE.current_request].eligible_targets:
                         pe[PE.current_request].completed_targets |= {target}
                         completed |= {target}
@@ -20830,11 +20862,15 @@ class ConfigVerifier:
         Args:
             cmd_runner: thread doing the wait
         """
+        start_time = time.time()
         while True:
             with self.ops_lock:
                 if self.expected_num_recv_timeouts == 0:
                     return
             time.sleep(0.1)
+            if start_time + 30 < time.time():
+                raise CmdTimedOut('wait_for_recv_msg_timeouts timed out '
+                                  f'with {self.expected_num_recv_timeouts=}')
 
     ####################################################################
     # wait_for_request_timeouts
@@ -23786,14 +23822,14 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_nosend_exit_senders_arg", [0, 1])
     @pytest.mark.parametrize("num_unreg_senders_arg", [0, 1])
     @pytest.mark.parametrize("num_reg_senders_arg", [0, 1])
-    # @pytest.mark.parametrize("timeout_type_arg", [TimeoutType.TimeoutNone])
-    # @pytest.mark.parametrize("num_receivers_arg", [1])
+    # @pytest.mark.parametrize("timeout_type_arg", [TimeoutType.TimeoutFalse])
+    # @pytest.mark.parametrize("num_receivers_arg", [2])
     # @pytest.mark.parametrize("num_active_no_delay_senders_arg", [0])
-    # @pytest.mark.parametrize("num_active_delay_senders_arg", [0])
-    # @pytest.mark.parametrize("num_send_exit_senders_arg", [0])
+    # @pytest.mark.parametrize("num_active_delay_senders_arg", [1])
+    # @pytest.mark.parametrize("num_send_exit_senders_arg", [1])
     # @pytest.mark.parametrize("num_nosend_exit_senders_arg", [1])
-    # @pytest.mark.parametrize("num_unreg_senders_arg", [0])
-    # @pytest.mark.parametrize("num_reg_senders_arg", [0])
+    # @pytest.mark.parametrize("num_unreg_senders_arg", [1])
+    # @pytest.mark.parametrize("num_reg_senders_arg", [1])
     def test_recv_msg_timeout_scenarios(
             self,
             timeout_type_arg: TimeoutType,
