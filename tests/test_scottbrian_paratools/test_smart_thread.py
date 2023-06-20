@@ -2499,6 +2499,7 @@ class ThreadPairStatus:
     pending_request: bool = False
     pending_msg_count: int = 0
     pending_wait: bool = False
+    pending_wait_count: int = 0
     pending_sync: bool = False
 
 
@@ -5123,11 +5124,27 @@ class ConfigVerifier:
 
         cb = pae[waiter]
 
+        before_pending_wait_count = cb.pending_wait_count
+        if pending_wait_flag:
+            cb.pending_wait_count += 1
+        else:
+            cb.pending_wait_count -= 1
+
+        after_pending_wait_count = cb.pending_wait_count
+
+        if cb.pending_wait_count == 1:
+            new_pending_wait_flag = True
+        else:
+            new_pending_wait_flag = False
+
         self.log_test_msg(f'set_wait_pending_flag {waiter=}, '
-                          f'{pair_key=}, {resumer=}, updating from '
+                          f'{pair_key=}, {resumer=}, {pending_wait_flag=} '
+                          f'{before_pending_wait_count=} updating from '
                           f'{cb.pending_wait=} to '
-                          f'{pending_wait_flag=}')
-        cb.pending_wait = pending_wait_flag
+                          f'{new_pending_wait_flag=}, '
+                          f'{after_pending_wait_count=}')
+
+        cb.pending_wait = new_pending_wait_flag
 
     ####################################################################
     # set_sync_pending_flag
@@ -10837,7 +10854,7 @@ class ConfigVerifier:
             num_stop_after_err: number of target threads that will
                 be started after the resume is issued, and will quickly
                 be stopped and joined before the resume has a chance to
-                see that is is alive to sety the wait_event, and should
+                see that is is alive to set the wait_event, and should
                 result in a not alive error
 
         """
@@ -10977,7 +10994,7 @@ class ConfigVerifier:
                 wait_serial_num = self.add_cmd(
                     Wait(cmd_runners=waiter,
                          resumers=resumer_names,
-                         stopped_remotes=set()))
+                         exp_resumers=resumer_names))
                 wait_confirms.append(
                     ConfirmResponse(
                         cmd_runners=[self.commander_name],
@@ -11024,14 +11041,18 @@ class ConfigVerifier:
         ################################################################
         if stop_before_names:
             stopped_remotes = stop_before_names
+            exp_resumed_targets = set(start_before_names)
         else:
+            exp_resumed_targets = (set(start_before_names)
+                                   | set(unreg_before_names)
+                                   | set(stop_after_ok_names))
             stopped_remotes = (unreg_after_names
                                + stop_after_err_names)
 
         resume_serial_num_1 = self.add_cmd(
             Resume(cmd_runners=resumer_names,
                    targets=all_targets,
-                   exp_resumed_targets=all_targets,
+                   exp_resumed_targets=exp_resumed_targets,
                    stopped_remotes=stopped_remotes))
 
         ################################################################
@@ -11052,10 +11073,12 @@ class ConfigVerifier:
             if after_targets:
                 stopped_remotes = (unreg_after_names
                                    + stop_after_err_names)
+                exp_resumed_targets = (set(unreg_before_names)
+                                       | set(stop_after_ok_names))
                 resume_serial_num_2 = self.add_cmd(
                     Resume(cmd_runners=resumer_names,
                            targets=after_targets,
-                           exp_resumed_targets=after_targets,
+                           exp_resumed_targets=exp_resumed_targets,
                            stopped_remotes=stopped_remotes))
 
         ################################################################
@@ -11079,7 +11102,7 @@ class ConfigVerifier:
             wait_serial_num = self.add_cmd(
                 Wait(cmd_runners=waiter,
                      resumers=resumer_names,
-                     stopped_remotes=set()))
+                     exp_resumers=resumer_names))
             wait_confirms.append(
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
@@ -11740,10 +11763,10 @@ class ConfigVerifier:
         # wait for resume timeouts to be known
         ################################################################
         # if not stopped_waiters:
-        self.add_cmd(WaitForRequestTimeouts(
-            cmd_runners=self.commander_name,
-            actor_names=resumers,
-            timeout_names=timeout_names))
+        #     self.add_cmd(WaitForRequestTimeouts(
+        #         cmd_runners=self.commander_name,
+        #         actor_names=resumers,
+        #         timeout_names=timeout_names))
 
         self.add_cmd(Pause(
             cmd_runners=self.commander_name,
@@ -11865,7 +11888,6 @@ class ConfigVerifier:
                         cmd_runners=resumers,
                         targets=unreg_waiters,
                         exp_resumed_targets=unreg_waiters,
-                        stopped_waiters=[],
                         timeout=0.5))
                 self.add_cmd(
                     ConfirmResponse(
@@ -17440,10 +17462,20 @@ class ConfigVerifier:
         pending_msg = (
             r" Remotes that are pending: \[([a-z0-9_]*|,|'| )*\].")
 
+        # if stopped_remotes:
+        #     stopped_msg = re.escape(
+        #         ' Remotes that are stopped: '
+        #         f'{sorted(stopped_remotes)}.')
+        # else:
+        #     stopped_msg = ''
+
         if stopped_remotes:
-            stopped_msg = re.escape(
-                ' Remotes that are stopped: '
-                f'{sorted(stopped_remotes)}.')
+            sp_search = r"\[(,| "
+            for name in stopped_remotes:
+                sp_search += "|'" + name + "'"
+            sp_search += r")+\]"
+            stopped_msg = (f' Remotes that are stopped: '
+                           f'{sp_search}.')
         else:
             stopped_msg = ''
 
