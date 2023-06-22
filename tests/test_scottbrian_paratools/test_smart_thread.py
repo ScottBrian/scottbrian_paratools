@@ -303,6 +303,7 @@ class RegistrySnapshotItem:
 
 @dataclass
 class StatusBlockSnapshotItem:
+    del_def_flag: bool = False
     pending_request: bool = False
     pending_msg_count: int = 0
     pending_wait: bool = False
@@ -12924,9 +12925,9 @@ class ConfigVerifier:
             send_type: type of send to do
 
         """
-        senders = {'sender_' + str(i) for i in range(num_senders)}
+        senders = get_names('sender_', num_senders)
 
-        receivers = {'receiver_' + str(i) for i in range(num_receivers)}
+        receivers = get_names('receiver_', num_receivers)
 
         self.create_config(active_names=senders | receivers)
 
@@ -12966,6 +12967,155 @@ class ConfigVerifier:
                 confirm_cmd='RecvMsg',
                 confirm_serial_num=recv_msg_serial_num,
                 confirmers=receivers))
+
+    ####################################################################
+    # build_send_scenario
+    ####################################################################
+    def build_sender_resumer_count_scenario(
+            self,
+            request_type: st.ReqType,
+            num_count_1: int,
+            num_count_2: int,) -> None:
+        """Add cmds to run scenario.
+
+        Args:
+            request_type: the request to do
+            num_count_1: the sender or resumer count for 1st batch
+            num_count_2: the sender or resumer count for 2nd batch
+
+        """
+        num_senders_resumers = 10
+
+        senders_resumers = get_names('sender_resumer_', num_senders_resumers)
+
+        receiver_waiter = 'receiver_waiter_0'
+
+        self.create_config(active_names=senders_resumers | {receiver_waiter})
+
+        msgs_to_send = SendRecvMsgs(sender_names=senders_resumers,
+                                    receiver_names=receiver_waiter,
+                                    num_msgs=1,
+                                    text='build_sender_resumer_count_scenario')
+
+        if num_count_1 == 0:
+            exp_senders_resumers: list[str] = sorted(senders_resumers)
+            sender_resumer_count = None
+        else:
+            exp_senders_resumers: list[str] = sorted(
+                senders_resumers)[0:num_count_1]
+            sender_resumer_count = num_count_1
+
+        ################################################################
+        # recv or wait 1st batch
+        ################################################################
+        if request_type == st.ReqType.Smart_recv:
+            recv_wait_cmd_to_confirm = 'RecvMsg'
+            recv_wait_serial_num_1 = self.add_cmd(RecvMsg(
+                cmd_runners=receiver_waiter,
+                senders=senders_resumers,
+                exp_senders=exp_senders_resumers,
+                exp_msgs=msgs_to_send,
+                sender_count=sender_resumer_count))
+        else:
+            recv_wait_cmd_to_confirm = 'Wait'
+            recv_wait_serial_num_1 = self.add_cmd(Wait(
+                cmd_runners=receiver_waiter,
+                resumers=senders_resumers,
+                exp_resumers=exp_senders_resumers,
+                resumer_count=sender_resumer_count))
+
+        ################################################################
+        # send or resume
+        ################################################################
+        for idx, sender_resumer in enumerate(sorted(senders_resumers)):
+            if request_type == st.ReqType.Smart_recv:
+                send_resume_cmd_to_confirm = 'SendMsg'
+                send_resume_serial_num_1 = self.add_cmd(SendMsg(
+                    cmd_runners=sender_resumer,
+                    receivers=receiver_waiter,
+                    msgs_to_send=msgs_to_send,
+                    msg_idx=idx))
+            else:
+                send_resume_cmd_to_confirm = 'Resume'
+                send_resume_serial_num_1 = self.add_cmd(Resume(
+                    cmd_runners=sender_resumer,
+                    targets=receiver_waiter,
+                    exp_resumed_targets=receiver_waiter))
+
+            self.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=self.commander_name,
+                    confirm_cmd=send_resume_cmd_to_confirm,
+                    confirm_serial_num=send_resume_serial_num_1,
+                    confirmers=sender_resumer))
+            self.add_cmd(Pause(cmd_runners=self.commander_name,
+                               pause_seconds=0.5))
+
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd=recv_wait_cmd_to_confirm,
+                confirm_serial_num=recv_wait_serial_num_1,
+                confirmers=receiver_waiter))
+
+        ############################################################
+        # receive or wait 2nd batch
+        ############################################################
+        if num_count_1 == 0:
+            exp_senders_resumers = set()
+            sender_resumer_count = num_count_2
+        else:
+            if num_count_2 == 0:
+                exp_senders_resumers: list[str] = sorted(
+                    senders_resumers)[num_count_1:]
+                sender_resumer_count = None
+            else
+                exp_senders_resumers: list[str] = sorted(
+                    senders_resumers)[num_count_1:]
+                sender_resumer_count = num_count_2
+
+        if request_type == st.ReqType.Smart_recv:
+            if exp_senders_resumers:
+                recv_wait_cmd_to_confirm = 'RecvMsg'
+                recv_wait_serial_num_2 = self.add_cmd(RecvMsg(
+                    cmd_runners=receiver_waiter,
+                    senders=senders_resumers,
+                    exp_senders=exp_senders_resumers,
+                    exp_msgs=msgs_to_send,
+                    sender_count=sender_resumer_count))
+            else:
+                recv_wait_cmd_to_confirm = 'RecvMsgTimeoutTrue'
+                recv_wait_serial_num_2 = self.add_cmd(RecvMsgTimeoutTrue(
+                    cmd_runners=receiver_waiter,
+                    senders=senders_resumers,
+                    exp_senders=exp_senders_resumers,
+                    exp_msgs=msgs_to_send,
+                    timeout=1,
+                    timeout_names=senders_resumers,
+                    sender_count=sender_resumer_count))
+        else:
+            if exp_senders_resumers:
+                recv_wait_cmd_to_confirm = 'Wait'
+                recv_wait_serial_num_2 = self.add_cmd(Wait(
+                    cmd_runners=receiver_waiter,
+                    resumers=senders_resumers,
+                    exp_resumers=exp_senders_resumers,
+                    resumer_count=sender_resumer_count))
+            else:
+                recv_wait_cmd_to_confirm = 'WaitTimeoutTrue'
+                recv_wait_serial_num_2 = self.add_cmd(WaitTimeoutTrue(
+                    cmd_runners=receiver_waiter,
+                    resumers=senders_resumers,
+                    exp_resumers=exp_senders_resumers,
+                    timeout=1,timeout_remotes=senders_resumers,
+                    resumer_count=sender_resumer_count))
+
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd=recv_wait_cmd_to_confirm,
+                confirm_serial_num=recv_wait_serial_num_2,
+                confirmers=receiver_waiter))
 
     ####################################################################
     # build_recv_basic_scenario
@@ -14741,6 +14891,7 @@ class ConfigVerifier:
                 pair_array_items[pair_key] = {}
                 for name, sb_item in connection_pair.status_blocks.items():
                     pair_array_items[pair_key][name] = StatusBlockSnapshotItem(
+                        del_def_flag=sb_item.del_deferred,
                         pending_request=sb_item.request_pending,
                         pending_msg_count=sb_item.msg_q.qsize(),
                         pending_wait=sb_item.wait_event.is_set(),
@@ -18579,7 +18730,8 @@ class ConfigVerifier:
                         f' {pair_key}, but is missing in expected_pairs')
 
                 if len(status_blocks) == 1:
-                    if not (status_item.pending_request
+                    if not (status_item.del_def_flag
+                            or status_item.pending_request
                             or status_item.pending_msg_count
                             or status_item.pending_wait
                             or status_item.pending_sync):
@@ -18588,7 +18740,8 @@ class ConfigVerifier:
                             f'verify_config found {name=} in real '
                             f'SmartThread._pair_array status_blocks for '
                             f'pair_key {pair_key}, but it is a single '
-                            f'name that has no pending reasons')
+                            f'name that has no pending reasons and is not '
+                            f'del_deferred')
                 mock_status_item = self.expected_pairs[pair_key][name]
                 if (status_item.pending_request
                         != mock_status_item.pending_request):
@@ -23908,20 +24061,13 @@ class TestSmartThreadComboScenarios:
     ####################################################################
     # test_resume_scenarios
     ####################################################################
-    # @pytest.mark.parametrize("num_resumers_arg", [1, 2, 3])
-    # @pytest.mark.parametrize("num_start_before_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_unreg_before_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_stop_before_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_unreg_after_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_stop_after_ok_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_stop_after_err_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_resumers_arg", [1, 2, 3])
     @pytest.mark.parametrize("num_start_before_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_unreg_before_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_stop_before_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_unreg_after_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_stop_after_ok_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_stop_after_err_arg", [1, 2])
+    @pytest.mark.parametrize("num_stop_after_err_arg", [0, 1, 2])
     def test_resume_scenarios(
             self,
             num_resumers_arg: int,
@@ -24306,14 +24452,6 @@ class TestSmartThreadComboScenarios:
         if total_num_targets == 0:
             return
 
-        commander_configs: tuple[AppConfig, ...] = (
-            AppConfig.ScriptStyle,
-            AppConfig.CurrentThreadApp,
-            AppConfig.RemoteThreadApp,
-            AppConfig.RemoteSmartThreadApp,
-            AppConfig.RemoteSmartThreadApp2
-        )
-
         args_for_scenario_builder: dict[str, Any] = {
             'num_auto_start': num_auto_start_arg,
             'num_manual_start': num_manual_start_arg,
@@ -24326,8 +24464,47 @@ class TestSmartThreadComboScenarios:
             scenario_builder=ConfigVerifier.build_smart_start_suite,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
-            commander_config=commander_configs[total_num_targets
-                                               % num_commander_configs]
+            commander_config=commander_config[total_num_targets
+                                              % num_commander_configs]
+        )
+
+    ####################################################################
+    # test_smart_recv_sender_count_scenario
+    ####################################################################
+    @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_recv,
+                                                  st.ReqType.Smart_wait])
+    @pytest.mark.parametrize("num_count_1_arg", [0, 1, 2, 3, 4, 5])
+    @pytest.mark.parametrize("num_count_2_arg", [0, 1, 2, 3, 4, 5])
+    def test_sender_resumer_count_scenario(
+            self,
+            request_type_arg: st.ReqType,
+            num_count_1_arg: int,
+            num_count_2_arg: int,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test smart_sync scenarios.
+
+        Args:
+            request_type_arg: the request to do
+            num_count_1_arg: the sender or resumer count for 1st batch
+            num_count_2_arg: the sender or resumer count for 2nd batch
+            caplog: pytest fixture to capture log output
+
+        """
+        total_counts = num_count_1_arg + num_count_2_arg
+        args_for_scenario_builder: dict[str, Any] = {
+            'request_type': request_type_arg,
+            'num_count_1': num_count_1_arg,
+            'num_count_2': num_count_2_arg,
+        }
+
+        scenario_driver(
+            scenario_builder=ConfigVerifier.
+            build_sender_resumer_count_scenario,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog,
+            commander_config=commander_config[total_counts
+                                              % num_commander_configs]
         )
 
     ####################################################################
