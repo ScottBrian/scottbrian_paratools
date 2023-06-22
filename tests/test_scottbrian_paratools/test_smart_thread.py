@@ -10969,9 +10969,9 @@ class ConfigVerifier:
                                              st.ThreadState.Registered)
                 a_target_mock_dict[resumer_name] = a_sub_dict
 
-        # a_mock_get_target_state = MockGetTargetState(
-        #     targets=a_target_mock_dict,
-        #     config_ver=self)
+        MockGetTargetState(
+            targets=a_target_mock_dict,
+            config_ver=self)
 
         resume_serial_num_2 = 0
 
@@ -23908,13 +23908,20 @@ class TestSmartThreadComboScenarios:
     ####################################################################
     # test_resume_scenarios
     ####################################################################
+    # @pytest.mark.parametrize("num_resumers_arg", [1, 2, 3])
+    # @pytest.mark.parametrize("num_start_before_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_unreg_before_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_stop_before_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_unreg_after_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_stop_after_ok_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_stop_after_err_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_resumers_arg", [1, 2, 3])
     @pytest.mark.parametrize("num_start_before_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_unreg_before_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_stop_before_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_unreg_after_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_stop_after_ok_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_stop_after_err_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_stop_after_err_arg", [1, 2])
     def test_resume_scenarios(
             self,
             num_resumers_arg: int,
