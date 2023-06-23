@@ -12999,15 +12999,25 @@ class ConfigVerifier:
                                     num_msgs=1,
                                     text='build_sender_resumer_count_scenario')
 
-        requests: dict[st.ReqType, Callable[..., tuple[str, int]]] = {
+        ####################################################################
+        # build_send_request
+        ####################################################################
+        def build_send_request() -> tuple[str, int]:
+            """Add send request to run scenario."""
+            request_to_confirm = 'SendMsg'
+            request_serial_num = self.add_cmd(SendMsg(
+                cmd_runners=sender_resumer,
+                receivers=receiver_waiter,
+                msgs_to_send=msgs_to_send,
+                msg_idx=idx))
 
-        }
+            return request_to_confirm, request_serial_num
 
         ####################################################################
         # build_receive_request
         ####################################################################
-        def build_receive_request() -> tuple[str, int]:
-            """Add receive cmd to run scenario."""
+        def build_recv_request() -> tuple[str, int]:
+            """Add receive request to run scenario."""
             if exp_senders_resumers:
                 request_to_confirm = 'RecvMsg'
                 request_serial_num = self.add_cmd(RecvMsg(
@@ -13029,10 +13039,22 @@ class ConfigVerifier:
             return request_to_confirm, request_serial_num
 
         ####################################################################
+        # build_resume_request
+        ####################################################################
+        def build_resume_request() -> tuple[str, int]:
+            """Add send request to run scenario."""
+            request_to_confirm = 'Resume'
+            request_serial_num = self.add_cmd(Resume(
+                cmd_runners=sender_resumer,
+                targets=receiver_waiter,
+                exp_resumed_targets=receiver_waiter))
+            return request_to_confirm, request_serial_num
+
+        ####################################################################
         # build_wait_request
         ####################################################################
         def build_wait_request() -> tuple[str, int]:
-            """Add receive cmd to run scenario."""
+            """Add wait request to run scenario."""
             if exp_senders_resumers:
                 request_to_confirm = 'Wait'
                 request_serial_num = self.add_cmd(Wait(
@@ -13050,6 +13072,14 @@ class ConfigVerifier:
                     resumer_count=sender_resumer_count))
             return request_to_confirm, request_serial_num
 
+        requests: dict[st.ReqType, Callable[..., tuple[str, int]]] = {
+            st.ReqType.Smart_send: build_send_request,
+            st.ReqType.Smart_recv: build_recv_request,
+            st.ReqType.Smart_resume: build_resume_request,
+            st.ReqType.Smart_wait: build_wait_request
+
+        }
+
         if num_count_1 == 0:
             exp_senders_resumers: list[str] = sorted(senders_resumers)
             sender_resumer_count = None
@@ -13058,62 +13088,37 @@ class ConfigVerifier:
                 senders_resumers)[0:num_count_1]
             sender_resumer_count = num_count_1
 
+        if request_type == st.ReqType.Smart_recv:
+            sender_resumer_req_type = st.ReqType.Smart_send
+        else:
+            sender_resumer_req_type = st.ReqType.Smart_resume
         ################################################################
         # send or resume
         ################################################################
         for idx, sender_resumer in enumerate(sorted(senders_resumers)):
+            # issue recv/wait after num_count_0 requests
             if idx == num_count_0:
-                if request_type == st.ReqType.Smart_recv:
-                    build_wait_request()
+                recv_wait_confirm_0, recv_wait_serial_num_0 = requests[
+                    request_type]()
 
-
-            if idx == num_count_0 + num_count_1:
-                ########################################################
-                # recv or wait 1st batch
-                ########################################################
-                if request_type == st.ReqType.Smart_recv:
-                    recv_wait_cmd_to_confirm = 'RecvMsg'
-                    recv_wait_serial_num_1 = self.add_cmd(RecvMsg(
-                        cmd_runners=receiver_waiter,
-                        senders=senders_resumers,
-                        exp_senders=exp_senders_resumers_0,
-                        exp_msgs=msgs_to_send,
-                        sender_count=sender_resumer_count_0))
-                else:
-                    recv_wait_cmd_to_confirm = 'Wait'
-                    recv_wait_serial_num_1 = self.add_cmd(Wait(
-                        cmd_runners=receiver_waiter,
-                        resumers=senders_resumers,
-                        exp_resumers=exp_senders_resumers,
-                        resumer_count=sender_resumer_count))
-            if request_type == st.ReqType.Smart_recv:
-                send_resume_cmd_to_confirm = 'SendMsg'
-                send_resume_serial_num_1 = self.add_cmd(SendMsg(
-                    cmd_runners=sender_resumer,
-                    receivers=receiver_waiter,
-                    msgs_to_send=msgs_to_send,
-                    msg_idx=idx))
-            else:
-                send_resume_cmd_to_confirm = 'Resume'
-                send_resume_serial_num_1 = self.add_cmd(Resume(
-                    cmd_runners=sender_resumer,
-                    targets=receiver_waiter,
-                    exp_resumed_targets=receiver_waiter))
+            send_resume_confirm_0, send_resume_serial_num_0 = requests[
+                sender_resumer_req_type]()
 
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=self.commander_name,
-                    confirm_cmd=send_resume_cmd_to_confirm,
-                    confirm_serial_num=send_resume_serial_num_1,
+                    confirm_cmd=send_resume_confirm_0,
+                    confirm_serial_num=send_resume_serial_num_0,
                     confirmers=sender_resumer))
+
             self.add_cmd(Pause(cmd_runners=self.commander_name,
                                pause_seconds=0.5))
 
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=self.commander_name,
-                confirm_cmd=recv_wait_cmd_to_confirm,
-                confirm_serial_num=recv_wait_serial_num_1,
+                confirm_cmd=recv_wait_confirm_0,
+                confirm_serial_num=recv_wait_serial_num_0,
                 confirmers=receiver_waiter))
 
         ############################################################
@@ -13132,47 +13137,14 @@ class ConfigVerifier:
                     senders_resumers)[num_count_1:]
                 sender_resumer_count = num_count_2
 
-        if request_type == st.ReqType.Smart_recv:
-            if exp_senders_resumers:
-                recv_wait_cmd_to_confirm = 'RecvMsg'
-                recv_wait_serial_num_2 = self.add_cmd(RecvMsg(
-                    cmd_runners=receiver_waiter,
-                    senders=senders_resumers,
-                    exp_senders=exp_senders_resumers,
-                    exp_msgs=msgs_to_send,
-                    sender_count=sender_resumer_count))
-            else:
-                recv_wait_cmd_to_confirm = 'RecvMsgTimeoutTrue'
-                recv_wait_serial_num_2 = self.add_cmd(RecvMsgTimeoutTrue(
-                    cmd_runners=receiver_waiter,
-                    senders=senders_resumers,
-                    exp_senders=exp_senders_resumers,
-                    exp_msgs=msgs_to_send,
-                    timeout=1,
-                    timeout_names=senders_resumers,
-                    sender_count=sender_resumer_count))
-        else:
-            if exp_senders_resumers:
-                recv_wait_cmd_to_confirm = 'Wait'
-                recv_wait_serial_num_2 = self.add_cmd(Wait(
-                    cmd_runners=receiver_waiter,
-                    resumers=senders_resumers,
-                    exp_resumers=exp_senders_resumers,
-                    resumer_count=sender_resumer_count))
-            else:
-                recv_wait_cmd_to_confirm = 'WaitTimeoutTrue'
-                recv_wait_serial_num_2 = self.add_cmd(WaitTimeoutTrue(
-                    cmd_runners=receiver_waiter,
-                    resumers=senders_resumers,
-                    exp_resumers=exp_senders_resumers,
-                    timeout=1,timeout_remotes=senders_resumers,
-                    resumer_count=sender_resumer_count))
+        recv_wait_confirm_1, recv_wait_serial_num_1 = requests[
+            request_type]()
 
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=self.commander_name,
-                confirm_cmd=recv_wait_cmd_to_confirm,
-                confirm_serial_num=recv_wait_serial_num_2,
+                confirm_cmd=recv_wait_confirm_1,
+                confirm_serial_num=recv_wait_serial_num_1,
                 confirmers=receiver_waiter))
 
     ####################################################################
