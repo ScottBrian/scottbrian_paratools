@@ -12974,17 +12974,19 @@ class ConfigVerifier:
     def build_sender_resumer_count_scenario(
             self,
             request_type: st.ReqType,
+            num_count_0: int,
             num_count_1: int,
             num_count_2: int,) -> None:
         """Add cmds to run scenario.
 
         Args:
             request_type: the request to do
+            num_count_0: the sender or resumer count for 0th batch
             num_count_1: the sender or resumer count for 1st batch
             num_count_2: the sender or resumer count for 2nd batch
 
         """
-        num_senders_resumers = 10
+        num_senders_resumers = 15
 
         senders_resumers = get_names('sender_resumer_', num_senders_resumers)
 
@@ -12997,6 +12999,57 @@ class ConfigVerifier:
                                     num_msgs=1,
                                     text='build_sender_resumer_count_scenario')
 
+        requests: dict[st.ReqType, Callable[..., tuple[str, int]]] = {
+
+        }
+
+        ####################################################################
+        # build_receive_request
+        ####################################################################
+        def build_receive_request() -> tuple[str, int]:
+            """Add receive cmd to run scenario."""
+            if exp_senders_resumers:
+                request_to_confirm = 'RecvMsg'
+                request_serial_num = self.add_cmd(RecvMsg(
+                    cmd_runners=receiver_waiter,
+                    senders=senders_resumers,
+                    exp_senders=exp_senders_resumers,
+                    exp_msgs=msgs_to_send,
+                    sender_count=sender_resumer_count))
+            else:
+                request_to_confirm = 'RecvMsgTimeoutTrue'
+                request_serial_num = self.add_cmd(RecvMsgTimeoutTrue(
+                    cmd_runners=receiver_waiter,
+                    senders=senders_resumers,
+                    exp_senders=exp_senders_resumers,
+                    exp_msgs=msgs_to_send,
+                    timeout=1,
+                    timeout_names=senders_resumers,
+                    sender_count=sender_resumer_count))
+            return request_to_confirm, request_serial_num
+
+        ####################################################################
+        # build_wait_request
+        ####################################################################
+        def build_wait_request() -> tuple[str, int]:
+            """Add receive cmd to run scenario."""
+            if exp_senders_resumers:
+                request_to_confirm = 'Wait'
+                request_serial_num = self.add_cmd(Wait(
+                    cmd_runners=receiver_waiter,
+                    resumers=senders_resumers,
+                    exp_resumers=exp_senders_resumers,
+                    resumer_count=sender_resumer_count))
+            else:
+                request_to_confirm = 'WaitTimeoutTrue'
+                request_serial_num = self.add_cmd(WaitTimeoutTrue(
+                    cmd_runners=receiver_waiter,
+                    resumers=senders_resumers,
+                    exp_resumers=exp_senders_resumers,
+                    timeout=1, timeout_remotes=senders_resumers,
+                    resumer_count=sender_resumer_count))
+            return request_to_confirm, request_serial_num
+
         if num_count_1 == 0:
             exp_senders_resumers: list[str] = sorted(senders_resumers)
             sender_resumer_count = None
@@ -13006,28 +13059,33 @@ class ConfigVerifier:
             sender_resumer_count = num_count_1
 
         ################################################################
-        # recv or wait 1st batch
-        ################################################################
-        if request_type == st.ReqType.Smart_recv:
-            recv_wait_cmd_to_confirm = 'RecvMsg'
-            recv_wait_serial_num_1 = self.add_cmd(RecvMsg(
-                cmd_runners=receiver_waiter,
-                senders=senders_resumers,
-                exp_senders=exp_senders_resumers,
-                exp_msgs=msgs_to_send,
-                sender_count=sender_resumer_count))
-        else:
-            recv_wait_cmd_to_confirm = 'Wait'
-            recv_wait_serial_num_1 = self.add_cmd(Wait(
-                cmd_runners=receiver_waiter,
-                resumers=senders_resumers,
-                exp_resumers=exp_senders_resumers,
-                resumer_count=sender_resumer_count))
-
-        ################################################################
         # send or resume
         ################################################################
         for idx, sender_resumer in enumerate(sorted(senders_resumers)):
+            if idx == num_count_0:
+                if request_type == st.ReqType.Smart_recv:
+                    build_wait_request()
+
+
+            if idx == num_count_0 + num_count_1:
+                ########################################################
+                # recv or wait 1st batch
+                ########################################################
+                if request_type == st.ReqType.Smart_recv:
+                    recv_wait_cmd_to_confirm = 'RecvMsg'
+                    recv_wait_serial_num_1 = self.add_cmd(RecvMsg(
+                        cmd_runners=receiver_waiter,
+                        senders=senders_resumers,
+                        exp_senders=exp_senders_resumers_0,
+                        exp_msgs=msgs_to_send,
+                        sender_count=sender_resumer_count_0))
+                else:
+                    recv_wait_cmd_to_confirm = 'Wait'
+                    recv_wait_serial_num_1 = self.add_cmd(Wait(
+                        cmd_runners=receiver_waiter,
+                        resumers=senders_resumers,
+                        exp_resumers=exp_senders_resumers,
+                        resumer_count=sender_resumer_count))
             if request_type == st.ReqType.Smart_recv:
                 send_resume_cmd_to_confirm = 'SendMsg'
                 send_resume_serial_num_1 = self.add_cmd(SendMsg(
@@ -13069,7 +13127,7 @@ class ConfigVerifier:
                 exp_senders_resumers: list[str] = sorted(
                     senders_resumers)[num_count_1:]
                 sender_resumer_count = None
-            else
+            else:
                 exp_senders_resumers: list[str] = sorted(
                     senders_resumers)[num_count_1:]
                 sender_resumer_count = num_count_2
