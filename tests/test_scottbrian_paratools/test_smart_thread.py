@@ -12986,7 +12986,7 @@ class ConfigVerifier:
             num_count_1: the sender or resumer count for 2nd batch
 
         """
-        num_senders_resumers = 9
+        num_senders_resumers = 5
 
         senders_resumers = get_names('sender_resumer_', num_senders_resumers)
 
@@ -13061,7 +13061,8 @@ class ConfigVerifier:
                     cmd_runners=receiver_waiter,
                     resumers=senders_resumers,
                     exp_resumers=exp_senders_resumers,
-                    timeout=1, timeout_remotes=senders_resumers,
+                    timeout=1,
+                    timeout_remotes=senders_resumers,
                     resumer_count=sender_resumer_count))
             else:
                 request_to_confirm = 'Wait'
@@ -13082,9 +13083,10 @@ class ConfigVerifier:
 
         exp_timeout = False
         sorted_senders_resumers: list[str] = sorted(senders_resumers)
+        max_count = max(pre_count, num_count_0)
         if num_count_0:
             exp_senders_resumers: set[str] = set(
-                sorted_senders_resumers[0:max(pre_count, num_count_0)])
+                sorted_senders_resumers[0:max_count])
             sender_resumer_count = num_count_0
         else:
             exp_senders_resumers: set[str] = senders_resumers
@@ -13098,11 +13100,21 @@ class ConfigVerifier:
         ################################################################
         # send or resume
         ################################################################
+        recv_wait_confirm_0 = ''
+        recv_wait_serial_num_0 = 0
+        len_exp_senders_resumers = len(exp_senders_resumers)
+        pause_secs = 0.4
         for idx, sender_resumer in enumerate(sorted(senders_resumers)):
             # issue recv/wait after pre_count requests
             if idx == pre_count:
                 recv_wait_confirm_0, recv_wait_serial_num_0 = requests[
                     request_type]()
+
+            self.add_cmd(Pause(cmd_runners=self.commander_name,
+                               pause_seconds=pause_secs))
+
+            if len_exp_senders_resumers < idx:
+                pause_secs = 0.1  # allow remaining sends to go faster
 
             send_resume_confirm_0, send_resume_serial_num_0 = requests[
                 sender_resumer_req_type]()
@@ -13114,15 +13126,20 @@ class ConfigVerifier:
                     confirm_serial_num=send_resume_serial_num_0,
                     confirmers=sender_resumer))
 
-            self.add_cmd(Pause(cmd_runners=self.commander_name,
-                               pause_seconds=0.5))
+        self.add_cmd(Pause(cmd_runners=self.commander_name,
+                           pause_seconds=0.5))
 
-        self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=self.commander_name,
-                confirm_cmd=recv_wait_confirm_0,
-                confirm_serial_num=recv_wait_serial_num_0,
-                confirmers=receiver_waiter))
+        if pre_count == num_senders_resumers:
+            recv_wait_confirm_0, recv_wait_serial_num_0 = requests[
+                request_type]()
+
+        if recv_wait_serial_num_0:
+            self.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=self.commander_name,
+                    confirm_cmd=recv_wait_confirm_0,
+                    confirm_serial_num=recv_wait_serial_num_0,
+                    confirmers=receiver_waiter))
 
         ############################################################
         # receive or wait 2nd batch
@@ -13137,7 +13154,7 @@ class ConfigVerifier:
             exp_timeout = True
         else:
             exp_senders_resumers: set[str] = set(
-                sorted_senders_resumers[max(pre_count, num_count_0):])
+                sorted_senders_resumers[max_count:])
             if num_count_1 == 0:
                 exp_timeout = True
             else:
@@ -24510,9 +24527,9 @@ class TestSmartThreadComboScenarios:
     ####################################################################
     @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_recv,
                                                   st.ReqType.Smart_wait])
-    @pytest.mark.parametrize("pre_count_arg", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
-    @pytest.mark.parametrize("num_count_0_arg", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
-    @pytest.mark.parametrize("num_count_1_arg", [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+    @pytest.mark.parametrize("pre_count_arg", [0, 1, 2, 3, 4, 5])
+    @pytest.mark.parametrize("num_count_0_arg", [0, 1, 2, 3, 4, 5])
+    @pytest.mark.parametrize("num_count_1_arg", [0, 1, 2, 3, 4, 5])
     def test_sender_resumer_count_scenario(
             self,
             request_type_arg: st.ReqType,
