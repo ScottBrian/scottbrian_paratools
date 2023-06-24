@@ -10820,7 +10820,7 @@ class ConfigVerifier:
                         confirmers=target_names))
 
     ####################################################################
-    # test_resume_scenarios
+    # build_resume_scenario
     ####################################################################
     def build_resume_scenarios(
             self,
@@ -11172,9 +11172,364 @@ class ConfigVerifier:
             self.add_cmd(confirm)
 
     ####################################################################
-    # test_resume_scenarios
+    # build_resume_wait_scenario
     ####################################################################
-    def build_wait_scenarios(
+    def build_resume_wait_scenario(
+            self,
+            req_type: st.ReqType,
+            num_resumers_waiters: int,
+            num_start_before: int,
+            num_unreg_before: int,
+            num_stop_before: int,
+            num_unreg_after: int,
+            num_stop_after_ok: int,
+            num_stop_after_err: int
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            req_type: specifies whether to issue resume or wait
+            num_resumers_waiters: number of threads doing resume/wait
+            num_start_before: number of target threads that will
+                be started and issue a wait/resume before the resume is
+                done, and should succeed
+            num_unreg_before: number of target threads that will be
+                registered and then unregistered before the resume/wait,
+                and then started after the resume/wait, and should
+                succeed
+            num_stop_before: number of target threads that will
+                be started and then stopped (but not joined) before the
+                resume, and should result in a not alive error
+            num_unreg_after: number of target threads that will be
+                unregistered after the resume, and should cause an error
+            num_stop_after_ok: number of target threads that will
+                be started after the resume is issued, and will stay
+                alive long enough for the resume to set the wait_event,
+                and will then be stopped and joined, and should result
+                in success
+            num_stop_after_err: number of target threads that will
+                be started after the resume is issued, and will quickly
+                be stopped and joined before the resume has a chance to
+                see that is is alive to set the wait_event, and should
+                result in a not alive error
+
+        """
+        # Make sure we have enough threads
+        total_arg_counts = (
+                num_resumers_waiters
+                + num_start_before
+                + num_unreg_before
+                + num_stop_before
+                + num_unreg_after
+                + num_stop_after_ok
+                + num_stop_after_err)
+        assert total_arg_counts <= len(self.unregistered_names)
+
+        assert num_resumers > 0
+
+        num_active_needed = (num_resumers + 1)  # plus 1 for commander
+
+        self.build_config(
+            cmd_runner=self.commander_name,
+            num_active=num_active_needed,
+        )
+
+        # remove commander
+        active_names_copy = self.active_names - {self.commander_name}
+
+        ################################################################
+        # choose resumer_names
+        ################################################################
+        resumer_names = self.choose_names(
+            name_collection=active_names_copy,
+            num_names_needed=num_resumers,
+            update_collection=True,
+            var_name_for_log='resumer_names')
+
+        ################################################################
+        # choose start_before_names
+        ################################################################
+        unregistered_names_copy = self.unregistered_names.copy()
+        start_before_names = self.choose_names(
+            name_collection=unregistered_names_copy,
+            num_names_needed=num_start_before,
+            update_collection=True,
+            var_name_for_log='start_before_names')
+
+        ################################################################
+        # choose unreg_before_names
+        ################################################################
+        unreg_before_names = self.choose_names(
+            name_collection=unregistered_names_copy,
+            num_names_needed=num_unreg_before,
+            update_collection=True,
+            var_name_for_log='unreg_before_names')
+
+        ################################################################
+        # choose stop_before_names
+        ################################################################
+        stop_before_names = self.choose_names(
+            name_collection=unregistered_names_copy,
+            num_names_needed=num_stop_before,
+            update_collection=True,
+            var_name_for_log='stop_before_names')
+
+        ################################################################
+        # choose unreg_after_names
+        ################################################################
+        unreg_after_names = self.choose_names(
+            name_collection=unregistered_names_copy,
+            num_names_needed=num_unreg_after,
+            update_collection=True,
+            var_name_for_log='unreg_after_names')
+
+        ################################################################
+        # choose stop_after_ok_names
+        ################################################################
+        stop_after_ok_names = self.choose_names(
+            name_collection=unregistered_names_copy,
+            num_names_needed=num_stop_after_ok,
+            update_collection=True,
+            var_name_for_log='stop_after_ok_names')
+
+        ################################################################
+        # choose stop_after_ok_names
+        ################################################################
+        stop_after_err_names = self.choose_names(
+            name_collection=unregistered_names_copy,
+            num_names_needed=num_stop_after_err,
+            update_collection=True,
+            var_name_for_log='stop_after_err_names')
+
+        all_targets: list[str] = (start_before_names
+                                  + unreg_before_names
+                                  + stop_before_names
+                                  + unreg_after_names
+                                  + stop_after_ok_names
+                                  + stop_after_err_names)
+
+        after_targets: list[str] = (unreg_before_names
+                                    + unreg_after_names
+                                    + stop_after_ok_names
+                                    + stop_after_err_names)
+
+        ################################################################
+        # monkeypatch for SmartThread._get_target_state
+        ################################################################
+        a_target_mock_dict = {}
+        if stop_after_err_names:
+            for resumer_name in resumer_names:
+                a_sub_dict = {}
+                for stop_name in stop_after_err_names:
+                    a_sub_dict[stop_name] = (st.ThreadState.Alive,
+                                             st.ThreadState.Registered)
+                a_target_mock_dict[resumer_name] = a_sub_dict
+
+        MockGetTargetState(
+            targets=a_target_mock_dict,
+            config_ver=self)
+
+        resume_serial_num_2 = 0
+
+        wait_confirms: list[ConfirmResponse] = []
+        for idx, waiter in enumerate(roundrobin(start_before_names,
+                                     unreg_before_names,
+                                     stop_before_names)):
+            if idx % 2:
+                app_config = AppConfig.ScriptStyle
+            else:
+                app_config = AppConfig.RemoteThreadApp
+
+            if waiter in start_before_names:
+                self.build_create_suite(
+                    f1_create_items=[F1CreateItem(name=waiter,
+                                                  auto_start=True,
+                                                  target_rtn=outer_f1,
+                                                  app_config=app_config)],
+                    validate_config=False)
+                wait_serial_num = self.add_cmd(
+                    Wait(cmd_runners=waiter,
+                         resumers=resumer_names,
+                         exp_resumers=resumer_names))
+                wait_confirms.append(
+                    ConfirmResponse(
+                        cmd_runners=[self.commander_name],
+                        confirm_cmd='Wait',
+                        confirm_serial_num=wait_serial_num,
+                        confirmers=waiter))
+            elif waiter in unreg_before_names:
+                self.build_create_suite(
+                    f1_create_items=[F1CreateItem(name=waiter,
+                                                  auto_start=False,
+                                                  target_rtn=outer_f1,
+                                                  app_config=app_config)],
+                    validate_config=False)
+                self.build_unreg_suite(names=waiter)
+            elif waiter in stop_before_names:
+                self.build_create_suite(
+                    f1_create_items=[F1CreateItem(name=waiter,
+                                                  auto_start=True,
+                                                  target_rtn=outer_f1,
+                                                  app_config=app_config)],
+                    validate_config=False)
+                # stop now, join later
+                self.build_exit_suite(
+                    cmd_runner=self.commander_name,
+                    names=waiter,
+                    validate_config=False)
+            else:
+                raise IncorrectDataDetected('build_resume_wait_scenario '
+                                            f'{waiter=} not found in '
+                                            f'{start_before_names=} nor '
+                                            f'{unreg_before_names=} nor '
+                                            f'{stop_before_names=}')
+
+        ################################################################
+        # wait for wait to be running and waiting to be resumed
+        ################################################################
+        if start_before_names:
+            self.add_cmd(WaitForRequestTimeouts(
+                cmd_runners=self.commander_name,
+                actor_names=start_before_names,
+                timeout_names=resumer_names))
+        ################################################################
+        # issue smart_resume
+        ################################################################
+        if stop_before_names:
+            stopped_remotes = stop_before_names
+            exp_resumed_targets = set(start_before_names)
+        else:
+            exp_resumed_targets = (set(start_before_names)
+                                   | set(unreg_before_names)
+                                   | set(stop_after_ok_names))
+            stopped_remotes = (unreg_after_names
+                               + stop_after_err_names)
+
+        resume_serial_num_1 = self.add_cmd(
+            Resume(cmd_runners=resumer_names,
+                   targets=all_targets,
+                   exp_resumed_targets=exp_resumed_targets,
+                   stopped_remotes=stopped_remotes))
+
+        ################################################################
+        # confirm response now if we should have raised error for
+        # stopped remotes
+        ################################################################
+        if stop_before_names:
+            self.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=[self.commander_name],
+                    confirm_cmd='Resume',
+                    confirm_serial_num=resume_serial_num_1,
+                    confirmers=resumer_names))
+            ############################################################
+            # we need this resume for the after resume waits when the
+            # first resume ends early because of stopped remotes
+            ############################################################
+            if after_targets:
+                stopped_remotes = (unreg_after_names
+                                   + stop_after_err_names)
+                exp_resumed_targets = (set(unreg_before_names)
+                                       | set(stop_after_ok_names))
+                resume_serial_num_2 = self.add_cmd(
+                    Resume(cmd_runners=resumer_names,
+                           targets=after_targets,
+                           exp_resumed_targets=exp_resumed_targets,
+                           stopped_remotes=stopped_remotes))
+
+        ################################################################
+        # Create and start unreg_before and stop_after_ok and issue the
+        # wait. Note unreg_before is used both before and after the
+        # resume
+        ################################################################
+        for idx, waiter in enumerate(roundrobin(unreg_before_names,
+                                                stop_after_ok_names)):
+            if idx % 2:
+                app_config = AppConfig.ScriptStyle
+            else:
+                app_config = AppConfig.RemoteThreadApp
+
+            self.build_create_suite(
+                f1_create_items=[F1CreateItem(name=waiter,
+                                              auto_start=True,
+                                              target_rtn=outer_f1,
+                                              app_config=app_config)],
+                validate_config=False)
+            wait_serial_num = self.add_cmd(
+                Wait(cmd_runners=waiter,
+                     resumers=resumer_names,
+                     exp_resumers=resumer_names))
+            wait_confirms.append(
+                ConfirmResponse(
+                    cmd_runners=[self.commander_name],
+                    confirm_cmd='Wait',
+                    confirm_serial_num=wait_serial_num,
+                    confirmers=waiter))
+
+        ################################################################
+        # build unreg_after and stop_after_err
+        ################################################################
+        for idx, waiter in enumerate(roundrobin(unreg_after_names,
+                                                stop_after_err_names)):
+            if idx % 2:
+                app_config = AppConfig.ScriptStyle
+            else:
+                app_config = AppConfig.RemoteThreadApp
+
+            if waiter in unreg_after_names:
+                self.build_create_suite(
+                    f1_create_items=[F1CreateItem(name=waiter,
+                                                  auto_start=False,
+                                                  target_rtn=outer_f1,
+                                                  app_config=app_config)],
+                    validate_config=False)
+                self.build_unreg_suite(names=waiter)
+            elif waiter in stop_after_err_names:
+                self.build_create_suite(
+                    f1_create_items=[F1CreateItem(name=waiter,
+                                                  auto_start=True,
+                                                  target_rtn=outer_f1,
+                                                  app_config=app_config)],
+                    validate_config=False)
+                self.build_exit_suite(
+                    cmd_runner=self.commander_name,
+                    names=waiter,
+                    validate_config=False)
+                self.build_join_suite(
+                    cmd_runners=self.commander_name,
+                    join_target_names=waiter,
+                    validate_config=False)
+            else:
+                raise IncorrectDataDetected('build_resume_wait_scenario '
+                                            f'{waiter=} not found in '
+                                            f'{unreg_after_names=} nor '
+                                            f'{stop_after_err_names=}')
+
+        ####################################################
+        # confirm the resumes
+        ####################################################
+        if not stop_before_names:
+            self.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=[self.commander_name],
+                    confirm_cmd='Resume',
+                    confirm_serial_num=resume_serial_num_1,
+                    confirmers=resumer_names))
+        elif after_targets:
+            self.add_cmd(
+                ConfirmResponse(
+                    cmd_runners=[self.commander_name],
+                    confirm_cmd='Resume',
+                    confirm_serial_num=resume_serial_num_2,
+                    confirmers=resumer_names))
+
+        for confirm in wait_confirms:
+            self.add_cmd(confirm)
+
+    ####################################################################
+    # build_wait_scenario
+    ####################################################################
+    def build_wait_scenario(
             self,
             num_waiters: int,
             num_start_before: int,
@@ -11322,9 +11677,9 @@ class ConfigVerifier:
                                              st.ThreadState.Registered)
                 a_target_mock_dict[waiter_name] = a_sub_dict
 
-        # a_mock_get_target_state = MockGetTargetState(
-        #     targets=a_target_mock_dict,
-        #     config_ver=self)
+        a_mock_get_target_state = MockGetTargetState(
+            targets=a_target_mock_dict,
+            config_ver=self)
 
         wait_serial_num_2 = 0
 
@@ -11394,18 +11749,24 @@ class ConfigVerifier:
         # issue smart_wait
         ################################################################
         if stop_before_names:
-            stopped_remotes = (stop_before_names
-                               + unreg_before_names
-                               + unreg_after_names
-                               + stop_after_ok_names
-                               + stop_after_err_names)
+            stopped_remotes = stop_before_names
+            exp_resumers = set(start_before_names)
+            # stopped_remotes = (stop_before_names
+            #                    + unreg_before_names
+            #                    + unreg_after_names
+            #                    + stop_after_ok_names
+            #                    + stop_after_err_names)
         else:
             stopped_remotes = (unreg_after_names
                                + stop_after_err_names)
+            exp_resumers = (set(start_before_names)
+                            | set(unreg_before_names)
+                            | set(stop_after_ok_names))
 
         wait_serial_num_1 = self.add_cmd(
             Wait(cmd_runners=waiter_names,
                  resumers=all_targets,
+                 exp_resumers=exp_resumers,
                  stopped_remotes=stopped_remotes))
 
         ################################################################
@@ -11426,9 +11787,12 @@ class ConfigVerifier:
             if after_targets:
                 stopped_remotes = (unreg_after_names
                                    + stop_after_err_names)
+                exp_resumers = (set(unreg_before_names)
+                                | set(stop_after_ok_names))
                 wait_serial_num_2 = self.add_cmd(
                     Wait(cmd_runners=waiter_names,
                          resumers=after_targets,
+                         exp_resumers=exp_resumers,
                          stopped_remotes=stopped_remotes))
 
         ################################################################
@@ -23867,14 +24231,6 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_unreg_timeouts_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_exit_timeouts_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_full_q_timeouts_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("timeout_type_arg",
-    #                          [TimeoutType.TimeoutNone])
-    # @pytest.mark.parametrize("num_senders_arg", [1])
-    # @pytest.mark.parametrize("num_active_targets_arg", [0])
-    # @pytest.mark.parametrize("num_registered_targets_arg", [0])
-    # @pytest.mark.parametrize("num_unreg_timeouts_arg", [0])
-    # @pytest.mark.parametrize("num_exit_timeouts_arg", [2])
-    # @pytest.mark.parametrize("num_full_q_timeouts_arg", [0])
     def test_send_msg_timeout_scenarios(
             self,
             timeout_type_arg: TimeoutType,
@@ -23950,14 +24306,6 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_nosend_exit_senders_arg", [0, 1])
     @pytest.mark.parametrize("num_unreg_senders_arg", [0, 1])
     @pytest.mark.parametrize("num_reg_senders_arg", [0, 1])
-    # @pytest.mark.parametrize("timeout_type_arg", [TimeoutType.TimeoutFalse])
-    # @pytest.mark.parametrize("num_receivers_arg", [2])
-    # @pytest.mark.parametrize("num_active_no_delay_senders_arg", [0])
-    # @pytest.mark.parametrize("num_active_delay_senders_arg", [1])
-    # @pytest.mark.parametrize("num_send_exit_senders_arg", [1])
-    # @pytest.mark.parametrize("num_nosend_exit_senders_arg", [1])
-    # @pytest.mark.parametrize("num_unreg_senders_arg", [1])
-    # @pytest.mark.parametrize("num_reg_senders_arg", [1])
     def test_recv_msg_timeout_scenarios(
             self,
             timeout_type_arg: TimeoutType,
@@ -24200,6 +24548,99 @@ class TestSmartThreadComboScenarios:
                                               % num_commander_configs])
 
     ####################################################################
+    # test_resume_wait_scenario
+    ####################################################################
+    @pytest.mark.parametrize("req_type_arg", [st.ReqType.Smart_resume,
+                                              st.ReqType.Smart_wait])
+    @pytest.mark.parametrize("num_resumers_waiters_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_start_before_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_unreg_before_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_stop_before_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_unreg_after_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_stop_after_ok_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_stop_after_err_arg", [0, 1, 2])
+    def test_resume_wait_scenario(
+            self,
+            req_type_arg: st.ReqType,
+            num_resumers_waiters_arg: int,
+            num_start_before_arg: int,
+            num_unreg_before_arg: int,
+            num_stop_before_arg: int,
+            num_unreg_after_arg: int,
+            num_stop_after_ok_arg: int,
+            num_stop_after_err_arg: int,
+            caplog: pytest.CaptureFixture[str],
+            monkeypatch: Any
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            req_type_arg: specifies whther to do resume or wait
+            num_resumers_waiters_arg: number of threads doing resumes or
+                waits
+            num_start_before_arg: number of target threads that will
+                be started and issue a wait before the resume is done,
+                and should succeed
+            num_unreg_before_arg: number of target threads that will be
+                registered and then unregistered before the resume, and
+                then started after the resume, and should succeed
+            num_stop_before_arg: number of target threads that will
+                be started and then stopped (but not joined) before the
+                resume, and should result in a not alive error
+            num_unreg_after_arg: number of target threads that will be
+                unregistered after the resume, and should cause an error
+            num_stop_after_ok_arg: number of target threads that will
+                be started after the resume is issued, and will stay
+                alive long enough for the resume to set the wait_event,
+                and will then be stopped and joined, and should result
+                in success
+            num_stop_after_err_arg: number of target threads that will
+                be started after the resume is issued, and will quickly
+                be stopped and joined before the resume has a chance to
+                see that is is alive to sety the wait_event, and should
+                result in a not alive error
+            caplog: pytest fixture to capture log output
+            monkeypatch: pytest fixture used to modify code for testing
+
+        """
+        ################################################################
+        # monkeypatch for SmartThread._get_target_state
+        ################################################################
+        monkeypatch.setattr(st.SmartThread,
+                            "_get_target_state",
+                            MockGetTargetState.mock_get_target_state)
+
+        total_arg_counts = (
+            num_resumers_waiters_arg
+            + num_start_before_arg
+            + num_unreg_before_arg
+            + num_stop_before_arg
+            + num_unreg_after_arg
+            + num_stop_after_ok_arg
+            + num_stop_after_err_arg)
+
+        if total_arg_counts - num_resumers_waiters_arg == 0:
+            return
+
+        args_for_scenario_builder: dict[str, Any] = {
+            'req_type': req_type_arg,
+            'num_resumers_waiters': num_resumers_waiters_arg,
+            'num_start_before': num_start_before_arg,
+            'num_unreg_before': num_unreg_before_arg,
+            'num_stop_before': num_stop_before_arg,
+            'num_unreg_after': num_unreg_after_arg,
+            'num_stop_after_ok': num_stop_after_ok_arg,
+            'num_stop_after_err': num_stop_after_err_arg
+        }
+
+        scenario_driver(
+            scenario_builder=ConfigVerifier.build_resume_wait_scenario,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog,
+            commander_config=commander_config[total_arg_counts
+                                              % num_commander_configs])
+
+    ####################################################################
     # test_wait_scenarios
     ####################################################################
     @pytest.mark.parametrize("num_waiters_arg", [1, 2, 3])
@@ -24209,7 +24650,7 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_unreg_after_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_stop_after_ok_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_stop_after_err_arg", [0, 1, 2])
-    def test_wait_scenarios(
+    def test_wait_scenario(
             self,
             num_waiters_arg: int,
             num_start_before_arg: int,
@@ -24280,14 +24721,14 @@ class TestSmartThreadComboScenarios:
         }
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_wait_scenarios,
+            scenario_builder=ConfigVerifier.build_wait_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
             commander_config=commander_config[total_arg_counts
                                               % num_commander_configs])
 
     ####################################################################
-    # test_wait_timeout_scenarios
+    # test_wait_scenario3
     ####################################################################
     @pytest.mark.parametrize("num_waiters_arg", [1, 2, 3])
     @pytest.mark.parametrize("num_actors_arg", [1, 2, 3])
@@ -24309,7 +24750,7 @@ class TestSmartThreadComboScenarios:
                                              Actors.ExitActionActor,
                                              Actors.UnregActor,
                                              Actors.RegActor])
-    def test_wait_scenarios3(
+    def test_wait_scenario3(
             self,
             num_waiters_arg: int,
             num_actors_arg: int,
