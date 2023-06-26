@@ -4555,6 +4555,8 @@ class SmartThread:
             self.work_pk_remotes: list[PairKeyRemote] = (
                 pk_remotes.copy())
             self.found_pk_remotes: list[PairKeyRemote] = []
+            logger.debug(f'{self.name} {self.request.value} setup complete '
+                         f'for targets: {pk_remotes}')
 
     ####################################################################
     # _handle_found_pk_remotes

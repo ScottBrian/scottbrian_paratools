@@ -2680,6 +2680,80 @@ class RequestEntryExitLogSearchItem(LogSearchItem):
 
 
 ########################################################################
+# SetupCompleteLogSearchItem
+########################################################################
+class SetupCompleteLogSearchItem(LogSearchItem):
+    """Input to search log msgs."""
+
+    def __init__(self,
+                 config_ver: "ConfigVerifier",
+                 found_log_msg: str = '',
+                 found_log_idx: int = 0,
+                 ) -> None:
+        """Initialize the LogItem.
+
+        Args:
+            config_ver: configuration verifier
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+        """
+        super().__init__(
+            search_str=(f"[a-z0-9_]+ {list_of_smart_requests} setup complete "
+                        f"for targets: "),
+            config_ver=config_ver,
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx
+        )
+
+    def get_found_log_item(self,
+                           found_log_msg: str,
+                           found_log_idx: int
+                           ) -> "SetupCompleteLogSearchItem":
+        """Return a found log item.
+
+        Args:
+            found_log_msg: log msg that was found
+            found_log_idx: index in the log where message was found
+
+        Returns:
+            SyncResumedLogSearchItem containing found message and index
+        """
+        return SetupCompleteLogSearchItem(
+            found_log_msg=found_log_msg,
+            found_log_idx=found_log_idx,
+            config_ver=self.config_ver)
+
+    def run_process(self):
+        """Run the process to handle the log message."""
+        split_msg = self.found_log_msg.split()
+        cmd_runner = split_msg[0]
+        request_name = split_msg[1]
+        # pk_remotes = split_msg[6]
+        target_msg = self.found_log_msg.split('[')[1].split(']')[0].split(', ')
+
+        targets: list[str] = []
+        for item in target_msg:
+            if item.startswith('remote='):
+                target = item[8:-1]
+                targets.append(target)
+            # if item.startswith('create_time='):
+            #     create_time = item[12:-1]
+            #     if float(create_time) > 0:
+            #         targets.append(target)
+        # self.config_ver.log_test_msg(
+        #     f'SetupCompleteLogSearchItem targets: {targets}')
+
+        if request_name in ('smart_send',
+                            'smart_recv',
+                            'smart_wait',
+                            'smart_resume',
+                            'smart_sync'):
+            self.config_ver.set_request_pending_flag(cmd_runner=cmd_runner,
+                                                     targets=set(targets),
+                                                     pending_request_flag=True)
+
+
+########################################################################
 # SubProcessEntryExitLogSearchItem
 ########################################################################
 class SubProcessEntryExitLogSearchItem(LogSearchItem):
@@ -4495,6 +4569,7 @@ class MonitorCheckpointLogSearchItem(LogSearchItem):
 
 LogSearchItems: TypeAlias = Union[
     RequestEntryExitLogSearchItem,
+    SetupCompleteLogSearchItem,
     SubProcessEntryExitLogSearchItem,
     RegistryStatusLogSearchItem,
     AddPairArrayEntryLogSearchItem,
@@ -4808,6 +4883,7 @@ class ConfigVerifier:
         self.log_start_idx: int = 0
         self.log_search_items: tuple[LogSearchItems, ...] = (
             RequestEntryExitLogSearchItem(config_ver=self),
+            SetupCompleteLogSearchItem(config_ver=self),
             SubProcessEntryExitLogSearchItem(config_ver=self),
             RegistryStatusLogSearchItem(config_ver=self),
             AddPairArrayEntryLogSearchItem(config_ver=self),
@@ -5031,6 +5107,16 @@ class ConfigVerifier:
 
             cb = pae[cmd_runner]
             pot_key: PotentialDefDelKey = (pair_key, cmd_runner)
+            # self.log_test_msg(f'set_request_pending_flag {cmd_runner=}, '
+            #                   f'{pair_key=}, {target=}, '
+            #                   f'{self.auto_calling_refresh_msg=}, '
+            #                   f'{cb.pending_request=}, '
+            #                   f'{pending_request_flag=}, '
+            #                   f'{cb.pending_msg_count=}, '
+            #                   f'{cb.pending_wait=}, '
+            #                   f'{cb.pending_sync=}, '
+            #                   f'{pot_key=}, '
+            #                   f'{self.potential_def_del_pairs[pot_key]=} ')
             if (self.auto_calling_refresh_msg
                     and cb.pending_request
                     and not pending_request_flag
@@ -10249,7 +10335,7 @@ class ConfigVerifier:
     # powerset
     ####################################################################
     @staticmethod
-    def powerset(names: list[str]):
+    def powerset(names: list[str]) -> tuple[str]:
         """Returns a generator powerset of the input list of names.
 
         Args:
@@ -10302,6 +10388,7 @@ class ConfigVerifier:
                     WaitTimeoutFalse(
                         cmd_runners=target_names,
                         resumers=actor_names,
+                        exp_resumers=actor_names,
                         stopped_remotes=set(),
                         timeout=timeout_time))
 
@@ -10324,6 +10411,7 @@ class ConfigVerifier:
                     WaitTimeoutTrue(
                         cmd_runners=timeout_names,
                         resumers=actor_names,
+                        exp_resumers=set(),
                         stopped_remotes=set(),
                         timeout=timeout_time,
                         timeout_remotes=set(actor_names)))
@@ -10364,6 +10452,7 @@ class ConfigVerifier:
                     WaitTimeoutFalse(
                         cmd_runners=list(target_names),
                         resumers=actor_names,
+                        exp_resumers=actor_names,
                         stopped_remotes=set(),
                         timeout=timeout_time))
 
@@ -10398,6 +10487,7 @@ class ConfigVerifier:
                     WaitTimeoutTrue(
                         cmd_runners=timeout_names,
                         resumers=actor_names,
+                        exp_resumers=set(),
                         stopped_remotes=set(),
                         timeout=timeout_time,
                         timeout_remotes=set(actor_names)))
@@ -10468,6 +10558,7 @@ class ConfigVerifier:
                     WaitTimeoutFalse(
                         cmd_runners=target_names,
                         resumers=actor_names,
+                        exp_resumers=actor_names,
                         stopped_remotes=set(),
                         timeout=timeout_time))
                 self.add_cmd(
@@ -10504,6 +10595,7 @@ class ConfigVerifier:
                     WaitTimeoutTrue(
                         cmd_runners=timeout_names,
                         resumers=actor_names,
+                        exp_resumers=set(),
                         stopped_remotes=set(),
                         timeout=timeout_time,
                         timeout_remotes=set(actor_names)))
@@ -10537,8 +10629,10 @@ class ConfigVerifier:
 
             if len(target_names) % 2:
                 stopped_remotes = set(actor_names.copy())
+                exp_resumers = set()
             else:
                 stopped_remotes = set()
+                exp_resumers = set(actor_names.copy())
 
             if target_names:
                 target_names = list(target_names)
@@ -10548,6 +10642,7 @@ class ConfigVerifier:
                     WaitTimeoutFalse(
                         cmd_runners=target_names,
                         resumers=actor_names,
+                        exp_resumers=exp_resumers,
                         stopped_remotes=stopped_remotes,
                         timeout=timeout_time))
 
@@ -10625,6 +10720,7 @@ class ConfigVerifier:
                     WaitTimeoutTrue(
                         cmd_runners=timeout_names,
                         resumers=actor_names,
+                        exp_resumers=set(),
                         stopped_remotes=stopped_remotes,
                         timeout=timeout_time,
                         timeout_remotes=set(actor_names)))
@@ -10693,6 +10789,7 @@ class ConfigVerifier:
                     Wait(
                         cmd_runners=target_names,
                         resumers=actor_names,
+                        exp_resumers=actor_names,
                         stopped_remotes=set()))
 
                 ########################################################
@@ -10789,6 +10886,7 @@ class ConfigVerifier:
                     Wait(
                         cmd_runners=target_names,
                         resumers=actor_names,
+                        exp_resumers=actor_names,
                         stopped_remotes=set()))
 
                 ########################################################
@@ -11172,12 +11270,12 @@ class ConfigVerifier:
             self.add_cmd(confirm)
 
     ####################################################################
-    # build_resume_wait_scenario
+    # build_srrw_scenario
     ####################################################################
-    def build_resume_wait_scenario(
+    def build_srrw_scenario(
             self,
             req_type: st.ReqType,
-            num_resumers_waiters: int,
+            num_requestors: int,
             num_start_before: int,
             num_unreg_before: int,
             num_stop_before: int,
@@ -11189,7 +11287,7 @@ class ConfigVerifier:
 
         Args:
             req_type: specifies whether to issue resume or wait
-            num_resumers_waiters: number of threads doing resume/wait
+            num_requestors: number of threads doing resume/wait
             num_start_before: number of target threads that will
                 be started and issue a wait/resume before the resume is
                 done, and should succeed
@@ -11216,7 +11314,7 @@ class ConfigVerifier:
         """
         # Make sure we have enough threads
         total_arg_counts = (
-                num_resumers_waiters
+                num_requestors
                 + num_start_before
                 + num_unreg_before
                 + num_stop_before
@@ -11225,9 +11323,19 @@ class ConfigVerifier:
                 + num_stop_after_err)
         assert total_arg_counts <= len(self.unregistered_names)
 
-        assert num_resumers > 0
+        assert num_requestors > 0
 
-        num_active_needed = (num_resumers + 1)  # plus 1 for commander
+        requestors = get_names('requestor_', num_requestors)
+        start_before_names = get_names('start_before_name_', num_start_before)
+        unreg_before_names = get_names('start_before_name_', num_unreg_before)
+        stop_before_names = get_names('start_before_name_', num_stop_before)
+
+        self.create_config(unreg_names=unreg_waiters | unreg_delay_waiters,
+                           reg_names=reg_waiters | reg_delay_waiters,
+                           active_names=resumers | active_waiters,
+                           stopped_names=stopped_waiters)
+
+        num_active_needed = (num_requestors + 1)  # plus 1 for commander
 
         self.build_config(
             cmd_runner=self.commander_name,
@@ -11242,28 +11350,9 @@ class ConfigVerifier:
         ################################################################
         resumer_names = self.choose_names(
             name_collection=active_names_copy,
-            num_names_needed=num_resumers,
+            num_names_needed=num_requestors,
             update_collection=True,
             var_name_for_log='resumer_names')
-
-        ################################################################
-        # choose start_before_names
-        ################################################################
-        unregistered_names_copy = self.unregistered_names.copy()
-        start_before_names = self.choose_names(
-            name_collection=unregistered_names_copy,
-            num_names_needed=num_start_before,
-            update_collection=True,
-            var_name_for_log='start_before_names')
-
-        ################################################################
-        # choose unreg_before_names
-        ################################################################
-        unreg_before_names = self.choose_names(
-            name_collection=unregistered_names_copy,
-            num_names_needed=num_unreg_before,
-            update_collection=True,
-            var_name_for_log='unreg_before_names')
 
         ################################################################
         # choose stop_before_names
@@ -11332,6 +11421,8 @@ class ConfigVerifier:
         resume_serial_num_2 = 0
 
         wait_confirms: list[ConfirmResponse] = []
+        resume_confirms_before: list[ConfirmResponse] = []
+        resume_confirms_after: list[ConfirmResponse] = []
         for idx, waiter in enumerate(roundrobin(start_before_names,
                                      unreg_before_names,
                                      stop_before_names)):
@@ -11347,16 +11438,29 @@ class ConfigVerifier:
                                                   target_rtn=outer_f1,
                                                   app_config=app_config)],
                     validate_config=False)
-                wait_serial_num = self.add_cmd(
-                    Wait(cmd_runners=waiter,
-                         resumers=resumer_names,
-                         exp_resumers=resumer_names))
-                wait_confirms.append(
-                    ConfirmResponse(
-                        cmd_runners=[self.commander_name],
-                        confirm_cmd='Wait',
-                        confirm_serial_num=wait_serial_num,
-                        confirmers=waiter))
+                if req_type == st.ReqType.Smart_resume:
+                    wait_serial_num = self.add_cmd(
+                        Wait(cmd_runners=waiter,
+                             resumers=resumer_names,
+                             exp_resumers=resumer_names))
+                    wait_confirms.append(
+                        ConfirmResponse(
+                            cmd_runners=[self.commander_name],
+                            confirm_cmd='Wait',
+                            confirm_serial_num=wait_serial_num,
+                            confirmers=waiter))
+                elif req_type == st.ReqType.Smart_wait:
+                    resume_serial_num = self.add_cmd(
+                        Resume(cmd_runners=resumer,
+                               targets=waiter_names,
+                               exp_resumed_targets=waiter_names,
+                               stopped_remotes=set()))
+                    resume_confirms_before.append(
+                        ConfirmResponse(
+                            cmd_runners=[self.commander_name],
+                            confirm_cmd='Resume',
+                            confirm_serial_num=resume_serial_num,
+                            confirmers=resumer))
             elif waiter in unreg_before_names:
                 self.build_create_suite(
                     f1_create_items=[F1CreateItem(name=waiter,
@@ -11378,7 +11482,7 @@ class ConfigVerifier:
                     names=waiter,
                     validate_config=False)
             else:
-                raise IncorrectDataDetected('build_resume_wait_scenario '
+                raise IncorrectDataDetected('build_srrw_scenario '
                                             f'{waiter=} not found in '
                                             f'{start_before_names=} nor '
                                             f'{unreg_before_names=} nor '
@@ -11387,11 +11491,16 @@ class ConfigVerifier:
         ################################################################
         # wait for wait to be running and waiting to be resumed
         ################################################################
-        if start_before_names:
-            self.add_cmd(WaitForRequestTimeouts(
-                cmd_runners=self.commander_name,
-                actor_names=start_before_names,
-                timeout_names=resumer_names))
+        if req_type == st.ReqType.Smart_resume:
+            if start_before_names:
+                self.add_cmd(WaitForRequestTimeouts(
+                    cmd_runners=self.commander_name,
+                    actor_names=start_before_names,
+                    timeout_names=resumer_names))
+        elif req_type == st.ReqType.Smart_wait:
+            for confirm in resume_confirms_before:
+                self.add_cmd(confirm)
+
         ################################################################
         # issue smart_resume
         ################################################################
@@ -11405,11 +11514,18 @@ class ConfigVerifier:
             stopped_remotes = (unreg_after_names
                                + stop_after_err_names)
 
-        resume_serial_num_1 = self.add_cmd(
-            Resume(cmd_runners=resumer_names,
-                   targets=all_targets,
-                   exp_resumed_targets=exp_resumed_targets,
-                   stopped_remotes=stopped_remotes))
+        if req_type == st.ReqType.Smart_resume:
+            resume_serial_num_1 = self.add_cmd(
+                Resume(cmd_runners=resumer_names,
+                       targets=all_targets,
+                       exp_resumed_targets=exp_resumed_targets,
+                       stopped_remotes=stopped_remotes))
+        elif req_type == st.ReqType.Smart_wait:
+            wait_serial_num_1 = self.add_cmd(
+                Wait(cmd_runners=waiter_names,
+                     resumers=all_targets,
+                     exp_resumers=exp_resumers,
+                     stopped_remotes=stopped_remotes))
 
         ################################################################
         # confirm response now if we should have raised error for
@@ -11431,11 +11547,18 @@ class ConfigVerifier:
                                    + stop_after_err_names)
                 exp_resumed_targets = (set(unreg_before_names)
                                        | set(stop_after_ok_names))
-                resume_serial_num_2 = self.add_cmd(
-                    Resume(cmd_runners=resumer_names,
-                           targets=after_targets,
-                           exp_resumed_targets=exp_resumed_targets,
-                           stopped_remotes=stopped_remotes))
+                if req_type == st.ReqType.Smart_resume:
+                    resume_serial_num_2 = self.add_cmd(
+                        Resume(cmd_runners=resumer_names,
+                               targets=after_targets,
+                               exp_resumed_targets=exp_resumed_targets,
+                               stopped_remotes=stopped_remotes))
+                elif req_type == st.ReqType.Smart_wait:
+                    wait_serial_num_2 = self.add_cmd(
+                        Wait(cmd_runners=waiter_names,
+                             resumers=after_targets,
+                             exp_resumers=exp_resumers,
+                             stopped_remotes=stopped_remotes))
 
         ################################################################
         # Create and start unreg_before and stop_after_ok and issue the
@@ -11455,16 +11578,29 @@ class ConfigVerifier:
                                               target_rtn=outer_f1,
                                               app_config=app_config)],
                 validate_config=False)
-            wait_serial_num = self.add_cmd(
-                Wait(cmd_runners=waiter,
-                     resumers=resumer_names,
-                     exp_resumers=resumer_names))
-            wait_confirms.append(
-                ConfirmResponse(
-                    cmd_runners=[self.commander_name],
-                    confirm_cmd='Wait',
-                    confirm_serial_num=wait_serial_num,
-                    confirmers=waiter))
+            if req_type == st.ReqType.Smart_resume:
+                wait_serial_num = self.add_cmd(
+                    Wait(cmd_runners=waiter,
+                         resumers=resumer_names,
+                         exp_resumers=resumer_names))
+                wait_confirms.append(
+                    ConfirmResponse(
+                        cmd_runners=[self.commander_name],
+                        confirm_cmd='Wait',
+                        confirm_serial_num=wait_serial_num,
+                        confirmers=waiter))
+            elif req_type == st.ReqType.Smart_wait:
+                resume_serial_num = self.add_cmd(
+                    Resume(cmd_runners=resumer,
+                           targets=waiter_names,
+                           exp_resumed_targets=waiter_names,
+                           stopped_remotes=set()))
+                resume_confirms_after.append(
+                    ConfirmResponse(
+                        cmd_runners=[self.commander_name],
+                        confirm_cmd='Resume',
+                        confirm_serial_num=resume_serial_num,
+                        confirmers=resumer))
 
         ################################################################
         # build unreg_after and stop_after_err
@@ -11500,7 +11636,7 @@ class ConfigVerifier:
                     join_target_names=waiter,
                     validate_config=False)
             else:
-                raise IncorrectDataDetected('build_resume_wait_scenario '
+                raise IncorrectDataDetected('build_srrw_scenario '
                                             f'{waiter=} not found in '
                                             f'{unreg_after_names=} nor '
                                             f'{stop_after_err_names=}')
@@ -15923,18 +16059,18 @@ class ConfigVerifier:
             # self.log_test_msg(
             #     'handle_request_entry_exit_log_msg looking at '
             #     f'{req_start_item.req_type.value=}')
-            if req_start_item.req_type.value in ('smart_send',
-                                                 'smart_recv',
-                                                 'smart_wait',
-                                                 'smart_resume',
-                                                 'smart_sync'):
-                # self.log_test_msg(
-                #     'handle_request_entry_exit_log_msg calling '
-                #     f'set_request_pending_flag for {cmd_runner=}, '
-                #     f'{targets=}, {set(targets)=}')
-                self.set_request_pending_flag(cmd_runner=cmd_runner,
-                                              targets=set(targets),
-                                              pending_request_flag=True)
+            # if req_start_item.req_type.value in ('smart_send',
+            #                                      'smart_recv',
+            #                                      'smart_wait',
+            #                                      'smart_resume',
+            #                                      'smart_sync'):
+            #     # self.log_test_msg(
+            #     #     'handle_request_entry_exit_log_msg calling '
+            #     #     f'set_request_pending_flag for {cmd_runner=}, '
+            #     #     f'{targets=}, {set(targets)=}')
+            #     self.set_request_pending_flag(cmd_runner=cmd_runner,
+            #                                   targets=set(targets),
+            #                                   pending_request_flag=True)
 
         ################################################################
         # call handler for request
@@ -18728,23 +18864,6 @@ class ConfigVerifier:
                     pot_key: PotentialDefDelKey = (pair_key, other_name)
                     self.potential_def_del_pairs[pot_key] = 0
 
-                # pe_other = self.pending_events[other_name]
-                # cr_keys = list(pe_other[PE.calling_refresh_msg].keys())
-                # for cr_key in cr_keys:
-                #     if pe_other[PE.calling_refresh_msg][cr_key] > 0:
-                #         pe_other[PE.calling_refresh_msg][cr_key] -= 1
-                #         self.log_test_msg(
-                #             f'add_to_pair_array {cmd_runner=}, {add_name=}, '
-                #             f'{other_name=}, decremented for {cr_key=}, '
-                #             f'{pe_other[PE.calling_refresh_msg][cr_key]=}')
-
-
-
-                # self.log_test_msg(f'{cmd_runner} '
-                #                   'resurrected expected_pairs '
-                #                   f'for {pair_key=}, {add_name=} with '
-                #                   f'{add_poc=}')
-
         self.log_test_msg(f'add_to_pair_array exit: {cmd_runner=}, '
                           f'{add_name=}')
         return changed
@@ -18825,24 +18944,6 @@ class ConfigVerifier:
                         if self.auto_calling_refresh_msg:
                             pot_key: PotentialDefDelKey = (pair_key, name)
                             self.potential_def_del_pairs[pot_key] = 1
-
-                        # pe_cmd = self.pending_events[name]
-                        # ref_key: RefPendKey = ('smart_recv', pair_key)
-                        # if pe_cmd[PE.refresh_pending_needed][ref_key] > 0:
-                        #     pe_cmd[PE.calling_refresh_msg]['smart_recv'] += 1
-                        #     pe_cmd[PE.refresh_pending_needed][ref_key] -= 1
-                        #     self.log_test_msg(
-                        #         'clean_pair_array defer set '
-                        #         f'calling_refresh_msg for {name=}, '
-                        #         f'{pair_key=} '
-                        #         f'{pe_cmd[PE.refresh_pending_needed][ref_key]=}'
-                        #         f"{pe_cmd[PE.calling_refresh_msg]['smart_recv']=}")
-                        # if (pending_request
-                        #         and pending_msg
-                        #         and pe_cmd[PE.refresh_pending_needed][ref_key]
-                        #         > 0):
-                        #     pe_cmd[PE.calling_refresh_msg]['smart_recv'] += 1
-                        #     pe_cmd[PE.refresh_pending_needed][ref_key] -= 1
 
                     else:
                         del pae[name]
@@ -24548,21 +24649,21 @@ class TestSmartThreadComboScenarios:
                                               % num_commander_configs])
 
     ####################################################################
-    # test_resume_wait_scenario
+    # test_srrw_scenario
     ####################################################################
     @pytest.mark.parametrize("req_type_arg", [st.ReqType.Smart_resume,
                                               st.ReqType.Smart_wait])
-    @pytest.mark.parametrize("num_resumers_waiters_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_requestors_arg", [1, 2, 3])
     @pytest.mark.parametrize("num_start_before_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_unreg_before_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_stop_before_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_unreg_after_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_stop_after_ok_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_stop_after_err_arg", [0, 1, 2])
-    def test_resume_wait_scenario(
+    def test_srrw_scenario(
             self,
             req_type_arg: st.ReqType,
-            num_resumers_waiters_arg: int,
+            num_requestors_arg: int,
             num_start_before_arg: int,
             num_unreg_before_arg: int,
             num_stop_before_arg: int,
@@ -24576,7 +24677,7 @@ class TestSmartThreadComboScenarios:
 
         Args:
             req_type_arg: specifies whther to do resume or wait
-            num_resumers_waiters_arg: number of threads doing resumes or
+            num_requestors_arg: number of threads doing resumes or
                 waits
             num_start_before_arg: number of target threads that will
                 be started and issue a wait before the resume is done,
@@ -24611,7 +24712,7 @@ class TestSmartThreadComboScenarios:
                             MockGetTargetState.mock_get_target_state)
 
         total_arg_counts = (
-            num_resumers_waiters_arg
+            num_requestors_arg
             + num_start_before_arg
             + num_unreg_before_arg
             + num_stop_before_arg
@@ -24619,12 +24720,12 @@ class TestSmartThreadComboScenarios:
             + num_stop_after_ok_arg
             + num_stop_after_err_arg)
 
-        if total_arg_counts - num_resumers_waiters_arg == 0:
+        if total_arg_counts - num_requestors_arg == 0:
             return
 
         args_for_scenario_builder: dict[str, Any] = {
             'req_type': req_type_arg,
-            'num_resumers_waiters': num_resumers_waiters_arg,
+            'num_requestors': num_requestors_arg,
             'num_start_before': num_start_before_arg,
             'num_unreg_before': num_unreg_before_arg,
             'num_stop_before': num_stop_before_arg,
@@ -24634,7 +24735,7 @@ class TestSmartThreadComboScenarios:
         }
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_resume_wait_scenario,
+            scenario_builder=ConfigVerifier.build_srrw_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
             commander_config=commander_config[total_arg_counts
@@ -24730,26 +24831,31 @@ class TestSmartThreadComboScenarios:
     ####################################################################
     # test_wait_scenario3
     ####################################################################
-    @pytest.mark.parametrize("num_waiters_arg", [1, 2, 3])
-    @pytest.mark.parametrize("num_actors_arg", [1, 2, 3])
-    @pytest.mark.parametrize("actor_1_arg", [Actors.ActiveBeforeActor,
-                                             Actors.ActiveAfterActor,
-                                             Actors.ActionExitActor,
-                                             Actors.ExitActionActor,
-                                             Actors.UnregActor,
-                                             Actors.RegActor])
-    @pytest.mark.parametrize("actor_2_arg", [Actors.ActiveBeforeActor,
-                                             Actors.ActiveAfterActor,
-                                             Actors.ActionExitActor,
-                                             Actors.ExitActionActor,
-                                             Actors.UnregActor,
-                                             Actors.RegActor])
-    @pytest.mark.parametrize("actor_3_arg", [Actors.ActiveBeforeActor,
-                                             Actors.ActiveAfterActor,
-                                             Actors.ActionExitActor,
-                                             Actors.ExitActionActor,
-                                             Actors.UnregActor,
-                                             Actors.RegActor])
+    # @pytest.mark.parametrize("num_waiters_arg", [1, 2, 3])
+    # @pytest.mark.parametrize("num_actors_arg", [1, 2, 3])
+    # @pytest.mark.parametrize("actor_1_arg", [Actors.ActiveBeforeActor,
+    #                                          Actors.ActiveAfterActor,
+    #                                          Actors.ActionExitActor,
+    #                                          Actors.ExitActionActor,
+    #                                          Actors.UnregActor,
+    #                                          Actors.RegActor])
+    # @pytest.mark.parametrize("actor_2_arg", [Actors.ActiveBeforeActor,
+    #                                          Actors.ActiveAfterActor,
+    #                                          Actors.ActionExitActor,
+    #                                          Actors.ExitActionActor,
+    #                                          Actors.UnregActor,
+    #                                          Actors.RegActor])
+    # @pytest.mark.parametrize("actor_3_arg", [Actors.ActiveBeforeActor,
+    #                                          Actors.ActiveAfterActor,
+    #                                          Actors.ActionExitActor,
+    #                                          Actors.ExitActionActor,
+    #                                          Actors.UnregActor,
+    #                                          Actors.RegActor])
+    @pytest.mark.parametrize("num_waiters_arg", [3])
+    @pytest.mark.parametrize("num_actors_arg", [3])
+    @pytest.mark.parametrize("actor_1_arg", [Actors.ActiveBeforeActor])
+    @pytest.mark.parametrize("actor_2_arg", [Actors.ActiveBeforeActor])
+    @pytest.mark.parametrize("actor_3_arg", [Actors.ActionExitActor])
     def test_wait_scenario3(
             self,
             num_waiters_arg: int,
