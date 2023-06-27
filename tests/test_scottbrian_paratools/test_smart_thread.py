@@ -11478,12 +11478,14 @@ class ConfigVerifier:
 
         }
 
-        resume_serial_num_2 = 0
-
-        wait_confirms: list[ConfirmResponse] = []
-        resume_confirms_before: list[ConfirmResponse] = []
-        resume_confirms_after: list[ConfirmResponse] = []
+        confirm_req_1 = ''
+        confirm_serial_1 = 0
         target_confirms_before: list[ConfirmResponse] = []
+        target_confirms_after: list[ConfirmResponse] = []
+
+        ################################################################
+        # First batch of targets for start, unreg, and stop before
+        ################################################################
         for idx, target in enumerate(roundrobin(start_before_names,
                                      unreg_before_names,
                                      stop_before_names)):
@@ -11499,35 +11501,39 @@ class ConfigVerifier:
                                                   target_rtn=outer_f1,
                                                   app_config=app_config)],
                     validate_config=False)
-                confirm_req, confirm_serial = target_builds[req_type]()
+                confirm_req, confirm_serial = target_builds[req_type](
+                    cmd_runners=target,
+                    targets=requestors,
+                    exp_targets=requestors
+                )
                 target_confirms_before.append(ConfirmResponse(
                             cmd_runners=[self.commander_name],
                             confirm_cmd=confirm_req,
                             confirm_serial_num=confirm_serial,
                             confirmers=target))
-                if req_type == st.ReqType.Smart_resume:
-                    wait_serial_num = self.add_cmd(
-                        Wait(cmd_runners=target,
-                             resumers=requestors,
-                             exp_resumers=requestors))
-                    wait_confirms.append(
-                        ConfirmResponse(
-                            cmd_runners=[self.commander_name],
-                            confirm_cmd='Wait',
-                            confirm_serial_num=wait_serial_num,
-                            confirmers=target))
-                elif req_type == st.ReqType.Smart_wait:
-                    resume_serial_num = self.add_cmd(
-                        Resume(cmd_runners=resumer,
-                               targets=waiter_names,
-                               exp_resumed_targets=waiter_names,
-                               stopped_remotes=set()))
-                    resume_confirms_before.append(
-                        ConfirmResponse(
-                            cmd_runners=[self.commander_name],
-                            confirm_cmd='Resume',
-                            confirm_serial_num=resume_serial_num,
-                            confirmers=resumer))
+                # if req_type == st.ReqType.Smart_resume:
+                #     wait_serial_num = self.add_cmd(
+                #         Wait(cmd_runners=target,
+                #              resumers=requestors,
+                #              exp_resumers=requestors))
+                #     wait_confirms.append(
+                #         ConfirmResponse(
+                #             cmd_runners=[self.commander_name],
+                #             confirm_cmd='Wait',
+                #             confirm_serial_num=wait_serial_num,
+                #             confirmers=target))
+                # elif req_type == st.ReqType.Smart_wait:
+                #     resume_serial_num = self.add_cmd(
+                #         Resume(cmd_runners=resumer,
+                #                targets=waiter_names,
+                #                exp_resumed_targets=waiter_names,
+                #                stopped_remotes=set()))
+                #     resume_confirms_before.append(
+                #         ConfirmResponse(
+                #             cmd_runners=[self.commander_name],
+                #             confirm_cmd='Resume',
+                #             confirm_serial_num=resume_serial_num,
+                #             confirmers=resumer))
             elif target in unreg_before_names:
                 self.build_create_suite(
                     f1_create_items=[F1CreateItem(name=target,
@@ -11556,43 +11562,49 @@ class ConfigVerifier:
                                             f'{stop_before_names=}')
 
         ################################################################
-        # wait for wait to be running and waiting to be resumed
+        # for recv/wait, make sure running before send/resume
         ################################################################
-        if req_type == st.ReqType.Smart_resume:
+        if req_type in (st.ReqType.Smart_send, st.ReqType.Smart_resume):
             if start_before_names:
                 self.add_cmd(WaitForRequestTimeouts(
                     cmd_runners=self.commander_name,
                     actor_names=start_before_names,
                     timeout_names=requestors))
-        elif req_type == st.ReqType.Smart_wait:
-            for confirm in resume_confirms_before:
+        else:
+            for confirm in target_confirms_before:
                 self.add_cmd(confirm)
 
         ################################################################
-        # issue smart_resume
+        # issue request
         ################################################################
         if stop_before_names:
             stopped_remotes = stop_before_names
-            exp_resumed_targets = set(start_before_names)
+            exp_targets = start_before_names
         else:
-            exp_resumed_targets = (set(start_before_names)
-                                   | set(unreg_before_names)
-                                   | set(stop_after_ok_names))
-            stopped_remotes = (unreg_after_names
-                               + stop_after_err_names)
+            stopped_remotes = unreg_after_names | stop_after_err_names
+            exp_targets = (start_before_names
+                           | unreg_before_names
+                           | stop_after_ok_names)
 
-        if req_type == st.ReqType.Smart_resume:
-            resume_serial_num_1 = self.add_cmd(
-                Resume(cmd_runners=requestors,
-                       targets=all_targets,
-                       exp_resumed_targets=exp_resumed_targets,
-                       stopped_remotes=stopped_remotes))
-        elif req_type == st.ReqType.Smart_wait:
-            wait_serial_num_1 = self.add_cmd(
-                Wait(cmd_runners=waiter_names,
-                     resumers=all_targets,
-                     exp_resumers=exp_resumers,
-                     stopped_remotes=stopped_remotes))
+        confirm_req_0, confirm_serial_0 = request_builds[req_type](
+            cmd_runners=requestors,
+            targets=all_targets,
+            exp_targets=exp_targets,
+            stopped_targets=stopped_remotes
+        )
+
+        # if req_type == st.ReqType.Smart_resume:
+        #     resume_serial_num_1 = self.add_cmd(
+        #         Resume(cmd_runners=requestors,
+        #                targets=all_targets,
+        #                exp_resumed_targets=exp_resumed_targets,
+        #                stopped_remotes=stopped_remotes))
+        # elif req_type == st.ReqType.Smart_wait:
+        #     wait_serial_num_1 = self.add_cmd(
+        #         Wait(cmd_runners=waiter_names,
+        #              resumers=all_targets,
+        #              exp_resumers=exp_resumers,
+        #              stopped_remotes=stopped_remotes))
 
         ################################################################
         # confirm response now if we should have raised error for
@@ -11602,35 +11614,40 @@ class ConfigVerifier:
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
-                    confirm_cmd='Resume',
-                    confirm_serial_num=resume_serial_num_1,
+                    confirm_cmd=confirm_req_0,
+                    confirm_serial_num=confirm_serial_0,
                     confirmers=requestors))
             ############################################################
-            # we need this resume for the after resume waits when the
-            # first resume ends early because of stopped remotes
+            # we need this request for the after targets when the first
+            # request ends early because of stopped remotes
             ############################################################
             if after_targets:
-                stopped_remotes = (unreg_after_names
-                                   + stop_after_err_names)
-                exp_resumed_targets = (set(unreg_before_names)
-                                       | set(stop_after_ok_names))
-                if req_type == st.ReqType.Smart_resume:
-                    resume_serial_num_2 = self.add_cmd(
-                        Resume(cmd_runners=requestors,
-                               targets=after_targets,
-                               exp_resumed_targets=exp_resumed_targets,
-                               stopped_remotes=stopped_remotes))
-                elif req_type == st.ReqType.Smart_wait:
-                    wait_serial_num_2 = self.add_cmd(
-                        Wait(cmd_runners=waiter_names,
-                             resumers=after_targets,
-                             exp_resumers=exp_resumers,
-                             stopped_remotes=stopped_remotes))
+                stopped_remotes = unreg_after_names | stop_after_err_names
+                exp_targets = unreg_before_names | stop_after_ok_names
+
+                confirm_req_1, confirm_serial_1 = request_builds[req_type](
+                    cmd_runner=requestors,
+                    targets=all_targets,
+                    exp_targets=exp_targets,
+                    stopped_targets=stopped_remotes
+                )
+                # if req_type == st.ReqType.Smart_resume:
+                #     resume_serial_num_2 = self.add_cmd(
+                #         Resume(cmd_runners=requestors,
+                #                targets=after_targets,
+                #                exp_resumed_targets=exp_resumed_targets,
+                #                stopped_remotes=stopped_remotes))
+                # elif req_type == st.ReqType.Smart_wait:
+                #     wait_serial_num_2 = self.add_cmd(
+                #         Wait(cmd_runners=waiter_names,
+                #              resumers=after_targets,
+                #              exp_resumers=exp_resumers,
+                #              stopped_remotes=stopped_remotes))
 
         ################################################################
         # Create and start unreg_before and stop_after_ok and issue the
-        # wait. Note unreg_before is used both before and after the
-        # resume
+        # target request. Note unreg_before is used both before and
+        # after the request
         ################################################################
         for idx, target in enumerate(roundrobin(unreg_before_names,
                                                 stop_after_ok_names)):
@@ -11645,29 +11662,40 @@ class ConfigVerifier:
                                               target_rtn=outer_f1,
                                               app_config=app_config)],
                 validate_config=False)
-            if req_type == st.ReqType.Smart_resume:
-                wait_serial_num = self.add_cmd(
-                    Wait(cmd_runners=target,
-                         resumers=requestors,
-                         exp_resumers=requestors))
-                wait_confirms.append(
-                    ConfirmResponse(
-                        cmd_runners=[self.commander_name],
-                        confirm_cmd='Wait',
-                        confirm_serial_num=wait_serial_num,
-                        confirmers=target))
-            elif req_type == st.ReqType.Smart_wait:
-                resume_serial_num = self.add_cmd(
-                    Resume(cmd_runners=resumer,
-                           targets=waiter_names,
-                           exp_resumed_targets=waiter_names,
-                           stopped_remotes=set()))
-                resume_confirms_after.append(
-                    ConfirmResponse(
-                        cmd_runners=[self.commander_name],
-                        confirm_cmd='Resume',
-                        confirm_serial_num=resume_serial_num,
-                        confirmers=resumer))
+
+            confirm_req, confirm_serial = target_builds[req_type](
+                cmd_runner=target,
+                targets=requestors,
+                exp_targets=requestors
+            )
+            target_confirms_after.append(ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd=confirm_req,
+                confirm_serial_num=confirm_serial,
+                confirmers=target))
+            # if req_type == st.ReqType.Smart_resume:
+            #     wait_serial_num = self.add_cmd(
+            #         Wait(cmd_runners=target,
+            #              resumers=requestors,
+            #              exp_resumers=requestors))
+            #     wait_confirms.append(
+            #         ConfirmResponse(
+            #             cmd_runners=[self.commander_name],
+            #             confirm_cmd='Wait',
+            #             confirm_serial_num=wait_serial_num,
+            #             confirmers=target))
+            # elif req_type == st.ReqType.Smart_wait:
+            #     resume_serial_num = self.add_cmd(
+            #         Resume(cmd_runners=resumer,
+            #                targets=waiter_names,
+            #                exp_resumed_targets=waiter_names,
+            #                stopped_remotes=set()))
+            #     resume_confirms_after.append(
+            #         ConfirmResponse(
+            #             cmd_runners=[self.commander_name],
+            #             confirm_cmd='Resume',
+            #             confirm_serial_num=resume_serial_num,
+            #             confirmers=resumer))
 
         ################################################################
         # build unreg_after and stop_after_err
@@ -11715,18 +11743,18 @@ class ConfigVerifier:
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
-                    confirm_cmd='Resume',
-                    confirm_serial_num=resume_serial_num_1,
+                    confirm_cmd=confirm_req_0,
+                    confirm_serial_num=confirm_serial_0,
                     confirmers=requestors))
         elif after_targets:
             self.add_cmd(
                 ConfirmResponse(
                     cmd_runners=[self.commander_name],
-                    confirm_cmd='Resume',
-                    confirm_serial_num=resume_serial_num_2,
+                    confirm_cmd=confirm_req_1,
+                    confirm_serial_num=confirm_serial_1,
                     confirmers=requestors))
 
-        for confirm in wait_confirms:
+        for confirm in target_confirms_after:
             self.add_cmd(confirm)
 
     ####################################################################
