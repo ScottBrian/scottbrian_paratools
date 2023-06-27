@@ -185,11 +185,11 @@ class SendRecvMsgs:
 
     def get_broadcast_msg(self,
                           sender_name: str,
-                          receiver_names: Iterable,
+                          exp_receivers: Iterable,
                           msg_idx: int) -> str:
         with self.msg_lock:
             msg = self.broadcast_msgs[msg_idx][sender_name]
-            for receiver_name in receiver_names:
+            for receiver_name in exp_receivers:
                 self.add_exp_msg_received(receiver_name=receiver_name,
                                           sender_name=sender_name,
                                           msg=msg)
@@ -198,15 +198,17 @@ class SendRecvMsgs:
     def get_send_msgs(self,
                       sender_name: str,
                       receiver_names: Iterable,
+                      exp_receivers: Iterable,
                       msg_idx: int) -> dict[str, Any]:
         send_msgs: dict[str, Any] = {}
         with self.msg_lock:
             for receiver_name in receiver_names:
                 msg = self.directed_msgs[msg_idx][sender_name][receiver_name]
                 send_msgs[receiver_name] = msg
-                self.add_exp_msg_received(receiver_name=receiver_name,
-                                          sender_name=sender_name,
-                                          msg=msg)
+                if receiver_name in exp_receivers:
+                    self.add_exp_msg_received(receiver_name=receiver_name,
+                                              sender_name=sender_name,
+                                              msg=msg)
         return send_msgs
 
     def add_exp_msg_received(self,
@@ -11339,7 +11341,7 @@ class ConfigVerifier:
 
         requestors = get_names('requestor_', num_requestors)
         start_before_names = get_names('start_before_', num_start_before)
-        unreg_before_names = get_names('start_before_', num_unreg_before)
+        unreg_before_names = get_names('unreg_before_', num_unreg_before)
         stop_before_names = get_names('stop_before_', num_stop_before)
         unreg_after_names = get_names('unreg_after_', num_unreg_after)
         stop_after_ok_names = get_names('stop_after_ok_', num_stop_after_ok)
@@ -11626,8 +11628,8 @@ class ConfigVerifier:
                 exp_targets = unreg_before_names | stop_after_ok_names
 
                 confirm_req_1, confirm_serial_1 = request_builds[req_type](
-                    cmd_runner=requestors,
-                    targets=all_targets,
+                    cmd_runners=requestors,
+                    targets=after_targets,
                     exp_targets=exp_targets,
                     stopped_targets=stopped_remotes
                 )
@@ -11664,7 +11666,7 @@ class ConfigVerifier:
                 validate_config=False)
 
             confirm_req, confirm_serial = target_builds[req_type](
-                cmd_runner=target,
+                cmd_runners=target,
                 targets=requestors,
                 exp_targets=requestors
             )
@@ -17100,7 +17102,7 @@ class ConfigVerifier:
 
         """
         self.log_test_msg(f'handle_send entry: {cmd_runner=}, {receivers=}, '
-                          f'{send_type=}, {timeout_type=}, '
+                          f'{exp_receivers=}, {send_type=}, {timeout_type=}, '
                           f'{unreg_timeout_names=}, {fullq_timeout_names=}, '
                           f'{stopped_remotes=}')
         self.log_ver.add_call_seq(
@@ -17108,10 +17110,10 @@ class ConfigVerifier:
             seq='test_smart_thread.py::ConfigVerifier.handle_send_msg')
 
         receivers_to_use = receivers.copy()
-        if exp_receivers:
-            exp_receivers_arg = exp_receivers
-        else:
+        if exp_receivers is None:
             exp_receivers_arg = receivers.copy()
+        else:
+            exp_receivers_arg = exp_receivers  # could be empty set()
         timeout_remotes = set()
         if timeout_type == TimeoutType.TimeoutTrue and unreg_timeout_names:
             timeout_remotes |= unreg_timeout_names
@@ -17149,11 +17151,12 @@ class ConfigVerifier:
             # build a dict from the SendRecvMsgs test messages
             send_msg = msgs_to_send.get_send_msgs(sender_name=cmd_runner,
                                                   receiver_names=receivers,
+                                                  exp_receivers=exp_receivers_arg,
                                                   msg_idx=msg_idx)
         else:
             send_msg = msgs_to_send.get_broadcast_msg(
                 sender_name=cmd_runner,
-                receiver_names=receivers,
+                exp_receivers=exp_receivers_arg,
                 msg_idx=msg_idx)
 
         if stopped_remotes:
@@ -24762,6 +24765,14 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_unreg_after_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_stop_after_ok_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_stop_after_err_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("req_type_arg", [st.ReqType.Smart_send])
+    # @pytest.mark.parametrize("num_requestors_arg", [1])
+    # @pytest.mark.parametrize("num_start_before_arg", [0])
+    # @pytest.mark.parametrize("num_unreg_before_arg", [0])
+    # @pytest.mark.parametrize("num_stop_before_arg", [1])
+    # @pytest.mark.parametrize("num_unreg_after_arg", [0])
+    # @pytest.mark.parametrize("num_stop_after_ok_arg", [0])
+    # @pytest.mark.parametrize("num_stop_after_err_arg", [0])
     def test_srrw_scenario(
             self,
             req_type_arg: st.ReqType,
@@ -24844,7 +24855,7 @@ class TestSmartThreadComboScenarios:
                                               % num_commander_configs])
 
     ####################################################################
-    # test_wait_scenarios
+    # test_wait_scenario
     ####################################################################
     @pytest.mark.parametrize("num_waiters_arg", [1, 2, 3])
     @pytest.mark.parametrize("num_start_before_arg", [0, 1, 2])
@@ -24931,41 +24942,288 @@ class TestSmartThreadComboScenarios:
                                               % num_commander_configs])
 
     ####################################################################
-    # test_wait_scenario3
+    # wait_scenario2_actor_arg_list
     ####################################################################
-    @pytest.mark.parametrize("num_waiters_arg", [1, 2, 3])
-    @pytest.mark.parametrize("num_actors_arg", [1, 2, 3])
-    @pytest.mark.parametrize("actor_1_arg", [Actors.ActiveBeforeActor,
-                                             Actors.ActiveAfterActor,
-                                             Actors.ActionExitActor,
-                                             Actors.ExitActionActor,
-                                             Actors.UnregActor,
-                                             Actors.RegActor])
-    @pytest.mark.parametrize("actor_2_arg", [Actors.ActiveBeforeActor,
-                                             Actors.ActiveAfterActor,
-                                             Actors.ActionExitActor,
-                                             Actors.ExitActionActor,
-                                             Actors.UnregActor,
-                                             Actors.RegActor])
-    @pytest.mark.parametrize("actor_3_arg", [Actors.ActiveBeforeActor,
-                                             Actors.ActiveAfterActor,
-                                             Actors.ActionExitActor,
-                                             Actors.ExitActionActor,
-                                             Actors.UnregActor,
-                                             Actors.RegActor])
-    # @pytest.mark.parametrize("num_waiters_arg", [3])
-    # @pytest.mark.parametrize("num_actors_arg", [3])
-    # @pytest.mark.parametrize("actor_1_arg", [Actors.ActiveBeforeActor])
-    # @pytest.mark.parametrize("actor_2_arg", [Actors.ActiveBeforeActor])
-    # @pytest.mark.parametrize("actor_3_arg", [Actors.ActionExitActor])
-    def test_wait_scenario3(
+    wait_scenario2_actor_arg_list = [Actors.ActiveBeforeActor,
+                                     Actors.ActiveAfterActor,
+                                     Actors.ActionExitActor,
+                                     Actors.ExitActionActor,
+                                     Actors.UnregActor,
+                                     Actors.RegActor]
+
+    ####################################################################
+    # test_wait_scenario2_part_1_1
+    ####################################################################
+    @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
+    def test_wait_scenario2_part_1_1(
             self,
+            actor_1_arg: Actors,
+            actor_2_arg: Actors,
+            actor_3_arg: Actors,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test wait scenarios.
+
+        Args:
+            actor_1_arg: type of actor that will do the first resume
+            actor_2_arg: type of actor that will do the second resume
+            actor_3_arg: type of actor that will do the third resume
+            caplog: pytest fixture to capture log output
+
+        """
+        self.build_wait_scenario2(num_waiters_arg=1,
+                                  num_actors_arg=1,
+                                  actor_1_arg=actor_1_arg,
+                                  actor_2_arg=actor_2_arg,
+                                  actor_3_arg=actor_3_arg,
+                                  caplog_to_use=caplog)
+
+    ####################################################################
+    # test_wait_scenario2_part_1_2
+    ####################################################################
+    @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
+    def test_wait_scenario2_part_1_2(
+            self,
+            actor_1_arg: Actors,
+            actor_2_arg: Actors,
+            actor_3_arg: Actors,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test wait scenarios.
+
+        Args:
+            actor_1_arg: type of actor that will do the first resume
+            actor_2_arg: type of actor that will do the second resume
+            actor_3_arg: type of actor that will do the third resume
+            caplog: pytest fixture to capture log output
+
+        """
+        self.build_wait_scenario2(num_waiters_arg=1,
+                                  num_actors_arg=2,
+                                  actor_1_arg=actor_1_arg,
+                                  actor_2_arg=actor_2_arg,
+                                  actor_3_arg=actor_3_arg,
+                                  caplog_to_use=caplog)
+
+    ####################################################################
+    # test_wait_scenario2_part_1_3
+    ####################################################################
+    @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
+    def test_wait_scenario2_part_1_3(
+            self,
+            actor_1_arg: Actors,
+            actor_2_arg: Actors,
+            actor_3_arg: Actors,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test wait scenarios.
+
+        Args:
+            actor_1_arg: type of actor that will do the first resume
+            actor_2_arg: type of actor that will do the second resume
+            actor_3_arg: type of actor that will do the third resume
+            caplog: pytest fixture to capture log output
+
+        """
+        self.build_wait_scenario2(num_waiters_arg=1,
+                                  num_actors_arg=3,
+                                  actor_1_arg=actor_1_arg,
+                                  actor_2_arg=actor_2_arg,
+                                  actor_3_arg=actor_3_arg,
+                                  caplog_to_use=caplog)
+
+    ####################################################################
+    # test_wait_scenario2_part_2_1
+    ####################################################################
+    @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
+    def test_wait_scenario2_part_2_1(
+            self,
+            actor_1_arg: Actors,
+            actor_2_arg: Actors,
+            actor_3_arg: Actors,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test wait scenarios.
+
+        Args:
+            actor_1_arg: type of actor that will do the first resume
+            actor_2_arg: type of actor that will do the second resume
+            actor_3_arg: type of actor that will do the third resume
+            caplog: pytest fixture to capture log output
+
+        """
+        self.build_wait_scenario2(num_waiters_arg=2,
+                                  num_actors_arg=1,
+                                  actor_1_arg=actor_1_arg,
+                                  actor_2_arg=actor_2_arg,
+                                  actor_3_arg=actor_3_arg,
+                                  caplog_to_use=caplog)
+
+    ####################################################################
+    # test_wait_scenario2_part_2_2
+    ####################################################################
+    @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
+    def test_wait_scenario2_part_2_2(
+            self,
+            actor_1_arg: Actors,
+            actor_2_arg: Actors,
+            actor_3_arg: Actors,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test wait scenarios.
+
+        Args:
+            actor_1_arg: type of actor that will do the first resume
+            actor_2_arg: type of actor that will do the second resume
+            actor_3_arg: type of actor that will do the third resume
+            caplog: pytest fixture to capture log output
+
+        """
+        self.build_wait_scenario2(num_waiters_arg=2,
+                                  num_actors_arg=2,
+                                  actor_1_arg=actor_1_arg,
+                                  actor_2_arg=actor_2_arg,
+                                  actor_3_arg=actor_3_arg,
+                                  caplog_to_use=caplog)
+
+    ####################################################################
+    # test_wait_scenario2_part_2_3
+    ####################################################################
+    @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
+    def test_wait_scenario2_part_2_3(
+            self,
+            actor_1_arg: Actors,
+            actor_2_arg: Actors,
+            actor_3_arg: Actors,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test wait scenarios.
+
+        Args:
+            actor_1_arg: type of actor that will do the first resume
+            actor_2_arg: type of actor that will do the second resume
+            actor_3_arg: type of actor that will do the third resume
+            caplog: pytest fixture to capture log output
+
+        """
+        self.build_wait_scenario2(num_waiters_arg=2,
+                                  num_actors_arg=3,
+                                  actor_1_arg=actor_1_arg,
+                                  actor_2_arg=actor_2_arg,
+                                  actor_3_arg=actor_3_arg,
+                                  caplog_to_use=caplog)
+
+
+    ####################################################################
+    # test_wait_scenario2_part_3_1
+    ####################################################################
+    @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
+    def test_wait_scenario2_part_3_1(
+            self,
+            actor_1_arg: Actors,
+            actor_2_arg: Actors,
+            actor_3_arg: Actors,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test wait scenarios.
+
+        Args:
+            actor_1_arg: type of actor that will do the first resume
+            actor_2_arg: type of actor that will do the second resume
+            actor_3_arg: type of actor that will do the third resume
+            caplog: pytest fixture to capture log output
+
+        """
+        self.build_wait_scenario2(num_waiters_arg=3,
+                                  num_actors_arg=1,
+                                  actor_1_arg=actor_1_arg,
+                                  actor_2_arg=actor_2_arg,
+                                  actor_3_arg=actor_3_arg,
+                                  caplog_to_use=caplog)
+
+    ####################################################################
+    # test_wait_scenario2_part_3_2
+    ####################################################################
+    @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
+    def test_wait_scenario2_part_3_2(
+            self,
+            actor_1_arg: Actors,
+            actor_2_arg: Actors,
+            actor_3_arg: Actors,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test wait scenarios.
+
+        Args:
+            actor_1_arg: type of actor that will do the first resume
+            actor_2_arg: type of actor that will do the second resume
+            actor_3_arg: type of actor that will do the third resume
+            caplog: pytest fixture to capture log output
+
+        """
+        self.build_wait_scenario2(num_waiters_arg=3,
+                                  num_actors_arg=2,
+                                  actor_1_arg=actor_1_arg,
+                                  actor_2_arg=actor_2_arg,
+                                  actor_3_arg=actor_3_arg,
+                                  caplog_to_use=caplog)
+
+    ####################################################################
+    # test_wait_scenario2_part_3_3
+    ####################################################################
+    @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
+    def test_wait_scenario2_part_3_3(
+            self,
+            actor_1_arg: Actors,
+            actor_2_arg: Actors,
+            actor_3_arg: Actors,
+            caplog: pytest.CaptureFixture[str]
+    ) -> None:
+        """Test wait scenarios.
+
+        Args:
+            actor_1_arg: type of actor that will do the first resume
+            actor_2_arg: type of actor that will do the second resume
+            actor_3_arg: type of actor that will do the third resume
+            caplog: pytest fixture to capture log output
+
+        """
+        self.build_wait_scenario2(num_waiters_arg=3,
+                                  num_actors_arg=3,
+                                  actor_1_arg=actor_1_arg,
+                                  actor_2_arg=actor_2_arg,
+                                  actor_3_arg=actor_3_arg,
+                                  caplog_to_use=caplog)
+
+    ####################################################################
+    # build_wait_scenario2
+    ####################################################################
+    @staticmethod
+    def build_wait_scenario2(
             num_waiters_arg: int,
             num_actors_arg: int,
             actor_1_arg: Actors,
             actor_2_arg: Actors,
             actor_3_arg: Actors,
-            caplog: pytest.CaptureFixture[str]
+            caplog_to_use: pytest.CaptureFixture[str]
     ) -> None:
         """Test wait scenarios.
 
@@ -24975,7 +25233,7 @@ class TestSmartThreadComboScenarios:
             actor_1_arg: type of actor that will do the first resume
             actor_2_arg: type of actor that will do the second resume
             actor_3_arg: type of actor that will do the third resume
-            caplog: pytest fixture to capture log output
+            caplog_to_use: pytest fixture to capture log output
 
         """
         total_arg_counts = (
@@ -24991,7 +25249,7 @@ class TestSmartThreadComboScenarios:
         scenario_driver(
             scenario_builder=ConfigVerifier.build_wait_scenario_suite,
             scenario_builder_args=args_for_scenario_builder,
-            caplog_to_use=caplog,
+            caplog_to_use=caplog_to_use,
             commander_config=commander_config[total_arg_counts
                                               % num_commander_configs]
         )
