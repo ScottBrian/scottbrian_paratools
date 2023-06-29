@@ -15136,163 +15136,93 @@ class ConfigVerifier:
                 sync
             num_stopped_syncers: number of threads that will
                 cause a not alive error
-            num_timeout_syncers: number of threads that will
-                cause a timeout error
+            num_timeout_syncers: number of threads that will be delayed
+                and will succeed when timeout is None or False and
+                there are no stopped syncers, or fail when timeout
+                is True or there are one or more stopped syncers
 
         """
-        # Make sure we have enough threads
-        assert (num_syncers
-                + num_stopped_syncers
-                + num_timeout_syncers) <= len(self.unregistered_names)
-
         timeout_time = ((num_syncers * 0.64)
                         + (num_timeout_syncers * 0.64))
 
         pause_time = timeout_time
         if timeout_type == TimeoutType.TimeoutFalse:
-            timeout_time *= 2  # prevent timeout
-            timeout_time = max(timeout_time, 2)
+            timeout_time *= 4  # prevent timeout
         elif timeout_type == TimeoutType.TimeoutTrue:
-            timeout_time *= 0.5  # force timeout
+            timeout_time *= 0.25  # force timeout
 
-        self.build_config(
-            cmd_runner=self.commander_name,
-            num_registered=num_timeout_syncers,
-            num_active=num_syncers + 1,
-            num_stopped=num_stopped_syncers)
+        syncer_names = get_names('syncer_', num_syncers)
+        timeout_syncer_names = get_names('timeout_syncer_',
+                                         num_timeout_syncers)
+        stopped_syncer_names = get_names('stopped_syncer_',
+                                         num_stopped_syncers)
 
-        active_names_copy = self.active_names - {self.commander_name}
+        all_targets: set[str] = (syncer_names
+                                 | timeout_syncer_names
+                                 | stopped_syncer_names)
 
-        ################################################################
-        # choose syncer_names
-        ################################################################
-        syncer_names = self.choose_names(
-            name_collection=active_names_copy,
-            num_names_needed=num_syncers,
-            update_collection=True,
-            var_name_for_log='syncer_names')
+        self.create_config(reg_names=timeout_syncer_names,
+                           active_names=syncer_names,
+                           stopped_names=stopped_syncer_names)
 
-        ################################################################
-        # choose timeout_syncer_names
-        ################################################################
-        timeout_syncer_names = self.choose_names(
-            name_collection=self.registered_names,
-            num_names_needed=num_timeout_syncers,
-            update_collection=False,
-            var_name_for_log='timeout_syncer_names')
-
-        ################################################################
-        # choose stopped_syncer_names
-        ################################################################
-        stopped_syncer_names = self.choose_names(
-            name_collection=self.stopped_remotes,
-            num_names_needed=num_stopped_syncers,
-            update_collection=False,
-            var_name_for_log='stopped_syncer_names')
-
-        all_targets: list[str] = (syncer_names
-                                  + timeout_syncer_names
-                                  + stopped_syncer_names)
-
+        sync_set_ack_remotes: set[str] = syncer_names.copy()
         ################################################################
         # timeout True
         ################################################################
         if timeout_type == TimeoutType.TimeoutTrue:
-            sync_set_ack_remotes: set[str] = (
-                    set(all_targets)
-                    - set(timeout_syncer_names)
-                    - set(stopped_syncer_names))
             confirm_cmd_to_use = 'SyncTimeoutTrue'
+            confirmers: set[str] = syncer_names
             sync_serial_num = self.add_cmd(
                 SyncTimeoutTrue(
                     cmd_runners=syncer_names,
-                    targets=set(all_targets),
+                    targets=all_targets,
                     sync_set_ack_remotes=sync_set_ack_remotes,
                     timeout=timeout_time,
-                    timeout_remotes=set(timeout_syncer_names),
-                    stopped_remotes=set(stopped_syncer_names)))
+                    timeout_remotes=timeout_syncer_names,
+                    stopped_remotes=stopped_syncer_names))
         else:
             ############################################################
-            # timeout False
+            # timeout None or False
             ############################################################
-            sync_set_ack_remotes: set[str] = (set(all_targets)
-                                              - set(stopped_syncer_names))
+            # if stopped targets, syncers will fail before they see
+            # the timeout targets, so the ack should not include them
+            confirmers: set[str] = syncer_names.copy()
+            if not stopped_syncer_names:
+                sync_set_ack_remotes |= timeout_syncer_names.copy()
+                confirmers |= timeout_syncer_names.copy()
             if timeout_type == TimeoutType.TimeoutFalse:
                 confirm_cmd_to_use = 'SyncTimeoutFalse'
                 sync_serial_num = self.add_cmd(
                     SyncTimeoutFalse(
-                        cmd_runners=syncer_names,
-                        targets=set(all_targets),
+                        cmd_runners=confirmers,
+                        targets=all_targets,
                         sync_set_ack_remotes=sync_set_ack_remotes,
                         timeout=timeout_time,
-                        timeout_remotes=set(timeout_syncer_names),
-                        stopped_remotes=set(stopped_syncer_names)))
+                        timeout_remotes=timeout_syncer_names,
+                        stopped_remotes=stopped_syncer_names))
             else:
                 ########################################################
                 # timeout None
                 ########################################################
                 confirm_cmd_to_use = 'Sync'
                 sync_serial_num = self.add_cmd(
-                    Sync(cmd_runners=syncer_names,
-                         targets=set(all_targets),
+                    Sync(cmd_runners=confirmers,
+                         targets=all_targets,
                          sync_set_ack_remotes=sync_set_ack_remotes,
                          timeout=timeout_time,
-                         timeout_remotes=set(timeout_syncer_names),
-                         stopped_remotes=set(stopped_syncer_names),
+                         timeout_remotes=timeout_syncer_names,
+                         stopped_remotes=stopped_syncer_names,
                          log_msg='sync test1'))
 
-            self.add_cmd(Pause(cmd_runners=self.commander_name,
-                               pause_seconds=pause_time))
-            ############################################################
-            # start the registered syncers to get them active
-            ############################################################
-            if timeout_syncer_names:
-                self.build_start_suite(
-                    start_names=list(timeout_syncer_names),
-                    validate_config=False)
-
-            ############################################################
-            # join stopped syncers and then create to get them active
-            ############################################################
-            # if stopped_syncer_names:
-            #     self.build_join_suite(
-            #         cmd_runners=self.commander_name,
-            #         join_target_names=list(stopped_syncer_names))
-            #     f1_create_items: list[F1CreateItem] = []
-            #     for idx, name in enumerate(stopped_syncer_names):
-            #         if idx % 2:
-            #             app_config = AppConfig.ScriptStyle
-            #         else:
-            #             app_config = AppConfig.RemoteThreadApp
-            #
-            #         f1_create_items.append(F1CreateItem(name=name,
-            #                                             auto_start=True,
-            #                                             target_rtn=outer_f1,
-            #                                             app_config=app_config))
-            #     self.build_create_suite(
-            #         f1_create_items=f1_create_items,
-            #         validate_config=False)
-
-            ############################################################
-            # do sync for newly started syncers
-            ############################################################
-            if timeout_syncer_names:
-                started_cmd_runners = list(timeout_syncer_names)
-                sync_set_ack_remotes_2: set[str] = (
-                        set(all_targets) - set(stopped_syncer_names))
-                sync_serial_num2 = self.add_cmd(
-                    Sync(cmd_runners=started_cmd_runners,
-                         targets=set(all_targets),
-                         sync_set_ack_remotes=sync_set_ack_remotes_2,
-                         timeout=timeout_time,
-                         timeout_remotes=set(timeout_syncer_names),
-                         stopped_remotes=set(stopped_syncer_names),
-                         log_msg='sync test2'))
-                self.add_cmd(
-                    ConfirmResponse(cmd_runners=[self.commander_name],
-                                    confirm_cmd='Sync',
-                                    confirm_serial_num=sync_serial_num2,
-                                    confirmers=started_cmd_runners))
+        self.add_cmd(Pause(cmd_runners=self.commander_name,
+                           pause_seconds=pause_time))
+        ############################################################
+        # start the registered syncers to get them active
+        ############################################################
+        if timeout_syncer_names:
+            self.build_start_suite(
+                start_names=timeout_syncer_names,
+                validate_config=False)
 
         ################################################################
         # confirm the sync
@@ -15301,7 +15231,52 @@ class ConfigVerifier:
             ConfirmResponse(cmd_runners=[self.commander_name],
                             confirm_cmd=confirm_cmd_to_use,
                             confirm_serial_num=sync_serial_num,
-                            confirmers=list(syncer_names)))
+                            confirmers=confirmers))
+
+        ############################################################
+        # join stopped syncers and then create to get them active
+        ############################################################
+        if stopped_syncer_names:
+            self.build_join_suite(
+                cmd_runners=self.commander_name,
+                join_target_names=list(stopped_syncer_names))
+            f1_create_items: list[F1CreateItem] = []
+            for idx, name in enumerate(stopped_syncer_names):
+                if idx % 2:
+                    app_config = AppConfig.ScriptStyle
+                else:
+                    app_config = AppConfig.RemoteThreadApp
+
+                f1_create_items.append(F1CreateItem(name=name,
+                                                    auto_start=True,
+                                                    target_rtn=outer_f1,
+                                                    app_config=app_config))
+            self.build_create_suite(
+                f1_create_items=f1_create_items,
+                validate_config=False)
+
+        ############################################################
+        # do sync for newly started syncers
+        ############################################################
+        # if timeout_syncer_names:
+        #     started_cmd_runners = list(timeout_syncer_names)
+        #     sync_set_ack_remotes_2: set[str] = (
+        #             set(all_targets) - set(stopped_syncer_names))
+        #     sync_serial_num2 = self.add_cmd(
+        #         Sync(cmd_runners=started_cmd_runners,
+        #              targets=set(all_targets),
+        #              sync_set_ack_remotes=sync_set_ack_remotes_2,
+        #              timeout=timeout_time,
+        #              timeout_remotes=set(timeout_syncer_names),
+        #              stopped_remotes=set(stopped_syncer_names),
+        #              log_msg='sync test2'))
+        #     self.add_cmd(
+        #         ConfirmResponse(cmd_runners=[self.commander_name],
+        #                         confirm_cmd='Sync',
+        #                         confirm_serial_num=sync_serial_num2,
+        #                         confirmers=started_cmd_runners))
+
+
 
     ####################################################################
     # build_unreg_suite
