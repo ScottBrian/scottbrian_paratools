@@ -1784,7 +1784,8 @@ class Sync(ConfigCmd):
                           'timeout',
                           'stopped_remotes',
                           'timeout_remotes',
-                          'deadlock_remotes']
+                          'deadlock_remotes',
+                          'sync_set_ack_remotes']
 
     def run_process(self, cmd_runner: str) -> None:
         """Run the command.
@@ -3961,19 +3962,28 @@ class RequestAckLogSearchItem(LogSearchItem):
                                                       resumer=cmd_runner,
                                                       pending_sync_flag=True)
             elif action == 'achieved':
-                ack_key = (remote, 'smart_sync_achieved')
+                if self.config_ver.auto_sync_ach_or_back_msg:
+                    ack_key = (remote, 'smart_sync_ach_or_back')
+                else:
+                    ack_key = (remote, 'smart_sync_achieved')
                 self.config_ver.set_sync_pending_flag(waiter=cmd_runner,
                                                       resumer=remote,
                                                       pending_sync_flag=False)
             elif action == 'backout':
                 if split_msg[4] == 'local':
-                    ack_key = (remote, 'smart_sync_backout_local')
+                    if self.config_ver.auto_sync_ach_or_back_msg:
+                        ack_key = (remote, 'smart_sync_ach_or_back')
+                    else:
+                        ack_key = (remote, 'smart_sync_backout_local')
                     self.config_ver.set_sync_pending_flag(
                         waiter=cmd_runner,
                         resumer=remote,
                         pending_sync_flag=False)
                 else:
-                    ack_key = (remote, 'smart_sync_backout_remote')
+                    if self.config_ver.auto_sync_ach_or_back_msg:
+                        ack_key = (remote, 'smart_sync_ach_or_back')
+                    else:
+                        ack_key = (remote, 'smart_sync_backout_remote')
                     self.config_ver.set_sync_pending_flag(
                         waiter=remote,
                         resumer=cmd_runner,
@@ -4931,6 +4941,7 @@ class ConfigVerifier:
 
         self.pending_events: dict[str, PendEvents] = {}
         self.auto_calling_refresh_msg = True
+        self.auto_sync_ach_or_back_msg = True
         self.potential_def_del_pairs: dict[
             PotentialDefDelKey, int] = defaultdict(int)
         self.setup_pending_events()
@@ -16725,19 +16736,27 @@ class ConfigVerifier:
                               | pe[PE.current_request].deadlock_remotes))
 
         for target in pe[PE.current_request].sync_set_ack_remotes:
+            if target == cmd_runner:
+                continue
+
             ack_key: AckKey = (target, 'smart_sync_set')
 
             pe[PE.ack_msg][ack_key] += 1
 
-        for target in eligible_targets:
-            ack_key: AckKey = (target, 'smart_sync_achieved')
+            if self.auto_sync_ach_or_back_msg:
+                ack_key: AckKey = (target, 'smart_sync_ach_or_back')
+                pe[PE.ack_msg][ack_key] += 1
 
-            pe[PE.ack_msg][ack_key] += 1
 
-        for target in backout_targets:
-            ack_key: AckKey = (target, 'smart_sync_backout_remote')
-
-            pe[PE.ack_msg][ack_key] += 1
+        # for target in eligible_targets:
+        #     ack_key: AckKey = (target, 'smart_sync_achieved')
+        #
+        #     pe[PE.ack_msg][ack_key] += 1
+        #
+        # for target in backout_targets:
+        #     ack_key: AckKey = (target, 'smart_sync_backout_remote')
+        #
+        #     pe[PE.ack_msg][ack_key] += 1
 
     ####################################################################
     # handle_request_smart_sync_exit
@@ -18076,11 +18095,11 @@ class ConfigVerifier:
                                     'exit')
 
         exp_completed_syncs: set[str] = targets.copy()
-        exp_completed_syncs -= stopped_remotes
-        exp_completed_syncs -= timeout_remotes
-        exp_completed_syncs -= deadlock_remotes
 
         if stopped_remotes:
+            exp_completed_syncs -= stopped_remotes
+            exp_completed_syncs -= timeout_remotes
+            exp_completed_syncs -= deadlock_remotes
             with pytest.raises(st.SmartThreadRemoteThreadNotAlive):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_sync(
@@ -18105,6 +18124,8 @@ class ConfigVerifier:
                 log_level=logging.ERROR)
 
         elif deadlock_remotes:
+            exp_completed_syncs -= timeout_remotes
+            exp_completed_syncs -= deadlock_remotes
             with pytest.raises(st.SmartThreadDeadlockDetected):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_sync(
@@ -18142,6 +18163,7 @@ class ConfigVerifier:
                 log_msg=log_msg)
 
         elif timeout_type == TimeoutType.TimeoutTrue:
+            exp_completed_syncs -= timeout_remotes
             with pytest.raises(st.SmartThreadRequestTimedOut):
                 self.all_threads[cmd_runner].smart_sync(
                     targets=targets,
@@ -18161,7 +18183,8 @@ class ConfigVerifier:
                     deadlock_remotes=deadlock_remotes),
                 log_level=logging.ERROR)
 
-        assert exp_completed_syncs == synced_targets
+        if not (self.auto_sync_ach_or_back_msg and stopped_remotes):
+            assert exp_completed_syncs == synced_targets
 
         # self.add_request_log_msg(cmd_runner=cmd_runner,
         #                          smart_request='smart_sync',
