@@ -5441,7 +5441,7 @@ class ConfigVerifier:
         wait_serial_num = self.add_cmd(
             Wait(cmd_runners=waiters,
                  resumers=resumers,
-                 stopped_remotes=set(),
+                 exp_resumers=resumers,
                  log_msg='cd normal resume wait test'))
         self.add_cmd(
             ConfirmResponse(
@@ -5490,7 +5490,7 @@ class ConfigVerifier:
         wait_serial_num = self.add_cmd(
             Wait(cmd_runners=waiters,
                  resumers=resumers,
-                 stopped_remotes=set(),
+                 exp_resumers=resumers,
                  log_msg='cd resume sync sync wait test'))
         self.add_cmd(
             ConfirmResponse(
@@ -5531,7 +5531,7 @@ class ConfigVerifier:
         wait_serial_num = self.add_cmd(
             Wait(cmd_runners=waiters,
                  resumers=syncers,
-                 stopped_remotes=set(),
+                 exp_resumers=set(),
                  deadlock_remotes=set(syncers),
                  log_msg='cd resume sync conflict test'))
 
@@ -5567,14 +5567,14 @@ class ConfigVerifier:
         wait_serial_num_1 = self.add_cmd(
             Wait(cmd_runners=waiters1,
                  resumers=waiters2,
-                 stopped_remotes=set(),
+                 exp_resumers=set(),
                  deadlock_remotes=set(waiters2),
                  log_msg='cd wait deadlock test'))
 
         wait_serial_num_2 = self.add_cmd(
             Wait(cmd_runners=waiters2,
                  resumers=waiters1,
-                 stopped_remotes=set(),
+                 exp_resumers=set(),
                  deadlock_remotes=set(waiters1),
                  log_msg='cd wait deadlock test'))
 
