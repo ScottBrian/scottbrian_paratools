@@ -382,8 +382,9 @@ class DeadlockScenario(Enum):
     NormalSync = auto()
     SendSyncRecv = auto()
     ResumeSyncWait = auto()
-    SyncConflict = auto()
+    RecvDeadlock = auto()
     WaitDeadlock = auto()
+    SyncDeadlock = auto()
 
 
 ########################################################################
@@ -5391,9 +5392,9 @@ class ConfigVerifier:
             log_msg=new_log_msg)
 
     ####################################################################
-    # build_cd_normal_send_recv_suite
+    # build_normal_send_recv_scenario
     ####################################################################
-    def build_cd_normal_send_recv_suite(
+    def build_normal_send_recv_scenario(
             self,
             actor_names: list[str]) -> None:
         """Adds cmds to the cmd queue.
@@ -5410,7 +5411,7 @@ class ConfigVerifier:
             sender_names=senders,
             receiver_names=receivers,
             num_msgs=1,
-            text='build_cd_normal_send_recv_suite')
+            text='build_normal_send_recv_scenario')
 
         send_serial_num = self.add_cmd(
             SendMsg(cmd_runners=senders,
@@ -5418,7 +5419,7 @@ class ConfigVerifier:
                     msgs_to_send=msgs_to_send,
                     exp_receivers=receivers,
                     msg_idx=0,
-                    log_msg='cd normal send recv test'))
+                    log_msg='normal send recv test'))
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
@@ -5430,7 +5431,7 @@ class ConfigVerifier:
                     senders=senders,
                     exp_senders=senders,
                     exp_msgs=msgs_to_send,
-                    log_msg='cd normal send recv test'))
+                    log_msg='normal send recv test'))
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
@@ -5439,9 +5440,9 @@ class ConfigVerifier:
                 confirmers=receivers))
 
     ####################################################################
-    # build_cd_normal_resume_wait_suite
+    # build_normal_resume_wait_scenario
     ####################################################################
-    def build_cd_normal_resume_wait_suite(
+    def build_normal_resume_wait_scenario(
             self,
             actor_names: list[str]) -> None:
         """Adds cmds to the cmd queue.
@@ -5458,7 +5459,7 @@ class ConfigVerifier:
                    targets=waiters,
                    exp_resumed_targets=waiters,
                    stopped_remotes=[],
-                   log_msg='cd normal resume wait test'))
+                   log_msg='normal resume wait test'))
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
@@ -5469,7 +5470,7 @@ class ConfigVerifier:
             Wait(cmd_runners=waiters,
                  resumers=resumers,
                  exp_resumers=resumers,
-                 log_msg='cd normal resume wait test'))
+                 log_msg='normal resume wait test'))
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
@@ -5478,9 +5479,9 @@ class ConfigVerifier:
                 confirmers=waiters))
 
     ####################################################################
-    # build_cd_normal_sync_suite
+    # build_normal_sync_scenario
     ####################################################################
-    def build_cd_normal_sync_suite(
+    def build_normal_sync_scenario(
             self,
             actor_names: list[str]) -> None:
         """Adds cmds to the cmd queue.
@@ -5493,7 +5494,7 @@ class ConfigVerifier:
             Sync(cmd_runners=actor_names,
                  targets=actor_names,
                  sync_set_ack_remotes=actor_names,
-                 log_msg='cd normal sync test'))
+                 log_msg='normal sync test'))
         self.add_cmd(
             ConfirmResponse(cmd_runners=[self.commander_name],
                             confirm_cmd='Sync',
@@ -5501,9 +5502,9 @@ class ConfigVerifier:
                             confirmers=list(actor_names)))
 
     ####################################################################
-    # build_cd_send_sync_sync_recv_suite
+    # build_send_sync_recv_scenario
     ####################################################################
-    def build_cd_send_sync_recv_suite(
+    def build_send_sync_recv_scenario(
             self,
             actor_names: list[str]) -> None:
         """Adds cmds to the cmd queue.
@@ -5520,7 +5521,7 @@ class ConfigVerifier:
             sender_names=senders,
             receiver_names=receivers,
             num_msgs=1,
-            text='build_cd_normal_send_recv_suite')
+            text='build_send_sync_recv_scenario')
 
         send_serial_num = self.add_cmd(
             SendMsg(cmd_runners=senders,
@@ -5528,7 +5529,7 @@ class ConfigVerifier:
                     exp_receivers=receivers,
                     msgs_to_send=msgs_to_send,
                     msg_idx=0,
-                    log_msg='cd send sync sync recv test'))
+                    log_msg='send sync recv test'))
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
@@ -5539,7 +5540,7 @@ class ConfigVerifier:
             Sync(cmd_runners=actor_names,
                  targets=actor_names,
                  sync_set_ack_remotes=actor_names,
-                 log_msg='cd send sync sync recv test'))
+                 log_msg='send sync recv test'))
         self.add_cmd(
             ConfirmResponse(cmd_runners=[self.commander_name],
                             confirm_cmd='Sync',
@@ -5550,7 +5551,7 @@ class ConfigVerifier:
                     senders=senders,
                     exp_senders=senders,
                     exp_msgs=msgs_to_send,
-                    log_msg='cd send sync sync recv test'))
+                    log_msg='send sync recv test'))
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
@@ -5559,9 +5560,9 @@ class ConfigVerifier:
                 confirmers=receivers))
 
     ####################################################################
-    # build_cd_resume_sync_wait_suite
+    # build_resume_sync_wait_scenario
     ####################################################################
-    def build_cd_resume_sync_wait_suite(
+    def build_resume_sync_wait_scenario(
             self,
             actor_names: list[str]) -> None:
         """Adds cmds to the cmd queue.
@@ -5578,7 +5579,7 @@ class ConfigVerifier:
                    targets=waiters,
                    exp_resumed_targets=waiters,
                    stopped_remotes=[],
-                   log_msg='cd resume sync sync wait test'))
+                   log_msg='resume sync sync wait test'))
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
@@ -5589,7 +5590,7 @@ class ConfigVerifier:
             Sync(cmd_runners=actor_names,
                  targets=actor_names,
                  sync_set_ack_remotes=actor_names,
-                 log_msg='cd resume sync sync wait test'))
+                 log_msg='resume sync sync wait test'))
         self.add_cmd(
             ConfirmResponse(cmd_runners=[self.commander_name],
                             confirm_cmd='Sync',
@@ -5599,7 +5600,7 @@ class ConfigVerifier:
             Wait(cmd_runners=waiters,
                  resumers=resumers,
                  exp_resumers=resumers,
-                 log_msg='cd resume sync sync wait test'))
+                 log_msg='resume sync sync wait test'))
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
@@ -5608,9 +5609,105 @@ class ConfigVerifier:
                 confirmers=waiters))
 
     ####################################################################
-    # build_cd_sync_conflict_suite
+    # build_recv_deadlock_scenario
     ####################################################################
-    def build_cd_sync_conflict_suite(
+    def build_recv_deadlock_scenario(
+            self,
+            actor_names: list[str]) -> None:
+        """Adds cmds to the cmd queue.
+
+        Args:
+            actor_names: names of threads that will do the sync
+
+        """
+        mid_point = len(actor_names) // 2
+        receivers1 = actor_names[0:mid_point]
+        receivers2 = actor_names[mid_point:]
+
+        msgs_to_send = SendRecvMsgs(
+            sender_names=receivers1 + receivers2,
+            receiver_names=receivers1 + receivers2,
+            num_msgs=1,
+            text='build_recv_deadlock_scenario')
+
+        recv_serial_num_1 = self.add_cmd(
+            RecvMsg(cmd_runners=receivers1,
+                    senders=receivers2,
+                    exp_senders=set(),
+                    exp_msgs=msgs_to_send,
+                    deadlock_remotes=set(receivers2),
+                    log_msg='receive deadlock test'))
+
+        recv_serial_num_2 = self.add_cmd(
+            RecvMsg(cmd_runners=receivers2,
+                    senders=receivers1,
+                    exp_senders=set(),
+                    exp_msgs=msgs_to_send,
+                    deadlock_remotes=set(receivers1),
+                    log_msg='receive deadlock test'))
+
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd='RecvMsg',
+                confirm_serial_num=recv_serial_num_1,
+                confirmers=receivers1))
+
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd='RecvMsg',
+                confirm_serial_num=recv_serial_num_2,
+                confirmers=receivers2))
+
+    ####################################################################
+    # build_wait_deadlock_scenario
+    ####################################################################
+    def build_wait_deadlock_scenario(
+            self,
+            actor_names: list[str]) -> None:
+        """Adds cmds to the cmd queue.
+
+        Args:
+            actor_names: names of threads that will do the sync
+
+        """
+        mid_point = len(actor_names) // 2
+        waiters1 = actor_names[0:mid_point]
+        waiters2 = actor_names[mid_point:]
+
+        wait_serial_num_1 = self.add_cmd(
+            Wait(cmd_runners=waiters1,
+                 resumers=waiters2,
+                 exp_resumers=set(),
+                 deadlock_remotes=set(waiters2),
+                 log_msg='wait deadlock test'))
+
+        wait_serial_num_2 = self.add_cmd(
+            Wait(cmd_runners=waiters2,
+                 resumers=waiters1,
+                 exp_resumers=set(),
+                 deadlock_remotes=set(waiters1),
+                 log_msg='wait deadlock test'))
+
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd='Wait',
+                confirm_serial_num=wait_serial_num_1,
+                confirmers=waiters1))
+
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd='Wait',
+                confirm_serial_num=wait_serial_num_2,
+                confirmers=waiters2))
+
+    ####################################################################
+    # build_sync_deadlock_scenario
+    ####################################################################
+    def build_sync_deadlock_scenario(
             self,
             actor_names: list[str]) -> None:
         """Adds cmds to the cmd queue.
@@ -5629,20 +5726,20 @@ class ConfigVerifier:
             sender_names=syncers + waiters,
             receiver_names=receivers,
             num_msgs=1,
-            text='build_cd_sync_conflict_suite')
+            text='build_sync_deadlock_scenario')
 
         sync_serial_num = self.add_cmd(
             Sync(cmd_runners=syncers,
                  targets=actor_names,
                  sync_set_ack_remotes=actor_names,
-                 deadlock_remotes=set(waiters),
-                 log_msg='cd resume sync conflict test'))
+                 deadlock_remotes=receivers + waiters,
+                 log_msg='sync deadlock test'))
 
         self.add_cmd(
             WaitForRequestTimeouts(
                 cmd_runners=self.commander_name,
                 actor_names=syncers,
-                timeout_names=waiters))
+                timeout_names=receivers + waiters))
 
         recv_serial_num = self.add_cmd(
             RecvMsg(cmd_runners=receivers,
@@ -5650,14 +5747,14 @@ class ConfigVerifier:
                     exp_senders=set(),
                     exp_msgs=msgs_to_send,
                     deadlock_remotes=syncers + waiters,
-                    log_msg='cd resume sync conflict test'))
+                    log_msg='sync deadlock test'))
 
         wait_serial_num = self.add_cmd(
             Wait(cmd_runners=waiters,
                  resumers=syncers,
                  exp_resumers=set(),
-                 deadlock_remotes=set(syncers),
-                 log_msg='cd resume sync conflict test'))
+                 deadlock_remotes=syncers + receivers,
+                 log_msg='sync deadlock test'))
 
         self.add_cmd(
             ConfirmResponse(cmd_runners=[self.commander_name],
@@ -5680,97 +5777,9 @@ class ConfigVerifier:
                 confirmers=waiters))
 
     ####################################################################
-    # build_cd_wait_deadlock_suite
+    # build_deadlock_scenario
     ####################################################################
-    def build_cd_recv_deadlock_suite(
-            self,
-            actor_names: list[str]) -> None:
-        """Adds cmds to the cmd queue.
-
-        Args:
-            actor_names: names of threads that will do the sync
-
-        """
-        mid_point = len(actor_names) // 2
-        receivers1 = actor_names[0:mid_point]
-        receivers2 = actor_names[mid_point:]
-
-        recv_serial_num_1 = self.add_cmd(
-            RecvMsg(cmd_runners=receivers1,
-                    resumers=receivers2,
-                    exp_resumers=set(),
-                    deadlock_remotes=set(waiters2),
-                    log_msg='cd wait deadlock test'))
-
-        wait_serial_num_2 = self.add_cmd(
-            RecvMsg(cmd_runners=receivers2,
-                    resumers=receivers1,
-                    exp_resumers=set(),
-                    deadlock_remotes=set(receivers1),
-                    log_msg='cd wait deadlock test'))
-
-        self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=[self.commander_name],
-                confirm_cmd='RecvMsg',
-                confirm_serial_num=recv_serial_num_1,
-                confirmers=receivers1))
-
-        self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=[self.commander_name],
-                confirm_cmd='RecvMsg',
-                confirm_serial_num=recv_serial_num_2,
-                confirmers=receivers2))
-
-    ####################################################################
-    # build_cd_wait_deadlock_suite
-    ####################################################################
-    def build_cd_wait_deadlock_suite(
-            self,
-            actor_names: list[str]) -> None:
-        """Adds cmds to the cmd queue.
-
-        Args:
-            actor_names: names of threads that will do the sync
-
-        """
-        mid_point = len(actor_names) // 2
-        waiters1 = actor_names[0:mid_point]
-        waiters2 = actor_names[mid_point:]
-
-        wait_serial_num_1 = self.add_cmd(
-            Wait(cmd_runners=waiters1,
-                 resumers=waiters2,
-                 exp_resumers=set(),
-                 deadlock_remotes=set(waiters2),
-                 log_msg='cd wait deadlock test'))
-
-        wait_serial_num_2 = self.add_cmd(
-            Wait(cmd_runners=waiters2,
-                 resumers=waiters1,
-                 exp_resumers=set(),
-                 deadlock_remotes=set(waiters1),
-                 log_msg='cd wait deadlock test'))
-
-        self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=[self.commander_name],
-                confirm_cmd='Wait',
-                confirm_serial_num=wait_serial_num_1,
-                confirmers=waiters1))
-
-        self.add_cmd(
-            ConfirmResponse(
-                cmd_runners=[self.commander_name],
-                confirm_cmd='Wait',
-                confirm_serial_num=wait_serial_num_2,
-                confirmers=waiters2))
-
-    ####################################################################
-    # build_conf_dead_scenario_suite
-    ####################################################################
-    def build_conf_dead_scenario_suite(
+    def build_deadlock_scenario(
             self,
             scenario_list: list[DeadlockScenario],
             num_cd_actors: int) -> None:
@@ -5783,19 +5792,21 @@ class ConfigVerifier:
         """
         actions: dict[DeadlockScenario, Callable[..., None]] = {
             DeadlockScenario.NormalSendRecv:
-                self.build_cd_normal_send_recv_suite,
+                self.build_normal_send_recv_scenario,
             DeadlockScenario.NormalResumeWait:
-                self.build_cd_normal_resume_wait_suite,
+                self.build_normal_resume_wait_scenario,
             DeadlockScenario.NormalSync:
-                self.build_cd_normal_sync_suite,
+                self.build_normal_sync_scenario,
             DeadlockScenario.SendSyncRecv:
-                self.build_cd_send_sync_recv_suite,
+                self.build_send_sync_recv_scenario,
             DeadlockScenario.ResumeSyncWait:
-                self.build_cd_resume_sync_wait_suite,
-            DeadlockScenario.SyncConflict:
-                self.build_cd_sync_conflict_suite,
+                self.build_resume_sync_wait_scenario,
+            DeadlockScenario.RecvDeadlock:
+                self.build_recv_deadlock_scenario,
             DeadlockScenario.WaitDeadlock:
-                self.build_cd_wait_deadlock_suite,
+                self.build_wait_deadlock_scenario,
+            DeadlockScenario.SyncDeadlock:
+                self.build_sync_deadlock_scenario,
         }
         # Make sure we have enough threads
         assert num_cd_actors <= len(self.unregistered_names)
@@ -5803,8 +5814,6 @@ class ConfigVerifier:
         self.build_config(
             cmd_runner=self.commander_name,
             num_active=num_cd_actors + 1)
-
-        self.log_name_groups()
 
         active_names_copy = self.active_names - {self.commander_name}
 
@@ -25479,7 +25488,7 @@ class TestSmartThreadComboScenarios:
         )
 
     ####################################################################
-    # test_deadlock_conflict_scenarios
+    # test_deadlock_scenario
     ####################################################################
     deadlock_arg_list = [
         DeadlockScenario.NormalSendRecv,
@@ -25487,14 +25496,22 @@ class TestSmartThreadComboScenarios:
         DeadlockScenario.NormalSync,
         DeadlockScenario.SendSyncRecv,
         DeadlockScenario.ResumeSyncWait,
-        DeadlockScenario.SyncConflict,
-        DeadlockScenario.WaitDeadlock]
+        DeadlockScenario.RecvDeadlock,
+        DeadlockScenario.WaitDeadlock,
+        DeadlockScenario.SyncDeadlock]
 
     @pytest.mark.parametrize("conflict_deadlock_1_arg", deadlock_arg_list)
     @pytest.mark.parametrize("conflict_deadlock_2_arg", deadlock_arg_list)
     @pytest.mark.parametrize("conflict_deadlock_3_arg", deadlock_arg_list)
     @pytest.mark.parametrize("num_cd_actors_arg", [3, 4, 5, 6, 7, 8, 9])
-    def test_conflict_deadlock_scenarios(
+    # @pytest.mark.parametrize("conflict_deadlock_1_arg",
+    #                          [DeadlockScenario.RecvDeadlock])
+    # @pytest.mark.parametrize("conflict_deadlock_2_arg",
+    #                          [DeadlockScenario.SendSyncRecv])
+    # @pytest.mark.parametrize("conflict_deadlock_3_arg",
+    #                          [DeadlockScenario.NormalSendRecv])
+    # @pytest.mark.parametrize("num_cd_actors_arg", [3])
+    def test_deadlock_scenario(
             self,
             conflict_deadlock_1_arg: DeadlockScenario,
             conflict_deadlock_2_arg: DeadlockScenario,
@@ -25520,7 +25537,7 @@ class TestSmartThreadComboScenarios:
         }
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_conf_dead_scenario_suite,
+            scenario_builder=ConfigVerifier.build_deadlock_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
             commander_config=commander_config[num_cd_actors_arg
