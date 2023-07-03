@@ -5379,7 +5379,8 @@ class ConfigVerifier:
     ####################################################################
     def add_log_msg(self,
                     new_log_msg: str,
-                    log_level: Optional[int] = logging.DEBUG) -> None:
+                    log_level: Optional[int] = logging.DEBUG,
+                    fullmatch: bool = True) -> None:
         """Add log message to log_ver for SmartThread logger.
 
         Args:
@@ -5389,7 +5390,8 @@ class ConfigVerifier:
         self.log_ver.add_msg(
             log_name='scottbrian_paratools.smart_thread',
             log_level=log_level,
-            log_msg=new_log_msg)
+            log_msg=new_log_msg,
+            fullmatch=fullmatch)
 
     ####################################################################
     # build_normal_send_recv_scenario
@@ -22669,7 +22671,8 @@ class TestSmartThreadExamples:
                     target=f1,
                     thread_parm_name='smart_thread')
         alpha_smart_thread.smart_send(msg=('hello beta',
-                                      'have a great day', 42))
+                                      'have a great day', 42),
+                                      receivers='beta')
         alpha_smart_thread.smart_join(targets='beta')
         print('mainline alpha exiting')
 
@@ -22803,7 +22806,7 @@ class TestSmartThreadExamples:
             'beta': 'hi beta',
             'charlie': ('hi charlie', 'have a great day'),
             'delta': [42, 'hi delta', {'nums': (1, 2, 3)}]}
-        alpha_smart_thread.smart_send(msg=msgs_to_send)
+        alpha_smart_thread.smart_send(msg_dict=msgs_to_send)
         alpha_smart_thread.smart_wait(resumers='delta')
         alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
         print('mainline alpha exiting')
@@ -22928,70 +22931,6 @@ class TestSmartThreadExamples:
                                   capsys: Any) -> None:
         """Test smart_recv example 3.
 
-        receive a single message from all remote threads in the
-        configuration
-
-        Args:
-            capsys: pytest fixture to get the print output
-        """
-        from scottbrian_paratools.smart_thread import SmartThread
-        import time
-
-        def f1(greeting: str, smart_thread: SmartThread) -> None:
-            print(f'f1 {smart_thread.name} entered')
-            smart_thread.smart_send(msg=f'{greeting}',
-                                    receivers='alpha')
-            print(f'f1 {smart_thread.name} exiting')
-
-        print('mainline alpha entered')
-        alpha_smart_thread = SmartThread(name='alpha')
-        SmartThread(name='beta',
-                    target=f1,
-                    thread_parm_name='smart_thread',
-                    args=('hi',))
-        time.sleep(0.2)
-        SmartThread(name='charlie',
-                    target=f1,
-                    thread_parm_name='smart_thread',
-                    args=('hello',))
-        time.sleep(0.2)
-        SmartThread(name='delta',
-                    target=f1,
-                    thread_parm_name='smart_thread',
-                    args=('aloha',))
-        time.sleep(1.5)
-        recvd_msgs = alpha_smart_thread.smart_recv()
-        print(recvd_msgs['beta'])
-        print(recvd_msgs['charlie'])
-        print(recvd_msgs['delta'])
-        alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
-        print('mainline alpha exiting')
-
-        expected_result = 'mainline alpha entered\n'
-        expected_result += 'f1 beta entered\n'
-        expected_result += 'f1 beta exiting\n'
-        expected_result += 'f1 charlie entered\n'
-        expected_result += 'f1 charlie exiting\n'
-        expected_result += 'f1 delta entered\n'
-        expected_result += 'f1 delta exiting\n'
-        expected_result += "['hi']\n"
-        expected_result += "['hello']\n"
-        expected_result += "['aloha']\n"
-        expected_result += 'mainline alpha exiting\n'
-
-        captured = capsys.readouterr().out
-
-        assert captured == expected_result
-
-        logger.debug('mainline exiting')
-
-    ####################################################################
-    # test_smart_recv_example_4
-    ####################################################################
-    def test_smart_recv_example_4(self,
-                                  capsys: Any) -> None:
-        """Test smart_recv example 4.
-
         receive multiple messages from a single remote thread
 
         Args:
@@ -23038,11 +22977,11 @@ class TestSmartThreadExamples:
         logger.debug('mainline exiting')
 
     ####################################################################
-    # test_smart_recv_example_5
+    # test_smart_recv_example_4
     ####################################################################
-    def test_smart_recv_example_5(self,
+    def test_smart_recv_example_4(self,
                                   capsys: Any) -> None:
-        """Test smart_recv example 5.
+        """Test smart_recv example 4.
 
         receive any mixture of single and multiple messages from
         specified remote threads
@@ -23305,65 +23244,6 @@ class TestSmartThreadExamples:
         resumed_by = alpha_smart_thread.smart_wait(
             resumers=['beta', 'charlie', 'delta'],
             resumer_count=1)
-        print(f'alpha resumed by resumers={sorted(resumed_by)}')
-
-        alpha_smart_thread.smart_join(targets=['beta', 'charlie', 'delta'])
-        print('mainline alpha exiting')
-
-        expected_result = 'mainline alpha entered\n'
-        expected_result += 'f1 beta about to resume alpha\n'
-        expected_result += 'f1 charlie about to resume alpha\n'
-        expected_result += 'alpha about to wait for any threads\n'
-        expected_result += "alpha resumed by resumers=['beta', 'charlie']\n"
-        expected_result += 'f1 delta about to resume alpha\n'
-        expected_result += 'alpha about to wait for any threads\n'
-        expected_result += "alpha resumed by resumers=['delta']\n"
-        expected_result += 'mainline alpha exiting\n'
-
-        captured = capsys.readouterr().out
-
-        assert captured == expected_result
-
-        logger.debug('mainline exiting')
-
-    ####################################################################
-    # test_smart_wait_example_5
-    ####################################################################
-    def test_smart_wait_example_5(self,
-                                  capsys: Any) -> None:
-        """Test smart_wait example 5.
-
-        smart_wait for any resumers in configuration
-
-        Args:
-            capsys: pytest fixture to get the print output
-        """
-        from scottbrian_paratools.smart_thread import SmartThread
-        import time
-
-        def f1(smart_thread: SmartThread) -> None:
-            print(f'f1 {smart_thread.name} about to resume alpha')
-            smart_thread.smart_resume(waiters='alpha')
-
-        print('mainline alpha entered')
-        alpha_smart_thread = SmartThread(name='alpha')
-        SmartThread(name='beta',
-                    target=f1,
-                    thread_parm_name='smart_thread')
-        time.sleep(1)
-        SmartThread(name='charlie',
-                    target=f1,
-                    thread_parm_name='smart_thread')
-        time.sleep(1)
-        print('alpha about to wait for any threads')
-        resumed_by = alpha_smart_thread.smart_wait()
-        print(f'alpha resumed by resumers={sorted(resumed_by)}')
-        SmartThread(name='delta',
-                    target=f1,
-                    thread_parm_name='smart_thread')
-        time.sleep(1)  # allow time for alpha to wait
-        print('alpha about to wait for any threads')
-        resumed_by = alpha_smart_thread.smart_wait()
         print(f'alpha resumed by resumers={sorted(resumed_by)}')
 
         alpha_smart_thread.smart_join(targets=['beta', 'charlie', 'delta'])
@@ -23847,7 +23727,7 @@ def scenario_driver(
     ################################################################
     match_results = log_ver.get_match_results(
         caplog=caplog_to_use)
-    log_ver.print_match_results(match_results)
+    log_ver.print_match_results(match_results, print_matched=False)
     log_ver.verify_log_results(match_results)
 
     logger.debug('mainline exiting')

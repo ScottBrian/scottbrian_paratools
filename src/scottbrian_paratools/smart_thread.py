@@ -2688,12 +2688,12 @@ class SmartThread:
         Args:
             senders: thread names whose sent messages are to be
                 received.
-            sender_count: the least number of *senders* that must
-                send a message to satisfy the *smart_recv*. If not
-                specified, *sender_count* will default to the number of
-                names specified for *senders*. If specified,
-                *sender_count* must be an integer between
-                1 and the number of *senders*, inclusive.
+            sender_count: the least number of *senders* that must send a
+                message to satisfy the *smart_recv*. If not specified,
+                *sender_count* will default to the number of names
+                specified for *senders*. If specified, *sender_count*
+                must be an integer between 1 and the number of
+                *senders*, inclusive.
             timeout: number of seconds to wait for messages
             log_msg: additional text to append to the debug log message
                 that is issued on request entry and exit
@@ -2735,9 +2735,9 @@ class SmartThread:
                already delivered earlier by a smart_send.
 
         For *smart_recv*, a message is any type (e.g., text, lists,
-        sets, class objects). *smart_recv* can be used to receive a
-        single message or multiple messages from a single remote
-        thread, or from multiple remote threads. *smart_recv* will
+        sets, class objects, etc.). *smart_recv* can be used to receive
+        a single message or multiple messages from a single remote
+        thread or from multiple remote threads. *smart_recv* will
         return messages in a dictionary indexed by sender thread name.
 
         When *smart_recv* gets control, it will check its message
@@ -2761,10 +2761,8 @@ class SmartThread:
 
             1) receive a single message from a single remote thread
             2) receive a single message from multiple remote threads
-            3) receive a single message from all remote threads in the
-               configuration
-            4) receive multiple messages from a single remote thread
-            5) receive multiple messages from multiple remote threads
+            3) receive multiple messages from a single remote thread
+            4) receive multiple messages from multiple remote threads
 
         **Example 1:** receive a single message from a single remote
         thread
@@ -2845,65 +2843,7 @@ class SmartThread:
             ['charlie says hi']
             mainline alpha exiting
 
-        **Example 3:** receive a single message from all remote threads
-        in the configuration
-
-        .. code-block:: python
-
-            from scottbrian_paratools.smart_thread import SmartThread
-            import time
-
-            def f1(greeting: str, smart_thread: SmartThread) -> None:
-                print(f'f1 {smart_thread.name} entered')
-                smart_thread.smart_send(msg=f'{greeting}',
-                                        receivers='alpha')
-                print(f'f1 {smart_thread.name} exiting')
-
-            print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(name='alpha')
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread',
-                                            args=('hi',))
-            time.sleep(0.2)
-            charlie_smart_thread = SmartThread(name='charlie',
-                                               target=f1,
-                                               thread_parm_name='smart_thread',
-                                               args=('hello',))
-            time.sleep(0.2)
-            delta_smart_thread = SmartThread(name='delta',
-                                             target=f1,
-                                             thread_parm_name='smart_thread',
-                                             args=('aloha',))
-            time.sleep(0.2)
-            my_msg = alpha_smart_thread.smart_recv()
-            print(my_msg['beta'])
-            print(my_msg['charlie'])
-            print(my_msg['delta'])
-            alpha_smart_thread.smart_join(targets=('beta',
-                                                   'charlie',
-                                                   'delta'))
-            print('mainline alpha exiting')
-
-        .. invisible-code-block: python
-
-            del SmartThread._registry['alpha']
-
-        Expected output for Example 3::
-
-            mainline alpha entered
-            f1 beta entered
-            f1 beta exiting
-            f1 charlie entered
-            f1 charlie exiting
-            f1 delta entered
-            f1 delta exiting
-            ['hi']
-            ['hello']
-            ['aloha']
-            mainline alpha exiting
-
-        **Example 4:** receive multiple messages from a single remote
+        **Example 3:** receive multiple messages from a single remote
         thread
 
         .. code-block:: python
@@ -2936,7 +2876,7 @@ class SmartThread:
 
             del SmartThread._registry['alpha']
 
-        Expected output for Example 4::
+        Expected output for Example 3::
             mainline alpha entered
             f1 beta entered
             f1 beta exiting
@@ -2944,7 +2884,7 @@ class SmartThread:
             ("let's do lunch sometime", "Tuesday afternoons are best")]}
             mainline alpha exiting
 
-        **Example 5:** receive any mixture of single and multiple
+        **Example 4:** receive any mixture of single and multiple
         messages from specified remote threads
 
         .. code-block:: python
@@ -3005,7 +2945,7 @@ class SmartThread:
 
             del SmartThread._registry['alpha']
 
-        Expected output for Example 5::
+        Expected output for Example 4::
 
             mainline alpha entered
             f1 beta entered
@@ -4832,11 +4772,9 @@ class SmartThread:
         self.cmd_runner = threading.current_thread().name
 
         if not remotes:
-            if self.request not in (ReqType.Smart_recv,
-                                    ReqType.Smart_wait):
-                raise SmartThreadInvalidInput(
-                    f'{self.name} {self.request.value} '
-                    'request with no targets specified.')
+            raise SmartThreadInvalidInput(
+                f'{self.name} {self.request.value} '
+                'request with no targets specified.')
         else:
             if isinstance(remotes, str):
                 remotes = {remotes}
@@ -4849,10 +4787,6 @@ class SmartThread:
             timeout_value=timer.timeout_value(),
             log_msg=log_msg)
 
-        # if self.request not in (ReqType.Smart_start,
-        #                         ReqType.Smart_unreg,
-        #                         ReqType.Smart_join):
-        #     self._verify_thread_is_current()
         if not (self.request == ReqType.Smart_start and self.name in remotes):
             self._verify_thread_is_current()
 
