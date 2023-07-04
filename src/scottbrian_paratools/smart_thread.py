@@ -974,7 +974,6 @@ class SmartThread:
         self.resumed_targets: set[str] = set()
         self.synced_targets: set[str] = set()
 
-
         self.work_remotes: set[str] = set()
         self.work_pk_remotes: list[PairKeyRemote] = []
         self.missing_remotes: set[str] = set()

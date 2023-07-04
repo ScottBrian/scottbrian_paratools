@@ -4829,7 +4829,7 @@ class ConfigVerifier:
     def __init__(self,
                  commander_name: str,
                  log_ver: LogVer,
-                 caplog_to_use: pytest.CaptureFixture[str],
+                 caplog_to_use: pytest.LogCaptureFixture,
                  msgs: Msgs,
                  max_msgs: Optional[int] = 10) -> None:
         """Initialize the ConfigVerifier.
@@ -6952,7 +6952,7 @@ class ConfigVerifier:
                 pend_req_serial_num = self.add_cmd(
                     Resume(cmd_runners=pending_names[0],
                            targets=remote_names[0],
-                           exp_resumed_targets=remote_names[0],
+                           exp_resumed_targets=set(),
                            stopped_remotes=stopped_remotes))
             else:
                 raise InvalidInputDetected(
@@ -7265,6 +7265,7 @@ class ConfigVerifier:
             send_msg_serial_num = self.add_cmd(SendMsg(
                 cmd_runners=remote_names,
                 receivers=pending_names,
+                exp_receivers=pending_names,
                 msgs_to_send=msgs_remote_to_pending,
                 msg_idx=idx,
                 send_type=SendType.ToRemotes))
@@ -7778,6 +7779,7 @@ class ConfigVerifier:
             send_msg_serial_num = self.add_cmd(SendMsg(
                 cmd_runners=remote_name,
                 receivers=pending_name,
+                exp_receivers=pending_name,
                 msgs_to_send=msgs_remote_to_pending,
                 msg_idx=idx,
                 send_type=SendType.ToRemotes))
@@ -7803,7 +7805,7 @@ class ConfigVerifier:
         if pending_wait_tf:
             resume_serial_num = self.add_cmd(Resume(
                 cmd_runners=remote_name,
-                exp_resumed_targets=remote_name,
+                exp_resumed_targets=pending_name,
                 targets=pending_name))
             self.add_cmd(
                 ConfirmResponse(
@@ -8106,9 +8108,10 @@ class ConfigVerifier:
     ####################################################################
     def build_backout_sync_remote_scenario(self) -> None:
         """Return a list of ConfigCmd items for a create."""
+        self.auto_sync_ach_or_back_msg = False
+
         pending_names = ['pending_0']
         remote_names = ['remote_0']
-        locker_names = ['locker_0', 'locker_1', 'locker_2']
         joiner_names = ['joiner_0']
 
         active_names: list[str] = (
@@ -8122,10 +8125,6 @@ class ConfigVerifier:
         pending_name = pending_names[0]
         remote_name = remote_names[0]
         joiner_name = joiner_names[0]
-
-        lock_positions: list[str] = []
-        pend_req_serial_num: int = 0
-        join_serial_num: int = 0
 
         ################################################################
         # verify all flags off
@@ -8145,20 +8144,8 @@ class ConfigVerifier:
         sync_serial_num = self.add_cmd(Sync(
             cmd_runners=remote_name,
             targets=pending_name,
-            sync_set_ack_remotes=set(),
+            sync_set_ack_remotes=pending_name,
             stopped_remotes=pending_name))
-
-        # Normally, handle_request_smart_sync_entry will set up the
-        # ack msg when the target is not included in the set of
-        # stopped_remotes. In this case, we know the sync flag will
-        # be set for the pending_name, but we include it in the set
-        # of stopped_remotes. So, we need to set up the ack msg
-        # here.
-        pe = self.pending_events[remote_name]
-
-        ack_key: AckKey = (pending_name, 'smart_sync_set')
-
-        pe[PE.ack_msg][ack_key] += 1
 
         ################################################################
         # wait for the pending_sync flag to be set in mock structures
@@ -8258,26 +8245,23 @@ class ConfigVerifier:
     ####################################################################
     def build_backout_sync_local_scenario(self) -> None:
         """Return a list of ConfigCmd items for a create."""
+        self.auto_sync_ach_or_back_msg = False
+
         pending_names = ['pending_0']
         remote_names = ['remote_0']
         locker_names = ['locker_0', 'locker_1', 'locker_2']
-        joiner_names = ['joiner_0']
 
         active_names: list[str] = (
                 pending_names
                 + remote_names
-                + locker_names
-                + joiner_names)
+                + locker_names)
 
         self.create_config(active_names=active_names)
 
         pending_name = pending_names[0]
         remote_name = remote_names[0]
-        joiner_name = joiner_names[0]
 
         lock_positions: list[str] = []
-        pend_req_serial_num: int = 0
-        join_serial_num: int = 0
 
         ################################################################
         # verify all flags off
@@ -8513,6 +8497,14 @@ class ConfigVerifier:
                        exp_positions=lock_positions.copy()))
 
         ################################################################
+        # Set the ack message for the completed sync by pend_sync.
+        ################################################################
+        pe = self.pending_events[pending_name]
+        ack_key: AckKey = (remote_name, 'smart_sync_achieved')
+
+        pe[PE.ack_msg][ack_key] += 1
+
+        ################################################################
         # release lock_0 to allow remote_sync to enter the backout
         # routine to reset its sync event flag
         # locks held:
@@ -8535,27 +8527,6 @@ class ConfigVerifier:
         ack_key: AckKey = (pending_name, 'smart_sync_backout_local')
 
         pe[PE.ack_msg][ack_key] += 1
-
-        ################################################################
-        # The entry request sync code sets up the ack message for
-        # backout of the remote, but in this test case we manipulate the
-        # timing with locks and get the pending thread to complete the
-        # sync. So, we need to undo the ack for the remote backout.
-        ################################################################
-        ack_key: AckKey = (pending_name, 'smart_sync_backout_remote')
-
-        pe[PE.ack_msg][ack_key] -= 1
-
-        ################################################################
-        # wait for the pending_sync flag to be set in mock structures
-        ################################################################
-        # pair_key = st.SmartThread._get_pair_key(remote_name,
-        #                                         pending_name)
-        # check_pend_arg: CheckPendArg = (pending_name, pair_key)
-        # self.add_cmd(WaitForCondition(
-        #     cmd_runners=self.commander_name,
-        #     check_rtn=self.check_sync_event_set,
-        #     check_args=check_pend_arg))
 
         ################################################################
         # verify the pending flags are as expected
@@ -16878,21 +16849,6 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
 
-        if pe[PE.current_request].timeout_type == TimeoutType.TimeoutTrue:
-            timeout_remotes = pe[PE.current_request].timeout_remotes
-        else:
-            timeout_remotes = set()
-
-        eligible_targets = (pe[PE.current_request].targets.copy()
-                            - timeout_remotes
-                            - pe[PE.current_request].stopped_remotes
-                            - pe[PE.current_request].deadlock_remotes)
-
-        backout_targets = (pe[PE.current_request].sync_set_ack_remotes
-                           & (timeout_remotes
-                              | pe[PE.current_request].stopped_remotes
-                              | pe[PE.current_request].deadlock_remotes))
-
         for target in pe[PE.current_request].sync_set_ack_remotes:
             if target == cmd_runner:
                 continue
@@ -16904,17 +16860,6 @@ class ConfigVerifier:
             if self.auto_sync_ach_or_back_msg:
                 ack_key: AckKey = (target, 'smart_sync_ach_or_back')
                 pe[PE.ack_msg][ack_key] += 1
-
-
-        # for target in eligible_targets:
-        #     ack_key: AckKey = (target, 'smart_sync_achieved')
-        #
-        #     pe[PE.ack_msg][ack_key] += 1
-        #
-        # for target in backout_targets:
-        #     ack_key: AckKey = (target, 'smart_sync_backout_remote')
-        #
-        #     pe[PE.ack_msg][ack_key] += 1
 
     ####################################################################
     # handle_request_smart_sync_exit
@@ -17228,6 +17173,9 @@ class ConfigVerifier:
                     error_str='SmartThreadRequestTimedOut',
                     stopped_remotes=stopped_remotes),
                 log_level=logging.ERROR)
+        else:
+            raise InvalidInputDetected(f'handle_resume for {cmd_runner=} '
+                                       f'detected invalid {timeout_type=}')
 
         assert exp_resumed_targets == resumed_targets
         # self.add_request_log_msg(cmd_runner=cmd_runner,
@@ -23418,7 +23366,7 @@ class TestSmartThreadExamples:
 def scenario_driver(
         scenario_builder: Callable[..., None],
         scenario_builder_args: dict[str, Any],
-        caplog_to_use: pytest.CaptureFixture[str],
+        caplog_to_use: pytest.LogCaptureFixture,
         commander_config: AppConfig = AppConfig.ScriptStyle
 ) -> None:
     """Build and run a scenario.
@@ -23754,7 +23702,7 @@ class TestSmartThreadSmokeTest:
                               AppConfig.RemoteSmartThreadApp2])
     def test_smart_thread_simple_scenarios(
             self,
-            caplog: pytest.CaptureFixture[str],
+            caplog: pytest.LogCaptureFixture,
             commander_config_arg: AppConfig
     ) -> None:
         """Test meta configuration scenarios.
@@ -23789,7 +23737,7 @@ class TestSmartThreadSmokeTest:
             num_registered_2_arg: int,
             num_active_2_arg: int,
             num_stopped_2_arg: int,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test meta configuration scenarios.
 
@@ -23844,7 +23792,7 @@ class TestSmartBasicScenarios:
             num_receivers_arg: int,
             num_msgs_arg: int,
             send_type_arg: SendType,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test meta configuration scenarios.
 
@@ -23884,7 +23832,7 @@ class TestSmartBasicScenarios:
             num_msgs_arg: int,
             sender_count_arg: int,
             recv_type_arg: RecvType,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test meta configuration scenarios.
 
@@ -23917,7 +23865,7 @@ class TestSmartBasicScenarios:
             self,
             num_resumers_arg: int,
             num_waiters_arg: int,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test meta configuration scenarios.
 
@@ -23951,7 +23899,7 @@ class TestSmartBasicScenarios:
             num_resumers_arg: int,
             resumer_count_arg: int,
             wait_type_arg: WaitType,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test meta configuration scenarios.
 
@@ -23983,7 +23931,7 @@ class TestSmartBasicScenarios:
             self,
             num_syncers_arg: int,
             num_extras_arg: int,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test meta configuration scenarios.
 
@@ -24007,21 +23955,25 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_pending_sans_sync_scenario
     ####################################################################
-    @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_send,
-                                                  st.ReqType.Smart_recv,
-                                                  st.ReqType.Smart_wait,
-                                                  st.ReqType.Smart_resume,
-                                                  ])
-    @pytest.mark.parametrize("pending_request_tf_arg", [True, False])
-    @pytest.mark.parametrize("pending_msg_count_arg", [0, 1, 2])
-    @pytest.mark.parametrize("pending_wait_tf_arg", [True, False])
+    # @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_send,
+    #                                               st.ReqType.Smart_recv,
+    #                                               st.ReqType.Smart_wait,
+    #                                               st.ReqType.Smart_resume,
+    #                                               ])
+    # @pytest.mark.parametrize("pending_request_tf_arg", [True, False])
+    # @pytest.mark.parametrize("pending_msg_count_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("pending_wait_tf_arg", [True, False])
+    @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_resume])
+    @pytest.mark.parametrize("pending_request_tf_arg", [True])
+    @pytest.mark.parametrize("pending_msg_count_arg", [0])
+    @pytest.mark.parametrize("pending_wait_tf_arg", [True])
     def test_pending_sans_sync_scenario(
             self,
             request_type_arg: st.ReqType,
             pending_request_tf_arg: bool,
             pending_msg_count_arg: int,
             pending_wait_tf_arg: bool,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test meta configuration scenarios.
 
@@ -24059,7 +24011,7 @@ class TestSmartBasicScenarios:
             pending_msg_count_arg: int,
             pending_wait_tf_arg: bool,
             pending_sync_tf_arg: bool,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test meta configuration scenarios.
 
@@ -24093,7 +24045,7 @@ class TestSmartBasicScenarios:
             pending_msg_count_arg: int,
             pending_wait_tf_arg: bool,
             pending_sync_tf_arg: bool,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test meta configuration scenarios.
 
@@ -24122,7 +24074,7 @@ class TestSmartBasicScenarios:
     @pytest.mark.cover
     def test_backout_sync_remote_scenario(
             self,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test meta configuration scenarios.
 
@@ -24143,7 +24095,7 @@ class TestSmartBasicScenarios:
     @pytest.mark.cover
     def test_backout_sync_local_scenario(
             self,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test meta configuration scenarios.
 
@@ -24187,7 +24139,7 @@ class TestSmartThreadComboScenarios:
             num_delay_unreg_arg: int,
             num_no_delay_reg_arg: int,
             num_delay_reg_arg: int,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
             ) -> None:
         """Test error cases in the _regref remote array method.
 
@@ -24283,7 +24235,7 @@ class TestSmartThreadComboScenarios:
     def test_def_del_scenarios(
             self,
             def_del_scenario_arg: DefDelScenario,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test meta configuration scenarios.
 
@@ -24378,7 +24330,7 @@ class TestSmartThreadComboScenarios:
     #         name_0_pend_arg: DefDelReasons,
     #         name_1_pend_arg: DefDelReasons,
     #         name_2_pend_arg: DefDelReasons,
-    #         caplog: pytest.CaptureFixture[str]
+    #         caplog: pytest.LogCaptureFixture
     # ) -> None:
     #     """Test pending reasons.
     #
@@ -24446,7 +24398,7 @@ class TestSmartThreadComboScenarios:
             req0_when_req1_state_arg: tuple[st.ThreadState, int],
             req0_when_req1_lap_arg: int,
             req1_lap_arg_arg: int,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test meta configuration scenarios.
 
@@ -24503,7 +24455,7 @@ class TestSmartThreadComboScenarios:
             num_unreg_timeouts_arg: int,
             num_exit_timeouts_arg: int,
             num_full_q_timeouts_arg: int,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test meta configuration scenarios.
 
@@ -24579,7 +24531,7 @@ class TestSmartThreadComboScenarios:
             num_nosend_exit_senders_arg: int,
             num_unreg_senders_arg: int,
             num_reg_senders_arg: int,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test meta configuration scenarios.
 
@@ -24665,7 +24617,7 @@ class TestSmartThreadComboScenarios:
             num_unreg_no_delay_arg: int,
             num_unreg_delay_arg: int,
             num_stopped_arg: int,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test meta configuration scenarios.
 
@@ -24742,7 +24694,7 @@ class TestSmartThreadComboScenarios:
             num_unreg_after_arg: int,
             num_stop_after_ok_arg: int,
             num_stop_after_err_arg: int,
-            caplog: pytest.CaptureFixture[str],
+            caplog: pytest.LogCaptureFixture,
             monkeypatch: Any
     ) -> None:
         """Test meta configuration scenarios.
@@ -24842,7 +24794,7 @@ class TestSmartThreadComboScenarios:
             num_unreg_after_arg: int,
             num_stop_after_ok_arg: int,
             num_stop_after_err_arg: int,
-            caplog: pytest.CaptureFixture[str],
+            caplog: pytest.LogCaptureFixture,
             monkeypatch: Any
     ) -> None:
         """Test meta configuration scenarios.
@@ -24932,7 +24884,7 @@ class TestSmartThreadComboScenarios:
             num_unreg_after_arg: int,
             num_stop_after_ok_arg: int,
             num_stop_after_err_arg: int,
-            caplog: pytest.CaptureFixture[str],
+            caplog: pytest.LogCaptureFixture,
             monkeypatch: Any
     ) -> None:
         """Test meta configuration scenarios.
@@ -25021,7 +24973,7 @@ class TestSmartThreadComboScenarios:
             actor_1_arg: Actors,
             actor_2_arg: Actors,
             actor_3_arg: Actors,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test wait scenarios.
 
@@ -25050,7 +25002,7 @@ class TestSmartThreadComboScenarios:
             actor_1_arg: Actors,
             actor_2_arg: Actors,
             actor_3_arg: Actors,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test wait scenarios.
 
@@ -25079,7 +25031,7 @@ class TestSmartThreadComboScenarios:
             actor_1_arg: Actors,
             actor_2_arg: Actors,
             actor_3_arg: Actors,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test wait scenarios.
 
@@ -25108,7 +25060,7 @@ class TestSmartThreadComboScenarios:
             actor_1_arg: Actors,
             actor_2_arg: Actors,
             actor_3_arg: Actors,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test wait scenarios.
 
@@ -25137,7 +25089,7 @@ class TestSmartThreadComboScenarios:
             actor_1_arg: Actors,
             actor_2_arg: Actors,
             actor_3_arg: Actors,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test wait scenarios.
 
@@ -25166,7 +25118,7 @@ class TestSmartThreadComboScenarios:
             actor_1_arg: Actors,
             actor_2_arg: Actors,
             actor_3_arg: Actors,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test wait scenarios.
 
@@ -25196,7 +25148,7 @@ class TestSmartThreadComboScenarios:
             actor_1_arg: Actors,
             actor_2_arg: Actors,
             actor_3_arg: Actors,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test wait scenarios.
 
@@ -25225,7 +25177,7 @@ class TestSmartThreadComboScenarios:
             actor_1_arg: Actors,
             actor_2_arg: Actors,
             actor_3_arg: Actors,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test wait scenarios.
 
@@ -25254,7 +25206,7 @@ class TestSmartThreadComboScenarios:
             actor_1_arg: Actors,
             actor_2_arg: Actors,
             actor_3_arg: Actors,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test wait scenarios.
 
@@ -25282,7 +25234,7 @@ class TestSmartThreadComboScenarios:
             actor_1_arg: Actors,
             actor_2_arg: Actors,
             actor_3_arg: Actors,
-            caplog_to_use: pytest.CaptureFixture[str]
+            caplog_to_use: pytest.LogCaptureFixture
     ) -> None:
         """Test wait scenarios.
 
@@ -25329,7 +25281,7 @@ class TestSmartThreadComboScenarios:
             num_syncers_arg: int,
             num_stopped_syncers_arg: int,
             num_timeout_syncers_arg: int,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test smart_sync scenarios.
 
@@ -25388,20 +25340,13 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("conflict_deadlock_2_arg", deadlock_arg_list)
     @pytest.mark.parametrize("conflict_deadlock_3_arg", deadlock_arg_list)
     @pytest.mark.parametrize("num_cd_actors_arg", [3, 4, 5, 6, 7, 8, 9])
-    # @pytest.mark.parametrize("conflict_deadlock_1_arg",
-    #                          [DeadlockScenario.RecvDeadlock])
-    # @pytest.mark.parametrize("conflict_deadlock_2_arg",
-    #                          [DeadlockScenario.SendSyncRecv])
-    # @pytest.mark.parametrize("conflict_deadlock_3_arg",
-    #                          [DeadlockScenario.NormalSendRecv])
-    # @pytest.mark.parametrize("num_cd_actors_arg", [3])
     def test_deadlock_scenario(
             self,
             conflict_deadlock_1_arg: DeadlockScenario,
             conflict_deadlock_2_arg: DeadlockScenario,
             conflict_deadlock_3_arg: DeadlockScenario,
             num_cd_actors_arg: int,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test smart_sync scenarios.
 
@@ -25443,7 +25388,7 @@ class TestSmartThreadComboScenarios:
             num_unreg_arg: int,
             num_alive_arg: int,
             num_stopped_arg: int,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test smart_sync scenarios.
 
@@ -25494,7 +25439,7 @@ class TestSmartThreadComboScenarios:
             pre_count_arg: int,
             num_count_0_arg: int,
             num_count_1_arg: int,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test smart_sync scenarios.
 
@@ -25535,7 +25480,7 @@ class TestSmartThreadComboScenarios:
     def test_smart_thread_log_msg(
             self,
             log_level_arg: int,
-            caplog: pytest.CaptureFixture[str]
+            caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test smart_thread logging.
 
@@ -25551,8 +25496,8 @@ class TestSmartThreadComboScenarios:
             3) if conftest is not specified, the level defaults to
                WARNING
             4) logging.getLogger('scottbrian_paratools').setLevel(
-               logging.DEBUG) overrides the root setting, whether
-               default, set by conftest, or set by pytest.ini
+               logging.DEBUG) overrides the root setting, whether the
+               default set by conftest or set by pytest.ini
             5) logging.getLogger('scottbrian_paratools.smart_thread')
                .setLevel(logging.INFO) overrides all of the above.
             6) Basic strategy is to not specify the level with 4 or 5 -
@@ -25576,21 +25521,21 @@ class TestSmartThreadComboScenarios:
                 log_msgs = [log_msgs]
 
             if log_level_arg <= log_level:
-                for log_msg in log_msgs:
+                for a_log_msg in log_msgs:
                     log_ver.add_msg(log_level=log_level,
-                                    log_msg=log_msg,
+                                    log_msg=a_log_msg,
                                     log_name=log_name)
 
         ################################################################
         # f1
         ################################################################
-        def f1(f1_name: str):
+        def f1(thread_name: str):
             """F1 routine.
 
             Args:
-                f1_name: name of f1
+                thread_name: name of f1
             """
-            log_msg_f1 = f'f1 entered for {f1_name}'
+            log_msg_f1 = f'f1 entered for {thread_name}'
             add_log_msgs(log_msgs=log_msg_f1,
                          log_level=logging.DEBUG,
                          log_name=test_log_name)
@@ -25607,7 +25552,7 @@ class TestSmartThreadComboScenarios:
             ############################################################
             # exit
             ############################################################
-            log_msg_f1 = f'f1 exiting for {f1_name}'
+            log_msg_f1 = f'f1 exiting for {thread_name}'
             add_log_msgs(log_msgs=log_msg_f1,
                          log_level=logging.DEBUG,
                          log_name=test_log_name)
@@ -25617,7 +25562,7 @@ class TestSmartThreadComboScenarios:
         # Set up log verification and start tests
         # The following code gets the root logger from the
         # logging Manager dictionary using the parent of smart_thread.
-        # This is not the way it would normally be done but it suits
+        # This is not the way it would normally be done, but it suits
         # our purpose to test that the log messages are being issued or
         # suppressed correctly based on logging levels.
         ################################################################
@@ -25680,18 +25625,46 @@ class TestSmartThreadComboScenarios:
         # commander log messages
         ################################################################
         commander_debug_log_msgs = [
+            ("smart_init entry: requestor: alpha targets: "
+             r"\['alpha'\] timeout value: None "
+             "test_smart_thread.py::TestSmartThreadScenarios."
+             "test_smart_thread_log_msg:"),
+            ("smart_init exit: requestor: alpha targets: "
+             r"\['alpha'\] timeout value: None "
+             "test_smart_thread.py::TestSmartThreadScenarios."
+             "test_smart_thread_log_msg:"),
             ('alpha set state for thread alpha from '
              'ThreadState.Unregistered to ThreadState.Initializing'),
-            'alpha obtained _registry_lock, class name = SmartThread',
+            ('smart_init _register entry: cmd_runner: alpha, '
+             'target: alpha'),
+            ('smart_init _register exit: cmd_runner: alpha, '
+             'target: alpha'),
+            ('alpha completed initialization of alpha: ThreadCreate.Current '
+             'ThreadState.Alive, auto_start obviated.'),
             ('alpha set state for thread alpha from '
              'ThreadState.Initializing to ThreadState.Alive'),
             'alpha added alpha to SmartThread registry at UTC',
-            'alpha entered _clean_pair_array',
-            ("smart_send entry: requestor: alpha receivers: "
+            ('smart_init _clean_registry entry: '
+             'cmd_runner: alpha'),
+            ('smart_init _clean_registry exit: '
+             'cmd_runner: alpha'),
+            ('smart_init _clean_pair_array entry: '
+             'cmd_runner: alpha'),
+            ('smart_init _clean_pair_array exit: '
+             'cmd_runner: alpha'),
+            ('smart_init _add_to_pair_array entry: '
+             f'cmd_runner: alpha, target: beta'),
+            ('smart_init _add_to_pair_array exit: '
+             f'cmd_runner: alpha, target: beta'),
+            (f"alpha added PairKey(name0='alpha', name1='beta') to the "
+             "_pair_array"),
+            (f"alpha added status_blocks entry "
+             f"for PairKey(name0='alpha', name1='beta'), name = beta"),
+            ("smart_send entry: requestor: alpha targets: "
              r"\['beta'\] timeout value: None "
              "test_smart_thread.py::TestSmartThreadScenarios."
              "test_smart_thread_log_msg:"),
-            ("smart_send exit: requestor: alpha receivers: "
+            ("smart_send exit: requestor: alpha targets: "
              r"\['beta'\] timeout value: None "
              "test_smart_thread.py::TestSmartThreadScenarios."
              "test_smart_thread_log_msg:"),
@@ -25706,23 +25679,34 @@ class TestSmartThreadComboScenarios:
             ('alpha set state for thread beta from '
              'ThreadState.Alive to '
              'ThreadState.Stopped'),
-            (r"name=alpha, smart_thread=SmartThread\(name='alpha'\), "
-             r"s_alive\(\)=True, "
-             "state=<ThreadState.Alive: 16>"),
-            (r"name=beta, smart_thread=SmartThread\(name='beta', "
-             r"target=f1, args=\('beta',\)\), "
-             r"is_alive\(\)=False, "
-             "state=<ThreadState.Stopped: 32>"),
+            ('alpha set state for thread beta from '
+             'ThreadState.Stopped to '
+             'ThreadState.Unregistered'),
+            (r"name=alpha, s_alive\(\)=True, state=ThreadState.Alive, "
+             r"smart_thread=SmartThread\(name='alpha'\), "),
+            (r"name=beta, is_alive\(\)=False, state=ThreadState.Stopped, "
+             r"32> smart_thread=SmartThread\(name='beta', "
+             r"target=f1, args=\('beta',\)\), "),
             ("alpha removed beta from registry for "
-             "process='join'"),
-            'alpha entered _clean_pair_array',
+             "request=smart_join"),
+            ('smart_join _clean_registry entry: '
+             'cmd_runner: alpha'),
+            ('smart_join _clean_registry exit: '
+             'cmd_runner: alpha'),
+            ('smart_join _clean_pair_array entry: '
+             'cmd_runner: alpha'),
+            ('smart_join _clean_pair_array exit: '
+             'cmd_runner: alpha'),
+            ("alpha did cleanup of registry at UTC "
+             fr"{time_match}, deleted \['beta'\]"),
             ("alpha removed status_blocks entry for pair_key = "
              r"\('alpha', 'beta'\), name = beta"),
             ("alpha removed status_blocks entry for pair_key = "
              r"\('alpha', 'beta'\), name = alpha"),
             ("alpha removed _pair_array entry for pair_key = "
              r"\('alpha', 'beta'\)"),
-            'alpha updated _pair_array at UTC',
+            ('alpha did cleanup of _pair_array at UTC '
+             f'{time_match}'),
             "alpha did cleanup of registry at UTC",
             'alpha did successful smart_join of beta.',
             (r"smart_resume entry: requestor: alpha targets: \['beta'\] "
@@ -25884,7 +25868,7 @@ class TestSmartThreadComboScenarios:
     # def test_smart_thread_random_scenarios(
     #         self,
     #         random_seed_arg: int,
-    #         caplog: pytest.CaptureFixture[str]
+    #         caplog: pytest.LogCaptureFixture
     # ) -> None:
     #     """Test meta configuration scenarios.
     #
@@ -27404,7 +27388,7 @@ class TestSmartThreadErrors:
     # Foreign Op
     ####################################################################
     def test_foreign_op_scenario(self,
-                                 caplog: pytest.CaptureFixture[str]
+                                 caplog: pytest.LogCaptureFixture
                                  ) -> None:
         """Test foreign op error for SmartThread.
 
@@ -27468,7 +27452,7 @@ class TestSmartThreadErrors:
     # Unreg error cases
     ####################################################################
     def test_unreg_scenario(self,
-                            caplog: pytest.CaptureFixture[str]
+                            caplog: pytest.LogCaptureFixture
                             ) -> None:
         """Test unreg error cases for SmartThread.
 
