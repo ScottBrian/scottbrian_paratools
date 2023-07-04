@@ -13741,6 +13741,7 @@ class ConfigVerifier:
             send_msg_serial_num = self.add_cmd(SendMsg(
                 cmd_runners=senders,
                 receivers=receivers,
+                exp_receivers=receivers,
                 msgs_to_send=msgs_to_send,
                 msg_idx=msg_idx,
                 send_type=send_type))
@@ -13767,7 +13768,7 @@ class ConfigVerifier:
                 confirmers=receivers))
 
     ####################################################################
-    # build_send_scenario
+    # build_sender_resumer_count_scenario
     ####################################################################
     def build_sender_resumer_count_scenario(
             self,
@@ -13806,6 +13807,7 @@ class ConfigVerifier:
             request_serial_num = self.add_cmd(SendMsg(
                 cmd_runners=sender_resumer,
                 receivers=receiver_waiter,
+                exp_receivers=receiver_waiter,
                 msgs_to_send=msgs_to_send,
                 msg_idx=0))
 
@@ -14043,6 +14045,7 @@ class ConfigVerifier:
                 send_msg_serial_num = self.add_cmd(SendMsg(
                     cmd_runners=senders,
                     receivers=receiver,
+                    exp_receivers=receiver,
                     msgs_to_send=msgs_to_send,
                     msg_idx=msg_idx,
                     send_type=SendType.ToRemotes))
@@ -15015,6 +15018,7 @@ class ConfigVerifier:
         send_msg_serial_num = self.add_cmd(
             SendMsg(cmd_runners=['delta', 'echo'],
                     receivers=['alpha', 'beta', 'charlie'],
+                    exp_receivers=['alpha', 'beta', 'charlie'],
                     msgs_to_send=msgs_to_send,
                     msg_idx=0,
                     log_msg='SendCmd test log message 1'))
