@@ -1287,7 +1287,7 @@ class SmartThread:
             print_time = (SmartThread._registry_last_update
                           .strftime("%H:%M:%S.%f"))
             logger.debug(f'{self.cmd_runner} did cleanup of registry at UTC '
-                         f'{print_time}, deleted {keys_to_del}')
+                         f'{print_time}, deleted {sorted(keys_to_del)}')
 
         logger.debug(f'{self.request.value} _clean_registry exit: '
                      f'cmd_runner: {self.cmd_runner}')

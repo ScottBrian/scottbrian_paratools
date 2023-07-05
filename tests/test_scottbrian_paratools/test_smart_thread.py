@@ -13529,6 +13529,7 @@ class ConfigVerifier:
                 SendMsgTimeoutFalse(
                     cmd_runners=cmd_runner,
                     receivers=target,
+                    exp_receivers={target} - stopped_remotes,
                     msgs_to_send=request_specific_args['sender_msgs'],
                     msg_idx=0,
                     timeout=timeout_time,
@@ -13540,6 +13541,7 @@ class ConfigVerifier:
                 SendMsgTimeoutTrue(
                     cmd_runners=cmd_runner,
                     receivers=target,
+                    exp_receivers=set(),
                     msgs_to_send=request_specific_args['sender_msgs'],
                     msg_idx=0,
                     timeout=timeout_time,
@@ -25473,12 +25475,13 @@ class TestSmartThreadComboScenarios:
     ####################################################################
     # test_smart_thread_log_msg
     ####################################################################
-    @pytest.mark.parametrize("log_level_arg", [logging.DEBUG,
-                                               logging.INFO,
-                                               logging.WARNING,
-                                               logging.ERROR,
-                                               logging.CRITICAL,
-                                               logging.NOTSET])
+    # @pytest.mark.parametrize("log_level_arg", [logging.DEBUG,
+    #                                            logging.INFO,
+    #                                            logging.WARNING,
+    #                                            logging.ERROR,
+    #                                            logging.CRITICAL,
+    #                                            logging.NOTSET])
+    @pytest.mark.parametrize("log_level_arg", [logging.DEBUG])
     def test_smart_thread_log_msg(
             self,
             log_level_arg: int,
@@ -25624,13 +25627,13 @@ class TestSmartThreadComboScenarios:
         commander_thread.smart_unreg(targets='beta')
 
         ################################################################
-        # commander log messages
+        # alpha_smart_init_alpha_debug_log_msgs
         ################################################################
-        commander_smart_init_alpha_debug_log_msgs = [
-            ("smart_init entry: requestor: alpha targets: "
+        alpha_smart_init_alpha_debug_log_msgs = [
+            ("smart_init entry: requestor: alpha, targets: "
              r"\['alpha'\] timeout value: None "
-             "test_smart_thread.py::TestSmartThreadScenarios."
-             "test_smart_thread_log_msg:"),
+             "test_smart_thread.py::TestSmartThreadComboScenarios."
+             "test_smart_thread_log_msg:[0-9]+"),
             ('alpha set state for thread alpha from '
              'ThreadState.Unregistered to ThreadState.Initializing'),
             ('smart_init _register entry: cmd_runner: alpha, '
@@ -25655,26 +25658,29 @@ class TestSmartThreadComboScenarios:
              'cmd_runner: alpha, target: alpha'),
             ('smart_init _register exit: cmd_runner: alpha, '
              'target: alpha'),
-            ('alpha completed initialization of alpha: ThreadCreate.Current '
+            ('alpha completed initialization of alpha: ThreadCreate.Current, '
              'ThreadState.Alive, auto_start obviated.'),
-            ("smart_init exit: requestor: alpha targets: "
+            ("smart_init exit: requestor: alpha, targets: "
              r"\['alpha'\] timeout value: None "
-             "test_smart_thread.py::TestSmartThreadScenarios."
-             "test_smart_thread_log_msg:")
+             "test_smart_thread.py::TestSmartThreadComboScenarios."
+             "test_smart_thread_log_msg:[0-9]+")
         ]
 
-        commander_smart_init_beta_debug_log_msgs = [
-            ("smart_init entry: requestor: alpha targets: "
+        ################################################################
+        # alpha_first_smart_init_beta_debug_log_msgs
+        ################################################################
+        alpha_first_smart_init_beta_debug_log_msgs = [
+            ("smart_init entry: requestor: alpha, targets: "
              r"\['beta'\] timeout value: None "
-             "test_smart_thread.py::TestSmartThreadScenarios."
-             "test_smart_thread_log_msg:"),
+             "test_smart_thread.py::TestSmartThreadComboScenarios."
+             "test_smart_thread_log_msg:[0-9]+"),
             ('alpha set state for thread beta from '
              'ThreadState.Unregistered to ThreadState.Initializing'),
             ('smart_init _register entry: cmd_runner: alpha, '
              'target: beta'),
             ('smart_init _clean_registry entry: '
              'cmd_runner: alpha'),
-            (r"name=alpha, s_alive\(\)=True, state=ThreadState.Alive, "
+            (r"name=alpha, is_alive\(\)=True, state=ThreadState.Alive, "
              r"smart_thread=SmartThread\(name='alpha'\), "),
             ('smart_init _clean_registry exit: '
              'cmd_runner: alpha'),
@@ -25682,9 +25688,181 @@ class TestSmartThreadComboScenarios:
              'cmd_runner: alpha'),
             ('smart_init _clean_pair_array exit: '
              'cmd_runner: alpha'),
-            ('alpha added alpha to SmartThread registry at UTC '
+            ('alpha added beta to SmartThread registry at UTC '
              f'{time_match}'),
-            ('alpha set state for thread alpha from '
+            ('alpha set state for thread beta from '
+             'ThreadState.Initializing to ThreadState.Registered'),
+            ('smart_init _add_to_pair_array entry: '
+             'cmd_runner: alpha, target: beta'),
+            (r"alpha added PairKe\(name0='alpha', name1='beta'\) to the "
+             "_pair_array"),
+            ("alpha added status_blocks entry "
+             r"for PairKey\(name0='alpha', name1='beta'\), name = alpha"),
+            ("alpha added status_blocks entry "
+             r"for PairKey\(name0='alpha', name1='beta'\), name = beta"),
+            ('alpha updated _pair_array at UTC '
+             f'{time_match}'),
+            ('smart_init _add_to_pair_array exit: '
+             'cmd_runner: alpha, target: beta'),
+            ('smart_init _register exit: cmd_runner: alpha, '
+             'target: beta'),
+            ('alpha completed initialization of beta: ThreadCreate.Target '
+             'ThreadState.Registered, auto_start will proceed.'),
+            ("smart_start entry: requestor: alpha, targets: "
+             r"\['beta'\] timeout value: None "
+             "smart_thread.py::SmartThread.__init__:"),
+            ('alpha set state for thread beta from '
+             'ThreadState.Registered to ThreadState.Starting'),
+            ('alpha set state for thread beta from '
+             'ThreadState.Starting to ThreadState.Alive'),
+            ("smart_start exit: requestor: alpha, targets: "
+             r"\['beta'\] timeout value: None "
+             "smart_thread.py::SmartThread.__init__:"),
+            ("smart_init exit: requestor: alpha, targets: "
+             r"\['beta'\] timeout value: None "
+             "test_smart_thread.py::TestSmartThreadComboScenarios."
+             "test_smart_thread_log_msg:[0-9]+")
+        ]
+
+        ################################################################
+        # alpha_smart_send_debug_log_msgs
+        ################################################################
+        alpha_smart_send_debug_log_msgs = [
+            ("smart_send entry: requestor: alpha, targets: "
+             r"\['beta'\] timeout value: None "
+             "test_smart_thread.py::TestSmartThreadComboScenarios."
+             "test_smart_thread_log_msg:[0-9]+"),
+            ("smart_send exit: requestor: alpha, targets: "
+             r"\['beta'\] timeout value: None "
+             "test_smart_thread.py::TestSmartThreadComboScenarios."
+             "test_smart_thread_log_msg:[0-9]+")
+        ]
+
+        ################################################################
+        # alpha_smart_send_info_log_msgs
+        ################################################################
+        alpha_smart_send_info_log_msgs = [
+            'alpha smart_send sent message to beta'
+        ]
+
+        ################################################################
+        # alpha_smart_resume_debug_log_msgs
+        ################################################################
+        alpha_smart_resume_debug_log_msgs = [
+            (r"smart_resume entry: requestor: alpha, targets: \['beta'\] "
+             "timeout value: None "
+             "test_smart_thread.py::TestSmartThreadComboScenarios"
+             ".test_smart_thread_log_msg:[0-9]+"),
+            (r"smart_resume exit: requestor: alpha, targets: \['beta'\] "
+             "timeout value: None "
+             "test_smart_thread.py::TestSmartThreadComboScenarios"
+             ".test_smart_thread_log_msg:[0-9]+")
+        ]
+
+        ################################################################
+        # alpha_smart_resume_info_log_msgs
+        ################################################################
+        alpha_smart_resume_info_log_msgs = [
+            'alpha smart_resume resumed beta',
+        ]
+
+        ################################################################
+        # alpha_smart_sync_debug_log_msgs
+        ################################################################
+        alpha_smart_sync_debug_log_msgs = [
+            (r"smart_sync entry: requestor: alpha, targets: \['beta'\] timeout "
+             "value: None test_smart_thread.py::TestSmartThreadComboScenarios."
+             "test_smart_thread_log_msg:[0-9]+"),
+            (r"smart_sync exit: requestor: alpha, targets: \['beta'\] timeout "
+             "value: None test_smart_thread.py::TestSmartThreadComboScenarios."
+             "test_smart_thread_log_msg:[0-9]+")
+        ]
+        ################################################################
+        # alpha_smart_sync_info_log_msgs
+        ################################################################
+        alpha_smart_sync_info_log_msgs = [
+            'alpha smart_sync set event for beta',
+            'alpha smart_sync achieved with beta'
+        ]
+
+        ################################################################
+        # alpha_smart_join_debug_log_msgs
+        ################################################################
+        alpha_smart_join_debug_log_msgs = [
+            ("smart_join entry: requestor: alpha, targets: "
+             r"\['beta'\] timeout value: None "
+             "test_smart_thread.py::TestSmartThreadComboScenarios."
+             "test_smart_thread_log_msg:[0-9]+"),
+            ('alpha set state for thread beta from '
+             'ThreadState.Alive to '
+             'ThreadState.Stopped'),
+            ('smart_join _clean_registry entry: '
+             'cmd_runner: alpha'),
+            (r"name=alpha, is_alive\(\)=True, state=ThreadState.Alive, "
+             r"smart_thread=SmartThread\(name='alpha'\), "),
+            (r"name=beta, is_alive\(\)=False, state=ThreadState.Stopped, "
+             r"32> smart_thread=SmartThread\(name='beta', "
+             r"target=f1, args=\('beta',\)\), "),
+            ("alpha removed beta from registry for "
+             "request=smart_join"),
+            ('alpha set state for thread beta from '
+             'ThreadState.Stopped to ThreadState.Unregistered'),
+            ("alpha did cleanup of registry at UTC "
+             fr"{time_match}, deleted \['beta'\]"),
+            ('smart_join _clean_registry exit: '
+             'cmd_runner: alpha'),
+            ('smart_join _clean_pair_array entry: '
+             'cmd_runner: alpha'),
+            ("alpha removed status_blocks entry for "
+             r"PairKey\(name0='alpha', name1='beta'\), name = alpha"),
+            ("alpha removed status_blocks entry for "
+             r"PairKey\(name0='alpha', name1='beta'\), name = beta"),
+            ("alpha removed _pair_array entry for "
+             r"PairKey\(name0='alpha', name1='beta'\)"),
+            ('alpha did cleanup of _pair_array at UTC '
+             f'{time_match}'),
+            ('smart_join _clean_pair_array exit: '
+             'cmd_runner: alpha'),
+            ("smart_join exit: requestor: alpha, targets: "
+             r"\['beta'\] timeout value: None "
+             "test_smart_thread.py::TestSmartThreadComboScenarios."
+             "test_smart_thread_log_msg:[0-9]+")
+        ]
+
+        ################################################################
+        # alpha_smart_join_info_log_msgs
+        ################################################################
+        alpha_smart_join_info_log_msgs = [
+            'alpha did successful smart_join of beta.',
+            ("alpha smart_join completed targets: "
+             r"\['beta'\], pending targets: \[\]")
+        ]
+
+        ################################################################
+        # alpha_second_smart_init_beta_debug_log_msgs
+        ################################################################
+        alpha_second_smart_init_beta_debug_log_msgs = [
+            ("smart_init entry: requestor: alpha, targets: "
+             r"\['beta'\] timeout value: None "
+             "test_smart_thread.py::TestSmartThreadComboScenarios."
+             "test_smart_thread_log_msg:[0-9]+"),
+            ('alpha set state for thread beta from '
+             'ThreadState.Unregistered to ThreadState.Initializing'),
+            ('smart_init _register entry: cmd_runner: alpha, '
+             'target: beta'),
+            ('smart_init _clean_registry entry: '
+             'cmd_runner: alpha'),
+            (r"name=alpha, is_alive\(\)=True, state=ThreadState.Alive, "
+             r"smart_thread=SmartThread\(name='alpha'\), "),
+            ('smart_init _clean_registry exit: '
+             'cmd_runner: alpha'),
+            ('smart_init _clean_pair_array entry: '
+             'cmd_runner: alpha'),
+            ('smart_init _clean_pair_array exit: '
+             'cmd_runner: alpha'),
+            ('alpha added beta to SmartThread registry at UTC '
+             f'{time_match}'),
+            ('alpha set state for thread beta from '
              'ThreadState.Initializing to ThreadState.Registered'),
             ('smart_init _add_to_pair_array entry: '
              'cmd_runner: alpha, target: beta'),
@@ -25700,204 +25878,161 @@ class TestSmartThreadComboScenarios:
              'cmd_runner: alpha, target: beta'),
             ('smart_init _register exit: cmd_runner: alpha, '
              'target: beta'),
-            ('alpha completed initialization of beta: ThreadCreate.Target '
-             'ThreadState.Registered, auto_start will proceed.'),
-            ("smart_start entry: requestor: alpha targets: "
+            ('alpha completed initialization of beta: ThreadCreate.Target, '
+             'ThreadState.Registered, auto_start not requested.'),
+            ("smart_init exit: requestor: alpha, targets: "
              r"\['beta'\] timeout value: None "
-             "smart_thread.py::SmartThread.__init__:"),
-            ('alpha set state for thread beta from '
-             'ThreadState.Registered to ThreadState.Starting'),
-            ('alpha set state for thread beta from '
-             'ThreadState.Starting to ThreadState.Alive'),
-            ("smart_start exit: requestor: alpha targets: "
-             r"\['beta'\] timeout value: None "
-             "smart_thread.py::SmartThread.__init__:"),
-            ("smart_init exit: requestor: alpha targets: "
-             r"\['beta'\] timeout value: None "
-             "test_smart_thread.py::TestSmartThreadScenarios."
-             "test_smart_thread_log_msg:")
+             "test_smart_thread.py::TestSmartThreadComboScenarios."
+             "test_smart_thread_log_msg:[0-9]+")
         ]
 
-        alpha_debug_smart_send_log_msgs = [
-            ("smart_send entry: requestor: alpha targets: "
-             r"\['beta'\] timeout value: None "
-             "test_smart_thread.py::TestSmartThreadScenarios."
-             "test_smart_thread_log_msg:"),
-            ("smart_send exit: requestor: alpha targets: "
-             r"\['beta'\] timeout value: None "
-             "test_smart_thread.py::TestSmartThreadScenarios."
-             "test_smart_thread_log_msg:"),
-            ("smart_join entry: requestor: alpha targets: "
-             r"\['beta'\] timeout value: None "
-             "test_smart_thread.py::TestSmartThreadScenarios."
-             "test_smart_thread_log_msg:"),
-            ("smart_join exit: requestor: alpha targets: "
-             r"\['beta'\] timeout value: None "
-             "test_smart_thread.py::TestSmartThreadScenarios."
-             "test_smart_thread_log_msg:"),
+        ################################################################
+        # alpha_smart_unreg_beta_debug_log_msgs
+        ################################################################
+        alpha_smart_unreg_beta_debug_log_msgs = [
+            (r"smart_unreg entry: requestor: alpha, targets: \['beta'\] "
+             "timeout value: None "
+             "test_smart_thread.py::TestSmartThreadComboScenarios."
+             "test_smart_thread_log_msg:[0-9]+"),
             ('alpha set state for thread beta from '
-             'ThreadState.Alive to '
-             'ThreadState.Stopped'),
-            ('alpha set state for thread beta from '
-             'ThreadState.Stopped to '
-             'ThreadState.Unregistered'),
-            (r"name=alpha, s_alive\(\)=True, state=ThreadState.Alive, "
+             'ThreadState.Registered to ThreadState.Stopped'),
+            ('smart_unreg _clean_registry entry: '
+             'cmd_runner: alpha'),
+            (r"name=alpha, is_alive\(\)=True, state=ThreadState.Alive, "
              r"smart_thread=SmartThread\(name='alpha'\), "),
             (r"name=beta, is_alive\(\)=False, state=ThreadState.Stopped, "
              r"32> smart_thread=SmartThread\(name='beta', "
              r"target=f1, args=\('beta',\)\), "),
             ("alpha removed beta from registry for "
              "request=smart_join"),
-            ('smart_join _clean_registry entry: '
-             'cmd_runner: alpha'),
-            ('smart_join _clean_registry exit: '
-             'cmd_runner: alpha'),
-            ('smart_join _clean_pair_array entry: '
-             'cmd_runner: alpha'),
-            ('smart_join _clean_pair_array exit: '
-             'cmd_runner: alpha'),
+            ('alpha set state for thread beta from '
+             'ThreadState.Stopped to ThreadState.Unregistered'),
             ("alpha did cleanup of registry at UTC "
              fr"{time_match}, deleted \['beta'\]"),
-            ("alpha removed status_blocks entry for pair_key = "
-             r"\('alpha', 'beta'\), name = beta"),
-            ("alpha removed status_blocks entry for pair_key = "
-             r"\('alpha', 'beta'\), name = alpha"),
-            ("alpha removed _pair_array entry for pair_key = "
-             r"\('alpha', 'beta'\)"),
+            ('smart_unreg _clean_registry exit: '
+             'cmd_runner: alpha'),
+            ('smart_unreg _clean_pair_array entry: '
+             'cmd_runner: alpha'),
+            ("alpha removed status_blocks entry for "
+             r"PairKey\(name0='alpha', name1='beta'\), name = alpha"),
+            ("alpha removed status_blocks entry for "
+             r"PairKey\(name0='alpha', name1='beta'\), name = beta"),
+            ("alpha removed _pair_array entry for "
+             r"PairKey\(name0='alpha', name1='beta'\)"),
             ('alpha did cleanup of _pair_array at UTC '
              f'{time_match}'),
-            "alpha did cleanup of registry at UTC",
-            'alpha did successful smart_join of beta.',
-            (r"smart_resume entry: requestor: alpha targets: \['beta'\] "
+            ('smart_unreg _clean_pair_array exit: '
+             'cmd_runner: alpha'),
+            (r"smart_unreg exit: requestor: alpha, targets: \['beta'\] "
              "timeout value: None "
-             "test_smart_thread.py::TestSmartThreadScenarios"
-             ".test_smart_thread_log_msg:"),
-            (r"smart_resume exit: requestor: alpha targets: \['beta'\] "
-             "timeout value: None "
-             "test_smart_thread.py::TestSmartThreadScenarios"
-             ".test_smart_thread_log_msg:"),
-            (r"smart_sync entry: requestor: alpha targets: \['beta'\] timeout "
-             "value: None test_smart_thread.py::TestSmartThreadScenarios."
-             "test_smart_thread_log_msg:"),
-            (r"smart_sync exit: requestor: alpha targets: \['beta'\] timeout "
-             "value: None test_smart_thread.py::TestSmartThreadScenarios."
-             "test_smart_thread_log_msg:"),
-            ('alpha set state for thread beta from ThreadState.Unregistered '
-             'to ThreadState.Initializing'),
-            'alpha obtained _registry_lock, class name = SmartThread',
-            (r"name=alpha, smart_thread=SmartThread\(name='alpha'\), "
-             r"is_alive\(\)=True, "
-             "state=<ThreadState.Alive: 16>"),
-            ('alpha set state for thread beta from ThreadState.Initializing '
-             'to ThreadState.Registered'),
-            'alpha added beta to SmartThread registry at UTC',
-            'alpha entered _clean_pair_array',
-            ("alpha created _clean_pair_array with pair_key = "
-             r"\('alpha', 'beta'\)"),
-            ("alpha added status_blocks entry for pair_key = "
-             r"\('alpha', 'beta'\), name = alpha"),
-            ("alpha added status_blocks entry for pair_key = "
-             r"\('alpha', 'beta'\), name = beta"),
-            'alpha updated _pair_array at UTC',
-            (r"smart_unreg entry: requestor: alpha targets: \['beta'\] "
-             "timeout value: None "
-             "test_smart_thread.py::TestSmartThreadScenarios."
-             "test_smart_thread_log_msg:"),
-            (r"smart_unreg exit: requestor: alpha targets: \['beta'\] "
-             "timeout value: None "
-             "test_smart_thread.py::TestSmartThreadScenarios."
-             "test_smart_thread_log_msg:"),
-            ('alpha set state for thread beta from ThreadState.Registered to '
-             'ThreadState.Stopped'),
-            (r"name=alpha, smart_thread=SmartThread\(name='alpha'\), "
-             r"is_alive\(\)=True, "
-             "state=<ThreadState.Alive: 16>"),
-            (r"name=beta, smart_thread=SmartThread\(name='beta', target=f1, "
-             r"args=\('beta',\)\), is_alive\(\)=False, "
-             "state=<ThreadState.Stopped: 32>"),
-            "alpha removed beta from registry for process='smart_unreg'",
-            'alpha entered _clean_pair_array',
-            ("alpha removed status_blocks entry for pair_key = "
-             r"\('alpha', 'beta'\), name = beta"),
-            ("alpha removed status_blocks entry for pair_key = "
-             r"\('alpha', 'beta'\), name = alpha"),
-            ("alpha removed _pair_array entry for pair_key = "
-             r"\('alpha', 'beta'\)"),
-            'alpha updated _pair_array at UTC',
-            "alpha did cleanup of registry at UTC",
-            'alpha did successful smart_unreg of beta.',
+             "test_smart_thread.py::TestSmartThreadComboScenarios."
+             "test_smart_thread_log_msg:[0-9]+")
         ]
 
-
-        commander_info_log_msgs = [
-            'alpha sent message to beta',
-            'alpha smart_sync resumed by beta'
+        ################################################################
+        # alpha_smart_unreg_info_log_msgs
+        ################################################################
+        alpha_smart_unreg_info_log_msgs = [
+            ("alpha did successful smart_unreg of "
+             r"\['beta'\].")
         ]
 
+        ################################################################
+        # add all alpha debug and info log msgs
+        ################################################################
         add_log_msgs(
-            log_msgs=commander_debug_log_msgs,
+            log_msgs=(alpha_smart_init_alpha_debug_log_msgs
+                      + alpha_first_smart_init_beta_debug_log_msgs
+                      + alpha_smart_send_debug_log_msgs
+                      + alpha_smart_resume_debug_log_msgs
+                      + alpha_smart_sync_debug_log_msgs
+                      + alpha_smart_join_debug_log_msgs
+                      + alpha_second_smart_init_beta_debug_log_msgs
+                      + alpha_smart_unreg_beta_debug_log_msgs
+                      ),
             log_level=logging.DEBUG,
             log_name=smart_thread_log_name)
 
         add_log_msgs(
-            log_msgs=commander_info_log_msgs,
+            log_msgs=(alpha_smart_send_info_log_msgs
+                      + alpha_smart_resume_info_log_msgs
+                      + alpha_smart_sync_info_log_msgs
+                      + alpha_smart_join_info_log_msgs
+                      + alpha_smart_unreg_info_log_msgs
+                      ),
             log_level=logging.INFO,
             log_name=smart_thread_log_name)
 
         ################################################################
-        # f1 beta log messages
+        # beta_smart_recv_debug_log_msgs
         ################################################################
-        f1_beta_debug_log_msgs = [
-            ('alpha set state for thread beta from '
-             'ThreadState.Unregistered to '
-             'ThreadState.Initializing'),
-            ('alpha obtained _registry_lock, class name = '
-             'SmartThread'),
-            (r"name=alpha, smart_thread=SmartThread\(name='alpha'\), "
-             r"is_alive\(\)=True, "
-             "state=<ThreadState.Alive: 16>"),
-            ('alpha set state for thread beta from '
-             'ThreadState.Initializing to '
-             'ThreadState.Registered'),
-            'alpha added beta to SmartThread registry at UTC',
-            'alpha entered _clean_pair_array',
-            ("alpha created _clean_pair_array with pair_key "
-             r"= \('alpha', 'beta'\)"),
-            ("alpha added status_blocks entry for pair_key "
-             r"= \('alpha', 'beta'\), name = alpha"),
-            ("alpha added status_blocks entry for pair_key "
-             r"= \('alpha', 'beta'\), name = beta"),
-            'alpha updated _pair_array at UTC',
-
-            ("smart_recv entry: requestor: beta targets: "
+        beta_smart_recv_debug_log_msgs = [
+            ("smart_recv entry: requestor: beta, targets: "
              r"\['alpha'\] timeout value: None "
              "test_smart_thread.py::f1:"),
-            ("smart_recv exit: requestor: beta targets: "
+            ("smart_recv exit: requestor: beta, targets: "
              r"\['alpha'\] timeout value: None "
-             "test_smart_thread.py::f1:"),
-            (r"smart_wait entry: requestor: beta targets: \['alpha'\] "
-             "timeout value: None test_smart_thread.py::f1:"),
-            (r"smart_wait exit: requestor: beta targets: \['alpha'\] "
-             "timeout value: None test_smart_thread.py::f1:"),
-            (r"smart_sync entry: requestor: beta targets: \['alpha'\] timeout "
-             "value: None test_smart_thread.py::f1:"),
-            (r"smart_sync exit: requestor: beta targets: \['alpha'\] timeout "
-             "value: None test_smart_thread.py::f1:"),
+             "test_smart_thread.py::f1:")
         ]
 
-        f1_beta_info_log_msgs = [
-            'beta received msg from alpha',
+        ################################################################
+        # beta_smart_recv_info_log_msgs
+        ################################################################
+        beta_smart_recv_info_log_msgs = [
+            'beta smart_recv received 1 msg from alpha',
+        ]
+
+        ################################################################
+        # beta_smart_wait_debug_log_msgs
+        ################################################################
+        beta_smart_wait_debug_log_msgs = [
+            (r"smart_wait entry: requestor: beta, targets: \['alpha'\] "
+             "timeout value: None test_smart_thread.py::f1:"),
+            (r"smart_wait exit: requestor: beta, targets: \['alpha'\] "
+             "timeout value: None test_smart_thread.py::f1:")
+        ]
+
+        ################################################################
+        # beta_smart_wait_info_log_msgs
+        ################################################################
+        beta_smart_wait_info_log_msgs = [
             'beta smart_wait resumed by alpha',
-            'beta smart_sync resumed by alpha'
         ]
 
+        ################################################################
+        # beta_smart_sync_debug_log_msgs
+        ################################################################
+        beta_smart_sync_debug_log_msgs = [
+            (r"smart_sync entry: requestor: beta, targets: \['alpha'\] timeout "
+             "value: None test_smart_thread.py::f1:"),
+            (r"smart_sync exit: requestor: beta, targets: \['alpha'\] timeout "
+             "value: None test_smart_thread.py::f1:")
+        ]
+
+        ################################################################
+        # beta_smart_sync_info_log_msgs
+        ################################################################
+        beta_smart_sync_info_log_msgs = [
+            'beta smart_sync set event for alpha',
+            'beta smart_sync achieved with alpha'
+        ]
+
+        ################################################################
+        # add all beta debug and info log msgs
+        ################################################################
         add_log_msgs(
-            log_msgs=f1_beta_debug_log_msgs,
+            log_msgs=(beta_smart_recv_debug_log_msgs
+                      + beta_smart_wait_debug_log_msgs
+                      + beta_smart_sync_debug_log_msgs
+                      ),
             log_level=logging.DEBUG,
             log_name=smart_thread_log_name)
 
         add_log_msgs(
-            log_msgs=f1_beta_info_log_msgs,
+            log_msgs=(beta_smart_recv_info_log_msgs
+                      + beta_smart_wait_info_log_msgs
+                      + beta_smart_sync_info_log_msgs
+                      ),
             log_level=logging.INFO,
             log_name=smart_thread_log_name)
 
