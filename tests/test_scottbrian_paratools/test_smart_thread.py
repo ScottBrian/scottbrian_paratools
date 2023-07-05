@@ -9392,7 +9392,7 @@ class ConfigVerifier:
                 or def_del_scenario == DefDelScenario.ResurrectionWait):
             single_request = True
 
-        if (def_del_scenario == DefDelScenario.Recv0Recv1
+        elif (def_del_scenario == DefDelScenario.Recv0Recv1
                 or def_del_scenario == DefDelScenario.Recv1Recv0
                 or def_del_scenario == DefDelScenario.WaitRecv
                 or def_del_scenario == DefDelScenario.Wait0Wait1
@@ -9400,7 +9400,7 @@ class ConfigVerifier:
                 or def_del_scenario == DefDelScenario.RecvWait):
             double_request = True
 
-        if (def_del_scenario == DefDelScenario.RecvDel
+        elif (def_del_scenario == DefDelScenario.RecvDel
                 or def_del_scenario == DefDelScenario.WaitDel
                 or def_del_scenario == DefDelScenario.RecvAdd
                 or def_del_scenario == DefDelScenario.WaitAdd):
@@ -9489,6 +9489,7 @@ class ConfigVerifier:
             send_msg_serial_num_0 = self.add_cmd(
                 SendMsg(cmd_runners=sender_names[0],
                         receivers=receivers,
+                        exp_receivers=receivers,
                         msgs_to_send=sender_msgs,
                         msg_idx=0))
             self.add_cmd(
@@ -9824,7 +9825,7 @@ class ConfigVerifier:
                        exp_positions=lock_positions.copy()))
 
         ################################################################
-        # Get lock 2 to keep the first smart_recv/wait progressing
+        # Get lock 2 to keep the first smart_recv/wait from progressing
         # beyond the lock obtain in _request_loop.
         ################################################################
         self.add_cmd(
@@ -13517,6 +13518,7 @@ class ConfigVerifier:
                 SendMsg(
                     cmd_runners=cmd_runner,
                     receivers=target,
+                    exp_receivers={target} - stopped_remotes,
                     msgs_to_send=request_specific_args['sender_msgs'],
                     msg_idx=0,
                     stopped_remotes=stopped_remotes))
@@ -20300,7 +20302,7 @@ class ConfigVerifier:
         ################################################################
         # get second smart_recv log msg
         ################################################################
-        search_msg = (f'{receiver_names[1]} smart_recv received [0 - 9]+ '
+        search_msg = (f'{receiver_names[1]} smart_recv received [0-9]+ '
                       f'msg[s]* from {sender_names[0]}')
 
         recv_1_log_msg, recv_1_log_pos = self.get_log_msg(
@@ -25624,12 +25626,8 @@ class TestSmartThreadComboScenarios:
         ################################################################
         # commander log messages
         ################################################################
-        commander_debug_log_msgs = [
+        commander_smart_init_alpha_debug_log_msgs = [
             ("smart_init entry: requestor: alpha targets: "
-             r"\['alpha'\] timeout value: None "
-             "test_smart_thread.py::TestSmartThreadScenarios."
-             "test_smart_thread_log_msg:"),
-            ("smart_init exit: requestor: alpha targets: "
              r"\['alpha'\] timeout value: None "
              "test_smart_thread.py::TestSmartThreadScenarios."
              "test_smart_thread_log_msg:"),
@@ -25637,13 +25635,6 @@ class TestSmartThreadComboScenarios:
              'ThreadState.Unregistered to ThreadState.Initializing'),
             ('smart_init _register entry: cmd_runner: alpha, '
              'target: alpha'),
-            ('smart_init _register exit: cmd_runner: alpha, '
-             'target: alpha'),
-            ('alpha completed initialization of alpha: ThreadCreate.Current '
-             'ThreadState.Alive, auto_start obviated.'),
-            ('alpha set state for thread alpha from '
-             'ThreadState.Initializing to ThreadState.Alive'),
-            'alpha added alpha to SmartThread registry at UTC',
             ('smart_init _clean_registry entry: '
              'cmd_runner: alpha'),
             ('smart_init _clean_registry exit: '
@@ -25652,14 +25643,82 @@ class TestSmartThreadComboScenarios:
              'cmd_runner: alpha'),
             ('smart_init _clean_pair_array exit: '
              'cmd_runner: alpha'),
+            ('alpha added alpha to SmartThread registry at UTC '
+             f'{time_match}'),
+            ('alpha set state for thread alpha from '
+             'ThreadState.Initializing to ThreadState.Registered'),
+            ('alpha set state for thread alpha from '
+             'ThreadState.Registered to ThreadState.Alive'),
             ('smart_init _add_to_pair_array entry: '
-             f'cmd_runner: alpha, target: beta'),
+             'cmd_runner: alpha, target: alpha'),
             ('smart_init _add_to_pair_array exit: '
-             f'cmd_runner: alpha, target: beta'),
+             'cmd_runner: alpha, target: alpha'),
+            ('smart_init _register exit: cmd_runner: alpha, '
+             'target: alpha'),
+            ('alpha completed initialization of alpha: ThreadCreate.Current '
+             'ThreadState.Alive, auto_start obviated.'),
+            ("smart_init exit: requestor: alpha targets: "
+             r"\['alpha'\] timeout value: None "
+             "test_smart_thread.py::TestSmartThreadScenarios."
+             "test_smart_thread_log_msg:")
+        ]
+
+        commander_smart_init_beta_debug_log_msgs = [
+            ("smart_init entry: requestor: alpha targets: "
+             r"\['beta'\] timeout value: None "
+             "test_smart_thread.py::TestSmartThreadScenarios."
+             "test_smart_thread_log_msg:"),
+            ('alpha set state for thread beta from '
+             'ThreadState.Unregistered to ThreadState.Initializing'),
+            ('smart_init _register entry: cmd_runner: alpha, '
+             'target: beta'),
+            ('smart_init _clean_registry entry: '
+             'cmd_runner: alpha'),
+            (r"name=alpha, s_alive\(\)=True, state=ThreadState.Alive, "
+             r"smart_thread=SmartThread\(name='alpha'\), "),
+            ('smart_init _clean_registry exit: '
+             'cmd_runner: alpha'),
+            ('smart_init _clean_pair_array entry: '
+             'cmd_runner: alpha'),
+            ('smart_init _clean_pair_array exit: '
+             'cmd_runner: alpha'),
+            ('alpha added alpha to SmartThread registry at UTC '
+             f'{time_match}'),
+            ('alpha set state for thread alpha from '
+             'ThreadState.Initializing to ThreadState.Registered'),
+            ('smart_init _add_to_pair_array entry: '
+             'cmd_runner: alpha, target: beta'),
             (f"alpha added PairKey(name0='alpha', name1='beta') to the "
              "_pair_array"),
             (f"alpha added status_blocks entry "
+             f"for PairKey(name0='alpha', name1='beta'), name = alpha"),
+            (f"alpha added status_blocks entry "
              f"for PairKey(name0='alpha', name1='beta'), name = beta"),
+            ('alpha updated _pair_array at UTC '
+             f'{time_match}'),
+            ('smart_init _add_to_pair_array exit: '
+             'cmd_runner: alpha, target: beta'),
+            ('smart_init _register exit: cmd_runner: alpha, '
+             'target: beta'),
+            ('alpha completed initialization of beta: ThreadCreate.Target '
+             'ThreadState.Registered, auto_start will proceed.'),
+            ("smart_start entry: requestor: alpha targets: "
+             r"\['beta'\] timeout value: None "
+             "smart_thread.py::SmartThread.__init__:"),
+            ('alpha set state for thread beta from '
+             'ThreadState.Registered to ThreadState.Starting'),
+            ('alpha set state for thread beta from '
+             'ThreadState.Starting to ThreadState.Alive'),
+            ("smart_start exit: requestor: alpha targets: "
+             r"\['beta'\] timeout value: None "
+             "smart_thread.py::SmartThread.__init__:"),
+            ("smart_init exit: requestor: alpha targets: "
+             r"\['beta'\] timeout value: None "
+             "test_smart_thread.py::TestSmartThreadScenarios."
+             "test_smart_thread_log_msg:")
+        ]
+
+        alpha_debug_smart_send_log_msgs = [
             ("smart_send entry: requestor: alpha targets: "
              r"\['beta'\] timeout value: None "
              "test_smart_thread.py::TestSmartThreadScenarios."
@@ -25769,6 +25828,7 @@ class TestSmartThreadComboScenarios:
             'alpha did successful smart_unreg of beta.',
         ]
 
+
         commander_info_log_msgs = [
             'alpha sent message to beta',
             'alpha smart_sync resumed by beta'
@@ -25808,18 +25868,7 @@ class TestSmartThreadComboScenarios:
             ("alpha added status_blocks entry for pair_key "
              r"= \('alpha', 'beta'\), name = beta"),
             'alpha updated _pair_array at UTC',
-            ("smart_start entry: requestor: alpha targets: "
-             r"\['beta'\] timeout value: None "
-             "smart_thread.py::SmartThread.__init__:"),
-            ('alpha set state for thread beta from '
-             'ThreadState.Registered to '
-             'ThreadState.Starting'),
-            ('alpha set state for thread beta from '
-             'ThreadState.Starting to '
-             'ThreadState.Alive'),
-            ("smart_start exit: requestor: alpha targets: "
-             r"\['beta'\] timeout value: None "
-             "smart_thread.py::SmartThread.__init__:"),
+
             ("smart_recv entry: requestor: beta targets: "
              r"\['alpha'\] timeout value: None "
              "test_smart_thread.py::f1:"),
