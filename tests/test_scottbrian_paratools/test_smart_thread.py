@@ -25658,12 +25658,18 @@ class TestSmartThreadComboScenarios:
              'cmd_runner: alpha, target: alpha'),
             ('smart_init _register exit: cmd_runner: alpha, '
              'target: alpha'),
-            ('alpha completed initialization of alpha: ThreadCreate.Current, '
-             'ThreadState.Alive, auto_start obviated.'),
             ("smart_init exit: requestor: alpha, targets: "
              r"\['alpha'\] timeout value: None "
              "test_smart_thread.py::TestSmartThreadComboScenarios."
              "test_smart_thread_log_msg:[0-9]+")
+        ]
+
+        ################################################################
+        # alpha_smart_init_alpha_debug_log_msgs
+        ################################################################
+        alpha_smart_init_alpha_info_log_msgs = [
+            ('alpha completed initialization of alpha: ThreadCreate.Current, '
+             'ThreadState.Alive, auto_start obviated.')
         ]
 
         ################################################################
@@ -25680,8 +25686,8 @@ class TestSmartThreadComboScenarios:
              'target: beta'),
             ('smart_init _clean_registry entry: '
              'cmd_runner: alpha'),
-            (r"name=alpha, is_alive\(\)=True, state=ThreadState.Alive, "
-             r"smart_thread=SmartThread\(name='alpha'\), "),
+            (r"name=alpha, is_alive=True, state=ThreadState.Alive, "
+             r"smart_thread=SmartThread\(name='alpha'\)"),
             ('smart_init _clean_registry exit: '
              'cmd_runner: alpha'),
             ('smart_init _clean_pair_array entry: '
@@ -25706,8 +25712,6 @@ class TestSmartThreadComboScenarios:
              'cmd_runner: alpha, target: beta'),
             ('smart_init _register exit: cmd_runner: alpha, '
              'target: beta'),
-            ('alpha completed initialization of beta: ThreadCreate.Target '
-             'ThreadState.Registered, auto_start will proceed.'),
             ("smart_start entry: requestor: alpha, targets: "
              r"\['beta'\] timeout value: None "
              "smart_thread.py::SmartThread.__init__:"),
@@ -25722,6 +25726,14 @@ class TestSmartThreadComboScenarios:
              r"\['beta'\] timeout value: None "
              "test_smart_thread.py::TestSmartThreadComboScenarios."
              "test_smart_thread_log_msg:[0-9]+")
+        ]
+
+        ################################################################
+        # alpha_first_smart_init_beta_info_log_msgs
+        ################################################################
+        alpha_first_smart_init_beta_info_log_msgs = [
+            ('alpha completed initialization of beta: ThreadCreate.Target '
+             'ThreadState.Registered, auto_start will proceed.')
         ]
 
         ################################################################
@@ -25770,8 +25782,9 @@ class TestSmartThreadComboScenarios:
         # alpha_smart_sync_debug_log_msgs
         ################################################################
         alpha_smart_sync_debug_log_msgs = [
-            (r"smart_sync entry: requestor: alpha, targets: \['beta'\] timeout "
-             "value: None test_smart_thread.py::TestSmartThreadComboScenarios."
+            (r"smart_sync entry: requestor: alpha, targets: \['beta'\] "
+             "timeout value: None "
+             "test_smart_thread.py::TestSmartThreadComboScenarios."
              "test_smart_thread_log_msg:[0-9]+"),
             (r"smart_sync exit: requestor: alpha, targets: \['beta'\] timeout "
              "value: None test_smart_thread.py::TestSmartThreadComboScenarios."
@@ -25798,10 +25811,10 @@ class TestSmartThreadComboScenarios:
              'ThreadState.Stopped'),
             ('smart_join _clean_registry entry: '
              'cmd_runner: alpha'),
-            (r"name=alpha, is_alive\(\)=True, state=ThreadState.Alive, "
-             r"smart_thread=SmartThread\(name='alpha'\), "),
-            (r"name=beta, is_alive\(\)=False, state=ThreadState.Stopped, "
-             r"32> smart_thread=SmartThread\(name='beta', "
+            (r"name=alpha, is_alive=True, state=ThreadState.Alive, "
+             r"smart_thread=SmartThread\(name='alpha'\)"),
+            (r"name=beta, is_alive=False, state=ThreadState.Stopped, "
+             r"32> smart_thread=SmartThread\(name='beta'"
              r"target=f1, args=\('beta',\)\), "),
             ("alpha removed beta from registry for "
              "request=smart_join"),
@@ -25852,8 +25865,8 @@ class TestSmartThreadComboScenarios:
              'target: beta'),
             ('smart_init _clean_registry entry: '
              'cmd_runner: alpha'),
-            (r"name=alpha, is_alive\(\)=True, state=ThreadState.Alive, "
-             r"smart_thread=SmartThread\(name='alpha'\), "),
+            (r"name=alpha, is_alive=True, state=ThreadState.Alive, "
+             r"smart_thread=SmartThread\(name='alpha'\)"),
             ('smart_init _clean_registry exit: '
              'cmd_runner: alpha'),
             ('smart_init _clean_pair_array entry: '
@@ -25878,14 +25891,19 @@ class TestSmartThreadComboScenarios:
              'cmd_runner: alpha, target: beta'),
             ('smart_init _register exit: cmd_runner: alpha, '
              'target: beta'),
-            ('alpha completed initialization of beta: ThreadCreate.Target, '
-             'ThreadState.Registered, auto_start not requested.'),
             ("smart_init exit: requestor: alpha, targets: "
              r"\['beta'\] timeout value: None "
              "test_smart_thread.py::TestSmartThreadComboScenarios."
              "test_smart_thread_log_msg:[0-9]+")
         ]
 
+        ################################################################
+        # alpha_second_smart_init_beta_debug_log_msgs
+        ################################################################
+        alpha_second_smart_init_beta_info_log_msgs = [
+            ('alpha completed initialization of beta: ThreadCreate.Target, '
+             'ThreadState.Registered, auto_start not requested.')
+        ]
         ################################################################
         # alpha_smart_unreg_beta_debug_log_msgs
         ################################################################
@@ -25898,10 +25916,10 @@ class TestSmartThreadComboScenarios:
              'ThreadState.Registered to ThreadState.Stopped'),
             ('smart_unreg _clean_registry entry: '
              'cmd_runner: alpha'),
-            (r"name=alpha, is_alive\(\)=True, state=ThreadState.Alive, "
-             r"smart_thread=SmartThread\(name='alpha'\), "),
-            (r"name=beta, is_alive\(\)=False, state=ThreadState.Stopped, "
-             r"32> smart_thread=SmartThread\(name='beta', "
+            (r"name=alpha, is_alive=True, state=ThreadState.Alive, "
+             r"smart_thread=SmartThread\(name='alpha'\)"),
+            (r"name=beta, is_alive=False, state=ThreadState.Stopped, "
+             r"32> smart_thread=SmartThread\(name='beta'"
              r"target=f1, args=\('beta',\)\), "),
             ("alpha removed beta from registry for "
              "request=smart_join"),
@@ -25954,10 +25972,13 @@ class TestSmartThreadComboScenarios:
             log_name=smart_thread_log_name)
 
         add_log_msgs(
-            log_msgs=(alpha_smart_send_info_log_msgs
+            log_msgs=(alpha_smart_init_alpha_info_log_msgs
+                      + alpha_first_smart_init_beta_info_log_msgs
+                      + alpha_smart_send_info_log_msgs
                       + alpha_smart_resume_info_log_msgs
                       + alpha_smart_sync_info_log_msgs
                       + alpha_smart_join_info_log_msgs
+                      + alpha_second_smart_init_beta_info_log_msgs
                       + alpha_smart_unreg_info_log_msgs
                       ),
             log_level=logging.INFO,
