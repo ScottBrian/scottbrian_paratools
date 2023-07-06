@@ -3442,7 +3442,7 @@ class RemRegEntryLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=("[a-z0-9_]+ removed [a-z0-9_]+ from registry for "
-                        f"request {list_of_smart_requests}"),
+                        f"request: {list_of_smart_requests}"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -25475,13 +25475,12 @@ class TestSmartThreadComboScenarios:
     ####################################################################
     # test_smart_thread_log_msg
     ####################################################################
-    # @pytest.mark.parametrize("log_level_arg", [logging.DEBUG,
-    #                                            logging.INFO,
-    #                                            logging.WARNING,
-    #                                            logging.ERROR,
-    #                                            logging.CRITICAL,
-    #                                            logging.NOTSET])
-    @pytest.mark.parametrize("log_level_arg", [logging.DEBUG])
+    @pytest.mark.parametrize("log_level_arg", [logging.DEBUG,
+                                               logging.INFO,
+                                               logging.WARNING,
+                                               logging.ERROR,
+                                               logging.CRITICAL,
+                                               logging.NOTSET])
     def test_smart_thread_log_msg(
             self,
             log_level_arg: int,
@@ -25529,7 +25528,8 @@ class TestSmartThreadComboScenarios:
                 for a_log_msg in log_msgs:
                     log_ver.add_msg(log_level=log_level,
                                     log_msg=a_log_msg,
-                                    log_name=log_name)
+                                    log_name=log_name,
+                                    fullmatch=True)
 
         ################################################################
         # f1
@@ -25700,7 +25700,7 @@ class TestSmartThreadComboScenarios:
              'ThreadState.Initializing to ThreadState.Registered'),
             ('smart_init _add_to_pair_array entry: '
              'cmd_runner: alpha, target: beta'),
-            (r"alpha added PairKe\(name0='alpha', name1='beta'\) to the "
+            (r"alpha added PairKey\(name0='alpha', name1='beta'\) to the "
              "_pair_array"),
             ("alpha added status_blocks entry "
              r"for PairKey\(name0='alpha', name1='beta'\), name = alpha"),
@@ -25714,14 +25714,14 @@ class TestSmartThreadComboScenarios:
              'target: beta'),
             ("smart_start entry: requestor: alpha, targets: "
              r"\['beta'\] timeout value: None "
-             "smart_thread.py::SmartThread.__init__:"),
+             "smart_thread.py::SmartThread.__init__:[0-9]+"),
             ('alpha set state for thread beta from '
              'ThreadState.Registered to ThreadState.Starting'),
             ('alpha set state for thread beta from '
              'ThreadState.Starting to ThreadState.Alive'),
             ("smart_start exit: requestor: alpha, targets: "
              r"\['beta'\] timeout value: None "
-             "smart_thread.py::SmartThread.__init__:"),
+             "smart_thread.py::SmartThread.__init__:[0-9]+"),
             ("smart_init exit: requestor: alpha, targets: "
              r"\['beta'\] timeout value: None "
              "test_smart_thread.py::TestSmartThreadComboScenarios."
@@ -25732,7 +25732,7 @@ class TestSmartThreadComboScenarios:
         # alpha_first_smart_init_beta_info_log_msgs
         ################################################################
         alpha_first_smart_init_beta_info_log_msgs = [
-            ('alpha completed initialization of beta: ThreadCreate.Target '
+            ('alpha completed initialization of beta: ThreadCreate.Target, '
              'ThreadState.Registered, auto_start will proceed.')
         ]
 
@@ -25744,6 +25744,10 @@ class TestSmartThreadComboScenarios:
              r"\['beta'\] timeout value: None "
              "test_smart_thread.py::TestSmartThreadComboScenarios."
              "test_smart_thread_log_msg:[0-9]+"),
+            ("alpha smart_send setup complete for targets: "
+             r"\[PairKeyRemote\(pair_key=PairKey\(name0='alpha', "
+             r"name1='beta'\), remote='beta', "
+             r"create_time=[0-9]+\.[0-9]+\)\]"),
             ("smart_send exit: requestor: alpha, targets: "
              r"\['beta'\] timeout value: None "
              "test_smart_thread.py::TestSmartThreadComboScenarios."
@@ -25765,6 +25769,10 @@ class TestSmartThreadComboScenarios:
              "timeout value: None "
              "test_smart_thread.py::TestSmartThreadComboScenarios"
              ".test_smart_thread_log_msg:[0-9]+"),
+            ("alpha smart_resume setup complete for targets: "
+             r"\[PairKeyRemote\(pair_key=PairKey\(name0='alpha', "
+             r"name1='beta'\), remote='beta', "
+             r"create_time=[0-9]+\.[0-9]+\)\]"),
             (r"smart_resume exit: requestor: alpha, targets: \['beta'\] "
              "timeout value: None "
              "test_smart_thread.py::TestSmartThreadComboScenarios"
@@ -25786,6 +25794,10 @@ class TestSmartThreadComboScenarios:
              "timeout value: None "
              "test_smart_thread.py::TestSmartThreadComboScenarios."
              "test_smart_thread_log_msg:[0-9]+"),
+            ("alpha smart_sync setup complete for targets: "
+             r"\[PairKeyRemote\(pair_key=PairKey\(name0='alpha', "
+             r"name1='beta'\), remote='beta', "
+             r"create_time=[0-9]+\.[0-9]+\)\]"),
             (r"smart_sync exit: requestor: alpha, targets: \['beta'\] timeout "
              "value: None test_smart_thread.py::TestSmartThreadComboScenarios."
              "test_smart_thread_log_msg:[0-9]+")
@@ -25814,10 +25826,10 @@ class TestSmartThreadComboScenarios:
             (r"name=alpha, is_alive=True, state=ThreadState.Alive, "
              r"smart_thread=SmartThread\(name='alpha'\)"),
             (r"name=beta, is_alive=False, state=ThreadState.Stopped, "
-             r"32> smart_thread=SmartThread\(name='beta'"
-             r"target=f1, args=\('beta',\)\), "),
+             r"smart_thread=SmartThread\(name='beta', "
+             r"target=f1, args=\('beta',\)\)"),
             ("alpha removed beta from registry for "
-             "request=smart_join"),
+             "request: smart_join"),
             ('alpha set state for thread beta from '
              'ThreadState.Stopped to ThreadState.Unregistered'),
             ("alpha did cleanup of registry at UTC "
@@ -25846,7 +25858,7 @@ class TestSmartThreadComboScenarios:
         # alpha_smart_join_info_log_msgs
         ################################################################
         alpha_smart_join_info_log_msgs = [
-            'alpha did successful smart_join of beta.',
+            r"alpha did successful smart_join of \['beta'\].",
             ("alpha smart_join completed targets: "
              r"\['beta'\], pending targets: \[\]")
         ]
@@ -25879,12 +25891,12 @@ class TestSmartThreadComboScenarios:
              'ThreadState.Initializing to ThreadState.Registered'),
             ('smart_init _add_to_pair_array entry: '
              'cmd_runner: alpha, target: beta'),
-            (f"alpha added PairKey(name0='alpha', name1='beta') to the "
+            (r"alpha added PairKey\(name0='alpha', name1='beta'\) to the "
              "_pair_array"),
             (f"alpha added status_blocks entry "
-             f"for PairKey(name0='alpha', name1='beta'), name = alpha"),
+             r"for PairKey\(name0='alpha', name1='beta'\), name = alpha"),
             (f"alpha added status_blocks entry "
-             f"for PairKey(name0='alpha', name1='beta'), name = beta"),
+             r"for PairKey\(name0='alpha', name1='beta'\), name = beta"),
             ('alpha updated _pair_array at UTC '
              f'{time_match}'),
             ('smart_init _add_to_pair_array exit: '
@@ -25919,10 +25931,10 @@ class TestSmartThreadComboScenarios:
             (r"name=alpha, is_alive=True, state=ThreadState.Alive, "
              r"smart_thread=SmartThread\(name='alpha'\)"),
             (r"name=beta, is_alive=False, state=ThreadState.Stopped, "
-             r"32> smart_thread=SmartThread\(name='beta'"
-             r"target=f1, args=\('beta',\)\), "),
+             r"smart_thread=SmartThread\(name='beta', "
+             r"target=f1, args=\('beta',\)\)"),
             ("alpha removed beta from registry for "
-             "request=smart_join"),
+             "request: smart_unreg"),
             ('alpha set state for thread beta from '
              'ThreadState.Stopped to ThreadState.Unregistered'),
             ("alpha did cleanup of registry at UTC "
@@ -25990,10 +26002,14 @@ class TestSmartThreadComboScenarios:
         beta_smart_recv_debug_log_msgs = [
             ("smart_recv entry: requestor: beta, targets: "
              r"\['alpha'\] timeout value: None "
-             "test_smart_thread.py::f1:"),
+             "test_smart_thread.py::f1:[0-9]+"),
+            ("beta smart_recv setup complete for targets: "
+             r"\[PairKeyRemote\(pair_key=PairKey\(name0='alpha', "
+             r"name1='beta'\), remote='alpha', "
+             r"create_time=[0-9]+\.[0-9]+\)\]"),
             ("smart_recv exit: requestor: beta, targets: "
              r"\['alpha'\] timeout value: None "
-             "test_smart_thread.py::f1:")
+             "test_smart_thread.py::f1:[0-9]+")
         ]
 
         ################################################################
@@ -26008,9 +26024,13 @@ class TestSmartThreadComboScenarios:
         ################################################################
         beta_smart_wait_debug_log_msgs = [
             (r"smart_wait entry: requestor: beta, targets: \['alpha'\] "
-             "timeout value: None test_smart_thread.py::f1:"),
+             "timeout value: None test_smart_thread.py::f1:[0-9]+"),
+            ("beta smart_wait setup complete for targets: "
+             r"\[PairKeyRemote\(pair_key=PairKey\(name0='alpha', "
+             r"name1='beta'\), remote='alpha', "
+             r"create_time=[0-9]+\.[0-9]+\)\]"),
             (r"smart_wait exit: requestor: beta, targets: \['alpha'\] "
-             "timeout value: None test_smart_thread.py::f1:")
+             "timeout value: None test_smart_thread.py::f1:[0-9]+")
         ]
 
         ################################################################
@@ -26024,10 +26044,14 @@ class TestSmartThreadComboScenarios:
         # beta_smart_sync_debug_log_msgs
         ################################################################
         beta_smart_sync_debug_log_msgs = [
-            (r"smart_sync entry: requestor: beta, targets: \['alpha'\] timeout "
-             "value: None test_smart_thread.py::f1:"),
+            (r"smart_sync entry: requestor: beta, targets: \['alpha'\] "
+             "timeout value: None test_smart_thread.py::f1:[0-9]+"),
+            ("beta smart_sync setup complete for targets: "
+             r"\[PairKeyRemote\(pair_key=PairKey\(name0='alpha', "
+             r"name1='beta'\), remote='alpha', "
+             r"create_time=[0-9]+\.[0-9]+\)\]"),
             (r"smart_sync exit: requestor: beta, targets: \['alpha'\] timeout "
-             "value: None test_smart_thread.py::f1:")
+             "value: None test_smart_thread.py::f1:[0-9]+")
         ]
 
         ################################################################

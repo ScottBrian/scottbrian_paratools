@@ -1275,7 +1275,7 @@ class SmartThread:
             del SmartThread._registry[key]
             changed = True
             logger.debug(f'{self.cmd_runner} removed {key} from registry for '
-                         f'request {self.request.value}')
+                         f'request: {self.request.value}')
             logger.debug(
                 f'{self.cmd_runner} set '
                 f'state for thread {key} from {ThreadState.Stopped} to '
