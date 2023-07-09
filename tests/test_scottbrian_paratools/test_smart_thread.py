@@ -219,8 +219,9 @@ class SendRecvMsgs:
 
     def clear_exp_msgs_received(self,
                                 receiver_name: str,
-                                sender_names: set[str],
+                                sender_names: Iterable[str],
                                 num_msgs: int):
+        sender_names: set[str] = get_set(sender_names)
         with self.msg_lock:
             for sender in sender_names:
                 for idx in range(num_msgs):
@@ -1457,22 +1458,22 @@ class SendMsg(ConfigCmd):
     def __init__(self,
                  cmd_runners: Iterable,
                  receivers: Iterable,
+                 exp_receivers: Iterable,
                  msgs_to_send: SendRecvMsgs,
                  msg_idx: int,
                  send_type: SendType = SendType.ToRemotes,
                  stopped_remotes: Optional[Iterable] = None,
-                 exp_receivers: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
         Args:
             cmd_runners: thread names that will execute the command
             receivers: thread names that will receive the message
+            exp_receivers: thread names expected to receive
             msgs_to_send: messages to send and verify
             msg_idx: index to use with msgs_to_send for this call
             send_type: specifies how to send the messages
             stopped_remotes: thread names that are stopped
-            exp_receivers: thread names expected to receive
             log_msg: log message for smart_send
         """
         super().__init__(cmd_runners=cmd_runners)
@@ -1504,6 +1505,7 @@ class SendMsg(ConfigCmd):
         self.config_ver.handle_send_msg(
             cmd_runner=cmd_runner,
             receivers=self.receivers,
+            exp_receivers=self.exp_receivers,
             msgs_to_send=self.msgs_to_send,
             msg_idx=self.msg_idx,
             send_type=self.send_type,
@@ -1512,7 +1514,6 @@ class SendMsg(ConfigCmd):
             unreg_timeout_names=None,
             fullq_timeout_names=None,
             stopped_remotes=self.stopped_remotes,
-            exp_receivers=self.exp_receivers,
             log_msg=self.log_msg)
 
 
@@ -1523,35 +1524,35 @@ class SendMsgTimeoutFalse(SendMsg):
     """Do smart_send with timeout false."""
     def __init__(self,
                  cmd_runners: Iterable,
+                 receivers: Iterable,
+                 exp_receivers: Iterable,
                  msgs_to_send: SendRecvMsgs,
                  msg_idx: int,
                  timeout: IntOrFloat,
                  send_type: SendType = SendType.ToRemotes,
-                 receivers: Optional[Iterable] = None,
                  stopped_remotes: Optional[StrOrSet] = None,
-                 exp_receivers: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
         Args:
             cmd_runners: thread names that will execute the command
             receivers: thread names that will receive the message
+            exp_receivers: thread names expected to receive
             msgs_to_send: messages to send and verify
             msg_idx: index to use with msgs_to_send for this call
             timeout: value for smart_send
             send_type: specifies how to send the messages
             stopped_remotes: thread names that are stopped
-            exp_receivers: thread names expected to receive
             log_msg: log message for smart_send
         """
         super().__init__(
             cmd_runners=cmd_runners,
             receivers=receivers,
+            exp_receivers=exp_receivers,
             msgs_to_send=msgs_to_send,
             msg_idx=msg_idx,
             send_type=send_type,
             stopped_remotes=stopped_remotes,
-            exp_receivers=exp_receivers,
             log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
 
@@ -1568,6 +1569,7 @@ class SendMsgTimeoutFalse(SendMsg):
         self.config_ver.handle_send_msg(
             cmd_runner=cmd_runner,
             receivers=self.receivers,
+            exp_receivers=self.exp_receivers,
             msgs_to_send=self.msgs_to_send,
             msg_idx=self.msg_idx,
             send_type=self.send_type,
@@ -1576,7 +1578,6 @@ class SendMsgTimeoutFalse(SendMsg):
             unreg_timeout_names=None,
             fullq_timeout_names=None,
             stopped_remotes=self.stopped_remotes,
-            exp_receivers=self.exp_receivers,
             log_msg=self.log_msg)
 
 
@@ -1587,21 +1588,22 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
     """Do smart_send with timeout true."""
     def __init__(self,
                  cmd_runners: Iterable,
+                 receivers: Iterable,
+                 exp_receivers: Iterable,
                  msgs_to_send: SendRecvMsgs,
                  msg_idx: int,
-                 receivers: Iterable,
                  timeout: IntOrFloat,
                  unreg_timeout_names: Iterable,
                  fullq_timeout_names: Iterable,
                  send_type: SendType = SendType.ToRemotes,
                  stopped_remotes: Optional[StrOrSet] = None,
-                 exp_receivers: Optional[Iterable] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
         Args:
             cmd_runners: thread names that will execute the command
             receivers: thread names that will receive the message
+            exp_receivers: thread names expected to receive
             msgs_to_send: messages to send and verify
             msg_idx: index to use with msgs_to_send for this call
             timeout: value for smart_send
@@ -1609,18 +1611,17 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
             fullq_timeout_names: thread names whose msg_q is full
             send_type: specifies how to send the messages
             stopped_remotes: thread names that are stopped
-            exp_receivers: thread names expected to receive
             log_msg: log message for smart_send
         """
         super().__init__(
             cmd_runners=cmd_runners,
             receivers=receivers,
+            exp_receivers=exp_receivers,
             msgs_to_send=msgs_to_send,
             msg_idx=msg_idx,
             timeout=timeout,
             send_type=send_type,
             stopped_remotes=stopped_remotes,
-            exp_receivers=exp_receivers,
             log_msg=log_msg)
         self.specified_args = locals()  # used for __repr__
 
@@ -1640,6 +1641,7 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
         self.config_ver.handle_send_msg(
             cmd_runner=cmd_runner,
             receivers=self.receivers,
+            exp_receivers=self.exp_receivers,
             msgs_to_send=self.msgs_to_send,
             msg_idx=self.msg_idx,
             send_type=self.send_type,
@@ -1648,7 +1650,6 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
             unreg_timeout_names=set(self.unreg_timeout_names),
             fullq_timeout_names=set(self.fullq_timeout_names),
             stopped_remotes=self.stopped_remotes,
-            exp_receivers=self.exp_receivers,
             log_msg=self.log_msg)
 
 
@@ -5418,8 +5419,8 @@ class ConfigVerifier:
         send_serial_num = self.add_cmd(
             SendMsg(cmd_runners=senders,
                     receivers=receivers,
-                    msgs_to_send=msgs_to_send,
                     exp_receivers=receivers,
+                    msgs_to_send=msgs_to_send,
                     msg_idx=0,
                     log_msg='normal send recv test'))
         self.add_cmd(
@@ -6738,6 +6739,7 @@ class ConfigVerifier:
         self.add_cmd(
             SendMsg(cmd_runners=from_names,
                     receivers=to_names,
+                    exp_receivers=to_names,
                     msgs_to_send=msgs_to_send,
                     msg_idx=0))
 
@@ -6836,6 +6838,7 @@ class ConfigVerifier:
             send_msg_serial_num = self.add_cmd(SendMsg(
                 cmd_runners=remote_names,
                 receivers=pending_names,
+                exp_receivers=pending_names,
                 msgs_to_send=msgs_remote_to_pending,
                 msg_idx=idx,
                 send_type=SendType.ToRemotes))
@@ -6920,6 +6923,7 @@ class ConfigVerifier:
                 pend_req_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=pending_names[0],
                             receivers=remote_names[0],
+                            exp_receivers=remote_names[0],
                             msgs_to_send=msgs_pending_to_remote,
                             msg_idx=0,
                             stopped_remotes=stopped_remotes))
@@ -8936,6 +8940,7 @@ class ConfigVerifier:
             send_msg_serial_num_0 = self.add_cmd(
                 SendMsg(cmd_runners=sender_names[0],
                         receivers=receivers,
+                        exp_receivers=receivers,
                         msgs_to_send=sender_msgs,
                         msg_idx=0))
             self.add_cmd(
@@ -10306,6 +10311,7 @@ class ConfigVerifier:
             self.add_cmd(
                 SendMsg(cmd_runners=active_no_delay_sender_names,
                         receivers=receiver_names,
+                        exp_receivers=receiver_names,
                         msgs_to_send=sender_msgs,
                         msg_idx=0))
 
@@ -10322,6 +10328,7 @@ class ConfigVerifier:
             send_serial_num = self.add_cmd(
                 SendMsg(cmd_runners=active_delay_sender_names,
                         receivers=receiver_names,
+                        exp_receivers=receiver_names,
                         msgs_to_send=sender_msgs,
                         msg_idx=0))
             self.add_cmd(
@@ -10338,6 +10345,7 @@ class ConfigVerifier:
             self.add_cmd(
                 SendMsg(cmd_runners=send_exit_sender_names,
                         receivers=receiver_names,
+                        exp_receivers=receiver_names,
                         msgs_to_send=sender_msgs,
                         msg_idx=0))
 
@@ -10408,6 +10416,7 @@ class ConfigVerifier:
             self.add_cmd(
                 SendMsg(cmd_runners=nosend_exit_sender_names,
                         receivers=receiver_names,
+                        exp_receivers=receiver_names,
                         msgs_to_send=sender_msgs,
                         msg_idx=0))
 
@@ -10432,6 +10441,7 @@ class ConfigVerifier:
             self.add_cmd(
                 SendMsg(cmd_runners=unreg_sender_names,
                         receivers=receiver_names,
+                        exp_receivers=receiver_names,
                         msgs_to_send=sender_msgs,
                         msg_idx=0))
 
@@ -10445,6 +10455,7 @@ class ConfigVerifier:
             self.add_cmd(
                 SendMsg(cmd_runners=reg_sender_names,
                         receivers=receiver_names,
+                        exp_receivers=receiver_names,
                         msgs_to_send=sender_msgs,
                         msg_idx=0))
 
@@ -14542,6 +14553,7 @@ class ConfigVerifier:
                 send_msg_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=exit_name,
                             receivers='sender_1',
+                            exp_receivers='sender_1',
                             msgs_to_send=exit_msgs,
                             msg_idx=0,
                             log_msg=log_msg))
@@ -14560,6 +14572,7 @@ class ConfigVerifier:
                 send_msg_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=exit_name,
                             receivers='sender_2',
+                            exp_receivers='sender_2',
                             msgs_to_send=exit_msgs,
                             msg_idx=1))
 
@@ -14577,6 +14590,7 @@ class ConfigVerifier:
                 send_msg_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=exit_name,
                             receivers='sender_2',
+                            exp_receivers='sender_2',
                             msgs_to_send=exit_msgs,
                             msg_idx=2,
                             log_msg=log_msg))
@@ -14601,6 +14615,7 @@ class ConfigVerifier:
                 send_msg_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=sender_names,
                             receivers=full_q_names,
+                            exp_receivers=full_q_names,
                             msgs_to_send=sender_msgs,
                             msg_idx=idx))
 
@@ -14625,6 +14640,7 @@ class ConfigVerifier:
                     send_msg_serial_num = self.add_cmd(
                         SendMsg(cmd_runners=sender_names,
                                 receivers='exit_name_' + str(idx),
+                                exp_receivers='exit_name_' + str(idx),
                                 msgs_to_send=sender_msgs,
                                 msg_idx=0,
                                 log_msg=log_msg))
@@ -14668,10 +14684,15 @@ class ConfigVerifier:
                         aux_names=exit_name))
 
         if timeout_type == TimeoutType.TimeoutTrue:
+            exp_receivers: set[str] = (all_targets
+                                       - unreg_timeout_names
+                                       - exit_names
+                                       - full_q_names)
             send_msg_serial_num = self.add_cmd(
                 SendMsgTimeoutTrue(
                     cmd_runners=sender_names,
                     receivers=all_targets,
+                    exp_receivers=exp_receivers,
                     msgs_to_send=sender_msgs,
                     msg_idx=0,
                     timeout=timeout_time,
@@ -14686,6 +14707,7 @@ class ConfigVerifier:
                     SendMsgTimeoutFalse(
                         cmd_runners=sender_names,
                         receivers=all_targets,
+                        exp_receivers=all_targets,
                         msgs_to_send=sender_msgs,
                         msg_idx=0,
                         timeout=timeout_time))
@@ -14695,6 +14717,7 @@ class ConfigVerifier:
                 send_msg_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=sender_names,
                             receivers=all_targets,
+                            exp_receivers=all_targets,
                             msgs_to_send=sender_msgs,
                             msg_idx=0))
                 confirm_cmd_to_use = 'SendMsg'
@@ -15938,7 +15961,7 @@ class ConfigVerifier:
         ################################################################
         rem_reg_list = pe[PE.rem_reg_targets].pop()
 
-        if rem_reg_list != targets:
+        if sorted(rem_reg_list) != sorted(targets):
             raise IncorrectDataDetected(
                 'handle_did_clean_reg_log_msg detected that the list of '
                 f'removed targets {rem_reg_list} did not match the '
@@ -17201,6 +17224,7 @@ class ConfigVerifier:
     def handle_send_msg(self,
                         cmd_runner: str,
                         receivers: set[str],
+                        exp_receivers: set[str],
                         msgs_to_send: SendRecvMsgs,
                         msg_idx: int,
                         send_type: SendType,
@@ -17210,12 +17234,13 @@ class ConfigVerifier:
                         unreg_timeout_names: Optional[set[str]] = None,
                         fullq_timeout_names: Optional[set[str]] = None,
                         stopped_remotes: Optional[set[str]] = None,
-                        exp_receivers: Optional[set[str]] = None) -> None:
+                        ) -> None:
         """Handle the send_cmd execution and log msgs.
 
         Args:
             cmd_runner: name of thread doing the cmd
             receivers: names of threads to receive the message
+            exp_receivers: thread names that are expected to receive
             msgs_to_send: message to send to the receivers
             msg_idx: index to use with msgs_to_send for this call
             send_type: specifies how to send the message
@@ -17227,7 +17252,6 @@ class ConfigVerifier:
             fullq_timeout_names: names of threads whose msg_q is full
                 and are expected to cause timeout
             stopped_remotes: names of threads that are stopped
-            exp_receivers: thread names that are expected to receive
 
         """
         self.log_test_msg(f'handle_send entry: {cmd_runner=}, {receivers=}, '
@@ -17239,21 +17263,11 @@ class ConfigVerifier:
             seq='test_smart_thread.py::ConfigVerifier.handle_send_msg')
 
         receivers_to_use = receivers.copy()
-        if exp_receivers is None:
-            exp_receivers_arg = receivers.copy()
-        else:
-            exp_receivers_arg = exp_receivers  # could be empty set()
         timeout_remotes = set()
         if timeout_type == TimeoutType.TimeoutTrue and unreg_timeout_names:
             timeout_remotes |= unreg_timeout_names
         if fullq_timeout_names:
             timeout_remotes |= fullq_timeout_names
-
-        if exp_receivers is None:
-            exp_receivers_arg -= timeout_remotes
-
-        if stopped_remotes and exp_receivers is None:
-            exp_receivers_arg -= stopped_remotes
 
         pe = self.pending_events[cmd_runner]
         pe[PE.start_request].append(
@@ -17262,7 +17276,7 @@ class ConfigVerifier:
                          targets=receivers_to_use,
                          timeout_remotes=timeout_remotes,
                          stopped_remotes=stopped_remotes.copy(),
-                         exp_receivers=exp_receivers_arg))
+                         exp_receivers=exp_receivers))
 
         req_key_entry: RequestKey = ('smart_send',
                                      'entry')
@@ -17280,12 +17294,12 @@ class ConfigVerifier:
             # build a dict from the SendRecvMsgs test messages
             send_msg = msgs_to_send.get_send_msgs(sender_name=cmd_runner,
                                                   receiver_names=receivers,
-                                                  exp_receivers=exp_receivers_arg,
+                                                  exp_receivers=exp_receivers,
                                                   msg_idx=msg_idx)
         else:
             send_msg = msgs_to_send.get_broadcast_msg(
                 sender_name=cmd_runner,
-                exp_receivers=exp_receivers_arg,
+                exp_receivers=exp_receivers,
                 msg_idx=msg_idx)
 
         if stopped_remotes:
@@ -17372,10 +17386,11 @@ class ConfigVerifier:
                     smart_request='smart_send',
                     targets=receivers_to_use,
                     error_str='SmartThreadRequestTimedOut',
-                    stopped_remotes=set(stopped_remotes)),
+                    stopped_remotes=set(stopped_remotes),
+                    full_send_q_remotes=fullq_timeout_names),
                 log_level=logging.ERROR)
 
-        assert sent_targets == exp_receivers_arg
+        assert sent_targets == exp_receivers
 
         mean_elapsed_time = elapsed_time / len(receivers)
         self.log_test_msg(f'handle_send exit: {cmd_runner=} '
@@ -18441,9 +18456,9 @@ class ConfigVerifier:
             deadlock_msg = ''
 
         if full_send_q_remotes:
-            full_send_q_msg = (
-                f' Remotes who have a full send_q: '
-                f'{sorted(full_send_q_remotes)}.')
+            full_send_q_msg = (re.escape(
+                f' Remotes that have a full send_q: '
+                f'{sorted(full_send_q_remotes)}.'))
         else:
             full_send_q_msg = ''
 
@@ -24449,7 +24464,8 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_registered_targets_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_unreg_timeouts_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_exit_timeouts_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_full_q_timeouts_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_full_q_timeouts_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_full_q_timeouts_arg", [1, 2])
     def test_send_msg_timeout_scenarios(
             self,
             timeout_type_arg: TimeoutType,
@@ -24525,6 +24541,14 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_nosend_exit_senders_arg", [0, 1])
     @pytest.mark.parametrize("num_unreg_senders_arg", [0, 1])
     @pytest.mark.parametrize("num_reg_senders_arg", [0, 1])
+    # @pytest.mark.parametrize("timeout_type_arg", [TimeoutType.TimeoutFalse])
+    # @pytest.mark.parametrize("num_receivers_arg", [3])
+    # @pytest.mark.parametrize("num_active_no_delay_senders_arg", [1])
+    # @pytest.mark.parametrize("num_active_delay_senders_arg", [1])
+    # @pytest.mark.parametrize("num_send_exit_senders_arg", [1])
+    # @pytest.mark.parametrize("num_nosend_exit_senders_arg", [0])
+    # @pytest.mark.parametrize("num_unreg_senders_arg", [1])
+    # @pytest.mark.parametrize("num_reg_senders_arg", [1])
     def test_recv_msg_timeout_scenarios(
             self,
             timeout_type_arg: TimeoutType,

@@ -4621,7 +4621,7 @@ class SmartThread:
 
         if request_block.full_send_q_remotes:
             full_send_q_msg = (
-                f' Remotes who have a full send_q: '
+                f' Remotes that have a full send_q: '
                 f'{sorted(request_block.full_send_q_remotes)}.')
         else:
             full_send_q_msg = ''
