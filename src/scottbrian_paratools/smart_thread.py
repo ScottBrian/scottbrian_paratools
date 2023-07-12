@@ -728,11 +728,6 @@ class SmartThread:
             finally:
                 # Avoid a refcycle if the thread is running a function with
                 # an argument that has a member that points to the thread.
-
-                # with sel.SELockExcl(SmartThread._registry_lock):
-                #     self.smart_thread._set_state(
-                #         target_thread=self.smart_thread,
-                #         new_state=ThreadState.Stopped)
                 del self._target, self._args, self._kwargs
 
     ####################################################################
@@ -894,7 +889,10 @@ class SmartThread:
 
         self.debug_logging_enabled = logger.isEnabledFor(logging.DEBUG)
 
-        if not thread and not target:
+        # set the cmd_runner name if it is valid (if not valid, we raise
+        # an error after we issue the smart_init entry log message with
+        # the current thread name)
+        if not thread and not target and isinstance(name, str):
             self.cmd_runner = name
         else:
             self.cmd_runner = threading.current_thread().name
@@ -907,15 +905,22 @@ class SmartThread:
             latest=2)
 
         if not isinstance(name, str):
-            raise SmartThreadIncorrectNameSpecified(
-                'Attempted SmartThread instantiation with incorrect name of '
-                f'{name}.')
+            error_msg = (
+                f'Error detected for request {self.request.value} '
+                f'__init__ with cmd_runner {self.cmd_runner}. '
+                'While attempting to initialize a new SmartThread, '
+                f'the input name of {name} was detected to be incorrect.')
+            raise SmartThreadIncorrectNameSpecified(error_msg)
         self.name = name
 
         if target and thread:
-            raise SmartThreadMutuallyExclusiveTargetThreadSpecified(
-                'Attempted SmartThread instantiation with both target and '
-                'thread specified.')
+            error_msg = (
+                f'Error detected for request {self.request.value} '
+                f'__init__ with cmd_runner {self.cmd_runner}. '
+                'While attempting to initialize a new SmartThread with '
+                f'name of {name}, it was detected that mutually exclusive '
+                f'arguments target and thread were both specified.')
+            raise SmartThreadMutuallyExclusiveTargetThreadSpecified(error_msg)
 
         if (not target) and (args or kwargs):
             raise SmartThreadArgsSpecificationWithoutTarget(
@@ -1218,9 +1223,15 @@ class SmartThread:
                 self._add_to_pair_array()
 
             elif SmartThread._registry[self.name] != self:
-                raise SmartThreadNameAlreadyInUse(
-                    f'An entry for a SmartThread with name = {self.name} is '
-                    'already registered for a different thread.')
+                error_msg = (
+                    f'Error detected for request {self.request.value} '
+                    f'_register with cmd_runner {self.cmd_runner}. '
+                    f'While attempting to register a new SmartThread with '
+                    f'name {self.name} and ID {id(self)}, it was detected '
+                    'that a register entry already exists for a SmartThread '
+                    f'with name {self.name} but a different ID of '
+                    f'{id(SmartThread._registry[self.name])}.')
+                raise SmartThreadNameAlreadyInUse(error_msg)
 
         logger.debug(f'{self.request.value} _register exit: '
                      f'cmd_runner: {self.cmd_runner}, '
@@ -1706,9 +1717,9 @@ class SmartThread:
             if self.name in targets:
                 if len(targets) > 1:
                     raise SmartThreadMultipleTargetsForSelfStart(
-                        f'{self.name} smart_start can not be done for multiple '
-                        'threads when one of the targets is for itself. '
-                        f'{targets=}, {len(targets)=}')
+                        f'{self.name} smart_start can not be done for '
+                        'multiple threads when one of the targets is for '
+                        f'itself. {targets=}, {len(targets)=}')
                 with sel.SELockExcl(SmartThread._registry_lock):
                     if self.thread.is_alive():
                         raise SmartThreadAlreadyStarted(

@@ -4486,7 +4486,8 @@ class CRunnerRaisesLogSearchItem(LogSearchItem):
         """
         list_of_errors = ('(SmartThreadRemoteThreadNotAlive'
                           '|SmartThreadDeadlockDetected'
-                          '|SmartThreadRequestTimedOut)')
+                          '|SmartThreadRequestTimedOut'
+                          '|SmartThreadRemoteThreadNotRegistered)')
         super().__init__(
             search_str=(f"[a-z0-9_]+ raising {list_of_errors} while processing "
                         f"a {list_of_smart_requests} request with "
@@ -5862,11 +5863,6 @@ class ConfigVerifier:
                 + num_stopped) <= len(self.thread_names)
         assert num_active >= 1  # always need at least 1 for commander
 
-        # if not self.commander_thread_config_built:
-        #     self.build_create_suite(commander_name=self.commander_name)
-        #     self.commander_thread_config_built = True
-        #     # num_active -= 1  # one less active thread to create
-
         num_adjust_registered = len(self.registered_names) - num_registered
         num_adjust_active = len(self.active_names) - num_active
         num_adjust_stopped = len(self.stopped_remotes) - num_stopped
@@ -6094,7 +6090,6 @@ class ConfigVerifier:
     def build_create_suite(
             self,
             cmd_runner: Optional[str] = None,
-            commander_name: Optional[str] = None,
             commander_auto_start: Optional[bool] = True,
             f1_create_items: Optional[list[F1CreateItem]] = None,
             validate_config: Optional[bool] = True
@@ -6111,8 +6106,6 @@ class ConfigVerifier:
             validate_config: indicates whether to do config validation
 
         """
-        if commander_name:
-            self.commander_name = commander_name
         if cmd_runner:
             cmd_runner_to_use = cmd_runner
         else:
@@ -15138,7 +15131,7 @@ class ConfigVerifier:
                                 num_alive: int,
                                 num_stopped: int
                                 ) -> None:
-        """Return a list of ConfigCmd items for smart_unreg.
+        """Return a list of ConfigCmd items for smart_start.
 
         Args:
             num_auto_start: number of threads to auto start
@@ -15150,101 +15143,50 @@ class ConfigVerifier:
         """
         # Make sure we have enough threads
         num_alt_cmd_runners = 1
-        assert (num_alt_cmd_runners
-                + num_auto_start
-                + num_manual_start
-                + num_unreg
-                + num_alive
-                + num_stopped) <= len(self.unregistered_names)
 
-        self.build_config(
-            cmd_runner=self.commander_name,
-            num_registered=num_manual_start,
-            num_active=num_alt_cmd_runners + num_auto_start + num_alive + 1,
-            num_stopped=num_stopped)
+        alt_cmd_runners = get_names('alt_cmd_runner_', num_alt_cmd_runners)
+        auto_start_names = get_names('auto_start_name_', num_auto_start)
+        manual_start_names = get_names('manual_start_name_', num_manual_start)
+        unreg_names = get_names('unreg_names_', num_unreg)
+        alive_names = get_names('alive_name_', num_alive)
+        stopped_remotes = get_names('stopped_remote_', num_stopped)
 
-        active_names_copy = self.active_names - {self.commander_name}
-
-        ################################################################
-        # choose alt_cmd_runner
-        ################################################################
-        alt_cmd_runners = self.choose_names(
-            name_collection=active_names_copy,
-            num_names_needed=num_alt_cmd_runners,
-            update_collection=True,
-            var_name_for_log='alt_cmd_runner')
-
-        ################################################################
-        # choose manual_start_names
-        ################################################################
-        manual_start_names = self.choose_names(
-            name_collection=self.registered_names,
-            num_names_needed=num_manual_start,
-            update_collection=False,
-            var_name_for_log='manual_start_names')
-
-        ################################################################
-        # choose unreg_names
-        ################################################################
-        unreg_names = self.choose_names(
-            name_collection=self.unregistered_names,
-            num_names_needed=num_unreg,
-            update_collection=False,
-            var_name_for_log='unreg_names')
-
-        ################################################################
-        # choose alive_names
-        ################################################################
-        alive_names = self.choose_names(
-            name_collection=active_names_copy,
-            num_names_needed=num_alive,
-            update_collection=True,
-            var_name_for_log='alive_names')
-
-        ################################################################
-        # choose stopped_remotes
-        ################################################################
-        stopped_remotes = self.choose_names(
-            name_collection=self.stopped_remotes,
-            num_names_needed=num_stopped,
-            update_collection=False,
-            var_name_for_log='stopped_remotes')
-
-        targets = (manual_start_names
-                   + unreg_names
-                   + alive_names
-                   + stopped_remotes)
+        self.create_config(unreg_names=auto_start_names | unreg_names,
+                           reg_names=manual_start_names,
+                           active_names=alt_cmd_runners | alive_names,
+                           stopped_names=stopped_remotes)
 
         unreg_remotes = (unreg_names
-                         + alive_names
-                         + stopped_remotes)
+                         | alive_names
+                         | stopped_remotes)
 
-        if len(targets) % 2:
-            smart_start_serial_num = self.add_cmd(
-                StartThread(
-                    cmd_runners=alt_cmd_runners[0],
-                    start_names=targets,
-                    unreg_remotes=unreg_remotes,
-                    log_msg='smart_start test 1'))
-            ################################################################
-            # confirm the smart_recv
-            ################################################################
-            self.add_cmd(
-                ConfirmResponse(cmd_runners='alpha',
-                                confirm_cmd='StartThread',
-                                confirm_serial_num=smart_start_serial_num,
-                                confirmers=[alt_cmd_runners[0]]))
-        else:
-            self.add_cmd(
-                StartThread(
-                    cmd_runners=self.commander_name,
-                    start_names=targets,
-                    unreg_remotes=unreg_remotes,
-                    log_msg='smart_start test 2'))
+        for idx, name in enumerate(roundrobin(auto_start_names,
+                                              manual_start_names)):
+            if name in auto_start_names:
+                self.add_cmd(CreateF1AutoStart(
+                    cmd_runners='alpha',
+                    f1_create_items=[
+                        F1CreateItem(name=name,
+                                     auto_start=True,
+                                     target_rtn=outer_f1),
+                    ]))
+                self.unregistered_names -= {name}
+                self.active_names |= {name}
 
-        if manual_start_names:
-            self.registered_names -= set(manual_start_names)
-            self.active_names |= set(manual_start_names)
+            elif name in manual_start_names:
+                smart_start_serial_num = self.add_cmd(
+                    StartThread(
+                        cmd_runners='alt_cmd_runner_0',
+                        start_names=unreg_remotes | {name},
+                        unreg_remotes=unreg_remotes,
+                        log_msg='smart_start test 1'))
+                self.add_cmd(
+                    ConfirmResponse(cmd_runners=self.commander_name,
+                                    confirm_cmd='StartThread',
+                                    confirm_serial_num=smart_start_serial_num,
+                                    confirmers='alt_cmd_runner_0'))
+                self.registered_names -= {name}
+                self.active_names |= {name}
 
     ####################################################################
     # build_start_suite
@@ -17728,7 +17670,7 @@ class ConfigVerifier:
         req_key_exit: RequestKey = ('smart_start',
                                     'exit')
 
-        exp_started_names = start_names
+        exp_started_names = start_names.copy()
         # enter_exit = ('entry', 'exit')
         if unreg_remotes:
             exp_started_names -= unreg_remotes
@@ -25164,7 +25106,6 @@ class TestSmartThreadComboScenarios:
                                   actor_3_arg=actor_3_arg,
                                   caplog_to_use=caplog)
 
-
     ####################################################################
     # test_wait_scenario2_part_3_1
     ####################################################################
@@ -25429,7 +25370,8 @@ class TestSmartThreadComboScenarios:
             caplog: pytest fixture to capture log output
 
         """
-        total_num_targets = (num_manual_start_arg
+        total_num_targets = (num_auto_start_arg
+                             + num_manual_start_arg
                              + num_unreg_arg
                              + num_alive_arg
                              + num_stopped_arg)
@@ -27584,7 +27526,6 @@ class TestSmartThreadErrors:
     ####################################################################
     # Basic Scenario1
     ####################################################################
-    @pytest.mark.cover
     def test_smart_thread_instantiation_errors(self):
         """Test error cases for SmartThread."""
         ################################################################
@@ -27601,14 +27542,37 @@ class TestSmartThreadErrors:
 
         logger.debug('mainline creating bad name thread')
 
-        with pytest.raises(st.SmartThreadIncorrectNameSpecified):
+        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc:
             st.SmartThread(name=1)  # type: ignore
 
+        exp_error_msg = (
+            'Error detected for request smart_init '
+            f'__init__ with cmd_runner {threading.current_thread().name}. '
+            'While attempting to initialize a new SmartThread, '
+            f'the input name of 1 was detected to be incorrect.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
         test_thread = threading.Thread(target=f1)
+
         with pytest.raises(
-                st.SmartThreadMutuallyExclusiveTargetThreadSpecified):
+                st.SmartThreadMutuallyExclusiveTargetThreadSpecified) as exc:
 
             st.SmartThread(name='alpha', target=f1, thread=test_thread)
+
+        exp_error_msg = (
+            'Error detected for request smart_init '
+            f'__init__ with cmd_runner {threading.current_thread().name}. '
+            'While attempting to initialize a new SmartThread with '
+            'name of alpha, it was detected that mutually exclusive '
+            'arguments target and thread were both specified.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
 
         with pytest.raises(st.SmartThreadArgsSpecificationWithoutTarget):
             st.SmartThread(name='alpha', args=(1,))
@@ -27630,10 +27594,35 @@ class TestSmartThreadErrors:
         with pytest.raises(st.SmartThreadErrorInRegistry):
             st.SmartThread(name='alpha')
 
-        alpha_thread.name = 'alpha'  # restore name
+        logger.debug('mainline exiting')
 
-        with pytest.raises(st.SmartThreadNameAlreadyInUse):
-            st.SmartThread(name='alpha')
+    ####################################################################
+    # Basic Scenario1
+    ####################################################################
+    def test_smart_thread_register_errors(self):
+        """Test error cases for SmartThread."""
+        ####################################################################
+        # Create smart thread with duplicate name
+        ####################################################################
+        logger.debug('mainline entered')
+        alpha_smart_thread = st.SmartThread(name='alpha')
+
+        with pytest.raises(st.SmartThreadNameAlreadyInUse) as exc:
+            alpha_dup_smart_thread = st.SmartThread(name='alpha')
+
+        existing_id = id(alpha_smart_thread)
+
+        exp_error_msg = (
+            'Error detected for request smart_init '
+            '_register with cmd_runner alpha. '
+            'While attempting to register a new SmartThread with '
+            'name alpha and ID [0-9]+, it was detected that a '
+            'register entry already exists for a SmartThread '
+            f'with name alpha but a different ID of {existing_id}.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n',exc.value)
 
         logger.debug('mainline exiting')
 
@@ -27705,6 +27694,44 @@ class TestSmartThreadErrors:
     # Unreg error cases
     ####################################################################
     def test_unreg_scenario(self,
+                            caplog: pytest.LogCaptureFixture
+                            ) -> None:
+        """Test unreg error cases for SmartThread.
+
+        Args:
+            caplog: pytest fixture to capture log output
+
+        """
+        ################################################################
+        # f1
+        ################################################################
+        def f1(f1_name: str):
+            logger.debug(f'f1 entered for {f1_name}')
+            msgs.get_msg(f1_name)
+            logger.debug(f'f1 exit for {f1_name}')
+            ############################################################
+            # exit
+            ############################################################
+
+        logger.debug('mainline entry')
+        msgs = Msgs()
+        alpha_thread = st.SmartThread(name='alpha')
+        beta_thread = st.SmartThread(name='beta',
+                                     auto_start=True,
+                                     target=f1,
+                                     kwargs={'f1_name': 'beta'})
+        with pytest.raises(st.SmartThreadRemoteThreadNotRegistered):
+            alpha_thread.smart_unreg(targets='beta')
+
+        msgs.queue_msg('beta')
+        alpha_thread.smart_join(targets='beta')
+
+        logger.debug('mainline exit')
+
+    ####################################################################
+    # Unreg error cases
+    ####################################################################
+    def test_request_errors_scenario(self,
                             caplog: pytest.LogCaptureFixture
                             ) -> None:
         """Test unreg error cases for SmartThread.
