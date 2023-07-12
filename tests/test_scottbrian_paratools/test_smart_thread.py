@@ -27524,7 +27524,7 @@ class TestSmartThreadInterface:
 class TestSmartThreadErrors:
     """Test class for SmartThread error tests."""
     ####################################################################
-    # Basic Scenario1
+    # test_smart_thread_instantiation_errors
     ####################################################################
     def test_smart_thread_instantiation_errors(self):
         """Test error cases for SmartThread."""
@@ -27535,9 +27535,9 @@ class TestSmartThreadErrors:
             logger.debug('f1 entered')
             logger.debug('f1 exiting')
 
-        ####################################################################
+        ################################################################
         # Create smart thread with bad name
-        ####################################################################
+        ################################################################
         logger.debug('mainline entered')
 
         logger.debug('mainline creating bad name thread')
@@ -27566,44 +27566,58 @@ class TestSmartThreadErrors:
             'Error detected for request smart_init '
             f'__init__ with cmd_runner {threading.current_thread().name}. '
             'While attempting to initialize a new SmartThread with '
-            'name of alpha, it was detected that mutually exclusive '
-            'arguments target and thread were both specified.')
+            'name of alpha, it was detected that arguments were '
+            'both specified for mutually exclusive parameters target '
+            'and thread.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
         print('\n', exc.value)
 
 
-        with pytest.raises(st.SmartThreadArgsSpecificationWithoutTarget):
+        with pytest.raises(
+                st.SmartThreadArgsSpecificationWithoutTarget) as exc:
             st.SmartThread(name='alpha', args=(1,))
 
-        with pytest.raises(st.SmartThreadArgsSpecificationWithoutTarget):
+        exp_error_msg = (
+            'Error detected for request smart_init '
+            '__init__ with cmd_runner alpha. '
+            'While attempting to initialize a new SmartThread with '
+            'name of alpha, it was detected that arguments for '
+            'parameters args or kwargs were specified, but the '
+            'required argument for the target parameter was not '
+            'specified.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        with pytest.raises(
+                st.SmartThreadArgsSpecificationWithoutTarget) as exc:
             st.SmartThread(name='alpha', kwargs={'arg1': 1})
 
-        with pytest.raises(st.SmartThreadArgsSpecificationWithoutTarget):
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        with pytest.raises(
+                st.SmartThreadArgsSpecificationWithoutTarget) as exc:
             st.SmartThread(name='alpha', args=(1,), kwargs={'arg1': 1})
 
-        alpha_thread = st.SmartThread(name='alpha')
-        alpha_thread.name = 1
-        with pytest.raises(st.SmartThreadErrorInRegistry):
-            alpha_thread._register()
+        assert re.fullmatch(exp_error_msg, str(exc.value))
 
-        # we still have alpha with name changed to 1
-        # which will cause the following registry error
-        # when we try to create another thread
-        with pytest.raises(st.SmartThreadErrorInRegistry):
-            st.SmartThread(name='alpha')
+        print('\n', exc.value)
 
         logger.debug('mainline exiting')
 
     ####################################################################
-    # Basic Scenario1
+    # test_smart_thread_register_errors
     ####################################################################
     def test_smart_thread_register_errors(self):
         """Test error cases for SmartThread."""
-        ####################################################################
+        ################################################################
         # Create smart thread with duplicate name
-        ####################################################################
+        ################################################################
         logger.debug('mainline entered')
         alpha_smart_thread = st.SmartThread(name='alpha')
 
@@ -27625,6 +27639,38 @@ class TestSmartThreadErrors:
         print('\n',exc.value)
 
         logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_thread_register_errors
+    ####################################################################
+    def test_smart_thread_clean_registry_errors(self):
+        """Test error cases for SmartThread."""
+
+        logger.debug('mainline entered')
+        alpha_thread = st.SmartThread(name='alpha')
+        alpha_thread.name = 'bad_name'
+        with pytest.raises(st.SmartThreadErrorInRegistry) as exc:
+            beta_thread = st.SmartThread(name='beta')
+            # alpha_thread._register()
+
+        exp_error_msg = (
+            f'Error detected for request smart_init '
+            f'_clean_registry with cmd_runner alpha. '
+            f'Registry item with key alpha has non-matching '
+            f'item.name of bad_name.')
+
+        # we still have alpha with name changed to 1
+        # which will cause the following registry error
+        # when we try to create another thread
+        # with pytest.raises(st.SmartThreadErrorInRegistry):
+        #     st.SmartThread(name='alpha')
+        #
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        logger.debug('mainline exiting')
+
 
     ####################################################################
     # Foreign Op

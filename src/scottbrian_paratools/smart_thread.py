@@ -892,10 +892,10 @@ class SmartThread:
         # set the cmd_runner name if it is valid (if not valid, we raise
         # an error after we issue the smart_init entry log message with
         # the current thread name)
-        if not thread and not target and isinstance(name, str):
-            self.cmd_runner = name
-        else:
-            self.cmd_runner = threading.current_thread().name
+        # if not thread and not target and isinstance(name, str):
+        #     self.cmd_runner = name
+        # else:
+        self.cmd_runner = threading.current_thread().name
 
         self.request: ReqType = ReqType.Smart_init
 
@@ -918,14 +918,21 @@ class SmartThread:
                 f'Error detected for request {self.request.value} '
                 f'__init__ with cmd_runner {self.cmd_runner}. '
                 'While attempting to initialize a new SmartThread with '
-                f'name of {name}, it was detected that mutually exclusive '
-                f'arguments target and thread were both specified.')
+                f'name of {name}, it was detected that arguments were '
+                'both specified for mutually exclusive parameters target '
+                'and thread.')
             raise SmartThreadMutuallyExclusiveTargetThreadSpecified(error_msg)
 
         if (not target) and (args or kwargs):
-            raise SmartThreadArgsSpecificationWithoutTarget(
-                'Attempted SmartThread instantiation with args or '
-                'kwargs specified but without target specified.')
+            error_msg = (
+                f'Error detected for request {self.request.value} '
+                f'__init__ with cmd_runner {self.cmd_runner}. '
+                'While attempting to initialize a new SmartThread with '
+                f'name of {name}, it was detected that arguments for '
+                'parameters args or kwargs were specified, but the '
+                'required argument for the target parameter was not '
+                'specified.')
+            raise SmartThreadArgsSpecificationWithoutTarget(error_msg)
 
         if target:  # caller wants a thread created
             self.thread_create = ThreadCreate.Target
@@ -1277,9 +1284,12 @@ class SmartThread:
                 keys_to_del.append(key)
 
             if key != item.name:
-                raise SmartThreadErrorInRegistry(
+                error_msg = (
+                    f'Error detected for request {self.request.value} '
+                    f'_clean_registry with cmd_runner {self.cmd_runner}. '
                     f'Registry item with key {key} has non-matching '
                     f'item.name of {item.name}.')
+                raise SmartThreadErrorInRegistry(error_msg)
 
         changed = False
         for key in keys_to_del:
