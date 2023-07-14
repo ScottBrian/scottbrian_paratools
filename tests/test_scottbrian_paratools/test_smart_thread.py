@@ -27574,7 +27574,6 @@ class TestSmartThreadErrors:
 
         print('\n', exc.value)
 
-
         with pytest.raises(
                 st.SmartThreadArgsSpecificationWithoutTarget) as exc:
             st.SmartThread(name='alpha', args=(1,))
@@ -27621,6 +27620,22 @@ class TestSmartThreadErrors:
         logger.debug('mainline entered')
         alpha_smart_thread = st.SmartThread(name='alpha')
 
+        with pytest.raises(st.SmartThreadAlreadyExists) as exc:
+            st.SmartThread(name='beta')
+
+        exp_error_msg = (
+            f'Error detected for request smart_init '
+            f'_register with cmd_runner beta. '
+            'While attempting to register a new SmartThread '
+            f'with name beta and thread '
+            f'{alpha_smart_thread.thread}, it was detected that a register '
+            'entry already exists for a SmartThread with '
+            f'name alpha with the same thread {alpha_smart_thread.thread}.')
+
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+
+        print('\n', exc.value)
+
         with pytest.raises(st.SmartThreadNameAlreadyInUse) as exc:
             alpha_dup_smart_thread = st.SmartThread(name='alpha')
 
@@ -27636,12 +27651,12 @@ class TestSmartThreadErrors:
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
-        print('\n',exc.value)
+        print('\n', exc.value)
 
         logger.debug('mainline exiting')
 
     ####################################################################
-    # test_smart_thread_register_errors
+    # test_smart_thread_clean_registry_errors
     ####################################################################
     def test_smart_thread_clean_registry_errors(self):
         """Test error cases for SmartThread."""
@@ -27650,27 +27665,61 @@ class TestSmartThreadErrors:
         alpha_thread = st.SmartThread(name='alpha')
         alpha_thread.name = 'bad_name'
         with pytest.raises(st.SmartThreadErrorInRegistry) as exc:
-            beta_thread = st.SmartThread(name='beta')
-            # alpha_thread._register()
+            st.SmartThread(name='beta')
 
         exp_error_msg = (
             f'Error detected for request smart_init '
-            f'_clean_registry with cmd_runner alpha. '
+            f'_clean_registry with cmd_runner beta. '
             f'Registry item with key alpha has non-matching '
             f'item.name of bad_name.')
 
-        # we still have alpha with name changed to 1
-        # which will cause the following registry error
-        # when we try to create another thread
-        # with pytest.raises(st.SmartThreadErrorInRegistry):
-        #     st.SmartThread(name='alpha')
-        #
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
         print('\n', exc.value)
 
         logger.debug('mainline exiting')
 
+    ####################################################################
+    # test_smart_thread_add_to_pair_array_errors
+    ####################################################################
+    def test_smart_thread_add_to_pair_array_errors(self):
+        """Test error cases for SmartThread."""
+
+        ################################################################
+        # f1
+        ################################################################
+        def f1():
+            logger.debug('f1 entered')
+            logger.debug('f1 exiting')
+
+        logger.debug('mainline entered')
+        st.SmartThread(name='alpha')
+
+        # create an empty pair array entry_
+        pair_key = st.SmartThread._get_pair_key('alpha', 'beta')
+        st.SmartThread._pair_array[pair_key] = (
+            st.SmartThread.ConnectionPair(
+                status_lock=threading.Lock(),
+                status_blocks={}
+            ))
+
+        with pytest.raises(st.SmartThreadIncorrectData) as exc:
+            st.SmartThread(name='beta', target=f1)
+
+        exp_error_msg = (
+            f'Error detected for request smart_init '
+            f'_add_to_pair_array with cmd_runner '
+            f'alpha. '
+            f'While attempting to add beta to the pair '
+            f'array, it was detected that pair_key {pair_key} is '
+            f'already in the pair array with an empty '
+            f'status_blocks.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        logger.debug('mainline exiting')
 
     ####################################################################
     # Foreign Op

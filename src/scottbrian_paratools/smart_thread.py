@@ -548,6 +548,11 @@ class SmartThreadMultipleTargetsForSelfStart(SmartThreadError):
     pass
 
 
+class SmartThreadAlreadyExists(SmartThreadError):
+    """SmartThread exception for smart_init of same thread."""
+    pass
+
+
 ########################################################################
 # ReqType
 # contains the type of request
@@ -892,10 +897,10 @@ class SmartThread:
         # set the cmd_runner name if it is valid (if not valid, we raise
         # an error after we issue the smart_init entry log message with
         # the current thread name)
-        # if not thread and not target and isinstance(name, str):
-        #     self.cmd_runner = name
-        # else:
-        self.cmd_runner = threading.current_thread().name
+        if not thread and not target and isinstance(name, str):
+            self.cmd_runner = name
+        else:
+            self.cmd_runner = threading.current_thread().name
 
         self.request: ReqType = ReqType.Smart_init
 
@@ -955,11 +960,11 @@ class SmartThread:
         elif thread:  # caller provided the thread to use
             self.thread_create = ThreadCreate.Thread
             self.thread = thread
-            self.thread.name = name
+            # self.thread.name = name
         else:  # caller is running on the thread to be used
             self.thread_create = ThreadCreate.Current
             self.thread = threading.current_thread()
-            self.thread.name = name
+            # self.thread.name = name
 
         self.cmd_lock = threading.Lock()
 
@@ -997,6 +1002,11 @@ class SmartThread:
 
         # register this new SmartThread so others can find us
         self._register()
+
+        # set the thread name only after _register was successful to
+        # avoid having to restore the name in the case of a duplicate
+        # thread error
+        self.thread.name = name
 
         self.auto_started = False
 
@@ -1199,6 +1209,19 @@ class SmartThread:
             # Add new name to registry
             ############################################################
             if self.name not in SmartThread._registry:
+                # verify that the new instance is not already in the
+                # registry under a different name
+                for key, item in SmartThread._registry.items():
+                    if item.thread is self.thread:
+                        error_msg = (
+                            f'Error detected for request {self.request.value} '
+                            f'_register with cmd_runner {self.cmd_runner}. '
+                            'While attempting to register a new SmartThread '
+                            f'with name {self.name} and thread '
+                            f'{self.thread}, it was detected that a register '
+                            'entry already exists for a SmartThread with '
+                            f'name {key} with the same thread {item.thread}.')
+                        raise SmartThreadAlreadyExists(error_msg)
                 # get a unique time stamp for create_time
                 create_time = time.time()
                 while create_time == (
@@ -1462,11 +1485,15 @@ class SmartThread:
                 num_status_blocks = len(SmartThread._pair_array[
                                             pair_key].status_blocks)
                 if num_status_blocks == 0:
-                    raise SmartThreadIncorrectData(
-                        f'{self.cmd_runner} detected in '
-                        f'_add_to_pair_array while adding {self.name} that '
-                        f'pair_key {pair_key} is already in the pair array '
-                        f'with an empty status_blocks.')
+                    error_msg = (
+                        f'Error detected for request {self.request.value} '
+                        f'_add_to_pair_array with cmd_runner '
+                        f'{self.cmd_runner}. '
+                        f'While attempting to add {self.name} to the pair '
+                        f'array, it was detected that pair_key {pair_key} is '
+                        f'already in the pair array with an empty '
+                        f'status_blocks.')
+                    raise SmartThreadIncorrectData(error_msg)
                 elif num_status_blocks == 1:
                     if self.name in SmartThread._pair_array[
                             pair_key].status_blocks:
