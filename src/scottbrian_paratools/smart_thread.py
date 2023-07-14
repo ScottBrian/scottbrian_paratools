@@ -398,7 +398,6 @@ Expected output for Example5::
 ########################################################################
 # Standard Library
 ########################################################################
-from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -985,7 +984,8 @@ class SmartThread:
         self.started_targets: set[str] = set()
         self.unreged_targets: set[str] = set()
         self.joined_targets: set[str] = set()
-        self.recvd_msgs: dict[str, list[Any]] = defaultdict(list)
+        # self.recvd_msgs: dict[str, list[Any]] = defaultdict(list)
+        self.recvd_msgs: dict[str, list[Any]] = {}
         self.sent_targets: set[str] = set()
         self.resumed_by: set[str] = set()
         self.resumed_targets: set[str] = set()
@@ -1150,8 +1150,8 @@ class SmartThread:
     ####################################################################
     # _set_status
     ####################################################################
-    @staticmethod
-    def _set_state(target_thread: "SmartThread",
+    def _set_state(self,
+                   target_thread: "SmartThread",
                    new_state: ThreadState) -> bool:
         """Set the state for a thread.
 
@@ -1167,8 +1167,12 @@ class SmartThread:
             return False
         target_thread.st_state = new_state
 
+        # logger.debug(
+        #     f'{threading.current_thread().name} set '
+        #     f'state for thread {target_thread.name} from {saved_status} to '
+        #     f'{new_state}', stacklevel=2)
         logger.debug(
-            f'{threading.current_thread().name} set '
+            f'{self.cmd_runner} set '
             f'state for thread {target_thread.name} from {saved_status} to '
             f'{new_state}', stacklevel=2)
         return True
@@ -1218,7 +1222,7 @@ class SmartThread:
                             f'_register with cmd_runner {self.cmd_runner}. '
                             'While attempting to register a new SmartThread '
                             f'with name {self.name} and thread '
-                            f'{self.thread}, it was detected that a register '
+                            f'{self.thread}, it was detected that a registry '
                             'entry already exists for a SmartThread with '
                             f'name {key} with the same thread {item.thread}.')
                         raise SmartThreadAlreadyExists(error_msg)
@@ -1497,12 +1501,15 @@ class SmartThread:
                 elif num_status_blocks == 1:
                     if self.name in SmartThread._pair_array[
                             pair_key].status_blocks:
-                        raise SmartThreadIncorrectData(
-                            f'{self.cmd_runner} detected in '
-                            f'_add_to_pair_array while adding {self.name} '
-                            f'that pair_key {pair_key} is already in the pair '
-                            f'array with an existing status_blocks entry for '
-                            f'{self.name}.')
+                        error_msg = (
+                            f'Error detected for request {self.request.value} '
+                            f'_add_to_pair_array with cmd_runner '
+                            f'{self.cmd_runner}. '
+                            f'While attempting to add {self.name} to the pair '
+                            f'array, it was detected that pair_key {pair_key} '
+                            f'is already in the pair array with a '
+                            f'status_blocks entry containing {self.name}.')
+                        raise SmartThreadIncorrectData(error_msg)
                     if (existing_name in SmartThread._pair_array[
                             pair_key].status_blocks
                             and not SmartThread._pair_array[
@@ -3009,7 +3016,8 @@ class SmartThread:
         """
         self._verify_thread_is_current()
         self.request = ReqType.Smart_recv
-        self.recvd_msgs = defaultdict(list)
+        # self.recvd_msgs = defaultdict(list)
+        self.recvd_msgs = {}
 
         if sender_count is None:
             completion_count = len(self._get_set(senders))
@@ -3076,9 +3084,9 @@ class SmartThread:
             try:
                 # recv message from remote
                 with SmartThread._pair_array[pk_remote.pair_key].status_lock:
-                    recvd_msg = local_sb.msg_q.get(
-                        timeout=timeout_value)
-                    self.recvd_msgs[pk_remote.remote].append(recvd_msg)
+                    recvd_msg = local_sb.msg_q.get(timeout=timeout_value)
+                    # self.recvd_msgs[pk_remote.remote].append(recvd_msg)
+                    self.recvd_msgs[pk_remote.remote] = [recvd_msg]
                     while not local_sb.msg_q.empty():
                         recvd_msg = local_sb.msg_q.get()
                         self.recvd_msgs[pk_remote.remote].append(recvd_msg)

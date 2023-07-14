@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
 from itertools import combinations, chain, product
+import queue
 
 import logging
 
@@ -4726,6 +4727,28 @@ class MockGetTargetState:
         #     f'mock {self.name} returning for {pk_remote.remote=} '
         #     f'with {ret_state=}')
         return ret_state
+
+
+class MockCleanPairArray:
+    """Tracks targets whose state is to be reported differently."""
+    # targets: ClassVar[TargetsDict] = {}
+    # config_ver: ClassVar["ConfigVerifier"]
+
+    def __init__(self) -> None:
+        """Initialize the mock target state."""
+        pass
+
+    ####################################################################
+    # mock_clean_pair_arraye
+    ####################################################################
+    def mock_clean_pair_array(self) -> None:
+        """Get the status of a thread that is the target of a request.
+
+        Notes:
+            Must be called holding the registry lock either shared or
+            exclusive
+        """
+        pass
 
 
 @dataclass
@@ -27628,7 +27651,7 @@ class TestSmartThreadErrors:
             f'_register with cmd_runner beta. '
             'While attempting to register a new SmartThread '
             f'with name beta and thread '
-            f'{alpha_smart_thread.thread}, it was detected that a register '
+            f'{alpha_smart_thread.thread}, it was detected that a registry '
             'entry already exists for a SmartThread with '
             f'name alpha with the same thread {alpha_smart_thread.thread}.')
 
@@ -27682,9 +27705,14 @@ class TestSmartThreadErrors:
     ####################################################################
     # test_smart_thread_add_to_pair_array_errors
     ####################################################################
-    def test_smart_thread_add_to_pair_array_errors(self):
-        """Test error cases for SmartThread."""
+    def test_smart_thread_add_to_pair_array_errors(self,
+                                                   monkeypatch: Any):
+        """Test error cases for SmartThread.
 
+        Args:
+            monkeypatch: pytest fixture to set up a mock routine
+
+        """
         ################################################################
         # f1
         ################################################################
@@ -27693,6 +27721,16 @@ class TestSmartThreadErrors:
             logger.debug('f1 exiting')
 
         logger.debug('mainline entered')
+
+        MockCleanPairArray()
+
+        ################################################################
+        # monkeypatch for SmartThread._get_target_state
+        ################################################################
+        monkeypatch.setattr(st.SmartThread,
+                            "_clean_pair_array",
+                            MockCleanPairArray.mock_clean_pair_array)
+
         st.SmartThread(name='alpha')
 
         # create an empty pair array entry_
@@ -27715,9 +27753,34 @@ class TestSmartThreadErrors:
             f'already in the pair array with an empty '
             f'status_blocks.')
 
-        assert re.fullmatch(exp_error_msg, str(exc.value))
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
 
         print('\n', exc.value)
+
+        ################################################################
+
+        st.SmartThread._pair_array[pair_key].status_blocks[
+            'beta'] = st.SmartThread.ConnectionStatusBlock(
+            name='beta',
+            create_time=0,
+            target_create_time=0.0,
+            wait_event=threading.Event(),
+            sync_event=threading.Event(),
+            msg_q=queue.Queue(maxsize=10))
+
+        with pytest.raises(st.SmartThreadIncorrectData) as exc:
+            st.SmartThread(name='beta', target=f1)
+
+        exp_error_msg = (
+            f'Error detected for request {self.request.value} '
+            '_add_to_pair_array with cmd_runner '
+            f'{self.cmd_runner}. '
+            f'While attempting to add {self.name} to the pair '
+            f'array, it was detected that pair_key {pair_key} '
+            'is already in the pair array with a '
+            f'status_blocks entry containing {self.name}.')
+
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
 
         logger.debug('mainline exiting')
 
