@@ -27854,18 +27854,232 @@ class TestSmartThreadErrors:
             f'cmd_runner alpha. '
             f'While attempting to add beta to the pair array, it was detected '
             f'that pair_key {pair_key} is already in the pair array with a '
-            f'status_blocks entry containing entries for ')
-        exp_error_msg2 = f'{exp_error_msg}{sorted(existing_names)}.'
+            f'status_blocks entry containing entries for '
+            f'{sorted(existing_names)}.')
 
-        assert re.match(exp_error_msg2, str(exc.value))
+        assert re.match(exp_error_msg, str(exc.value))
 
         alpha_st.smart_unreg(targets='beta')
 
         print('\n', exc.value)
 
-        print('\n', exp_error_msg)
+        logger.debug('mainline exiting')
 
-        print('\n', exp_error_msg2)
+    ####################################################################
+    # test_smart_start_errors
+    ####################################################################
+    def test_smart_start_errors(self):
+        """Test error cases for SmartThread."""
+        ################################################################
+        # f1
+        ################################################################
+        def f1():
+            logger.debug('f1 entered')
+            beta_thread.smart_wait(resumers='alpha')
+            logger.debug('f1 exiting')
+
+        logger.debug('mainline entered')
+        alpha_thread = st.SmartThread(name='alpha')
+
+        beta_thread = st.SmartThread(name='beta', target=f1, auto_start=False)
+
+        with pytest.raises(st.SmartThreadMultipleTargetsForSelfStart) as exc:
+            beta_thread.smart_start(targets=('beta', 'charlie'))
+
+        targets = set(('beta', 'charlie'))
+        exp_error_msg = (
+            f'Error detected for request smart_start with cmd_runner alpha '
+            f'and smart_thread instance beta. '
+            'Request smart_start can not be done for multiple targets '
+            f'{targets} when one of the targets is also the smart_thread '
+            'instance, in this case beta.')
+
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        beta_thread.smart_start()
+
+        with pytest.raises(st.SmartThreadAlreadyStarted) as exc:
+            beta_thread.smart_start()
+
+        exp_error_msg = (
+            f'Error detected for request smart_start '
+            f'with cmd_runner alpha and smart_thread instance beta. '
+            f'Request smart_start unable to start beta '
+            'because beta has already been started.')
+
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        alpha_thread.smart_resume(waiters='beta')
+
+        start_time = time.time()
+        timeout_value = 30
+        while True:
+            # if alpha_thread._get_state('beta') != st.ThreadState.Alive:
+            if not beta_thread.thread.is_alive():
+                break
+            time.sleep(0.2)
+            if time.time() - start_time > timeout_value:
+                raise CmdTimedOut('test_smart_start_errors took longer than '
+                                  f'{timeout_value} seconds waiting for beta '
+                                  'to exit and become inactive.')
+
+        with pytest.raises(st.SmartThreadRemoteThreadNotRegistered) as exc:
+            beta_thread.smart_start()
+
+        exp_error_msg = (
+            f'Error detected for request smart_start '
+            f'with cmd_runner alpha and smart_thread instance beta. '
+            f'Request smart_start unable to start beta '
+            'because beta is not registered.')
+
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+
+        print('\n', exc.value)
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_send_errors
+    ####################################################################
+    def test_smart_send_errors(self):
+        """Test error cases for SmartThread."""
+        ################################################################
+        # f1
+        ################################################################
+        def f1():
+            logger.debug('f1 entered')
+            beta_thread.smart_wait(resumers='alpha')
+            logger.debug('f1 exiting')
+        logger.debug('mainline entered')
+        alpha_thread = st.SmartThread(name='alpha')
+        beta_thread = st.SmartThread(name='beta', target=f1, auto_start=False)
+        beta_thread.smart_start()
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_send(msg='hi beta',
+                                    receivers='beta',
+                                    msg_dict={'beta': 'hello again'})
+
+        exp_error_msg = (
+            f'Error detected for request smart_send with cmd_runner '
+            f'alpha. '
+            'Mutually exclusive arguments msg and msg_dict were both '
+            'specified.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadNoRemoteTargets) as exc:
+            alpha_thread.smart_send(msg='hi beta',
+                                    receivers=set())
+
+        exp_error_msg = (
+            'Error detected for request smart_send with cmd_runner alpha. '
+            'The receivers argument does not specify any receivers.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_send(msg_dict={'beta': 'hi beta'},
+                                    receivers=set())
+
+        exp_error_msg = (
+            'Error detected for request smart_send with cmd_runner alpha. '
+            'Mutually exclusive arguments msg_dict and msg or msg_dict and '
+            'receivers were specified.'
+        )
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_send(msg='hi beta',
+                                    msg_dict={'beta': 'hello beta'})
+
+        exp_error_msg = (
+            'Error detected for request smart_send with cmd_runner alpha. '
+            'Mutually exclusive arguments msg_dict and msg or msg_dict and '
+            'receivers were specified.'
+        )
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadNoRemoteTargets) as exc:
+            alpha_thread.smart_send(msg_dict={})
+
+        exp_error_msg = (
+            'Error detected for request smart_send with cmd_runner alpha. '
+            'Argument msg_dict was specified with no items.'
+        )
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_send()
+
+        exp_error_msg = (
+            'Error detected for request smart_send with cmd_runner alpha. '
+            'The smart_send request failed to specify msg_dict, or failed to '
+            'specify both msg and receivers.'
+            )
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_send(receivers='beta')
+
+        exp_error_msg = (
+            'Error detected for request smart_send with cmd_runner alpha. '
+            'The smart_send request failed to specify msg_dict, or failed to '
+            'specify both msg and receivers.'
+            )
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_send(msg='hi beta')
+
+        exp_error_msg = (
+            'Error detected for request smart_send with cmd_runner alpha. '
+            'The smart_send request failed to specify msg_dict, or failed to '
+            'specify both msg and receivers.'
+            )
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
 
         logger.debug('mainline exiting')
 

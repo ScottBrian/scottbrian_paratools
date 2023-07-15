@@ -1768,9 +1768,9 @@ class SmartThread:
         """
         # smart_start is the only cmd that can be issued with itself as
         # the target running under any other thread. That means two or
-        # more threads could be doing smart_start again the same
+        # more threads could be doing smart_start against the same
         # smart_thread instance. We use the self.cmd_lock to prevent
-        # more than start at a time. The first start will work, the
+        # more than one start at a time. The first start will work, the
         # others will fail with an already started error.
         with self.cmd_lock:
             if not targets:
@@ -1780,19 +1780,35 @@ class SmartThread:
 
             if self.name in targets:
                 if len(targets) > 1:
-                    raise SmartThreadMultipleTargetsForSelfStart(
-                        f'{self.name} smart_start can not be done for '
-                        'multiple threads when one of the targets is for '
-                        f'itself. {targets=}, {len(targets)=}')
+                    error_msg = (
+                        f'Error detected for request smart_start '
+                        f'with cmd_runner {threading.current_thread().name} '
+                        f'and smart_thread instance {self.name}. '
+                        'Request smart_start can not be done for multiple '
+                        f'targets {targets} when one of the targets is also '
+                        f'the smart_thread instance, in this case {self.name}.'
+                    )
+                    logger.error(error_msg)
+                    raise SmartThreadMultipleTargetsForSelfStart(error_msg)
                 with sel.SELockExcl(SmartThread._registry_lock):
                     if self.thread.is_alive():
-                        raise SmartThreadAlreadyStarted(
-                            f'{self.name} smart_start request unable to start '
-                            'since thread has already been started.')
+                        error_msg = (
+                            f'Error detected for request smart_start '
+                            'with cmd_runner '
+                            f'{threading.current_thread().name} and '
+                            f'smart_thread instance {self.name}. '
+                            f'Request smart_start unable to start {self.name} '
+                            f'because {self.name} has already been started.')
+                        logger.error(error_msg)
+                        raise SmartThreadAlreadyStarted(error_msg)
                     if self._get_state(self.name) != ThreadState.Registered:
                         error_msg = (
-                            f'{self.name} raising '
-                            'SmartThreadRemoteThreadNotRegistered')
+                            f'Error detected for request smart_start '
+                            'with cmd_runner '
+                            f'{threading.current_thread().name} and '
+                            f'smart_thread instance {self.name}. '
+                            f'Request smart_start unable to start {self.name} '
+                            f'because {self.name} is not registered.')
                         logger.error(error_msg)
                         raise SmartThreadRemoteThreadNotRegistered(error_msg)
 
@@ -2618,32 +2634,55 @@ class SmartThread:
 
         if msg and receivers:
             if msg_dict:
-                raise SmartThreadInvalidInput(
-                    f'smart_send issued by {self.name} specified msg but '
-                    f'also specified mutually exclusive msg_dict.')
+                error_msg = (
+                    'Error detected for request smart_send with cmd_runner '
+                    f'{threading.current_thread().name}. '
+                    'Mutually exclusive arguments msg and msg_dict were both '
+                    'specified.')
+                logger.error(error_msg)
+                raise SmartThreadInvalidInput(error_msg)
             remotes = self._get_set(receivers)
             if not remotes:
-                raise SmartThreadNoRemoteTargets(
-                    f'{self.name} issued a smart_send request with '
-                    f'an empty receivers argument.')
+                error_msg = (
+                    'Error detected for request smart_send with cmd_runner '
+                    f'{threading.current_thread().name}. '
+                    f'The receivers argument does not specify any receivers.'
+                )
+                logger.error(error_msg)
+                raise SmartThreadNoRemoteTargets(error_msg)
             work_msgs = {}
             for remote in remotes:
                 work_msgs[remote] = msg
         elif msg_dict:
             if msg or receivers:
-                raise SmartThreadInvalidInput(
-                    f'smart_send issued by {self.name} specified msg_dict but '
-                    f'also specified mutually exclusive msg and/or receivers.')
+                error_msg = (
+                    'Error detected for request smart_send with cmd_runner '
+                    f'{threading.current_thread().name}. '
+                    'Mutually exclusive arguments msg_dict and msg or '
+                    'msg_dict and receivers were specified.'
+                )
+                logger.error(error_msg)
+                raise SmartThreadInvalidInput(error_msg)
+
             remotes = set(msg_dict.keys())
             if not remotes:
-                raise SmartThreadNoRemoteTargets(
-                    f'{self.name} issued a smart_send request with an '
-                    'empty msg_dict')
+                error_msg = (
+                    'Error detected for request smart_send with cmd_runner '
+                    f'{threading.current_thread().name}. '
+                    'Argument msg_dict was specified with no items.'
+                )
+                logger.error(error_msg)
+                raise SmartThreadNoRemoteTargets(error_msg)
             work_msgs = msg_dict
         else:
-            raise SmartThreadInvalidInput(
-                f'smart_send issued by {self.name} failed to specify '
-                f'msg_dict, or failed to specify both msg and receivers.')
+            error_msg = (
+                'Error detected for request smart_send with cmd_runner '
+                f'{threading.current_thread().name}. '
+                'The smart_send request failed to specify '
+                'msg_dict, or failed to specify both msg and receivers.'
+            )
+            logger.error(error_msg)
+            raise SmartThreadInvalidInput(error_msg)
 
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
@@ -4867,8 +4906,15 @@ class SmartThread:
 
         if (remotes and self.request != ReqType.Smart_start
                 and self.cmd_runner in remotes):
-            raise SmartThreadInvalidInput(f'{self.name} {self.request.value} '
-                                          f'is also a target: {remotes=}')
+            error_msg = (
+                f'Error detected for request {self.request.value} '
+                f'_request_setup with cmd_runner {self.cmd_runner} and '
+                f'smart_thread instance {self.name}. '
+                f'Targets {remotes} includes {self.cmd_runner} which is not '
+                f'permitted except for request smart_start.'
+            )
+            logger.error(error_msg)
+            raise SmartThreadInvalidInput(error_msg)
 
         pk_remotes: list[PairKeyRemote] = []
 
