@@ -27731,7 +27731,7 @@ class TestSmartThreadErrors:
                             "_clean_pair_array",
                             MockCleanPairArray.mock_clean_pair_array)
 
-        st.SmartThread(name='alpha')
+        alpha_st = st.SmartThread(name='alpha')
 
         # create an empty pair array entry_
         pair_key = st.SmartThread._get_pair_key('alpha', 'beta')
@@ -27757,30 +27757,115 @@ class TestSmartThreadErrors:
 
         print('\n', exc.value)
 
+        alpha_st.smart_unreg(targets='beta')
+
         ################################################################
 
-        st.SmartThread._pair_array[pair_key].status_blocks[
-            'beta'] = st.SmartThread.ConnectionStatusBlock(
-            name='beta',
-            create_time=0,
-            target_create_time=0.0,
-            wait_event=threading.Event(),
-            sync_event=threading.Event(),
-            msg_q=queue.Queue(maxsize=10))
+        st.SmartThread._pair_array[pair_key] = (
+            st.SmartThread.ConnectionPair(
+                status_lock=threading.Lock(),
+                status_blocks={
+                    'beta': st.SmartThread.ConnectionStatusBlock(
+                        name='beta',
+                        create_time=0,
+                        target_create_time=0.0,
+                        wait_event=threading.Event(),
+                        sync_event=threading.Event(),
+                        msg_q=queue.Queue(maxsize=10))
+                }))
 
         with pytest.raises(st.SmartThreadIncorrectData) as exc:
             st.SmartThread(name='beta', target=f1)
 
         exp_error_msg = (
-            f'Error detected for request {self.request.value} '
-            '_add_to_pair_array with cmd_runner '
-            f'{self.cmd_runner}. '
-            f'While attempting to add {self.name} to the pair '
-            f'array, it was detected that pair_key {pair_key} '
-            'is already in the pair array with a '
-            f'status_blocks entry containing {self.name}.')
+            'Error detected for request smart_init _add_to_pair_array with '
+            'cmd_runner alpha. '
+            'While attempting to add beta to the pair array, it was detected '
+            f'that pair_key {pair_key} is already in the pair array with a '
+            f'status_blocks entry containing beta.')
 
         assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+
+        alpha_st.smart_unreg(targets='beta')
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        st.SmartThread._pair_array[pair_key] = (
+            st.SmartThread.ConnectionPair(
+                status_lock=threading.Lock(),
+                status_blocks={
+                    'alpha': st.SmartThread.ConnectionStatusBlock(
+                        name='beta',
+                        create_time=0,
+                        target_create_time=0.0,
+                        wait_event=threading.Event(),
+                        sync_event=threading.Event(),
+                        msg_q=queue.Queue(maxsize=10))
+                }))
+
+        with pytest.raises(st.SmartThreadIncorrectData) as exc:
+            st.SmartThread(name='beta', target=f1)
+
+        exp_error_msg = (
+            f'Error detected for request smart_init _add_to_pair_array with '
+            f'cmd_runner alpha. '
+            f'While attempting to add beta to the pair array, it was detected '
+            f'that pair_key {pair_key} is already in the pair array with a '
+            f'status_blocks entry containing alpha that is not del_deferred.')
+
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+
+        alpha_st.smart_unreg(targets='beta')
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        st.SmartThread._pair_array[pair_key] = (
+            st.SmartThread.ConnectionPair(
+                status_lock=threading.Lock(),
+                status_blocks={
+                    'alpha': st.SmartThread.ConnectionStatusBlock(
+                        name='beta',
+                        create_time=0,
+                        target_create_time=0.0,
+                        wait_event=threading.Event(),
+                        sync_event=threading.Event(),
+                        msg_q=queue.Queue(maxsize=10)),
+                    'beta': st.SmartThread.ConnectionStatusBlock(
+                        name='beta',
+                        create_time=0,
+                        target_create_time=0.0,
+                        wait_event=threading.Event(),
+                        sync_event=threading.Event(),
+                        msg_q=queue.Queue(maxsize=10)),
+                }))
+
+        with pytest.raises(st.SmartThreadIncorrectData) as exc:
+            st.SmartThread(name='beta', target=f1)
+
+        existing_names = st.SmartThread._pair_array[
+            pair_key].status_blocks.keys()
+
+        exp_error_msg = re.escape(
+            f'Error detected for request smart_init _add_to_pair_array with '
+            f'cmd_runner alpha. '
+            f'While attempting to add beta to the pair array, it was detected '
+            f'that pair_key {pair_key} is already in the pair array with a '
+            f'status_blocks entry containing entries for ')
+        exp_error_msg2 = f'{exp_error_msg}{sorted(existing_names)}.'
+
+        assert re.match(exp_error_msg2, str(exc.value))
+
+        alpha_st.smart_unreg(targets='beta')
+
+        print('\n', exc.value)
+
+        print('\n', exp_error_msg)
+
+        print('\n', exp_error_msg2)
 
         logger.debug('mainline exiting')
 

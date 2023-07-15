@@ -914,6 +914,7 @@ class SmartThread:
                 f'__init__ with cmd_runner {self.cmd_runner}. '
                 'While attempting to initialize a new SmartThread, '
                 f'the input name of {name} was detected to be incorrect.')
+            logger.error(error_msg)
             raise SmartThreadIncorrectNameSpecified(error_msg)
         self.name = name
 
@@ -925,6 +926,7 @@ class SmartThread:
                 f'name of {name}, it was detected that arguments were '
                 'both specified for mutually exclusive parameters target '
                 'and thread.')
+            logger.error(error_msg)
             raise SmartThreadMutuallyExclusiveTargetThreadSpecified(error_msg)
 
         if (not target) and (args or kwargs):
@@ -936,6 +938,7 @@ class SmartThread:
                 'parameters args or kwargs were specified, but the '
                 'required argument for the target parameter was not '
                 'specified.')
+            logger.error(error_msg)
             raise SmartThreadArgsSpecificationWithoutTarget(error_msg)
 
         if target:  # caller wants a thread created
@@ -1225,6 +1228,7 @@ class SmartThread:
                             f'{self.thread}, it was detected that a registry '
                             'entry already exists for a SmartThread with '
                             f'name {key} with the same thread {item.thread}.')
+                        logger.error(error_msg)
                         raise SmartThreadAlreadyExists(error_msg)
                 # get a unique time stamp for create_time
                 create_time = time.time()
@@ -1265,6 +1269,7 @@ class SmartThread:
                     'that a register entry already exists for a SmartThread '
                     f'with name {self.name} but a different ID of '
                     f'{id(SmartThread._registry[self.name])}.')
+                logger.error(error_msg)
                 raise SmartThreadNameAlreadyInUse(error_msg)
 
         logger.debug(f'{self.request.value} _register exit: '
@@ -1316,6 +1321,7 @@ class SmartThread:
                     f'_clean_registry with cmd_runner {self.cmd_runner}. '
                     f'Registry item with key {key} has non-matching '
                     f'item.name of {item.name}.')
+                logger.error(error_msg)
                 raise SmartThreadErrorInRegistry(error_msg)
 
         changed = False
@@ -1497,6 +1503,7 @@ class SmartThread:
                         f'array, it was detected that pair_key {pair_key} is '
                         f'already in the pair array with an empty '
                         f'status_blocks.')
+                    logger.error(error_msg)
                     raise SmartThreadIncorrectData(error_msg)
                 elif num_status_blocks == 1:
                     if self.name in SmartThread._pair_array[
@@ -1509,25 +1516,38 @@ class SmartThread:
                             f'array, it was detected that pair_key {pair_key} '
                             f'is already in the pair array with a '
                             f'status_blocks entry containing {self.name}.')
+                        logger.error(error_msg)
                         raise SmartThreadIncorrectData(error_msg)
                     if (existing_name in SmartThread._pair_array[
                             pair_key].status_blocks
                             and not SmartThread._pair_array[
                             pair_key].status_blocks[
                                 existing_name].del_deferred):
-                        raise SmartThreadIncorrectData(
-                            f'{self.cmd_runner} detected in '
-                            f'_add_to_pair_array while adding {self.name} '
-                            f'that pair_key {pair_key} is already in the pair '
-                            f'array with an existing status_blocks entry for '
-                            f'{existing_name} that is not del_deferred.')
+                        error_msg = (
+                            f'Error detected for request {self.request.value} '
+                            f'_add_to_pair_array with cmd_runner '
+                            f'{self.cmd_runner}. '
+                            f'While attempting to add {self.name} to the pair '
+                            f'array, it was detected that pair_key {pair_key} '
+                            f'is already in the pair array with a '
+                            f'status_blocks entry containing {existing_name} '
+                            f'that is not del_deferred.')
+                        logger.error(error_msg)
+                        raise SmartThreadIncorrectData(error_msg)
                 else:
-                    raise SmartThreadIncorrectData(
-                        f'{self.cmd_runner} detected in '
-                        f'_add_to_pair_array while adding {self.name} that '
-                        f'pair_key {pair_key} is already in the pair array '
-                        f'with an existing status_blocks entry for two or '
-                        f'more entries.')
+                    existing_names = SmartThread._pair_array[
+                        pair_key].status_blocks.keys()
+                    error_msg = (
+                        f'Error detected for request {self.request.value} '
+                        '_add_to_pair_array with cmd_runner '
+                        f'{self.cmd_runner}. '
+                        f'While attempting to add {self.name} to the pair '
+                        f'array, it was detected that pair_key {pair_key} '
+                        'is already in the pair array with a '
+                        'status_blocks entry containing entries for '
+                        f'{sorted(existing_names)}.')
+                    logger.error(error_msg)
+                    raise SmartThreadIncorrectData(error_msg)
 
             # proceed with valid pair_array
             else:  # pair_key not in SmartThread._pair_array:
