@@ -28081,6 +28081,202 @@ class TestSmartThreadErrors:
 
         print('\n', exc.value)
 
+        ################################################################
+        # resume and join beta
+        ################################################################
+        alpha_thread.smart_resume(waiters='beta', timeout=5)
+        alpha_thread.smart_join(targets='beta', timeout=5)
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_recv_errors
+    ####################################################################
+    def test_smart_recv_errors(self):
+        """Test error cases for SmartThread."""
+        ################################################################
+        # f1
+        ################################################################
+        def f1():
+            logger.debug('f1 entered')
+            beta_thread.smart_wait(resumers='alpha')
+            logger.debug('f1 exiting')
+        logger.debug('mainline entered')
+        alpha_thread = st.SmartThread(name='alpha')
+        beta_thread = st.SmartThread(name='beta', target=f1, auto_start=False)
+        beta_thread.smart_start()
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_recv(senders='beta',
+                                    sender_count=-1)
+
+        exp_error_msg = (
+            'Error detected for request smart_recv with cmd_runner alpha. '
+            f'The value specified for sender_count=-1 is not valid. '
+            f'The number of specified senders is 1. The value for '
+            f'sender_count must be an integer between 1 and the '
+            f'number of specified senders, inclusive.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_recv(senders='beta',
+                                    sender_count=0)
+
+        exp_error_msg = (
+            'Error detected for request smart_recv with cmd_runner alpha. '
+            f'The value specified for sender_count=0 is not valid. '
+            f'The number of specified senders is 1. The value for '
+            f'sender_count must be an integer between 1 and the '
+            f'number of specified senders, inclusive.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_recv(senders='beta',
+                                    sender_count=2)
+
+        exp_error_msg = (
+            'Error detected for request smart_recv with cmd_runner alpha. '
+            f'The value specified for sender_count=2 is not valid. '
+            f'The number of specified senders is 1. The value for '
+            f'sender_count must be an integer between 1 and the '
+            f'number of specified senders, inclusive.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        # resume and join beta
+        ################################################################
+        alpha_thread.smart_resume(waiters='beta', timeout=5)
+        alpha_thread.smart_join(targets='beta', timeout=5)
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_wait_errors
+    ####################################################################
+    def test_smart_wait_errors(self):
+        """Test error cases for SmartThread."""
+        ################################################################
+        # f1
+        ################################################################
+        def f1():
+            logger.debug('f1 entered')
+            beta_thread.smart_wait(resumers='alpha')
+            logger.debug('f1 exiting')
+        logger.debug('mainline entered')
+        alpha_thread = st.SmartThread(name='alpha')
+        beta_thread = st.SmartThread(name='beta', target=f1, auto_start=False)
+        beta_thread.smart_start()
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_wait(resumers='beta',
+                                    resumer_count=-1)
+
+        exp_error_msg = (
+            'Error detected for request smart_wait with cmd_runner alpha. '
+            f'The value specified for resumer_count=-1 is not valid. '
+            f'The number of specified resumers is 1. The value for '
+            f'resumer_count must be an integer between 1 and the '
+            f'number of specified resumers, inclusive.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_wait(resumers='beta',
+                                    resumer_count=0)
+
+        exp_error_msg = (
+            'Error detected for request smart_wait with cmd_runner alpha. '
+            f'The value specified for resumer_count=0 is not valid. '
+            f'The number of specified resumers is 1. The value for '
+            f'resumer_count must be an integer between 1 and the '
+            f'number of specified resumers, inclusive.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_wait(resumers='beta',
+                                    resumer_count=2)
+
+        exp_error_msg = (
+            'Error detected for request smart_wait with cmd_runner alpha. '
+            f'The value specified for resumer_count=2 is not valid. '
+            f'The number of specified resumers is 1. The value for '
+            f'resumer_count must be an integer between 1 and the '
+            f'number of specified resumers, inclusive.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        # resume and join beta
+        ################################################################
+        alpha_thread.smart_resume(waiters='beta', timeout=5)
+        alpha_thread.smart_join(targets='beta', timeout=5)
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_handle_found_pk_remotes_errors
+    ####################################################################
+    def test_handle_found_pk_remotes_errors(self):
+        """Test error cases for SmartThread."""
+        ################################################################
+        # f1
+        ################################################################
+        def f1():
+            logger.debug('f1 entered')
+            beta_thread.smart_wait(resumers='alpha')
+            logger.debug('f1 exiting')
+        logger.debug('mainline entered')
+        alpha_thread = st.SmartThread(name='alpha')
+        beta_thread = st.SmartThread(name='beta', target=f1, auto_start=False)
+        beta_thread.smart_start()
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_wait(resumers='beta',
+                                    resumer_count=-1)
+
+        exp_error_msg = (
+            f'Error detected for request {self.request} in '
+            '_handle_found_pk_remotes with cmd_runner '
+            f'{threading.current_thread().name}. '
+            f'An expected entry for {found_pk_remote=} was not '
+            f'found in {self.work_pk_remotes=}.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+
+
+        ################################################################
+        # resume and join beta
+        ################################################################
+        alpha_thread.smart_resume(waiters='beta', timeout=5)
+        alpha_thread.smart_join(targets='beta', timeout=5)
+
         logger.debug('mainline exiting')
 
     ####################################################################

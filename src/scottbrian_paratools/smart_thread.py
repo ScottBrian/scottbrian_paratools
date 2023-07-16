@@ -2632,8 +2632,11 @@ class SmartThread:
         remotes: set[str]
         work_msgs: dict[str, Any]
 
-        if msg and receivers:
-            if msg_dict:
+        # Note that we need to determine which combinations of arguments
+        # were specified for mutual exclusive checks. After that we will
+        # determine whether the specified arguments are valid.
+        if msg is not None and receivers is not None:
+            if msg_dict is not None:
                 error_msg = (
                     'Error detected for request smart_send with cmd_runner '
                     f'{threading.current_thread().name}. '
@@ -2650,11 +2653,12 @@ class SmartThread:
                 )
                 logger.error(error_msg)
                 raise SmartThreadNoRemoteTargets(error_msg)
-            work_msgs = {}
-            for remote in remotes:
-                work_msgs[remote] = msg
-        elif msg_dict:
-            if msg or receivers:
+            # work_msgs = {}
+            # for remote in remotes:
+            #     work_msgs[remote] = msg
+            work_msgs = {msg: remote for remote in remotes}
+        elif msg_dict is not None:
+            if msg is not None or receivers is not None:
                 error_msg = (
                     'Error detected for request smart_send with cmd_runner '
                     f'{threading.current_thread().name}. '
@@ -3084,12 +3088,16 @@ class SmartThread:
             if (not isinstance(sender_count, int)
                     or sender_count < 1
                     or len(self._get_set(senders)) < sender_count):
-                raise SmartThreadInvalidInput(
-                    f'smart_recv issued by {self.name} incorrectly specified '
-                    f'a value for {sender_count=}. The value must be an '
-                    f'integer between 1 and the number of specified senders, '
-                    f'inclusive.'
-                )
+                error_msg = (
+                    'Error detected for request smart_recv with cmd_runner '
+                    f'{threading.current_thread().name}. '
+                    f'The value specified for {sender_count=} is not valid. '
+                    f'The number of specified senders is '
+                    f'{len(self._get_set(senders))}. The value for '
+                    f'sender_count must be an integer between 1 and the '
+                    f'number of specified senders, inclusive.')
+                logger.error(error_msg)
+                raise SmartThreadInvalidInput(error_msg)
             completion_count = sender_count
 
         # get RequestBlock with targets in a set and a timer object
@@ -3534,12 +3542,16 @@ class SmartThread:
             if (not isinstance(resumer_count, int)
                     or resumer_count < 1
                     or len(self._get_set(resumers)) < resumer_count):
-                raise SmartThreadInvalidInput(
-                    f'smart_wait issued by {self.name} incorrectly specified '
-                    f'a value for {resumer_count=}. The value must be an '
-                    f'integer between 1 and the number of specified resumers, '
-                    f'inclusive.'
-                )
+                error_msg = (
+                    'Error detected for request smart_wait with cmd_runner '
+                    f'{threading.current_thread().name}. '
+                    f'The value specified for {resumer_count=} is not valid. '
+                    f'The number of specified resumers is '
+                    f'{len(self._get_set(resumers))}. The value for '
+                    f'resumer_count must be an integer between 1 and the '
+                    f'number of specified resumers, inclusive.')
+                logger.error(error_msg)
+                raise SmartThreadInvalidInput(error_msg)
             completion_count = resumer_count
 
         # get RequestBlock with targets in a set and a timer object
@@ -4658,10 +4670,14 @@ class SmartThread:
                         found_pk_remote.create_time)
 
             except ValueError:
-                raise SmartThreadWorkDataException(
-                    f'_handle_found_pk_remotes failed to find an '
-                    f'entry for {found_pk_remote=} in '
-                    f'{self.work_pk_remotes=}')
+                error_msg = (
+                    f'Error detected for request {self.request} in '
+                    '_handle_found_pk_remotes with cmd_runner '
+                    f'{threading.current_thread().name}. '
+                    f'An expected entry for {found_pk_remote=} was not '
+                    f'found in {self.work_pk_remotes=}.')
+                logger.error(error_msg)
+                raise SmartThreadWorkDataException(error_msg)
 
             try:
                 idx = work_pk_remotes.index(test_pk_remote)
