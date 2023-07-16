@@ -28240,42 +28240,182 @@ class TestSmartThreadErrors:
     ####################################################################
     # test_handle_found_pk_remotes_errors
     ####################################################################
-    def test_handle_found_pk_remotes_errors(self):
-        """Test error cases for SmartThread."""
+    def test_handle_found_pk_remotes_errors(self,
+                                            monkeypatch: Any):
+        """Test error cases for SmartThread.
+
+        Args:
+            monkeypatch: pytest fixture to set up a mock routine
+
+        """
+        from scottbrian_locking import se_lock as sel
+
+        ################################################################
+        # mock_request_loop
+        ################################################################
+        class MockRequestLoop:
+            """Provide a way to test found_pk_remotes errors."""
+            mock_action: ClassVar[str] = ''
+
+            def __init__(self) -> None:
+                """Initialize the mock target state."""
+                # self.work_pk_remotes = []
+                MockRequestLoop.mock_action = 'action1'
+
+            def mock_request_loop(self,
+                                  request_block: st.RequestBlock,
+                                  ) -> None:
+                """Main loop for each request.
+
+                Args:
+                    request_block: contains requestors, timeout, etc
+
+                """
+                logger.debug('mock_request_loop entered')
+                delta_added = False
+                while True:
+                    if MockRequestLoop.mock_action == 'action1':
+                        work_pk_remotes_copy = self.work_pk_remotes.copy()
+                    elif MockRequestLoop.mock_action == 'action2':
+                        work_pk_remotes_copy = self.work_pk_remotes.copy()
+                        mock_pair_key = self._get_pair_key('beta', 'delta')
+                        if not delta_added:
+                            delta_added = True
+                            self.work_pk_remotes.append(st.PairKeyRemote(
+                                mock_pair_key,
+                                'delta',
+                                0.0))
+                        logger.debug('mock_request_loop '
+                                     f'{self.work_pk_remotes=}')
+                    else:
+                        raise IncorrectActionSpecified(
+                            'test_handle_found_pk_remotes_errors '
+                            'mock_request_loop detected incorrect '
+                            f'{MockRequestLoop.mock_action=}')
+                    for pk_remote in work_pk_remotes_copy:
+                        # we need to hold the lock to ensure the pair_array
+                        # remains stable while getting local_sb. The
+                        # request_pending flag in our entry will prevent our
+                        # entry for being removed (but not the remote)
+                        with sel.SELockShare(st.SmartThread._registry_lock):
+                            if self.found_pk_remotes:
+                                pk_remote = self._handle_found_pk_remotes(
+                                    pk_remote=pk_remote,
+                                    work_pk_remotes=work_pk_remotes_copy
+                                )
+                    time.sleep(0.5)
+
         ################################################################
         # f1
         ################################################################
         def f1():
             logger.debug('f1 entered')
-            beta_thread.smart_wait(resumers='alpha')
+            with pytest.raises(st.SmartThreadWorkDataException) as exc:
+                beta_thread.smart_wait(resumers=('alpha', 'charlie'))
+
+            action = msgs.get_msg('beta')
+
+            pair_key = st.SmartThread._get_pair_key('beta', 'delta')
+            found_pk_remote = st.PairKeyRemote(
+                pair_key,
+                'delta',
+                delta_thread.create_time)
+
+            if action == 'action1':
+                exp_error_msg = (
+                    'Error detected for request smart_wait in '
+                    '_handle_found_pk_remotes with cmd_runner beta. '
+                    f'An expected entry for {found_pk_remote=} was not '
+                    f'found in self.work_pk_remotes={exp_work_remotes}.')
+            elif action == 'action2':
+                exp_error_msg = (
+                    'Error detected for request smart_wait in '
+                    '_handle_found_pk_remotes with cmd_runner beta. '
+                    f'An expected entry for {found_pk_remote=} was not '
+                    f'found in work_pk_remotes={exp_work_remotes}.')
+            else:
+                raise IncorrectActionSpecified(
+                    f'test_handle_found_pk_remotes_errors received '
+                    f'an unrecognized {action=} in beta f1 rtn')
+
+            assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+
+            print('\n', exc.value)
+
             logger.debug('f1 exiting')
+
+        ################################################################
+        # mainline
+        ################################################################
         logger.debug('mainline entered')
+
+        a_mock_get_target_state = MockRequestLoop()
+
+        msgs = Msgs()
+
         alpha_thread = st.SmartThread(name='alpha')
         beta_thread = st.SmartThread(name='beta', target=f1, auto_start=False)
         beta_thread.smart_start()
 
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_wait(resumers='beta',
-                                    resumer_count=-1)
+        start_time = time.time()
+        timeout_value = 15
+        while len(beta_thread.work_pk_remotes) < 2:
+            time.sleep(0.5)
+            if time.time() - start_time > timeout_value:
+                raise CmdTimedOut('test_smart_start_errors took longer than '
+                                  f'{timeout_value} seconds waiting for beta '
+                                  'to exit and become inactive.')
 
-        exp_error_msg = (
-            f'Error detected for request {self.request} in '
-            '_handle_found_pk_remotes with cmd_runner '
-            f'{threading.current_thread().name}. '
-            f'An expected entry for {found_pk_remote=} was not '
-            f'found in {self.work_pk_remotes=}.')
+        exp_work_remotes = beta_thread.work_pk_remotes
+        beta_thread.missing_remotes |= {'delta'}
 
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-
+        delta_thread = st.SmartThread(name='delta',
+                                      target=f1,
+                                      auto_start=False)
+        msgs.queue_msg(target='beta',
+                       msg='action1')
 
         ################################################################
-        # resume and join beta
+        # join beta
         ################################################################
-        alpha_thread.smart_resume(waiters='beta', timeout=5)
         alpha_thread.smart_join(targets='beta', timeout=5)
+        alpha_thread.smart_unreg(targets='delta')
+
+        ################################################################
+        # part 2
+        ################################################################
+        beta_thread = st.SmartThread(name='beta', target=f1, auto_start=False)
+
+        monkeypatch.setattr(st.SmartThread,
+                            "_request_loop",
+                            MockRequestLoop.mock_request_loop)
+        MockRequestLoop.mock_action = 'action2'
+        beta_thread.smart_start()
+
+        start_time = time.time()
+        timeout_value = 15
+        while len(beta_thread.work_pk_remotes) < 2:
+            time.sleep(0.5)
+            if time.time() - start_time > timeout_value:
+                raise CmdTimedOut('test_smart_start_errors took longer than '
+                                  f'{timeout_value} seconds waiting for beta '
+                                  'to exit and become inactive.')
+
+        exp_work_remotes = beta_thread.work_pk_remotes
+        beta_thread.missing_remotes |= {'delta'}
+
+        delta_thread = st.SmartThread(name='delta',
+                                      target=f1,
+                                      auto_start=False)
+
+        msgs.queue_msg(target='beta',
+                       msg='action2')
+
+        ################################################################
+        # join beta
+        ################################################################
+        alpha_thread.smart_join(targets='beta', timeout=5)
+        alpha_thread.smart_unreg(targets='delta')
 
         logger.debug('mainline exiting')
 

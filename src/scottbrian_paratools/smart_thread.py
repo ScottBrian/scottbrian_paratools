@@ -4687,10 +4687,14 @@ class SmartThread:
                     found_pk_remote.create_time)
 
             except ValueError:
-                raise SmartThreadWorkDataException(
-                    f'_handle_found_pk_remotes failed to find an '
-                    f'entry for {found_pk_remote=} in '
-                    f'{self.work_pk_remotes=}')
+                error_msg = (
+                    f'Error detected for request {self.request} in '
+                    '_handle_found_pk_remotes with cmd_runner '
+                    f'{threading.current_thread().name}. '
+                    f'An expected entry for {found_pk_remote=} was not '
+                    f'found in {work_pk_remotes=}.')
+                logger.error(error_msg)
+                raise SmartThreadWorkDataException(error_msg)
 
         self.found_pk_remotes = []
 
