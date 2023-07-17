@@ -3100,10 +3100,10 @@ class SmartThread:
                     'SmartThreadInvalidInput error while processing request '
                     'smart_recv. '
                     f'The value specified for {sender_count=} is not valid. '
-                    f'The number of specified senders is '
+                    'The number of specified senders is '
                     f'{len(self._get_set(senders))}. The value for '
-                    f'sender_count must be an integer between 1 and the '
-                    f'number of specified senders, inclusive.')
+                    'sender_count must be an integer between 1 and the '
+                    'number of specified senders, inclusive.')
                 logger.error(error_msg)
                 raise SmartThreadInvalidInput(error_msg)
             completion_count = sender_count
@@ -3551,14 +3551,14 @@ class SmartThread:
                     or resumer_count < 1
                     or len(self._get_set(resumers)) < resumer_count):
                 error_msg = (
-                    'SmartThread {threading.current_thread().name} raising '
+                    f'SmartThread {threading.current_thread().name} raising '
                     'SmartThreadInvalidInput error while processing request '
                     'smart_wait. '
                     f'The value specified for {resumer_count=} is not valid. '
-                    f'The number of specified resumers is '
+                    'The number of specified resumers is '
                     f'{len(self._get_set(resumers))}. The value for '
-                    f'resumer_count must be an integer between 1 and the '
-                    f'number of specified resumers, inclusive.')
+                    'resumer_count must be an integer between 1 and the '
+                    'number of specified resumers, inclusive.')
                 logger.error(error_msg)
                 raise SmartThreadInvalidInput(error_msg)
             completion_count = resumer_count

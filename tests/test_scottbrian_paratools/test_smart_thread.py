@@ -28148,11 +28148,14 @@ class TestSmartThreadErrors:
                                     sender_count=-1)
 
         exp_error_msg = (
-            'Error detected for request smart_recv with cmd_runner alpha. '
-            f'The value specified for sender_count=-1 is not valid. '
-            f'The number of specified senders is 1. The value for '
-            f'sender_count must be an integer between 1 and the '
-            f'number of specified senders, inclusive.')
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing request '
+            'smart_recv. '
+            'The value specified for sender_count=-1 is not valid. '
+            'The number of specified senders is '
+            '1. The value for '
+            'sender_count must be an integer between 1 and the '
+            'number of specified senders, inclusive.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
@@ -28165,11 +28168,14 @@ class TestSmartThreadErrors:
                                     sender_count=0)
 
         exp_error_msg = (
-            'Error detected for request smart_recv with cmd_runner alpha. '
-            f'The value specified for sender_count=0 is not valid. '
-            f'The number of specified senders is 1. The value for '
-            f'sender_count must be an integer between 1 and the '
-            f'number of specified senders, inclusive.')
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing request '
+            'smart_recv. '
+            'The value specified for sender_count=0 is not valid. '
+            'The number of specified senders is '
+            '1. The value for '
+            'sender_count must be an integer between 1 and the '
+            'number of specified senders, inclusive.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
@@ -28182,11 +28188,14 @@ class TestSmartThreadErrors:
                                     sender_count=2)
 
         exp_error_msg = (
-            'Error detected for request smart_recv with cmd_runner alpha. '
-            f'The value specified for sender_count=2 is not valid. '
-            f'The number of specified senders is 1. The value for '
-            f'sender_count must be an integer between 1 and the '
-            f'number of specified senders, inclusive.')
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing request '
+            'smart_recv. '
+            'The value specified for sender_count=2 is not valid. '
+            'The number of specified senders is '
+            '1. The value for '
+            'sender_count must be an integer between 1 and the '
+            'number of specified senders, inclusive.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
@@ -28222,11 +28231,14 @@ class TestSmartThreadErrors:
                                     resumer_count=-1)
 
         exp_error_msg = (
-            'Error detected for request smart_wait with cmd_runner alpha. '
-            f'The value specified for resumer_count=-1 is not valid. '
-            f'The number of specified resumers is 1. The value for '
-            f'resumer_count must be an integer between 1 and the '
-            f'number of specified resumers, inclusive.')
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing request '
+            'smart_wait. '
+            'The value specified for resumer_count=-1 is not valid. '
+            'The number of specified resumers is '
+            '1. The value for '
+            'resumer_count must be an integer between 1 and the '
+            'number of specified resumers, inclusive.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
@@ -28239,11 +28251,14 @@ class TestSmartThreadErrors:
                                     resumer_count=0)
 
         exp_error_msg = (
-            'Error detected for request smart_wait with cmd_runner alpha. '
-            f'The value specified for resumer_count=0 is not valid. '
-            f'The number of specified resumers is 1. The value for '
-            f'resumer_count must be an integer between 1 and the '
-            f'number of specified resumers, inclusive.')
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing request '
+            'smart_wait. '
+            'The value specified for resumer_count=0 is not valid. '
+            'The number of specified resumers is '
+            '1. The value for '
+            'resumer_count must be an integer between 1 and the '
+            'number of specified resumers, inclusive.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
@@ -28256,11 +28271,14 @@ class TestSmartThreadErrors:
                                     resumer_count=2)
 
         exp_error_msg = (
-            'Error detected for request smart_wait with cmd_runner alpha. '
-            f'The value specified for resumer_count=2 is not valid. '
-            f'The number of specified resumers is 1. The value for '
-            f'resumer_count must be an integer between 1 and the '
-            f'number of specified resumers, inclusive.')
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing request '
+            'smart_wait. '
+            'The value specified for resumer_count=2 is not valid. '
+            'The number of specified resumers is '
+            '1. The value for '
+            'resumer_count must be an integer between 1 and the '
+            'number of specified resumers, inclusive.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
@@ -28357,14 +28375,16 @@ class TestSmartThreadErrors:
 
             if action == 'action1':
                 exp_error_msg = (
-                    'Error detected for request smart_wait in '
-                    '_handle_found_pk_remotes with cmd_runner beta. '
+                    'SmartThread beta raising '
+                    'SmartThreadWorkDataException error while processing '
+                    'request smart_wait. '
                     f'An expected entry for {found_pk_remote=} was not '
                     f'found in self.work_pk_remotes={exp_work_remotes}.')
             elif action == 'action2':
                 exp_error_msg = (
-                    'Error detected for request smart_wait in '
-                    '_handle_found_pk_remotes with cmd_runner beta. '
+                    'SmartThread beta raising '
+                    'SmartThreadWorkDataException error while processing '
+                    'request smart_wait. '
                     f'An expected entry for {found_pk_remote=} was not '
                     f'found in work_pk_remotes='
                     f'{MockRequestLoop.mock_exp_pk_remotes}.')
@@ -28386,7 +28406,7 @@ class TestSmartThreadErrors:
         ################################################################
         logger.debug('mainline entered')
 
-        a_mock_get_target_state = MockRequestLoop()
+        MockRequestLoop()
 
         msgs = Msgs()
 
@@ -28453,6 +28473,69 @@ class TestSmartThreadErrors:
         ################################################################
         alpha_thread.smart_join(targets='beta', timeout=5)
         alpha_thread.smart_unreg(targets='delta')
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_handle_loop_errors_errors
+    ####################################################################
+    def test_handle_loop_errors_errors(self):
+        """Test error cases for SmartThread."""
+        ################################################################
+        # f1
+        ################################################################
+        def f1():
+            logger.debug('f1 entered')
+            beta_thread.smart_wait(resumers='alpha')
+            logger.debug('f1 exiting')
+        logger.debug('mainline entered')
+        alpha_thread = st.SmartThread(name='alpha')
+        beta_thread = st.SmartThread(name='beta', target=f1, auto_start=False)
+        beta_thread.smart_start()
+        alpha_thread.smart_resume(waiters='beta')
+
+        ################################################################
+        # SmartThreadRemoteThreadNotAlive
+        ################################################################
+        with pytest.raises(st.SmartThreadRemoteThreadNotAlive) as exc:
+            alpha_thread.smart_recv(senders='beta')
+
+        targets_msg = ('while processing a '
+                       'smart_recv '
+                       'request with targets '
+                       r"\['beta'\].")
+
+        pending_msg = ''
+
+        stopped_msg = (
+            ' Remotes that are stopped: '
+            r"\['beta'\].")
+
+        not_registered_msg = ''
+
+        deadlock_msg = ''
+
+        full_send_q_msg = ''
+
+        msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
+                     f'{not_registered_msg}{deadlock_msg}{full_send_q_msg}')
+
+        exp_error_msg = (
+            f'alpha raising '
+            f'SmartThreadRemoteThreadNotAlive {msg_suite}')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+
+        ################################################################
+        # join beta
+        ################################################################
+        alpha_thread.smart_join(targets='beta', timeout=5)
 
         logger.debug('mainline exiting')
 
