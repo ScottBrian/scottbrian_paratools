@@ -910,34 +910,34 @@ class SmartThread:
 
         if not isinstance(name, str):
             error_msg = (
-                f'Error detected for request {self.request.value} '
-                f'__init__ with cmd_runner {self.cmd_runner}. '
-                'While attempting to initialize a new SmartThread, '
-                f'the input name of {name} was detected to be incorrect.')
+                f'SmartThread {threading.current_thread().name} raising '
+                'SmartThreadIncorrectNameSpecified error while processing '
+                'request smart_init. '
+                f'The input {name=} is incorrect. Please specify a str for'
+                f'the name.')
             logger.error(error_msg)
             raise SmartThreadIncorrectNameSpecified(error_msg)
         self.name = name
 
         if target and thread:
             error_msg = (
-                f'Error detected for request {self.request.value} '
-                f'__init__ with cmd_runner {self.cmd_runner}. '
-                'While attempting to initialize a new SmartThread with '
-                f'name of {name}, it was detected that arguments were '
-                'both specified for mutually exclusive parameters target '
-                'and thread.')
-            logger.error(error_msg)
+                f'SmartThread {threading.current_thread().name} raising '
+                'SmartThreadMutuallyExclusiveTargetThreadSpecified error '
+                'while processing request smart_init. '
+                'Arguments for mutually exclusive parameters target and '
+                'thread were both specified. Please specify only one or '
+                'target or thread.')
             raise SmartThreadMutuallyExclusiveTargetThreadSpecified(error_msg)
 
         if (not target) and (args or kwargs):
             error_msg = (
-                f'Error detected for request {self.request.value} '
-                f'__init__ with cmd_runner {self.cmd_runner}. '
-                'While attempting to initialize a new SmartThread with '
-                f'name of {name}, it was detected that arguments for '
-                'parameters args or kwargs were specified, but the '
-                'required argument for the target parameter was not '
-                'specified.')
+                f'SmartThread {threading.current_thread().name} raising '
+                'SmartThreadArgsSpecificationWithoutTarget error while '
+                'processing request smart_init. '
+                'Arguments for parameters args or kwargs were specified, '
+                'but an argument for the target parameter was not '
+                'specified. Please specify target or remove args and '
+                'kwargs.')
             logger.error(error_msg)
             raise SmartThreadArgsSpecificationWithoutTarget(error_msg)
 
@@ -1221,13 +1221,14 @@ class SmartThread:
                 for key, item in SmartThread._registry.items():
                     if item.thread is self.thread:
                         error_msg = (
-                            f'Error detected for request {self.request.value} '
-                            f'_register with cmd_runner {self.cmd_runner}. '
+                            f'SmartThread {threading.current_thread().name} '
+                            f'raising SmartThreadAlreadyExists error while '
+                            f'processing request {self.request.value}. '
                             'While attempting to register a new SmartThread '
                             f'with name {self.name} and thread '
                             f'{self.thread}, it was detected that a registry '
                             'entry already exists for a SmartThread with '
-                            f'name {key} with the same thread {item.thread}.')
+                            f'the same thread {item.thread} for name {key}.')
                         logger.error(error_msg)
                         raise SmartThreadAlreadyExists(error_msg)
                 # get a unique time stamp for create_time
@@ -1262,11 +1263,12 @@ class SmartThread:
 
             elif SmartThread._registry[self.name] != self:
                 error_msg = (
-                    f'Error detected for request {self.request.value} '
-                    f'_register with cmd_runner {self.cmd_runner}. '
+                    f'SmartThread {threading.current_thread().name} raising '
+                    f'SmartThreadNameAlreadyInUse error while processing '
+                    f'request {self.request.value}. '
                     f'While attempting to register a new SmartThread with '
                     f'name {self.name} and ID {id(self)}, it was detected '
-                    'that a register entry already exists for a SmartThread '
+                    'that a registry entry already exists for a SmartThread '
                     f'with name {self.name} but a different ID of '
                     f'{id(SmartThread._registry[self.name])}.')
                 logger.error(error_msg)
@@ -1317,8 +1319,9 @@ class SmartThread:
 
             if key != item.name:
                 error_msg = (
-                    f'Error detected for request {self.request.value} '
-                    f'_clean_registry with cmd_runner {self.cmd_runner}. '
+                    f'SmartThread {threading.current_thread().name} raising '
+                    f'SmartThreadErrorInRegistry error while processing '
+                    f'request {self.request.value}. '
                     f'Registry item with key {key} has non-matching '
                     f'item.name of {item.name}.')
                 logger.error(error_msg)
@@ -1496,9 +1499,9 @@ class SmartThread:
                                             pair_key].status_blocks)
                 if num_status_blocks == 0:
                     error_msg = (
-                        f'Error detected for request {self.request.value} '
-                        f'_add_to_pair_array with cmd_runner '
-                        f'{self.cmd_runner}. '
+                        f'SmartThread {threading.current_thread().name} '
+                        f'raising SmartThreadIncorrectData error while '
+                        f'processing request {self.request.value}. '
                         f'While attempting to add {self.name} to the pair '
                         f'array, it was detected that pair_key {pair_key} is '
                         f'already in the pair array with an empty '
@@ -1509,9 +1512,9 @@ class SmartThread:
                     if self.name in SmartThread._pair_array[
                             pair_key].status_blocks:
                         error_msg = (
-                            f'Error detected for request {self.request.value} '
-                            f'_add_to_pair_array with cmd_runner '
-                            f'{self.cmd_runner}. '
+                            f'SmartThread {threading.current_thread().name} '
+                            f'raising SmartThreadIncorrectData error while '
+                            f'processing request {self.request.value}. '
                             f'While attempting to add {self.name} to the pair '
                             f'array, it was detected that pair_key {pair_key} '
                             f'is already in the pair array with a '
@@ -1524,9 +1527,9 @@ class SmartThread:
                             pair_key].status_blocks[
                                 existing_name].del_deferred):
                         error_msg = (
-                            f'Error detected for request {self.request.value} '
-                            f'_add_to_pair_array with cmd_runner '
-                            f'{self.cmd_runner}. '
+                            f'SmartThread {threading.current_thread().name} '
+                            f'raising SmartThreadIncorrectData error while '
+                            f'processing request {self.request.value}. '
                             f'While attempting to add {self.name} to the pair '
                             f'array, it was detected that pair_key {pair_key} '
                             f'is already in the pair array with a '
@@ -1538,9 +1541,9 @@ class SmartThread:
                     existing_names = SmartThread._pair_array[
                         pair_key].status_blocks.keys()
                     error_msg = (
-                        f'Error detected for request {self.request.value} '
-                        '_add_to_pair_array with cmd_runner '
-                        f'{self.cmd_runner}. '
+                        f'SmartThread {threading.current_thread().name} '
+                        f'raising SmartThreadIncorrectData error while '
+                        f'processing request {self.request.value}. '
                         f'While attempting to add {self.name} to the pair '
                         f'array, it was detected that pair_key {pair_key} '
                         'is already in the pair array with a '
@@ -1781,9 +1784,9 @@ class SmartThread:
             if self.name in targets:
                 if len(targets) > 1:
                     error_msg = (
-                        f'Error detected for request smart_start '
-                        f'with cmd_runner {threading.current_thread().name} '
-                        f'and smart_thread instance {self.name}. '
+                        f'SmartThread {threading.current_thread().name} '
+                        f'raising SmartThreadMultipleTargetsForSelfStart '
+                        f'error while processing request smart_start. '
                         'Request smart_start can not be done for multiple '
                         f'targets {targets} when one of the targets is also '
                         f'the smart_thread instance, in this case {self.name}.'
@@ -1793,22 +1796,20 @@ class SmartThread:
                 with sel.SELockExcl(SmartThread._registry_lock):
                     if self.thread.is_alive():
                         error_msg = (
-                            f'Error detected for request smart_start '
-                            'with cmd_runner '
-                            f'{threading.current_thread().name} and '
-                            f'smart_thread instance {self.name}. '
-                            f'Request smart_start unable to start {self.name} '
-                            f'because {self.name} has already been started.')
+                            f'SmartThread {threading.current_thread().name} '
+                            'raising SmartThreadAlreadyStarted error while '
+                            'processing request smart_start. '
+                            f'Unable to start {self.name} because {self.name} '
+                            'has already been started.')
                         logger.error(error_msg)
                         raise SmartThreadAlreadyStarted(error_msg)
                     if self._get_state(self.name) != ThreadState.Registered:
                         error_msg = (
-                            f'Error detected for request smart_start '
-                            'with cmd_runner '
-                            f'{threading.current_thread().name} and '
-                            f'smart_thread instance {self.name}. '
-                            f'Request smart_start unable to start {self.name} '
-                            f'because {self.name} is not registered.')
+                            f'SmartThread {threading.current_thread().name} '
+                            'raising SmartThreadRemoteThreadNotRegistered '
+                            'error while processing request smart_start. '
+                            f'Unable to start {self.name} because {self.name} '
+                            'is not registered.')
                         logger.error(error_msg)
                         raise SmartThreadRemoteThreadNotRegistered(error_msg)
 
@@ -2638,18 +2639,21 @@ class SmartThread:
         if msg is not None and receivers is not None:
             if msg_dict is not None:
                 error_msg = (
-                    'Error detected for request smart_send with cmd_runner '
-                    f'{threading.current_thread().name}. '
+                    f'SmartThread {threading.current_thread().name} raising '
+                    'SmartThreadInvalidInput error while processing request '
+                    'smart_send. '
                     'Mutually exclusive arguments msg and msg_dict were both '
-                    'specified.')
+                    'specified. Please specify only one of msg or msg_dict.')
                 logger.error(error_msg)
                 raise SmartThreadInvalidInput(error_msg)
             remotes = self._get_set(receivers)
             if not remotes:
                 error_msg = (
-                    'Error detected for request smart_send with cmd_runner '
-                    f'{threading.current_thread().name}. '
-                    f'The receivers argument does not specify any receivers.'
+                    f'SmartThread {threading.current_thread().name} raising '
+                    'SmartThreadNoRemoteTargets error while processing '
+                    'request smart_send. '
+                    f'The receivers argument {receivers=} does not specify '
+                    'any receivers.'
                 )
                 logger.error(error_msg)
                 raise SmartThreadNoRemoteTargets(error_msg)
@@ -2660,8 +2664,9 @@ class SmartThread:
         elif msg_dict is not None:
             if msg is not None or receivers is not None:
                 error_msg = (
-                    'Error detected for request smart_send with cmd_runner '
-                    f'{threading.current_thread().name}. '
+                    f'SmartThread {threading.current_thread().name} raising '
+                    'SmartThreadInvalidInput error while processing request '
+                    'smart_send. '
                     'Mutually exclusive arguments msg_dict and msg or '
                     'msg_dict and receivers were specified.'
                 )
@@ -2671,17 +2676,19 @@ class SmartThread:
             remotes = set(msg_dict.keys())
             if not remotes:
                 error_msg = (
-                    'Error detected for request smart_send with cmd_runner '
-                    f'{threading.current_thread().name}. '
-                    'Argument msg_dict was specified with no items.'
+                    f'SmartThread {threading.current_thread().name} raising '
+                    'SmartThreadNoRemoteTargets error while processing '
+                    'request smart_send. '
+                    f'Argument {msg_dict=} was specified with no items.'
                 )
                 logger.error(error_msg)
                 raise SmartThreadNoRemoteTargets(error_msg)
             work_msgs = msg_dict
         else:
             error_msg = (
-                'Error detected for request smart_send with cmd_runner '
-                f'{threading.current_thread().name}. '
+                f'SmartThread {threading.current_thread().name} raising '
+                'SmartThreadInvalidInput error while processing request '
+                'smart_send. '
                 'The smart_send request failed to specify '
                 'msg_dict, or failed to specify both msg and receivers.'
             )
@@ -3089,8 +3096,9 @@ class SmartThread:
                     or sender_count < 1
                     or len(self._get_set(senders)) < sender_count):
                 error_msg = (
-                    'Error detected for request smart_recv with cmd_runner '
-                    f'{threading.current_thread().name}. '
+                    f'SmartThread {threading.current_thread().name} raising '
+                    'SmartThreadInvalidInput error while processing request '
+                    'smart_recv. '
                     f'The value specified for {sender_count=} is not valid. '
                     f'The number of specified senders is '
                     f'{len(self._get_set(senders))}. The value for '
@@ -3543,8 +3551,9 @@ class SmartThread:
                     or resumer_count < 1
                     or len(self._get_set(resumers)) < resumer_count):
                 error_msg = (
-                    'Error detected for request smart_wait with cmd_runner '
-                    f'{threading.current_thread().name}. '
+                    'SmartThread {threading.current_thread().name} raising '
+                    'SmartThreadInvalidInput error while processing request '
+                    'smart_wait. '
                     f'The value specified for {resumer_count=} is not valid. '
                     f'The number of specified resumers is '
                     f'{len(self._get_set(resumers))}. The value for '
@@ -4671,9 +4680,9 @@ class SmartThread:
 
             except ValueError:
                 error_msg = (
-                    f'Error detected for request {self.request} in '
-                    '_handle_found_pk_remotes with cmd_runner '
-                    f'{threading.current_thread().name}. '
+                    f'SmartThread {threading.current_thread().name} raising '
+                    'SmartThreadWorkDataException error while processing '
+                    f'request {self.request}. '
                     f'An expected entry for {found_pk_remote=} was not '
                     f'found in {self.work_pk_remotes=}.')
                 logger.error(error_msg)
@@ -4688,9 +4697,9 @@ class SmartThread:
 
             except ValueError:
                 error_msg = (
-                    f'Error detected for request {self.request} in '
-                    '_handle_found_pk_remotes with cmd_runner '
-                    f'{threading.current_thread().name}. '
+                    f'SmartThread {threading.current_thread().name} raising '
+                    'SmartThreadWorkDataException error while processing '
+                    f'request {self.request}. '
                     f'An expected entry for {found_pk_remote=} was not '
                     f'found in {work_pk_remotes=}.')
                 logger.error(error_msg)
@@ -4927,7 +4936,7 @@ class SmartThread:
         if (remotes and self.request != ReqType.Smart_start
                 and self.cmd_runner in remotes):
             error_msg = (
-                f'Error detected for request {self.request.value} '
+                f'SmartThread {threading.current_thread().name} raising error while processing request {self.request.value} '
                 f'_request_setup with cmd_runner {self.cmd_runner} and '
                 f'smart_thread instance {self.name}. '
                 f'Targets {remotes} includes {self.cmd_runner} which is not '

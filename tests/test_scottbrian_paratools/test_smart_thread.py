@@ -27569,11 +27569,13 @@ class TestSmartThreadErrors:
             st.SmartThread(name=1)  # type: ignore
 
         exp_error_msg = (
-            'Error detected for request smart_init '
-            f'__init__ with cmd_runner {threading.current_thread().name}. '
-            'While attempting to initialize a new SmartThread, '
-            f'the input name of 1 was detected to be incorrect.')
+            f'SmartThread {threading.current_thread().name} raising '
+            f'SmartThreadIncorrectNameSpecified error while processing '
+            f'request smart_init. '
+            f'The input name=1 is incorrect. Please specify a str for'
+            f'the name.')
 
+        logger.debug(exp_error_msg)
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
         print('\n', exc.value)
@@ -27586,13 +27588,14 @@ class TestSmartThreadErrors:
             st.SmartThread(name='alpha', target=f1, thread=test_thread)
 
         exp_error_msg = (
-            'Error detected for request smart_init '
-            f'__init__ with cmd_runner {threading.current_thread().name}. '
-            'While attempting to initialize a new SmartThread with '
-            'name of alpha, it was detected that arguments were '
-            'both specified for mutually exclusive parameters target '
-            'and thread.')
+            f'SmartThread {threading.current_thread().name} raising '
+            'SmartThreadMutuallyExclusiveTargetThreadSpecified error '
+            'while processing request smart_init. '
+            'Arguments for mutually exclusive parameters target and '
+            'thread were both specified. Please specify only one or '
+            'target or thread.')
 
+        logger.debug(exp_error_msg)
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
         print('\n', exc.value)
@@ -27602,14 +27605,15 @@ class TestSmartThreadErrors:
             st.SmartThread(name='alpha', args=(1,))
 
         exp_error_msg = (
-            'Error detected for request smart_init '
-            '__init__ with cmd_runner alpha. '
-            'While attempting to initialize a new SmartThread with '
-            'name of alpha, it was detected that arguments for '
-            'parameters args or kwargs were specified, but the '
-            'required argument for the target parameter was not '
-            'specified.')
+            f'SmartThread {threading.current_thread().name} raising '
+            'SmartThreadArgsSpecificationWithoutTarget error while '
+            'processing request smart_init. '
+            'Arguments for parameters args or kwargs were specified, '
+            'but an argument for the target parameter was not '
+            'specified. Please specify target or remove args and '
+            'kwargs.')
 
+        logger.debug(exp_error_msg)
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
         print('\n', exc.value)
@@ -27647,14 +27651,14 @@ class TestSmartThreadErrors:
             st.SmartThread(name='beta')
 
         exp_error_msg = (
-            f'Error detected for request smart_init '
-            f'_register with cmd_runner beta. '
+            f'SmartThread {threading.current_thread().name} '
+            'raising SmartThreadAlreadyExists error while '
+            'processing request smart_init. '
             'While attempting to register a new SmartThread '
-            f'with name beta and thread '
+            'with name beta and thread '
             f'{alpha_smart_thread.thread}, it was detected that a registry '
             'entry already exists for a SmartThread with '
-            f'name alpha with the same thread {alpha_smart_thread.thread}.')
-
+            f'the same thread {alpha_smart_thread.thread} for name alpha.')
         assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
 
         print('\n', exc.value)
@@ -27665,12 +27669,14 @@ class TestSmartThreadErrors:
         existing_id = id(alpha_smart_thread)
 
         exp_error_msg = (
-            'Error detected for request smart_init '
-            '_register with cmd_runner alpha. '
-            'While attempting to register a new SmartThread with '
-            'name alpha and ID [0-9]+, it was detected that a '
-            'register entry already exists for a SmartThread '
-            f'with name alpha but a different ID of {existing_id}.')
+            'SmartThread alpha raising '
+            'SmartThreadNameAlreadyInUse error while processing '
+            'request smart_init. '
+            f'While attempting to register a new SmartThread with '
+            f'name alpha and ID [0-9]+, it was detected '
+            'that a registry entry already exists for a SmartThread '
+            f'with name alpha but a different ID of '
+            f'{existing_id}.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
@@ -27691,11 +27697,13 @@ class TestSmartThreadErrors:
             st.SmartThread(name='beta')
 
         exp_error_msg = (
-            f'Error detected for request smart_init '
-            f'_clean_registry with cmd_runner beta. '
+            f'SmartThread alpha raising '
+            f'SmartThreadErrorInRegistry error while processing '
+            f'request smart_init. '
             f'Registry item with key alpha has non-matching '
             f'item.name of bad_name.')
 
+        logger.debug(exp_error_msg)
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
         print('\n', exc.value)
@@ -27745,13 +27753,13 @@ class TestSmartThreadErrors:
             st.SmartThread(name='beta', target=f1)
 
         exp_error_msg = (
-            f'Error detected for request smart_init '
-            f'_add_to_pair_array with cmd_runner '
-            f'alpha. '
-            f'While attempting to add beta to the pair '
+            'SmartThread alpha '
+            'raising SmartThreadIncorrectData error while '
+            'processing request smart_init. '
+            'While attempting to add beta to the pair '
             f'array, it was detected that pair_key {pair_key} is '
-            f'already in the pair array with an empty '
-            f'status_blocks.')
+            'already in the pair array with an empty '
+            'status_blocks.')
 
         assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
 
@@ -27778,11 +27786,13 @@ class TestSmartThreadErrors:
             st.SmartThread(name='beta', target=f1)
 
         exp_error_msg = (
-            'Error detected for request smart_init _add_to_pair_array with '
-            'cmd_runner alpha. '
-            'While attempting to add beta to the pair array, it was detected '
-            f'that pair_key {pair_key} is already in the pair array with a '
-            f'status_blocks entry containing beta.')
+            'SmartThread alpha '
+            'raising SmartThreadIncorrectData error while '
+            'processing request smart_init. '
+            'While attempting to add beta to the pair '
+            f'array, it was detected that pair_key {pair_key} '
+            'is already in the pair array with a '
+            'status_blocks entry containing beta.')
 
         assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
 
@@ -27809,11 +27819,14 @@ class TestSmartThreadErrors:
             st.SmartThread(name='beta', target=f1)
 
         exp_error_msg = (
-            f'Error detected for request smart_init _add_to_pair_array with '
-            f'cmd_runner alpha. '
-            f'While attempting to add beta to the pair array, it was detected '
-            f'that pair_key {pair_key} is already in the pair array with a '
-            f'status_blocks entry containing alpha that is not del_deferred.')
+            f'SmartThread alpha '
+            f'raising SmartThreadIncorrectData error while '
+            f'processing request smart_init. '
+            f'While attempting to add beta to the pair '
+            f'array, it was detected that pair_key {pair_key} '
+            f'is already in the pair array with a '
+            f'status_blocks entry containing alpha '
+            f'that is not del_deferred.')
 
         assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
 
@@ -27850,11 +27863,13 @@ class TestSmartThreadErrors:
             pair_key].status_blocks.keys()
 
         exp_error_msg = re.escape(
-            f'Error detected for request smart_init _add_to_pair_array with '
-            f'cmd_runner alpha. '
-            f'While attempting to add beta to the pair array, it was detected '
-            f'that pair_key {pair_key} is already in the pair array with a '
-            f'status_blocks entry containing entries for '
+            'SmartThread alpha '
+            'raising SmartThreadIncorrectData error while '
+            'processing request smart_init. '
+            'While attempting to add beta to the pair '
+            f'array, it was detected that pair_key {pair_key} '
+            'is already in the pair array with a '
+            'status_blocks entry containing entries for '
             f'{sorted(existing_names)}.')
 
         assert re.match(exp_error_msg, str(exc.value))
@@ -27887,12 +27902,14 @@ class TestSmartThreadErrors:
             beta_thread.smart_start(targets=('beta', 'charlie'))
 
         targets = set(('beta', 'charlie'))
+
         exp_error_msg = (
-            f'Error detected for request smart_start with cmd_runner alpha '
-            f'and smart_thread instance beta. '
-            'Request smart_start can not be done for multiple targets '
-            f'{targets} when one of the targets is also the smart_thread '
-            'instance, in this case beta.')
+            'SmartThread alpha '
+            'raising SmartThreadMultipleTargetsForSelfStart '
+            'error while processing request smart_start. '
+            'Request smart_start can not be done for multiple '
+            f'targets {targets} when one of the targets is also '
+            'the smart_thread instance, in this case beta.')
 
         assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
 
@@ -27905,10 +27922,11 @@ class TestSmartThreadErrors:
             beta_thread.smart_start()
 
         exp_error_msg = (
-            f'Error detected for request smart_start '
-            f'with cmd_runner alpha and smart_thread instance beta. '
-            f'Request smart_start unable to start beta '
-            'because beta has already been started.')
+            'SmartThread alpha '
+            'raising SmartThreadAlreadyStarted error while '
+            'processing request smart_start. '
+            'Unable to start beta because beta '
+            'has already been started.')
 
         assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
 
@@ -27933,10 +27951,11 @@ class TestSmartThreadErrors:
             beta_thread.smart_start()
 
         exp_error_msg = (
-            f'Error detected for request smart_start '
-            f'with cmd_runner alpha and smart_thread instance beta. '
-            f'Request smart_start unable to start beta '
-            'because beta is not registered.')
+            'SmartThread alpha '
+            'raising SmartThreadRemoteThreadNotRegistered '
+            'error while processing request smart_start. '
+            'Unable to start beta because beta '
+            'is not registered.')
 
         assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
 
@@ -27967,26 +27986,32 @@ class TestSmartThreadErrors:
                                     msg_dict={'beta': 'hello again'})
 
         exp_error_msg = (
-            f'Error detected for request smart_send with cmd_runner '
-            f'alpha. '
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing request '
+            'smart_send. '
             'Mutually exclusive arguments msg and msg_dict were both '
-            'specified.')
+            'specified. Please specify only one of msg or msg_dict.')
 
+        logger.debug(exp_error_msg)
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
         print('\n', exc.value)
 
         ################################################################
-
+        receivers = set()
         with pytest.raises(st.SmartThreadNoRemoteTargets) as exc:
             alpha_thread.smart_send(msg='hi beta',
-                                    receivers=set())
+                                    receivers=receivers)
 
         exp_error_msg = (
-            'Error detected for request smart_send with cmd_runner alpha. '
-            'The receivers argument does not specify any receivers.')
+            'SmartThread alpha raising '
+            'SmartThreadNoRemoteTargets error while processing '
+            'request smart_send. '
+            f'The receivers argument {receivers=} does not specify '
+            'any receivers.')
 
-        assert re.fullmatch(exp_error_msg, str(exc.value))
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
 
         print('\n', exc.value)
 
@@ -27997,11 +28022,13 @@ class TestSmartThreadErrors:
                                     receivers=set())
 
         exp_error_msg = (
-            'Error detected for request smart_send with cmd_runner alpha. '
-            'Mutually exclusive arguments msg_dict and msg or msg_dict and '
-            'receivers were specified.'
-        )
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing request '
+            'smart_send. '
+            'Mutually exclusive arguments msg_dict and msg or '
+            'msg_dict and receivers were specified.')
 
+        logger.debug(exp_error_msg)
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
         print('\n', exc.value)
@@ -28013,11 +28040,13 @@ class TestSmartThreadErrors:
                                     msg_dict={'beta': 'hello beta'})
 
         exp_error_msg = (
-            'Error detected for request smart_send with cmd_runner alpha. '
-            'Mutually exclusive arguments msg_dict and msg or msg_dict and '
-            'receivers were specified.'
-        )
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing request '
+            'smart_send. '
+            'Mutually exclusive arguments msg_dict and msg or '
+            'msg_dict and receivers were specified.')
 
+        logger.debug(exp_error_msg)
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
         print('\n', exc.value)
@@ -28028,10 +28057,12 @@ class TestSmartThreadErrors:
             alpha_thread.smart_send(msg_dict={})
 
         exp_error_msg = (
-            'Error detected for request smart_send with cmd_runner alpha. '
-            'Argument msg_dict was specified with no items.'
-        )
+            'SmartThread alpha raising '
+            'SmartThreadNoRemoteTargets error while processing '
+            'request smart_send. '
+            'Argument msg_dict={} was specified with no items.')
 
+        logger.debug(exp_error_msg)
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
         print('\n', exc.value)
@@ -28042,11 +28073,13 @@ class TestSmartThreadErrors:
             alpha_thread.smart_send()
 
         exp_error_msg = (
-            'Error detected for request smart_send with cmd_runner alpha. '
-            'The smart_send request failed to specify msg_dict, or failed to '
-            'specify both msg and receivers.'
-            )
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing request '
+            'smart_send. '
+            'The smart_send request failed to specify '
+            'msg_dict, or failed to specify both msg and receivers.')
 
+        logger.debug(exp_error_msg)
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
         print('\n', exc.value)
@@ -28057,11 +28090,13 @@ class TestSmartThreadErrors:
             alpha_thread.smart_send(receivers='beta')
 
         exp_error_msg = (
-            'Error detected for request smart_send with cmd_runner alpha. '
-            'The smart_send request failed to specify msg_dict, or failed to '
-            'specify both msg and receivers.'
-            )
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing request '
+            'smart_send. '
+            'The smart_send request failed to specify '
+            'msg_dict, or failed to specify both msg and receivers.')
 
+        logger.debug(exp_error_msg)
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
         print('\n', exc.value)
@@ -28072,11 +28107,13 @@ class TestSmartThreadErrors:
             alpha_thread.smart_send(msg='hi beta')
 
         exp_error_msg = (
-            'Error detected for request smart_send with cmd_runner alpha. '
-            'The smart_send request failed to specify msg_dict, or failed to '
-            'specify both msg and receivers.'
-            )
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing request '
+            'smart_send. '
+            'The smart_send request failed to specify '
+            'msg_dict, or failed to specify both msg and receivers.')
 
+        logger.debug(exp_error_msg)
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
         print('\n', exc.value)
@@ -28256,6 +28293,7 @@ class TestSmartThreadErrors:
         class MockRequestLoop:
             """Provide a way to test found_pk_remotes errors."""
             mock_action: ClassVar[str] = ''
+            mock_exp_pk_remotes: ClassVar[str] = ''
 
             def __init__(self) -> None:
                 """Initialize the mock target state."""
@@ -28274,24 +28312,7 @@ class TestSmartThreadErrors:
                 logger.debug('mock_request_loop entered')
                 delta_added = False
                 while True:
-                    if MockRequestLoop.mock_action == 'action1':
-                        work_pk_remotes_copy = self.work_pk_remotes.copy()
-                    elif MockRequestLoop.mock_action == 'action2':
-                        work_pk_remotes_copy = self.work_pk_remotes.copy()
-                        mock_pair_key = self._get_pair_key('beta', 'delta')
-                        if not delta_added:
-                            delta_added = True
-                            self.work_pk_remotes.append(st.PairKeyRemote(
-                                mock_pair_key,
-                                'delta',
-                                0.0))
-                        logger.debug('mock_request_loop '
-                                     f'{self.work_pk_remotes=}')
-                    else:
-                        raise IncorrectActionSpecified(
-                            'test_handle_found_pk_remotes_errors '
-                            'mock_request_loop detected incorrect '
-                            f'{MockRequestLoop.mock_action=}')
+                    work_pk_remotes_copy = self.work_pk_remotes.copy()
                     for pk_remote in work_pk_remotes_copy:
                         # we need to hold the lock to ensure the pair_array
                         # remains stable while getting local_sb. The
@@ -28299,6 +28320,19 @@ class TestSmartThreadErrors:
                         # entry for being removed (but not the remote)
                         with sel.SELockShare(st.SmartThread._registry_lock):
                             if self.found_pk_remotes:
+                                if MockRequestLoop.mock_action == 'action2':
+                                    MockRequestLoop.mock_exp_pk_remotes = (
+                                        work_pk_remotes_copy
+                                    )
+                                    mock_pair_key = self._get_pair_key('beta',
+                                                                       'delta')
+                                    if not delta_added:
+                                        delta_added = True
+                                        self.work_pk_remotes.append(
+                                            st.PairKeyRemote(
+                                                mock_pair_key,
+                                                'delta',
+                                                0.0))
                                 pk_remote = self._handle_found_pk_remotes(
                                     pk_remote=pk_remote,
                                     work_pk_remotes=work_pk_remotes_copy
@@ -28332,7 +28366,10 @@ class TestSmartThreadErrors:
                     'Error detected for request smart_wait in '
                     '_handle_found_pk_remotes with cmd_runner beta. '
                     f'An expected entry for {found_pk_remote=} was not '
-                    f'found in work_pk_remotes={exp_work_remotes}.')
+                    f'found in work_pk_remotes='
+                    f'{MockRequestLoop.mock_exp_pk_remotes}.')
+
+                logger.debug(f'{" "*21}{exp_error_msg}')
             else:
                 raise IncorrectActionSpecified(
                     f'test_handle_found_pk_remotes_errors received '
