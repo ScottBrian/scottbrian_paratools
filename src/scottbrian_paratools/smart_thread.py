@@ -2657,10 +2657,7 @@ class SmartThread:
                 )
                 logger.error(error_msg)
                 raise SmartThreadNoRemoteTargets(error_msg)
-            # work_msgs = {}
-            # for remote in remotes:
-            #     work_msgs[remote] = msg
-            work_msgs = {msg: remote for remote in remotes}
+            work_msgs = {remote: msg for remote in remotes}
         elif msg_dict is not None:
             if msg is not None or receivers is not None:
                 error_msg = (
@@ -4936,7 +4933,8 @@ class SmartThread:
         if (remotes and self.request != ReqType.Smart_start
                 and self.cmd_runner in remotes):
             error_msg = (
-                f'SmartThread {threading.current_thread().name} raising error while processing request {self.request.value} '
+                f'SmartThread {threading.current_thread().name} raising error '
+                f'while processing request {self.request.value}. '
                 f'_request_setup with cmd_runner {self.cmd_runner} and '
                 f'smart_thread instance {self.name}. '
                 f'Targets {remotes} includes {self.cmd_runner} which is not '

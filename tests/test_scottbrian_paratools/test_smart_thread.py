@@ -28484,13 +28484,58 @@ class TestSmartThreadErrors:
         ################################################################
         # f1
         ################################################################
-        def f1():
+        def f1(action: str):
             logger.debug('f1 entered')
-            beta_thread.smart_wait(resumers='alpha')
+            if action == 'wait':
+                beta_thread.smart_wait(resumers='alpha')
+            elif action == 'msg_wait':
+                msgs.get_msg('beta')
+            elif action == 'deadlock':
+                with pytest.raises(st.SmartThreadDeadlockDetected) as f1_exc:
+                    beta_thread.smart_recv(senders='alpha')
+                f1_targets_msg = ('while processing a '
+                                  'smart_recv '
+                                  'request with targets '
+                                  r"\['alpha'\].")
+
+                f1_pending_msg = r' Remotes that are pending: \[\].'
+
+                f1_stopped_msg = ''
+
+                f1_not_registered_msg = ''
+
+                f1_deadlock_msg = (f' Remotes that are deadlocked: '
+                                   r"\['alpha'\].")
+
+                f1_full_send_q_msg = ''
+
+                f1_msg_suite = (f'{f1_targets_msg}{f1_pending_msg}'
+                                f'{f1_stopped_msg}{f1_not_registered_msg}'
+                                f'{f1_deadlock_msg}{f1_full_send_q_msg}')
+
+                f1_exp_error_msg = (
+                    f'beta raising '
+                    f'SmartThreadDeadlockDetected {f1_msg_suite}')
+
+                logger.debug(f1_exp_error_msg)
+                assert re.fullmatch(f1_exp_error_msg, str(f1_exc.value))
+
+                print('\n', f1_exc.value)
+
             logger.debug('f1 exiting')
+
+        ################################################################
+        # mainline
+        ################################################################
         logger.debug('mainline entered')
+
+        msgs = Msgs()
+
         alpha_thread = st.SmartThread(name='alpha')
-        beta_thread = st.SmartThread(name='beta', target=f1, auto_start=False)
+        beta_thread = st.SmartThread(name='beta',
+                                     target=f1,
+                                     kwargs={'action': 'wait'},
+                                     auto_start=False)
         beta_thread.smart_start()
         alpha_thread.smart_resume(waiters='beta')
 
@@ -28505,7 +28550,7 @@ class TestSmartThreadErrors:
                        'request with targets '
                        r"\['beta'\].")
 
-        pending_msg = ''
+        pending_msg = r' Remotes that are pending: \[\].'
 
         stopped_msg = (
             ' Remotes that are stopped: '
@@ -28530,11 +28575,178 @@ class TestSmartThreadErrors:
         print('\n', exc.value)
 
         ################################################################
+        # SmartThreadRemoteThreadNotRegistered
+        ################################################################
+        with pytest.raises(st.SmartThreadRemoteThreadNotRegistered) as exc:
+            alpha_thread.smart_start(targets='beta')
 
+        targets_msg = ('while processing a '
+                       'smart_start '
+                       'request with targets '
+                       r"\['beta'\].")
+
+        pending_msg = r' Remotes that are pending: \[\].'
+
+        # stopped_msg = (
+        #     ' Remotes that are stopped: '
+        #     r"\['beta'\].")
+        stopped_msg = ''
+
+        not_registered_msg = (
+            ' Remotes that are not registered: '
+            r"\['beta'\].")
+
+        deadlock_msg = ''
+
+        full_send_q_msg = ''
+
+        msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
+                     f'{not_registered_msg}{deadlock_msg}{full_send_q_msg}')
+
+        exp_error_msg = (
+            f'alpha raising '
+            f'SmartThreadRemoteThreadNotRegistered {msg_suite}')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        # SmartThreadDeadlockDetected
+        ################################################################
+        alpha_thread.smart_join(targets='beta', timeout=5)
+        beta_thread = st.SmartThread(name='beta',
+                                     target=f1,
+                                     kwargs={'action': 'deadlock'},
+                                     auto_start=False)
+        beta_thread.smart_start()
+        with pytest.raises(st.SmartThreadDeadlockDetected) as exc:
+            alpha_thread.smart_recv(senders='beta')
+
+        targets_msg = ('while processing a '
+                       'smart_recv '
+                       'request with targets '
+                       r"\['beta'\].")
+
+        pending_msg = r' Remotes that are pending: \[\].'
+
+        # stopped_msg = (
+        #     ' Remotes that are stopped: '
+        #     r"\['beta'\].")
+        stopped_msg = ''
+
+        not_registered_msg = ''
+
+        deadlock_msg = (f' Remotes that are deadlocked: '
+                        r"\['beta'\].")
+
+        full_send_q_msg = ''
+
+        msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
+                     f'{not_registered_msg}{deadlock_msg}{full_send_q_msg}')
+
+        exp_error_msg = (
+            f'alpha raising '
+            f'SmartThreadDeadlockDetected {msg_suite}')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        # SmartThreadRequestTimedOut not responsive
+        ################################################################
+        alpha_thread.smart_join(targets='beta', timeout=5)
+        beta_thread = st.SmartThread(name='beta',
+                                     target=f1,
+                                     kwargs={'action': 'msg_wait'},
+                                     auto_start=False)
+        beta_thread.smart_start()
+        with pytest.raises(st.SmartThreadRequestTimedOut) as exc:
+            alpha_thread.smart_recv(senders='beta', timeout=1)
+
+        targets_msg = ('while processing a '
+                       'smart_recv '
+                       'request with targets '
+                       r"\['beta'\].")
+
+        pending_msg = r" Remotes that are pending: \['beta'\]."
+
+        stopped_msg = ''
+
+        not_registered_msg = ''
+
+        deadlock_msg = ''
+
+        full_send_q_msg = ''
+
+        msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
+                     f'{not_registered_msg}{deadlock_msg}{full_send_q_msg}')
+
+        exp_error_msg = (
+            f'alpha raising '
+            f'SmartThreadRequestTimedOut {msg_suite}')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
 
         ################################################################
         # join beta
         ################################################################
+        msgs.queue_msg('beta')
+        alpha_thread.smart_join(targets='beta', timeout=5)
+
+        ################################################################
+        # SmartThreadRequestTimedOut full_msg_q
+        ################################################################
+        alpha_thread.smart_join(targets='beta', timeout=5)
+        beta_thread = st.SmartThread(name='beta',
+                                     target=f1,
+                                     kwargs={'action': 'msg_wait'},
+                                     auto_start=False,
+                                     max_msgs=1)
+        beta_thread.smart_start()
+        alpha_thread.smart_send(receivers='beta', msg='hi beta')
+        with pytest.raises(st.SmartThreadRequestTimedOut) as exc:
+            alpha_thread.smart_send(receivers='beta',
+                                    msg='hello again',
+                                    timeout=1)
+
+        targets_msg = ('while processing a '
+                       'smart_send '
+                       'request with targets '
+                       r"\['beta'\].")
+
+        pending_msg = r" Remotes that are pending: \['beta'\]."
+
+        stopped_msg = ''
+
+        not_registered_msg = ''
+
+        deadlock_msg = ''
+
+        full_send_q_msg = r" Remotes that have a full send_q: \['beta'\]."
+
+        msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
+                     f'{not_registered_msg}{deadlock_msg}{full_send_q_msg}')
+
+        exp_error_msg = (
+            f'alpha raising '
+            f'SmartThreadRequestTimedOut {msg_suite}')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        # join beta
+        ################################################################
+        msgs.queue_msg('beta')
         alpha_thread.smart_join(targets='beta', timeout=5)
 
         logger.debug('mainline exiting')
