@@ -28608,7 +28608,7 @@ class TestSmartThreadErrors:
         stopped_msg = ''
 
         not_registered_msg = re.escape(
-            f' Remotes that are not registered: {targets}')
+            f' Remotes that are not registered: {targets}.')
 
         deadlock_msg = ''
 
@@ -28763,6 +28763,219 @@ class TestSmartThreadErrors:
         logger.debug('mainline exiting')
 
     ####################################################################
+    # test_request_setup_errors
+    ####################################################################
+    def test_request_setup_errors(self) -> None:
+        """Test error cases for SmartThread."""
+        logger.debug('mainline entered')
+        alpha_thread = st.SmartThread(name='alpha')
+
+        ################################################################
+        # SmartThreadInvalidInput - no remotes
+        ################################################################
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_unreg(targets=set())
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing '
+            'request smart_unreg. '
+            'Remote threads are required for the request but none were '
+            'specified.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_join(targets=set())
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing '
+            'request smart_join. '
+            'Remote threads are required for the request but none were '
+            'specified.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_recv(senders=set())
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing '
+            'request smart_recv. '
+            'Remote threads are required for the request but none were '
+            'specified.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_wait(resumers=set())
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing '
+            'request smart_wait. '
+            'Remote threads are required for the request but none were '
+            'specified.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_resume(waiters=set())
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing '
+            'request smart_resume. '
+            'Remote threads are required for the request but none were '
+            'specified.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_sync(targets=set())
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing '
+            'request smart_sync. '
+            'Remote threads are required for the request but none were '
+            'specified.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        # SmartThreadInvalidInput - caller also a remote
+        ################################################################
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_unreg(targets='alpha')
+
+        exp_error_msg = (
+            'SmartThread alpha raising SmartThreadInvalidInput '
+            'error while processing request smart_unreg. '
+            r"Targets \['alpha'\] includes alpha which is not "
+            'permitted except for request smart_start.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_join(targets='alpha')
+
+        exp_error_msg = (
+            'SmartThread alpha raising SmartThreadInvalidInput '
+            'error while processing request smart_join. '
+            r"Targets \['alpha'\] includes alpha which is not "
+            'permitted except for request smart_start.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_recv(senders='alpha')
+
+        exp_error_msg = (
+            'SmartThread alpha raising SmartThreadInvalidInput '
+            'error while processing request smart_recv. '
+            r"Targets \['alpha'\] includes alpha which is not "
+            'permitted except for request smart_start.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_send(msg='hello',
+                                    receivers='alpha')
+
+        exp_error_msg = (
+            'SmartThread alpha raising SmartThreadInvalidInput '
+            'error while processing request smart_send. '
+            r"Targets \['alpha'\] includes alpha which is not "
+            'permitted except for request smart_start.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_wait(resumers='alpha')
+
+        exp_error_msg = (
+            'SmartThread alpha raising SmartThreadInvalidInput '
+            'error while processing request smart_wait. '
+            r"Targets \['alpha'\] includes alpha which is not "
+            'permitted except for request smart_start.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_resume(waiters='alpha')
+
+        exp_error_msg = (
+            'SmartThread alpha raising SmartThreadInvalidInput '
+            'error while processing request smart_resume. '
+            r"Targets \['alpha'\] includes alpha which is not "
+            'permitted except for request smart_start.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        ################################################################
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_sync(targets='alpha')
+
+        exp_error_msg = (
+            'SmartThread alpha raising SmartThreadInvalidInput '
+            'error while processing request smart_sync. '
+            r"Targets \['alpha'\] includes alpha which is not "
+            'permitted except for request smart_start.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
     # Foreign Op
     ####################################################################
     def test_foreign_op_scenario(self,
@@ -28791,9 +29004,22 @@ class TestSmartThreadErrors:
         beta_thread = st.SmartThread(name='beta',
                                      target=f1,
                                      kwargs={'f1_name': 'beta'})
-        with pytest.raises(st.SmartThreadDetectedOpFromForeignThread):
+        with pytest.raises(st.SmartThreadDetectedOpFromForeignThread) as exc:
             beta_thread.smart_send(receivers='alpha', msg='hi alpha')
 
+        exp_error_msg = (
+            f'SmartThread alpha raising '
+            f'SmartThreadDetectedOpFromForeignThread error '
+            f'while processing request smart_send. '
+            f'The SmartThread object used for the invocation is '
+            f'associated with thread {beta_thread.thread} which does not '
+            f'match '
+            f'caller thread {threading.current_thread()} as required.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        ################################################################
         with pytest.raises(st.SmartThreadDetectedOpFromForeignThread):
             beta_thread.smart_recv(senders='alpha')
 

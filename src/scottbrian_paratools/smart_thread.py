@@ -4912,9 +4912,14 @@ class SmartThread:
         self.cmd_runner = threading.current_thread().name
 
         if not remotes:
-            raise SmartThreadInvalidInput(
-                f'{self.name} {self.request.value} '
-                'request with no targets specified.')
+            error_msg = (
+                f'SmartThread {threading.current_thread().name} raising '
+                'SmartThreadInvalidInput error while processing '
+                f'request {self.request}. '
+                f'Remote threads are required for the request but none were '
+                f'specified.')
+            logger.error(error_msg)
+            raise SmartThreadInvalidInput(error_msg)
         else:
             if isinstance(remotes, str):
                 remotes = {remotes}
@@ -4933,12 +4938,11 @@ class SmartThread:
         if (remotes and self.request != ReqType.Smart_start
                 and self.cmd_runner in remotes):
             error_msg = (
-                f'SmartThread {threading.current_thread().name} raising error '
-                f'while processing request {self.request.value}. '
-                f'_request_setup with cmd_runner {self.cmd_runner} and '
-                f'smart_thread instance {self.name}. '
-                f'Targets {remotes} includes {self.cmd_runner} which is not '
-                f'permitted except for request smart_start.'
+                f'SmartThread {threading.current_thread().name} raising '
+                f'SmartThreadInvalidInput error while processing request '
+                f'{self.request.value}. '
+                f'Targets {sorted(remotes)} includes {self.cmd_runner} '
+                f'which is not permitted except for request smart_start.'
             )
             logger.error(error_msg)
             raise SmartThreadInvalidInput(error_msg)
@@ -5031,13 +5035,13 @@ class SmartThread:
 
         """
         if self.thread is not threading.current_thread():
-            error_msg = (f'{self.cmd_runner} raising '
-                         'SmartThreadDetectedOpFromForeignThread. '
-                         f'{self.thread=}, {threading.current_thread()=}. '
-                         f'SmartThread services must be called from the '
-                         f'thread that was originally assigned during '
-                         f'instantiation of SmartThread. '
-                         f'Call sequence: {get_formatted_call_sequence(1,2)}')
+            error_msg = (
+                f'SmartThread {threading.current_thread().name} raising '
+                f'SmartThreadDetectedOpFromForeignThread error '
+                f'while processing request {self.request.value}. '
+                f'The SmartThread object used for the invocation is '
+                f'associated with thread {self.thread} which does not match '
+                f'caller thread {threading.current_thread()} as required.')
             logger.error(error_msg)
             raise SmartThreadDetectedOpFromForeignThread(error_msg)
 
