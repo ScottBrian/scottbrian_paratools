@@ -27549,7 +27549,7 @@ class TestSmartThreadErrors:
     ####################################################################
     # test_smart_thread_instantiation_errors
     ####################################################################
-    def test_smart_thread_instantiation_errors(self):
+    def test_smart_thread_instantiation_errors(self) -> None:
         """Test error cases for SmartThread."""
         ################################################################
         # f1
@@ -27639,7 +27639,7 @@ class TestSmartThreadErrors:
     ####################################################################
     # test_smart_thread_register_errors
     ####################################################################
-    def test_smart_thread_register_errors(self):
+    def test_smart_thread_register_errors(self) -> None:
         """Test error cases for SmartThread."""
         ################################################################
         # Create smart thread with duplicate name
@@ -27687,7 +27687,7 @@ class TestSmartThreadErrors:
     ####################################################################
     # test_smart_thread_clean_registry_errors
     ####################################################################
-    def test_smart_thread_clean_registry_errors(self):
+    def test_smart_thread_clean_registry_errors(self) -> None:
         """Test error cases for SmartThread."""
 
         logger.debug('mainline entered')
@@ -27714,7 +27714,8 @@ class TestSmartThreadErrors:
     # test_smart_thread_add_to_pair_array_errors
     ####################################################################
     def test_smart_thread_add_to_pair_array_errors(self,
-                                                   monkeypatch: Any):
+                                                   monkeypatch: Any
+                                                   ) -> None:
         """Test error cases for SmartThread.
 
         Args:
@@ -27883,7 +27884,7 @@ class TestSmartThreadErrors:
     ####################################################################
     # test_smart_start_errors
     ####################################################################
-    def test_smart_start_errors(self):
+    def test_smart_start_errors(self) -> None:
         """Test error cases for SmartThread."""
         ################################################################
         # f1
@@ -27966,7 +27967,7 @@ class TestSmartThreadErrors:
     ####################################################################
     # test_smart_send_errors
     ####################################################################
-    def test_smart_send_errors(self):
+    def test_smart_send_errors(self) -> None:
         """Test error cases for SmartThread."""
         ################################################################
         # f1
@@ -28129,7 +28130,7 @@ class TestSmartThreadErrors:
     ####################################################################
     # test_smart_recv_errors
     ####################################################################
-    def test_smart_recv_errors(self):
+    def test_smart_recv_errors(self) -> None:
         """Test error cases for SmartThread."""
         ################################################################
         # f1
@@ -28212,7 +28213,7 @@ class TestSmartThreadErrors:
     ####################################################################
     # test_smart_wait_errors
     ####################################################################
-    def test_smart_wait_errors(self):
+    def test_smart_wait_errors(self) -> None:
         """Test error cases for SmartThread."""
         ################################################################
         # f1
@@ -28296,7 +28297,7 @@ class TestSmartThreadErrors:
     # test_handle_found_pk_remotes_errors
     ####################################################################
     def test_handle_found_pk_remotes_errors(self,
-                                            monkeypatch: Any):
+                                            monkeypatch: Any) -> None:
         """Test error cases for SmartThread.
 
         Args:
@@ -28479,8 +28480,16 @@ class TestSmartThreadErrors:
     ####################################################################
     # test_handle_loop_errors_errors
     ####################################################################
-    def test_handle_loop_errors_errors(self):
-        """Test error cases for SmartThread."""
+    @pytest.mark.parametrize("num_pending_arg", [0, 1, 2])
+    def test_handle_loop_errors_errors(self,
+                                       num_pending_arg: int) -> None:
+        """Test error cases for SmartThread.
+
+        Args:
+            num_pending_arg: number of threads that should be in the
+                pending names array for the error message
+
+        """
         ################################################################
         # f1
         ################################################################
@@ -28491,14 +28500,19 @@ class TestSmartThreadErrors:
             elif action == 'msg_wait':
                 msgs.get_msg('beta')
             elif action == 'deadlock':
+                f1_senders = ['alpha']
+                f1_pending_targets = []
+                for idx in range(num_pending_arg):
+                    f1_senders.append(f'pending_{idx}')
+                    f1_pending_targets.append(f'pending_{idx}')
                 with pytest.raises(st.SmartThreadDeadlockDetected) as f1_exc:
-                    beta_thread.smart_recv(senders='alpha')
-                f1_targets_msg = ('while processing a '
-                                  'smart_recv '
-                                  'request with targets '
-                                  r"\['alpha'\].")
+                    beta_thread.smart_recv(senders=f1_senders)
+                f1_targets_msg = re.escape(
+                    'while processing a smart_recv request with targets '
+                    f'{f1_senders}.')
 
-                f1_pending_msg = r' Remotes that are pending: \[\].'
+                f1_pending_msg = re.escape(
+                    f' Remotes that are pending: {f1_pending_targets}.')
 
                 f1_stopped_msg = ''
 
@@ -28539,18 +28553,23 @@ class TestSmartThreadErrors:
         beta_thread.smart_start()
         alpha_thread.smart_resume(waiters='beta')
 
+        targets = ['beta']
+        pending_targets = []
+        for idx in range(num_pending_arg):
+            targets.append(f'pending_{idx}')
+            pending_targets.append(f'pending_{idx}')
+
         ################################################################
         # SmartThreadRemoteThreadNotAlive
         ################################################################
         with pytest.raises(st.SmartThreadRemoteThreadNotAlive) as exc:
-            alpha_thread.smart_recv(senders='beta')
+            alpha_thread.smart_recv(senders=targets)
 
-        targets_msg = ('while processing a '
-                       'smart_recv '
-                       'request with targets '
-                       r"\['beta'\].")
+        targets_msg = re.escape(
+            f'while processing a smart_recv request with targets {targets}.')
 
-        pending_msg = r' Remotes that are pending: \[\].'
+        pending_msg = re.escape(
+            f' Remotes that are pending: {pending_targets}.')
 
         stopped_msg = (
             ' Remotes that are stopped: '
@@ -28578,23 +28597,18 @@ class TestSmartThreadErrors:
         # SmartThreadRemoteThreadNotRegistered
         ################################################################
         with pytest.raises(st.SmartThreadRemoteThreadNotRegistered) as exc:
-            alpha_thread.smart_start(targets='beta')
+            alpha_thread.smart_start(targets=targets)
 
-        targets_msg = ('while processing a '
-                       'smart_start '
-                       'request with targets '
-                       r"\['beta'\].")
+        targets_msg = re.escape(
+            f'while processing a smart_start request with targets {targets}.')
 
-        pending_msg = r' Remotes that are pending: \[\].'
+        pending_msg = re.escape(
+            f' Remotes that are pending: [].')
 
-        # stopped_msg = (
-        #     ' Remotes that are stopped: '
-        #     r"\['beta'\].")
         stopped_msg = ''
 
-        not_registered_msg = (
-            ' Remotes that are not registered: '
-            r"\['beta'\].")
+        not_registered_msg = re.escape(
+            f' Remotes that are not registered: {targets}')
 
         deadlock_msg = ''
 
@@ -28622,14 +28636,13 @@ class TestSmartThreadErrors:
                                      auto_start=False)
         beta_thread.smart_start()
         with pytest.raises(st.SmartThreadDeadlockDetected) as exc:
-            alpha_thread.smart_recv(senders='beta')
+            alpha_thread.smart_recv(senders=targets)
 
-        targets_msg = ('while processing a '
-                       'smart_recv '
-                       'request with targets '
-                       r"\['beta'\].")
+        targets_msg = re.escape(
+            f'while processing a smart_recv request with targets {targets}.')
 
-        pending_msg = r' Remotes that are pending: \[\].'
+        pending_msg = re.escape(
+            f' Remotes that are pending: {pending_targets}.')
 
         # stopped_msg = (
         #     ' Remotes that are stopped: '
@@ -28665,14 +28678,13 @@ class TestSmartThreadErrors:
                                      auto_start=False)
         beta_thread.smart_start()
         with pytest.raises(st.SmartThreadRequestTimedOut) as exc:
-            alpha_thread.smart_recv(senders='beta', timeout=1)
+            alpha_thread.smart_recv(senders=targets, timeout=1)
 
-        targets_msg = ('while processing a '
-                       'smart_recv '
-                       'request with targets '
-                       r"\['beta'\].")
+        targets_msg = re.escape(
+            f'while processing a smart_recv request with targets {targets}.')
 
-        pending_msg = r" Remotes that are pending: \['beta'\]."
+        pending_msg = re.escape(
+            f' Remotes that are pending: {targets}.')
 
         stopped_msg = ''
 
@@ -28712,16 +28724,15 @@ class TestSmartThreadErrors:
         beta_thread.smart_start()
         alpha_thread.smart_send(receivers='beta', msg='hi beta')
         with pytest.raises(st.SmartThreadRequestTimedOut) as exc:
-            alpha_thread.smart_send(receivers='beta',
+            alpha_thread.smart_send(receivers=targets,
                                     msg='hello again',
                                     timeout=1)
 
-        targets_msg = ('while processing a '
-                       'smart_send '
-                       'request with targets '
-                       r"\['beta'\].")
+        targets_msg = re.escape(
+            f'while processing a smart_send request with targets {targets}.')
 
-        pending_msg = r" Remotes that are pending: \['beta'\]."
+        pending_msg = re.escape(
+            f' Remotes that are pending: {targets}.')
 
         stopped_msg = ''
 
@@ -28857,8 +28868,8 @@ class TestSmartThreadErrors:
     # Unreg error cases
     ####################################################################
     def test_request_errors_scenario(self,
-                            caplog: pytest.LogCaptureFixture
-                            ) -> None:
+                                     caplog: pytest.LogCaptureFixture
+                                     ) -> None:
         """Test unreg error cases for SmartThread.
 
         Args:
