@@ -1781,7 +1781,9 @@ class SmartThread:
             else:
                 targets = self._get_set(targets)
 
-            if self.name in targets:
+            if self.name not in targets:
+                self._verify_thread_is_current(request=ReqType.Smart_start)
+            else:
                 if len(targets) > 1:
                     error_msg = (
                         f'SmartThread {threading.current_thread().name} '
@@ -1966,7 +1968,7 @@ class SmartThread:
             mainline alpha exiting
 
         """
-        self._verify_thread_is_current()
+        self._verify_thread_is_current(request=ReqType.Smart_unreg)
         self.request = ReqType.Smart_unreg
         self.unreged_targets = set()
         request_block = self._request_setup(
@@ -2116,7 +2118,7 @@ class SmartThread:
 
 
         """
-        self._verify_thread_is_current()
+        self._verify_thread_is_current(request=ReqType.Smart_join)
         self.request = ReqType.Smart_join
         self.joined_targets = set()
         # get RequestBlock with targets in a set and a timer object
@@ -2627,7 +2629,7 @@ class SmartThread:
             mainline alpha exiting
 
         """
-        self._verify_thread_is_current()
+        self._verify_thread_is_current(request=ReqType.Smart_send)
         self.request = ReqType.Smart_send
         self.sent_targets = set()
         remotes: set[str]
@@ -3081,7 +3083,7 @@ class SmartThread:
             mainline alpha exiting
 
         """
-        self._verify_thread_is_current()
+        self._verify_thread_is_current(request=ReqType.Smart_recv)
         self.request = ReqType.Smart_recv
         # self.recvd_msgs = defaultdict(list)
         self.recvd_msgs = {}
@@ -3537,7 +3539,7 @@ class SmartThread:
             mainline alpha exiting
 
         """
-        self._verify_thread_is_current()
+        self._verify_thread_is_current(request=ReqType.Smart_wait)
         self.request = ReqType.Smart_wait
         self.resumed_by = set()
 
@@ -3899,7 +3901,7 @@ class SmartThread:
         #              sync
         #                                           wait
         ###############################################################
-        self._verify_thread_is_current()
+        self._verify_thread_is_current(request=ReqType.Smart_resume)
         self.request = ReqType.Smart_resume
         self.resumed_targets = set()
         # get RequestBlock with targets in a set and a timer object
@@ -4081,7 +4083,7 @@ class SmartThread:
             mainline alpha exiting
 
         """
-        self._verify_thread_is_current()
+        self._verify_thread_is_current(request=ReqType.Smart_sync)
         self.request = ReqType.Smart_sync
         self.synced_targets = set()
         # get RequestBlock with targets in a set and a timer object
@@ -4932,8 +4934,8 @@ class SmartThread:
             timeout_value=timer.timeout_value(),
             log_msg=log_msg)
 
-        if not (self.request == ReqType.Smart_start and self.name in remotes):
-            self._verify_thread_is_current()
+        # if not (self.request == ReqType.Smart_start and self.name in remotes):
+        #     self._verify_thread_is_current()
 
         if (remotes and self.request != ReqType.Smart_start
                 and self.cmd_runner in remotes):
@@ -5025,8 +5027,12 @@ class SmartThread:
     ####################################################################
     # _verify_thread_is_current
     ####################################################################
-    def _verify_thread_is_current(self) -> None:
+    def _verify_thread_is_current(self,
+                                  request: ReqType) -> None:
         """Verify that SmartThread is running under the current thread.
+
+        Args:
+            request: the request that is being processed
 
         Raises:
             SmartThreadDetectedOpFromForeignThread: SmartThread services
@@ -5038,7 +5044,7 @@ class SmartThread:
             error_msg = (
                 f'SmartThread {threading.current_thread().name} raising '
                 f'SmartThreadDetectedOpFromForeignThread error '
-                f'while processing request {self.request.value}. '
+                f'while processing request {request.value}. '
                 f'The SmartThread object used for the invocation is '
                 f'associated with thread {self.thread} which does not match '
                 f'caller thread {threading.current_thread()} as required.')
