@@ -399,7 +399,7 @@ Expected output for Example5::
 # Standard Library
 ########################################################################
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from enum import auto, Enum, Flag, StrEnum
 import logging
@@ -4933,9 +4933,6 @@ class SmartThread:
             remotes=remotes,
             timeout_value=timer.timeout_value(),
             log_msg=log_msg)
-
-        # if not (self.request == ReqType.Smart_start and self.name in remotes):
-        #     self._verify_thread_is_current()
 
         if (remotes and self.request != ReqType.Smart_start
                 and self.cmd_runner in remotes):
