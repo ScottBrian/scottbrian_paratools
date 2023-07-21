@@ -39,7 +39,7 @@ from scottbrian_utils.diag_msg import (get_formatted_call_sequence,
 import scottbrian_paratools.smart_thread as st
 
 logger = logging.getLogger(__name__)
-logger.debug('about to start the tests')
+# logger.debug('about to start the tests')
 
 
 ########################################################################
@@ -9592,7 +9592,7 @@ class ConfigVerifier:
             pause_time = 0.5
         elif timeout_type == TimeoutType.TimeoutFalse:
             pause_time = 0.5
-            timeout_time += (pause_time * 4)  # prevent timeout
+            timeout_time += (pause_time * 8)  # prevent timeout
         else:  # timeout True
             pause_time = timeout_time + 1  # force timeout
 
@@ -21367,8 +21367,1514 @@ num_commander_configs = len(commander_config)
 
 
 ########################################################################
+# TestSmartThreadInterface class
+########################################################################
+@pytest.mark.cover
+class TestSmartThreadInterface:
+    """Test class for SmartThread example tests."""
+    ####################################################################
+    # test_smart_thread_interface_1
+    ####################################################################
+    @pytest.mark.parametrize("num_f1_args",
+                             [(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 0, 3),
+                              (0, 1, 0), (0, 1, 1), (0, 1, 2), (0, 1, 3),
+                              (0, 2, 0), (0, 2, 1), (0, 2, 2), (0, 2, 3),
+                              (0, 3, 0), (0, 3, 1), (0, 3, 2), (0, 3, 3),
+                              (1, 0, 0), (1, 0, 1), (1, 0, 2), (1, 0, 3),
+                              (1, 1, 0), (1, 1, 1), (1, 1, 2), (1, 1, 3),
+                              (1, 2, 0), (1, 2, 1), (1, 2, 2), (1, 2, 3),
+                              (1, 3, 0), (1, 3, 1), (1, 3, 2), (1, 3, 3)
+                              ])
+    def test_smart_thread_interface_1(self,
+                                      num_f1_args: tuple[int, int, int]
+                                      ) -> None:
+        """Test smart_send example 1 with no parms.
+
+        Args:
+            num_f1_args: number of arguments to specify
+        """
+        from scottbrian_paratools.smart_thread import SmartThread, ThreadState
+
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
+        def f1_0_0_0() -> None:
+            logger.debug('f1 beta entry')
+            logger.debug('there are no args to check')
+            assert num_f1_args == (0, 0, 0)
+            logger.debug('f1 beta exit')
+
+        def f1_0_0_1(arg1: int) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}')
+            assert arg1 == 42
+            assert num_f1_args == (0, 0, 1)
+            logger.debug('f1 beta exit')
+
+        def f1_0_0_2(arg1: int, arg2: str) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert num_f1_args == (0, 0, 2)
+            logger.debug('f1 beta exit')
+
+        def f1_0_0_3(arg1: int, arg2: str, arg3: list[int]) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert arg3 == [1, 2, 3]
+            assert num_f1_args == (0, 0, 3)
+            logger.debug('f1 beta exit')
+
+        def f1_0_1_0(kwarg1: int) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{kwarg1=}')
+            assert kwarg1 == 13
+            assert num_f1_args == (0, 1, 0)
+            logger.debug('f1 beta exit')
+
+        def f1_0_1_1(arg1: int,
+                     kwarg1: int) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}')
+            logger.debug(f'{kwarg1=}')
+            assert arg1 == 42
+            assert kwarg1 == 13
+            assert num_f1_args == (0, 1, 1)
+            logger.debug('f1 beta exit')
+
+        def f1_0_1_2(arg1: int, arg2: str,
+                     kwarg1: int) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}')
+            logger.debug(f'{kwarg1=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert kwarg1 == 13
+            assert num_f1_args == (0, 1, 2)
+            logger.debug('f1 beta exit')
+
+        def f1_0_1_3(arg1: int, arg2: str, arg3: list[int],
+                     kwarg1: int) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
+            logger.debug(f'{kwarg1=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert arg3 == [1, 2, 3]
+            assert kwarg1 == 13
+            assert num_f1_args == (0, 1, 3)
+            logger.debug('f1 beta exit')
+
+        def f1_0_2_0(kwarg1: int, kwarg2: str) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{kwarg1=}, {kwarg2=}')
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert num_f1_args == (0, 2, 0)
+            logger.debug('f1 beta exit')
+
+        def f1_0_2_1(arg1: int,
+                     kwarg1: int, kwarg2: str) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}')
+            logger.debug(f'{kwarg1=}, {kwarg2=}')
+            assert arg1 == 42
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert num_f1_args == (0, 2, 1)
+            logger.debug('f1 beta exit')
+
+        def f1_0_2_2(arg1: int, arg2: str,
+                     kwarg1: int, kwarg2: str) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}')
+            logger.debug(f'{kwarg1=}, {kwarg2=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert num_f1_args == (0, 2, 2)
+            logger.debug('f1 beta exit')
+
+        def f1_0_2_3(arg1: int, arg2: str, arg3: list[int],
+                     kwarg1: int, kwarg2: str) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
+            logger.debug(f'{kwarg1=}, {kwarg2=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert arg3 == [1, 2, 3]
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert num_f1_args == (0, 2, 3)
+            logger.debug('f1 beta exit')
+
+        def f1_0_3_0(kwarg1: int, kwarg2: str, kwarg3: list[int]) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert kwarg3 == [11, 22, 33]
+            assert num_f1_args == (0, 3, 0)
+            logger.debug('f1 beta exit')
+
+        def f1_0_3_1(arg1: int,
+                     kwarg1: int, kwarg2: str, kwarg3: list[int]) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}')
+            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
+            assert arg1 == 42
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert kwarg3 == [11, 22, 33]
+            assert num_f1_args == (0, 3, 1)
+            logger.debug('f1 beta exit')
+
+        def f1_0_3_2(arg1: int, arg2: str,
+                     kwarg1: int, kwarg2: str, kwarg3: list[int]) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}')
+            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert kwarg3 == [11, 22, 33]
+            assert num_f1_args == (0, 3, 2)
+            logger.debug('f1 beta exit')
+
+        def f1_0_3_3(arg1: int, arg2: str, arg3: list[int],
+                     kwarg1: int, kwarg2: str, kwarg3: list[int]) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
+            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert arg3 == [1, 2, 3]
+            assert kwarg1 == 13
+            assert kwarg3 == [11, 22, 33]
+            assert kwarg2 == "second kwarg"
+            assert num_f1_args == (0, 3, 3)
+            logger.debug('f1 beta exit')
+
+        def f1_1_0_0(smart_thread: SmartThread) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{smart_thread=}')
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 0, 0)
+            logger.debug('f1 beta exit')
+
+        def f1_1_0_1(arg1: int,
+                     smart_thread: SmartThread) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}')
+            assert arg1 == 42
+            logger.debug(f'{smart_thread=}')
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 0, 1)
+            logger.debug('f1 beta exit')
+
+        def f1_1_0_2(arg1: int, arg2: str,
+                     smart_thread: SmartThread) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}')
+            logger.debug(f'{smart_thread=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 0, 2)
+            logger.debug('f1 beta exit')
+
+        def f1_1_0_3(arg1: int, arg2: str, arg3: list[int],
+                     smart_thread: SmartThread) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
+            logger.debug(f'{smart_thread=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert arg3 == [1, 2, 3]
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 0, 3)
+            logger.debug('f1 beta exit')
+
+        def f1_1_1_0(kwarg1: int,
+                     smart_thread: SmartThread) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{kwarg1=}')
+            logger.debug(f'{smart_thread=}')
+            assert kwarg1 == 13
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 1, 0)
+            logger.debug('f1 beta exit')
+
+        def f1_1_1_1(arg1: int,
+                     smart_thread: SmartThread,
+                     kwarg1: int) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}')
+            logger.debug(f'{kwarg1=}')
+            logger.debug(f'{smart_thread=}')
+            assert arg1 == 42
+            assert kwarg1 == 13
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 1, 1)
+            logger.debug('f1 beta exit')
+
+        def f1_1_1_2(arg1: int, arg2: str,
+                     kwarg1: int,
+                     smart_thread: SmartThread) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}')
+            logger.debug(f'{kwarg1=}')
+            logger.debug(f'{smart_thread=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert kwarg1 == 13
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 1, 2)
+            logger.debug('f1 beta exit')
+
+        def f1_1_1_3(arg1: int, arg2: str, arg3: list[int],
+                     smart_thread: SmartThread,
+                     kwarg1: int) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
+            logger.debug(f'{kwarg1=}')
+            logger.debug(f'{smart_thread=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert arg3 == [1, 2, 3]
+            assert kwarg1 == 13
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 1, 3)
+            logger.debug('f1 beta exit')
+
+        def f1_1_2_0(kwarg1: int, kwarg2: str,
+                     smart_thread: SmartThread) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{kwarg1=}, {kwarg2=}')
+            logger.debug(f'{smart_thread=}')
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 2, 0)
+            logger.debug('f1 beta exit')
+
+        def f1_1_2_1(arg1: int,
+                     kwarg1: int,
+                     smart_thread: SmartThread,
+                     kwarg2: str) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}')
+            logger.debug(f'{kwarg1=}, {kwarg2=}')
+            logger.debug(f'{smart_thread=}')
+            assert arg1 == 42
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 2, 1)
+            logger.debug('f1 beta exit')
+
+        def f1_1_2_2(arg1: int, arg2: str,
+                     kwarg1: int, kwarg2: str,
+                     smart_thread: SmartThread) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}')
+            logger.debug(f'{kwarg1=}, {kwarg2=}')
+            logger.debug(f'{smart_thread=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 2, 2)
+            logger.debug('f1 beta exit')
+
+        def f1_1_2_3(arg1: int, arg2: str, arg3: list[int],
+                     smart_thread: SmartThread,
+                     kwarg1: int, kwarg2: str) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
+            logger.debug(f'{kwarg1=}, {kwarg2=}')
+            logger.debug(f'{smart_thread=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert arg3 == [1, 2, 3]
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 2, 3)
+            logger.debug('f1 beta exit')
+
+        def f1_1_3_0(kwarg1: int,
+                     kwarg2: str,
+                     smart_thread: SmartThread,
+                     kwarg3: list[int]) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
+            logger.debug(f'{smart_thread=}')
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert kwarg3 == [11, 22, 33]
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 3, 0)
+            logger.debug('f1 beta exit')
+
+        def f1_1_3_1(arg1: int,
+                     kwarg1: int,
+                     smart_thread: SmartThread,
+                     kwarg2: str,
+                     kwarg3: list[int]) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}')
+            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
+            logger.debug(f'{smart_thread=}')
+            assert arg1 == 42
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert kwarg3 == [11, 22, 33]
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 3, 1)
+            logger.debug('f1 beta exit')
+
+        def f1_1_3_2(arg1: int, arg2: str,
+                     kwarg1: int,
+                     kwarg2: str,
+                     kwarg3: list[int],
+                     smart_thread: SmartThread) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}')
+            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
+            logger.debug(f'{smart_thread=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert kwarg3 == [11, 22, 33]
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 3, 2)
+            logger.debug('f1 beta exit')
+
+        def f1_1_3_3(arg1: int, arg2: str, arg3: list[int],
+                     kwarg1: int, kwarg2: str, kwarg3: list[int],
+                     smart_thread: SmartThread) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
+            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
+            logger.debug(f'{smart_thread=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert arg3 == [1, 2, 3]
+            assert kwarg1 == 13
+            assert kwarg3 == [11, 22, 33]
+            assert kwarg2 == "second kwarg"
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 3, 3)
+            logger.debug('f1 beta exit')
+
+        logger.debug('mainline entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        if num_f1_args == (0, 0, 0):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_0_0_0)
+        elif num_f1_args == (0, 0, 1):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_0_0_1,
+                                            args=(42, ))
+        elif num_f1_args == (0, 0, 2):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_0_0_2,
+                                            args=(42, "my arg 2"))
+        elif num_f1_args == (0, 0, 3):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_0_0_3,
+                                            args=(42, "my arg 2", [1, 2, 3]))
+        elif num_f1_args == (0, 1, 0):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_0_1_0,
+                                            kwargs={'kwarg1': 13})
+        elif num_f1_args == (0, 1, 1):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_0_1_1,
+                                            args=(42, ),
+                                            kwargs={'kwarg1': 13})
+        elif num_f1_args == (0, 1, 2):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_0_1_2,
+                                            args=(42, "my arg 2"),
+                                            kwargs={'kwarg1': 13})
+        elif num_f1_args == (0, 1, 3):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_0_1_3,
+                                            args=(42, "my arg 2", [1, 2, 3]),
+                                            kwargs={'kwarg1': 13})
+        elif num_f1_args == (0, 2, 0):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_0_2_0,
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg"})
+        elif num_f1_args == (0, 2, 1):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_0_2_1,
+                                            args=(42, ),
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg"})
+        elif num_f1_args == (0, 2, 2):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_0_2_2,
+                                            args=(42, "my arg 2"),
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg"})
+        elif num_f1_args == (0, 2, 3):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_0_2_3,
+                                            args=(42, "my arg 2", [1, 2, 3]),
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg"})
+        elif num_f1_args == (0, 3, 0):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_0_3_0,
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg",
+                                                    'kwarg3': [11, 22, 33]})
+        elif num_f1_args == (0, 3, 1):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_0_3_1,
+                                            args=(42, ),
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg",
+                                                    'kwarg3': [11, 22, 33]})
+        elif num_f1_args == (0, 3, 2):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_0_3_2,
+                                            args=(42, "my arg 2"),
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg",
+                                                    'kwarg3': [11, 22, 33]})
+        elif num_f1_args == (0, 3, 3):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_0_3_3,
+                                            args=(42, "my arg 2", [1, 2, 3]),
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg",
+                                                    'kwarg3': [11, 22, 33]})
+        elif num_f1_args == (1, 0, 0):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_1_0_0,
+                                            thread_parm_name='smart_thread')
+        elif num_f1_args == (1, 0, 1):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_1_0_1,
+                                            thread_parm_name='smart_thread',
+                                            args=(42, ))
+        elif num_f1_args == (1, 0, 2):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_1_0_2,
+                                            thread_parm_name='smart_thread',
+                                            args=(42, "my arg 2"))
+        elif num_f1_args == (1, 0, 3):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_1_0_3,
+                                            thread_parm_name='smart_thread',
+                                            args=(42, "my arg 2", [1, 2, 3]))
+        elif num_f1_args == (1, 1, 0):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_1_1_0,
+                                            thread_parm_name='smart_thread',
+                                            kwargs={'kwarg1': 13})
+        elif num_f1_args == (1, 1, 1):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_1_1_1,
+                                            thread_parm_name='smart_thread',
+                                            args=(42, ),
+                                            kwargs={'kwarg1': 13})
+        elif num_f1_args == (1, 1, 2):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_1_1_2,
+                                            thread_parm_name='smart_thread',
+                                            args=(42, "my arg 2"),
+                                            kwargs={'kwarg1': 13})
+        elif num_f1_args == (1, 1, 3):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_1_1_3,
+                                            thread_parm_name='smart_thread',
+                                            args=(42, "my arg 2", [1, 2, 3]),
+                                            kwargs={'kwarg1': 13})
+        elif num_f1_args == (1, 2, 0):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_1_2_0,
+                                            thread_parm_name='smart_thread',
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg"})
+        elif num_f1_args == (1, 2, 1):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_1_2_1,
+                                            thread_parm_name='smart_thread',
+                                            args=(42, ),
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg"})
+        elif num_f1_args == (1, 2, 2):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_1_2_2,
+                                            thread_parm_name='smart_thread',
+                                            args=(42, "my arg 2"),
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg"})
+        elif num_f1_args == (1, 2, 3):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_1_2_3,
+                                            thread_parm_name='smart_thread',
+                                            args=(42, "my arg 2", [1, 2, 3]),
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg"})
+        elif num_f1_args == (1, 3, 0):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_1_3_0,
+                                            thread_parm_name='smart_thread',
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg",
+                                                    'kwarg3': [11, 22, 33]})
+        elif num_f1_args == (1, 3, 1):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_1_3_1,
+                                            thread_parm_name='smart_thread',
+                                            args=(42, ),
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg",
+                                                    'kwarg3': [11, 22, 33]})
+        elif num_f1_args == (1, 3, 2):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_1_3_2,
+                                            thread_parm_name='smart_thread',
+                                            args=(42, "my arg 2"),
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg",
+                                                    'kwarg3': [11, 22, 33]})
+        elif num_f1_args == (1, 3, 3):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1_1_3_3,
+                                            thread_parm_name='smart_thread',
+                                            args=(42, "my arg 2", [1, 2, 3]),
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg",
+                                                    'kwarg3': [11, 22, 33]})
+
+        time.sleep(0.5)
+        assert beta_smart_thread._get_state('beta') == ThreadState.Stopped
+        alpha_smart_thread.smart_join(targets='beta')
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_thread_interface_2
+    ####################################################################
+    @pytest.mark.parametrize("num_f1_args",
+                             [(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 0, 3),
+                              (0, 1, 0), (0, 1, 1), (0, 1, 2), (0, 1, 3),
+                              (0, 2, 0), (0, 2, 1), (0, 2, 2), (0, 2, 3),
+                              (0, 3, 0), (0, 3, 1), (0, 3, 2), (0, 3, 3),
+                              (1, 0, 0), (1, 0, 1), (1, 0, 2), (1, 0, 3),
+                              (1, 1, 0), (1, 1, 1), (1, 1, 2), (1, 1, 3),
+                              (1, 2, 0), (1, 2, 1), (1, 2, 2), (1, 2, 3),
+                              (1, 3, 0), (1, 3, 1), (1, 3, 2), (1, 3, 3)
+                              ])
+    def test_smart_thread_interface_2(self,
+                                      num_f1_args: tuple[int, int, int]
+                                      ) -> None:
+        """Test smart_send example 2 with no parms.
+
+        Args:
+            num_f1_args: number of arguments to specify
+        """
+        from scottbrian_paratools.smart_thread import SmartThread, ThreadState
+
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
+        def f1_0_0_0() -> None:
+            logger.debug('f1 beta entry')
+            logger.debug('there are no args to check')
+            assert num_f1_args == (0, 0, 0)
+            logger.debug('f1 beta exit')
+
+        def f1_0_0_1(arg1: int) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}')
+            assert arg1 == 42
+            assert num_f1_args == (0, 0, 1)
+            logger.debug('f1 beta exit')
+
+        def f1_0_0_2(arg1: int, arg2: str) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert num_f1_args == (0, 0, 2)
+            logger.debug('f1 beta exit')
+
+        def f1_0_0_3(arg1: int, arg2: str, arg3: list[int]) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert arg3 == [1, 2, 3]
+            assert num_f1_args == (0, 0, 3)
+            logger.debug('f1 beta exit')
+
+        def f1_0_1_0(kwarg1: int) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{kwarg1=}')
+            assert kwarg1 == 13
+            assert num_f1_args == (0, 1, 0)
+            logger.debug('f1 beta exit')
+
+        def f1_0_1_1(arg1: int,
+                     kwarg1: int) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}')
+            logger.debug(f'{kwarg1=}')
+            assert arg1 == 42
+            assert kwarg1 == 13
+            assert num_f1_args == (0, 1, 1)
+            logger.debug('f1 beta exit')
+
+        def f1_0_1_2(arg1: int, arg2: str,
+                     kwarg1: int) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}')
+            logger.debug(f'{kwarg1=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert kwarg1 == 13
+            assert num_f1_args == (0, 1, 2)
+            logger.debug('f1 beta exit')
+
+        def f1_0_1_3(arg1: int, arg2: str, arg3: list[int],
+                     kwarg1: int) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
+            logger.debug(f'{kwarg1=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert arg3 == [1, 2, 3]
+            assert kwarg1 == 13
+            assert num_f1_args == (0, 1, 3)
+            logger.debug('f1 beta exit')
+
+        def f1_0_2_0(kwarg1: int, kwarg2: str) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{kwarg1=}, {kwarg2=}')
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert num_f1_args == (0, 2, 0)
+            logger.debug('f1 beta exit')
+
+        def f1_0_2_1(arg1: int,
+                     kwarg1: int, kwarg2: str) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}')
+            logger.debug(f'{kwarg1=}, {kwarg2=}')
+            assert arg1 == 42
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert num_f1_args == (0, 2, 1)
+            logger.debug('f1 beta exit')
+
+        def f1_0_2_2(arg1: int, arg2: str,
+                     kwarg1: int, kwarg2: str) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}')
+            logger.debug(f'{kwarg1=}, {kwarg2=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert num_f1_args == (0, 2, 2)
+            logger.debug('f1 beta exit')
+
+        def f1_0_2_3(arg1: int, arg2: str, arg3: list[int],
+                     kwarg1: int, kwarg2: str) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
+            logger.debug(f'{kwarg1=}, {kwarg2=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert arg3 == [1, 2, 3]
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert num_f1_args == (0, 2, 3)
+            logger.debug('f1 beta exit')
+
+        def f1_0_3_0(kwarg1: int, kwarg2: str, kwarg3: list[int]) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert kwarg3 == [11, 22, 33]
+            assert num_f1_args == (0, 3, 0)
+            logger.debug('f1 beta exit')
+
+        def f1_0_3_1(arg1: int,
+                     kwarg1: int, kwarg2: str, kwarg3: list[int]) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}')
+            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
+            assert arg1 == 42
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert kwarg3 == [11, 22, 33]
+            assert num_f1_args == (0, 3, 1)
+            logger.debug('f1 beta exit')
+
+        def f1_0_3_2(arg1: int, arg2: str,
+                     kwarg1: int, kwarg2: str, kwarg3: list[int]) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}')
+            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert kwarg3 == [11, 22, 33]
+            assert num_f1_args == (0, 3, 2)
+            logger.debug('f1 beta exit')
+
+        def f1_0_3_3(arg1: int, arg2: str, arg3: list[int],
+                     kwarg1: int, kwarg2: str, kwarg3: list[int]) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
+            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert arg3 == [1, 2, 3]
+            assert kwarg1 == 13
+            assert kwarg3 == [11, 22, 33]
+            assert kwarg2 == "second kwarg"
+            assert num_f1_args == (0, 3, 3)
+            logger.debug('f1 beta exit')
+
+        def f1_1_0_0(smart_thread: SmartThread) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{smart_thread=}')
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 0, 0)
+            logger.debug('f1 beta exit')
+
+        def f1_1_0_1(arg1: int,
+                     smart_thread: SmartThread) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}')
+            assert arg1 == 42
+            logger.debug(f'{smart_thread=}')
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 0, 1)
+            logger.debug('f1 beta exit')
+
+        def f1_1_0_2(arg1: int, arg2: str,
+                     smart_thread: SmartThread) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}')
+            logger.debug(f'{smart_thread=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 0, 2)
+            logger.debug('f1 beta exit')
+
+        def f1_1_0_3(arg1: int, arg2: str, arg3: list[int],
+                     smart_thread: SmartThread) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
+            logger.debug(f'{smart_thread=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert arg3 == [1, 2, 3]
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 0, 3)
+            logger.debug('f1 beta exit')
+
+        def f1_1_1_0(kwarg1: int,
+                     smart_thread: SmartThread) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{kwarg1=}')
+            logger.debug(f'{smart_thread=}')
+            assert kwarg1 == 13
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 1, 0)
+            logger.debug('f1 beta exit')
+
+        def f1_1_1_1(arg1: int,
+                     smart_thread: SmartThread,
+                     kwarg1: int) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}')
+            logger.debug(f'{kwarg1=}')
+            logger.debug(f'{smart_thread=}')
+            assert arg1 == 42
+            assert kwarg1 == 13
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 1, 1)
+            logger.debug('f1 beta exit')
+
+        def f1_1_1_2(arg1: int, arg2: str,
+                     kwarg1: int,
+                     smart_thread: SmartThread) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}')
+            logger.debug(f'{kwarg1=}')
+            logger.debug(f'{smart_thread=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert kwarg1 == 13
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 1, 2)
+            logger.debug('f1 beta exit')
+
+        def f1_1_1_3(arg1: int, arg2: str, arg3: list[int],
+                     smart_thread: SmartThread,
+                     kwarg1: int) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
+            logger.debug(f'{kwarg1=}')
+            logger.debug(f'{smart_thread=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert arg3 == [1, 2, 3]
+            assert kwarg1 == 13
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 1, 3)
+            logger.debug('f1 beta exit')
+
+        def f1_1_2_0(kwarg1: int, kwarg2: str,
+                     smart_thread: SmartThread) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{kwarg1=}, {kwarg2=}')
+            logger.debug(f'{smart_thread=}')
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 2, 0)
+            logger.debug('f1 beta exit')
+
+        def f1_1_2_1(arg1: int,
+                     kwarg1: int,
+                     smart_thread: SmartThread,
+                     kwarg2: str) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}')
+            logger.debug(f'{kwarg1=}, {kwarg2=}')
+            logger.debug(f'{smart_thread=}')
+            assert arg1 == 42
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 2, 1)
+            logger.debug('f1 beta exit')
+
+        def f1_1_2_2(arg1: int, arg2: str,
+                     kwarg1: int, kwarg2: str,
+                     smart_thread: SmartThread) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}')
+            logger.debug(f'{kwarg1=}, {kwarg2=}')
+            logger.debug(f'{smart_thread=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 2, 2)
+            logger.debug('f1 beta exit')
+
+        def f1_1_2_3(arg1: int, arg2: str, arg3: list[int],
+                     smart_thread: SmartThread,
+                     kwarg1: int, kwarg2: str) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
+            logger.debug(f'{kwarg1=}, {kwarg2=}')
+            logger.debug(f'{smart_thread=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert arg3 == [1, 2, 3]
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 2, 3)
+            logger.debug('f1 beta exit')
+
+        def f1_1_3_0(kwarg1: int,
+                     kwarg2: str,
+                     smart_thread: SmartThread,
+                     kwarg3: list[int]) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
+            logger.debug(f'{smart_thread=}')
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert kwarg3 == [11, 22, 33]
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 3, 0)
+            logger.debug('f1 beta exit')
+
+        def f1_1_3_1(arg1: int,
+                     kwarg1: int,
+                     smart_thread: SmartThread,
+                     kwarg2: str,
+                     kwarg3: list[int]) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}')
+            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
+            logger.debug(f'{smart_thread=}')
+            assert arg1 == 42
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert kwarg3 == [11, 22, 33]
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 3, 1)
+            logger.debug('f1 beta exit')
+
+        def f1_1_3_2(arg1: int, arg2: str,
+                     kwarg1: int,
+                     kwarg2: str,
+                     kwarg3: list[int],
+                     smart_thread: SmartThread) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}')
+            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
+            logger.debug(f'{smart_thread=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert kwarg1 == 13
+            assert kwarg2 == "second kwarg"
+            assert kwarg3 == [11, 22, 33]
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 3, 2)
+            logger.debug('f1 beta exit')
+
+        def f1_1_3_3(arg1: int, arg2: str, arg3: list[int],
+                     kwarg1: int, kwarg2: str, kwarg3: list[int],
+                     smart_thread: SmartThread) -> None:
+            logger.debug('f1 beta entry')
+            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
+            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
+            logger.debug(f'{smart_thread=}')
+            assert arg1 == 42
+            assert arg2 == "my arg 2"
+            assert arg3 == [1, 2, 3]
+            assert kwarg1 == 13
+            assert kwarg3 == [11, 22, 33]
+            assert kwarg2 == "second kwarg"
+            assert smart_thread._get_state('beta') == ThreadState.Alive
+            assert num_f1_args == (1, 3, 3)
+            logger.debug('f1 beta exit')
+
+        logger.debug('mainline entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+
+        f1_target_to_specify = (f'f1_'
+                                f'{num_f1_args[0]}_'
+                                f'{num_f1_args[1]}_'
+                                f'{num_f1_args[2]}')
+
+        smart_thread_name_to_specify = None
+        args_to_specify = None
+        kwargs_to_specify = None
+        if num_f1_args[0] == 1:
+            smart_thread_name_to_specify = 'smart_thread'
+
+        if num_f1_args[1] >= 1:
+            kwargs_to_specify = {'kwarg1': 13}
+        if num_f1_args[1] >= 2:
+            kwargs_to_specify['kwarg2'] = "second kwarg"
+        if num_f1_args[1] == 3:
+            kwargs_to_specify['kwarg3'] = [11, 22, 33]
+
+        if num_f1_args[2] == 1:
+            args_to_specify = (42, )
+        if num_f1_args[2] >= 2:
+            args_to_specify = (42, "my arg 2")
+        if num_f1_args[2] == 3:
+            args_to_specify = (42, "my arg 2", [1, 2, 3])
+
+        logger.debug(f'Before: {kwargs_to_specify}')
+
+        if smart_thread_name_to_specify:
+            if args_to_specify:
+                if kwargs_to_specify:
+                    beta_smart_thread = SmartThread(
+                        name='beta',
+                        target=eval(f1_target_to_specify),
+                        thread_parm_name=smart_thread_name_to_specify,
+                        args=args_to_specify,
+                        kwargs=kwargs_to_specify)
+                else:
+                    beta_smart_thread = SmartThread(
+                        name='beta',
+                        target=eval(f1_target_to_specify),
+                        thread_parm_name=smart_thread_name_to_specify,
+                        args=args_to_specify)
+            else:
+                if kwargs_to_specify:
+                    beta_smart_thread = SmartThread(
+                        name='beta',
+                        target=eval(f1_target_to_specify),
+                        thread_parm_name=smart_thread_name_to_specify,
+                        kwargs=kwargs_to_specify)
+                else:
+                    beta_smart_thread = SmartThread(
+                        name='beta',
+                        target=eval(f1_target_to_specify),
+                        thread_parm_name=smart_thread_name_to_specify)
+        else:
+            if args_to_specify:
+                if kwargs_to_specify:
+                    beta_smart_thread = SmartThread(
+                        name='beta',
+                        target=eval(f1_target_to_specify),
+                        args=args_to_specify,
+                        kwargs=kwargs_to_specify)
+                else:
+                    beta_smart_thread = SmartThread(
+                        name='beta',
+                        target=eval(f1_target_to_specify),
+                        args=args_to_specify)
+            else:
+                if kwargs_to_specify:
+                    beta_smart_thread = SmartThread(
+                        name='beta',
+                        target=eval(f1_target_to_specify),
+                        kwargs=kwargs_to_specify)
+                else:
+                    beta_smart_thread = SmartThread(
+                        name='beta',
+                        target=eval(f1_target_to_specify))
+
+        logger.debug(f'After: {kwargs_to_specify}')
+        time.sleep(0.5)
+        assert beta_smart_thread._get_state('beta') == ThreadState.Stopped
+        alpha_smart_thread.smart_join(targets='beta')
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_thread_interface_3
+    ####################################################################
+    @pytest.mark.parametrize("num_f1_args",
+                             [(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 0, 3),
+                              (0, 1, 0), (0, 1, 1), (0, 1, 2), (0, 1, 3),
+                              (0, 2, 0), (0, 2, 1), (0, 2, 2), (0, 2, 3),
+                              (0, 3, 0), (0, 3, 1), (0, 3, 2), (0, 3, 3),
+                              (1, 0, 0), (1, 0, 1), (1, 0, 2), (1, 0, 3),
+                              (1, 1, 0), (1, 1, 1), (1, 1, 2), (1, 1, 3),
+                              (1, 2, 0), (1, 2, 1), (1, 2, 2), (1, 2, 3),
+                              (1, 3, 0), (1, 3, 1), (1, 3, 2), (1, 3, 3)
+                              ])
+    def test_smart_thread_interface_3(self,
+                                      num_f1_args: tuple[int, int, int]
+                                      ) -> None:
+        """Test smart_send example 3 with no parms.
+
+        Args:
+            num_f1_args: number of arguments to specify
+        """
+        from scottbrian_paratools.smart_thread import SmartThread, ThreadState
+
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
+        def f1(*args, **kwargs) -> None:
+            logger.debug('f1 beta entry')
+
+            exp_args = (0, 42, "my arg 2", [1, 2, 3])
+            exp_kwargs = {'kwarg1': 13,
+                          'kwarg2': "second kwarg",
+                          'kwarg3': [11, 22, 33]
+                          }
+            args_str = ''
+            comma = ''
+            for idx, arg in enumerate(args, 1):
+                args_str = f'{args_str}{comma}arg{idx}={arg}'
+                comma = ', '
+                assert arg == exp_args[idx]
+            if args_str:
+                logger.debug(args_str)
+
+            smart_thread_arg = False
+            kwargs_str = ''
+            comma = ''
+            for key, value in kwargs.items():
+                if key == 'smart_thread':
+                    smart_thread_arg = True
+                    smart_thread = value
+                else:
+                    kwargs_str = f'{kwargs_str}{comma}{key}={value}'
+                    comma = ', '
+                    assert exp_kwargs[key] == value
+            if kwargs_str:
+                logger.debug(kwargs_str)
+
+            if smart_thread_arg:
+                logger.debug(f'{smart_thread=}')
+                assert smart_thread._get_state('beta') == ThreadState.Alive
+
+            logger.debug('f1 beta exit')
+
+        logger.debug('mainline entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+        if num_f1_args == (0, 0, 0):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1)
+        elif num_f1_args == (0, 0, 1):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            args=(42, ))
+        elif num_f1_args == (0, 0, 2):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            args=(42, "my arg 2"))
+        elif num_f1_args == (0, 0, 3):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            args=(42, "my arg 2", [1, 2, 3]))
+        elif num_f1_args == (0, 1, 0):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            kwargs={'kwarg1': 13})
+        elif num_f1_args == (0, 1, 1):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            args=(42, ),
+                                            kwargs={'kwarg1': 13})
+        elif num_f1_args == (0, 1, 2):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            args=(42, "my arg 2"),
+                                            kwargs={'kwarg1': 13})
+        elif num_f1_args == (0, 1, 3):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            args=(42, "my arg 2", [1, 2, 3]),
+                                            kwargs={'kwarg1': 13})
+        elif num_f1_args == (0, 2, 0):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg"})
+        elif num_f1_args == (0, 2, 1):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            args=(42, ),
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg"})
+        elif num_f1_args == (0, 2, 2):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            args=(42, "my arg 2"),
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg"})
+        elif num_f1_args == (0, 2, 3):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            args=(42, "my arg 2", [1, 2, 3]),
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg"})
+        elif num_f1_args == (0, 3, 0):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg",
+                                                    'kwarg3': [11, 22, 33]})
+        elif num_f1_args == (0, 3, 1):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            args=(42, ),
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg",
+                                                    'kwarg3': [11, 22, 33]})
+        elif num_f1_args == (0, 3, 2):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            args=(42, "my arg 2"),
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg",
+                                                    'kwarg3': [11, 22, 33]})
+        elif num_f1_args == (0, 3, 3):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            args=(42, "my arg 2", [1, 2, 3]),
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg",
+                                                    'kwarg3': [11, 22, 33]})
+        elif num_f1_args == (1, 0, 0):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            thread_parm_name='smart_thread')
+        elif num_f1_args == (1, 0, 1):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            thread_parm_name='smart_thread',
+                                            args=(42, ))
+        elif num_f1_args == (1, 0, 2):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            thread_parm_name='smart_thread',
+                                            args=(42, "my arg 2"))
+        elif num_f1_args == (1, 0, 3):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            thread_parm_name='smart_thread',
+                                            args=(42, "my arg 2", [1, 2, 3]))
+        elif num_f1_args == (1, 1, 0):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            thread_parm_name='smart_thread',
+                                            kwargs={'kwarg1': 13})
+        elif num_f1_args == (1, 1, 1):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            thread_parm_name='smart_thread',
+                                            args=(42, ),
+                                            kwargs={'kwarg1': 13})
+        elif num_f1_args == (1, 1, 2):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            thread_parm_name='smart_thread',
+                                            args=(42, "my arg 2"),
+                                            kwargs={'kwarg1': 13})
+        elif num_f1_args == (1, 1, 3):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            thread_parm_name='smart_thread',
+                                            args=(42, "my arg 2", [1, 2, 3]),
+                                            kwargs={'kwarg1': 13})
+        elif num_f1_args == (1, 2, 0):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            thread_parm_name='smart_thread',
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg"})
+        elif num_f1_args == (1, 2, 1):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            thread_parm_name='smart_thread',
+                                            args=(42, ),
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg"})
+        elif num_f1_args == (1, 2, 2):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            thread_parm_name='smart_thread',
+                                            args=(42, "my arg 2"),
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg"})
+        elif num_f1_args == (1, 2, 3):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            thread_parm_name='smart_thread',
+                                            args=(42, "my arg 2", [1, 2, 3]),
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg"})
+        elif num_f1_args == (1, 3, 0):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            thread_parm_name='smart_thread',
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg",
+                                                    'kwarg3': [11, 22, 33]})
+        elif num_f1_args == (1, 3, 1):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            thread_parm_name='smart_thread',
+                                            args=(42, ),
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg",
+                                                    'kwarg3': [11, 22, 33]})
+        elif num_f1_args == (1, 3, 2):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            thread_parm_name='smart_thread',
+                                            args=(42, "my arg 2"),
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg",
+                                                    'kwarg3': [11, 22, 33]})
+        elif num_f1_args == (1, 3, 3):
+            beta_smart_thread = SmartThread(name='beta',
+                                            target=f1,
+                                            thread_parm_name='smart_thread',
+                                            args=(42, "my arg 2", [1, 2, 3]),
+                                            kwargs={'kwarg1': 13,
+                                                    'kwarg2': "second kwarg",
+                                                    'kwarg3': [11, 22, 33]})
+
+        time.sleep(0.5)
+        assert beta_smart_thread._get_state('beta') == ThreadState.Stopped
+        alpha_smart_thread.smart_join(targets='beta')
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_thread_interface_4
+    ####################################################################
+    @pytest.mark.parametrize("num_f1_args",
+                             [(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 0, 3),
+                              (0, 1, 0), (0, 1, 1), (0, 1, 2), (0, 1, 3),
+                              (0, 2, 0), (0, 2, 1), (0, 2, 2), (0, 2, 3),
+                              (0, 3, 0), (0, 3, 1), (0, 3, 2), (0, 3, 3),
+                              (1, 0, 0), (1, 0, 1), (1, 0, 2), (1, 0, 3),
+                              (1, 1, 0), (1, 1, 1), (1, 1, 2), (1, 1, 3),
+                              (1, 2, 0), (1, 2, 1), (1, 2, 2), (1, 2, 3),
+                              (1, 3, 0), (1, 3, 1), (1, 3, 2), (1, 3, 3)
+                              ])
+    def test_smart_thread_interface_4(self,
+                                      num_f1_args: tuple[int, int, int]
+                                      ) -> None:
+        """Test smart_send example 4 with no parms.
+
+        Args:
+            num_f1_args: number of arguments to specify
+        """
+        from scottbrian_paratools.smart_thread import SmartThread, ThreadState
+
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
+        def f1(*args,
+               kwarg1: Optional[int] = None,
+               kwarg2: Optional[str] = None,
+               kwarg3: Optional[list[int]] = None,
+               smart_thread: Optional[SmartThread] = None) -> None:
+            logger.debug('f1 beta entry')
+
+            exp_args = (0, 42, "my arg 2", [1, 2, 3])
+            exp_kwargs = {'kwarg1': 13,
+                          'kwarg2': "second kwarg",
+                          'kwarg3': [11, 22, 33]
+                          }
+            args_str = ''
+            comma = ''
+            for idx, arg in enumerate(args, 1):
+                args_str = f'{args_str}{comma}arg{idx}={arg}'
+                comma = ', '
+                assert arg == exp_args[idx]
+            if args_str:
+                logger.debug(args_str)
+
+            kwargs_str = ''
+            if kwarg1:
+                kwargs_str = f'{kwargs_str}{kwarg1=}'
+                assert kwarg1 == exp_kwargs['kwarg1']
+            if kwarg2:
+                kwargs_str = f'{kwargs_str}, {kwarg2=}'
+                assert kwarg2 == exp_kwargs['kwarg2']
+            if kwarg3:
+                kwargs_str = f'{kwargs_str}, {kwarg3=}'
+                assert kwarg3 == exp_kwargs['kwarg3']
+
+            if kwargs_str:
+                logger.debug(kwargs_str)
+
+            if smart_thread:
+                logger.debug(f'{smart_thread=}')
+                assert smart_thread._get_state('beta') == ThreadState.Alive
+
+            logger.debug('f1 beta exit')
+
+        logger.debug('mainline entered')
+        alpha_smart_thread = SmartThread(name='alpha')
+
+        smart_thread_name_to_specify = None
+        args_to_specify = None
+        kwargs_to_specify = None
+        if num_f1_args[0] == 1:
+            smart_thread_name_to_specify = 'smart_thread'
+
+        if num_f1_args[1] >= 1:
+            kwargs_to_specify = {'kwarg1': 13}
+        if num_f1_args[1] >= 2:
+            kwargs_to_specify['kwarg2'] = "second kwarg"
+        if num_f1_args[1] == 3:
+            kwargs_to_specify['kwarg3'] = [11, 22, 33]
+
+        if num_f1_args[2] == 1:
+            args_to_specify = (42, )
+        if num_f1_args[2] >= 2:
+            args_to_specify = (42, "my arg 2")
+        if num_f1_args[2] == 3:
+            args_to_specify = (42, "my arg 2", [1, 2, 3])
+
+        beta_smart_thread = SmartThread(
+            name='beta',
+            target=f1,
+            thread_parm_name=smart_thread_name_to_specify,
+            args=args_to_specify,
+            kwargs=kwargs_to_specify)
+
+        time.sleep(0.5)
+        assert beta_smart_thread._get_state('beta') == ThreadState.Stopped
+        alpha_smart_thread.smart_join(targets='beta')
+        logger.debug('mainline exiting')
+
+
+########################################################################
 # TestSmartThreadErrors class
 ########################################################################
+@pytest.mark.cover
 class TestSmartThreadExamples:
     """Test class for SmartThread example tests."""
 
@@ -21387,6 +22893,23 @@ class TestSmartThreadExamples:
             capsys: pytest fixture to get the print output
         """
         from scottbrian_paratools.smart_thread import SmartThread
+
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
 
         def f1() -> None:
             print('f1 beta entered')
@@ -21437,6 +22960,23 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
 
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
         def f1(smart_thread: SmartThread) -> None:
             print('f1 beta entered')
             smart_thread.smart_send(receivers='alpha',
@@ -21485,6 +23025,23 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
         import threading
+
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
 
         def f1() -> None:
             print('f1 beta entered')
@@ -21535,6 +23092,23 @@ class TestSmartThreadExamples:
         from scottbrian_paratools.smart_thread import SmartThread
         import threading
         import time
+
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
 
         class ThreadApp(threading.Thread):
             """Example thread app."""
@@ -21609,6 +23183,23 @@ class TestSmartThreadExamples:
         import threading
         import time
 
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
         class SmartThreadApp(threading.Thread, SmartThread):
             """Example thread app."""
 
@@ -21674,6 +23265,23 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
 
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
         def f1() -> None:
             print('f1 beta entered')
             print('f1 beta exiting')
@@ -21714,6 +23322,23 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
         import time
+
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
 
         def f1_beta() -> None:
             print('f1_beta entered')
@@ -21765,6 +23390,23 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
 
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
         def f1_beta() -> None:
             print('f1_beta entered')
             print('f1_beta exiting')
@@ -21804,6 +23446,23 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
         import time
+
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
 
         def f1_beta() -> None:
             print('f1_beta entered')
@@ -21845,6 +23504,23 @@ class TestSmartThreadExamples:
             capsys: pytest fixture to get the print output
         """
         from scottbrian_paratools.smart_thread import SmartThread
+
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
 
         def f1(smart_thread: SmartThread) -> None:
             print('f1 beta entered')
@@ -21888,6 +23564,23 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
         import time
+
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
 
         def f1(smart_thread: SmartThread) -> None:
             if smart_thread.name == 'charlie':
@@ -21938,6 +23631,23 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
 
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
         def f1(smart_thread: SmartThread) -> None:
             print(f'f1 {smart_thread.name} entered')
             recvd_msgs = smart_thread.smart_recv(senders='alpha')
@@ -21981,6 +23691,23 @@ class TestSmartThreadExamples:
             capsys: pytest fixture to get the print output
         """
         from scottbrian_paratools.smart_thread import SmartThread
+
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
 
         def f1(smart_thread: SmartThread,
                wait_for: Optional[str] = None,
@@ -22053,6 +23780,23 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
 
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
         def f1(smart_thread: SmartThread,
                wait_for: Optional[str] = None,
                resume_target: Optional[str] = None) -> None:
@@ -22124,6 +23868,23 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
 
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
         def f1(smart_thread: SmartThread) -> None:
             print('f1 beta entered')
             smart_thread.smart_send(msg='hi alpha', receivers='alpha')
@@ -22165,6 +23926,23 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
         import time
+
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
 
         def f1(smart_thread: SmartThread) -> None:
             print(f'f1 {smart_thread.name} entered')
@@ -22216,6 +23994,23 @@ class TestSmartThreadExamples:
             capsys: pytest fixture to get the print output
         """
         from scottbrian_paratools.smart_thread import SmartThread
+
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
 
         def f1(greeting: str, smart_thread: SmartThread) -> None:
             print(f'f1 {smart_thread.name} entered')
@@ -22269,6 +24064,23 @@ class TestSmartThreadExamples:
             capsys: pytest fixture to get the print output
         """
         from scottbrian_paratools.smart_thread import SmartThread
+
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
 
         def f1(greeting: str,
                smart_thread: SmartThread,
@@ -22353,6 +24165,23 @@ class TestSmartThreadExamples:
         from scottbrian_paratools.smart_thread import SmartThread
         import time
 
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
         def f1(smart_thread: SmartThread) -> None:
             print(f'f1 {smart_thread.name} about to wait')
             resumed_by = smart_thread.smart_wait(resumers='alpha')
@@ -22395,6 +24224,23 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
         import time
+
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
 
         def f1(smart_thread: SmartThread) -> None:
             time.sleep(1)  # allow time for smart_resume to be issued
@@ -22439,6 +24285,23 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
         import time
+
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
 
         def f1(smart_thread: SmartThread) -> None:
             print(f'f1 {smart_thread.name} about to resume alpha')
@@ -22495,6 +24358,23 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
         import time
+
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
 
         def f1(smart_thread: SmartThread) -> None:
             print(f'f1 {smart_thread.name} about to resume alpha')
@@ -22559,6 +24439,23 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
         import time
+
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
 
         def f1_beta(smart_thread: SmartThread) -> None:
             print('f1_beta about to wait')
@@ -22643,6 +24540,23 @@ class TestSmartThreadExamples:
         from scottbrian_paratools.smart_thread import SmartThread
         import time
 
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
         def f1_beta(smart_thread: SmartThread) -> None:
             print('f1_beta about to sync with alpha and charlie')
             smart_thread.smart_sync(targets=['alpha', 'charlie'])
@@ -22724,6 +24638,22 @@ def scenario_driver(
                         log_msg=log_msg_f1)
         logger.debug(log_msg_f1)
 
+    ###############################################################################
+    # logging
+    ###############################################################################
+    # logging.basicConfig(filename='ThreadComm.log',
+    #                     filemode='w',
+    #                     level=logging.DEBUG,
+    #                     format='%(asctime)s '
+    #                            '%(msecs)03d '
+    #                            '[%(levelname)8s] '
+    #                            '%(threadName)s '
+    #                            '%(filename)s:'
+    #                            '%(funcName)s:'
+    #                            '%(lineno)d '
+    #                            '%(message)s')
+    #
+    # logger = logging.getLogger(__name__)
     ################################################################
     # Set up log verification and start tests
     ################################################################
@@ -23009,12 +24939,15 @@ def scenario_driver(
     log_ver.print_match_results(match_results, print_matched=False)
     log_ver.verify_log_results(match_results)
 
-    logger.debug('mainline exiting')
+    log_len = len(caplog_to_use.record_tuples)
+
+    logger.debug(f'mainline exiting {log_len=}')
 
 
 ########################################################################
 # TestSmartThreadScenarios class
 ########################################################################
+@pytest.mark.cover
 class TestSmartThreadSmokeTest:
     """Test class for SmartThread scenarios."""
 
@@ -23039,6 +24972,23 @@ class TestSmartThreadSmokeTest:
             commander_config_arg: specifies the config for the commander
 
         """
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
         args_for_scenario_builder: dict[str, Any] = {}
 
         scenario_driver(
@@ -23084,6 +25034,22 @@ class TestSmartThreadSmokeTest:
             caplog: pytest fixture to capture log output
 
         """
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
         args_for_scenario_builder: dict[str, Any] = {
             'num_registered_1': num_registered_1_arg,
             'num_active_1': num_active_1_arg,
@@ -23100,8 +25066,1857 @@ class TestSmartThreadSmokeTest:
 
 
 ########################################################################
+# TestSmartThreadErrors class
+########################################################################
+@pytest.mark.cover
+class TestSmartThreadErrors:
+    """Test class for SmartThread error tests."""
+    ####################################################################
+    # test_smart_thread_instantiation_errors
+    ####################################################################
+    def test_smart_thread_instantiation_errors(self) -> None:
+        """Test error cases for SmartThread."""
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
+        ################################################################
+        # f1
+        ################################################################
+        def f1():
+            logger.debug('f1 entered')
+            logger.debug('f1 exiting')
+
+        ################################################################
+        # Create smart thread with bad name
+        ################################################################
+        logger.debug('mainline entered')
+
+        logger.debug('mainline creating bad name thread')
+
+        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc:
+            st.SmartThread(name=1)  # type: ignore
+
+        exp_error_msg = (
+            f'SmartThread {threading.current_thread().name} raising '
+            f'SmartThreadIncorrectNameSpecified error while processing '
+            f'request smart_init. '
+            f'The input name=1 is incorrect. Please specify a str for'
+            f'the name.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        test_thread = threading.Thread(target=f1)
+
+        with pytest.raises(
+                st.SmartThreadMutuallyExclusiveTargetThreadSpecified) as exc:
+
+            st.SmartThread(name='alpha', target=f1, thread=test_thread)
+
+        exp_error_msg = (
+            f'SmartThread {threading.current_thread().name} raising '
+            'SmartThreadMutuallyExclusiveTargetThreadSpecified error '
+            'while processing request smart_init. '
+            'Arguments for mutually exclusive parameters target and '
+            'thread were both specified. Please specify only one or '
+            'target or thread.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        with pytest.raises(
+                st.SmartThreadArgsSpecificationWithoutTarget) as exc:
+            st.SmartThread(name='alpha', args=(1,))
+
+        exp_error_msg = (
+            f'SmartThread {threading.current_thread().name} raising '
+            'SmartThreadArgsSpecificationWithoutTarget error while '
+            'processing request smart_init. '
+            'Arguments for parameters args or kwargs were specified, '
+            'but an argument for the target parameter was not '
+            'specified. Please specify target or remove args and '
+            'kwargs.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        with pytest.raises(
+                st.SmartThreadArgsSpecificationWithoutTarget) as exc:
+            st.SmartThread(name='alpha', kwargs={'arg1': 1})
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        with pytest.raises(
+                st.SmartThreadArgsSpecificationWithoutTarget) as exc:
+            st.SmartThread(name='alpha', args=(1,), kwargs={'arg1': 1})
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_thread_register_errors
+    ####################################################################
+    def test_smart_thread_register_errors(self) -> None:
+        """Test error cases for SmartThread."""
+        ################################################################
+        # Create smart thread with duplicate name
+        ################################################################
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
+        logger.debug('mainline entered')
+        alpha_smart_thread = st.SmartThread(name='alpha')
+
+        with pytest.raises(st.SmartThreadAlreadyExists) as exc:
+            st.SmartThread(name='beta')
+
+        exp_error_msg = (
+            f'SmartThread {threading.current_thread().name} '
+            'raising SmartThreadAlreadyExists error while '
+            'processing request smart_init. '
+            'While attempting to register a new SmartThread '
+            'with name beta and thread '
+            f'{alpha_smart_thread.thread}, it was detected that a registry '
+            'entry already exists for a SmartThread with '
+            f'the same thread {alpha_smart_thread.thread} for name alpha.')
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+
+        print('\n', exc.value)
+
+        with pytest.raises(st.SmartThreadNameAlreadyInUse) as exc:
+            st.SmartThread(name='alpha')
+
+        existing_id = id(alpha_smart_thread)
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadNameAlreadyInUse error while processing '
+            'request smart_init. '
+            f'While attempting to register a new SmartThread with '
+            f'name alpha and ID [0-9]+, it was detected '
+            'that a registry entry already exists for a SmartThread '
+            f'with name alpha but a different ID of '
+            f'{existing_id}.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_thread_clean_registry_errors
+    ####################################################################
+    def test_smart_thread_clean_registry_errors(self) -> None:
+        """Test error cases for SmartThread."""
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
+        logger.debug('mainline entered')
+        alpha_thread = st.SmartThread(name='alpha')
+        alpha_thread.name = 'bad_name'
+        with pytest.raises(st.SmartThreadErrorInRegistry) as exc:
+            st.SmartThread(name='beta')
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadErrorInRegistry error while processing '
+            'request smart_init. '
+            'Registry item with key alpha has non-matching '
+            'item.name of bad_name.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_thread_add_to_pair_array_errors
+    ####################################################################
+    def test_smart_thread_add_to_pair_array_errors(self,
+                                                   monkeypatch: Any
+                                                   ) -> None:
+        """Test error cases for SmartThread.
+
+        Args:
+            monkeypatch: pytest fixture to set up a mock routine
+
+        """
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
+        ################################################################
+        # f1
+        ################################################################
+        def f1():
+            logger.debug('f1 entered')
+            logger.debug('f1 exiting')
+
+        logger.debug('mainline entered')
+
+        MockCleanPairArray()
+
+        ################################################################
+        # monkeypatch for SmartThread._get_target_state
+        ################################################################
+        monkeypatch.setattr(st.SmartThread,
+                            "_clean_pair_array",
+                            MockCleanPairArray.mock_clean_pair_array)
+
+        alpha_st = st.SmartThread(name='alpha')
+
+        # create an empty pair array entry_
+        pair_key = st.SmartThread._get_pair_key('alpha', 'beta')
+        st.SmartThread._pair_array[pair_key] = (
+            st.SmartThread.ConnectionPair(
+                status_lock=threading.Lock(),
+                status_blocks={}
+            ))
+
+        with pytest.raises(st.SmartThreadIncorrectData) as exc:
+            st.SmartThread(name='beta', target=f1)
+
+        exp_error_msg = (
+            'SmartThread alpha '
+            'raising SmartThreadIncorrectData error while '
+            'processing request smart_init. '
+            'While attempting to add beta to the pair '
+            f'array, it was detected that pair_key {pair_key} is '
+            'already in the pair array with an empty '
+            'status_blocks.')
+
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+
+        print('\n', exc.value)
+
+        alpha_st.smart_unreg(targets='beta')
+
+        ################################################################
+
+        st.SmartThread._pair_array[pair_key] = (
+            st.SmartThread.ConnectionPair(
+                status_lock=threading.Lock(),
+                status_blocks={
+                    'beta': st.SmartThread.ConnectionStatusBlock(
+                        name='beta',
+                        create_time=0,
+                        target_create_time=0.0,
+                        wait_event=threading.Event(),
+                        sync_event=threading.Event(),
+                        msg_q=queue.Queue(maxsize=10))
+                }))
+
+        with pytest.raises(st.SmartThreadIncorrectData) as exc:
+            st.SmartThread(name='beta', target=f1)
+
+        exp_error_msg = (
+            'SmartThread alpha '
+            'raising SmartThreadIncorrectData error while '
+            'processing request smart_init. '
+            'While attempting to add beta to the pair '
+            f'array, it was detected that pair_key {pair_key} '
+            'is already in the pair array with a '
+            'status_blocks entry containing beta.')
+
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+
+        alpha_st.smart_unreg(targets='beta')
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        st.SmartThread._pair_array[pair_key] = (
+            st.SmartThread.ConnectionPair(
+                status_lock=threading.Lock(),
+                status_blocks={
+                    'alpha': st.SmartThread.ConnectionStatusBlock(
+                        name='beta',
+                        create_time=0,
+                        target_create_time=0.0,
+                        wait_event=threading.Event(),
+                        sync_event=threading.Event(),
+                        msg_q=queue.Queue(maxsize=10))
+                }))
+
+        with pytest.raises(st.SmartThreadIncorrectData) as exc:
+            st.SmartThread(name='beta', target=f1)
+
+        exp_error_msg = (
+            f'SmartThread alpha '
+            f'raising SmartThreadIncorrectData error while '
+            f'processing request smart_init. '
+            f'While attempting to add beta to the pair '
+            f'array, it was detected that pair_key {pair_key} '
+            f'is already in the pair array with a '
+            f'status_blocks entry containing alpha '
+            f'that is not del_deferred.')
+
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+
+        alpha_st.smart_unreg(targets='beta')
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        st.SmartThread._pair_array[pair_key] = (
+            st.SmartThread.ConnectionPair(
+                status_lock=threading.Lock(),
+                status_blocks={
+                    'alpha': st.SmartThread.ConnectionStatusBlock(
+                        name='beta',
+                        create_time=0,
+                        target_create_time=0.0,
+                        wait_event=threading.Event(),
+                        sync_event=threading.Event(),
+                        msg_q=queue.Queue(maxsize=10)),
+                    'beta': st.SmartThread.ConnectionStatusBlock(
+                        name='beta',
+                        create_time=0,
+                        target_create_time=0.0,
+                        wait_event=threading.Event(),
+                        sync_event=threading.Event(),
+                        msg_q=queue.Queue(maxsize=10)),
+                }))
+
+        with pytest.raises(st.SmartThreadIncorrectData) as exc:
+            st.SmartThread(name='beta', target=f1)
+
+        existing_names = st.SmartThread._pair_array[
+            pair_key].status_blocks.keys()
+
+        exp_error_msg = re.escape(
+            'SmartThread alpha '
+            'raising SmartThreadIncorrectData error while '
+            'processing request smart_init. '
+            'While attempting to add beta to the pair '
+            f'array, it was detected that pair_key {pair_key} '
+            'is already in the pair array with a '
+            'status_blocks entry containing entries for '
+            f'{sorted(existing_names)}.')
+
+        assert re.match(exp_error_msg, str(exc.value))
+
+        alpha_st.smart_unreg(targets='beta')
+
+        print('\n', exc.value)
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_start_errors
+    ####################################################################
+    def test_smart_start_errors(self) -> None:
+        """Test error cases for SmartThread."""
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
+        ################################################################
+        # f1
+        ################################################################
+        def f1():
+            logger.debug('f1 entered')
+            beta_thread.smart_wait(resumers='alpha')
+            logger.debug('f1 exiting')
+
+        logger.debug('mainline entered')
+        alpha_thread = st.SmartThread(name='alpha')
+
+        beta_thread = st.SmartThread(name='beta', target=f1, auto_start=False)
+
+        with pytest.raises(st.SmartThreadMultipleTargetsForSelfStart) as exc:
+            beta_thread.smart_start(targets=('beta', 'charlie'))
+
+        targets = set(('beta', 'charlie'))
+
+        exp_error_msg = (
+            'SmartThread alpha '
+            'raising SmartThreadMultipleTargetsForSelfStart '
+            'error while processing request smart_start. '
+            'Request smart_start can not be done for multiple '
+            f'targets {targets} when one of the targets is also '
+            'the smart_thread instance, in this case beta.')
+
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        beta_thread.smart_start()
+
+        with pytest.raises(st.SmartThreadAlreadyStarted) as exc:
+            beta_thread.smart_start()
+
+        exp_error_msg = (
+            'SmartThread alpha '
+            'raising SmartThreadAlreadyStarted error while '
+            'processing request smart_start. '
+            'Unable to start beta because beta '
+            'has already been started.')
+
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        alpha_thread.smart_resume(waiters='beta')
+
+        start_time = time.time()
+        timeout_value = 30
+        while True:
+            # if alpha_thread._get_state('beta') != st.ThreadState.Alive:
+            if not beta_thread.thread.is_alive():
+                break
+            time.sleep(0.2)
+            if time.time() - start_time > timeout_value:
+                raise CmdTimedOut('test_smart_start_errors took longer than '
+                                  f'{timeout_value} seconds waiting for beta '
+                                  'to exit and become inactive.')
+
+        with pytest.raises(st.SmartThreadRemoteThreadNotRegistered) as exc:
+            beta_thread.smart_start()
+
+        exp_error_msg = (
+            'SmartThread alpha '
+            'raising SmartThreadRemoteThreadNotRegistered '
+            'error while processing request smart_start. '
+            'Unable to start beta because beta '
+            'is not registered.')
+
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+
+        print('\n', exc.value)
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_send_errors
+    ####################################################################
+    def test_smart_send_errors(self) -> None:
+        """Test error cases for SmartThread."""
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
+        ################################################################
+        # f1
+        ################################################################
+        def f1():
+            logger.debug('f1 entered')
+            beta_thread.smart_wait(resumers='alpha')
+            logger.debug('f1 exiting')
+        logger.debug('mainline entered')
+        alpha_thread = st.SmartThread(name='alpha')
+        beta_thread = st.SmartThread(name='beta', target=f1, auto_start=False)
+        beta_thread.smart_start()
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_send(msg='hi beta',
+                                    receivers='beta',
+                                    msg_dict={'beta': 'hello again'})
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing request '
+            'smart_send. '
+            'Mutually exclusive arguments msg and msg_dict were both '
+            'specified. Please specify only one of msg or msg_dict.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        receivers = set()
+        with pytest.raises(st.SmartThreadNoRemoteTargets) as exc:
+            alpha_thread.smart_send(msg='hi beta',
+                                    receivers=receivers)
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadNoRemoteTargets error while processing '
+            'request smart_send. '
+            f'The receivers argument {receivers=} does not specify '
+            'any receivers.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_send(msg_dict={'beta': 'hi beta'},
+                                    receivers=set())
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing request '
+            'smart_send. '
+            'Mutually exclusive arguments msg_dict and msg or '
+            'msg_dict and receivers were specified.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_send(msg='hi beta',
+                                    msg_dict={'beta': 'hello beta'})
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing request '
+            'smart_send. '
+            'Mutually exclusive arguments msg_dict and msg or '
+            'msg_dict and receivers were specified.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadNoRemoteTargets) as exc:
+            alpha_thread.smart_send(msg_dict={})
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadNoRemoteTargets error while processing '
+            'request smart_send. '
+            'Argument msg_dict={} was specified with no items.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_send()
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing request '
+            'smart_send. '
+            'The smart_send request failed to specify '
+            'msg_dict, or failed to specify both msg and receivers.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_send(receivers='beta')
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing request '
+            'smart_send. '
+            'The smart_send request failed to specify '
+            'msg_dict, or failed to specify both msg and receivers.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_send(msg='hi beta')
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing request '
+            'smart_send. '
+            'The smart_send request failed to specify '
+            'msg_dict, or failed to specify both msg and receivers.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        # resume and join beta
+        ################################################################
+        alpha_thread.smart_resume(waiters='beta', timeout=5)
+        alpha_thread.smart_join(targets='beta', timeout=5)
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_recv_errors
+    ####################################################################
+    def test_smart_recv_errors(self) -> None:
+        """Test error cases for SmartThread."""
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
+        ################################################################
+        # f1
+        ################################################################
+        def f1():
+            logger.debug('f1 entered')
+            beta_thread.smart_wait(resumers='alpha')
+            logger.debug('f1 exiting')
+        logger.debug('mainline entered')
+        alpha_thread = st.SmartThread(name='alpha')
+        beta_thread = st.SmartThread(name='beta', target=f1, auto_start=False)
+        beta_thread.smart_start()
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_recv(senders='beta',
+                                    sender_count=-1)
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing request '
+            'smart_recv. '
+            'The value specified for sender_count=-1 is not valid. '
+            'The number of specified senders is '
+            '1. The value for '
+            'sender_count must be an integer between 1 and the '
+            'number of specified senders, inclusive.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_recv(senders='beta',
+                                    sender_count=0)
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing request '
+            'smart_recv. '
+            'The value specified for sender_count=0 is not valid. '
+            'The number of specified senders is '
+            '1. The value for '
+            'sender_count must be an integer between 1 and the '
+            'number of specified senders, inclusive.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_recv(senders='beta',
+                                    sender_count=2)
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing request '
+            'smart_recv. '
+            'The value specified for sender_count=2 is not valid. '
+            'The number of specified senders is '
+            '1. The value for '
+            'sender_count must be an integer between 1 and the '
+            'number of specified senders, inclusive.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        # resume and join beta
+        ################################################################
+        alpha_thread.smart_resume(waiters='beta', timeout=5)
+        alpha_thread.smart_join(targets='beta', timeout=5)
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_smart_wait_errors
+    ####################################################################
+    def test_smart_wait_errors(self) -> None:
+        """Test error cases for SmartThread."""
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
+        ################################################################
+        # f1
+        ################################################################
+        def f1():
+            logger.debug('f1 entered')
+            beta_thread.smart_wait(resumers='alpha')
+            logger.debug('f1 exiting')
+        logger.debug('mainline entered')
+        alpha_thread = st.SmartThread(name='alpha')
+        beta_thread = st.SmartThread(name='beta', target=f1, auto_start=False)
+        beta_thread.smart_start()
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_wait(resumers='beta',
+                                    resumer_count=-1)
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing request '
+            'smart_wait. '
+            'The value specified for resumer_count=-1 is not valid. '
+            'The number of specified resumers is '
+            '1. The value for '
+            'resumer_count must be an integer between 1 and the '
+            'number of specified resumers, inclusive.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_wait(resumers='beta',
+                                    resumer_count=0)
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing request '
+            'smart_wait. '
+            'The value specified for resumer_count=0 is not valid. '
+            'The number of specified resumers is '
+            '1. The value for '
+            'resumer_count must be an integer between 1 and the '
+            'number of specified resumers, inclusive.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_wait(resumers='beta',
+                                    resumer_count=2)
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing request '
+            'smart_wait. '
+            'The value specified for resumer_count=2 is not valid. '
+            'The number of specified resumers is '
+            '1. The value for '
+            'resumer_count must be an integer between 1 and the '
+            'number of specified resumers, inclusive.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        # resume and join beta
+        ################################################################
+        alpha_thread.smart_resume(waiters='beta', timeout=5)
+        alpha_thread.smart_join(targets='beta', timeout=5)
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_handle_found_pk_remotes_errors
+    ####################################################################
+    def test_handle_found_pk_remotes_errors(self,
+                                            monkeypatch: Any) -> None:
+        """Test error cases for SmartThread.
+
+        Args:
+            monkeypatch: pytest fixture to set up a mock routine
+
+        """
+        from scottbrian_locking import se_lock as sel
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
+        ################################################################
+        # mock_request_loop
+        ################################################################
+        class MockRequestLoop:
+            """Provide a way to test found_pk_remotes errors."""
+            mock_action: ClassVar[str] = ''
+            mock_exp_pk_remotes: ClassVar[str] = ''
+
+            def __init__(self) -> None:
+                """Initialize the mock target state."""
+                # self.work_pk_remotes = []
+                MockRequestLoop.mock_action = 'action1'
+
+            def mock_request_loop(self,
+                                  request_block: st.RequestBlock,
+                                  ) -> None:
+                """Main loop for each request.
+
+                Args:
+                    request_block: contains requestors, timeout, etc
+
+                """
+                logger.debug('mock_request_loop entered')
+                delta_added = False
+                while True:
+                    work_pk_remotes_copy = self.work_pk_remotes.copy()
+                    for pk_remote in work_pk_remotes_copy:
+                        # we need to hold the lock to ensure the pair_array
+                        # remains stable while getting local_sb. The
+                        # request_pending flag in our entry will prevent our
+                        # entry for being removed (but not the remote)
+                        with sel.SELockShare(st.SmartThread._registry_lock):
+                            if self.found_pk_remotes:
+                                if MockRequestLoop.mock_action == 'action2':
+                                    MockRequestLoop.mock_exp_pk_remotes = (
+                                        work_pk_remotes_copy
+                                    )
+                                    mock_pair_key = self._get_pair_key('beta',
+                                                                       'delta')
+                                    if not delta_added:
+                                        delta_added = True
+                                        self.work_pk_remotes.append(
+                                            st.PairKeyRemote(
+                                                mock_pair_key,
+                                                'delta',
+                                                0.0))
+                                pk_remote = self._handle_found_pk_remotes(
+                                    pk_remote=pk_remote,
+                                    work_pk_remotes=work_pk_remotes_copy
+                                )
+                    time.sleep(0.5)
+
+        ################################################################
+        # f1
+        ################################################################
+        def f1():
+            logger.debug('f1 entered')
+            with pytest.raises(st.SmartThreadWorkDataException) as exc:
+                beta_thread.smart_wait(resumers=('alpha', 'charlie'))
+
+            action = msgs.get_msg('beta')
+
+            pair_key = st.SmartThread._get_pair_key('beta', 'delta')
+            found_pk_remote = st.PairKeyRemote(
+                pair_key,
+                'delta',
+                delta_thread.create_time)
+
+            if action == 'action1':
+                exp_error_msg = (
+                    'SmartThread beta raising '
+                    'SmartThreadWorkDataException error while processing '
+                    'request smart_wait. '
+                    f'An expected entry for {found_pk_remote=} was not '
+                    f'found in self.work_pk_remotes={exp_work_remotes}.')
+            elif action == 'action2':
+                exp_error_msg = (
+                    'SmartThread beta raising '
+                    'SmartThreadWorkDataException error while processing '
+                    'request smart_wait. '
+                    f'An expected entry for {found_pk_remote=} was not '
+                    f'found in work_pk_remotes='
+                    f'{MockRequestLoop.mock_exp_pk_remotes}.')
+
+                logger.debug(f'{" "*21}{exp_error_msg}')
+            else:
+                raise IncorrectActionSpecified(
+                    f'test_handle_found_pk_remotes_errors received '
+                    f'an unrecognized {action=} in beta f1 rtn')
+
+            assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+
+            print('\n', exc.value)
+
+            logger.debug('f1 exiting')
+
+        ################################################################
+        # mainline
+        ################################################################
+        logger.debug('mainline entered')
+
+        MockRequestLoop()
+
+        msgs = Msgs()
+
+        alpha_thread = st.SmartThread(name='alpha')
+        beta_thread = st.SmartThread(name='beta', target=f1, auto_start=False)
+        beta_thread.smart_start()
+
+        start_time = time.time()
+        timeout_value = 15
+        while len(beta_thread.work_pk_remotes) < 2:
+            time.sleep(0.5)
+            if time.time() - start_time > timeout_value:
+                raise CmdTimedOut('test_smart_start_errors took longer than '
+                                  f'{timeout_value} seconds waiting for beta '
+                                  'to exit and become inactive.')
+
+        exp_work_remotes = beta_thread.work_pk_remotes
+        beta_thread.missing_remotes |= {'delta'}
+
+        delta_thread = st.SmartThread(name='delta',
+                                      target=f1,
+                                      auto_start=False)
+        msgs.queue_msg(target='beta',
+                       msg='action1')
+
+        ################################################################
+        # join beta
+        ################################################################
+        alpha_thread.smart_join(targets='beta', timeout=5)
+        alpha_thread.smart_unreg(targets='delta')
+
+        ################################################################
+        # part 2
+        ################################################################
+        beta_thread = st.SmartThread(name='beta', target=f1, auto_start=False)
+
+        monkeypatch.setattr(st.SmartThread,
+                            "_request_loop",
+                            MockRequestLoop.mock_request_loop)
+        MockRequestLoop.mock_action = 'action2'
+        beta_thread.smart_start()
+
+        start_time = time.time()
+        timeout_value = 15
+        while len(beta_thread.work_pk_remotes) < 2:
+            time.sleep(0.5)
+            if time.time() - start_time > timeout_value:
+                raise CmdTimedOut('test_smart_start_errors took longer than '
+                                  f'{timeout_value} seconds waiting for beta '
+                                  'to exit and become inactive.')
+
+        exp_work_remotes = beta_thread.work_pk_remotes
+        beta_thread.missing_remotes |= {'delta'}
+
+        delta_thread = st.SmartThread(name='delta',
+                                      target=f1,
+                                      auto_start=False)
+
+        msgs.queue_msg(target='beta',
+                       msg='action2')
+
+        ################################################################
+        # join beta
+        ################################################################
+        alpha_thread.smart_join(targets='beta', timeout=5)
+        alpha_thread.smart_unreg(targets='delta')
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_handle_loop_errors_errors
+    ####################################################################
+    @pytest.mark.parametrize("num_pending_arg", [0, 1, 2])
+    def test_handle_loop_errors_errors(self,
+                                       num_pending_arg: int) -> None:
+        """Test error cases for SmartThread.
+
+        Args:
+            num_pending_arg: number of threads that should be in the
+                pending names array for the error message
+
+        """
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
+        ################################################################
+        # f1
+        ################################################################
+        def f1(action: str):
+            logger.debug('f1 entered')
+            if action == 'wait':
+                beta_thread.smart_wait(resumers='alpha')
+            elif action == 'msg_wait':
+                msgs.get_msg('beta')
+            elif action == 'deadlock':
+                f1_senders = ['alpha']
+                f1_pending_targets = []
+                for idx in range(num_pending_arg):
+                    f1_senders.append(f'pending_{idx}')
+                    f1_pending_targets.append(f'pending_{idx}')
+                with pytest.raises(st.SmartThreadDeadlockDetected) as f1_exc:
+                    beta_thread.smart_recv(senders=f1_senders)
+                f1_targets_msg = re.escape(
+                    'while processing a smart_recv request with targets '
+                    f'{f1_senders}.')
+
+                f1_pending_msg = re.escape(
+                    f' Remotes that are pending: {f1_pending_targets}.')
+
+                f1_stopped_msg = ''
+
+                f1_not_registered_msg = ''
+
+                f1_deadlock_msg = (' Remotes that are deadlocked: '
+                                   r"\['alpha'\].")
+
+                f1_full_send_q_msg = ''
+
+                f1_msg_suite = (f'{f1_targets_msg}{f1_pending_msg}'
+                                f'{f1_stopped_msg}{f1_not_registered_msg}'
+                                f'{f1_deadlock_msg}{f1_full_send_q_msg}')
+
+                f1_exp_error_msg = (
+                    f'beta raising '
+                    f'SmartThreadDeadlockDetected {f1_msg_suite}')
+
+                logger.debug(f1_exp_error_msg)
+                assert re.fullmatch(f1_exp_error_msg, str(f1_exc.value))
+
+                print('\n', f1_exc.value)
+
+            logger.debug('f1 exiting')
+
+        ################################################################
+        # mainline
+        ################################################################
+        logger.debug('mainline entered')
+
+        msgs = Msgs()
+
+        alpha_thread = st.SmartThread(name='alpha')
+        beta_thread = st.SmartThread(name='beta',
+                                     target=f1,
+                                     kwargs={'action': 'wait'},
+                                     auto_start=False)
+        beta_thread.smart_start()
+        alpha_thread.smart_resume(waiters='beta')
+
+        targets = ['beta']
+        pending_targets = []
+        for idx in range(num_pending_arg):
+            targets.append(f'pending_{idx}')
+            pending_targets.append(f'pending_{idx}')
+
+        ################################################################
+        # SmartThreadRemoteThreadNotAlive
+        ################################################################
+        with pytest.raises(st.SmartThreadRemoteThreadNotAlive) as exc:
+            alpha_thread.smart_recv(senders=targets)
+
+        targets_msg = re.escape(
+            f'while processing a smart_recv request with targets {targets}.')
+
+        pending_msg = re.escape(
+            f' Remotes that are pending: {pending_targets}.')
+
+        stopped_msg = (
+            ' Remotes that are stopped: '
+            r"\['beta'\].")
+
+        not_registered_msg = ''
+
+        deadlock_msg = ''
+
+        full_send_q_msg = ''
+
+        msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
+                     f'{not_registered_msg}{deadlock_msg}{full_send_q_msg}')
+
+        exp_error_msg = (
+            f'alpha raising '
+            f'SmartThreadRemoteThreadNotAlive {msg_suite}')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        # SmartThreadRemoteThreadNotRegistered
+        ################################################################
+        with pytest.raises(st.SmartThreadRemoteThreadNotRegistered) as exc:
+            alpha_thread.smart_start(targets=targets)
+
+        targets_msg = re.escape(
+            f'while processing a smart_start request with targets {targets}.')
+
+        pending_msg = re.escape(
+            ' Remotes that are pending: [].')
+
+        stopped_msg = ''
+
+        not_registered_msg = re.escape(
+            f' Remotes that are not registered: {targets}.')
+
+        deadlock_msg = ''
+
+        full_send_q_msg = ''
+
+        msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
+                     f'{not_registered_msg}{deadlock_msg}{full_send_q_msg}')
+
+        exp_error_msg = (
+            f'alpha raising '
+            f'SmartThreadRemoteThreadNotRegistered {msg_suite}')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        with pytest.raises(st.SmartThreadRemoteThreadNotRegistered) as exc:
+            alpha_thread.smart_unreg(targets=targets)
+
+        targets_msg = re.escape(
+            f'while processing a smart_unreg request with targets {targets}.')
+
+        pending_msg = re.escape(
+            ' Remotes that are pending: [].')
+
+        stopped_msg = ''
+
+        not_registered_msg = re.escape(
+            f' Remotes that are not registered: {targets}.')
+
+        deadlock_msg = ''
+
+        full_send_q_msg = ''
+
+        msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
+                     f'{not_registered_msg}{deadlock_msg}{full_send_q_msg}')
+
+        exp_error_msg = (
+            f'alpha raising '
+            f'SmartThreadRemoteThreadNotRegistered {msg_suite}')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        # SmartThreadDeadlockDetected
+        ################################################################
+        alpha_thread.smart_join(targets='beta', timeout=5)
+        beta_thread = st.SmartThread(name='beta',
+                                     target=f1,
+                                     kwargs={'action': 'deadlock'},
+                                     auto_start=False)
+        beta_thread.smart_start()
+        with pytest.raises(st.SmartThreadDeadlockDetected) as exc:
+            alpha_thread.smart_recv(senders=targets)
+
+        targets_msg = re.escape(
+            f'while processing a smart_recv request with targets {targets}.')
+
+        pending_msg = re.escape(
+            f' Remotes that are pending: {pending_targets}.')
+
+        # stopped_msg = (
+        #     ' Remotes that are stopped: '
+        #     r"\['beta'\].")
+        stopped_msg = ''
+
+        not_registered_msg = ''
+
+        deadlock_msg = (' Remotes that are deadlocked: '
+                        r"\['beta'\].")
+
+        full_send_q_msg = ''
+
+        msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
+                     f'{not_registered_msg}{deadlock_msg}{full_send_q_msg}')
+
+        exp_error_msg = (
+            f'alpha raising '
+            f'SmartThreadDeadlockDetected {msg_suite}')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        # SmartThreadRequestTimedOut not responsive
+        ################################################################
+        alpha_thread.smart_join(targets='beta', timeout=5)
+        beta_thread = st.SmartThread(name='beta',
+                                     target=f1,
+                                     kwargs={'action': 'msg_wait'},
+                                     auto_start=False)
+        beta_thread.smart_start()
+        with pytest.raises(st.SmartThreadRequestTimedOut) as exc:
+            alpha_thread.smart_recv(senders=targets, timeout=1)
+
+        targets_msg = re.escape(
+            f'while processing a smart_recv request with targets {targets}.')
+
+        pending_msg = re.escape(
+            f' Remotes that are pending: {targets}.')
+
+        stopped_msg = ''
+
+        not_registered_msg = ''
+
+        deadlock_msg = ''
+
+        full_send_q_msg = ''
+
+        msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
+                     f'{not_registered_msg}{deadlock_msg}{full_send_q_msg}')
+
+        exp_error_msg = (
+            f'alpha raising '
+            f'SmartThreadRequestTimedOut {msg_suite}')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        # join beta
+        ################################################################
+        msgs.queue_msg('beta')
+        alpha_thread.smart_join(targets='beta', timeout=5)
+
+        ################################################################
+        # SmartThreadRequestTimedOut full_msg_q
+        ################################################################
+        alpha_thread.smart_join(targets='beta', timeout=5)
+        beta_thread = st.SmartThread(name='beta',
+                                     target=f1,
+                                     kwargs={'action': 'msg_wait'},
+                                     auto_start=False,
+                                     max_msgs=1)
+        beta_thread.smart_start()
+        alpha_thread.smart_send(receivers='beta', msg='hi beta')
+        with pytest.raises(st.SmartThreadRequestTimedOut) as exc:
+            alpha_thread.smart_send(receivers=targets,
+                                    msg='hello again',
+                                    timeout=1)
+
+        targets_msg = re.escape(
+            f'while processing a smart_send request with targets {targets}.')
+
+        pending_msg = re.escape(
+            f' Remotes that are pending: {targets}.')
+
+        stopped_msg = ''
+
+        not_registered_msg = ''
+
+        deadlock_msg = ''
+
+        full_send_q_msg = r" Remotes that have a full send_q: \['beta'\]."
+
+        msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
+                     f'{not_registered_msg}{deadlock_msg}{full_send_q_msg}')
+
+        exp_error_msg = (
+            f'alpha raising '
+            f'SmartThreadRequestTimedOut {msg_suite}')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        # join beta
+        ################################################################
+        msgs.queue_msg('beta')
+        alpha_thread.smart_join(targets='beta', timeout=5)
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # test_request_setup_errors
+    ####################################################################
+    def test_request_setup_errors(self) -> None:
+        """Test error cases for SmartThread."""
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
+        logger.debug('mainline entered')
+        alpha_thread = st.SmartThread(name='alpha')
+
+        ################################################################
+        # SmartThreadInvalidInput - no remotes
+        ################################################################
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_unreg(targets=set())
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing '
+            'request smart_unreg. '
+            'Remote threads are required for the request but none were '
+            'specified.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_join(targets=set())
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing '
+            'request smart_join. '
+            'Remote threads are required for the request but none were '
+            'specified.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_recv(senders=set())
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing '
+            'request smart_recv. '
+            'Remote threads are required for the request but none were '
+            'specified.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_wait(resumers=set())
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing '
+            'request smart_wait. '
+            'Remote threads are required for the request but none were '
+            'specified.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_resume(waiters=set())
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing '
+            'request smart_resume. '
+            'Remote threads are required for the request but none were '
+            'specified.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_sync(targets=set())
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing '
+            'request smart_sync. '
+            'Remote threads are required for the request but none were '
+            'specified.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        # SmartThreadInvalidInput - caller also a remote
+        ################################################################
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_unreg(targets='alpha')
+
+        exp_error_msg = (
+            'SmartThread alpha raising SmartThreadInvalidInput '
+            'error while processing request smart_unreg. '
+            r"Targets \['alpha'\] includes alpha which is not "
+            'permitted except for request smart_start.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_join(targets='alpha')
+
+        exp_error_msg = (
+            'SmartThread alpha raising SmartThreadInvalidInput '
+            'error while processing request smart_join. '
+            r"Targets \['alpha'\] includes alpha which is not "
+            'permitted except for request smart_start.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_recv(senders='alpha')
+
+        exp_error_msg = (
+            'SmartThread alpha raising SmartThreadInvalidInput '
+            'error while processing request smart_recv. '
+            r"Targets \['alpha'\] includes alpha which is not "
+            'permitted except for request smart_start.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_send(msg='hello',
+                                    receivers='alpha')
+
+        exp_error_msg = (
+            'SmartThread alpha raising SmartThreadInvalidInput '
+            'error while processing request smart_send. '
+            r"Targets \['alpha'\] includes alpha which is not "
+            'permitted except for request smart_start.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_wait(resumers='alpha')
+
+        exp_error_msg = (
+            'SmartThread alpha raising SmartThreadInvalidInput '
+            'error while processing request smart_wait. '
+            r"Targets \['alpha'\] includes alpha which is not "
+            'permitted except for request smart_start.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_resume(waiters='alpha')
+
+        exp_error_msg = (
+            'SmartThread alpha raising SmartThreadInvalidInput '
+            'error while processing request smart_resume. '
+            r"Targets \['alpha'\] includes alpha which is not "
+            'permitted except for request smart_start.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        ################################################################
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_sync(targets='alpha')
+
+        exp_error_msg = (
+            'SmartThread alpha raising SmartThreadInvalidInput '
+            'error while processing request smart_sync. '
+            r"Targets \['alpha'\] includes alpha which is not "
+            'permitted except for request smart_start.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
+    # Foreign Op
+    ####################################################################
+    def test_foreign_op_scenario(self,
+                                 caplog: pytest.LogCaptureFixture
+                                 ) -> None:
+        """Test foreign op error for SmartThread.
+
+        Args:
+            caplog: pytest fixture to capture log output
+
+        """
+        ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
+        ################################################################
+        # f1
+        ################################################################
+        def f1(f1_name: str):
+            logger.debug(f'f1 entered for {f1_name}')
+            msgs.get_msg(f1_name)
+            logger.debug(f'f1 exit for {f1_name}')
+            ############################################################
+            # exit
+            ############################################################
+
+        logger.debug('mainline entry')
+        msgs = Msgs()
+        alpha_thread = st.SmartThread(name='alpha')
+        beta_thread = st.SmartThread(name='beta',
+                                     target=f1,
+                                     kwargs={'f1_name': 'beta'})
+        st.SmartThread(name='charlie',
+                       target=f1,
+                       kwargs={'f1_name': 'charlie'},
+                       auto_start=False)
+
+        ################################################################
+        with pytest.raises(st.SmartThreadDetectedOpFromForeignThread) as exc:
+            beta_thread.smart_start(targets='charlie')
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadDetectedOpFromForeignThread error '
+            'while processing request smart_start. '
+            'The SmartThread object used for the invocation is '
+            f'associated with thread {beta_thread.thread} which does not '
+            'match '
+            f'caller thread {threading.current_thread()} as required.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+        print('\n', exc.value)
+
+        ################################################################
+        with pytest.raises(st.SmartThreadDetectedOpFromForeignThread) as exc:
+            beta_thread.smart_unreg(targets='charlie')
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadDetectedOpFromForeignThread error '
+            'while processing request smart_unreg. '
+            'The SmartThread object used for the invocation is '
+            f'associated with thread {beta_thread.thread} which does not '
+            'match '
+            f'caller thread {threading.current_thread()} as required.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+        print('\n', exc.value)
+
+        ################################################################
+        with pytest.raises(st.SmartThreadDetectedOpFromForeignThread) as exc:
+            beta_thread.smart_join(targets='charlie')
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadDetectedOpFromForeignThread error '
+            'while processing request smart_join. '
+            'The SmartThread object used for the invocation is '
+            f'associated with thread {beta_thread.thread} which does not '
+            'match '
+            f'caller thread {threading.current_thread()} as required.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+        print('\n', exc.value)
+
+        ################################################################
+        with pytest.raises(st.SmartThreadDetectedOpFromForeignThread) as exc:
+            beta_thread.smart_recv(senders='alpha')
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadDetectedOpFromForeignThread error '
+            'while processing request smart_recv. '
+            'The SmartThread object used for the invocation is '
+            f'associated with thread {beta_thread.thread} which does not '
+            'match '
+            f'caller thread {threading.current_thread()} as required.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+        print('\n', exc.value)
+
+        ################################################################
+        with pytest.raises(st.SmartThreadDetectedOpFromForeignThread) as exc:
+            beta_thread.smart_send(receivers='alpha', msg='hi alpha')
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadDetectedOpFromForeignThread error '
+            'while processing request smart_send. '
+            'The SmartThread object used for the invocation is '
+            f'associated with thread {beta_thread.thread} which does not '
+            'match '
+            f'caller thread {threading.current_thread()} as required.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+        print('\n', exc.value)
+
+        ################################################################
+        with pytest.raises(st.SmartThreadDetectedOpFromForeignThread) as exc:
+            beta_thread.smart_wait(resumers='alpha')
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadDetectedOpFromForeignThread error '
+            'while processing request smart_wait. '
+            'The SmartThread object used for the invocation is '
+            f'associated with thread {beta_thread.thread} which does not '
+            'match '
+            f'caller thread {threading.current_thread()} as required.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+        print('\n', exc.value)
+
+        ################################################################
+        with pytest.raises(st.SmartThreadDetectedOpFromForeignThread) as exc:
+            beta_thread.smart_resume(waiters='alpha')
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadDetectedOpFromForeignThread error '
+            'while processing request smart_resume. '
+            'The SmartThread object used for the invocation is '
+            f'associated with thread {beta_thread.thread} which does not '
+            'match '
+            f'caller thread {threading.current_thread()} as required.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+        print('\n', exc.value)
+
+        ################################################################
+        with pytest.raises(st.SmartThreadDetectedOpFromForeignThread) as exc:
+            beta_thread.smart_sync(targets='alpha')
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadDetectedOpFromForeignThread error '
+            'while processing request smart_sync. '
+            'The SmartThread object used for the invocation is '
+            f'associated with thread {beta_thread.thread} which does not '
+            'match '
+            f'caller thread {threading.current_thread()} as required.')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+        print('\n', exc.value)
+
+        ################################################################
+        alpha_thread.smart_start(targets='charlie')
+
+        msgs.queue_msg('beta')
+        msgs.queue_msg('charlie')
+        alpha_thread.smart_join(targets=('beta', 'charlie'))
+
+        logger.debug('mainline exit')
+
+
+########################################################################
 # TestSmartThreadScenarios class
 ########################################################################
+@pytest.mark.cover
 class TestSmartBasicScenarios:
     """Test class for SmartThread scenarios."""
 
@@ -23398,7 +27213,6 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_backout_sync_remote_scenario
     ####################################################################
-    @pytest.mark.cover
     def test_backout_sync_remote_scenario(
             self,
             caplog: pytest.LogCaptureFixture
@@ -23419,7 +27233,6 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_backout_sync_local_scenario
     ####################################################################
-    @pytest.mark.cover
     def test_backout_sync_local_scenario(
             self,
             caplog: pytest.LogCaptureFixture
@@ -23839,9 +27652,9 @@ class TestSmartThreadComboScenarios:
     ####################################################################
     # test_recv_msg_timeout_scenarios
     ####################################################################
-    @pytest.mark.parametrize("timeout_type_arg", [TimeoutType.TimeoutNone,
-                                                  TimeoutType.TimeoutFalse,
-                                                  TimeoutType.TimeoutTrue])
+    # @pytest.mark.parametrize("timeout_type_arg", [TimeoutType.TimeoutNone,
+    #                                               TimeoutType.TimeoutFalse,
+    #                                               TimeoutType.TimeoutTrue])
     @pytest.mark.parametrize("num_receivers_arg", [1, 2, 3])
     @pytest.mark.parametrize("num_active_no_delay_senders_arg", [0, 1])
     @pytest.mark.parametrize("num_active_delay_senders_arg", [0, 1])
@@ -23851,12 +27664,12 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_reg_senders_arg", [0, 1])
     # @pytest.mark.parametrize("timeout_type_arg", [TimeoutType.TimeoutFalse])
     # @pytest.mark.parametrize("num_receivers_arg", [3])
-    # @pytest.mark.parametrize("num_active_no_delay_senders_arg", [1])
+    # @pytest.mark.parametrize("num_active_no_delay_senders_arg", [0])
     # @pytest.mark.parametrize("num_active_delay_senders_arg", [1])
     # @pytest.mark.parametrize("num_send_exit_senders_arg", [1])
     # @pytest.mark.parametrize("num_nosend_exit_senders_arg", [0])
     # @pytest.mark.parametrize("num_unreg_senders_arg", [1])
-    # @pytest.mark.parametrize("num_reg_senders_arg", [1])
+    # @pytest.mark.parametrize("num_reg_senders_arg", [0])
     def test_recv_msg_timeout_scenarios(
             self,
             timeout_type_arg: TimeoutType,
@@ -24841,6 +28654,23 @@ class TestSmartThreadComboScenarios:
 
         """
         ################################################################
+        # logging
+        ################################################################
+        logging.basicConfig(filename='ThreadComm.log',
+                            filemode='w',
+                            level=logging.DEBUG,
+                            format='%(asctime)s '
+                                   '%(msecs)03d '
+                                   '[%(levelname)8s] '
+                                   '%(threadName)s '
+                                   '%(filename)s:'
+                                   '%(funcName)s:'
+                                   '%(lineno)d '
+                                   '%(message)s')
+
+        logger = logging.getLogger(__name__)
+
+        ################################################################
         # add_log_msgs
         ################################################################
         def add_log_msgs(log_msgs: StrOrList,
@@ -25446,3083 +29276,3 @@ class TestSmartThreadComboScenarios:
     #     f1_names_to_use = random.sample(f1_names, num_threads)
     #
     #     names = ['alpha'] + f1_names_to_use
-
-
-########################################################################
-# TestSmartThreadInterface class
-########################################################################
-class TestSmartThreadInterface:
-    """Test class for SmartThread example tests."""
-    ####################################################################
-    # test_smart_thread_interface_1
-    ####################################################################
-    @pytest.mark.parametrize("num_f1_args",
-                             [(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 0, 3),
-                              (0, 1, 0), (0, 1, 1), (0, 1, 2), (0, 1, 3),
-                              (0, 2, 0), (0, 2, 1), (0, 2, 2), (0, 2, 3),
-                              (0, 3, 0), (0, 3, 1), (0, 3, 2), (0, 3, 3),
-                              (1, 0, 0), (1, 0, 1), (1, 0, 2), (1, 0, 3),
-                              (1, 1, 0), (1, 1, 1), (1, 1, 2), (1, 1, 3),
-                              (1, 2, 0), (1, 2, 1), (1, 2, 2), (1, 2, 3),
-                              (1, 3, 0), (1, 3, 1), (1, 3, 2), (1, 3, 3)
-                              ])
-    def test_smart_thread_interface_1(self,
-                                      num_f1_args: tuple[int, int, int]
-                                      ) -> None:
-        """Test smart_send example 1 with no parms.
-
-        Args:
-            num_f1_args: number of arguments to specify
-        """
-        from scottbrian_paratools.smart_thread import SmartThread, ThreadState
-
-        def f1_0_0_0() -> None:
-            logger.debug('f1 beta entry')
-            logger.debug('there are no args to check')
-            assert num_f1_args == (0, 0, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_0_0_1(arg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            assert arg1 == 42
-            assert num_f1_args == (0, 0, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_0_0_2(arg1: int, arg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert num_f1_args == (0, 0, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_0_0_3(arg1: int, arg2: str, arg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert num_f1_args == (0, 0, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_0_1_0(kwarg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{kwarg1=}')
-            assert kwarg1 == 13
-            assert num_f1_args == (0, 1, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_0_1_1(arg1: int,
-                     kwarg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            logger.debug(f'{kwarg1=}')
-            assert arg1 == 42
-            assert kwarg1 == 13
-            assert num_f1_args == (0, 1, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_0_1_2(arg1: int, arg2: str,
-                     kwarg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{kwarg1=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert kwarg1 == 13
-            assert num_f1_args == (0, 1, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_0_1_3(arg1: int, arg2: str, arg3: list[int],
-                     kwarg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{kwarg1=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert kwarg1 == 13
-            assert num_f1_args == (0, 1, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_0_2_0(kwarg1: int, kwarg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert num_f1_args == (0, 2, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_0_2_1(arg1: int,
-                     kwarg1: int, kwarg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            assert arg1 == 42
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert num_f1_args == (0, 2, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_0_2_2(arg1: int, arg2: str,
-                     kwarg1: int, kwarg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert num_f1_args == (0, 2, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_0_2_3(arg1: int, arg2: str, arg3: list[int],
-                     kwarg1: int, kwarg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert num_f1_args == (0, 2, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_0_3_0(kwarg1: int, kwarg2: str, kwarg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert kwarg3 == [11, 22, 33]
-            assert num_f1_args == (0, 3, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_0_3_1(arg1: int,
-                     kwarg1: int, kwarg2: str, kwarg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            assert arg1 == 42
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert kwarg3 == [11, 22, 33]
-            assert num_f1_args == (0, 3, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_0_3_2(arg1: int, arg2: str,
-                     kwarg1: int, kwarg2: str, kwarg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert kwarg3 == [11, 22, 33]
-            assert num_f1_args == (0, 3, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_0_3_3(arg1: int, arg2: str, arg3: list[int],
-                     kwarg1: int, kwarg2: str, kwarg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert kwarg1 == 13
-            assert kwarg3 == [11, 22, 33]
-            assert kwarg2 == "second kwarg"
-            assert num_f1_args == (0, 3, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_1_0_0(smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{smart_thread=}')
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 0, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_1_0_1(arg1: int,
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            assert arg1 == 42
-            logger.debug(f'{smart_thread=}')
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 0, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_1_0_2(arg1: int, arg2: str,
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 0, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_1_0_3(arg1: int, arg2: str, arg3: list[int],
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 0, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_1_1_0(kwarg1: int,
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{kwarg1=}')
-            logger.debug(f'{smart_thread=}')
-            assert kwarg1 == 13
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 1, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_1_1_1(arg1: int,
-                     smart_thread: SmartThread,
-                     kwarg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            logger.debug(f'{kwarg1=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert kwarg1 == 13
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 1, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_1_1_2(arg1: int, arg2: str,
-                     kwarg1: int,
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{kwarg1=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert kwarg1 == 13
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 1, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_1_1_3(arg1: int, arg2: str, arg3: list[int],
-                     smart_thread: SmartThread,
-                     kwarg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{kwarg1=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert kwarg1 == 13
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 1, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_1_2_0(kwarg1: int, kwarg2: str,
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            logger.debug(f'{smart_thread=}')
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 2, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_1_2_1(arg1: int,
-                     kwarg1: int,
-                     smart_thread: SmartThread,
-                     kwarg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 2, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_1_2_2(arg1: int, arg2: str,
-                     kwarg1: int, kwarg2: str,
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 2, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_1_2_3(arg1: int, arg2: str, arg3: list[int],
-                     smart_thread: SmartThread,
-                     kwarg1: int, kwarg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 2, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_1_3_0(kwarg1: int,
-                     kwarg2: str,
-                     smart_thread: SmartThread,
-                     kwarg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            logger.debug(f'{smart_thread=}')
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert kwarg3 == [11, 22, 33]
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 3, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_1_3_1(arg1: int,
-                     kwarg1: int,
-                     smart_thread: SmartThread,
-                     kwarg2: str,
-                     kwarg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert kwarg3 == [11, 22, 33]
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 3, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_1_3_2(arg1: int, arg2: str,
-                     kwarg1: int,
-                     kwarg2: str,
-                     kwarg3: list[int],
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert kwarg3 == [11, 22, 33]
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 3, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_1_3_3(arg1: int, arg2: str, arg3: list[int],
-                     kwarg1: int, kwarg2: str, kwarg3: list[int],
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert kwarg1 == 13
-            assert kwarg3 == [11, 22, 33]
-            assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 3, 3)
-            logger.debug('f1 beta exit')
-
-        logger.debug('mainline entered')
-        alpha_smart_thread = SmartThread(name='alpha')
-        if num_f1_args == (0, 0, 0):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_0_0)
-        elif num_f1_args == (0, 0, 1):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_0_1,
-                                            args=(42, ))
-        elif num_f1_args == (0, 0, 2):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_0_2,
-                                            args=(42, "my arg 2"))
-        elif num_f1_args == (0, 0, 3):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_0_3,
-                                            args=(42, "my arg 2", [1, 2, 3]))
-        elif num_f1_args == (0, 1, 0):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_1_0,
-                                            kwargs={'kwarg1': 13})
-        elif num_f1_args == (0, 1, 1):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_1_1,
-                                            args=(42, ),
-                                            kwargs={'kwarg1': 13})
-        elif num_f1_args == (0, 1, 2):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_1_2,
-                                            args=(42, "my arg 2"),
-                                            kwargs={'kwarg1': 13})
-        elif num_f1_args == (0, 1, 3):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_1_3,
-                                            args=(42, "my arg 2", [1, 2, 3]),
-                                            kwargs={'kwarg1': 13})
-        elif num_f1_args == (0, 2, 0):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_2_0,
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg"})
-        elif num_f1_args == (0, 2, 1):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_2_1,
-                                            args=(42, ),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg"})
-        elif num_f1_args == (0, 2, 2):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_2_2,
-                                            args=(42, "my arg 2"),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg"})
-        elif num_f1_args == (0, 2, 3):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_2_3,
-                                            args=(42, "my arg 2", [1, 2, 3]),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg"})
-        elif num_f1_args == (0, 3, 0):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_3_0,
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg",
-                                                    'kwarg3': [11, 22, 33]})
-        elif num_f1_args == (0, 3, 1):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_3_1,
-                                            args=(42, ),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg",
-                                                    'kwarg3': [11, 22, 33]})
-        elif num_f1_args == (0, 3, 2):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_3_2,
-                                            args=(42, "my arg 2"),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg",
-                                                    'kwarg3': [11, 22, 33]})
-        elif num_f1_args == (0, 3, 3):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_0_3_3,
-                                            args=(42, "my arg 2", [1, 2, 3]),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg",
-                                                    'kwarg3': [11, 22, 33]})
-        elif num_f1_args == (1, 0, 0):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_0_0,
-                                            thread_parm_name='smart_thread')
-        elif num_f1_args == (1, 0, 1):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_0_1,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, ))
-        elif num_f1_args == (1, 0, 2):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_0_2,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, "my arg 2"))
-        elif num_f1_args == (1, 0, 3):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_0_3,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, "my arg 2", [1, 2, 3]))
-        elif num_f1_args == (1, 1, 0):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_1_0,
-                                            thread_parm_name='smart_thread',
-                                            kwargs={'kwarg1': 13})
-        elif num_f1_args == (1, 1, 1):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_1_1,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, ),
-                                            kwargs={'kwarg1': 13})
-        elif num_f1_args == (1, 1, 2):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_1_2,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, "my arg 2"),
-                                            kwargs={'kwarg1': 13})
-        elif num_f1_args == (1, 1, 3):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_1_3,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, "my arg 2", [1, 2, 3]),
-                                            kwargs={'kwarg1': 13})
-        elif num_f1_args == (1, 2, 0):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_2_0,
-                                            thread_parm_name='smart_thread',
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg"})
-        elif num_f1_args == (1, 2, 1):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_2_1,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, ),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg"})
-        elif num_f1_args == (1, 2, 2):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_2_2,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, "my arg 2"),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg"})
-        elif num_f1_args == (1, 2, 3):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_2_3,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, "my arg 2", [1, 2, 3]),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg"})
-        elif num_f1_args == (1, 3, 0):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_3_0,
-                                            thread_parm_name='smart_thread',
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg",
-                                                    'kwarg3': [11, 22, 33]})
-        elif num_f1_args == (1, 3, 1):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_3_1,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, ),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg",
-                                                    'kwarg3': [11, 22, 33]})
-        elif num_f1_args == (1, 3, 2):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_3_2,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, "my arg 2"),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg",
-                                                    'kwarg3': [11, 22, 33]})
-        elif num_f1_args == (1, 3, 3):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_1_3_3,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, "my arg 2", [1, 2, 3]),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg",
-                                                    'kwarg3': [11, 22, 33]})
-
-        time.sleep(0.5)
-        assert beta_smart_thread._get_state('beta') == ThreadState.Stopped
-        alpha_smart_thread.smart_join(targets='beta')
-        logger.debug('mainline exiting')
-
-    ####################################################################
-    # test_smart_thread_interface_2
-    ####################################################################
-    @pytest.mark.parametrize("num_f1_args",
-                             [(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 0, 3),
-                              (0, 1, 0), (0, 1, 1), (0, 1, 2), (0, 1, 3),
-                              (0, 2, 0), (0, 2, 1), (0, 2, 2), (0, 2, 3),
-                              (0, 3, 0), (0, 3, 1), (0, 3, 2), (0, 3, 3),
-                              (1, 0, 0), (1, 0, 1), (1, 0, 2), (1, 0, 3),
-                              (1, 1, 0), (1, 1, 1), (1, 1, 2), (1, 1, 3),
-                              (1, 2, 0), (1, 2, 1), (1, 2, 2), (1, 2, 3),
-                              (1, 3, 0), (1, 3, 1), (1, 3, 2), (1, 3, 3)
-                              ])
-    def test_smart_thread_interface_2(self,
-                                      num_f1_args: tuple[int, int, int]
-                                      ) -> None:
-        """Test smart_send example 2 with no parms.
-
-        Args:
-            num_f1_args: number of arguments to specify
-        """
-        from scottbrian_paratools.smart_thread import SmartThread, ThreadState
-
-        def f1_0_0_0() -> None:
-            logger.debug('f1 beta entry')
-            logger.debug('there are no args to check')
-            assert num_f1_args == (0, 0, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_0_0_1(arg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            assert arg1 == 42
-            assert num_f1_args == (0, 0, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_0_0_2(arg1: int, arg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert num_f1_args == (0, 0, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_0_0_3(arg1: int, arg2: str, arg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert num_f1_args == (0, 0, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_0_1_0(kwarg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{kwarg1=}')
-            assert kwarg1 == 13
-            assert num_f1_args == (0, 1, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_0_1_1(arg1: int,
-                     kwarg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            logger.debug(f'{kwarg1=}')
-            assert arg1 == 42
-            assert kwarg1 == 13
-            assert num_f1_args == (0, 1, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_0_1_2(arg1: int, arg2: str,
-                     kwarg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{kwarg1=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert kwarg1 == 13
-            assert num_f1_args == (0, 1, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_0_1_3(arg1: int, arg2: str, arg3: list[int],
-                     kwarg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{kwarg1=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert kwarg1 == 13
-            assert num_f1_args == (0, 1, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_0_2_0(kwarg1: int, kwarg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert num_f1_args == (0, 2, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_0_2_1(arg1: int,
-                     kwarg1: int, kwarg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            assert arg1 == 42
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert num_f1_args == (0, 2, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_0_2_2(arg1: int, arg2: str,
-                     kwarg1: int, kwarg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert num_f1_args == (0, 2, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_0_2_3(arg1: int, arg2: str, arg3: list[int],
-                     kwarg1: int, kwarg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert num_f1_args == (0, 2, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_0_3_0(kwarg1: int, kwarg2: str, kwarg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert kwarg3 == [11, 22, 33]
-            assert num_f1_args == (0, 3, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_0_3_1(arg1: int,
-                     kwarg1: int, kwarg2: str, kwarg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            assert arg1 == 42
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert kwarg3 == [11, 22, 33]
-            assert num_f1_args == (0, 3, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_0_3_2(arg1: int, arg2: str,
-                     kwarg1: int, kwarg2: str, kwarg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert kwarg3 == [11, 22, 33]
-            assert num_f1_args == (0, 3, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_0_3_3(arg1: int, arg2: str, arg3: list[int],
-                     kwarg1: int, kwarg2: str, kwarg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert kwarg1 == 13
-            assert kwarg3 == [11, 22, 33]
-            assert kwarg2 == "second kwarg"
-            assert num_f1_args == (0, 3, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_1_0_0(smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{smart_thread=}')
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 0, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_1_0_1(arg1: int,
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            assert arg1 == 42
-            logger.debug(f'{smart_thread=}')
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 0, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_1_0_2(arg1: int, arg2: str,
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 0, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_1_0_3(arg1: int, arg2: str, arg3: list[int],
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 0, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_1_1_0(kwarg1: int,
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{kwarg1=}')
-            logger.debug(f'{smart_thread=}')
-            assert kwarg1 == 13
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 1, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_1_1_1(arg1: int,
-                     smart_thread: SmartThread,
-                     kwarg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            logger.debug(f'{kwarg1=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert kwarg1 == 13
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 1, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_1_1_2(arg1: int, arg2: str,
-                     kwarg1: int,
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{kwarg1=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert kwarg1 == 13
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 1, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_1_1_3(arg1: int, arg2: str, arg3: list[int],
-                     smart_thread: SmartThread,
-                     kwarg1: int) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{kwarg1=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert kwarg1 == 13
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 1, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_1_2_0(kwarg1: int, kwarg2: str,
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            logger.debug(f'{smart_thread=}')
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 2, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_1_2_1(arg1: int,
-                     kwarg1: int,
-                     smart_thread: SmartThread,
-                     kwarg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 2, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_1_2_2(arg1: int, arg2: str,
-                     kwarg1: int, kwarg2: str,
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 2, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_1_2_3(arg1: int, arg2: str, arg3: list[int],
-                     smart_thread: SmartThread,
-                     kwarg1: int, kwarg2: str) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 2, 3)
-            logger.debug('f1 beta exit')
-
-        def f1_1_3_0(kwarg1: int,
-                     kwarg2: str,
-                     smart_thread: SmartThread,
-                     kwarg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            logger.debug(f'{smart_thread=}')
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert kwarg3 == [11, 22, 33]
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 3, 0)
-            logger.debug('f1 beta exit')
-
-        def f1_1_3_1(arg1: int,
-                     kwarg1: int,
-                     smart_thread: SmartThread,
-                     kwarg2: str,
-                     kwarg3: list[int]) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert kwarg3 == [11, 22, 33]
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 3, 1)
-            logger.debug('f1 beta exit')
-
-        def f1_1_3_2(arg1: int, arg2: str,
-                     kwarg1: int,
-                     kwarg2: str,
-                     kwarg3: list[int],
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert kwarg1 == 13
-            assert kwarg2 == "second kwarg"
-            assert kwarg3 == [11, 22, 33]
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 3, 2)
-            logger.debug('f1 beta exit')
-
-        def f1_1_3_3(arg1: int, arg2: str, arg3: list[int],
-                     kwarg1: int, kwarg2: str, kwarg3: list[int],
-                     smart_thread: SmartThread) -> None:
-            logger.debug('f1 beta entry')
-            logger.debug(f'{arg1=}, {arg2=}, {arg3=}')
-            logger.debug(f'{kwarg1=}, {kwarg2=}, {kwarg3=}')
-            logger.debug(f'{smart_thread=}')
-            assert arg1 == 42
-            assert arg2 == "my arg 2"
-            assert arg3 == [1, 2, 3]
-            assert kwarg1 == 13
-            assert kwarg3 == [11, 22, 33]
-            assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
-            assert num_f1_args == (1, 3, 3)
-            logger.debug('f1 beta exit')
-
-        logger.debug('mainline entered')
-        alpha_smart_thread = SmartThread(name='alpha')
-
-        f1_target_to_specify = (f'f1_'
-                                f'{num_f1_args[0]}_'
-                                f'{num_f1_args[1]}_'
-                                f'{num_f1_args[2]}')
-
-        smart_thread_name_to_specify = None
-        args_to_specify = None
-        kwargs_to_specify = None
-        if num_f1_args[0] == 1:
-            smart_thread_name_to_specify = 'smart_thread'
-
-        if num_f1_args[1] >= 1:
-            kwargs_to_specify = {'kwarg1': 13}
-        if num_f1_args[1] >= 2:
-            kwargs_to_specify['kwarg2'] = "second kwarg"
-        if num_f1_args[1] == 3:
-            kwargs_to_specify['kwarg3'] = [11, 22, 33]
-
-        if num_f1_args[2] == 1:
-            args_to_specify = (42, )
-        if num_f1_args[2] >= 2:
-            args_to_specify = (42, "my arg 2")
-        if num_f1_args[2] == 3:
-            args_to_specify = (42, "my arg 2", [1, 2, 3])
-
-        logger.debug(f'Before: {kwargs_to_specify}')
-
-        if smart_thread_name_to_specify:
-            if args_to_specify:
-                if kwargs_to_specify:
-                    beta_smart_thread = SmartThread(
-                        name='beta',
-                        target=eval(f1_target_to_specify),
-                        thread_parm_name=smart_thread_name_to_specify,
-                        args=args_to_specify,
-                        kwargs=kwargs_to_specify)
-                else:
-                    beta_smart_thread = SmartThread(
-                        name='beta',
-                        target=eval(f1_target_to_specify),
-                        thread_parm_name=smart_thread_name_to_specify,
-                        args=args_to_specify)
-            else:
-                if kwargs_to_specify:
-                    beta_smart_thread = SmartThread(
-                        name='beta',
-                        target=eval(f1_target_to_specify),
-                        thread_parm_name=smart_thread_name_to_specify,
-                        kwargs=kwargs_to_specify)
-                else:
-                    beta_smart_thread = SmartThread(
-                        name='beta',
-                        target=eval(f1_target_to_specify),
-                        thread_parm_name=smart_thread_name_to_specify)
-        else:
-            if args_to_specify:
-                if kwargs_to_specify:
-                    beta_smart_thread = SmartThread(
-                        name='beta',
-                        target=eval(f1_target_to_specify),
-                        args=args_to_specify,
-                        kwargs=kwargs_to_specify)
-                else:
-                    beta_smart_thread = SmartThread(
-                        name='beta',
-                        target=eval(f1_target_to_specify),
-                        args=args_to_specify)
-            else:
-                if kwargs_to_specify:
-                    beta_smart_thread = SmartThread(
-                        name='beta',
-                        target=eval(f1_target_to_specify),
-                        kwargs=kwargs_to_specify)
-                else:
-                    beta_smart_thread = SmartThread(
-                        name='beta',
-                        target=eval(f1_target_to_specify))
-
-        logger.debug(f'After: {kwargs_to_specify}')
-        time.sleep(0.5)
-        assert beta_smart_thread._get_state('beta') == ThreadState.Stopped
-        alpha_smart_thread.smart_join(targets='beta')
-        logger.debug('mainline exiting')
-
-    ####################################################################
-    # test_smart_thread_interface_3
-    ####################################################################
-    @pytest.mark.parametrize("num_f1_args",
-                             [(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 0, 3),
-                              (0, 1, 0), (0, 1, 1), (0, 1, 2), (0, 1, 3),
-                              (0, 2, 0), (0, 2, 1), (0, 2, 2), (0, 2, 3),
-                              (0, 3, 0), (0, 3, 1), (0, 3, 2), (0, 3, 3),
-                              (1, 0, 0), (1, 0, 1), (1, 0, 2), (1, 0, 3),
-                              (1, 1, 0), (1, 1, 1), (1, 1, 2), (1, 1, 3),
-                              (1, 2, 0), (1, 2, 1), (1, 2, 2), (1, 2, 3),
-                              (1, 3, 0), (1, 3, 1), (1, 3, 2), (1, 3, 3)
-                              ])
-    def test_smart_thread_interface_3(self,
-                                      num_f1_args: tuple[int, int, int]
-                                      ) -> None:
-        """Test smart_send example 3 with no parms.
-
-        Args:
-            num_f1_args: number of arguments to specify
-        """
-        from scottbrian_paratools.smart_thread import SmartThread, ThreadState
-
-        def f1(*args, **kwargs) -> None:
-            logger.debug('f1 beta entry')
-
-            exp_args = (0, 42, "my arg 2", [1, 2, 3])
-            exp_kwargs = {'kwarg1': 13,
-                          'kwarg2': "second kwarg",
-                          'kwarg3': [11, 22, 33]
-                          }
-            args_str = ''
-            comma = ''
-            for idx, arg in enumerate(args, 1):
-                args_str = f'{args_str}{comma}arg{idx}={arg}'
-                comma = ', '
-                assert arg == exp_args[idx]
-            if args_str:
-                logger.debug(args_str)
-
-            smart_thread_arg = False
-            kwargs_str = ''
-            comma = ''
-            for key, value in kwargs.items():
-                if key == 'smart_thread':
-                    smart_thread_arg = True
-                    smart_thread = value
-                else:
-                    kwargs_str = f'{kwargs_str}{comma}{key}={value}'
-                    comma = ', '
-                    assert exp_kwargs[key] == value
-            if kwargs_str:
-                logger.debug(kwargs_str)
-
-            if smart_thread_arg:
-                logger.debug(f'{smart_thread=}')
-                assert smart_thread._get_state('beta') == ThreadState.Alive
-
-            logger.debug('f1 beta exit')
-
-        logger.debug('mainline entered')
-        alpha_smart_thread = SmartThread(name='alpha')
-        if num_f1_args == (0, 0, 0):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1)
-        elif num_f1_args == (0, 0, 1):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            args=(42, ))
-        elif num_f1_args == (0, 0, 2):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            args=(42, "my arg 2"))
-        elif num_f1_args == (0, 0, 3):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            args=(42, "my arg 2", [1, 2, 3]))
-        elif num_f1_args == (0, 1, 0):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            kwargs={'kwarg1': 13})
-        elif num_f1_args == (0, 1, 1):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            args=(42, ),
-                                            kwargs={'kwarg1': 13})
-        elif num_f1_args == (0, 1, 2):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            args=(42, "my arg 2"),
-                                            kwargs={'kwarg1': 13})
-        elif num_f1_args == (0, 1, 3):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            args=(42, "my arg 2", [1, 2, 3]),
-                                            kwargs={'kwarg1': 13})
-        elif num_f1_args == (0, 2, 0):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg"})
-        elif num_f1_args == (0, 2, 1):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            args=(42, ),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg"})
-        elif num_f1_args == (0, 2, 2):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            args=(42, "my arg 2"),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg"})
-        elif num_f1_args == (0, 2, 3):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            args=(42, "my arg 2", [1, 2, 3]),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg"})
-        elif num_f1_args == (0, 3, 0):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg",
-                                                    'kwarg3': [11, 22, 33]})
-        elif num_f1_args == (0, 3, 1):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            args=(42, ),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg",
-                                                    'kwarg3': [11, 22, 33]})
-        elif num_f1_args == (0, 3, 2):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            args=(42, "my arg 2"),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg",
-                                                    'kwarg3': [11, 22, 33]})
-        elif num_f1_args == (0, 3, 3):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            args=(42, "my arg 2", [1, 2, 3]),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg",
-                                                    'kwarg3': [11, 22, 33]})
-        elif num_f1_args == (1, 0, 0):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread')
-        elif num_f1_args == (1, 0, 1):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, ))
-        elif num_f1_args == (1, 0, 2):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, "my arg 2"))
-        elif num_f1_args == (1, 0, 3):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, "my arg 2", [1, 2, 3]))
-        elif num_f1_args == (1, 1, 0):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread',
-                                            kwargs={'kwarg1': 13})
-        elif num_f1_args == (1, 1, 1):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, ),
-                                            kwargs={'kwarg1': 13})
-        elif num_f1_args == (1, 1, 2):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, "my arg 2"),
-                                            kwargs={'kwarg1': 13})
-        elif num_f1_args == (1, 1, 3):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, "my arg 2", [1, 2, 3]),
-                                            kwargs={'kwarg1': 13})
-        elif num_f1_args == (1, 2, 0):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread',
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg"})
-        elif num_f1_args == (1, 2, 1):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, ),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg"})
-        elif num_f1_args == (1, 2, 2):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, "my arg 2"),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg"})
-        elif num_f1_args == (1, 2, 3):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, "my arg 2", [1, 2, 3]),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg"})
-        elif num_f1_args == (1, 3, 0):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread',
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg",
-                                                    'kwarg3': [11, 22, 33]})
-        elif num_f1_args == (1, 3, 1):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, ),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg",
-                                                    'kwarg3': [11, 22, 33]})
-        elif num_f1_args == (1, 3, 2):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, "my arg 2"),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg",
-                                                    'kwarg3': [11, 22, 33]})
-        elif num_f1_args == (1, 3, 3):
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread',
-                                            args=(42, "my arg 2", [1, 2, 3]),
-                                            kwargs={'kwarg1': 13,
-                                                    'kwarg2': "second kwarg",
-                                                    'kwarg3': [11, 22, 33]})
-
-        time.sleep(0.5)
-        assert beta_smart_thread._get_state('beta') == ThreadState.Stopped
-        alpha_smart_thread.smart_join(targets='beta')
-        logger.debug('mainline exiting')
-
-    ####################################################################
-    # test_smart_thread_interface_4
-    ####################################################################
-    @pytest.mark.parametrize("num_f1_args",
-                             [(0, 0, 0), (0, 0, 1), (0, 0, 2), (0, 0, 3),
-                              (0, 1, 0), (0, 1, 1), (0, 1, 2), (0, 1, 3),
-                              (0, 2, 0), (0, 2, 1), (0, 2, 2), (0, 2, 3),
-                              (0, 3, 0), (0, 3, 1), (0, 3, 2), (0, 3, 3),
-                              (1, 0, 0), (1, 0, 1), (1, 0, 2), (1, 0, 3),
-                              (1, 1, 0), (1, 1, 1), (1, 1, 2), (1, 1, 3),
-                              (1, 2, 0), (1, 2, 1), (1, 2, 2), (1, 2, 3),
-                              (1, 3, 0), (1, 3, 1), (1, 3, 2), (1, 3, 3)
-                              ])
-    def test_smart_thread_interface_4(self,
-                                      num_f1_args: tuple[int, int, int]
-                                      ) -> None:
-        """Test smart_send example 4 with no parms.
-
-        Args:
-            num_f1_args: number of arguments to specify
-        """
-        from scottbrian_paratools.smart_thread import SmartThread, ThreadState
-
-        def f1(*args,
-               kwarg1: Optional[int] = None,
-               kwarg2: Optional[str] = None,
-               kwarg3: Optional[list[int]] = None,
-               smart_thread: Optional[SmartThread] = None) -> None:
-            logger.debug('f1 beta entry')
-
-            exp_args = (0, 42, "my arg 2", [1, 2, 3])
-            exp_kwargs = {'kwarg1': 13,
-                          'kwarg2': "second kwarg",
-                          'kwarg3': [11, 22, 33]
-                          }
-            args_str = ''
-            comma = ''
-            for idx, arg in enumerate(args, 1):
-                args_str = f'{args_str}{comma}arg{idx}={arg}'
-                comma = ', '
-                assert arg == exp_args[idx]
-            if args_str:
-                logger.debug(args_str)
-
-            kwargs_str = ''
-            if kwarg1:
-                kwargs_str = f'{kwargs_str}{kwarg1=}'
-                assert kwarg1 == exp_kwargs['kwarg1']
-            if kwarg2:
-                kwargs_str = f'{kwargs_str}, {kwarg2=}'
-                assert kwarg2 == exp_kwargs['kwarg2']
-            if kwarg3:
-                kwargs_str = f'{kwargs_str}, {kwarg3=}'
-                assert kwarg3 == exp_kwargs['kwarg3']
-
-            if kwargs_str:
-                logger.debug(kwargs_str)
-
-            if smart_thread:
-                logger.debug(f'{smart_thread=}')
-                assert smart_thread._get_state('beta') == ThreadState.Alive
-
-            logger.debug('f1 beta exit')
-
-        logger.debug('mainline entered')
-        alpha_smart_thread = SmartThread(name='alpha')
-
-        smart_thread_name_to_specify = None
-        args_to_specify = None
-        kwargs_to_specify = None
-        if num_f1_args[0] == 1:
-            smart_thread_name_to_specify = 'smart_thread'
-
-        if num_f1_args[1] >= 1:
-            kwargs_to_specify = {'kwarg1': 13}
-        if num_f1_args[1] >= 2:
-            kwargs_to_specify['kwarg2'] = "second kwarg"
-        if num_f1_args[1] == 3:
-            kwargs_to_specify['kwarg3'] = [11, 22, 33]
-
-        if num_f1_args[2] == 1:
-            args_to_specify = (42, )
-        if num_f1_args[2] >= 2:
-            args_to_specify = (42, "my arg 2")
-        if num_f1_args[2] == 3:
-            args_to_specify = (42, "my arg 2", [1, 2, 3])
-
-        beta_smart_thread = SmartThread(
-            name='beta',
-            target=f1,
-            thread_parm_name=smart_thread_name_to_specify,
-            args=args_to_specify,
-            kwargs=kwargs_to_specify)
-
-        time.sleep(0.5)
-        assert beta_smart_thread._get_state('beta') == ThreadState.Stopped
-        alpha_smart_thread.smart_join(targets='beta')
-        logger.debug('mainline exiting')
-
-
-########################################################################
-# TestSmartThreadErrors class
-########################################################################
-class TestSmartThreadErrors:
-    """Test class for SmartThread error tests."""
-    ####################################################################
-    # test_smart_thread_instantiation_errors
-    ####################################################################
-    def test_smart_thread_instantiation_errors(self) -> None:
-        """Test error cases for SmartThread."""
-        ################################################################
-        # f1
-        ################################################################
-        def f1():
-            logger.debug('f1 entered')
-            logger.debug('f1 exiting')
-
-        ################################################################
-        # Create smart thread with bad name
-        ################################################################
-        logger.debug('mainline entered')
-
-        logger.debug('mainline creating bad name thread')
-
-        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc:
-            st.SmartThread(name=1)  # type: ignore
-
-        exp_error_msg = (
-            f'SmartThread {threading.current_thread().name} raising '
-            f'SmartThreadIncorrectNameSpecified error while processing '
-            f'request smart_init. '
-            f'The input name=1 is incorrect. Please specify a str for'
-            f'the name.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        test_thread = threading.Thread(target=f1)
-
-        with pytest.raises(
-                st.SmartThreadMutuallyExclusiveTargetThreadSpecified) as exc:
-
-            st.SmartThread(name='alpha', target=f1, thread=test_thread)
-
-        exp_error_msg = (
-            f'SmartThread {threading.current_thread().name} raising '
-            'SmartThreadMutuallyExclusiveTargetThreadSpecified error '
-            'while processing request smart_init. '
-            'Arguments for mutually exclusive parameters target and '
-            'thread were both specified. Please specify only one or '
-            'target or thread.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        with pytest.raises(
-                st.SmartThreadArgsSpecificationWithoutTarget) as exc:
-            st.SmartThread(name='alpha', args=(1,))
-
-        exp_error_msg = (
-            f'SmartThread {threading.current_thread().name} raising '
-            'SmartThreadArgsSpecificationWithoutTarget error while '
-            'processing request smart_init. '
-            'Arguments for parameters args or kwargs were specified, '
-            'but an argument for the target parameter was not '
-            'specified. Please specify target or remove args and '
-            'kwargs.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        with pytest.raises(
-                st.SmartThreadArgsSpecificationWithoutTarget) as exc:
-            st.SmartThread(name='alpha', kwargs={'arg1': 1})
-
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        with pytest.raises(
-                st.SmartThreadArgsSpecificationWithoutTarget) as exc:
-            st.SmartThread(name='alpha', args=(1,), kwargs={'arg1': 1})
-
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        logger.debug('mainline exiting')
-
-    ####################################################################
-    # test_smart_thread_register_errors
-    ####################################################################
-    def test_smart_thread_register_errors(self) -> None:
-        """Test error cases for SmartThread."""
-        ################################################################
-        # Create smart thread with duplicate name
-        ################################################################
-        logger.debug('mainline entered')
-        alpha_smart_thread = st.SmartThread(name='alpha')
-
-        with pytest.raises(st.SmartThreadAlreadyExists) as exc:
-            st.SmartThread(name='beta')
-
-        exp_error_msg = (
-            f'SmartThread {threading.current_thread().name} '
-            'raising SmartThreadAlreadyExists error while '
-            'processing request smart_init. '
-            'While attempting to register a new SmartThread '
-            'with name beta and thread '
-            f'{alpha_smart_thread.thread}, it was detected that a registry '
-            'entry already exists for a SmartThread with '
-            f'the same thread {alpha_smart_thread.thread} for name alpha.')
-        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
-
-        print('\n', exc.value)
-
-        with pytest.raises(st.SmartThreadNameAlreadyInUse) as exc:
-            st.SmartThread(name='alpha')
-
-        existing_id = id(alpha_smart_thread)
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadNameAlreadyInUse error while processing '
-            'request smart_init. '
-            f'While attempting to register a new SmartThread with '
-            f'name alpha and ID [0-9]+, it was detected '
-            'that a registry entry already exists for a SmartThread '
-            f'with name alpha but a different ID of '
-            f'{existing_id}.')
-
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        logger.debug('mainline exiting')
-
-    ####################################################################
-    # test_smart_thread_clean_registry_errors
-    ####################################################################
-    def test_smart_thread_clean_registry_errors(self) -> None:
-        """Test error cases for SmartThread."""
-        logger.debug('mainline entered')
-        alpha_thread = st.SmartThread(name='alpha')
-        alpha_thread.name = 'bad_name'
-        with pytest.raises(st.SmartThreadErrorInRegistry) as exc:
-            st.SmartThread(name='beta')
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadErrorInRegistry error while processing '
-            'request smart_init. '
-            'Registry item with key alpha has non-matching '
-            'item.name of bad_name.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        logger.debug('mainline exiting')
-
-    ####################################################################
-    # test_smart_thread_add_to_pair_array_errors
-    ####################################################################
-    def test_smart_thread_add_to_pair_array_errors(self,
-                                                   monkeypatch: Any
-                                                   ) -> None:
-        """Test error cases for SmartThread.
-
-        Args:
-            monkeypatch: pytest fixture to set up a mock routine
-
-        """
-        ################################################################
-        # f1
-        ################################################################
-        def f1():
-            logger.debug('f1 entered')
-            logger.debug('f1 exiting')
-
-        logger.debug('mainline entered')
-
-        MockCleanPairArray()
-
-        ################################################################
-        # monkeypatch for SmartThread._get_target_state
-        ################################################################
-        monkeypatch.setattr(st.SmartThread,
-                            "_clean_pair_array",
-                            MockCleanPairArray.mock_clean_pair_array)
-
-        alpha_st = st.SmartThread(name='alpha')
-
-        # create an empty pair array entry_
-        pair_key = st.SmartThread._get_pair_key('alpha', 'beta')
-        st.SmartThread._pair_array[pair_key] = (
-            st.SmartThread.ConnectionPair(
-                status_lock=threading.Lock(),
-                status_blocks={}
-            ))
-
-        with pytest.raises(st.SmartThreadIncorrectData) as exc:
-            st.SmartThread(name='beta', target=f1)
-
-        exp_error_msg = (
-            'SmartThread alpha '
-            'raising SmartThreadIncorrectData error while '
-            'processing request smart_init. '
-            'While attempting to add beta to the pair '
-            f'array, it was detected that pair_key {pair_key} is '
-            'already in the pair array with an empty '
-            'status_blocks.')
-
-        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
-
-        print('\n', exc.value)
-
-        alpha_st.smart_unreg(targets='beta')
-
-        ################################################################
-
-        st.SmartThread._pair_array[pair_key] = (
-            st.SmartThread.ConnectionPair(
-                status_lock=threading.Lock(),
-                status_blocks={
-                    'beta': st.SmartThread.ConnectionStatusBlock(
-                        name='beta',
-                        create_time=0,
-                        target_create_time=0.0,
-                        wait_event=threading.Event(),
-                        sync_event=threading.Event(),
-                        msg_q=queue.Queue(maxsize=10))
-                }))
-
-        with pytest.raises(st.SmartThreadIncorrectData) as exc:
-            st.SmartThread(name='beta', target=f1)
-
-        exp_error_msg = (
-            'SmartThread alpha '
-            'raising SmartThreadIncorrectData error while '
-            'processing request smart_init. '
-            'While attempting to add beta to the pair '
-            f'array, it was detected that pair_key {pair_key} '
-            'is already in the pair array with a '
-            'status_blocks entry containing beta.')
-
-        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
-
-        alpha_st.smart_unreg(targets='beta')
-
-        print('\n', exc.value)
-
-        ################################################################
-
-        st.SmartThread._pair_array[pair_key] = (
-            st.SmartThread.ConnectionPair(
-                status_lock=threading.Lock(),
-                status_blocks={
-                    'alpha': st.SmartThread.ConnectionStatusBlock(
-                        name='beta',
-                        create_time=0,
-                        target_create_time=0.0,
-                        wait_event=threading.Event(),
-                        sync_event=threading.Event(),
-                        msg_q=queue.Queue(maxsize=10))
-                }))
-
-        with pytest.raises(st.SmartThreadIncorrectData) as exc:
-            st.SmartThread(name='beta', target=f1)
-
-        exp_error_msg = (
-            f'SmartThread alpha '
-            f'raising SmartThreadIncorrectData error while '
-            f'processing request smart_init. '
-            f'While attempting to add beta to the pair '
-            f'array, it was detected that pair_key {pair_key} '
-            f'is already in the pair array with a '
-            f'status_blocks entry containing alpha '
-            f'that is not del_deferred.')
-
-        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
-
-        alpha_st.smart_unreg(targets='beta')
-
-        print('\n', exc.value)
-
-        ################################################################
-
-        st.SmartThread._pair_array[pair_key] = (
-            st.SmartThread.ConnectionPair(
-                status_lock=threading.Lock(),
-                status_blocks={
-                    'alpha': st.SmartThread.ConnectionStatusBlock(
-                        name='beta',
-                        create_time=0,
-                        target_create_time=0.0,
-                        wait_event=threading.Event(),
-                        sync_event=threading.Event(),
-                        msg_q=queue.Queue(maxsize=10)),
-                    'beta': st.SmartThread.ConnectionStatusBlock(
-                        name='beta',
-                        create_time=0,
-                        target_create_time=0.0,
-                        wait_event=threading.Event(),
-                        sync_event=threading.Event(),
-                        msg_q=queue.Queue(maxsize=10)),
-                }))
-
-        with pytest.raises(st.SmartThreadIncorrectData) as exc:
-            st.SmartThread(name='beta', target=f1)
-
-        existing_names = st.SmartThread._pair_array[
-            pair_key].status_blocks.keys()
-
-        exp_error_msg = re.escape(
-            'SmartThread alpha '
-            'raising SmartThreadIncorrectData error while '
-            'processing request smart_init. '
-            'While attempting to add beta to the pair '
-            f'array, it was detected that pair_key {pair_key} '
-            'is already in the pair array with a '
-            'status_blocks entry containing entries for '
-            f'{sorted(existing_names)}.')
-
-        assert re.match(exp_error_msg, str(exc.value))
-
-        alpha_st.smart_unreg(targets='beta')
-
-        print('\n', exc.value)
-
-        logger.debug('mainline exiting')
-
-    ####################################################################
-    # test_smart_start_errors
-    ####################################################################
-    def test_smart_start_errors(self) -> None:
-        """Test error cases for SmartThread."""
-        ################################################################
-        # f1
-        ################################################################
-        def f1():
-            logger.debug('f1 entered')
-            beta_thread.smart_wait(resumers='alpha')
-            logger.debug('f1 exiting')
-
-        logger.debug('mainline entered')
-        alpha_thread = st.SmartThread(name='alpha')
-
-        beta_thread = st.SmartThread(name='beta', target=f1, auto_start=False)
-
-        with pytest.raises(st.SmartThreadMultipleTargetsForSelfStart) as exc:
-            beta_thread.smart_start(targets=('beta', 'charlie'))
-
-        targets = set(('beta', 'charlie'))
-
-        exp_error_msg = (
-            'SmartThread alpha '
-            'raising SmartThreadMultipleTargetsForSelfStart '
-            'error while processing request smart_start. '
-            'Request smart_start can not be done for multiple '
-            f'targets {targets} when one of the targets is also '
-            'the smart_thread instance, in this case beta.')
-
-        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-        beta_thread.smart_start()
-
-        with pytest.raises(st.SmartThreadAlreadyStarted) as exc:
-            beta_thread.smart_start()
-
-        exp_error_msg = (
-            'SmartThread alpha '
-            'raising SmartThreadAlreadyStarted error while '
-            'processing request smart_start. '
-            'Unable to start beta because beta '
-            'has already been started.')
-
-        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-        alpha_thread.smart_resume(waiters='beta')
-
-        start_time = time.time()
-        timeout_value = 30
-        while True:
-            # if alpha_thread._get_state('beta') != st.ThreadState.Alive:
-            if not beta_thread.thread.is_alive():
-                break
-            time.sleep(0.2)
-            if time.time() - start_time > timeout_value:
-                raise CmdTimedOut('test_smart_start_errors took longer than '
-                                  f'{timeout_value} seconds waiting for beta '
-                                  'to exit and become inactive.')
-
-        with pytest.raises(st.SmartThreadRemoteThreadNotRegistered) as exc:
-            beta_thread.smart_start()
-
-        exp_error_msg = (
-            'SmartThread alpha '
-            'raising SmartThreadRemoteThreadNotRegistered '
-            'error while processing request smart_start. '
-            'Unable to start beta because beta '
-            'is not registered.')
-
-        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
-
-        print('\n', exc.value)
-
-        logger.debug('mainline exiting')
-
-    ####################################################################
-    # test_smart_send_errors
-    ####################################################################
-    def test_smart_send_errors(self) -> None:
-        """Test error cases for SmartThread."""
-        ################################################################
-        # f1
-        ################################################################
-        def f1():
-            logger.debug('f1 entered')
-            beta_thread.smart_wait(resumers='alpha')
-            logger.debug('f1 exiting')
-        logger.debug('mainline entered')
-        alpha_thread = st.SmartThread(name='alpha')
-        beta_thread = st.SmartThread(name='beta', target=f1, auto_start=False)
-        beta_thread.smart_start()
-
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_send(msg='hi beta',
-                                    receivers='beta',
-                                    msg_dict={'beta': 'hello again'})
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadInvalidInput error while processing request '
-            'smart_send. '
-            'Mutually exclusive arguments msg and msg_dict were both '
-            'specified. Please specify only one of msg or msg_dict.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-        receivers = set()
-        with pytest.raises(st.SmartThreadNoRemoteTargets) as exc:
-            alpha_thread.smart_send(msg='hi beta',
-                                    receivers=receivers)
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadNoRemoteTargets error while processing '
-            'request smart_send. '
-            f'The receivers argument {receivers=} does not specify '
-            'any receivers.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_send(msg_dict={'beta': 'hi beta'},
-                                    receivers=set())
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadInvalidInput error while processing request '
-            'smart_send. '
-            'Mutually exclusive arguments msg_dict and msg or '
-            'msg_dict and receivers were specified.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_send(msg='hi beta',
-                                    msg_dict={'beta': 'hello beta'})
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadInvalidInput error while processing request '
-            'smart_send. '
-            'Mutually exclusive arguments msg_dict and msg or '
-            'msg_dict and receivers were specified.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-
-        with pytest.raises(st.SmartThreadNoRemoteTargets) as exc:
-            alpha_thread.smart_send(msg_dict={})
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadNoRemoteTargets error while processing '
-            'request smart_send. '
-            'Argument msg_dict={} was specified with no items.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_send()
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadInvalidInput error while processing request '
-            'smart_send. '
-            'The smart_send request failed to specify '
-            'msg_dict, or failed to specify both msg and receivers.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_send(receivers='beta')
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadInvalidInput error while processing request '
-            'smart_send. '
-            'The smart_send request failed to specify '
-            'msg_dict, or failed to specify both msg and receivers.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_send(msg='hi beta')
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadInvalidInput error while processing request '
-            'smart_send. '
-            'The smart_send request failed to specify '
-            'msg_dict, or failed to specify both msg and receivers.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-        # resume and join beta
-        ################################################################
-        alpha_thread.smart_resume(waiters='beta', timeout=5)
-        alpha_thread.smart_join(targets='beta', timeout=5)
-
-        logger.debug('mainline exiting')
-
-    ####################################################################
-    # test_smart_recv_errors
-    ####################################################################
-    def test_smart_recv_errors(self) -> None:
-        """Test error cases for SmartThread."""
-        ################################################################
-        # f1
-        ################################################################
-        def f1():
-            logger.debug('f1 entered')
-            beta_thread.smart_wait(resumers='alpha')
-            logger.debug('f1 exiting')
-        logger.debug('mainline entered')
-        alpha_thread = st.SmartThread(name='alpha')
-        beta_thread = st.SmartThread(name='beta', target=f1, auto_start=False)
-        beta_thread.smart_start()
-
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_recv(senders='beta',
-                                    sender_count=-1)
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadInvalidInput error while processing request '
-            'smart_recv. '
-            'The value specified for sender_count=-1 is not valid. '
-            'The number of specified senders is '
-            '1. The value for '
-            'sender_count must be an integer between 1 and the '
-            'number of specified senders, inclusive.')
-
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_recv(senders='beta',
-                                    sender_count=0)
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadInvalidInput error while processing request '
-            'smart_recv. '
-            'The value specified for sender_count=0 is not valid. '
-            'The number of specified senders is '
-            '1. The value for '
-            'sender_count must be an integer between 1 and the '
-            'number of specified senders, inclusive.')
-
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_recv(senders='beta',
-                                    sender_count=2)
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadInvalidInput error while processing request '
-            'smart_recv. '
-            'The value specified for sender_count=2 is not valid. '
-            'The number of specified senders is '
-            '1. The value for '
-            'sender_count must be an integer between 1 and the '
-            'number of specified senders, inclusive.')
-
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-        # resume and join beta
-        ################################################################
-        alpha_thread.smart_resume(waiters='beta', timeout=5)
-        alpha_thread.smart_join(targets='beta', timeout=5)
-
-        logger.debug('mainline exiting')
-
-    ####################################################################
-    # test_smart_wait_errors
-    ####################################################################
-    def test_smart_wait_errors(self) -> None:
-        """Test error cases for SmartThread."""
-        ################################################################
-        # f1
-        ################################################################
-        def f1():
-            logger.debug('f1 entered')
-            beta_thread.smart_wait(resumers='alpha')
-            logger.debug('f1 exiting')
-        logger.debug('mainline entered')
-        alpha_thread = st.SmartThread(name='alpha')
-        beta_thread = st.SmartThread(name='beta', target=f1, auto_start=False)
-        beta_thread.smart_start()
-
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_wait(resumers='beta',
-                                    resumer_count=-1)
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadInvalidInput error while processing request '
-            'smart_wait. '
-            'The value specified for resumer_count=-1 is not valid. '
-            'The number of specified resumers is '
-            '1. The value for '
-            'resumer_count must be an integer between 1 and the '
-            'number of specified resumers, inclusive.')
-
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_wait(resumers='beta',
-                                    resumer_count=0)
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadInvalidInput error while processing request '
-            'smart_wait. '
-            'The value specified for resumer_count=0 is not valid. '
-            'The number of specified resumers is '
-            '1. The value for '
-            'resumer_count must be an integer between 1 and the '
-            'number of specified resumers, inclusive.')
-
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_wait(resumers='beta',
-                                    resumer_count=2)
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadInvalidInput error while processing request '
-            'smart_wait. '
-            'The value specified for resumer_count=2 is not valid. '
-            'The number of specified resumers is '
-            '1. The value for '
-            'resumer_count must be an integer between 1 and the '
-            'number of specified resumers, inclusive.')
-
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-        # resume and join beta
-        ################################################################
-        alpha_thread.smart_resume(waiters='beta', timeout=5)
-        alpha_thread.smart_join(targets='beta', timeout=5)
-
-        logger.debug('mainline exiting')
-
-    ####################################################################
-    # test_handle_found_pk_remotes_errors
-    ####################################################################
-    def test_handle_found_pk_remotes_errors(self,
-                                            monkeypatch: Any) -> None:
-        """Test error cases for SmartThread.
-
-        Args:
-            monkeypatch: pytest fixture to set up a mock routine
-
-        """
-        from scottbrian_locking import se_lock as sel
-
-        ################################################################
-        # mock_request_loop
-        ################################################################
-        class MockRequestLoop:
-            """Provide a way to test found_pk_remotes errors."""
-            mock_action: ClassVar[str] = ''
-            mock_exp_pk_remotes: ClassVar[str] = ''
-
-            def __init__(self) -> None:
-                """Initialize the mock target state."""
-                # self.work_pk_remotes = []
-                MockRequestLoop.mock_action = 'action1'
-
-            def mock_request_loop(self,
-                                  request_block: st.RequestBlock,
-                                  ) -> None:
-                """Main loop for each request.
-
-                Args:
-                    request_block: contains requestors, timeout, etc
-
-                """
-                logger.debug('mock_request_loop entered')
-                delta_added = False
-                while True:
-                    work_pk_remotes_copy = self.work_pk_remotes.copy()
-                    for pk_remote in work_pk_remotes_copy:
-                        # we need to hold the lock to ensure the pair_array
-                        # remains stable while getting local_sb. The
-                        # request_pending flag in our entry will prevent our
-                        # entry for being removed (but not the remote)
-                        with sel.SELockShare(st.SmartThread._registry_lock):
-                            if self.found_pk_remotes:
-                                if MockRequestLoop.mock_action == 'action2':
-                                    MockRequestLoop.mock_exp_pk_remotes = (
-                                        work_pk_remotes_copy
-                                    )
-                                    mock_pair_key = self._get_pair_key('beta',
-                                                                       'delta')
-                                    if not delta_added:
-                                        delta_added = True
-                                        self.work_pk_remotes.append(
-                                            st.PairKeyRemote(
-                                                mock_pair_key,
-                                                'delta',
-                                                0.0))
-                                pk_remote = self._handle_found_pk_remotes(
-                                    pk_remote=pk_remote,
-                                    work_pk_remotes=work_pk_remotes_copy
-                                )
-                    time.sleep(0.5)
-
-        ################################################################
-        # f1
-        ################################################################
-        def f1():
-            logger.debug('f1 entered')
-            with pytest.raises(st.SmartThreadWorkDataException) as exc:
-                beta_thread.smart_wait(resumers=('alpha', 'charlie'))
-
-            action = msgs.get_msg('beta')
-
-            pair_key = st.SmartThread._get_pair_key('beta', 'delta')
-            found_pk_remote = st.PairKeyRemote(
-                pair_key,
-                'delta',
-                delta_thread.create_time)
-
-            if action == 'action1':
-                exp_error_msg = (
-                    'SmartThread beta raising '
-                    'SmartThreadWorkDataException error while processing '
-                    'request smart_wait. '
-                    f'An expected entry for {found_pk_remote=} was not '
-                    f'found in self.work_pk_remotes={exp_work_remotes}.')
-            elif action == 'action2':
-                exp_error_msg = (
-                    'SmartThread beta raising '
-                    'SmartThreadWorkDataException error while processing '
-                    'request smart_wait. '
-                    f'An expected entry for {found_pk_remote=} was not '
-                    f'found in work_pk_remotes='
-                    f'{MockRequestLoop.mock_exp_pk_remotes}.')
-
-                logger.debug(f'{" "*21}{exp_error_msg}')
-            else:
-                raise IncorrectActionSpecified(
-                    f'test_handle_found_pk_remotes_errors received '
-                    f'an unrecognized {action=} in beta f1 rtn')
-
-            assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
-
-            print('\n', exc.value)
-
-            logger.debug('f1 exiting')
-
-        ################################################################
-        # mainline
-        ################################################################
-        logger.debug('mainline entered')
-
-        MockRequestLoop()
-
-        msgs = Msgs()
-
-        alpha_thread = st.SmartThread(name='alpha')
-        beta_thread = st.SmartThread(name='beta', target=f1, auto_start=False)
-        beta_thread.smart_start()
-
-        start_time = time.time()
-        timeout_value = 15
-        while len(beta_thread.work_pk_remotes) < 2:
-            time.sleep(0.5)
-            if time.time() - start_time > timeout_value:
-                raise CmdTimedOut('test_smart_start_errors took longer than '
-                                  f'{timeout_value} seconds waiting for beta '
-                                  'to exit and become inactive.')
-
-        exp_work_remotes = beta_thread.work_pk_remotes
-        beta_thread.missing_remotes |= {'delta'}
-
-        delta_thread = st.SmartThread(name='delta',
-                                      target=f1,
-                                      auto_start=False)
-        msgs.queue_msg(target='beta',
-                       msg='action1')
-
-        ################################################################
-        # join beta
-        ################################################################
-        alpha_thread.smart_join(targets='beta', timeout=5)
-        alpha_thread.smart_unreg(targets='delta')
-
-        ################################################################
-        # part 2
-        ################################################################
-        beta_thread = st.SmartThread(name='beta', target=f1, auto_start=False)
-
-        monkeypatch.setattr(st.SmartThread,
-                            "_request_loop",
-                            MockRequestLoop.mock_request_loop)
-        MockRequestLoop.mock_action = 'action2'
-        beta_thread.smart_start()
-
-        start_time = time.time()
-        timeout_value = 15
-        while len(beta_thread.work_pk_remotes) < 2:
-            time.sleep(0.5)
-            if time.time() - start_time > timeout_value:
-                raise CmdTimedOut('test_smart_start_errors took longer than '
-                                  f'{timeout_value} seconds waiting for beta '
-                                  'to exit and become inactive.')
-
-        exp_work_remotes = beta_thread.work_pk_remotes
-        beta_thread.missing_remotes |= {'delta'}
-
-        delta_thread = st.SmartThread(name='delta',
-                                      target=f1,
-                                      auto_start=False)
-
-        msgs.queue_msg(target='beta',
-                       msg='action2')
-
-        ################################################################
-        # join beta
-        ################################################################
-        alpha_thread.smart_join(targets='beta', timeout=5)
-        alpha_thread.smart_unreg(targets='delta')
-
-        logger.debug('mainline exiting')
-
-    ####################################################################
-    # test_handle_loop_errors_errors
-    ####################################################################
-    @pytest.mark.parametrize("num_pending_arg", [0, 1, 2])
-    def test_handle_loop_errors_errors(self,
-                                       num_pending_arg: int) -> None:
-        """Test error cases for SmartThread.
-
-        Args:
-            num_pending_arg: number of threads that should be in the
-                pending names array for the error message
-
-        """
-        ################################################################
-        # f1
-        ################################################################
-        def f1(action: str):
-            logger.debug('f1 entered')
-            if action == 'wait':
-                beta_thread.smart_wait(resumers='alpha')
-            elif action == 'msg_wait':
-                msgs.get_msg('beta')
-            elif action == 'deadlock':
-                f1_senders = ['alpha']
-                f1_pending_targets = []
-                for idx in range(num_pending_arg):
-                    f1_senders.append(f'pending_{idx}')
-                    f1_pending_targets.append(f'pending_{idx}')
-                with pytest.raises(st.SmartThreadDeadlockDetected) as f1_exc:
-                    beta_thread.smart_recv(senders=f1_senders)
-                f1_targets_msg = re.escape(
-                    'while processing a smart_recv request with targets '
-                    f'{f1_senders}.')
-
-                f1_pending_msg = re.escape(
-                    f' Remotes that are pending: {f1_pending_targets}.')
-
-                f1_stopped_msg = ''
-
-                f1_not_registered_msg = ''
-
-                f1_deadlock_msg = (' Remotes that are deadlocked: '
-                                   r"\['alpha'\].")
-
-                f1_full_send_q_msg = ''
-
-                f1_msg_suite = (f'{f1_targets_msg}{f1_pending_msg}'
-                                f'{f1_stopped_msg}{f1_not_registered_msg}'
-                                f'{f1_deadlock_msg}{f1_full_send_q_msg}')
-
-                f1_exp_error_msg = (
-                    f'beta raising '
-                    f'SmartThreadDeadlockDetected {f1_msg_suite}')
-
-                logger.debug(f1_exp_error_msg)
-                assert re.fullmatch(f1_exp_error_msg, str(f1_exc.value))
-
-                print('\n', f1_exc.value)
-
-            logger.debug('f1 exiting')
-
-        ################################################################
-        # mainline
-        ################################################################
-        logger.debug('mainline entered')
-
-        msgs = Msgs()
-
-        alpha_thread = st.SmartThread(name='alpha')
-        beta_thread = st.SmartThread(name='beta',
-                                     target=f1,
-                                     kwargs={'action': 'wait'},
-                                     auto_start=False)
-        beta_thread.smart_start()
-        alpha_thread.smart_resume(waiters='beta')
-
-        targets = ['beta']
-        pending_targets = []
-        for idx in range(num_pending_arg):
-            targets.append(f'pending_{idx}')
-            pending_targets.append(f'pending_{idx}')
-
-        ################################################################
-        # SmartThreadRemoteThreadNotAlive
-        ################################################################
-        with pytest.raises(st.SmartThreadRemoteThreadNotAlive) as exc:
-            alpha_thread.smart_recv(senders=targets)
-
-        targets_msg = re.escape(
-            f'while processing a smart_recv request with targets {targets}.')
-
-        pending_msg = re.escape(
-            f' Remotes that are pending: {pending_targets}.')
-
-        stopped_msg = (
-            ' Remotes that are stopped: '
-            r"\['beta'\].")
-
-        not_registered_msg = ''
-
-        deadlock_msg = ''
-
-        full_send_q_msg = ''
-
-        msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
-                     f'{not_registered_msg}{deadlock_msg}{full_send_q_msg}')
-
-        exp_error_msg = (
-            f'alpha raising '
-            f'SmartThreadRemoteThreadNotAlive {msg_suite}')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-        # SmartThreadRemoteThreadNotRegistered
-        ################################################################
-        with pytest.raises(st.SmartThreadRemoteThreadNotRegistered) as exc:
-            alpha_thread.smart_start(targets=targets)
-
-        targets_msg = re.escape(
-            f'while processing a smart_start request with targets {targets}.')
-
-        pending_msg = re.escape(
-            ' Remotes that are pending: [].')
-
-        stopped_msg = ''
-
-        not_registered_msg = re.escape(
-            f' Remotes that are not registered: {targets}.')
-
-        deadlock_msg = ''
-
-        full_send_q_msg = ''
-
-        msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
-                     f'{not_registered_msg}{deadlock_msg}{full_send_q_msg}')
-
-        exp_error_msg = (
-            f'alpha raising '
-            f'SmartThreadRemoteThreadNotRegistered {msg_suite}')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-        with pytest.raises(st.SmartThreadRemoteThreadNotRegistered) as exc:
-            alpha_thread.smart_unreg(targets=targets)
-
-        targets_msg = re.escape(
-            f'while processing a smart_unreg request with targets {targets}.')
-
-        pending_msg = re.escape(
-            ' Remotes that are pending: [].')
-
-        stopped_msg = ''
-
-        not_registered_msg = re.escape(
-            f' Remotes that are not registered: {targets}.')
-
-        deadlock_msg = ''
-
-        full_send_q_msg = ''
-
-        msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
-                     f'{not_registered_msg}{deadlock_msg}{full_send_q_msg}')
-
-        exp_error_msg = (
-            f'alpha raising '
-            f'SmartThreadRemoteThreadNotRegistered {msg_suite}')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-        # SmartThreadDeadlockDetected
-        ################################################################
-        alpha_thread.smart_join(targets='beta', timeout=5)
-        beta_thread = st.SmartThread(name='beta',
-                                     target=f1,
-                                     kwargs={'action': 'deadlock'},
-                                     auto_start=False)
-        beta_thread.smart_start()
-        with pytest.raises(st.SmartThreadDeadlockDetected) as exc:
-            alpha_thread.smart_recv(senders=targets)
-
-        targets_msg = re.escape(
-            f'while processing a smart_recv request with targets {targets}.')
-
-        pending_msg = re.escape(
-            f' Remotes that are pending: {pending_targets}.')
-
-        # stopped_msg = (
-        #     ' Remotes that are stopped: '
-        #     r"\['beta'\].")
-        stopped_msg = ''
-
-        not_registered_msg = ''
-
-        deadlock_msg = (' Remotes that are deadlocked: '
-                        r"\['beta'\].")
-
-        full_send_q_msg = ''
-
-        msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
-                     f'{not_registered_msg}{deadlock_msg}{full_send_q_msg}')
-
-        exp_error_msg = (
-            f'alpha raising '
-            f'SmartThreadDeadlockDetected {msg_suite}')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-        # SmartThreadRequestTimedOut not responsive
-        ################################################################
-        alpha_thread.smart_join(targets='beta', timeout=5)
-        beta_thread = st.SmartThread(name='beta',
-                                     target=f1,
-                                     kwargs={'action': 'msg_wait'},
-                                     auto_start=False)
-        beta_thread.smart_start()
-        with pytest.raises(st.SmartThreadRequestTimedOut) as exc:
-            alpha_thread.smart_recv(senders=targets, timeout=1)
-
-        targets_msg = re.escape(
-            f'while processing a smart_recv request with targets {targets}.')
-
-        pending_msg = re.escape(
-            f' Remotes that are pending: {targets}.')
-
-        stopped_msg = ''
-
-        not_registered_msg = ''
-
-        deadlock_msg = ''
-
-        full_send_q_msg = ''
-
-        msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
-                     f'{not_registered_msg}{deadlock_msg}{full_send_q_msg}')
-
-        exp_error_msg = (
-            f'alpha raising '
-            f'SmartThreadRequestTimedOut {msg_suite}')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-        # join beta
-        ################################################################
-        msgs.queue_msg('beta')
-        alpha_thread.smart_join(targets='beta', timeout=5)
-
-        ################################################################
-        # SmartThreadRequestTimedOut full_msg_q
-        ################################################################
-        alpha_thread.smart_join(targets='beta', timeout=5)
-        beta_thread = st.SmartThread(name='beta',
-                                     target=f1,
-                                     kwargs={'action': 'msg_wait'},
-                                     auto_start=False,
-                                     max_msgs=1)
-        beta_thread.smart_start()
-        alpha_thread.smart_send(receivers='beta', msg='hi beta')
-        with pytest.raises(st.SmartThreadRequestTimedOut) as exc:
-            alpha_thread.smart_send(receivers=targets,
-                                    msg='hello again',
-                                    timeout=1)
-
-        targets_msg = re.escape(
-            f'while processing a smart_send request with targets {targets}.')
-
-        pending_msg = re.escape(
-            f' Remotes that are pending: {targets}.')
-
-        stopped_msg = ''
-
-        not_registered_msg = ''
-
-        deadlock_msg = ''
-
-        full_send_q_msg = r" Remotes that have a full send_q: \['beta'\]."
-
-        msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
-                     f'{not_registered_msg}{deadlock_msg}{full_send_q_msg}')
-
-        exp_error_msg = (
-            f'alpha raising '
-            f'SmartThreadRequestTimedOut {msg_suite}')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-        # join beta
-        ################################################################
-        msgs.queue_msg('beta')
-        alpha_thread.smart_join(targets='beta', timeout=5)
-
-        logger.debug('mainline exiting')
-
-    ####################################################################
-    # test_request_setup_errors
-    ####################################################################
-    def test_request_setup_errors(self) -> None:
-        """Test error cases for SmartThread."""
-        logger.debug('mainline entered')
-        alpha_thread = st.SmartThread(name='alpha')
-
-        ################################################################
-        # SmartThreadInvalidInput - no remotes
-        ################################################################
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_unreg(targets=set())
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadInvalidInput error while processing '
-            'request smart_unreg. '
-            'Remote threads are required for the request but none were '
-            'specified.')
-
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_join(targets=set())
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadInvalidInput error while processing '
-            'request smart_join. '
-            'Remote threads are required for the request but none were '
-            'specified.')
-
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_recv(senders=set())
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadInvalidInput error while processing '
-            'request smart_recv. '
-            'Remote threads are required for the request but none were '
-            'specified.')
-
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_wait(resumers=set())
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadInvalidInput error while processing '
-            'request smart_wait. '
-            'Remote threads are required for the request but none were '
-            'specified.')
-
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_resume(waiters=set())
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadInvalidInput error while processing '
-            'request smart_resume. '
-            'Remote threads are required for the request but none were '
-            'specified.')
-
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_sync(targets=set())
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadInvalidInput error while processing '
-            'request smart_sync. '
-            'Remote threads are required for the request but none were '
-            'specified.')
-
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-        # SmartThreadInvalidInput - caller also a remote
-        ################################################################
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_unreg(targets='alpha')
-
-        exp_error_msg = (
-            'SmartThread alpha raising SmartThreadInvalidInput '
-            'error while processing request smart_unreg. '
-            r"Targets \['alpha'\] includes alpha which is not "
-            'permitted except for request smart_start.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_join(targets='alpha')
-
-        exp_error_msg = (
-            'SmartThread alpha raising SmartThreadInvalidInput '
-            'error while processing request smart_join. '
-            r"Targets \['alpha'\] includes alpha which is not "
-            'permitted except for request smart_start.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_recv(senders='alpha')
-
-        exp_error_msg = (
-            'SmartThread alpha raising SmartThreadInvalidInput '
-            'error while processing request smart_recv. '
-            r"Targets \['alpha'\] includes alpha which is not "
-            'permitted except for request smart_start.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_send(msg='hello',
-                                    receivers='alpha')
-
-        exp_error_msg = (
-            'SmartThread alpha raising SmartThreadInvalidInput '
-            'error while processing request smart_send. '
-            r"Targets \['alpha'\] includes alpha which is not "
-            'permitted except for request smart_start.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_wait(resumers='alpha')
-
-        exp_error_msg = (
-            'SmartThread alpha raising SmartThreadInvalidInput '
-            'error while processing request smart_wait. '
-            r"Targets \['alpha'\] includes alpha which is not "
-            'permitted except for request smart_start.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        ################################################################
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_resume(waiters='alpha')
-
-        exp_error_msg = (
-            'SmartThread alpha raising SmartThreadInvalidInput '
-            'error while processing request smart_resume. '
-            r"Targets \['alpha'\] includes alpha which is not "
-            'permitted except for request smart_start.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        ################################################################
-        with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_sync(targets='alpha')
-
-        exp_error_msg = (
-            'SmartThread alpha raising SmartThreadInvalidInput '
-            'error while processing request smart_sync. '
-            r"Targets \['alpha'\] includes alpha which is not "
-            'permitted except for request smart_start.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
-
-        print('\n', exc.value)
-
-        logger.debug('mainline exiting')
-
-    ####################################################################
-    # Foreign Op
-    ####################################################################
-    def test_foreign_op_scenario(self,
-                                 caplog: pytest.LogCaptureFixture
-                                 ) -> None:
-        """Test foreign op error for SmartThread.
-
-        Args:
-            caplog: pytest fixture to capture log output
-
-        """
-        ################################################################
-        # f1
-        ################################################################
-        def f1(f1_name: str):
-            logger.debug(f'f1 entered for {f1_name}')
-            msgs.get_msg(f1_name)
-            logger.debug(f'f1 exit for {f1_name}')
-            ############################################################
-            # exit
-            ############################################################
-
-        logger.debug('mainline entry')
-        msgs = Msgs()
-        alpha_thread = st.SmartThread(name='alpha')
-        beta_thread = st.SmartThread(name='beta',
-                                     target=f1,
-                                     kwargs={'f1_name': 'beta'})
-        st.SmartThread(name='charlie',
-                       target=f1,
-                       kwargs={'f1_name': 'charlie'},
-                       auto_start=False)
-
-        ################################################################
-        with pytest.raises(st.SmartThreadDetectedOpFromForeignThread) as exc:
-            beta_thread.smart_start(targets='charlie')
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadDetectedOpFromForeignThread error '
-            'while processing request smart_start. '
-            'The SmartThread object used for the invocation is '
-            f'associated with thread {beta_thread.thread} which does not '
-            'match '
-            f'caller thread {threading.current_thread()} as required.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
-        print('\n', exc.value)
-
-        ################################################################
-        with pytest.raises(st.SmartThreadDetectedOpFromForeignThread) as exc:
-            beta_thread.smart_unreg(targets='charlie')
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadDetectedOpFromForeignThread error '
-            'while processing request smart_unreg. '
-            'The SmartThread object used for the invocation is '
-            f'associated with thread {beta_thread.thread} which does not '
-            'match '
-            f'caller thread {threading.current_thread()} as required.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
-        print('\n', exc.value)
-
-        ################################################################
-        with pytest.raises(st.SmartThreadDetectedOpFromForeignThread) as exc:
-            beta_thread.smart_join(targets='charlie')
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadDetectedOpFromForeignThread error '
-            'while processing request smart_join. '
-            'The SmartThread object used for the invocation is '
-            f'associated with thread {beta_thread.thread} which does not '
-            'match '
-            f'caller thread {threading.current_thread()} as required.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
-        print('\n', exc.value)
-
-        ################################################################
-        with pytest.raises(st.SmartThreadDetectedOpFromForeignThread) as exc:
-            beta_thread.smart_recv(senders='alpha')
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadDetectedOpFromForeignThread error '
-            'while processing request smart_recv. '
-            'The SmartThread object used for the invocation is '
-            f'associated with thread {beta_thread.thread} which does not '
-            'match '
-            f'caller thread {threading.current_thread()} as required.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
-        print('\n', exc.value)
-
-        ################################################################
-        with pytest.raises(st.SmartThreadDetectedOpFromForeignThread) as exc:
-            beta_thread.smart_send(receivers='alpha', msg='hi alpha')
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadDetectedOpFromForeignThread error '
-            'while processing request smart_send. '
-            'The SmartThread object used for the invocation is '
-            f'associated with thread {beta_thread.thread} which does not '
-            'match '
-            f'caller thread {threading.current_thread()} as required.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
-        print('\n', exc.value)
-
-        ################################################################
-        with pytest.raises(st.SmartThreadDetectedOpFromForeignThread) as exc:
-            beta_thread.smart_wait(resumers='alpha')
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadDetectedOpFromForeignThread error '
-            'while processing request smart_wait. '
-            'The SmartThread object used for the invocation is '
-            f'associated with thread {beta_thread.thread} which does not '
-            'match '
-            f'caller thread {threading.current_thread()} as required.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
-        print('\n', exc.value)
-
-        ################################################################
-        with pytest.raises(st.SmartThreadDetectedOpFromForeignThread) as exc:
-            beta_thread.smart_resume(waiters='alpha')
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadDetectedOpFromForeignThread error '
-            'while processing request smart_resume. '
-            'The SmartThread object used for the invocation is '
-            f'associated with thread {beta_thread.thread} which does not '
-            'match '
-            f'caller thread {threading.current_thread()} as required.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
-        print('\n', exc.value)
-
-        ################################################################
-        with pytest.raises(st.SmartThreadDetectedOpFromForeignThread) as exc:
-            beta_thread.smart_sync(targets='alpha')
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadDetectedOpFromForeignThread error '
-            'while processing request smart_sync. '
-            'The SmartThread object used for the invocation is '
-            f'associated with thread {beta_thread.thread} which does not '
-            'match '
-            f'caller thread {threading.current_thread()} as required.')
-
-        logger.debug(exp_error_msg)
-        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
-        print('\n', exc.value)
-
-        ################################################################
-        alpha_thread.smart_start(targets='charlie')
-
-        msgs.queue_msg('beta')
-        msgs.queue_msg('charlie')
-        alpha_thread.smart_join(targets=('beta', 'charlie'))
-
-        logger.debug('mainline exit')

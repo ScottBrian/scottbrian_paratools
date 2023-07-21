@@ -1101,6 +1101,17 @@ class SmartThread:
         if name not in SmartThread._registry:
             return ThreadState.Unregistered
 
+        # When we start the thread, we set the state to Starting and
+        # then call threading start which sets is_alive to true. When we
+        # get back we immediately set the state Alive. If the started
+        # thread were to call _get_state, we would want it to see itself
+        # as Alive. Thus, if is_alive is true here and the state is
+        # Starting, return Alive.
+        if (SmartThread._registry[name].thread.is_alive()
+                and SmartThread._registry[name].st_state
+                == ThreadState.Starting):
+            return ThreadState.Alive
+
         # is_alive will be False when the thread has not yet been
         # started or after the thread has ended. For the former, the
         # ThreadState will probably be Registered. For the latter it
