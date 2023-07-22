@@ -3096,7 +3096,6 @@ class SmartThread:
         """
         self._verify_thread_is_current(request=ReqType.Smart_recv)
         self.request = ReqType.Smart_recv
-        # self.recvd_msgs = defaultdict(list)
         self.recvd_msgs = {}
 
         if sender_count is None:
@@ -4328,52 +4327,6 @@ class SmartThread:
                     local_sb.deadlock = False
 
     ####################################################################
-    # _config_cmd_loop
-    ####################################################################
-    def _config_cmd_loop(self, *,
-                         request_block: RequestBlock,
-                         ) -> None:
-        """Main loop for each config command.
-
-        Args:
-            request_block: contains requestors, timeout, etc
-
-        Raises:
-            SmartThreadRequestTimedOut: request processing timed out
-                waiting for the remote.
-            SmartThreadRemoteThreadNotAlive: request detected remote
-                thread is not alive.
-            SmartThreadDeadlockDetected: a deadlock was detected
-                between two requests.
-
-        .. # noqa: DAR402
-
-        """
-        with self.cmd_lock:
-            self.work_remotes: set[str] = request_block.remotes.copy()
-
-            while len(self.work_remotes) > request_block.completion_count:
-                num_start_loop_work_remotes = len(self.work_remotes)
-                for remote in self.work_remotes.copy():
-                    with sel.SELockExcl(SmartThread._registry_lock):
-                        if request_block.process_rtn(request_block,
-                                                     remote):
-                            self.work_remotes -= {remote}
-
-                # if no progress was made
-                if len(self.work_remotes) == num_start_loop_work_remotes:
-                    if ((request_block.error_stopped_target
-                         and request_block.stopped_remotes)
-                            or (request_block.error_not_registered_target
-                                and request_block.not_registered_remotes)
-                            or request_block.timer.is_expired()):
-                        self._handle_loop_errors(request_block=request_block,
-                                                 pending_remotes=list(
-                                                     self.work_remotes))
-
-                time.sleep(0.2)
-
-    ####################################################################
     # _request_loop
     ####################################################################
     def _request_loop(self, *,
@@ -4561,8 +4514,6 @@ class SmartThread:
                 self._handle_loop_errors(request_block=request_block,
                                          pending_remotes=pending_remotes)
 
-            if not request_block.remotes:  # remotes were not specified
-                self._set_work_pk_remotes(request_block.request)
             time.sleep(0.2)
 
         ################################################################
@@ -4576,12 +4527,10 @@ class SmartThread:
     # _set_work_pk_remotes
     ####################################################################
     def _set_work_pk_remotes(self,
-                             request: ReqType,
-                             remotes: Optional[set[str]] = None) -> None:
+                             remotes: set[str]) -> None:
         """Update the work_pk_remotes with newly found threads.
 
         Args:
-            request: type of request being performed
             remotes: names of threads that are targets for the
                 request
 
@@ -4589,25 +4538,8 @@ class SmartThread:
         pk_remotes: list[PairKeyRemote] = []
 
         with sel.SELockExcl(SmartThread._registry_lock):
-            work_remotes: set[str] = set()
-            if remotes:
-                work_remotes = remotes.copy()
-            else:
-                for pair_key, item in SmartThread._pair_array.items():
-                    if self.name not in pair_key:
-                        continue
-
-                    local_sb = SmartThread._pair_array[
-                            pair_key].status_blocks[self.name]
-                    if (request == ReqType.Smart_recv
-                            and not local_sb.msg_q.empty()):
-                        if self.name == pair_key[0]:
-                            work_remotes |= {pair_key[1]}
-                        else:
-                            work_remotes |= {pair_key[0]}
-
             self.missing_remotes: set[str] = set()
-            for remote in work_remotes:
+            for remote in remotes:
                 if remote in SmartThread._registry:
                     target_create_time = SmartThread._registry[
                         remote].create_time
@@ -4962,8 +4894,7 @@ class SmartThread:
         if self.request in (ReqType.Smart_send, ReqType.Smart_recv,
                             ReqType.Smart_resume, ReqType.Smart_sync,
                             ReqType.Smart_wait):
-            self._set_work_pk_remotes(request=self.request,
-                                      remotes=remotes)
+            self._set_work_pk_remotes(remotes=remotes)
 
         request_block = RequestBlock(
             request=self.request,

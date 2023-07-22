@@ -1714,6 +1714,7 @@ class StopThread(ConfigCmd):
             stop_names: thread names to stop
             reset_ops_count: specifies whether to reset ops count for
                 the stop names
+            send_recv_msgs: messages to be reset
         """
         super().__init__(cmd_runners=cmd_runners)
         self.specified_args = locals()  # used for __repr__
@@ -1944,6 +1945,8 @@ class Unregister(ConfigCmd):
         Args:
             cmd_runners: thread names that will execute the command
             unregister_targets: thread names to be unregistered
+            not_registered_remotes: remotes not registered that should
+                result in error
             log_msg: log message for smart_unreg
         """
         super().__init__(cmd_runners=cmd_runners)
@@ -2656,7 +2659,8 @@ class RequestEntryExitLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(f"{list_of_smart_requests} (entry|exit): "
-                        r"requestor: [a-z0-9_]+, targets: \[([a-z0-9_]*|,|'| )*\]"),
+                        r"requestor: [a-z0-9_]+, "
+                        r"targets: \[([a-z0-9_]*|,|'| )*\]"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -2793,7 +2797,8 @@ class SubProcessEntryExitLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(f"{list_of_smart_requests} {list_of_sub_processes} "
-                        "(entry|exit): cmd_runner: [a-z0-9_]+(, target: [a-z0-9_]+)*"),
+                        "(entry|exit): cmd_runner: "
+                        "[a-z0-9_]+(, target: [a-z0-9_]+)*"),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx
@@ -5119,6 +5124,9 @@ class ConfigVerifier:
             with self.monitor_condition:
                 self.monitor_condition.notify_all()
 
+        self.log_test_msg(f'monitor exiting: {self.monitor_bail=},'
+                          f'{self.monitor_exit=}')
+
     ####################################################################
     # set_request_pending_flag
     ####################################################################
@@ -5319,12 +5327,14 @@ class ConfigVerifier:
     def abort_all_f1_threads(self):
         """Abort all threads before raising an error."""
         self.log_test_msg('abort_all_f1_threads entry')
+        self.log_test_msg(f'{len(self.all_threads.keys())=}')
         for name, thread in self.all_threads.items():
             # self.log_test_msg(f'abort_all_f1_threads looking at {name=}')
             if name == self.commander_name:
                 continue
-            self.add_log_msg(f'aborting f1_thread {name}, '
-                             f'thread.is_alive(): {thread.thread.is_alive()}.')
+            self.log_test_msg(
+                f'aborting f1_thread {name}, '
+                f'thread.is_alive(): {thread.thread.is_alive()}.')
             if thread.thread.is_alive():
                 exit_cmd = ExitThread(cmd_runners=name,
                                       stopped_by=self.commander_name)
@@ -6913,7 +6923,7 @@ class ConfigVerifier:
                 pend_req_serial_num = self.add_cmd(
                     SendMsg(cmd_runners=pending_names[0],
                             receivers=remote_names[0],
-                            exp_receivers=remote_names[0],
+                            exp_receivers=set(),
                             msgs_to_send=msgs_pending_to_remote,
                             msg_idx=0,
                             stopped_remotes=stopped_remotes))
@@ -7018,7 +7028,7 @@ class ConfigVerifier:
                            exp_positions=lock_positions.copy()))
 
             ################################################################
-            # release lock_0 to allow smart_wait to do request_set_up
+            # release lock_0 to allow smart_req to do request_set_up
             # to get pending_request set, and then wait behind lock_2
             # before going into request loop
             # locks held:
@@ -8269,7 +8279,7 @@ class ConfigVerifier:
             obtain_reg_lock=False))
 
         ################################################################
-        # start of by getting lock_0
+        # start off by getting lock_0
         # locks held:
         # before: none
         # after : lock_0
@@ -8301,7 +8311,7 @@ class ConfigVerifier:
                 cmd_runners=remote_name,
                 targets=pending_name,
                 sync_set_ack_remotes=pending_name,
-                timeout=1,
+                timeout=1.5,
                 timeout_remotes=pending_name))
 
         lock_positions.append(remote_name)
@@ -8452,7 +8462,7 @@ class ConfigVerifier:
         ################################################################
         self.add_cmd(Pause(
             cmd_runners=self.commander_name,
-            pause_seconds=1.5))
+            pause_seconds=2.0))
 
         ################################################################
         # release lock_2 to allow remote_sync to enter the request loop
@@ -9592,7 +9602,7 @@ class ConfigVerifier:
             pause_time = 0.5
         elif timeout_type == TimeoutType.TimeoutFalse:
             pause_time = 0.5
-            timeout_time += (pause_time * 8)  # prevent timeout
+            timeout_time = (pause_time * 8)  # prevent timeout
         else:  # timeout True
             pause_time = timeout_time + 1  # force timeout
 
@@ -9726,7 +9736,7 @@ class ConfigVerifier:
                     exp_senders=exp_senders,
                     stopped_remotes=nosend_exit_sender_names,
                     exp_msgs=sender_msgs,
-                    timeout=2,
+                    timeout=timeout_time,
                     log_msg=log_msg))
 
         else:  # TimeoutType.TimeoutTrue
@@ -12460,7 +12470,6 @@ class ConfigVerifier:
         req0_confirm_immediately: bool = False
         req0_will_do_refresh: bool = False
         req0_request_issued: bool = False
-        req0_pending_catch: bool = False
 
         req1_delay_confirm: bool = True
 
@@ -21395,23 +21404,6 @@ class TestSmartThreadInterface:
         """
         from scottbrian_paratools.smart_thread import SmartThread, ThreadState
 
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
         def f1_0_0_0() -> None:
             logger.debug('f1 beta entry')
             logger.debug('there are no args to check')
@@ -22004,23 +21996,6 @@ class TestSmartThreadInterface:
         """
         from scottbrian_paratools.smart_thread import SmartThread, ThreadState
 
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
         def f1_0_0_0() -> None:
             logger.debug('f1 beta entry')
             logger.debug('there are no args to check')
@@ -22508,23 +22483,6 @@ class TestSmartThreadInterface:
         """
         from scottbrian_paratools.smart_thread import SmartThread, ThreadState
 
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
         def f1(*args, **kwargs) -> None:
             logger.debug('f1 beta entry')
 
@@ -22777,23 +22735,6 @@ class TestSmartThreadInterface:
         """
         from scottbrian_paratools.smart_thread import SmartThread, ThreadState
 
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
         def f1(*args,
                kwarg1: Optional[int] = None,
                kwarg2: Optional[str] = None,
@@ -22894,23 +22835,6 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
 
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
         def f1() -> None:
             print('f1 beta entered')
             beta_smart_thread.smart_send(receivers='alpha',
@@ -22959,23 +22883,6 @@ class TestSmartThreadExamples:
             capsys: pytest fixture to get the print output
         """
         from scottbrian_paratools.smart_thread import SmartThread
-
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
 
         def f1(smart_thread: SmartThread) -> None:
             print('f1 beta entered')
@@ -23026,23 +22933,6 @@ class TestSmartThreadExamples:
         from scottbrian_paratools.smart_thread import SmartThread
         import threading
 
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
         def f1() -> None:
             print('f1 beta entered')
             beta_smart_thread = SmartThread(name='beta')
@@ -23092,23 +22982,6 @@ class TestSmartThreadExamples:
         from scottbrian_paratools.smart_thread import SmartThread
         import threading
         import time
-
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
 
         class ThreadApp(threading.Thread):
             """Example thread app."""
@@ -23183,23 +23056,6 @@ class TestSmartThreadExamples:
         import threading
         import time
 
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
         class SmartThreadApp(threading.Thread, SmartThread):
             """Example thread app."""
 
@@ -23265,23 +23121,6 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
 
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
         def f1() -> None:
             print('f1 beta entered')
             print('f1 beta exiting')
@@ -23322,23 +23161,6 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
         import time
-
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
 
         def f1_beta() -> None:
             print('f1_beta entered')
@@ -23390,23 +23212,6 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
 
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
         def f1_beta() -> None:
             print('f1_beta entered')
             print('f1_beta exiting')
@@ -23446,23 +23251,6 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
         import time
-
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
 
         def f1_beta() -> None:
             print('f1_beta entered')
@@ -23504,23 +23292,6 @@ class TestSmartThreadExamples:
             capsys: pytest fixture to get the print output
         """
         from scottbrian_paratools.smart_thread import SmartThread
-
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
 
         def f1(smart_thread: SmartThread) -> None:
             print('f1 beta entered')
@@ -23564,23 +23335,6 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
         import time
-
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
 
         def f1(smart_thread: SmartThread) -> None:
             if smart_thread.name == 'charlie':
@@ -23631,23 +23385,6 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
 
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
         def f1(smart_thread: SmartThread) -> None:
             print(f'f1 {smart_thread.name} entered')
             recvd_msgs = smart_thread.smart_recv(senders='alpha')
@@ -23691,23 +23428,6 @@ class TestSmartThreadExamples:
             capsys: pytest fixture to get the print output
         """
         from scottbrian_paratools.smart_thread import SmartThread
-
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
 
         def f1(smart_thread: SmartThread,
                wait_for: Optional[str] = None,
@@ -23780,23 +23500,6 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
 
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
         def f1(smart_thread: SmartThread,
                wait_for: Optional[str] = None,
                resume_target: Optional[str] = None) -> None:
@@ -23868,23 +23571,6 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
 
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
         def f1(smart_thread: SmartThread) -> None:
             print('f1 beta entered')
             smart_thread.smart_send(msg='hi alpha', receivers='alpha')
@@ -23926,23 +23612,6 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
         import time
-
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
 
         def f1(smart_thread: SmartThread) -> None:
             print(f'f1 {smart_thread.name} entered')
@@ -23994,23 +23663,6 @@ class TestSmartThreadExamples:
             capsys: pytest fixture to get the print output
         """
         from scottbrian_paratools.smart_thread import SmartThread
-
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
 
         def f1(greeting: str, smart_thread: SmartThread) -> None:
             print(f'f1 {smart_thread.name} entered')
@@ -24064,23 +23716,6 @@ class TestSmartThreadExamples:
             capsys: pytest fixture to get the print output
         """
         from scottbrian_paratools.smart_thread import SmartThread
-
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
 
         def f1(greeting: str,
                smart_thread: SmartThread,
@@ -24165,23 +23800,6 @@ class TestSmartThreadExamples:
         from scottbrian_paratools.smart_thread import SmartThread
         import time
 
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
         def f1(smart_thread: SmartThread) -> None:
             print(f'f1 {smart_thread.name} about to wait')
             resumed_by = smart_thread.smart_wait(resumers='alpha')
@@ -24224,23 +23842,6 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
         import time
-
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
 
         def f1(smart_thread: SmartThread) -> None:
             time.sleep(1)  # allow time for smart_resume to be issued
@@ -24285,23 +23886,6 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
         import time
-
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
 
         def f1(smart_thread: SmartThread) -> None:
             print(f'f1 {smart_thread.name} about to resume alpha')
@@ -24358,23 +23942,6 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
         import time
-
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
 
         def f1(smart_thread: SmartThread) -> None:
             print(f'f1 {smart_thread.name} about to resume alpha')
@@ -24439,23 +24006,6 @@ class TestSmartThreadExamples:
         """
         from scottbrian_paratools.smart_thread import SmartThread
         import time
-
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
 
         def f1_beta(smart_thread: SmartThread) -> None:
             print('f1_beta about to wait')
@@ -24540,23 +24090,6 @@ class TestSmartThreadExamples:
         from scottbrian_paratools.smart_thread import SmartThread
         import time
 
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
         def f1_beta(smart_thread: SmartThread) -> None:
             print('f1_beta about to sync with alpha and charlie')
             smart_thread.smart_sync(targets=['alpha', 'charlie'])
@@ -24638,22 +24171,6 @@ def scenario_driver(
                         log_msg=log_msg_f1)
         logger.debug(log_msg_f1)
 
-    ###############################################################################
-    # logging
-    ###############################################################################
-    # logging.basicConfig(filename='ThreadComm.log',
-    #                     filemode='w',
-    #                     level=logging.DEBUG,
-    #                     format='%(asctime)s '
-    #                            '%(msecs)03d '
-    #                            '[%(levelname)8s] '
-    #                            '%(threadName)s '
-    #                            '%(filename)s:'
-    #                            '%(funcName)s:'
-    #                            '%(lineno)d '
-    #                            '%(message)s')
-    #
-    # logger = logging.getLogger(__name__)
     ################################################################
     # Set up log verification and start tests
     ################################################################
@@ -24923,9 +24440,10 @@ def scenario_driver(
     # check that pending events are complete
     ################################################################
 
-    config_ver.log_test_msg('Monitor Checkpoint: check_pending_events 42')
-    config_ver.monitor_event.set()
-    config_ver.check_pending_events_complete_event.wait()
+    if not config_ver.monitor_exit:
+        config_ver.log_test_msg('Monitor Checkpoint: check_pending_events 42')
+        config_ver.monitor_event.set()
+        config_ver.check_pending_events_complete_event.wait()
 
     config_ver.monitor_exit = True
     config_ver.monitor_event.set()
@@ -24972,23 +24490,6 @@ class TestSmartThreadSmokeTest:
             commander_config_arg: specifies the config for the commander
 
         """
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
         args_for_scenario_builder: dict[str, Any] = {}
 
         scenario_driver(
@@ -25034,22 +24535,6 @@ class TestSmartThreadSmokeTest:
             caplog: pytest fixture to capture log output
 
         """
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
         args_for_scenario_builder: dict[str, Any] = {
             'num_registered_1': num_registered_1_arg,
             'num_active_1': num_active_1_arg,
@@ -25076,23 +24561,6 @@ class TestSmartThreadErrors:
     ####################################################################
     def test_smart_thread_instantiation_errors(self) -> None:
         """Test error cases for SmartThread."""
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
         ################################################################
         # f1
         ################################################################
@@ -25186,22 +24654,6 @@ class TestSmartThreadErrors:
         ################################################################
         # Create smart thread with duplicate name
         ################################################################
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
 
         logger.debug('mainline entered')
         alpha_smart_thread = st.SmartThread(name='alpha')
@@ -25248,23 +24700,6 @@ class TestSmartThreadErrors:
     ####################################################################
     def test_smart_thread_clean_registry_errors(self) -> None:
         """Test error cases for SmartThread."""
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
         logger.debug('mainline entered')
         alpha_thread = st.SmartThread(name='alpha')
         alpha_thread.name = 'bad_name'
@@ -25297,23 +24732,6 @@ class TestSmartThreadErrors:
             monkeypatch: pytest fixture to set up a mock routine
 
         """
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
         ################################################################
         # f1
         ################################################################
@@ -25479,23 +24897,6 @@ class TestSmartThreadErrors:
     def test_smart_start_errors(self) -> None:
         """Test error cases for SmartThread."""
         ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
-        ################################################################
         # f1
         ################################################################
         def f1():
@@ -25578,23 +24979,6 @@ class TestSmartThreadErrors:
     ####################################################################
     def test_smart_send_errors(self) -> None:
         """Test error cases for SmartThread."""
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
         ################################################################
         # f1
         ################################################################
@@ -25759,23 +25143,6 @@ class TestSmartThreadErrors:
     def test_smart_recv_errors(self) -> None:
         """Test error cases for SmartThread."""
         ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
-        ################################################################
         # f1
         ################################################################
         def f1():
@@ -25858,23 +25225,6 @@ class TestSmartThreadErrors:
     ####################################################################
     def test_smart_wait_errors(self) -> None:
         """Test error cases for SmartThread."""
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
         ################################################################
         # f1
         ################################################################
@@ -25965,22 +25315,6 @@ class TestSmartThreadErrors:
 
         """
         from scottbrian_locking import se_lock as sel
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
 
         ################################################################
         # mock_request_loop
@@ -26166,23 +25500,6 @@ class TestSmartThreadErrors:
                 pending names array for the error message
 
         """
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
         ################################################################
         # f1
         ################################################################
@@ -26491,23 +25808,6 @@ class TestSmartThreadErrors:
     ####################################################################
     def test_request_setup_errors(self) -> None:
         """Test error cases for SmartThread."""
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
         logger.debug('mainline entered')
         alpha_thread = st.SmartThread(name='alpha')
 
@@ -26728,23 +26028,6 @@ class TestSmartThreadErrors:
             caplog: pytest fixture to capture log output
 
         """
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
         ################################################################
         # f1
         ################################################################
@@ -27097,18 +26380,18 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_pending_sans_sync_scenario
     ####################################################################
-    # @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_send,
-    #                                               st.ReqType.Smart_recv,
-    #                                               st.ReqType.Smart_wait,
-    #                                               st.ReqType.Smart_resume,
-    #                                               ])
-    # @pytest.mark.parametrize("pending_request_tf_arg", [True, False])
-    # @pytest.mark.parametrize("pending_msg_count_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("pending_wait_tf_arg", [True, False])
-    @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_resume])
-    @pytest.mark.parametrize("pending_request_tf_arg", [True])
-    @pytest.mark.parametrize("pending_msg_count_arg", [0])
-    @pytest.mark.parametrize("pending_wait_tf_arg", [True])
+    @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_send,
+                                                  st.ReqType.Smart_recv,
+                                                  st.ReqType.Smart_wait,
+                                                  st.ReqType.Smart_resume,
+                                                  ])
+    @pytest.mark.parametrize("pending_request_tf_arg", [True, False])
+    @pytest.mark.parametrize("pending_msg_count_arg", [0, 1, 2])
+    @pytest.mark.parametrize("pending_wait_tf_arg", [True, False])
+    # @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_resume])
+    # @pytest.mark.parametrize("pending_request_tf_arg", [True])
+    # @pytest.mark.parametrize("pending_msg_count_arg", [0])
+    # @pytest.mark.parametrize("pending_wait_tf_arg", [True])
     def test_pending_sans_sync_scenario(
             self,
             request_type_arg: st.ReqType,
@@ -27655,21 +26938,21 @@ class TestSmartThreadComboScenarios:
     # @pytest.mark.parametrize("timeout_type_arg", [TimeoutType.TimeoutNone,
     #                                               TimeoutType.TimeoutFalse,
     #                                               TimeoutType.TimeoutTrue])
-    @pytest.mark.parametrize("num_receivers_arg", [1, 2, 3])
-    @pytest.mark.parametrize("num_active_no_delay_senders_arg", [0, 1])
-    @pytest.mark.parametrize("num_active_delay_senders_arg", [0, 1])
-    @pytest.mark.parametrize("num_send_exit_senders_arg", [0, 1])
-    @pytest.mark.parametrize("num_nosend_exit_senders_arg", [0, 1])
-    @pytest.mark.parametrize("num_unreg_senders_arg", [0, 1])
+    # @pytest.mark.parametrize("num_receivers_arg", [1, 2, 3])
+    # @pytest.mark.parametrize("num_active_no_delay_senders_arg", [0, 1])
+    # @pytest.mark.parametrize("num_active_delay_senders_arg", [0, 1])
+    # @pytest.mark.parametrize("num_send_exit_senders_arg", [0, 1])
+    # @pytest.mark.parametrize("num_nosend_exit_senders_arg", [0, 1])
+    # @pytest.mark.parametrize("num_unreg_senders_arg", [0, 1])
+    # @pytest.mark.parametrize("num_reg_senders_arg", [0, 1])
+    @pytest.mark.parametrize("timeout_type_arg", [TimeoutType.TimeoutFalse])
+    @pytest.mark.parametrize("num_receivers_arg", [3])
+    @pytest.mark.parametrize("num_active_no_delay_senders_arg", [0])
+    @pytest.mark.parametrize("num_active_delay_senders_arg", [1])
+    @pytest.mark.parametrize("num_send_exit_senders_arg", [1])
+    @pytest.mark.parametrize("num_nosend_exit_senders_arg", [0])
+    @pytest.mark.parametrize("num_unreg_senders_arg", [1])
     @pytest.mark.parametrize("num_reg_senders_arg", [0, 1])
-    # @pytest.mark.parametrize("timeout_type_arg", [TimeoutType.TimeoutFalse])
-    # @pytest.mark.parametrize("num_receivers_arg", [3])
-    # @pytest.mark.parametrize("num_active_no_delay_senders_arg", [0])
-    # @pytest.mark.parametrize("num_active_delay_senders_arg", [1])
-    # @pytest.mark.parametrize("num_send_exit_senders_arg", [1])
-    # @pytest.mark.parametrize("num_nosend_exit_senders_arg", [0])
-    # @pytest.mark.parametrize("num_unreg_senders_arg", [1])
-    # @pytest.mark.parametrize("num_reg_senders_arg", [0])
     def test_recv_msg_timeout_scenarios(
             self,
             timeout_type_arg: TimeoutType,
@@ -28653,23 +27936,6 @@ class TestSmartThreadComboScenarios:
                just let the application set the level using basicConfig
 
         """
-        ################################################################
-        # logging
-        ################################################################
-        logging.basicConfig(filename='ThreadComm.log',
-                            filemode='w',
-                            level=logging.DEBUG,
-                            format='%(asctime)s '
-                                   '%(msecs)03d '
-                                   '[%(levelname)8s] '
-                                   '%(threadName)s '
-                                   '%(filename)s:'
-                                   '%(funcName)s:'
-                                   '%(lineno)d '
-                                   '%(message)s')
-
-        logger = logging.getLogger(__name__)
-
         ################################################################
         # add_log_msgs
         ################################################################
