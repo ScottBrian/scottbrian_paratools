@@ -1166,7 +1166,7 @@ class SmartThread:
     ####################################################################
     def _set_state(self,
                    target_thread: "SmartThread",
-                   new_state: ThreadState) -> bool:
+                   new_state: ThreadState) -> None:
         """Set the state for a thread.
 
         Args:
@@ -1177,19 +1177,13 @@ class SmartThread:
             True if status was changed, False otherwise
         """
         saved_status = target_thread.st_state
-        if saved_status == new_state:
-            return False
         target_thread.st_state = new_state
 
-        # logger.debug(
-        #     f'{threading.current_thread().name} set '
-        #     f'state for thread {target_thread.name} from {saved_status} to '
-        #     f'{new_state}', stacklevel=2)
         logger.debug(
             f'{self.cmd_runner} set '
             f'state for thread {target_thread.name} from {saved_status} to '
-            f'{new_state}', stacklevel=2)
-        return True
+            f'{new_state}',
+            stacklevel=2)
 
     ####################################################################
     # _register
@@ -1886,33 +1880,31 @@ class SmartThread:
                 target_thread=SmartThread._registry[remote],
                 new_state=ThreadState.Starting)
             SmartThread._registry[remote].thread.start()
-            # At this point, the thread was started and the bootstrap
-            # method received control and set the Event that start waits
-            # on. The bootstrap method will call run and eventually the
+            # At this point, the thread was started and the threading
+            # start bootstrap method received control and set the Event
+            # that threading start waits on. The bootstrap method will
+            # call run, the thread will execute, and eventually the
             # thread will end. So, at this point, either run has not yet
             # been called, the thread is running, or the thread is
             # already stopped. The is_alive() method will return True
             # if the Event is set (it is) and will return False when
             # the thread is stopped. So, we can rely on is_alive here
-            # will set the correct state. Since we are holding
-            # the registry lock exclusive, the configuration can not
-            # change and a join will wait behind us. The only thing that
-            # could happen is we get back True from is_alive and set
-            # the state to alive, but then the thread ends and now we
-            # still show it as alive. This is not a problem since the
+            # to correctly reflect whether the thread is alive or has
+            # already ended. Since we are holding the registry lock
+            # exclusive, the configuration can not change and a join
+            # will wait behind us. Regardless of whether the thread is
+            # alive and running or has already ended, we will set the
+            # thread state to Alive. This is not a problem since the
             # _get_state method will detect that case and return stopped
-            # as the state
-            # if SmartThread._registry[remote].thread.is_alive():
+            # as the state. Note that setting Alive here is our way of
+            # saying that if is_alive() is False, it's not because the
+            # the thread was not yet started, but instead means that
+            # the thread started and already ended.
 
-            # better to just say alive for now
             self._set_state(
                 target_thread=SmartThread._registry[remote],
                 new_state=ThreadState.Alive)
             self.started_targets |= {remote}
-            # else:  # start failed or thread finished already
-            #     self._set_state(
-            #         target_thread=SmartThread._registry[remote],
-            #         new_state=ThreadState.Stopped)
         else:
             # if here, the remote is not registered
             request_block.not_registered_remotes |= {remote}
@@ -1986,7 +1978,7 @@ class SmartThread:
             remotes=targets,
             error_stopped_target=False,
             error_not_registered_target=True,
-            process_rtn=self._process_unregister,
+            process_rtn=None,
             cleanup_rtn=None,
             get_block_lock=False,
             completion_count=0,
@@ -2033,40 +2025,6 @@ class SmartThread:
         logger.debug(request_block.exit_log_msg)
 
         return self.unreged_targets
-
-    ####################################################################
-    # _process_unregister
-    ####################################################################
-    def _process_unregister(self,
-                            request_block: RequestBlock,
-                            remote: str
-                            ) -> bool:
-        """Process the smart_join request.
-
-        Args:
-            request_block: contains request related data
-            remote: remote name
-
-        Returns:
-            True when request completed, False otherwise
-
-        """
-        if self._get_state(remote) != ThreadState.Registered:
-            request_block.not_registered_remotes |= {remote}
-            return False
-
-        # remove this thread from the registry
-        self._set_state(
-            target_thread=SmartThread._registry[remote],
-            new_state=ThreadState.Stopped)
-        # self._clean_registry()
-        # self._clean_pair_array()
-
-        # logger.debug(
-        #     f'{self.name} did successful smart_unreg of {remote}.')
-
-        # restart while loop with one less remote
-        return True
 
     ####################################################################
     # join
@@ -2246,72 +2204,6 @@ class SmartThread:
 
         # restart while loop with one less remote
         return True
-
-    ####################################################################
-    # _process_smart_join
-    ####################################################################
-    # def _process_smart_join(self,
-    #                         request_block: RequestBlock,
-    #                         remote: str,
-    #                         ) -> bool:
-    #     """Process the smart_join request.
-    #
-    #     Args:
-    #         request_block: contains request related data
-    #         remote: remote name
-    #
-    #     Returns:
-    #         True when request completed, False otherwise
-    #
-    #     """
-    #     # if the remote is not in the registry then either it was never
-    #     # created, or it was created as a ThreadTarget which ended and
-    #     # set its state to stopped and then got removed by a command
-    #     # that called _clean_registry. In either case, we have
-    #     # nothing to do and can simply return True to move on to the
-    #     # next target.
-    #     if remote in SmartThread._registry:
-    #         # Note that if the remote thread was never
-    #         # started, the following join will raise an
-    #         # error. If the thread is eventually started,
-    #         # we currently have no way to detect that and
-    #         # react. We can only hope that a failed join
-    #         # here will help give us a clue that something
-    #         # went wrong.
-    #         # Note also that we timeout each join after a
-    #         # short 0.2 seconds so that we release and
-    #         # re-obtain the registry lock in between
-    #         # attempts. This is done to ensure we don't
-    #         # deadlock with any of the other services
-    #         # (e.g., smart_recv)
-    #         try:
-    #             SmartThread._registry[remote].thread.join(timeout=0.2)
-    #         except RuntimeError:
-    #             # We know the thread is registered, so
-    #             # we will skip it for now and come back to it
-    #             # later. If it never starts and exits then
-    #             # we will timeout (if timeout was specified)
-    #             return False
-    #
-    #         # we need to check to make sure the thread is
-    #         # not alive in case we timed out
-    #         if SmartThread._registry[remote].thread.is_alive():
-    #             return False  # give thread more time to end
-    #         else:
-    #             # set state to stopped
-    #             self._set_state(
-    #                 target_thread=SmartThread._registry[remote],
-    #                 new_state=ThreadState.Stopped)
-    #             # remove this thread from the registry
-    #             self._clean_registry(target=remote)
-    #             self._clean_pair_array(target=remote)
-    #
-    #     logger.debug(
-    #         f'{self.name} did successful join of {remote}.')
-    #
-    #     # restart while loop with one less remote
-    #
-    #     return True
 
     ####################################################################
     # smart_send
@@ -4767,9 +4659,10 @@ class SmartThread:
             1) must be entered holding the status_lock
 
         """
-        # if the deadlock has already been detected by
-        # the remote, no need to analyse this side. Just
-        # drop down to the code below and return
+        # If the deadlock has already been detected by
+        # the remote, then the remote will have set local_sb.deadlock
+        # to let us know. No need to analyse this side. Just
+        # drop down to the code below and return.
         if not local_sb.deadlock:
             if (remote_sb.sync_wait
                     and not local_sb.request == ReqType.Smart_sync
@@ -4795,8 +4688,8 @@ class SmartThread:
                     f'set remote and local '
                     f'deadlock flags {remote_sb.name=}')
             elif (remote_sb.recv_wait
-                    and (remote_sb.msg_q.empty()
-                         or remote_sb.deadlock)):
+                    and not (not remote_sb.msg_q.empty()
+                             or remote_sb.deadlock)):
                 remote_sb.deadlock = True
                 remote_sb.remote_deadlock_request = local_sb.request
                 local_sb.deadlock = True
@@ -4940,14 +4833,9 @@ class SmartThread:
             the log message to use for the exit call
 
         """
-        if remotes:
-            targets_to_use = sorted(remotes)
-        else:
-            # targets_to_use = 'eligible per request'
-            targets_to_use = ['']
         log_msg_body = (
             f'requestor: {self.cmd_runner}, '
-            f'targets: {targets_to_use} '
+            f'targets: {sorted(remotes)} '
             f'timeout value: {timeout_value} '
             f'{get_formatted_call_sequence(latest=latest, depth=1)}')
 

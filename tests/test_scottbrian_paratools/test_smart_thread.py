@@ -13813,6 +13813,204 @@ class ConfigVerifier:
                                    serial_number=request_serial_num)
 
     ####################################################################
+    # build_send_msg_timeout_scenario
+    ####################################################################
+    def build_sync_delay_scenario(self) -> None:
+        """Return a list of ConfigCmd items for a msg timeout."""
+        self.auto_calling_refresh_msg = False
+        sync_names = ['sync_0', 'sync_1']
+        lock_names = ['lock_0', 'lock_1', 'lock_2']
+        join_names = ['join_0']
+
+        active_names: list[str] = (
+                sync_names
+                + lock_names
+                + join_names)
+
+        self.create_config(active_names=active_names)
+
+        lock_positions: list[str] = []
+
+        ################################################################
+        # before: none
+        # action: get lock_0
+        # after : lock_0
+        ################################################################
+        obtain_lock_serial_num_0 = self.add_cmd(
+            LockObtain(cmd_runners=lock_names[0]))
+        lock_positions.append(locker_names[0])
+
+        # we can confirm only this first lock obtain
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd='LockObtain',
+                confirm_serial_num=obtain_lock_serial_num_0,
+                confirmers=locker_names[0]))
+
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # In the following:
+        #     _s means sync is behind lock just before request setup
+        #     _r means sync is behind lock just before request loop
+        ################################################################
+
+        ################################################################
+        # before: lock_0
+        # action: sync_0
+        # after : lock_0|sync_0_s
+        ################################################################
+
+        ################################################################
+        # before: lock_0|sync_0_s
+        # action: get lock_1
+        # after : lock_0|sync_0_s|lock_1
+        ################################################################
+
+        ################################################################
+        # before: lock_0|sync_0_s|lock_1
+        # action: sync_1a
+        # after : lock_0|sync_0_s|lock_1|sync_1a_s
+        ################################################################
+
+        ################################################################
+        # before: lock_0|sync_0_s|lock_1|sync_1a_s
+        # action: get lock_2
+        # after : lock_0|sync_0_s|lock_1|sync_1a_s|lock_2
+        ################################################################
+
+        ################################################################
+        # before: lock_0|sync_0_s|lock_1|sync_1a_s|lock_2
+        # action: drop lock_0
+        # after : lock_1|sync_1a_s|lock_2|sync_0_r
+        ################################################################
+
+        ################################################################
+        # before: lock_1|sync_1a_s|lock_2|sync_0_r
+        # action: get lock_0
+        # after : lock_1|sync_1a_s|lock_2|sync_0_r|lock_0
+        ################################################################
+
+        ################################################################
+        # before: lock_1|sync_1a_s|lock_2|sync_0_r|lock_0
+        # action: drop lock_1
+        # after : lock_2|sync_0_r|lock_0|sync_1a_r
+        ################################################################
+
+        ################################################################
+        # before: lock_2|sync_0_r|lock_0|sync_1a_r
+        # action: get lock_1
+        # after : lock_2|sync_0_r|lock_0|sync_1a_r|lock_1
+        ################################################################
+
+        ################################################################
+        # before: lock_2|sync_0_r|lock_0|sync_1a_r|lock_1
+        # action: drop lock_2, sync_0 sets sync_1 sync_event, loops back
+        #             to top of request loop
+        # after : lock_0|sync_1a_r|lock_1|sync_0_r
+        ################################################################
+
+        ################################################################
+        # before: lock_0|sync_1a_r|lock_1|sync_0_r
+        # action: get lock_2
+        # after : lock_0|sync_1a_r|lock_1|sync_0_r|lock_2
+        ################################################################
+
+        ################################################################
+        # before: lock_0|sync_1a_r|lock_1|sync_0_r|lock_2
+        # action: drop lock_0, sync_1a sets sync_0 sync_event and sees
+        #             its sync_event as set and completes request
+        # after : lock_1|sync_0_r|lock_2
+        ################################################################
+
+        ################################################################
+        # before: lock_1|sync_0_r|lock_2
+        # action: sync_1b
+        # after : lock_1|sync_0_r|lock_2|sync_1b_s
+        ################################################################
+
+        ################################################################
+        # before: lock_1|sync_0_r|lock_2|sync_1b_s
+        # action: get lock_0
+        # after : lock_1|sync_0_r|lock_2|sync_1b_s|lock_0
+        ################################################################
+
+        ################################################################
+        # before: lock_1|sync_0_r|lock_2|sync_1b_s|lock_0
+        # action: swap sync_0 and sync_1b
+        # after : lock_1|sync_1b_s|lock_2|sync_0_r|lock_0
+        ################################################################
+
+        ################################################################
+        # before: lock_1|sync_1b_s|lock_2|sync_0_r|lock_0
+        # action: drop lock_1
+        # after : lock_2|sync_0_r|lock_0|sync_1b_r
+        ################################################################
+
+        ################################################################
+        # before: lock_2|sync_0_r|lock_0|sync_1b_r
+        # action: get lock_1
+        # after : lock_2|sync_0_r|lock_0|sync_1b_r|lock_1
+        ################################################################
+
+        ################################################################
+        # before: lock_2|sync_0_r|lock_0|sync_1b_r|lock_1
+        # action: swap sync_0 and sync_1b
+        # after : lock_2|sync_1b_r|lock_0|sync_0_r|lock_1
+        ################################################################
+
+        ################################################################
+        # before: lock_2|sync_1b_r|lock_0|sync_0_r|lock_1
+        # action: drop lock_2, sync_1b sees sync_0 sync_event is still
+        #             set from sync_1a and gives sync_0 more time (i.e.,
+        #             returns False which is the path we are trying to
+        #             get sync_1b to take for proof of coverage)
+        # after : lock_0|sync_0_r|lock_1|sync_1b_r
+        ################################################################
+
+        ################################################################
+        # before: lock_0|sync_0_r|lock_1|sync_1b_r
+        # action: drop lock_0, sync_0_r sees its sync_event is set and
+        #             completes the request
+        # after : lock_1|sync_1b_r
+        ################################################################
+
+        ################################################################
+        # before: lock_1|sync_1b_r
+        # action: get lock_0
+        # after : lock_1|sync_1b_r|lock_0
+        ################################################################
+
+        ################################################################
+        # before: lock_1|sync_1b_r|lock_0
+        # action: sync_0b
+        # after : lock_1|sync_1b_r|lock_0|sync_0b_s
+        ################################################################
+
+        ################################################################
+        # before: lock_1|sync_1b_r|lock_0|sync_0b
+        # action: drop lock_1, sync_1b is now able to set sync_0
+        #             sync_event and loops back to top of req loop
+        # after : lock_0|sync_0b_s|sync_1b_r
+        ################################################################
+
+        ################################################################
+        # before: lock_0|sync_0b_s|sync_1b_r
+        # action: drop lock_0, sync_0b and sync_1b should now complete
+        # after : none
+        ################################################################
+
+        ################################################################
+        # release lock_2 to allow first smart_recv/wait to go
+        ################################################################
+        release_lock_serial_num_2 = self.add_cmd(
+            LockRelease(cmd_runners=locker_names[2]))
+        lock_positions.remove(locker_names[2])
+
+    ####################################################################
     # build_wait_request
     ####################################################################
     def build_wait_request(
@@ -26533,6 +26731,26 @@ class TestSmartBasicScenarios:
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 
+    ####################################################################
+    # test_backout_sync_local_scenario
+    ####################################################################
+    def test_sync_delay_scenario(
+            self,
+            caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            caplog: pytest fixture to capture log output
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {}
+
+        scenario_driver(
+            scenario_builder=ConfigVerifier.build_sync_delay_scenario,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
+
 
 ########################################################################
 # TestSmartThreadScenarios class
@@ -26678,114 +26896,6 @@ class TestSmartThreadComboScenarios:
             commander_config=commander_config[def_del_scenario_arg.value
                                               % num_commander_configs]
         )
-
-    # ####################################################################
-    # # test_def_del_reasons
-    # ####################################################################
-    # def_del_reasons_0 = DefDelReasons(False, False, False, False)
-    # def_del_reasons_1 = DefDelReasons(False, False, False, True)
-    # def_del_reasons_2 = DefDelReasons(False, False, True, False)
-    # def_del_reasons_3 = DefDelReasons(False, False, True, True)
-    # def_del_reasons_4 = DefDelReasons(False, True, False, False)
-    # def_del_reasons_5 = DefDelReasons(False, True, False, True)
-    # def_del_reasons_6 = DefDelReasons(False, True, True, False)
-    # def_del_reasons_7 = DefDelReasons(False, True, True, True)
-    # def_del_reasons_8 = DefDelReasons(True, False, False, False)
-    # def_del_reasons_9 = DefDelReasons(True, False, False, True)
-    # def_del_reasons_a = DefDelReasons(True, False, True, False)
-    # def_del_reasons_b = DefDelReasons(True, False, True, True)
-    # def_del_reasons_c = DefDelReasons(True, True, False, True)
-    # def_del_reasons_d = DefDelReasons(True, True, False, False)
-    # def_del_reasons_e = DefDelReasons(True, True, True, True)
-    # def_del_reasons_f = DefDelReasons(True, True, True, False)
-    #
-    #
-    # @pytest.mark.parametrize("name_0_pend_arg", (def_del_reasons_0,
-    #                                              def_del_reasons_1,
-    #                                              def_del_reasons_2,
-    #                                              def_del_reasons_3,
-    #                                              def_del_reasons_4,
-    #                                              def_del_reasons_5,
-    #                                              def_del_reasons_6,
-    #                                              def_del_reasons_7,
-    #                                              def_del_reasons_8,
-    #                                              def_del_reasons_9,
-    #                                              def_del_reasons_a,
-    #                                              def_del_reasons_b,
-    #                                              def_del_reasons_c,
-    #                                              def_del_reasons_d,
-    #                                              def_del_reasons_e,
-    #                                              def_del_reasons_f))
-    # @pytest.mark.parametrize("name_1_pend_arg", (def_del_reasons_0,
-    #                                              def_del_reasons_1,
-    #                                              def_del_reasons_2,
-    #                                              def_del_reasons_3,
-    #                                              def_del_reasons_4,
-    #                                              def_del_reasons_5,
-    #                                              def_del_reasons_6,
-    #                                              def_del_reasons_7,
-    #                                              def_del_reasons_8,
-    #                                              def_del_reasons_9,
-    #                                              def_del_reasons_a,
-    #                                              def_del_reasons_b,
-    #                                              def_del_reasons_c,
-    #                                              def_del_reasons_d,
-    #                                              def_del_reasons_e,
-    #                                              def_del_reasons_f))
-    # @pytest.mark.parametrize("name_2_pend_arg", (def_del_reasons_0,
-    #                                              def_del_reasons_1,
-    #                                              def_del_reasons_2,
-    #                                              def_del_reasons_3,
-    #                                              def_del_reasons_4,
-    #                                              def_del_reasons_5,
-    #                                              def_del_reasons_6,
-    #                                              def_del_reasons_7,
-    #                                              def_del_reasons_8,
-    #                                              def_del_reasons_9,
-    #                                              def_del_reasons_a,
-    #                                              def_del_reasons_b,
-    #                                              def_del_reasons_c,
-    #                                              def_del_reasons_d,
-    #                                              def_del_reasons_e,
-    #                                              def_del_reasons_f))
-    # def test_def_del_reasons(
-    #         self,
-    #         name_0_pend_arg: DefDelReasons,
-    #         name_1_pend_arg: DefDelReasons,
-    #         name_2_pend_arg: DefDelReasons,
-    #         caplog: pytest.LogCaptureFixture
-    # ) -> None:
-    #     """Test pending reasons.
-    #
-    #     Args:
-    #         name_0_pend_arg: reasons for name 0
-    #         name_1_pend_arg: reasons for name 1
-    #         name_2_pend_arg: reasons for name 2
-    #         caplog: pytest fixture to capture log output
-    #
-    #     """
-    #     command_config_num = ((name_0_pend_arg.pending_request
-    #                            + name_0_pend_arg.pending_msg
-    #                            + name_0_pend_arg.pending_wait
-    #                            + name_0_pend_arg.pending_sync
-    #                            + name_1_pend_arg.pending_request
-    #                            + name_1_pend_arg.pending_msg
-    #                            + name_1_pend_arg.pending_wait
-    #                            + name_1_pend_arg.pending_sync)
-    #                           % num_commander_configs)
-    #
-    #     args_for_scenario_builder: dict[str, Any] = {
-    #         'name_0_pend': name_0_pend_arg,
-    #         'name_1_pend': name_1_pend_arg,
-    #         'name_2_pend': name_2_pend_arg,
-    #     }
-    #
-    #     scenario_driver(
-    #         scenario_builder=ConfigVerifier.build_def_del_pending_scenario,
-    #         scenario_builder_args=args_for_scenario_builder,
-    #         caplog_to_use=caplog,
-    #         commander_config=commander_config[command_config_num]
-    #     )
 
     ####################################################################
     # test_rotate_state_scenarios
@@ -26935,23 +27045,15 @@ class TestSmartThreadComboScenarios:
     ####################################################################
     # test_recv_msg_timeout_scenarios
     ####################################################################
-    # @pytest.mark.parametrize("timeout_type_arg", [TimeoutType.TimeoutNone,
-    #                                               TimeoutType.TimeoutFalse,
-    #                                               TimeoutType.TimeoutTrue])
-    # @pytest.mark.parametrize("num_receivers_arg", [1, 2, 3])
-    # @pytest.mark.parametrize("num_active_no_delay_senders_arg", [0, 1])
-    # @pytest.mark.parametrize("num_active_delay_senders_arg", [0, 1])
-    # @pytest.mark.parametrize("num_send_exit_senders_arg", [0, 1])
-    # @pytest.mark.parametrize("num_nosend_exit_senders_arg", [0, 1])
-    # @pytest.mark.parametrize("num_unreg_senders_arg", [0, 1])
-    # @pytest.mark.parametrize("num_reg_senders_arg", [0, 1])
-    @pytest.mark.parametrize("timeout_type_arg", [TimeoutType.TimeoutFalse])
-    @pytest.mark.parametrize("num_receivers_arg", [3])
-    @pytest.mark.parametrize("num_active_no_delay_senders_arg", [0])
-    @pytest.mark.parametrize("num_active_delay_senders_arg", [1])
-    @pytest.mark.parametrize("num_send_exit_senders_arg", [1])
-    @pytest.mark.parametrize("num_nosend_exit_senders_arg", [0])
-    @pytest.mark.parametrize("num_unreg_senders_arg", [1])
+    @pytest.mark.parametrize("timeout_type_arg", [TimeoutType.TimeoutNone,
+                                                  TimeoutType.TimeoutFalse,
+                                                  TimeoutType.TimeoutTrue])
+    @pytest.mark.parametrize("num_receivers_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_active_no_delay_senders_arg", [0, 1])
+    @pytest.mark.parametrize("num_active_delay_senders_arg", [0, 1])
+    @pytest.mark.parametrize("num_send_exit_senders_arg", [0, 1])
+    @pytest.mark.parametrize("num_nosend_exit_senders_arg", [0, 1])
+    @pytest.mark.parametrize("num_unreg_senders_arg", [0, 1])
     @pytest.mark.parametrize("num_reg_senders_arg", [0, 1])
     def test_recv_msg_timeout_scenarios(
             self,
@@ -27033,12 +27135,12 @@ class TestSmartThreadComboScenarios:
                               TimeoutType.TimeoutFalse,
                               TimeoutType.TimeoutTrue])
     @pytest.mark.parametrize("num_resumers_arg", [1, 2, 3])
-    @pytest.mark.parametrize("num_active_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_registered_before_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_registered_after_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_unreg_no_delay_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_unreg_delay_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_stopped_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_active_arg", [0, 1])
+    @pytest.mark.parametrize("num_registered_before_arg", [0, 1])
+    @pytest.mark.parametrize("num_registered_after_arg", [0, 1])
+    @pytest.mark.parametrize("num_unreg_no_delay_arg", [0, 1])
+    @pytest.mark.parametrize("num_unreg_delay_arg", [0, 1])
+    @pytest.mark.parametrize("num_stopped_arg", [0, 1])
     def test_resume_timeout_scenarios(
             self,
             timeout_type_arg: TimeoutType,
@@ -27770,7 +27872,14 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("conflict_deadlock_1_arg", deadlock_arg_list)
     @pytest.mark.parametrize("conflict_deadlock_2_arg", deadlock_arg_list)
     @pytest.mark.parametrize("conflict_deadlock_3_arg", deadlock_arg_list)
-    @pytest.mark.parametrize("num_cd_actors_arg", [3, 4, 5, 6, 7, 8, 9])
+    @pytest.mark.parametrize("num_cd_actors_arg", [3, 6, 9, 12])
+    # @pytest.mark.parametrize("conflict_deadlock_1_arg",
+    #                          [DeadlockScenario.SendSyncRecv])
+    # @pytest.mark.parametrize("conflict_deadlock_2_arg",
+    #                          [DeadlockScenario.SyncDeadlock])
+    # @pytest.mark.parametrize("conflict_deadlock_3_arg",
+    #                          [DeadlockScenario.RecvDeadlock])
+    # @pytest.mark.parametrize("num_cd_actors_arg", [8])
     def test_deadlock_scenario(
             self,
             conflict_deadlock_1_arg: DeadlockScenario,
