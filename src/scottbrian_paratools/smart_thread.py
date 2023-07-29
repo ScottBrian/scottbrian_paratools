@@ -4673,8 +4673,8 @@ class SmartThread:
                 local_sb.deadlock = True
                 local_sb.remote_deadlock_request = ReqType.Smart_sync
                 logger.debug(
-                    f'TestDebug {self.name} wait '
-                    f'set remote and local '
+                    f'TestDebug {self.name} {self.request=} '
+                    f'set remote (sync_wait) and local '
                     f'deadlock flags {remote_sb.name=}')
             elif (remote_sb.wait_wait
                     and not (remote_sb.wait_event.is_set()
@@ -4684,8 +4684,8 @@ class SmartThread:
                 local_sb.deadlock = True
                 local_sb.remote_deadlock_request = ReqType.Smart_wait
                 logger.debug(
-                    f'TestDebug {self.name} wait '
-                    f'set remote and local '
+                    f'TestDebug {self.name} {self.request=} '
+                    f'set remote (wait) and local '
                     f'deadlock flags {remote_sb.name=}')
             elif (remote_sb.recv_wait
                     and not (not remote_sb.msg_q.empty()
@@ -4695,8 +4695,8 @@ class SmartThread:
                 local_sb.deadlock = True
                 local_sb.remote_deadlock_request = ReqType.Smart_recv
                 logger.debug(
-                    f'TestDebug {self.name} recv '
-                    f'set remote and local '
+                    f'TestDebug {self.name} {self.request=} '
+                    f'set remote (recv_wait) and local '
                     f'deadlock flags {remote_sb.name=}')
 
     ####################################################################

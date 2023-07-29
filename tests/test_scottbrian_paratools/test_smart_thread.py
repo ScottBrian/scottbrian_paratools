@@ -13813,7 +13813,7 @@ class ConfigVerifier:
                                    serial_number=request_serial_num)
 
     ####################################################################
-    # build_send_msg_timeout_scenario
+    # build_sync_delay_scenario
     ####################################################################
     def build_sync_delay_scenario(self) -> None:
         """Return a list of ConfigCmd items for a msg timeout."""
@@ -14208,6 +14208,528 @@ class ConfigVerifier:
                 cmd_runners=self.commander_name,
                 confirm_cmd='Sync',
                 confirm_serial_num=sync_1_b_serial_num,
+                confirmers=sync_names[1]))
+
+        ################################################################
+        # verify config structures
+        ################################################################
+        self.add_cmd(VerifyConfig(
+            cmd_runners=self.commander_name,
+            verify_type=VerifyType.VerifyStructures,
+            obtain_reg_lock=True))
+
+    ####################################################################
+    # build_sync_delay2_scenario
+    ####################################################################
+    def build_sync_delay2_scenario(self) -> None:
+        """Return a list of ConfigCmd items for a msg timeout."""
+        # self.auto_calling_refresh_msg = False
+        sync_names = ['sync_0', 'sync_1']
+        recv_names = ['sync_0', 'sync_1']
+        lock_names = ['lock_0', 'lock_1', 'lock_2']
+
+        self.create_config(active_names=sync_names + lock_names)
+
+        lock_positions: list[str] = []
+
+        sender_msgs = SendRecvMsgs(
+            sender_names=sync_names,
+            receiver_names=sync_names,
+            num_msgs=1,
+            text='build_sync_delay2_scenario')
+
+        ################################################################
+        # The following are appended to the requestor names:
+        #     _s means request is behind lock just before request setup
+        #     _r means request is behind lock just before request loop
+        #     _e means request is behind lock in error path
+        ################################################################
+
+        ################################################################
+        # before: none
+        # action: get lock_0
+        # after : lock_0
+        ################################################################
+        obtain_lock_serial_num_0 = self.add_cmd(
+            LockObtain(cmd_runners=lock_names[0]))
+        lock_positions.append(lock_names[0])
+
+        # we can confirm only this first lock obtain
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd='LockObtain',
+                confirm_serial_num=obtain_lock_serial_num_0,
+                confirmers=lock_names[0]))
+
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_0
+        # action: sync_0a
+        # after : lock_0|sync_0a_s
+        ################################################################
+        sync_0a_serial_num = self.add_cmd(
+            Sync(cmd_runners=sync_names[0],
+                 targets=sync_names[1],
+                 sync_set_ack_remotes=sync_names[1],
+                 deadlock_remotes=sync_names[1]))
+        lock_positions.append(sync_names[0])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_0|sync_0a_s
+        # action: get lock_1
+        # after : lock_0|sync_0a_s|lock_1
+        ################################################################
+        self.add_cmd(
+            LockObtain(cmd_runners=lock_names[1]))
+        lock_positions.append(lock_names[1])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_0|sync_0a_s|lock_1
+        # action: recv_1a
+        # after : lock_0|sync_0a_s|lock_1|recv_1a_s
+        ################################################################
+        recv_1a_serial_num = self.add_cmd(
+            RecvMsg(cmd_runners=recv_names[1],
+                    senders=sync_names[0],
+                    exp_senders=set(),
+                    exp_msgs=sender_msgs,
+                    deadlock_remotes=sync_names[0]))
+        lock_positions.append(recv_names[1])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_0|sync_0a_s|lock_1|recv_1a_s
+        # action: get lock_2
+        # after : lock_0|sync_0a_s|lock_1|recv_1a_s|lock_2
+        ################################################################
+        self.add_cmd(
+            LockObtain(cmd_runners=lock_names[2]))
+        lock_positions.append(lock_names[2])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_0|sync_0a_s|lock_1|recv_1a_s|lock_2
+        # action: drop lock_0
+        # after : lock_1|recv_1a_s|lock_2|sync_0a_r
+        ################################################################
+        self.add_cmd(
+            LockRelease(cmd_runners=lock_names[0]))
+        lock_positions.remove(lock_names[0])
+        lock_positions.remove(sync_names[0])
+        lock_positions.append(sync_names[0])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_1|recv_1a_s|lock_2|sync_0a_r
+        # action: get lock_0
+        # after : lock_1|recv_1a_s|lock_2|sync_0a_r|lock_0
+        ################################################################
+        self.add_cmd(
+            LockObtain(cmd_runners=lock_names[0]))
+        lock_positions.append(lock_names[0])
+
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_1|recv_1a_s|lock_2|sync_0a_r|lock_0
+        # action: drop lock_1, recv does setup and waits at req loop
+        # after : lock_2|sync_0a_r|lock_0|recv_1a_r
+        ################################################################
+        self.add_cmd(
+            LockRelease(cmd_runners=lock_names[1]))
+        lock_positions.remove(lock_names[1])
+        lock_positions.remove(recv_names[1])
+        lock_positions.append(recv_names[1])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_2|sync_0a_r|lock_0|recv_1a_r
+        # action: get lock_1
+        # after : lock_2|sync_0a_r|lock_0|recv_1a_r|lock_1
+        ################################################################
+        self.add_cmd(
+            LockObtain(cmd_runners=lock_names[1]))
+        lock_positions.append(lock_names[1])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_2|sync_0a_r|lock_0|recv_1a_r|lock_1
+        # action: drop lock_2, sync_0 sets recv_1 sync_event, loops back
+        #             to wait at top of request loop
+        # after : lock_0|recv_1a_r|lock_1|sync_0a_r
+        ################################################################
+        self.add_cmd(
+            LockRelease(cmd_runners=lock_names[2]))
+        lock_positions.remove(lock_names[2])
+        lock_positions.remove(sync_names[0])
+        lock_positions.append(sync_names[0])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_0|recv_1a_r|lock_1|sync_0a_r
+        # action: get lock_2
+        # after : lock_0|recv_1a_r|lock_1|sync_0a_r|lock_2
+        ################################################################
+        self.add_cmd(
+            LockObtain(cmd_runners=lock_names[2]))
+        lock_positions.append(lock_names[2])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_0|recv_1a_r|lock_1|sync_0a_r|lock_2
+        # action: drop lock_0, recv_1 detects deadlock and sets sync_0
+        #             deadlock flag and gets behind lock in error path
+        # after : lock_1|sync_0a_r|lock_2|recv_1a_e
+        ################################################################
+        self.add_cmd(
+            LockRelease(cmd_runners=lock_names[0]))
+        lock_positions.remove(lock_names[0])
+        lock_positions.remove(recv_names[1])
+        lock_positions.append(recv_names[1])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_1|sync_0a_r|lock_2|recv_1a_e
+        # action: get lock_0
+        # after : lock_1|sync_0a_r|lock_2|recv_1a_e|lock_0
+        ################################################################
+        self.add_cmd(
+            LockObtain(cmd_runners=lock_names[0]))
+        lock_positions.append(lock_names[0])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_1|sync_0a_r|lock_2|recv_1a_e|lock_0
+        # action: swap sync_0 and sync_1b
+        # after : lock_1|recv_1a_e|lock_2|sync_0a_r|lock_0
+        ################################################################
+        lock_pos_1 = lock_positions[1]
+        lock_positions[1] = lock_positions[3]
+        lock_positions[3] = lock_pos_1
+
+        assert lock_positions[0] == lock_names[1]
+        assert lock_positions[1] == recv_names[1]
+        assert lock_positions[2] == lock_names[2]
+        assert lock_positions[3] == sync_names[0]
+        assert lock_positions[4] == lock_names[0]
+
+        self.add_cmd(
+            LockSwap(cmd_runners=self.commander_name,
+                     new_positions=lock_positions.copy()))
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_1|recv_1a_e|lock_2|sync_0a_r|lock_0
+        # action: drop lock_1, recv_1a raises deadlock and exits
+        # after : lock_2|sync_0a_r|lock_0
+        ################################################################
+        self.add_cmd(
+            LockRelease(cmd_runners=lock_names[1]))
+        lock_positions.remove(lock_names[1])
+        lock_positions.remove(recv_names[1])
+        self.log_test_msg(f'14462: {lock_positions=}')
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_2|sync_0a_r|lock_0
+        # action: sync_1b
+        # after : lock_2|sync_0a_r|lock_0|sync_1b_s
+        ################################################################
+        sync_1b_serial_num = self.add_cmd(
+            Sync(cmd_runners=sync_names[1],
+                 targets=sync_names[0],
+                 sync_set_ack_remotes=sync_names[0]))
+        lock_positions.append(sync_names[1])
+        self.log_test_msg(f'14477: {lock_positions=}')
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_2|sync_0a_r|lock_0|sync_1b_s
+        # action: get lock_1
+        # after : lock_2|sync_0a_r|lock_0|sync_1b_s|lock_1
+        ################################################################
+        self.add_cmd(
+            LockObtain(cmd_runners=lock_names[1]))
+        lock_positions.append(lock_names[1])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_2|sync_0a_r|lock_0|sync_1b_s|lock_1
+        # action: swap sync_0 and sync_1b
+        # after : lock_2|sync_1b_s|lock_0|sync_0a_r|lock_1
+        ################################################################
+        lock_pos_1 = lock_positions[1]
+        lock_positions[1] = lock_positions[3]
+        lock_positions[3] = lock_pos_1
+
+        assert lock_positions[0] == lock_names[2]
+        assert lock_positions[1] == sync_names[1]
+        assert lock_positions[2] == lock_names[0]
+        assert lock_positions[3] == sync_names[0]
+        assert lock_positions[4] == lock_names[1]
+
+        self.add_cmd(
+            LockSwap(cmd_runners=self.commander_name,
+                     new_positions=lock_positions.copy()))
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_2|sync_1b_s|lock_0|sync_0a_r|lock_1
+        # action: drop lock_2, sync_1b_s completes setup and gets behind
+        #             lock in req loop
+        # after : lock_0|sync_0a_r|lock_1|sync_1b_r
+        ################################################################
+        self.add_cmd(
+            LockRelease(cmd_runners=lock_names[2]))
+        lock_positions.remove(lock_names[2])
+        lock_positions.remove(sync_names[1])
+        lock_positions.append(sync_names[1])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_0|sync_0a_r|lock_1|sync_1b_r
+        # action: get lock_2
+        # after : lock_0|sync_0a_r|lock_1|sync_1b_r|lock_2
+        ################################################################
+        self.add_cmd(
+            LockObtain(cmd_runners=lock_names[2]))
+        lock_positions.append(lock_names[2])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_0|sync_0a_r|lock_1|sync_1b_r|lock_2
+        # action: swap sync_0 and sync_1b
+        # after : lock_0|sync_1b_r|lock_1|sync_0a_r|lock_2
+        ################################################################
+        lock_pos_1 = lock_positions[1]
+        lock_positions[1] = lock_positions[3]
+        lock_positions[3] = lock_pos_1
+
+        assert lock_positions[0] == lock_names[0]
+        assert lock_positions[1] == sync_names[1]
+        assert lock_positions[2] == lock_names[1]
+        assert lock_positions[3] == sync_names[0]
+        assert lock_positions[4] == lock_names[2]
+
+        self.add_cmd(
+            LockSwap(cmd_runners=self.commander_name,
+                     new_positions=lock_positions.copy()))
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_0|sync_1b_r|lock_1|sync_0a_r|lock_2
+        # action: drop lock_0, sync_1b sees sync_0 is deadlocked and
+        #             gives more time (the case we are trying to get
+        #             coverage for) and waits at top of req loop
+        # after : lock_1|sync_0a_r|lock_2|sync_1b_r
+        ################################################################
+        self.add_cmd(
+            LockRelease(cmd_runners=lock_names[0]))
+        lock_positions.remove(lock_names[0])
+        lock_positions.remove(sync_names[1])
+        lock_positions.append(sync_names[1])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_1|sync_0a_r|lock_2|sync_1b_r
+        # action: get lock_0
+        # after : lock_1|sync_0a_r|lock_2|sync_1b_r|lock_0
+        ################################################################
+        self.add_cmd(
+            LockObtain(cmd_runners=lock_names[0]))
+        lock_positions.append(lock_names[0])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_1|sync_0a_r|lock_2|sync_1b_r|lock_0
+        # action: drop lock_1, sync_0 sees it is deadlocked and
+        #             waits at start of error path
+        # after : lock_2|sync_1b_r|lock_0|sync_0a_e
+        ################################################################
+        self.add_cmd(
+            LockRelease(cmd_runners=lock_names[1]))
+        lock_positions.remove(lock_names[1])
+        lock_positions.remove(sync_names[0])
+        lock_positions.append(sync_names[0])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_2|sync_1b_r|lock_0|sync_0a_e
+        # action: get lock_1
+        # after : lock_2|sync_1b_r|lock_0|sync_0a_e|lock_1
+        ################################################################
+        self.add_cmd(
+            LockObtain(cmd_runners=lock_names[1]))
+        lock_positions.append(lock_names[1])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_2|sync_1b_r|lock_0|sync_0a_e|lock_1
+        # action: drop lock_2, sync_1 sees sync_0 is still deadlocked
+        #             and gives yet more time and waits in req loop
+        # after : lock_0|sync_0a_e|lock_1|sync_1b_r
+        ################################################################
+        self.add_cmd(
+            LockRelease(cmd_runners=lock_names[2]))
+        lock_positions.remove(lock_names[2])
+        lock_positions.remove(sync_names[1])
+        lock_positions.append(sync_names[1])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_0|sync_0a_e|lock_1|sync_1b_r
+        # action: get lock_2
+        # after : lock_0|sync_0a_e|lock_1|sync_1b_r|lock_2
+        ################################################################
+        self.add_cmd(
+            LockObtain(cmd_runners=lock_names[2]))
+        lock_positions.append(lock_names[2])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_0|sync_0a_e|lock_1|sync_1b_r|lock_2
+        # action: drop lock_0, sync_0 raises deadlock and exits
+        # after : lock_1|sync_1b_r|lock_2
+        ################################################################
+        self.add_cmd(
+            LockRelease(cmd_runners=lock_names[0]))
+        lock_positions.remove(lock_names[0])
+        lock_positions.remove(sync_names[0])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_1|sync_1b_r|lock_2
+        # action: sync_0b
+        # after : lock_1|sync_1b_r|lock_2|sync_0b_s
+        ################################################################
+        sync_0b_serial_num = self.add_cmd(
+            Sync(cmd_runners=sync_names[0],
+                 targets=sync_names[1],
+                 sync_set_ack_remotes=sync_names[1]))
+        lock_positions.append(sync_names[0])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_1|sync_1b_r|lock_2|sync_0b_s
+        # action: drop lock_1, sync_1b is now able to set sync_0
+        #             sync_event and loops back to top of req loop
+        #             along side of sync_0b
+        # after : lock_2|sync_0b_s|sync_1b_r
+        ################################################################
+        self.add_cmd(
+            LockRelease(cmd_runners=lock_names[1]))
+        lock_positions.remove(lock_names[1])
+        lock_positions.remove(sync_names[1])
+        lock_positions.append(sync_names[1])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_2|sync_0b_s|sync_1b_r
+        # action: drop lock_2, sync_0b and sync_1b should now complete
+        # after : none
+        ################################################################
+        self.add_cmd(
+            LockRelease(cmd_runners=lock_names[2]))
+        lock_positions.remove(lock_names[2])
+        lock_positions.remove(sync_names[0])
+        lock_positions.remove(sync_names[1])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # confirm the sync requests
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='Sync',
+                confirm_serial_num=sync_0a_serial_num,
+                confirmers=sync_names[0]))
+
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='Sync',
+                confirm_serial_num=sync_0b_serial_num,
+                confirmers=sync_names[0]))
+
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='RecvMsg',
+                confirm_serial_num=recv_1a_serial_num,
+                confirmers=recv_names[1]))
+
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='Sync',
+                confirm_serial_num=sync_1b_serial_num,
                 confirmers=sync_names[1]))
 
         ################################################################
@@ -26942,7 +27464,6 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_backout_sync_local_scenario
     ####################################################################
-    @pytest.mark.cover2
     def test_sync_delay_scenario(
             self,
             caplog: pytest.LogCaptureFixture
@@ -26957,6 +27478,27 @@ class TestSmartBasicScenarios:
 
         scenario_driver(
             scenario_builder=ConfigVerifier.build_sync_delay_scenario,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
+
+    ####################################################################
+    # test_backout_sync_local_scenario
+    ####################################################################
+    @pytest.mark.cover2
+    def test_sync_delay2_scenario(
+            self,
+            caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            caplog: pytest fixture to capture log output
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {}
+
+        scenario_driver(
+            scenario_builder=ConfigVerifier.build_sync_delay2_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 
