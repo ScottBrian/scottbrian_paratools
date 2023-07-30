@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
-from itertools import combinations, chain, product
+from itertools import combinations, chain
 import queue
 
 import logging
@@ -20,7 +20,7 @@ import random
 import re
 from sys import _getframe
 import time
-from typing import (Any, Callable, cast, ClassVar, NamedTuple, Type, TypeAlias,
+from typing import (Any, Callable, ClassVar, NamedTuple, Type, TypeAlias,
                     TYPE_CHECKING, Optional, Union)
 import threading
 
@@ -91,6 +91,7 @@ PotentialDefDelKey: TypeAlias = tuple[st.PairKey, str]
 
 
 class DefDelReasons(NamedTuple):
+    """DefDelReasons used to test pending flags."""
     pending_request: bool = False
     pending_msg: bool = False
     pending_wait: bool = False
@@ -108,6 +109,7 @@ RemPaeKey: TypeAlias = tuple[str, tuple[str, str]]
 # text units
 ########################################################################
 class AutoStartDecision(Enum):
+    """AutoStartDecision used to specify the expected decision."""
     auto_start_obviated = auto()
     auto_start_yes = auto()
     auto_start_no = auto()
@@ -139,11 +141,13 @@ def get_ptime() -> str:
 # SendRecvMsgs
 ########################################################################
 class SendType(Enum):
+    """SendType used to specify how to send msgs with smart_send."""
     ToRemotes = auto()
     SRMsgs = auto()
 
 
 class RecvType(Enum):
+    """RecvType used for test cases to specify number of senders."""
     PartialSenders = auto()
     MatchSenders = auto()
     ExtraSenders = auto()
@@ -151,11 +155,21 @@ class RecvType(Enum):
 
 
 class SendRecvMsgs:
+    """SendRecvMsgs used for testing smart_send and smart_recv."""
     def __init__(self,
                  sender_names: Iterable,
                  receiver_names: Iterable,
                  num_msgs: int,
                  text: str = '') -> None:
+        """Initialize the SendRecvMsg object used for test messages.
+
+        Args:
+            sender_names: sender who will send messages
+            receiver_names: receivers expected to recv the messages
+            num_msgs: the number of messages to create
+            text: any text to place in the message
+
+        """
         self.sender_names = get_set(sender_names)
         self.receiver_names = get_set(receiver_names)
         self.num_msgs = num_msgs
@@ -170,6 +184,7 @@ class SendRecvMsgs:
         self.build_msgs()
 
     def build_msgs(self):
+        """Create the messages that will be sent and received."""
         for msg_idx in range(self.num_msgs):
             self.broadcast_msgs.append({})
             for sender_name in self.sender_names:
@@ -188,6 +203,19 @@ class SendRecvMsgs:
                           sender_name: str,
                           exp_receivers: Iterable,
                           msg_idx: int) -> str:
+        """Return a single message that is to be sent to receivers.
+
+        Args:
+            sender_name: sender who will send the message
+            exp_receivers: names of receivers expected to recv the
+                message
+            msg_idx: the index into the messages array for the message
+                to retrieve
+
+        Returns:
+            the broadcast messages to be sent
+
+        """
         with self.msg_lock:
             msg = self.broadcast_msgs[msg_idx][sender_name]
             for receiver_name in exp_receivers:
@@ -201,6 +229,21 @@ class SendRecvMsgs:
                       receiver_names: Iterable,
                       exp_receivers: Iterable,
                       msg_idx: int) -> dict[str, Any]:
+        """Return the messages that are to be sent.
+
+        Args:
+            sender_name: sender who will send the message
+            receiver_names: names of receivers that the message will be
+                sent to (but not necessarily received)
+            exp_receivers: names of receivers expected to recv the
+                message
+            msg_idx: the index into the messages array for the message
+                to retrieve
+
+        Returns:
+            the set of messages to be sent
+
+        """
         send_msgs: dict[str, Any] = {}
         with self.msg_lock:
             for receiver_name in receiver_names:
@@ -216,12 +259,29 @@ class SendRecvMsgs:
                              receiver_name: str,
                              sender_name: str,
                              msg: Any):
+        """Add sent message to the expected received messages list.
+
+        Args:
+            receiver_name: name of receiver that message was sent to
+            sender_name: sender who send the message
+            msg: the message that was sent
+
+        """
         self.exp_received_msgs[receiver_name][sender_name].append(msg)
 
     def clear_exp_msgs_received(self,
                                 receiver_name: str,
                                 sender_names: Iterable[str],
                                 num_msgs: int):
+        """Clear expected messages for a receiver and its senders.
+
+        Args:
+            receiver_name: name of receiver whose msgs are to be cleared
+            sender_names: senders whose message are to clear for
+                the specified receiver
+            num_msgs: number of messages to be cleared
+
+        """
         sender_names: set[str] = get_set(sender_names)
         with self.msg_lock:
             for sender in sender_names:
@@ -232,6 +292,12 @@ class SendRecvMsgs:
                         break
     def clear_all_exp_msgs_received(self,
                                     receiver_name: str):
+        """Clear the expected messages in the SendRecvMsgs object.
+
+        Args:
+            receiver_name: name of receiver whose msgs are to be cleared
+
+        """
         with self.msg_lock:
             senders = list(self.exp_received_msgs[receiver_name].keys())
             for sender in senders:
@@ -242,6 +308,7 @@ class SendRecvMsgs:
 # WaitType
 ########################################################################
 class WaitType(Enum):
+    """WaitType used to specify the number of resumers."""
     PartialResumers = auto()
     MatchResumers = auto()
     ExtraResumers = auto()
@@ -252,6 +319,7 @@ class WaitType(Enum):
 # VerifyData items
 ########################################################################
 class VerifyType(Enum):
+    """VerifyType used to select the verification to be done."""
     VerifyStructures = auto()
     VerifyAlive = auto()
     VerifyNotAlive = auto()
@@ -269,6 +337,7 @@ class VerifyType(Enum):
 
 @dataclass
 class PendingFlags:
+    """PendingFlags used for setting and checking the pending flags."""
     pending_request: bool = False
     pending_msgs: int = 0
     pending_wait: bool = False
@@ -277,6 +346,7 @@ class PendingFlags:
 
 @dataclass
 class VerifyData:
+    """VerifyData used for the verify methods."""
     cmd_runner: str
     verify_type: VerifyType
     names_to_check: set[str]
@@ -288,6 +358,7 @@ class VerifyData:
 
 @dataclass
 class VerifyCountsData:
+    """VerifyCountsData used to verify number of threads."""
     num_registered: int
     num_active: int
     num_stopped: int
@@ -301,12 +372,14 @@ VerifyDataItems: TypeAlias = Union[
 
 @dataclass
 class RegistrySnapshotItem:
+    """RegistrySnapshotItem used to verify registry."""
     is_alive: bool
     state: st.ThreadState
 
 
 @dataclass
 class StatusBlockSnapshotItem:
+    """StatusBlockSnapshotItem used for pending flags."""
     del_def_flag: bool = False
     pending_request: bool = False
     pending_msg_count: int = 0
@@ -321,6 +394,7 @@ PairArrayItems: TypeAlias = dict[st.PairKey, StatusBlockItems]
 
 @dataclass
 class SnapShotDataItem:
+    """SnapShotData used to collect mock array info."""
     registry_items: RegistryItems
     pair_array_items: PairArrayItems
     verify_data: VerifyDataItems
