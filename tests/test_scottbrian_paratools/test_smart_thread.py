@@ -14863,8 +14863,8 @@ class ConfigVerifier:
         sync_0a_serial_num = self.add_cmd(
             Sync(cmd_runners=sync_names[0],
                  targets=sync_names[1],
-                 sync_set_ack_remotes=sync_names[1],
-                 deadlock_remotes=sync_names[1]))
+                 sync_set_ack_remotes=set(),
+                 stopped_remotes=sync_names[1]))
         lock_positions.append(sync_names[0])
         self.add_cmd(
             LockVerify(cmd_runners=self.commander_name,
@@ -14985,14 +14985,16 @@ class ConfigVerifier:
         # action: resurrect sync_1
         # after : lock_0|sync_0a_r|lock_2|aux_0_reg
         ################################################################
-        self.build_create_suite(
-            cmd_runner=aux_names[0],
-            f1_create_items=[
-                F1CreateItem(name=sync_names[1],
-                             auto_start=True,
-                             target_rtn=outer_f1,
-                             app_config=AppConfig.ScriptStyle)],
-            validate_config=False)
+        self.unregistered_names -= {sync_names[1]}
+        self.add_cmd(
+            CreateF1AutoStart(cmd_runners=aux_names[0],
+                              f1_create_items=[F1CreateItem(
+                                  name=sync_names[1],
+                                  auto_start=True,
+                                  target_rtn=outer_f1,
+                                  app_config=AppConfig.ScriptStyle)]))
+
+        self.active_names |= {sync_names[1]}
 
         lock_positions.append(aux_names[0])
         self.add_cmd(
@@ -15299,7 +15301,7 @@ class ConfigVerifier:
         ################################################################
         # before: lock_0|sync_1a_s_r|lock_2|sync_0a_e|lock_1
         # action: drop lock_0, sync_1 sees sync_0 is still there with
-        #             the old create time for sync_1 and goea back to
+        #             the old create time for sync_1 and goes back to
         #             wait at top of req loop
         # after : lock_2|sync_0a_e|lock_1|sync_1a_s_r
         ################################################################
@@ -19779,8 +19781,8 @@ class ConfigVerifier:
                 {st.SmartThread._registry_lock.owner_wait_q=}.
 
         """
-        # self.log_test_msg(f'lock_verify entry: {cmd_runner=}, '
-        #                   f'{exp_positions=}, {line_num=}')
+        self.log_test_msg(f'lock_verify entry: {cmd_runner=}, '
+                          f'{exp_positions=}, {line_num=}')
         start_time = time.time()
         timeout_value = 60
         lock_verified = False
@@ -19804,8 +19806,8 @@ class ConfigVerifier:
                         f'{exp_positions=} to match \n'
                         f'{st.SmartThread._registry_lock.owner_wait_q=} ')
                 time.sleep(0.2)
-        # self.log_test_msg(f'lock_verify exit: {cmd_runner=}, '
-        #                   f'{exp_positions=}, {line_num=}')
+        self.log_test_msg(f'lock_verify exit: {cmd_runner=}, '
+                          f'{exp_positions=}, {line_num=}')
 
     ####################################################################
     # log_name_groups
@@ -28161,7 +28163,7 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_sync_create_time_scenario
     ####################################################################
-    @pytest.mark.cover2
+    # @pytest.mark.cover2
     def test_sync_create_time_scenario(
             self,
             caplog: pytest.LogCaptureFixture
