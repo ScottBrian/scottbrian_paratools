@@ -1107,10 +1107,15 @@ class SmartThread:
         # thread were to call _get_state, we would want it to see itself
         # as Alive. Thus, if is_alive is true here and the state is
         # Starting, return Alive.
-        if (SmartThread._registry[name].thread.is_alive()
-                and SmartThread._registry[name].st_state
-                == ThreadState.Starting):
-            return ThreadState.Alive
+
+        # $$$ wait: this can't happen since the lock must be held, so
+        # the started thread will not be able to see Starting - only
+        # will be able to see Alive. Comment out the following code and
+        # see if any error show up while testing:
+        # if (SmartThread._registry[name].thread.is_alive()
+        #         and SmartThread._registry[name].st_state
+        #         == ThreadState.Starting):
+        #     return ThreadState.Alive
 
         # is_alive will be False when the thread has not yet been
         # started or after the thread has ended. For the former, the
@@ -1175,6 +1180,10 @@ class SmartThread:
 
         Returns:
             True if status was changed, False otherwise
+
+        Notes:
+            Must be called holding the registry lock exclusive
+
         """
         saved_status = target_thread.st_state
         target_thread.st_state = new_state
@@ -1237,13 +1246,14 @@ class SmartThread:
                         logger.error(error_msg)
                         raise SmartThreadAlreadyExists(error_msg)
                 # get a unique time stamp for create_time
-                create_time = time.time()
-                while create_time == (
+                self.create_time = time.time()
+                while self.create_time == (
                         SmartThread._create_pair_array_entry_time):
-                    create_time = time.time()
+                    self.create_time = time.time()
+
                 # update last create time
-                SmartThread._create_pair_array_entry_time = create_time
-                self.create_time = create_time
+                SmartThread._create_pair_array_entry_time = self.create_time
+
                 SmartThread._registry[self.name] = self
 
                 SmartThread._registry_last_update = datetime.utcnow()
@@ -1895,11 +1905,11 @@ class SmartThread:
             # will wait behind us. Regardless of whether the thread is
             # alive and running or has already ended, we will set the
             # thread state to Alive. This is not a problem since the
-            # _get_state method will detect that case and return stopped
-            # as the state. Note that setting Alive here is our way of
-            # saying that if is_alive() is False, it's not because the
-            # the thread was not yet started, but instead means that
-            # the thread started and already ended.
+            # _get_state method will return Stopped state if is_alive()
+            # is False and the state is Alive. Note that setting Alive
+            # here is our way of saying that if is_alive() is False,
+            # it's not because the thread was not yet started, but
+            # instead means that the thread started and already ended.
 
             self._set_state(
                 target_thread=SmartThread._registry[remote],
@@ -4186,7 +4196,7 @@ class SmartThread:
                 with SmartThread._pair_array[pair_key].status_lock:
                     # if we made it as far as having set the remote sync
                     # event, then we need to back that out, but only when
-                    # the remote did not set out event yet
+                    # the remote did not set our event yet
                     if backout_request == 'smart_sync' and local_sb.sync_wait:
                         # if we are now set, then the remote did
                         # finally respond and this was a good sync,
@@ -4276,7 +4286,9 @@ class SmartThread:
                     if pk_remote.pair_key in SmartThread._pair_array:
                         # having a pair_key in the array implies our
                         # entry exists - set local_sb for easy
-                        # references
+                        # references. Note, however, that the remote
+                        # entry may not exist when our local entry was
+                        # a deferred delete case.
                         local_sb = SmartThread._pair_array[
                             pk_remote.pair_key].status_blocks[self.name]
 
@@ -4298,8 +4310,8 @@ class SmartThread:
 
                             # We may have been able to successfully
                             # complete this request despite not yet
-                            # having an alive remote (smart_recv and wait,
-                            # for example, do not require an alive
+                            # having an alive remote (smart_recv and
+                            # wait, for example, do not require an alive
                             # remote if the message or wait bit was
                             # previously delivered or set). We thus need
                             # to make sure we remove such a remote from

@@ -8183,25 +8183,38 @@ class ConfigVerifier:
     ####################################################################
     # build_backout_sync_remote_scenario
     ####################################################################
-    def build_backout_sync_remote_scenario(self) -> None:
-        """Return a list of ConfigCmd items for a create."""
+    def build_backout_sync_remote_scenario(self,
+                                           num_pending) -> None:
+        """Return a list of ConfigCmd items for sync backout scenario.
+
+        Args:
+            num_pending: number of threads that will be backed out
+
+        Notes:
+            1) The first pending thread will be stopped to cause the
+               backout to happen in the _process_sync method, and any
+               additional pending threads will not be stopped and will
+               be backed out in the _sync_wait_error_cleanup method
+
+        """
         self.auto_sync_ach_or_back_msg = False
 
-        pending_names = ['pending_0']
+        pending_names = get_names('pending_', num_pending)
         remote_names = ['remote_0']
         joiner_names = ['joiner_0']
 
         active_names: list[str] = (
-                pending_names
+                list(pending_names)
                 + remote_names
-                # + locker_names
                 + joiner_names)
 
         self.create_config(active_names=active_names)
 
-        pending_name = pending_names[0]
+        pending_name = 'pending_0'
         remote_name = remote_names[0]
         joiner_name = joiner_names[0]
+
+        timeout_remotes = pending_names - {pending_name}
 
         ################################################################
         # verify all flags off
@@ -8210,7 +8223,7 @@ class ConfigVerifier:
         self.add_cmd(VerifyConfig(
             cmd_runners=self.commander_name,
             verify_type=VerifyType.VerifyPendingFlags,
-            names_to_check=pending_name,
+            names_to_check=pending_names,
             aux_names=remote_name,
             exp_pending_flags=exp_pending_flags,
             obtain_reg_lock=False))
@@ -8220,20 +8233,22 @@ class ConfigVerifier:
         ################################################################
         sync_serial_num = self.add_cmd(Sync(
             cmd_runners=remote_name,
-            targets=pending_name,
-            sync_set_ack_remotes=pending_name,
+            targets=pending_names,
+            timeout_remotes=timeout_remotes,
+            sync_set_ack_remotes=pending_names,
             stopped_remotes=pending_name))
 
         ################################################################
         # wait for the pending_sync flag to be set in mock structures
         ################################################################
-        pair_key = st.SmartThread._get_pair_key(remote_name,
-                                                pending_name)
-        check_pend_arg: CheckPendArg = (pending_name, pair_key)
-        self.add_cmd(WaitForCondition(
-            cmd_runners=self.commander_name,
-            check_rtn=self.check_sync_event_set,
-            check_args=check_pend_arg))
+        for pending in pending_names:
+            pair_key = st.SmartThread._get_pair_key(remote_name,
+                                                    pending)
+            check_pend_arg: CheckPendArg = (pending, pair_key)
+            self.add_cmd(WaitForCondition(
+                cmd_runners=self.commander_name,
+                check_rtn=self.check_sync_event_set,
+                check_args=check_pend_arg))
 
         ################################################################
         # verify the pending flags are as expected before we do the join
@@ -8242,7 +8257,7 @@ class ConfigVerifier:
         self.add_cmd(VerifyConfig(
             cmd_runners=self.commander_name,
             verify_type=VerifyType.VerifyPendingFlags,
-            names_to_check=pending_name,
+            names_to_check=pending_names,
             aux_names=remote_name,
             exp_pending_flags=exp_pending_flags,
             obtain_reg_lock=False))
@@ -8264,9 +8279,10 @@ class ConfigVerifier:
 
         pe = self.pending_events[remote_name]
 
-        ack_key: AckKey = (pending_name, 'smart_sync_backout_remote')
+        for pending in pending_names:
+            ack_key: AckKey = (pending, 'smart_sync_backout_remote')
 
-        pe[PE.ack_msg][ack_key] += 1
+            pe[PE.ack_msg][ack_key] += 1
 
         ################################################################
         # confirm the sync is done
@@ -8645,6 +8661,88 @@ class ConfigVerifier:
                 confirm_cmd='Sync',
                 confirm_serial_num=pend_sync_serial_num,
                 confirmers=pending_name))
+
+        ################################################################
+        # verify config structures
+        ################################################################
+        self.add_cmd(VerifyConfig(
+            cmd_runners=self.commander_name,
+            verify_type=VerifyType.VerifyStructures,
+            obtain_reg_lock=True))
+
+    ####################################################################
+    # build_send_unreg_receiver_scenario
+    ####################################################################
+    def build_send_unreg_receiver_scenario(self) -> None:
+        """Return a list of ConfigCmd items for test scenario."""
+
+        sender_names = get_names('sender_', 1)
+        receiver_names = get_names('receiver_', 1)
+
+        self.create_config(active_names=sender_names | receiver_names)
+
+        ################################################################
+        # setup the messages to send
+        ################################################################
+        sender_msgs = SendRecvMsgs(
+            sender_names=sender_names,
+            receiver_names=receiver_names,
+            num_msgs=1,
+            text='build_send_unreg_receiver_scenario')
+
+        ################################################################
+        # receiver issues resume of sender to get sender del def
+        ################################################################
+        resume_serial_num = self.add_cmd(Resume(
+            cmd_runners=receiver_names,
+            targets=sender_names,
+            exp_resumed_targets=sender_names))
+
+        ################################################################
+        # confirm the resume is done
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='Resume',
+                confirm_serial_num=resume_serial_num,
+                confirmers=receiver_names))
+
+        ################################################################
+        # remove the receiver
+        ################################################################
+        self.build_exit_suite(cmd_runner=self.commander_name,
+                              names=receiver_names,
+                              validate_config=False)
+
+        self.add_cmd(
+            Join(cmd_runners=self.commander_name,
+                 join_names=receiver_names))
+
+        ################################################################
+        # issue the send to drive the path in _get_target_state that
+        # sees receiver is not in the registry and it's pk_remote
+        # create_time is zero, so it returns ThreadState.Unregistered
+        ################################################################
+        send_serial_num = self.add_cmd(SendMsgTimeoutTrue(
+            cmd_runners=sender_names,
+            receivers=receiver_names,
+            exp_receivers=set(),
+            timeout=1,
+            unreg_timeout_names=receiver_names,
+            fullq_timeout_names=set(),
+            msgs_to_send=sender_msgs,
+            msg_idx=0))
+
+        ################################################################
+        # confirm the send is done
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='SendMsgTimeoutTrue',
+                confirm_serial_num=send_serial_num,
+                confirmers=sender_names))
 
         ################################################################
         # verify config structures
@@ -28081,17 +28179,23 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_backout_sync_remote_scenario
     ####################################################################
+    @pytest.mark.parametrize("num_pending_arg", [1, 2, 3])
+    # @pytest.mark.cover2
     def test_backout_sync_remote_scenario(
             self,
+            num_pending_arg: int,
             caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test meta configuration scenarios.
 
         Args:
+            num_pending_arg: number of pending threads
             caplog: pytest fixture to capture log output
 
         """
-        args_for_scenario_builder: dict[str, Any] = {}
+        args_for_scenario_builder: dict[str, Any] = {
+            'num_pending': num_pending_arg
+        }
 
         scenario_driver(
             scenario_builder=ConfigVerifier.build_backout_sync_remote_scenario,
@@ -28178,6 +28282,32 @@ class TestSmartBasicScenarios:
 
         scenario_driver(
             scenario_builder=ConfigVerifier.build_sync_create_time_scenario,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
+
+    ####################################################################
+    # test_send_unreg_receiver_scenario
+    ####################################################################
+    @pytest.mark.cover2
+    def test_send_unreg_receiver_scenario(
+            self,
+            caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            caplog: pytest fixture to capture log output
+
+        Notes:
+            1) Test that the _get_target_state method returns
+               ThreadState.Unregistered for smart_send when the receiver
+               has not yet been started
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {}
+
+        scenario_driver(
+            scenario_builder=ConfigVerifier.build_send_unreg_receiver_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 
