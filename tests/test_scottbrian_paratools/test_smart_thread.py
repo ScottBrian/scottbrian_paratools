@@ -8753,6 +8753,103 @@ class ConfigVerifier:
             obtain_reg_lock=True))
 
     ####################################################################
+    # build_join_simple_timeout_scenario
+    ####################################################################
+    def build_join_simple_timeout_scenario(self) -> None:
+        """Return a list of ConfigCmd items for test scenario."""
+
+        target_names = get_names('target_', 1)
+        joiner_names = get_names('joiner_', 1)
+
+        self.create_config(reg_names=target_names,
+                           active_names=joiner_names)
+
+        timeout_time = 0.5
+        ################################################################
+        # join
+        ################################################################
+        join_serial_num = self.add_cmd(
+            JoinTimeoutTrue(cmd_runners=joiner_names,
+                            join_names=target_names,
+                            timeout=timeout_time,
+                            timeout_names=target_names))
+
+        ################################################################
+        # confirm the join is done
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='JoinTimeoutTrue',
+                confirm_serial_num=join_serial_num,
+                confirmers=joiner_names))
+
+        ################################################################
+        # verify config structures
+        ################################################################
+        self.add_cmd(VerifyConfig(
+            cmd_runners=self.commander_name,
+            verify_type=VerifyType.VerifyStructures,
+            obtain_reg_lock=True))
+
+    ####################################################################
+    # build_wait_simple_deadlock_scenario
+    ####################################################################
+    def build_wait_simple_deadlock_scenario(self) -> None:
+        """Return a list of ConfigCmd items for test scenario."""
+
+        waiter_names = get_names('waiter_', 2)
+
+        self.create_config(active_names=waiter_names)
+
+        ################################################################
+        # waiter_0
+        ################################################################
+        wait_0_serial_num = self.add_cmd(
+            Wait(cmd_runners='waiter_0',
+                 resumers='waiter_1',
+                 exp_resumers=set(),
+                 deadlock_remotes='waiter_1'))
+
+        ################################################################
+        # waiter_1
+        ################################################################
+        wait_1_serial_num = self.add_cmd(
+            Wait(cmd_runners='waiter_1',
+                 resumers='waiter_0',
+                 exp_resumers=set(),
+                 deadlock_remotes='waiter_0'))
+
+
+        ################################################################
+        # confirm the wait_0 is done
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='Wait',
+                confirm_serial_num=wait_0_serial_num,
+                confirmers='waiter_0'))
+
+        ################################################################
+        # confirm the wait_1 is done
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='Wait',
+                confirm_serial_num=wait_1_serial_num,
+                confirmers='waiter_1'))
+
+        ################################################################
+        # verify config structures
+        ################################################################
+        self.add_cmd(VerifyConfig(
+            cmd_runners=self.commander_name,
+            verify_type=VerifyType.VerifyStructures,
+            obtain_reg_lock=True))
+
+    ####################################################################
     # check_pending_events
     ####################################################################
     def check_sync_event_set(self,
@@ -28288,7 +28385,7 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_send_unreg_receiver_scenario
     ####################################################################
-    @pytest.mark.cover2
+    # @pytest.mark.cover2
     def test_send_unreg_receiver_scenario(
             self,
             caplog: pytest.LogCaptureFixture
@@ -28308,6 +28405,59 @@ class TestSmartBasicScenarios:
 
         scenario_driver(
             scenario_builder=ConfigVerifier.build_send_unreg_receiver_scenario,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
+
+    ####################################################################
+    # test_join_simple_timeout_scenario
+    ####################################################################
+    # @pytest.mark.cover2
+    def test_join_simple_timeout_scenario(
+            self,
+            caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            caplog: pytest fixture to capture log output
+
+        Notes:
+            1) Test that the _get_target_state method returns
+               ThreadState.Unregistered for smart_send when the receiver
+               has not yet been started
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {}
+
+        scenario_driver(
+            scenario_builder=ConfigVerifier.build_join_simple_timeout_scenario,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
+
+    ####################################################################
+    # test_wait_simple_deadlock_scenario
+    ####################################################################
+    @pytest.mark.cover2
+    def test_wait_simple_deadlock_scenario(
+            self,
+            caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            caplog: pytest fixture to capture log output
+
+        Notes:
+            1) Test that the _get_target_state method returns
+               ThreadState.Unregistered for smart_send when the receiver
+               has not yet been started
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {}
+
+        scenario_driver(
+            scenario_builder=
+            ConfigVerifier.build_wait_simple_deadlock_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 
