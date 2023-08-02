@@ -8850,6 +8850,44 @@ class ConfigVerifier:
             obtain_reg_lock=True))
 
     ####################################################################
+    # build_sync_unreg_simple_scenario
+    ####################################################################
+    def build_sync_unreg_simple_scenario(self) -> None:
+        """Return a list of ConfigCmd items for test scenario."""
+
+        self.create_config(reg_names={'sync_0'},
+                           active_names={'sync_1'})
+
+        timeout_time = 0.5
+        ################################################################
+        # waiter_0
+        ################################################################
+        sync_1_serial_num = self.add_cmd(
+            SyncTimeoutTrue(cmd_runners='sync_1',
+                            targets='sync_0',
+                            timeout=timeout_time,
+                            timeout_remotes='sync_0',
+                            sync_set_ack_remotes=set()))
+
+        ################################################################
+        # confirm the wait_1 is done
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='SyncTimeoutTrue',
+                confirm_serial_num=sync_1_serial_num,
+                confirmers='sync_1'))
+
+        ################################################################
+        # verify config structures
+        ################################################################
+        self.add_cmd(VerifyConfig(
+            cmd_runners=self.commander_name,
+            verify_type=VerifyType.VerifyStructures,
+            obtain_reg_lock=True))
+
+    ####################################################################
     # check_pending_events
     ####################################################################
     def check_sync_event_set(self,
@@ -28437,7 +28475,7 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_wait_simple_deadlock_scenario
     ####################################################################
-    @pytest.mark.cover2
+    # @pytest.mark.cover2
     def test_wait_simple_deadlock_scenario(
             self,
             caplog: pytest.LogCaptureFixture
@@ -28458,6 +28496,33 @@ class TestSmartBasicScenarios:
         scenario_driver(
             scenario_builder=
             ConfigVerifier.build_wait_simple_deadlock_scenario,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
+
+    ####################################################################
+    # test_sync_unreg_simple_scenario
+    ####################################################################
+    @pytest.mark.cover2
+    def test_sync_unreg_simple_scenario(
+            self,
+            caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            caplog: pytest fixture to capture log output
+
+        Notes:
+            1) Drive the path in _process_sync where _get_target_state
+               method returns ThreadState.Unregistered and the local
+               sync gives more time
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {}
+
+        scenario_driver(
+            scenario_builder=
+            ConfigVerifier.build_sync_unreg_simple_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 
