@@ -654,6 +654,7 @@ class ThreadState(Flag):
     Starting = auto()
     Alive = auto()
     Stopped = auto()
+    Unregistering = auto()
 
 
 ########################################################################
@@ -896,7 +897,10 @@ class SmartThread:
         # set the cmd_runner name if it is valid (if not valid, we raise
         # an error after we issue the smart_init entry log message with
         # the current thread name)
-        if not thread and not target and isinstance(name, str):
+        if (not thread
+                and not target
+                and isinstance(name, str)
+                and name != ''):
             self.cmd_runner = name
         else:
             self.cmd_runner = threading.current_thread().name
@@ -908,13 +912,13 @@ class SmartThread:
             remotes={name},
             latest=2)
 
-        if not isinstance(name, str):
+        if not isinstance(name, str) or name == '':
             error_msg = (
                 f'SmartThread {threading.current_thread().name} raising '
                 'SmartThreadIncorrectNameSpecified error while processing '
                 'request smart_init. '
-                f'The input {name=} is incorrect. Please specify a str for'
-                f'the name.')
+                f'The input {name=} is incorrect. Please specify a '
+                f'non-empty string for the name.')
             logger.error(error_msg)
             raise SmartThreadIncorrectNameSpecified(error_msg)
         self.name = name
@@ -1329,7 +1333,7 @@ class SmartThread:
             logger.debug(
                 f'name={key}, {is_alive=}, state={state}, '
                 f'smart_thread={item}')
-            if item.st_state == ThreadState.Stopped:
+            if item.st_state == ThreadState.Unregistering:
                 keys_to_del.append(key)
 
             if key != item.name:
@@ -1350,7 +1354,8 @@ class SmartThread:
                          f'request: {self.request.value}')
             logger.debug(
                 f'{self.cmd_runner} set '
-                f'state for thread {key} from {ThreadState.Stopped} to '
+                f'state for thread {key} from '
+                f'{ThreadState.Unregistering} to '
                 f'{ThreadState.Unregistered}', stacklevel=1)
 
         # update time only when we made a change
@@ -2009,7 +2014,7 @@ class SmartThread:
                     else:
                         self._set_state(
                             target_thread=SmartThread._registry[remote],
-                            new_state=ThreadState.Stopped)
+                            new_state=ThreadState.Unregistering)
 
                         self.work_remotes -= {remote}
                         self.unreged_targets |= {remote}
@@ -2208,9 +2213,13 @@ class SmartThread:
         if SmartThread._registry[remote].thread.is_alive():
             return False  # give thread more time to end
         else:
+            if SmartThread._registry[remote].st_state == ThreadState.Alive:
+                self._set_state(
+                    target_thread=SmartThread._registry[remote],
+                    new_state=ThreadState.Stopped)
             self._set_state(
                 target_thread=SmartThread._registry[remote],
-                new_state=ThreadState.Stopped)
+                new_state=ThreadState.Unregistering)
 
         # restart while loop with one less remote
         return True
@@ -4775,6 +4784,18 @@ class SmartThread:
                 remotes = {remotes}
             else:
                 remotes = set(remotes)
+
+        if '' in remotes:
+            error_msg = (
+                f'SmartThread {threading.current_thread().name} raising '
+                'SmartThreadInvalidInput error while processing '
+                f'request {self.request}. '
+                f'A remote thread name was detected to be an empty '
+                f'string: {remotes}. Thread names must be non-empty '
+                f'strings.')
+
+            logger.error(error_msg)
+            raise SmartThreadInvalidInput(error_msg)
 
         exit_log_msg = self._issue_entry_log_msg(
             request=self.request,
