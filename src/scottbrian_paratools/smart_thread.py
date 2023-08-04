@@ -1697,9 +1697,20 @@ class SmartThread:
     ####################################################################
     # _get_set
     ####################################################################
-    @staticmethod
-    def _get_set(item: Optional[Iterable] = None):
-        return set({item} if isinstance(item, str) else item or '')
+    def _get_set(self,
+                 item: Optional[Iterable] = None):
+        try:
+            return set({item} if isinstance(item, str) else item or '')
+        except TypeError:
+            error_msg = (
+                f'SmartThread {threading.current_thread().name} raising '
+                'SmartThreadInvalidInput error while processing '
+                f'request {self.request}. '
+                f'It was detected that an argument for remote thread names '
+                f'is not of type Iterable. Please specify an iterable, '
+                f'such as a list of thread names.')
+            logger.error(error_msg)
+            raise SmartThreadInvalidInput(error_msg)
 
     ####################################################################
     # start
@@ -1796,6 +1807,8 @@ class SmartThread:
         # more than one start at a time. The first start will work, the
         # others will fail with an already started error.
         with self.cmd_lock:
+            self.request = ReqType.Smart_start
+            self.started_targets = set()
             if targets is None:
                 targets = {self.name}
             else:
@@ -1835,8 +1848,6 @@ class SmartThread:
                         logger.error(error_msg)
                         raise SmartThreadRemoteThreadNotRegistered(error_msg)
 
-            self.request = ReqType.Smart_start
-            self.started_targets = set()
             request_block = self._request_setup(
                 remotes=targets,
                 error_stopped_target=True,
@@ -4783,7 +4794,7 @@ class SmartThread:
             raise SmartThreadInvalidInput(error_msg)
         else:
             for name in remotes:
-                if not (isinstance(name, str) or name):
+                if not (isinstance(name, str) and name):
                     if not isinstance(name, str):
                         fillin_text = 'not a string'
                     else:
@@ -4792,7 +4803,7 @@ class SmartThread:
                         f'SmartThread {threading.current_thread().name} '
                         f'raising SmartThreadInvalidInput error while '
                         f'processing request {self.request}. '
-                        f'It was detected that the name {name} specified '
+                        f'It was detected that the {name=} specified '
                         f'for a remote thread is {fillin_text}. Please '
                         f'specify a non-empty string for the thread name. ')
 

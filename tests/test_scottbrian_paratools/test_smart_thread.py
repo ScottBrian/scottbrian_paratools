@@ -26760,6 +26760,136 @@ class TestSmartThreadErrors:
         logger.debug('mainline exiting')
 
     ####################################################################
+    # test_get_set_errors
+    ####################################################################
+    def test_get_set_errors(self) -> None:
+        """Test error cases for SmartThread."""
+        logger.debug('mainline entered')
+        alpha_thread = st.SmartThread(name='alpha')
+
+        ################################################################
+        # SmartThreadInvalidInput - not a string
+        ################################################################
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_start(targets=42)
+
+        exp_error_msg = (
+            f'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing '
+            f'request smart_start. '
+            f'It was detected that an argument for remote thread names '
+            f'is not of type Iterable. Please specify an iterable, '
+            f'such as a list of thread names.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_unreg(targets=42)
+
+        exp_error_msg = (
+            f'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing '
+            f'request smart_unreg. '
+            f'It was detected that an argument for remote thread names '
+            f'is not of type Iterable. Please specify an iterable, '
+            f'such as a list of thread names.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_join(targets=43)
+
+        exp_error_msg = (
+            f'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing '
+            f'request smart_join. '
+            f'It was detected that an argument for remote thread names '
+            f'is not of type Iterable. Please specify an iterable, '
+            f'such as a list of thread names.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_recv(senders=44)
+
+        exp_error_msg = (
+            f'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing '
+            f'request smart_recv. '
+            f'It was detected that an argument for remote thread names '
+            f'is not of type Iterable. Please specify an iterable, '
+            f'such as a list of thread names.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_wait(resumers=45)
+
+        exp_error_msg = (
+            f'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing '
+            f'request smart_wait. '
+            f'It was detected that an argument for remote thread names '
+            f'is not of type Iterable. Please specify an iterable, '
+            f'such as a list of thread names.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_resume(waiters=46)
+
+        exp_error_msg = (
+            f'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing '
+            f'request smart_resume. '
+            f'It was detected that an argument for remote thread names '
+            f'is not of type Iterable. Please specify an iterable, '
+            f'such as a list of thread names.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_sync(targets=47)
+
+        exp_error_msg = (
+            f'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing '
+            f'request smart_sync. '
+            f'It was detected that an argument for remote thread names '
+            f'is not of type Iterable. Please specify an iterable, '
+            f'such as a list of thread names.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
     # test_smart_start_errors
     ####################################################################
     def test_smart_start_errors(self) -> None:
@@ -27683,6 +27813,22 @@ class TestSmartThreadErrors:
         # SmartThreadInvalidInput - no remotes
         ################################################################
         with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_start(targets=set())
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing '
+            'request smart_start. '
+            'Remote threads are required for the request but none were '
+            'specified.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
             alpha_thread.smart_unreg(targets=set())
 
         exp_error_msg = (
@@ -27780,14 +27926,30 @@ class TestSmartThreadErrors:
         # SmartThreadInvalidInput - not a string
         ################################################################
         with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_unreg(targets=42)
+            alpha_thread.smart_start(targets=[42.2])
+
+        exp_error_msg = (
+            f'SmartThread alpha '
+            f'raising SmartThreadInvalidInput error while '
+            f'processing request smart_start. '
+            f'It was detected that the name=42.2 specified '
+            f'for a remote thread is not a string. Please '
+            f'specify a non-empty string for the thread name. ')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            alpha_thread.smart_unreg(targets=[42, ''])
 
         exp_error_msg = (
             f'SmartThread alpha '
             f'raising SmartThreadInvalidInput error while '
             f'processing request smart_unreg. '
-            f'It was detected that the name 42 specified '
-            f'for a remote thread is not a string. Please '
+            f"It was detected that the name=(42|'') specified "
+            f'for a remote thread is (not a|an empty) string. Please '
             f'specify a non-empty string for the thread name. ')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
@@ -27797,13 +27959,13 @@ class TestSmartThreadErrors:
         ################################################################
 
         with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_join(targets=43)
+            alpha_thread.smart_join(targets=(43, ))
 
         exp_error_msg = (
             f'SmartThread alpha '
             f'raising SmartThreadInvalidInput error while '
             f'processing request smart_join. '
-            f'It was detected that the name 43 specified '
+            f'It was detected that the name=43 specified '
             f'for a remote thread is not a string. Please '
             f'specify a non-empty string for the thread name. ')
 
@@ -27814,14 +27976,14 @@ class TestSmartThreadErrors:
         ################################################################
 
         with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_recv(senders=44)
+            alpha_thread.smart_recv(senders={'', 44})
 
         exp_error_msg = (
             f'SmartThread alpha '
             f'raising SmartThreadInvalidInput error while '
             f'processing request smart_recv. '
-            f'It was detected that the name 44 specified '
-            f'for a remote thread is not a string. Please '
+            f"It was detected that the name=(''|44) specified "
+            f'for a remote thread is (not a|an empty) string. Please '
             f'specify a non-empty string for the thread name. ')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
@@ -27831,13 +27993,13 @@ class TestSmartThreadErrors:
         ################################################################
 
         with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_wait(resumers=45)
+            alpha_thread.smart_wait(resumers=[45, 'beta'])
 
         exp_error_msg = (
             f'SmartThread alpha '
             f'raising SmartThreadInvalidInput error while '
             f'processing request smart_wait. '
-            f'It was detected that the name 45 specified '
+            f'It was detected that the name=45 specified '
             f'for a remote thread is not a string. Please '
             f'specify a non-empty string for the thread name. ')
 
@@ -27848,14 +28010,14 @@ class TestSmartThreadErrors:
         ################################################################
 
         with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_resume(waiters=46)
+            alpha_thread.smart_resume(waiters='')
 
         exp_error_msg = (
             f'SmartThread alpha '
             f'raising SmartThreadInvalidInput error while '
             f'processing request smart_resume. '
-            f'It was detected that the name 46 specified '
-            f'for a remote thread is not a string. Please '
+            f"It was detected that the name='' specified "
+            f'for a remote thread is an empty string. Please '
             f'specify a non-empty string for the thread name. ')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
@@ -27865,14 +28027,14 @@ class TestSmartThreadErrors:
         ################################################################
 
         with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            alpha_thread.smart_sync(targets=47)
+            alpha_thread.smart_sync(targets=('a', 47, 48, ''))
 
         exp_error_msg = (
             f'SmartThread alpha '
             f'raising SmartThreadInvalidInput error while '
             f'processing request smart_sync. '
-            f'It was detected that the name 47 specified '
-            f'for a remote thread is not a string. Please '
+            f"It was detected that the name=(47|48|'') specified "
+            f'for a remote thread is (not a|an empty) string. Please '
             f'specify a non-empty string for the thread name. ')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
