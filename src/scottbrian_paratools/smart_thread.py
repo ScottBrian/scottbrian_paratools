@@ -6,16 +6,15 @@ SmartThread
 
 The SmartThread class makes it easy to create and use threads in a
 multithreaded application. It provides configuration, messaging,
-and resume/wait/sync methods It will also detect various error
+and resume/wait/sync methods. It will also detect various error
 conditions, such as when a thread becomes unresponsive because it has
 ended.
 
 SmartThread is built on top of the Python threading module. There are
 three cases where SmartThread can be instantiated:
 
-    1) SmartThread is instantiated with no arguments for *target* nor
-       *thread*. Internal variable *thread* is set from
-       ''threading.current_thread()''.
+    1) SmartThread is instantiated for the current thread. Internal
+       variable *thread* is set from ''threading.current_thread()''.
     2) SmartThread is instantiated with a *target* argument that
        specifies a routine that is to get control in a new thread.
        Internal variable *thread* is set from ''threading.Thread()''
@@ -68,6 +67,9 @@ are described as a ThreadState as follows:
        ThreadState.Registered or ThreadState.Alive state, it is still
        considered to be in the Threading.Stopped state for the duration
        of the request.
+    7) Threading.Unregistering: the SmartThread instance exists and is
+       in the process of being removed from the configuration via a
+       smart_unreg command or a smart_join command.
 
 The SmartThread requests can be divided into category's as follows:
 
@@ -107,12 +109,13 @@ and ThreadState transitions:
     3) ''smart_unreg()'':
         a) requires ThreadState.Registered. An error is raised if the
            SmartThread instance is in any other state
-        b) removes the SmartThread instance from the registry and
+        b) sets the state to ThreadState.Unregistering
+        c) removes the SmartThread instance from the registry and
            removes the status blocks from the pair array for any an all
            combinations involving the SmartThread being unregistered
-        c) by virtue of being removed from the registry, the state
+        d) by virtue of being removed from the registry, the state
            becomes ThreadState.Unregistered
-        d) the SmartThread instance may remain is scope, but it can
+        e) the SmartThread instance may remain is scope, but it can
            not be started or enacted upon by any command at this point.
            The name can be used again for a newly created instance.
     4) ''smart_join()'':
@@ -121,12 +124,13 @@ and ThreadState transitions:
            if the SmartThread instance is in any other state. If needed,
            ''smart_join()'' will loop until the SmartThread instance
            enters ThreadState.Stopped or a timeout is recognized
-        b) removes the SmartThread instance from the registry and
+        b) sets the state to ThreadState.Unregistering
+        c) removes the SmartThread instance from the registry and
            removes the status blocks from the pair array for any an all
            combinations involving the SmartThread being unregistered
-        c) by virtue of being removed from the registry, the state
+        d) by virtue of being removed from the registry, the state
            becomes ThreadState.Unregistered
-        d) the SmartThread instance may remain is scope, but it can
+        e) the SmartThread instance may remain is scope, but it can
            not be started or enacted upon by any command at this point.
            The name can be used again for a newly created instance.
 
@@ -149,7 +153,7 @@ instance with the same SmartThread name.
 
 .. code-block:: python
 
-    from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+    from scottbrian_paratools.smart_thread import SmartThread
 
     def f1() -> None:
         print('f1 beta entered')
@@ -164,11 +168,9 @@ instance with the same SmartThread name.
                                     target=f1,
                                     auto_start=False)
     beta_smart_thread.smart_start()
-    recvd_msgs = RecvMsgs()
-    alpha_smart_thread.smart_recv(
-        received_msgs=recvd_msgs,
-        senders='beta')
-    print(recvd_msgs.recv_msgs['beta'])
+
+    recvd_msgs = alpha_smart_thread.smart_recv(senders='beta')
+    print(recvd_msgs['beta'])
     alpha_smart_thread.smart_resume(waiters='beta')
     alpha_smart_thread.smart_join(targets='beta')
     print('mainline alpha exiting')
@@ -185,6 +187,12 @@ Expected output for Example 1::
     f1 beta exiting
     mainline alpha exiting
 
+    mainline alpha entered
+    f1 beta entered
+    ['hi alpha, this is beta']
+    f1 beta exiting
+    mainline alpha exiting
+
 
 :Example 2: Create a SmartThread configuration for threads named
             alpha and beta, send and receive a message, and resume a
@@ -193,7 +201,7 @@ Expected output for Example 1::
 
 .. code-block:: python
 
-    from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+    from scottbrian_paratools.smart_thread import SmartThread
 
     def f1(smart_thread: SmartThread) -> None:
         print('f1 beta entered')
@@ -208,11 +216,8 @@ Expected output for Example 1::
                 target=f1,
                 auto_start=True,
                 thread_parm_name='smart_thread')
-    recvd_msgs = RecvMsgs()
-    alpha_smart_thread.smart_recv(
-        received_msgs=recvd_msgs,
-        senders='beta')
-    print(recvd_msgs.recv_msgs['beta'])
+    recvd_msgs = alpha_smart_thread.smart_recv(senders='beta')
+    print(recvd_msgs['beta'])
     alpha_smart_thread.smart_resume(waiters='beta')
     alpha_smart_thread.smart_join(targets='beta')
     print('mainline alpha exiting')
@@ -238,7 +243,7 @@ Expected output for Example 2::
 
 .. code-block:: python
 
-    from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+    from scottbrian_paratools.smart_thread import SmartThread
     import threading
 
     def f1() -> None:
@@ -253,11 +258,8 @@ Expected output for Example 2::
     alpha_smart_thread = SmartThread(name='alpha')
     beta_thread = threading.Thread(target=f1, name='beta')
     beta_thread.start()
-    recvd_msgs = RecvMsgs()
-    alpha_smart_thread.smart_recv(
-        received_msgs=recvd_msgs,
-        senders='beta')
-    print(recvd_msgs.recv_msgs['beta'])
+    recvd_msgs = alpha_smart_thread.smart_recv(senders='beta')
+    print(recvd_msgs['beta'])
     alpha_smart_thread.smart_resume(waiters='beta')
     alpha_smart_thread.smart_join(targets='beta')
     print('mainline alpha exiting')
@@ -284,7 +286,7 @@ Expected output for Example 3::
 
 .. code-block:: python
 
-    from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+    from scottbrian_paratools.smart_thread import SmartThread
     import threading
     import time
 
@@ -309,11 +311,8 @@ Expected output for Example 3::
     print('mainline alpha entered')
     alpha_smart_thread = SmartThread(name='alpha')
     ThreadApp(name='beta')
-    recvd_msgs = RecvMsgs()
-    alpha_smart_thread.smart_recv(
-        received_msgs=recvd_msgs,
-        senders='beta')
-    print(recvd_msgs.recv_msgs['beta'])
+    recvd_msgs = alpha_smart_thread.smart_recv(senders='beta')
+    print(recvd_msgs['beta'])
     time.sleep(2)
     print('alpha about to resume beta')
     alpha_smart_thread.smart_resume(waiters='beta')
@@ -344,11 +343,12 @@ Expected output for Example 4::
 
 .. code-block:: python
 
-    from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+    from scottbrian_paratools.smart_thread import SmartThread
     import threading
     import time
 
     class SmartThreadApp(threading.Thread, SmartThread):
+
         def __init__(self, name: str) -> None:
             threading.Thread.__init__(self, name=name)
             SmartThread.__init__(self,
@@ -368,11 +368,8 @@ Expected output for Example 4::
     print('mainline alpha entered')
     alpha_smart_thread = SmartThread(name='alpha')
     SmartThreadApp(name='beta')
-    recvd_msgs = RecvMsgs()
-    alpha_smart_thread.smart_recv(
-        received_msgs=recvd_msgs,
-        senders='beta')
-    print(recvd_msgs.recv_msgs['beta'])
+    recvd_msgs = alpha_smart_thread.smart_recv(senders='beta')
+    print(recvd_msgs['beta'])
     time.sleep(2)
     print('alpha about to resume beta')
     alpha_smart_thread.smart_resume(waiters='beta')
@@ -655,19 +652,6 @@ class ThreadState(Flag):
     Alive = auto()
     Stopped = auto()
     Unregistering = auto()
-
-
-########################################################################
-# WaitFor Class
-# Used on the smart_wait to specify whether to wait for:
-#     All: every remote specified in the remotes argument must
-#         do a resume to complete the wait
-#     Any: any remote that does a resume will complete the wait
-########################################################################
-class WaitFor(Enum):
-    """Choices for how many remote threads required for completion."""
-    All = auto()
-    Any = auto()
 
 
 ########################################################################
@@ -2323,22 +2307,19 @@ class SmartThread:
             2) send a single message to multiple remote threads
             3) send multiple messages to a single remote thread
             4) send multiple messages to multiple remote threads
-            6) send any mixture of single and multiple messages
+            5) send any mixture of single and multiple messages
                individually to each remote thread via *msg_dict*.
 
         **Example 1:** send a single message to a single remote thread
 
         .. code-block:: python
 
-            from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+            from scottbrian_paratools.smart_thread import SmartThread
 
             def f1(smart_thread: SmartThread) -> None:
                 print('f1 beta entered')
-                recvd_msgs = RecvMsgs()
-                smart_thread.smart_recv(
-                    received_msgs=recvd_msgs,
-                    senders='alpha')
-                print(recvd_msgs.recv_msgs['alpha'])
+                recvd_msgs = smart_thread.smart_recv(senders='alpha')
+                print(recvd_msgs['alpha'])
                 print('f1 beta exiting')
 
             print('mainline alpha entered')
@@ -2367,18 +2348,15 @@ class SmartThread:
 
         .. code-block:: python
 
-            from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+            from scottbrian_paratools.smart_thread import SmartThread
             import time
 
             def f1(smart_thread: SmartThread) -> None:
                 if smart_thread.name == 'charlie':
-                    time.sleep(0.5)  # delay for non-interleaved msgs
+                    time.sleep(1)  # delay to control msg interleaving
                 print(f'f1 {smart_thread.name} entered')
-                recvd_msgs = RecvMsgs()
-                smart_thread.smart_recv(
-                    received_msgs=recvd_msgs,
-                    senders='alpha')
-                print(recvd_msgs.recv_msgs['alpha'])
+                recvd_msgs = smart_thread.smart_recv(senders='alpha')
+                print(recvd_msgs['alpha'])
                 print(f'f1 {smart_thread.name} exiting')
             print('mainline alpha entered')
             alpha_smart_thread = SmartThread(name='alpha')
@@ -2413,15 +2391,12 @@ class SmartThread:
 
         .. code-block:: python
 
-            from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+            from scottbrian_paratools.smart_thread import SmartThread
 
             def f1(smart_thread: SmartThread) -> None:
                 print(f'f1 {smart_thread.name} entered')
-                recvd_msgs = RecvMsgs()
-                smart_thread.smart_recv(
-                    received_msgs=recvd_msgs,
-                    senders='alpha')
-                print(recvd_msgs.recv_msgs['alpha'])
+                recvd_msgs = smart_thread.smart_recv(senders='alpha')
+                print(recvd_msgs['alpha'])
                 print(f'f1 {smart_thread.name} exiting')
 
             print('mainline alpha entered')
@@ -2430,7 +2405,8 @@ class SmartThread:
                         target=f1,
                         thread_parm_name='smart_thread')
             alpha_smart_thread.smart_send(msg=('hello beta',
-                                          'have a great day', 42))
+                                          'have a great day', 42),
+                                          receivers='beta')
             alpha_smart_thread.smart_join(targets='beta')
             print('mainline alpha exiting')
 
@@ -2450,7 +2426,7 @@ class SmartThread:
 
         .. code-block:: python
 
-            from scottbrian_paratools.smart_thread import SmartThread, RecvMsgs
+            from scottbrian_paratools.smart_thread import SmartThread
 
             def f1(smart_thread: SmartThread,
                    wait_for: Optional[str] = None,
@@ -2458,11 +2434,8 @@ class SmartThread:
                 if wait_for:
                     smart_thread.smart_wait(resumers=wait_for)
                 print(f'f1 {smart_thread.name} entered')
-                recvd_msgs = RecvMsgs()
-                smart_thread.smart_recv(
-                    received_msgs=recvd_msgs,
-                    senders='alpha')
-                print(recvd_msgs.recv_msgs['alpha'])
+                recvd_msgs = smart_thread.smart_recv(senders='alpha')
+                print(recvd_msgs['alpha'])
                 print(f'f1 {smart_thread.name} exiting')
                 if resume_target:
                     smart_thread.smart_resume(waiters=resume_target)
@@ -2483,9 +2456,11 @@ class SmartThread:
                         thread_parm_name='smart_thread',
                         kwargs={'wait_for': 'charlie',
                                 'resume_target': 'alpha'})
-            alpha_smart_thread.smart_send(
-                msg=['hello remotes', 'have a great day', 42],
-                receivers=['beta', 'charlie', 'delta'])
+            alpha_smart_thread.smart_send(msg=['hello remotes',
+                                               'have a great day', 42],
+                                          receivers=['beta',
+                                                     'charlie',
+                                                     'delta'])
             alpha_smart_thread.smart_wait(resumers='delta')
             alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
             print('mainline alpha exiting')
@@ -2513,8 +2488,7 @@ class SmartThread:
 
         .. code-block:: python
 
-            from scottbrian_paratools.smart_thread import (SmartThread,
-                                                           SendMsgs)
+            from scottbrian_paratools.smart_thread import SmartThread
 
             def f1(smart_thread: SmartThread,
                    wait_for: Optional[str] = None,
@@ -2522,11 +2496,8 @@ class SmartThread:
                 if wait_for:
                     smart_thread.smart_wait(resumers=wait_for)
                 print(f'f1 {smart_thread.name} entered')
-                recvd_msgs = RecvMsgs()
-                smart_thread.smart_recv(
-                    received_msgs=recvd_msgs,
-                    senders='alpha')
-                print(recvd_msgs.recv_msgs['alpha'])
+                recvd_msgs = smart_thread.smart_recv(senders='alpha')
+                print(recvd_msgs['alpha'])
                 print(f'f1 {smart_thread.name} exiting')
                 if resume_target:
                     smart_thread.smart_resume(waiters=resume_target)
@@ -2547,11 +2518,11 @@ class SmartThread:
                         thread_parm_name='smart_thread',
                         kwargs={'wait_for': 'charlie',
                                 'resume_target': 'alpha'})
-            msgs_to_send = SendMsgs(send_msgs={
+            msgs_to_send = {
                 'beta': 'hi beta',
                 'charlie': ('hi charlie', 'have a great day'),
-                'delta': [42, 'hi delta', {'nums': (1, 2, 3)}]})
-            alpha_smart_thread.smart_send(msg=msgs_to_send)
+                'delta': [42, 'hi delta', {'nums': (1, 2, 3)}]}
+            alpha_smart_thread.smart_send(msg_dict=msgs_to_send)
             alpha_smart_thread.smart_wait(resumers='delta')
             alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
             print('mainline alpha exiting')
@@ -3293,10 +3264,11 @@ class SmartThread:
             2) smart_wait can provide multiple remote thread names as an
                argument for the *resumers* parameter and will then wait
                for:
-               a) at least the number of resumes specified for
-                  *resumer_count*
-               b) all specified *resumers* if *resumer_count* is not
-                  specified
+
+                   a) at least the number of resumes specified for
+                      *resumer_count*
+                   b) all specified *resumers* if *resumer_count* is not
+                      specified
 
         *smart_wait* will raise an error if any of the specified
         *resumers* become inactive before the *smart_wait* is satisfied.
@@ -3324,14 +3296,14 @@ class SmartThread:
 
             def f1(smart_thread: SmartThread) -> None:
                 print(f'f1 {smart_thread.name} about to wait')
-                resumers = smart_thread.smart_wait(resumers='alpha')
-                print(f'f1 {smart_thread.name} resumed by {resumers=}')
+                resumed_by = smart_thread.smart_wait(resumers='alpha')
+                print(f'f1 {smart_thread.name} resumed by {resumed_by}')
 
             print('mainline alpha entered')
             alpha_smart_thread = SmartThread(name='alpha')
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread')
+            SmartThread(name='beta',
+                        target=f1,
+                        thread_parm_name='smart_thread')
             time.sleep(1)  # allow time for smart_wait to be issued
             print('alpha about to resume beta')
             alpha_smart_thread.smart_resume(waiters='beta')
@@ -3344,10 +3316,10 @@ class SmartThread:
 
         Expected output for Example 1::
 
-            mainline alpha entered
+            mainline alpha entered\
             f1 beta about to wait
             alpha about to resume beta
-            f1 beta resumed by resumers=['alpha']
+            f1 beta resumed by {'alpha'}
             mainline alpha exiting
 
         **Example 2:** smart_wait preceded by smart_resume
@@ -3360,16 +3332,17 @@ class SmartThread:
             def f1(smart_thread: SmartThread) -> None:
                 time.sleep(1)  # allow time for smart_resume to be issued
                 print(f'f1 {smart_thread.name} about to wait')
-                resumers = smart_thread.smart_wait(resumers='alpha')
-                print(f'f1 {smart_thread.name} resumed by {resumers=}')
+                resumed_by = smart_thread.smart_wait(resumers='alpha')
+                print(f'f1 {smart_thread.name} resumed by {resumed_by}')
 
             print('mainline alpha entered')
             alpha_smart_thread = SmartThread(name='alpha')
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread')
+            SmartThread(name='beta',
+                        target=f1,
+                        thread_parm_name='smart_thread')
             print('alpha about to resume beta')
             alpha_smart_thread.smart_resume(waiters='beta')
+
             alpha_smart_thread.smart_join(targets='beta')
             print('mainline alpha exiting')
 
@@ -3382,14 +3355,14 @@ class SmartThread:
             mainline alpha entered
             alpha about to resume beta
             f1 beta about to wait
-            f1 beta resumed by resumers=['alpha']
+            f1 beta resumed by {'alpha'}
             mainline alpha exiting
 
         **Example 3:** smart_wait for multiple resumers
 
         .. code-block:: python
 
-            from scottbrian_paratools.smart_thread import SmartThread, WaitFor
+            from scottbrian_paratools.smart_thread import SmartThread
             import time
 
             def f1(smart_thread: SmartThread) -> None:
@@ -3398,22 +3371,23 @@ class SmartThread:
 
             print('mainline alpha entered')
             alpha_smart_thread = SmartThread(name='alpha')
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread')
+            SmartThread(name='beta',
+                        target=f1,
+                        thread_parm_name='smart_thread')
             time.sleep(1)  # allow time for alpha to wait
-            charlie_smart_thread = SmartThread(name='charlie',
-                                               target=f1,
-                                               thread_parm_name='smart_thread')
+            SmartThread(name='charlie',
+                        target=f1,
+                        thread_parm_name='smart_thread')
             time.sleep(1)  # allow time for alpha to wait
-            delta_smart_thread = SmartThread(name='delta',
-                                             target=f1,
-                                             thread_parm_name='smart_thread')
+            SmartThread(name='delta',
+                        target=f1,
+                        thread_parm_name='smart_thread')
             time.sleep(1)  # allow time for alpha to wait
             print('alpha about to wait for all threads')
-            resumers = alpha_smart_thread.smart_wait(
+            resumed_by = alpha_smart_thread.smart_wait(
                 resumers=['beta', 'charlie', 'delta'])
-            print(f'f1 alpha resumed by resumers={sorted(resumers)}')
+            print(f'alpha resumed by resumers={sorted(resumed_by)}')
+
             alpha_smart_thread.smart_join(targets=['beta', 'charlie', 'delta'])
             print('mainline alpha exiting')
 
@@ -3435,7 +3409,7 @@ class SmartThread:
 
         .. code-block:: python
 
-            from scottbrian_paratools.smart_thread import SmartThread, WaitFor
+            from scottbrian_paratools.smart_thread import SmartThread
             import time
 
             def f1(smart_thread: SmartThread) -> None:
@@ -3444,26 +3418,29 @@ class SmartThread:
 
             print('mainline alpha entered')
             alpha_smart_thread = SmartThread(name='alpha')
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1,
-                                            thread_parm_name='smart_thread')
+            SmartThread(name='beta',
+                        target=f1,
+                        thread_parm_name='smart_thread')
             time.sleep(1)
-            charlie_smart_thread = SmartThread(name='charlie',
-                                               target=f1,
-                                               thread_parm_name='smart_thread')
+            SmartThread(name='charlie',
+                        target=f1,
+                        thread_parm_name='smart_thread')
             time.sleep(1)
             print('alpha about to wait for any threads')
-            resumers = alpha_smart_thread.smart_wait(
-                resumers=['beta', 'charlie', 'delta'])
-            print(f'alpha resumed by resumers={sorted(resumers)}')
-            delta_smart_thread = SmartThread(name='delta',
-                                             target=f1,
-                                             thread_parm_name='smart_thread')
+            resumed_by = alpha_smart_thread.smart_wait(
+                resumers=['beta', 'charlie', 'delta'],
+                resumer_count=1)
+            print(f'alpha resumed by resumers={sorted(resumed_by)}')
+            SmartThread(name='delta',
+                        target=f1,
+                        thread_parm_name='smart_thread')
             time.sleep(1)  # allow time for alpha to wait
             print('alpha about to wait for any threads')
-            resumers = alpha_smart_thread.smart_wait(
-                resumers=['beta', 'charlie', 'delta'])
-            print(f'alpha resumed by resumers={sorted(resumers)}')
+            resumed_by = alpha_smart_thread.smart_wait(
+                resumers=['beta', 'charlie', 'delta'],
+                resumer_count=1)
+            print(f'alpha resumed by resumers={sorted(resumed_by)}')
+
             alpha_smart_thread.smart_join(targets=['beta', 'charlie', 'delta'])
             print('mainline alpha exiting')
 
@@ -4812,7 +4789,7 @@ class SmartThread:
                     if not isinstance(name, str):
                         fillin_text = 'not a string'
                     else:
-                        fillin_text ='an empty string'
+                        fillin_text = 'an empty string'
                     error_msg = (
                         f'SmartThread {threading.current_thread().name} '
                         f'raising SmartThreadIncorrectNameSpecified error '
