@@ -912,15 +912,22 @@ class SmartThread:
             remotes={name},
             latest=2)
 
-        if not isinstance(name, str) or name == '':
+        if not (isinstance(name, str) and name):
+            if not isinstance(name, str):
+                fillin_text = 'not a string'
+            else:
+                fillin_text = 'an empty string'
             error_msg = (
-                f'SmartThread {threading.current_thread().name} raising '
-                'SmartThreadIncorrectNameSpecified error while processing '
-                'request smart_init. '
-                f'The input {name=} is incorrect. Please specify a '
-                f'non-empty string for the name.')
+                f'SmartThread {threading.current_thread().name} '
+                f'raising SmartThreadIncorrectNameSpecified error while '
+                f'processing request smart_init. '
+                f'It was detected that the {name=} specified '
+                f'for the new thread is {fillin_text}. Please '
+                f'specify a non-empty string for the thread name.')
+
             logger.error(error_msg)
             raise SmartThreadIncorrectNameSpecified(error_msg)
+
         self.name = name
 
         if target and thread:
@@ -1205,8 +1212,9 @@ class SmartThread:
         """Register SmartThread in the class registry.
 
         Raises:
-            SmartThreadIncorrectNameSpecified: The name for SmartThread
-                must be of type str.
+            SmartThreadAlreadyExists: While attempting to register a
+                new thread, it was discovered that the thread already
+                exists in the registry for a different thread name.
             SmartThreadNameAlreadyInUse: An entry for a SmartThread with
                 name = *name* is already registered for a different
                 thread.
@@ -1698,14 +1706,18 @@ class SmartThread:
     # _get_set
     ####################################################################
     def _get_set(self,
-                 item: Optional[Iterable] = None):
+                 item: Optional[Iterable] = None,
+                 request: Optional[str] = None):
         try:
             return set({item} if isinstance(item, str) else item or '')
         except TypeError:
+            if request is None:
+                request = self.request
+
             error_msg = (
                 f'SmartThread {threading.current_thread().name} raising '
                 'SmartThreadInvalidInput error while processing '
-                f'request {self.request}. '
+                f'request {request}. '
                 f'It was detected that an argument for remote thread names '
                 f'is not of type Iterable. Please specify an iterable, '
                 f'such as a list of thread names.')
@@ -1807,12 +1819,11 @@ class SmartThread:
         # more than one start at a time. The first start will work, the
         # others will fail with an already started error.
         with self.cmd_lock:
-            self.request = ReqType.Smart_start
-            self.started_targets = set()
             if targets is None:
                 targets = {self.name}
             else:
-                targets = self._get_set(targets)
+                targets = self._get_set(targets,
+                                        request='smart_start')
 
             if self.name not in targets:
                 self._verify_thread_is_current(request=ReqType.Smart_start)
@@ -1848,6 +1859,8 @@ class SmartThread:
                         logger.error(error_msg)
                         raise SmartThreadRemoteThreadNotRegistered(error_msg)
 
+            self.request = ReqType.Smart_start
+            self.started_targets = set()
             request_block = self._request_setup(
                 remotes=targets,
                 error_stopped_target=True,
@@ -2605,7 +2618,7 @@ class SmartThread:
                 logger.error(error_msg)
                 raise SmartThreadInvalidInput(error_msg)
 
-            remotes = set(msg_dict.keys())
+            remotes = self._get_set(msg_dict.keys())
             if not remotes:
                 error_msg = (
                     f'SmartThread {threading.current_thread().name} raising '
@@ -3545,7 +3558,7 @@ class SmartThread:
         for timeout_value in (SmartThread.K_REQUEST_MIN_INTERVAL,
                               request_block.request_max_interval):
             if local_sb.wait_event.wait(timeout=timeout_value):
-                # We need to the lock to coordinate with the remote
+                # We need the lock to coordinate with the remote
                 # deadlock detection code to prevent:
                 # 1) the remote sees that the wait_wait flag is True
                 # 2) we reset wait_wait
@@ -4382,6 +4395,7 @@ class SmartThread:
                         SmartThread._pair_array[
                             pair_key].status_blocks[
                             self.name].request = ReqType.NoReq
+
                 break
 
             # handle any error or timeout cases - don't worry about any
@@ -4801,14 +4815,14 @@ class SmartThread:
                         fillin_text ='an empty string'
                     error_msg = (
                         f'SmartThread {threading.current_thread().name} '
-                        f'raising SmartThreadInvalidInput error while '
-                        f'processing request {self.request}. '
+                        f'raising SmartThreadIncorrectNameSpecified error '
+                        f'while processing request {self.request}. '
                         f'It was detected that the {name=} specified '
                         f'for a remote thread is {fillin_text}. Please '
-                        f'specify a non-empty string for the thread name. ')
+                        f'specify a non-empty string for the thread name.')
 
                     logger.error(error_msg)
-                    raise SmartThreadInvalidInput(error_msg)
+                    raise SmartThreadIncorrectNameSpecified(error_msg)
 
         exit_log_msg = self._issue_entry_log_msg(
             request=self.request,
