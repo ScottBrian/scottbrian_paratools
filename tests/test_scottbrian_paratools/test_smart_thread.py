@@ -9345,6 +9345,161 @@ class ConfigVerifier:
             obtain_reg_lock=True))
 
     ####################################################################
+    # build_sync_partial_scenario
+    ####################################################################
+    def build_sync_partial_scenario(self,
+                                    sync_0_targets: int,
+                                    sync_1_targets: int,
+                                    sync_2_targets: int,
+                                    sync_3_targets: int) -> None:
+        """Return a list of ConfigCmd items for test scenario."""
+
+        sync_names = ['sync_0', 'sync_1', 'sync_2', 'sync_3']
+
+        self.create_config(active_names=sync_names)
+
+        targets: dict[int, set[str]] = {
+            1: {'sync_0'},
+            2: {'sync_1'},
+            3: {'sync_1', 'sync_0'},
+            4: {'sync_2'},
+            5: {'sync_2', 'sync_0'},
+            6: {'sync_2', 'sync_1'},
+            7: {'sync_2', 'sync_1', 'sync_0'},
+            8: {'sync_3'},
+            9: {'sync_3', 'sync_0'},
+            10: {'sync_3', 'sync_1'},
+            11: {'sync_3', 'sync_1', 'sync_0'},
+            12: {'sync_3', 'sync_2'},
+            13: {'sync_3', 'sync_2', 'sync_0'},
+            14: {'sync_3', 'sync_2', 'sync_1'},
+            15: {'sync_3', 'sync_2', 'sync_1', 'sync_0'}
+        }
+
+        sync_0_target_set = targets[sync_0_targets].copy()
+        sync_1_target_set = targets[sync_1_targets].copy()
+        sync_2_target_set = targets[sync_2_targets].copy()
+        sync_3_target_set = targets[sync_3_targets].copy()
+
+        self.log_test_msg(f'before: {sync_0_target_set=}')
+        self.log_test_msg(f'before: {sync_1_target_set=}')
+        self.log_test_msg(f'before: {sync_2_target_set=}')
+        self.log_test_msg(f'before: {sync_3_target_set=}')
+
+        if 'sync_0' in sync_1_target_set:
+            sync_0_target_set |= {'sync_1'}
+        if 'sync_0' in sync_2_target_set:
+            sync_0_target_set |= {'sync_2'}
+        if 'sync_0' in sync_3_target_set:
+            sync_0_target_set |= {'sync_3'}
+
+        if 'sync_1' in sync_0_target_set:
+            sync_1_target_set |= {'sync_0'}
+        if 'sync_1' in sync_2_target_set:
+            sync_1_target_set |= {'sync_2'}
+        if 'sync_1' in sync_3_target_set:
+            sync_1_target_set |= {'sync_3'}
+
+        if 'sync_2' in sync_0_target_set:
+            sync_2_target_set |= {'sync_0'}
+        if 'sync_2' in sync_1_target_set:
+            sync_2_target_set |= {'sync_1'}
+        if 'sync_2' in sync_3_target_set:
+            sync_2_target_set |= {'sync_3'}
+
+        if 'sync_3' in sync_0_target_set:
+            sync_3_target_set |= {'sync_0'}
+        if 'sync_3' in sync_1_target_set:
+            sync_3_target_set |= {'sync_1'}
+        if 'sync_3' in sync_2_target_set:
+            sync_3_target_set |= {'sync_2'}
+
+        self.log_test_msg(f'after: {sync_0_target_set=}')
+        self.log_test_msg(f'after: {sync_1_target_set=}')
+        self.log_test_msg(f'after: {sync_2_target_set=}')
+        self.log_test_msg(f'after: {sync_3_target_set=}')
+
+        ################################################################
+        # sync_0
+        ################################################################
+        sync_0_serial_num = self.add_cmd(
+            Sync(cmd_runners='sync_0',
+                 targets=sync_0_target_set,
+                 sync_set_ack_remotes=sync_0_target_set))
+
+        ################################################################
+        # sync_1
+        ################################################################
+        sync_1_serial_num = self.add_cmd(
+            Sync(cmd_runners='sync_1',
+                 targets=sync_1_target_set,
+                 sync_set_ack_remotes=sync_1_target_set))
+
+        ################################################################
+        # sync_2
+        ################################################################
+        sync_2_serial_num = self.add_cmd(
+            Sync(cmd_runners='sync_2',
+                 targets=sync_2_target_set,
+                 sync_set_ack_remotes=sync_2_target_set))
+
+        ################################################################
+        # sync_3
+        ################################################################
+        sync_3_serial_num = self.add_cmd(
+            Sync(cmd_runners='sync_3',
+                 targets=sync_3_target_set,
+                 sync_set_ack_remotes=sync_3_target_set))
+
+        ################################################################
+        # confirm sync_0
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='Sync',
+                confirm_serial_num=sync_0_serial_num,
+                confirmers='sync_0'))
+
+        ################################################################
+        # confirm sync_1
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='Sync',
+                confirm_serial_num=sync_1_serial_num,
+                confirmers='sync_1'))
+
+        ################################################################
+        # confirm sync_2
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='Sync',
+                confirm_serial_num=sync_2_serial_num,
+                confirmers='sync_2'))
+
+        ################################################################
+        # confirm sync_3
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='Sync',
+                confirm_serial_num=sync_3_serial_num,
+                confirmers='sync_3'))
+
+        ################################################################
+        # verify config structures
+        ################################################################
+        self.add_cmd(VerifyConfig(
+            cmd_runners=self.commander_name,
+            verify_type=VerifyType.VerifyStructures,
+            obtain_reg_lock=True))
+
+    ####################################################################
     # check_pending_events
     ####################################################################
     def check_sync_event_set(self,
@@ -29467,7 +29622,7 @@ class TestSmartBasicScenarios:
             caplog_to_use=caplog)
 
     ####################################################################
-    # test_sync_unreg_simple_scenario
+    # test_sync_init_delay_scenario
     ####################################################################
     def test_sync_init_delay_scenario(
             self,
@@ -29489,6 +29644,48 @@ class TestSmartBasicScenarios:
         scenario_driver(
             scenario_builder=
             ConfigVerifier.build_sync_init_delay_scenario,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
+
+    ####################################################################
+    # test_sync_partial_scenario
+    ####################################################################
+    @pytest.mark.parametrize("sync_0_targets_arg", [2, 4, 6, 8, 10, 12, 14])
+    @pytest.mark.parametrize("sync_1_targets_arg", [1, 4, 5, 8, 9, 12, 13])
+    @pytest.mark.parametrize("sync_2_targets_arg", [1, 2, 3, 8, 9, 10, 11])
+    @pytest.mark.parametrize("sync_3_targets_arg", [1, 2, 3, 4, 5, 6, 7])
+    def test_sync_partial_scenario(
+            self,
+            sync_0_targets_arg: int,
+            sync_1_targets_arg: int,
+            sync_2_targets_arg: int,
+            sync_3_targets_arg: int,
+            caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            sync_0_targets_arg: targets combo
+            sync_1_targets_arg: targets combo
+            sync_2_targets_arg: targets combo
+            sync_3_targets_arg: targets combo
+            caplog: pytest fixture to capture log output
+
+        Notes:
+            1) Sync will do various combinations of targets such that
+               a partial or full sync of all targets is done
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {
+            "sync_0_targets": sync_0_targets_arg,
+            "sync_1_targets": sync_1_targets_arg,
+            "sync_2_targets": sync_2_targets_arg,
+            "sync_3_targets": sync_3_targets_arg,
+        }
+
+        scenario_driver(
+            scenario_builder=
+            ConfigVerifier.build_sync_partial_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 
