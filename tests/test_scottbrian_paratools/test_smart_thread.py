@@ -17820,13 +17820,25 @@ class ConfigVerifier:
                     stop_key: ConfirmStopKey = (cmd_runner, target)
                     pe[PE.confirm_stop_msg][stop_key] += 1
                 else:
-                    if self.expected_registered[
-                            target].st_state == st.ThreadState.Alive:
+                    # the thread may have not yet been started, but we
+                    # know that eventually it will become alive if it
+                    # is an eligible target
+                    if self.expected_registered[target].st_state in (
+                            st.ThreadState.Unregistered,
+                            st.ThreadState.Initializing,
+                            st.ThreadState.Registered,
+                            st.ThreadState.Starting,
+                            st.ThreadState.Alive):
+                        # either smart_join will do the _set_state or
+                        # _clean_registry will do the _set_state
                         state_key: SetStateKey = (cmd_runner,
                                                   target,
                                                   st.ThreadState.Alive,
                                                   st.ThreadState.Stopped)
                         pe[PE.set_state_msg][state_key] += 1
+                        self.log_test_msg(f'handle_request_smart_join_entry '
+                                          f'bumped set_state '
+                                          f'pending for {state_key=} ')
                 state_key: SetStateKey = (cmd_runner,
                                           target,
                                           st.ThreadState.Stopped,
@@ -17861,10 +17873,10 @@ class ConfigVerifier:
                                       'entry',
                                       cmd_runner)
             pe[PE.subprocess_msg][sub_key] += 1
-            self.log_test_msg(
-                f'handle_request_smart_join_entry {cmd_runner=} added '
-                f'subprocess_msg with {sub_key=} and bumped count to: '
-                f'{pe[PE.subprocess_msg][sub_key]=}')
+            # self.log_test_msg(
+            #     f'handle_request_smart_join_entry {cmd_runner=} added '
+            #     f'subprocess_msg with {sub_key=} and bumped count to: '
+            #     f'{pe[PE.subprocess_msg][sub_key]=}')
 
             sub_key: SubProcessKey = (cmd_runner,
                                       'smart_join',
@@ -19005,51 +19017,51 @@ class ConfigVerifier:
     ####################################################################
     # handle_start_request_log_msg
     ####################################################################
-    def handle_start_request_log_msg(self,
-                                     cmd_runner: str,
-                                     req_start_item: StartRequest) -> None:
-        """Process the start request event.
-
-        Args:
-            cmd_runner: thread name doing the request
-            req_start_item: contains the request specifics
-
-        """
-        self.log_test_msg(f'handle_start_request_log_msg entered, '
-                          f'{cmd_runner=}, {req_start_item=}')
-        eligible_targets: set[str] = set()
-        self.pending_events[cmd_runner][PE.current_request] = req_start_item
-        if req_start_item.req_type == st.ReqType.Smart_start:
-            eligible_targets = (req_start_item.targets.copy()
-                                - req_start_item.not_registered_remotes.copy())
-            from_state = st.ThreadState.Registered
-            to_state = st.ThreadState.Alive
-        elif req_start_item.req_type == st.ReqType.Smart_unreg:
-            eligible_targets = (req_start_item.targets.copy()
-                                - req_start_item.not_registered_remotes.copy())
-            from_state = st.ThreadState.Registered
-            to_state = st.ThreadState.Stopped
-
-        elif req_start_item.req_type == st.ReqType.Smart_join:
-            pre_eligible_targets = (req_start_item.targets.copy()
-                                    - req_start_item.timeout_remotes.copy())
-            for name in pre_eligible_targets:
-                if (name in self.expected_registered
-                        and self.expected_registered[name].is_TargetThread):
-                    eligible_targets |= {name}
-
-            from_state = st.ThreadState.Alive
-            to_state = st.ThreadState.Stopped
-        else:
-            raise UnrecognizedCmd('handle_start_request_log_msg does not '
-                                  f'recognize {req_start_item.req_type=}')
-
-        for name in eligible_targets:
-            key: SetStateKey = (cmd_runner,
-                                name,
-                                from_state,
-                                to_state)
-            self.pending_events[cmd_runner][PE.set_state_msg][key] += 1
+    # def handle_start_request_log_msg(self,
+    #                                  cmd_runner: str,
+    #                                  req_start_item: StartRequest) -> None:
+    #     """Process the start request event.
+    #
+    #     Args:
+    #         cmd_runner: thread name doing the request
+    #         req_start_item: contains the request specifics
+    #
+    #     """
+    #     self.log_test_msg(f'handle_start_request_log_msg entered, '
+    #                       f'{cmd_runner=}, {req_start_item=}')
+    #     eligible_targets: set[str] = set()
+    #     self.pending_events[cmd_runner][PE.current_request] = req_start_item
+    #     if req_start_item.req_type == st.ReqType.Smart_start:
+    #         eligible_targets = (req_start_item.targets.copy()
+    #                             - req_start_item.not_registered_remotes.copy())
+    #         from_state = st.ThreadState.Registered
+    #         to_state = st.ThreadState.Alive
+    #     elif req_start_item.req_type == st.ReqType.Smart_unreg:
+    #         eligible_targets = (req_start_item.targets.copy()
+    #                             - req_start_item.not_registered_remotes.copy())
+    #         from_state = st.ThreadState.Registered
+    #         to_state = st.ThreadState.Stopped
+    #
+    #     elif req_start_item.req_type == st.ReqType.Smart_join:
+    #         pre_eligible_targets = (req_start_item.targets.copy()
+    #                                 - req_start_item.timeout_remotes.copy())
+    #         for name in pre_eligible_targets:
+    #             if (name in self.expected_registered
+    #                     and self.expected_registered[name].is_TargetThread):
+    #                 eligible_targets |= {name}
+    #
+    #         from_state = st.ThreadState.Alive
+    #         to_state = st.ThreadState.Stopped
+    #     else:
+    #         raise UnrecognizedCmd('handle_start_request_log_msg does not '
+    #                               f'recognize {req_start_item.req_type=}')
+    #
+    #     for name in eligible_targets:
+    #         key: SetStateKey = (cmd_runner,
+    #                             name,
+    #                             from_state,
+    #                             to_state)
+    #         self.pending_events[cmd_runner][PE.set_state_msg][key] += 1
 
     ####################################################################
     # handle_subprocess_entry_exit_log_msg
@@ -19362,9 +19374,13 @@ class ConfigVerifier:
         self.log_test_msg(
             f'{cmd_runner=} {rtn_name} waiting for monitor')
         self.monitor_event.set()
-        self.cmd_waiting_event_items[cmd_runner].wait()
-        with self.ops_lock:
-            del self.cmd_waiting_event_items[cmd_runner]
+        if self.cmd_waiting_event_items[cmd_runner].wait(timeout=60):
+            with self.ops_lock:
+                del self.cmd_waiting_event_items[cmd_runner]
+        else:
+            self.abort_all_f1_threads()
+            raise CmdTimedOut(f'wait_for_monitor timed out for {cmd_runner=} '
+                              f'and {rtn_name=}')
 
     ####################################################################
     # handle_stopped_log_msg
@@ -20115,7 +20131,7 @@ class ConfigVerifier:
             name='main_driver',
             seq='test_smart_thread.py::ConfigVerifier.main_driver')
 
-        while self.cmd_suite:
+        while self.cmd_suite and not self.monitor_bail:
             cmd: ConfigCmd = self.cmd_suite.popleft()
             self.log_test_msg(f'config_cmd: {cmd}')
 
@@ -20225,10 +20241,9 @@ class ConfigVerifier:
 
         self.log_test_msg(f'{cmd_runner=} stop_thread waiting for monitor')
         self.monitor_event.set()
-        self.stopped_event_items[cmd_runner].client_event.wait()
-
-        # self.wait_for_monitor(cmd_runner=cmd_runner,
-        #                       rtn_name='handle_recv')
+        if not self.stopped_event_items[cmd_runner].client_event.wait(
+                timeout=60):
+            self.abort_all_f1_threads()
 
         self.log_test_msg(f'{cmd_runner=} stop_thread exiting for '
                           f'{stop_names=}')
@@ -20476,17 +20491,57 @@ class ConfigVerifier:
         request = pe[PE.current_request].req_type.value
         with self.ops_lock:
             for key, item in self.expected_registered.items():
-                if (not item.is_alive
-                        and item.st_state == st.ThreadState.Alive):
-                    if (pe[PE.current_request].req_type in (
-                            st.ReqType.Smart_unreg,
-                            st.ReqType.Smart_join)
-                            and key in pe[PE.current_request].targets):
-                        state_to_use = st.ThreadState.Unregistering
-                    else:
-                        state_to_use = st.ThreadState.Stopped
+                if (item.st_state == st.ThreadState.Alive
+                        and not item.is_alive):
+                    state_to_use = st.ThreadState.Stopped
+
+                    # we need to set pending set_state since the current
+                    # cmd_runner will be doing a set state for this
+                    # item. But, smart_join processing will normally
+                    # do the set_state, if no one else does it first.
+                    # So, we need to find any smart_joins that
+                    # already added a pending set_state and back it out
+                    # since this cmd_runner beat them to it.
+                    # if not (pe[PE.current_request].req_type
+                    #         == st.ReqType.Smart_join
+                    #         and key in pe[
+                    #             PE.current_request].eligible_targets):
+                    target = key
+
+                    state_key: SetStateKey = (cmd_runner,
+                                              target,
+                                              st.ThreadState.Alive,
+                                              st.ThreadState.Stopped)
+                    # note that we could back out the same pending we
+                    # are about to bump, and this is OK
+                    for key2, item2 in self.pending_events.items():
+                        test_key: SetStateKey = (key2,
+                                                 target,
+                                                 st.ThreadState.Alive,
+                                                 st.ThreadState.Stopped)
+                        if item2[PE.set_state_msg][test_key] > 0:
+                            item2[PE.set_state_msg][test_key] -= 1
+                            self.log_test_msg(
+                                f'clean_registry backed out set_state '
+                                f'pending for {test_key=} ')
+                            break
+
+                    pe[PE.set_state_msg][state_key] += 1
+                    self.log_test_msg(f'clean_registry bumped set_state '
+                                      f'pending for {state_key=} ')
                 else:
                     state_to_use = item.st_state
+                # if (not item.is_alive
+                #         and item.st_state == st.ThreadState.Alive):
+                #     if (pe[PE.current_request].req_type in (
+                #             st.ReqType.Smart_unreg,
+                #             st.ReqType.Smart_join)
+                #             and key in pe[PE.current_request].targets):
+                #         state_to_use = st.ThreadState.Unregistering
+                #     else:
+                #         state_to_use = st.ThreadState.Stopped
+                # else:
+                #     state_to_use = item.st_state
                 if (state_to_use != st.ThreadState.Unregistered
                         and state_to_use != st.ThreadState.Initializing):
                     self.pending_events[key][PE.status_msg][
@@ -26293,7 +26348,7 @@ def scenario_driver(
     if not config_ver.monitor_exit:
         config_ver.log_test_msg('Monitor Checkpoint: check_pending_events 42')
         config_ver.monitor_event.set()
-        config_ver.check_pending_events_complete_event.wait()
+        config_ver.check_pending_events_complete_event.wait(timeout=30)
 
     config_ver.monitor_exit = True
     config_ver.monitor_event.set()
@@ -26310,6 +26365,9 @@ def scenario_driver(
     log_len = len(caplog_to_use.record_tuples)
 
     logger.debug(f'mainline exiting {log_len=}')
+
+    print(f'scenario builder: {scenario_builder}')
+    print(f'scenario args: {scenario_builder_args}')
 
 
 ########################################################################
@@ -28941,6 +28999,14 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_delay_unreg_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_no_delay_reg_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_delay_reg_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("timeout_type_arg",
+    #                          [TimeoutType.TimeoutNone])
+    # @pytest.mark.parametrize("num_active_no_target_arg", [1])
+    # @pytest.mark.parametrize("num_no_delay_exit_arg", [0])
+    # @pytest.mark.parametrize("num_delay_exit_arg", [0])
+    # @pytest.mark.parametrize("num_delay_unreg_arg", [0])
+    # @pytest.mark.parametrize("num_no_delay_reg_arg", [1])
+    # @pytest.mark.parametrize("num_delay_reg_arg", [0])
     def test_join_timeout_scenario(
             self,
             timeout_type_arg: TimeoutType,

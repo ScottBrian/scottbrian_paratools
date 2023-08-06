@@ -1103,7 +1103,7 @@ class SmartThread:
         # as Alive. Thus, if is_alive is true here and the state is
         # Starting, return Alive.
 
-        # $$$ wait: this can't happen since the lock must be held, so
+        # $$$ @sbt: this can't happen since the lock must be held, so
         # the started thread will not be able to see Starting - only
         # will be able to see Alive. Comment out the following code and
         # see if any error show up while testing:
@@ -1116,9 +1116,14 @@ class SmartThread:
         # started or after the thread has ended. For the former, the
         # ThreadState will probably be Registered. For the latter it
         # will be Alive, in which case we can safely return Stopped.
-        if (not SmartThread._registry[name].thread.is_alive() and
-                SmartThread._registry[name].st_state == ThreadState.Alive):
-            return ThreadState.Stopped
+
+        # $$$ @sbt: we are no longer returning Stopped - code commented
+        # out for now - will see what happens after testing with other
+        # changes in _register which will set the state to Stopped when
+        # its sees Alive and is_alive=False
+        # if (not SmartThread._registry[name].thread.is_alive() and
+        #         SmartThread._registry[name].st_state == ThreadState.Alive):
+        #     return ThreadState.Stopped
 
         # For all other cases, we can rely on the state being correct
         return SmartThread._registry[name].st_state
@@ -1322,6 +1327,10 @@ class SmartThread:
             # mix of requests.
             is_alive = item.thread.is_alive()
             state = self._get_state(name=key)
+            if state == ThreadState.Alive and not is_alive:
+                self._set_state(target_thread=SmartThread._registry[key],
+                                new_state=ThreadState.Stopped)
+                state = ThreadState.Stopped
             logger.debug(
                 f'name={key}, {is_alive=}, state={state}, '
                 f'smart_thread={item}')
