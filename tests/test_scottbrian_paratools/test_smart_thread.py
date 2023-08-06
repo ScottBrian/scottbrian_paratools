@@ -87,6 +87,8 @@ PendEvents: TypeAlias = dict["PE", Any]
 
 CheckPendArg: TypeAlias = tuple[str, st.PairKey]
 
+CheckZeroCtArg: TypeAlias = tuple[str, str]
+
 PotentialDefDelKey: TypeAlias = tuple[st.PairKey, str]
 
 
@@ -1107,7 +1109,7 @@ class LockSwap(ConfigCmd):
 
 
 ########################################################################
-# LockSwap
+# LockVerify
 ########################################################################
 class LockVerify(ConfigCmd):
     """Verify the registry lock has the expected owners and waiters."""
@@ -8889,6 +8891,460 @@ class ConfigVerifier:
             obtain_reg_lock=True))
 
     ####################################################################
+    # build_sync_init_delay_scenario
+    ####################################################################
+    def build_sync_init_delay_scenario(self) -> None:
+        """Return a list of ConfigCmd items for test scenario.
+
+        This test will drive the check of the the create time for zero:
+
+            1) create sync_0
+            2) get lock
+            3) sync_0 does smart_sync with sync_1
+            4) get lock
+            5) create sync_1 (swap sync_0 and sync_1 to keep sync_0
+               from advancing so it maintains a zero create time for
+               sync_1 in its pk_remote
+            6) sync_1 does smart_sync - sees sync_0 has zero create
+               time for sync_1, and therefore succeeds in doing the sync
+
+        """
+        # self.auto_calling_refresh_msg = False
+        sync_names = ['sync_0', 'sync_1']
+        lock_names = ['lock_0', 'lock_1', 'lock_2']
+        aux_names = ['aux_0']
+
+        self.create_config(unreg_names=[sync_names[1]],
+                           active_names=([sync_names[0]]
+                                         + lock_names
+                                         + aux_names))
+
+        lock_positions: list[str] = []
+
+        ################################################################
+        # The following are appended to the requestor names:
+        #     _s means request is behind lock just before request setup
+        #     _r means request is behind lock just before request loop
+        #     _e means request is behind lock in error path
+        #     -reg means register for smart_init
+        ################################################################
+
+        ################################################################
+        # before: none
+        # action: get lock_1
+        # after : lock_1
+        ################################################################
+        obtain_lock_serial_num_1 = self.add_cmd(
+            LockObtain(cmd_runners=lock_names[1]))
+        lock_positions.append(lock_names[1])
+
+        # we can confirm only this first lock obtain
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=[self.commander_name],
+                confirm_cmd='LockObtain',
+                confirm_serial_num=obtain_lock_serial_num_1,
+                confirmers=lock_names[1]))
+
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_1
+        # action: sync_0a
+        # after : lock_1|sync_0a_s
+        ################################################################
+        sync_0a_serial_num = self.add_cmd(
+            Sync(cmd_runners=sync_names[0],
+                 targets=sync_names[1],
+                 sync_set_ack_remotes=sync_names[1]))
+        lock_positions.append(sync_names[0])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_1|sync_0a_s
+        # action: get lock_0
+        # after : lock_1|sync_0a_s|lock_0
+        ################################################################
+        self.add_cmd(
+            LockObtain(cmd_runners=lock_names[0]))
+        lock_positions.append(lock_names[0])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_1|sync_0a_s|lock_0
+        # action: drop lock_1, sync_0 does setup and wait at req loop
+        # after : lock_0|sync_0a_r
+        ################################################################
+        self.add_cmd(
+            LockRelease(cmd_runners=lock_names[1]))
+        lock_positions.remove(lock_names[1])
+        lock_positions.remove(sync_names[0])
+        lock_positions.append(sync_names[0])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_0|sync_0a_r
+        # action: get lock_2
+        # after : lock_0|sync_0a_r|lock_2
+        ################################################################
+        self.add_cmd(
+            LockObtain(cmd_runners=lock_names[2]))
+        lock_positions.append(lock_names[2])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_0|sync_0a_r|lock_2
+        # action: create and start sync_1
+        # after : lock_0|sync_0a_r|lock_2|aux_0_reg
+        ################################################################
+        self.unregistered_names -= {sync_names[1]}
+        self.add_cmd(
+            CreateF1AutoStart(cmd_runners=aux_names[0],
+                              f1_create_items=[F1CreateItem(
+                                  name=sync_names[1],
+                                  auto_start=True,
+                                  target_rtn=outer_f1,
+                                  app_config=AppConfig.ScriptStyle)]))
+
+        self.active_names |= {sync_names[1]}
+
+        lock_positions.append(aux_names[0])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_0|sync_0a_r|lock_2|aux_0_reg
+        # action: get lock_1
+        # after : lock_0|sync_0a_r|lock_2|aux_0_reg|lock_1
+        ################################################################
+        self.add_cmd(
+            LockObtain(cmd_runners=lock_names[1]))
+        lock_positions.append(lock_names[1])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_0|sync_0a_r|lock_2|aux_0|lock_1
+        # action: swap sync_0 and aux_0_reg
+        # after : lock_0|aux_0_reg|lock_2|sync_0a_r|lock_1
+        ################################################################
+        lock_pos_1 = lock_positions[1]
+        lock_positions[1] = lock_positions[3]
+        lock_positions[3] = lock_pos_1
+
+        assert lock_positions[0] == lock_names[0]
+        assert lock_positions[1] == aux_names[0]
+        assert lock_positions[2] == lock_names[2]
+        assert lock_positions[3] == sync_names[0]
+        assert lock_positions[4] == lock_names[1]
+
+        self.add_cmd(
+            LockSwap(cmd_runners=self.commander_name,
+                     new_positions=lock_positions.copy()))
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_0|aux_0_reg|lock_2|sync_0a_r|lock_1
+        # action: drop lock_0, aux_0 does register, then goes to
+        #             smart_start setup
+        # after : lock_2|sync_0a_r|lock_1|aux_0_s
+        ################################################################
+        self.add_cmd(
+            LockRelease(cmd_runners=lock_names[0]))
+        lock_positions.remove(lock_names[0])
+        lock_positions.remove(aux_names[0])
+        lock_positions.append(aux_names[0])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_2|sync_0a_r|lock_1|aux_0_s
+        # action: get lock_0
+        # after : lock_2|sync_0a_r|lock_1|aux_0_s|lock_0
+        ################################################################
+        self.add_cmd(
+            LockObtain(cmd_runners=lock_names[0]))
+        lock_positions.append(lock_names[0])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_2|sync_0a_r|lock_1|aux_0_s|lock_0
+        # action: swap sync_0 and aux_0_s
+        # after : lock_2|aux_0_s|lock_1|sync_0a_r|lock_0
+        ################################################################
+        lock_pos_1 = lock_positions[1]
+        lock_positions[1] = lock_positions[3]
+        lock_positions[3] = lock_pos_1
+
+        assert lock_positions[0] == lock_names[2]
+        assert lock_positions[1] == aux_names[0]
+        assert lock_positions[2] == lock_names[1]
+        assert lock_positions[3] == sync_names[0]
+        assert lock_positions[4] == lock_names[0]
+
+        self.add_cmd(
+            LockSwap(cmd_runners=self.commander_name,
+                     new_positions=lock_positions.copy()))
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_2|aux_0_s|lock_1|sync_0a_r|lock_0
+        # action: drop lock_2, aux_0 does setup and waits at req loop
+        # after : lock_1|sync_0a_r|lock_0|aux_0_r
+        ################################################################
+        self.add_cmd(
+            LockRelease(cmd_runners=lock_names[2]))
+        lock_positions.remove(lock_names[2])
+        lock_positions.remove(aux_names[0])
+        lock_positions.append(aux_names[0])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_1|sync_0a_r|lock_0|aux_0_r
+        # action: get lock_2
+        # after : lock_1|sync_0a_r|lock_0|aux_0_r|lock_2
+        ################################################################
+        self.add_cmd(
+            LockObtain(cmd_runners=lock_names[2]))
+        lock_positions.append(lock_names[2])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_1|sync_0a_r|lock_0|aux_0_r|lock_2
+        # action: swap sync_0 and aux_0_r
+        # after : lock_1|aux_0_r|lock_0|sync_0a_r|lock_2
+        ################################################################
+        lock_pos_1 = lock_positions[1]
+        lock_positions[1] = lock_positions[3]
+        lock_positions[3] = lock_pos_1
+
+        assert lock_positions[0] == lock_names[1]
+        assert lock_positions[1] == aux_names[0]
+        assert lock_positions[2] == lock_names[0]
+        assert lock_positions[3] == sync_names[0]
+        assert lock_positions[4] == lock_names[2]
+
+        self.add_cmd(
+            LockSwap(cmd_runners=self.commander_name,
+                     new_positions=lock_positions.copy()))
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_1|aux_0_r|lock_0|sync_0a_r|lock_2
+        # action: drop lock_1, aux_0 completes smart_start
+        # after : lock_0|sync_0a_r|lock_2
+        ################################################################
+        self.add_cmd(
+            LockRelease(cmd_runners=lock_names[1]))
+        lock_positions.remove(lock_names[1])
+        lock_positions.remove(aux_names[0])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_0|sync_0a_r|lock_2
+        # action: sync_1a_s
+        # after : lock_0|sync_0a_r|lock_2|sync_1a_s
+        ################################################################
+        sync_1a_serial_num = self.add_cmd(
+            Sync(cmd_runners=sync_names[1],
+                 targets=sync_names[0],
+                 sync_set_ack_remotes=sync_names[0]))
+        lock_positions.append(sync_names[1])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_0|sync_0a_r|lock_2|sync_1a_s_s
+        # action: get lock_1
+        # after : lock_0|sync_0a_r|lock_2|sync_1a_s_s|lock_1
+        ################################################################
+        self.add_cmd(
+            LockObtain(cmd_runners=lock_names[1]))
+        lock_positions.append(lock_names[1])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_0|sync_0a_r|lock_2|sync_1a_s_s|lock_1
+        # action: swap sync_0 and sync_1a_s
+        # after : lock_0|sync_1a_s_s|lock_2|sync_0a_r|lock_1
+        ################################################################
+        lock_pos_1 = lock_positions[1]
+        lock_positions[1] = lock_positions[3]
+        lock_positions[3] = lock_pos_1
+
+        assert lock_positions[0] == lock_names[0]
+        assert lock_positions[1] == sync_names[1]
+        assert lock_positions[2] == lock_names[2]
+        assert lock_positions[3] == sync_names[0]
+        assert lock_positions[4] == lock_names[1]
+
+        self.add_cmd(
+            LockSwap(cmd_runners=self.commander_name,
+                     new_positions=lock_positions.copy()))
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_0|sync_1a_s_s|lock_2|sync_0a_r|lock_1
+        # action: drop lock_0, sync_1a_s_s completes setup and gets
+        #             behind lock in req loop
+        # after : lock_2|sync_0a_r|lock_1|sync_1a_s_r
+        ################################################################
+        self.add_cmd(
+            LockRelease(cmd_runners=lock_names[0]))
+        lock_positions.remove(lock_names[0])
+        lock_positions.remove(sync_names[1])
+        lock_positions.append(sync_names[1])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_2|sync_0a_r|lock_1|sync_1a_s_r
+        # action: get lock_0
+        # after : lock_2|sync_0a_r|lock_1|sync_1a_s_r|lock_0
+        ################################################################
+        self.add_cmd(
+            LockObtain(cmd_runners=lock_names[0]))
+        lock_positions.append(lock_names[0])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_2|sync_0a_r|lock_1|sync_1a_s_r|lock_0
+        # action: swap sync_0a and sync_1a_s
+        # after : lock_2|sync_1a_s_r|lock_1|sync_0a_r|lock_0
+        ################################################################
+        lock_pos_1 = lock_positions[1]
+        lock_positions[1] = lock_positions[3]
+        lock_positions[3] = lock_pos_1
+
+        assert lock_positions[0] == lock_names[2]
+        assert lock_positions[1] == sync_names[1]
+        assert lock_positions[2] == lock_names[1]
+        assert lock_positions[3] == sync_names[0]
+        assert lock_positions[4] == lock_names[0]
+
+        self.add_cmd(
+            LockSwap(cmd_runners=self.commander_name,
+                     new_positions=lock_positions.copy()))
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # verify sync_0 has zero create time for sync_1
+        ################################################################
+        check_pend_arg: CheckZeroCtArg = (sync_names[0], sync_names[1])
+        self.add_cmd(WaitForCondition(
+            cmd_runners=self.commander_name,
+            check_rtn=self.check_sync_zero_create_time,
+            check_args=check_pend_arg))
+
+        ################################################################
+        # before: lock_2|sync_1a_s_r|lock_1|sync_0a_r|lock_0
+        # action: drop lock_2, sync_1a_s sees sync_0 has zero create
+        #             time for sync_1, so sync_1 sets sync_0 sync_event
+        #             and loops back to top of req loop to let sync_0
+        #             sync up
+        # after : lock_1|sync_0a_r|lock_0|sync_1a_s_r
+        ################################################################
+        self.add_cmd(
+            LockRelease(cmd_runners=lock_names[2]))
+        lock_positions.remove(lock_names[2])
+        lock_positions.remove(sync_names[1])
+        lock_positions.append(sync_names[1])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_1|sync_0a_r|lock_0|sync_1a_s_r
+        # action: drop lock_1, sync_0 sees that sync_1 is alive and
+        #             sets sync_1 sync_event, sees its sync_event is
+        #             set and completes the sync request
+        # after : lock_0|sync_1a_s_r
+        ################################################################
+        self.add_cmd(
+            LockRelease(cmd_runners=lock_names[1]))
+        lock_positions.remove(lock_names[1])
+        lock_positions.remove(sync_names[0])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # before: lock_0|sync_1a_s_r
+        # action: drop lock_0, sync_1 sees sync_0 has set sync_1
+        #             sync and completes
+        # after : none
+        ################################################################
+        self.add_cmd(
+            LockRelease(cmd_runners=lock_names[0]))
+        lock_positions.remove(lock_names[0])
+        lock_positions.remove(sync_names[1])
+        self.add_cmd(
+            LockVerify(cmd_runners=self.commander_name,
+                       exp_positions=lock_positions.copy()))
+
+        ################################################################
+        # confirm the sync requests
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='Sync',
+                confirm_serial_num=sync_0a_serial_num,
+                confirmers=sync_names[0]))
+
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='Sync',
+                confirm_serial_num=sync_1a_serial_num,
+                confirmers=sync_names[1]))
+
+        ################################################################
+        # verify config structures
+        ################################################################
+        self.add_cmd(VerifyConfig(
+            cmd_runners=self.commander_name,
+            verify_type=VerifyType.VerifyStructures,
+            obtain_reg_lock=True))
+
+    ####################################################################
     # check_pending_events
     ####################################################################
     def check_sync_event_set(self,
@@ -8900,8 +9356,8 @@ class ConfigVerifier:
             cmd_runner: thread name doing the check
             check_args: target name and pair_key to be checked
         """
-        self.log_test_msg(f'check_sync_event_set entry: {cmd_runner=} '
-                          f'{check_args=}')
+        # self.log_test_msg(f'check_sync_event_set entry: {cmd_runner=} '
+        #                   f'{check_args=}')
         target = check_args[0]
         pair_key = check_args[1]
         if target not in self.expected_registered:
@@ -8918,6 +9374,42 @@ class ConfigVerifier:
                 f'with {pair_key=}')
 
         if self.expected_pairs[pair_key][target].pending_sync:
+            return True
+
+        return False
+
+    ####################################################################
+    # check_sync_zero_create_time
+    ####################################################################
+    def check_sync_zero_create_time(self,
+                                    cmd_runner: str,
+                                    check_args: CheckZeroCtArg) -> bool:
+        """Check that the sync event is set in the target.
+
+        Args:
+            cmd_runner: thread name doing the check
+            check_args: target name and pair_key to be checked
+        """
+        # self.log_test_msg(f'check_sync_zero_create_time: {cmd_runner=} '
+        #                   f'{check_args=}')
+        sync_0 = check_args[0]
+        sync_1 = check_args[1]
+
+        pair_key = st.SmartThread._get_pair_key(sync_0, sync_1)
+        pk_remote: st.PairKeyRemote = st.PairKeyRemote(pair_key=pair_key,
+                                                       remote=sync_1,
+                                                       create_time=0.0)
+        if sync_0 not in self.expected_registered:
+            raise InvalidConfigurationDetected(
+                f'check_sync_zero_create_time {sync_0=} not in '
+                'expected_registered')
+        if sync_1 not in self.expected_registered:
+            raise InvalidConfigurationDetected(
+                f'check_sync_zero_create_time {sync_1=} not in '
+                'expected_registered')
+
+        if pk_remote in self.expected_registered[
+                sync_0].thread.work_pk_remotes:
             return True
 
         return False
@@ -17815,11 +18307,13 @@ class ConfigVerifier:
         pe[PE.current_request].completed_targets = set()
         for target in eligible_targets:
             if target in self.expected_registered:
+                # if self.expected_registered[
+                #         target].st_state == st.ThreadState.Stopped:
+                #     stop_key: ConfirmStopKey = (cmd_runner, target)
+                #     pe[PE.confirm_stop_msg][stop_key] += 1
+                # else:
                 if self.expected_registered[
-                        target].st_state == st.ThreadState.Stopped:
-                    stop_key: ConfirmStopKey = (cmd_runner, target)
-                    pe[PE.confirm_stop_msg][stop_key] += 1
-                else:
+                        target].st_state != st.ThreadState.Stopped:
                     # the thread may have not yet been started, but we
                     # know that eventually it will become alive if it
                     # is an eligible target
@@ -20075,6 +20569,7 @@ class ConfigVerifier:
                             break
             if not lock_verified:
                 if (time.time() - start_time) > timeout_value:
+                    self.abort_all_f1_threads()
                     raise FailedLockVerify(
                         f'lock_verify from {line_num=} timed out after'
                         f' {timeout_value} seconds waiting for the '
@@ -28768,7 +29263,6 @@ class TestSmartBasicScenarios:
     # test_backout_sync_remote_scenario
     ####################################################################
     @pytest.mark.parametrize("num_pending_arg", [1, 2, 3])
-    # @pytest.mark.cover2
     def test_backout_sync_remote_scenario(
             self,
             num_pending_arg: int,
@@ -28813,7 +29307,6 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_sync_delay_scenario
     ####################################################################
-    # @pytest.mark.cover2
     def test_sync_delay_scenario(
             self,
             caplog: pytest.LogCaptureFixture
@@ -28834,7 +29327,6 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_sync_delay2_scenario
     ####################################################################
-    # @pytest.mark.cover2
     def test_sync_delay2_scenario(
             self,
             caplog: pytest.LogCaptureFixture
@@ -28855,7 +29347,6 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_sync_create_time_scenario
     ####################################################################
-    # @pytest.mark.cover2
     def test_sync_create_time_scenario(
             self,
             caplog: pytest.LogCaptureFixture
@@ -28876,7 +29367,6 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_send_unreg_receiver_scenario
     ####################################################################
-    # @pytest.mark.cover2
     def test_send_unreg_receiver_scenario(
             self,
             caplog: pytest.LogCaptureFixture
@@ -28902,7 +29392,6 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_join_simple_timeout_scenario
     ####################################################################
-    # @pytest.mark.cover2
     def test_join_simple_timeout_scenario(
             self,
             caplog: pytest.LogCaptureFixture
@@ -28928,7 +29417,6 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_wait_simple_deadlock_scenario
     ####################################################################
-    # @pytest.mark.cover2
     def test_wait_simple_deadlock_scenario(
             self,
             caplog: pytest.LogCaptureFixture
@@ -28955,7 +29443,6 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_sync_unreg_simple_scenario
     ####################################################################
-    @pytest.mark.cover2
     def test_sync_unreg_simple_scenario(
             self,
             caplog: pytest.LogCaptureFixture
@@ -28979,6 +29466,32 @@ class TestSmartBasicScenarios:
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 
+    ####################################################################
+    # test_sync_unreg_simple_scenario
+    ####################################################################
+    def test_sync_init_delay_scenario(
+            self,
+            caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            caplog: pytest fixture to capture log output
+
+        Notes:
+            1) Drive the path in _process_sync where _get_target_state
+               method returns ThreadState.Unregistered and the local
+               sync gives more time
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {}
+
+        scenario_driver(
+            scenario_builder=
+            ConfigVerifier.build_sync_init_delay_scenario,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog)
+
 
 ########################################################################
 # TestSmartThreadScenarios class
@@ -28999,14 +29512,6 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_delay_unreg_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_no_delay_reg_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_delay_reg_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("timeout_type_arg",
-    #                          [TimeoutType.TimeoutNone])
-    # @pytest.mark.parametrize("num_active_no_target_arg", [1])
-    # @pytest.mark.parametrize("num_no_delay_exit_arg", [0])
-    # @pytest.mark.parametrize("num_delay_exit_arg", [0])
-    # @pytest.mark.parametrize("num_delay_unreg_arg", [0])
-    # @pytest.mark.parametrize("num_no_delay_reg_arg", [1])
-    # @pytest.mark.parametrize("num_delay_reg_arg", [0])
     def test_join_timeout_scenario(
             self,
             timeout_type_arg: TimeoutType,
@@ -29214,8 +29719,7 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_registered_targets_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_unreg_timeouts_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_exit_timeouts_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("num_full_q_timeouts_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_full_q_timeouts_arg", [1, 2])
+    @pytest.mark.parametrize("num_full_q_timeouts_arg", [0, 1, 2])
     def test_send_msg_timeout_scenarios(
             self,
             timeout_type_arg: TimeoutType,
