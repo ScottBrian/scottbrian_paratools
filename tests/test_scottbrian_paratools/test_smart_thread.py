@@ -9381,11 +9381,6 @@ class ConfigVerifier:
         sync_2_target_set = targets[sync_2_targets].copy()
         sync_3_target_set = targets[sync_3_targets].copy()
 
-        self.log_test_msg(f'before: {sync_0_target_set=}')
-        self.log_test_msg(f'before: {sync_1_target_set=}')
-        self.log_test_msg(f'before: {sync_2_target_set=}')
-        self.log_test_msg(f'before: {sync_3_target_set=}')
-
         if 'sync_0' in sync_1_target_set:
             sync_0_target_set |= {'sync_1'}
         if 'sync_0' in sync_2_target_set:
@@ -9413,11 +9408,6 @@ class ConfigVerifier:
             sync_3_target_set |= {'sync_1'}
         if 'sync_3' in sync_2_target_set:
             sync_3_target_set |= {'sync_2'}
-
-        self.log_test_msg(f'after: {sync_0_target_set=}')
-        self.log_test_msg(f'after: {sync_1_target_set=}')
-        self.log_test_msg(f'after: {sync_2_target_set=}')
-        self.log_test_msg(f'after: {sync_3_target_set=}')
 
         ################################################################
         # sync_0
@@ -29654,6 +29644,7 @@ class TestSmartBasicScenarios:
     @pytest.mark.parametrize("sync_1_targets_arg", [1, 4, 5, 8, 9, 12, 13])
     @pytest.mark.parametrize("sync_2_targets_arg", [1, 2, 3, 8, 9, 10, 11])
     @pytest.mark.parametrize("sync_3_targets_arg", [1, 2, 3, 4, 5, 6, 7])
+    @pytest.mark.seltest
     def test_sync_partial_scenario(
             self,
             sync_0_targets_arg: int,
@@ -30156,6 +30147,7 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_unreg_after_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_stop_after_ok_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_stop_after_err_arg", [0, 1, 2])
+    @pytest.mark.seltest
     def test_resume_scenarios(
             self,
             num_resumers_arg: int,
@@ -30255,6 +30247,7 @@ class TestSmartThreadComboScenarios:
     # @pytest.mark.parametrize("num_unreg_after_arg", [0])
     # @pytest.mark.parametrize("num_stop_after_ok_arg", [0])
     # @pytest.mark.parametrize("num_stop_after_err_arg", [0])
+    @pytest.mark.seltest
     def test_srrw_scenario(
             self,
             req_type_arg: st.ReqType,
@@ -30346,6 +30339,7 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_unreg_after_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_stop_after_ok_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_stop_after_err_arg", [0, 1, 2])
+    @pytest.mark.seltest
     def test_wait_scenario(
             self,
             num_waiters_arg: int,
@@ -30439,6 +30433,7 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
     @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
     @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.seltest
     def test_wait_scenario2_part_1_1(
             self,
             actor_1_arg: Actors,
@@ -30468,6 +30463,7 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
     @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
     @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.seltest
     def test_wait_scenario2_part_1_2(
             self,
             actor_1_arg: Actors,
@@ -30497,6 +30493,7 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
     @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
     @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.seltest
     def test_wait_scenario2_part_1_3(
             self,
             actor_1_arg: Actors,
@@ -30526,6 +30523,7 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
     @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
     @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.seltest
     def test_wait_scenario2_part_2_1(
             self,
             actor_1_arg: Actors,
@@ -30555,6 +30553,7 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
     @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
     @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.seltest
     def test_wait_scenario2_part_2_2(
             self,
             actor_1_arg: Actors,
@@ -30584,6 +30583,7 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
     @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
     @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.seltest
     def test_wait_scenario2_part_2_3(
             self,
             actor_1_arg: Actors,
@@ -30613,6 +30613,7 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
     @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
     @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.seltest
     def test_wait_scenario2_part_3_1(
             self,
             actor_1_arg: Actors,
@@ -30642,6 +30643,7 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
     @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
     @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.seltest
     def test_wait_scenario2_part_3_2(
             self,
             actor_1_arg: Actors,
@@ -30671,6 +30673,7 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("actor_1_arg", wait_scenario2_actor_arg_list)
     @pytest.mark.parametrize("actor_2_arg", wait_scenario2_actor_arg_list)
     @pytest.mark.parametrize("actor_3_arg", wait_scenario2_actor_arg_list)
+    @pytest.mark.seltest
     def test_wait_scenario2_part_3_3(
             self,
             actor_1_arg: Actors,
@@ -30745,6 +30748,7 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_syncers_arg", [1, 2, 3, 16])
     @pytest.mark.parametrize("num_stopped_syncers_arg", [0, 1, 2, 3])
     @pytest.mark.parametrize("num_timeout_syncers_arg", [0, 1, 2, 3])
+    @pytest.mark.seltest
     def test_sync_scenarios(
             self,
             timeout_type_arg: TimeoutType,
@@ -30817,6 +30821,7 @@ class TestSmartThreadComboScenarios:
     # @pytest.mark.parametrize("conflict_deadlock_3_arg",
     #                          [DeadlockScenario.RecvDeadlock])
     # @pytest.mark.parametrize("num_cd_actors_arg", [8])
+    @pytest.mark.seltest
     def test_deadlock_scenario(
             self,
             conflict_deadlock_1_arg: DeadlockScenario,
@@ -30858,6 +30863,7 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_unreg_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_alive_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_stopped_arg", [0, 1, 2])
+    @pytest.mark.seltest
     def test_smart_start_scenarios(
             self,
             num_auto_start_arg: int,
@@ -30911,6 +30917,7 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("pre_count_arg", [0, 1, 2, 3, 4, 5])
     @pytest.mark.parametrize("num_count_0_arg", [0, 1, 2, 3, 4, 5])
     @pytest.mark.parametrize("num_count_1_arg", [0, 1, 2, 3, 4, 5])
+    @pytest.mark.seltest
     def test_sender_resumer_count_scenario(
             self,
             request_type_arg: st.ReqType,
@@ -30955,6 +30962,7 @@ class TestSmartThreadComboScenarios:
                                                logging.ERROR,
                                                logging.CRITICAL,
                                                logging.NOTSET])
+    @pytest.mark.seltest
     def test_smart_thread_log_msg(
             self,
             log_level_arg: int,

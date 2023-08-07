@@ -602,10 +602,7 @@ class RequestBlock:
     request: ReqType
     process_rtn: ProcessRtn
     cleanup_rtn: Callable[[set[str], str], None]
-    get_block_lock: bool
     remotes: set[str]
-    error_stopped_target: bool
-    error_not_registered_target: bool
     completion_count: int
     pk_remotes: list[PairKeyRemote]
     timer: Timer
@@ -1856,11 +1853,8 @@ class SmartThread:
             self.started_targets = set()
             request_block = self._request_setup(
                 remotes=targets,
-                error_stopped_target=True,
-                error_not_registered_target=True,
                 process_rtn=self._process_start,
                 cleanup_rtn=None,
-                get_block_lock=False,
                 completion_count=0,
                 timeout=0,
                 log_msg=log_msg)
@@ -2008,11 +2002,8 @@ class SmartThread:
         self.unreged_targets = set()
         request_block = self._request_setup(
             remotes=targets,
-            error_stopped_target=False,
-            error_not_registered_target=True,
             process_rtn=None,
             cleanup_rtn=None,
-            get_block_lock=False,
             completion_count=0,
             timeout=0,
             log_msg=log_msg)
@@ -2045,8 +2036,7 @@ class SmartThread:
                         f'{self.name} did successful smart_unreg of '
                         f'{sorted(self.unreged_targets)}.')
 
-                if (request_block.error_not_registered_target
-                        and request_block.not_registered_remotes):
+                if request_block.not_registered_remotes:
                     self._handle_loop_errors(
                         request_block=request_block,
                         pending_remotes=list(
@@ -2125,10 +2115,8 @@ class SmartThread:
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
             remotes=targets,
-            error_stopped_target=False,
             process_rtn=self._process_smart_join,
             cleanup_rtn=None,
-            get_block_lock=False,
             completion_count=0,
             timeout=timeout,
             log_msg=log_msg)
@@ -2196,37 +2184,36 @@ class SmartThread:
             True when request completed, False otherwise
 
         """
-        # if the remote is not in the registry then either it was never
-        # created, or it was created as a ThreadTarget which ended and
-        # set its state to stopped and then got removed by a command
-        # that called _clean_registry. In either case, we have
-        # nothing to do and can simply return True to move on to the
-        # next target.
+        # There are three possible cases to consider:
+        # 1) the remote thread was never started: the threading join
+        #    will raise a RunTimeError and we will return False to
+        #    allow more time.
+        # 2) the thread is still running and does not end while the
+        #    threading join is in control: the threading join will
+        #    time out and the following check of is_alive() will
+        #    show the thread is still running and we will return False
+        #    to allow more time.
+        # 3) the thread has ended: the threading join will complete
+        #    immediately and the following check of is_alive() will
+        #    show the thread is no longer alive. We will now return
+        #    True to complete the smart_join for this thread.
 
-        # Note that if the remote thread was never
-        # started, the following join will raise an
-        # error. If the thread is eventually started,
-        # we currently have no way to detect that and
-        # react. We can only hope that a failed join
-        # here will help give us a clue that something
-        # went wrong.
-        # Note also that we timeout each join after a
-        # short 0.2 seconds so that we release and
-        # re-obtain the registry lock in between
-        # attempts. This is done to ensure we don't
-        # deadlock with any of the other services
-        # (e.g., smart_recv)
+        # Note that we specify a short 0.2 seconds on the threading join
+        # so that we will return and release and re-obtain the registry
+        # lock in between attempts. This is done to ensure we don't
+        # deadlock with any of the other requests (e.g., smart_recv)
+        # which could prevent the thread from ending.
         try:
             SmartThread._registry[remote].thread.join(timeout=0.2)
         except RuntimeError:
-            # We know the thread is registered, so
-            # we will skip it for now and come back to it
-            # later. If it never starts and exits then
-            # we will timeout (if timeout was specified)
+            # If here, the thread has not yet been started. We know the
+            # thread is registered, so we will skip it for now and come
+            # back to it later. If it never starts and exits then the
+            # smart_join will time out (if timeout was specified).
             return False
 
-        # we need to check to make sure the thread is
-        # not alive in case we timed out on the thread.join above
+        # we need to check to make sure the thread is not alive in case
+        # we timed out on the threading join above
         if SmartThread._registry[remote].thread.is_alive():
             return False  # give thread more time to end
         else:
@@ -2623,10 +2610,8 @@ class SmartThread:
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
             remotes=remotes,
-            error_stopped_target=True,
             process_rtn=self._process_send_msg,
             cleanup_rtn=None,
-            get_block_lock=False,
             completion_count=len(remotes),
             timeout=timeout,
             msg_to_send=work_msgs,
@@ -3035,10 +3020,8 @@ class SmartThread:
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
             remotes=senders,
-            error_stopped_target=True,
             process_rtn=self._process_recv_msg,
             cleanup_rtn=None,
-            get_block_lock=False,
             completion_count=completion_count,
             timeout=timeout,
             log_msg=log_msg)
@@ -3123,20 +3106,11 @@ class SmartThread:
                 return True
 
             except queue.Empty:
-                # The msg queue was just now empty which rules out
-                # that case that the pair_key is valid only because
-                # of a deferred delete. So, we know the remote is in
-                # the registry and in the status block.
+                # The msg queue was just now empty which rules out the
+                # case that the pair_key is valid only because of a
+                # deferred delete. So, we know the remote is in the
+                # registry and in the status block.
 
-                # remote_state = self._get_target_state(pk_remote)
-                #
-                # if remote_state == ThreadState.Stopped:
-                #     request_block.stopped_remotes |= {pk_remote.remote}
-                #     request_block.do_refresh = True
-                #     return True  # we are done with this remote
-                #
-                # if remote_state != ThreadState.Alive:
-                #     return False  # remote needs more time
                 with SmartThread._pair_array[pk_remote.pair_key].status_lock:
                     local_sb.recv_wait = True
                     # Check for error conditions first before
@@ -3496,10 +3470,8 @@ class SmartThread:
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
             remotes=resumers,
-            error_stopped_target=True,
             process_rtn=self._process_wait,
             cleanup_rtn=self._sync_wait_error_cleanup,
-            get_block_lock=True,
             completion_count=completion_count,
             timeout=timeout,
             log_msg=log_msg)
@@ -3838,10 +3810,8 @@ class SmartThread:
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
             remotes=waiters,
-            error_stopped_target=True,
             process_rtn=self._process_resume,
             cleanup_rtn=None,
-            get_block_lock=True,
             completion_count=len(self._get_set(waiters)),
             timeout=timeout,
             log_msg=log_msg)
@@ -4020,10 +3990,8 @@ class SmartThread:
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
             remotes=targets,
-            error_stopped_target=True,
             process_rtn=self._process_sync,
             cleanup_rtn=self._sync_wait_error_cleanup,
-            get_block_lock=True,
             completion_count=len(self._get_set(targets)),
             timeout=timeout,
             log_msg=log_msg)
@@ -4387,20 +4355,8 @@ class SmartThread:
             # handle any error or timeout cases - don't worry about any
             # remotes that were still pending - we need to fail the
             # request as soon as we know about any unresolvable
-            # failures. Note that we ignore stopped_remotes when no
-            # remotes are specified. This will be the case when recv
-            # had no remotes and is looking for any message from any
-            # thread in the configuration, or wait had no remotes and is
-            # looking for  a resume from any thread in the
-            # configuration. In those two cases, we will refresh our
-            # list of threads to try and keep trying. For send, though,
-            # no remotes means either a broadcast to any and all active
-            # threads or a SendMsgs was provided. For broadcast, we are
-            # done after one loop regardless of whether there were any
-            # active threads and we will thus not reach the following
-            # code. For the SendMsg case, we do need to raise an error
-            # for stopped targets.
-            if ((request_block.stopped_remotes and request_block.remotes)
+            # failures.
+            if (request_block.stopped_remotes
                     or request_block.deadlock_remotes
                     or request_block.timer.is_expired()):
 
@@ -4640,8 +4596,7 @@ class SmartThread:
                      f'{not_registered_msg}{deadlock_msg}{full_send_q_msg}')
 
         # If an error should be raised for stopped threads
-        if (request_block.error_stopped_target
-                and request_block.stopped_remotes):
+        if request_block.stopped_remotes:
             error_msg = (
                 f'{self.name} raising '
                 f'SmartThreadRemoteThreadNotAlive {msg_suite}')
@@ -4649,8 +4604,7 @@ class SmartThread:
             raise SmartThreadRemoteThreadNotAlive(error_msg)
 
         # If an error should be raised for unregistered threads
-        if (request_block.error_not_registered_target
-                and request_block.not_registered_remotes):
+        if request_block.not_registered_remotes:
             error_msg = (
                 f'{self.name} raising '
                 f'SmartThreadRemoteThreadNotRegistered {msg_suite}')
@@ -4740,10 +4694,7 @@ class SmartThread:
                             PairKeyRemote,
                             "SmartThread.ConnectionStatusBlock"], bool],
                        cleanup_rtn: Optional[Callable[[set[str]], None]],
-                       get_block_lock: bool,
-                       error_stopped_target: bool,
                        remotes: Optional[Iterable] = None,
-                       error_not_registered_target: bool = False,
                        completion_count: int = 0,
                        timeout: OptIntFloat = None,
                        log_msg: Optional[str] = None,
@@ -4755,13 +4706,7 @@ class SmartThread:
             process_rtn: method to process the request for each
                 iteration of the request loop
             cleanup_rtn: method to back out a failed request
-            get_block_lock: True or False
             remotes: remote threads for the request
-            error_stopped_target: request will raise an error if any
-                one of the targets is in a stopped state.
-            error_not_registered_target: request will raise an error if
-                any one of the targets is in any state other than
-                registered.
             completion_count: how many request need to succeed
             timeout: number of seconds to allow for request completion
             log_msg: caller log message to issue
@@ -4839,10 +4784,7 @@ class SmartThread:
             request=self.request,
             process_rtn=process_rtn,
             cleanup_rtn=cleanup_rtn,
-            get_block_lock=get_block_lock,
             remotes=remotes,
-            error_stopped_target=error_stopped_target,
-            error_not_registered_target=error_not_registered_target,
             completion_count=completion_count,
             pk_remotes=pk_remotes,
             timer=timer,
