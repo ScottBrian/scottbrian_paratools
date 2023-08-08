@@ -24514,8 +24514,9 @@ class TestSmartThreadInterface:
                                                     'kwarg3': [11, 22, 33]})
 
         time.sleep(0.5)
-        assert beta_smart_thread._get_state('beta') == ThreadState.Stopped
+        assert beta_smart_thread._get_state('beta') == ThreadState.Alive
         alpha_smart_thread.smart_join(targets='beta')
+        assert beta_smart_thread._get_state('beta') == ThreadState.Unregistered
         logger.debug('mainline exiting')
 
     ####################################################################
@@ -25001,8 +25002,9 @@ class TestSmartThreadInterface:
 
         logger.debug(f'After: {kwargs_to_specify}')
         time.sleep(0.5)
-        assert beta_smart_thread._get_state('beta') == ThreadState.Stopped
+        assert beta_smart_thread._get_state('beta') == ThreadState.Alive
         alpha_smart_thread.smart_join(targets='beta')
+        assert beta_smart_thread._get_state('beta') == ThreadState.Unregistered
         logger.debug('mainline exiting')
 
     ####################################################################
@@ -25253,8 +25255,9 @@ class TestSmartThreadInterface:
                                                     'kwarg3': [11, 22, 33]})
 
         time.sleep(0.5)
-        assert beta_smart_thread._get_state('beta') == ThreadState.Stopped
+        assert beta_smart_thread._get_state('beta') == ThreadState.Alive
         alpha_smart_thread.smart_join(targets='beta')
+        assert beta_smart_thread._get_state('beta') == ThreadState.Unregistered
         logger.debug('mainline exiting')
 
     ####################################################################
@@ -25352,8 +25355,9 @@ class TestSmartThreadInterface:
             kwargs=kwargs_to_specify)
 
         time.sleep(0.5)
-        assert beta_smart_thread._get_state('beta') == ThreadState.Stopped
+        assert beta_smart_thread._get_state('beta') == ThreadState.Alive
         alpha_smart_thread.smart_join(targets='beta')
+        assert beta_smart_thread._get_state('beta') == ThreadState.Unregistered
         logger.debug('mainline exiting')
 
 

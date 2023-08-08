@@ -429,30 +429,13 @@ logger = logging.getLogger(__name__)
 IntFloat: TypeAlias = Union[int, float]
 OptIntFloat: TypeAlias = Optional[IntFloat]
 
-ConfigCmdCallable: TypeAlias = Callable[["RequestBlock", str], bool]
-RequestCallable: TypeAlias = Callable[
-    ["RequestBlock",
-     "PairKeyRemote",
-     "SmartThread.ConnectionStatusBlock"], bool]
+ProcessRtn: TypeAlias = Optional[
+    Callable[
+        ["RequestBlock",
+         "PairKeyRemote",
+         "SmartThread.ConnectionStatusBlock"], bool]]
 
-ProcessRtn: TypeAlias = Union[ConfigCmdCallable, RequestCallable]
-
-# SendMsgs: TypeAlias = dict[str, list[Any]]
-
-
-@dataclass
-class SendMsgs:
-    """Class used for a set of messages to send."""
-    send_msgs: dict[str, list[Any]]
-
-# def make_def_dict():
-#     return defaultdict(list)
-#
-# @dataclass
-# class RecvMsgs:
-#     """Class used for a set of messages to send."""
-#     recv_msgs: dict[str, list[Any]] = field(
-#         default_factory=make_def_dict)
+CleanupRtn: TypeAlias = Optional[Callable[[set[str], str], None]]
 
 
 ########################################################################
@@ -567,18 +550,6 @@ class ReqType(StrEnum):
     Smart_wait = auto()
 
 
-########################################################################
-# ReqCategory
-# contains the category of the request
-########################################################################
-class ReqCategory(Enum):
-    """Category for SmartThread request."""
-    Config = auto()
-    Throw = auto()
-    Catch = auto()
-    Handshake = auto()
-
-
 class PairKey(NamedTuple):
     """Names the remote threads in a pair in the pair array."""
     name0: str
@@ -600,8 +571,6 @@ class PairKeyRemote(NamedTuple):
 class RequestBlock:
     """Setup block."""
     request: ReqType
-    process_rtn: ProcessRtn
-    cleanup_rtn: Callable[[set[str], str], None]
     remotes: set[str]
     completion_count: int
     pk_remotes: list[PairKeyRemote]
@@ -613,6 +582,8 @@ class RequestBlock:
     not_registered_remotes: set[str]
     deadlock_remotes: set[str]
     full_send_q_remotes: set[str]
+    process_rtn: ProcessRtn = None
+    cleanup_rtn: CleanupRtn = None
     request_max_interval: IntFloat = 0.0
     remote_deadlock_request: ReqType = ReqType.NoReq
 
@@ -979,12 +950,13 @@ class SmartThread:
         self.started_targets: set[str] = set()
         self.unreged_targets: set[str] = set()
         self.joined_targets: set[str] = set()
-        # self.recvd_msgs: dict[str, list[Any]] = defaultdict(list)
         self.recvd_msgs: dict[str, list[Any]] = {}
         self.sent_targets: set[str] = set()
         self.resumed_by: set[str] = set()
         self.resumed_targets: set[str] = set()
         self.synced_targets: set[str] = set()
+
+        self.num_targets_completed: int = 0
 
         self.work_remotes: set[str] = set()
         self.work_pk_remotes: list[PairKeyRemote] = []
@@ -1117,7 +1089,7 @@ class SmartThread:
         # $$$ @sbt: we are no longer returning Stopped - code commented
         # out for now - will see what happens after testing with other
         # changes in _register which will set the state to Stopped when
-        # its sees Alive and is_alive=False
+        # it sees Alive and is_alive=False
         # if (not SmartThread._registry[name].thread.is_alive() and
         #         SmartThread._registry[name].st_state == ThreadState.Alive):
         #     return ThreadState.Stopped
@@ -1853,8 +1825,6 @@ class SmartThread:
             self.started_targets = set()
             request_block = self._request_setup(
                 remotes=targets,
-                process_rtn=self._process_start,
-                cleanup_rtn=None,
                 completion_count=0,
                 timeout=0,
                 log_msg=log_msg)
@@ -1862,8 +1832,8 @@ class SmartThread:
             self.work_remotes: set[str] = request_block.remotes.copy()
             for remote in self.work_remotes.copy():
                 with sel.SELockExcl(SmartThread._registry_lock):
-                    if request_block.process_rtn(request_block,
-                                                 remote):
+                    if self._process_start(request_block,
+                                           remote):
                         self.work_remotes -= {remote}
 
             if request_block.not_registered_remotes:
@@ -2002,8 +1972,6 @@ class SmartThread:
         self.unreged_targets = set()
         request_block = self._request_setup(
             remotes=targets,
-            process_rtn=None,
-            cleanup_rtn=None,
             completion_count=0,
             timeout=0,
             log_msg=log_msg)
@@ -2115,8 +2083,6 @@ class SmartThread:
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
             remotes=targets,
-            process_rtn=self._process_smart_join,
-            cleanup_rtn=None,
             completion_count=0,
             timeout=timeout,
             log_msg=log_msg)
@@ -2130,8 +2096,7 @@ class SmartThread:
                 with sel.SELockExcl(SmartThread._registry_lock):
                     for remote in self.work_remotes.copy():
                         if remote in SmartThread._registry:
-                            if request_block.process_rtn(request_block,
-                                                         remote):
+                            if self._process_smart_join(remote):
                                 self.work_remotes -= {remote}
                                 joined_remotes |= {remote}
                         else:
@@ -2171,13 +2136,11 @@ class SmartThread:
     # _process_smart_join
     ####################################################################
     def _process_smart_join(self,
-                            request_block: RequestBlock,
                             remote: str,
                             ) -> bool:
         """Process the smart_join request.
 
         Args:
-            request_block: contains request related data
             remote: remote name
 
         Returns:
@@ -2611,7 +2574,6 @@ class SmartThread:
         request_block = self._request_setup(
             remotes=remotes,
             process_rtn=self._process_send_msg,
-            cleanup_rtn=None,
             completion_count=len(remotes),
             timeout=timeout,
             msg_to_send=work_msgs,
@@ -2693,6 +2655,7 @@ class SmartThread:
                         f'{pk_remote.remote}')
 
                     self.sent_targets |= {pk_remote.remote}
+                    self.num_targets_completed += 1
                     return True
                 except queue.Full:
                     # We fail this request when the msg_q is full
@@ -3021,7 +2984,6 @@ class SmartThread:
         request_block = self._request_setup(
             remotes=senders,
             process_rtn=self._process_recv_msg,
-            cleanup_rtn=None,
             completion_count=completion_count,
             timeout=timeout,
             log_msg=log_msg)
@@ -3067,7 +3029,6 @@ class SmartThread:
                 # recv message from remote
                 with SmartThread._pair_array[pk_remote.pair_key].status_lock:
                     recvd_msg = local_sb.msg_q.get(timeout=timeout_value)
-                    # self.recvd_msgs[pk_remote.remote].append(recvd_msg)
                     self.recvd_msgs[pk_remote.remote] = [recvd_msg]
                     while not local_sb.msg_q.empty():
                         recvd_msg = local_sb.msg_q.get()
@@ -3103,6 +3064,7 @@ class SmartThread:
                 #         and not local_sb.wait_event.is_set()
                 #         and not local_sb.sync_event.is_set()):
                 #     request_block.do_refresh = True
+                self.num_targets_completed += 1
                 return True
 
             except queue.Empty:
@@ -3537,7 +3499,7 @@ class SmartThread:
                     f'{self.name} smart_wait resumed by '
                     f'{pk_remote.remote}')
                 self.resumed_by |= {pk_remote.remote}
-
+                self.num_targets_completed += 1
                 return True
 
             with SmartThread._pair_array[pk_remote.pair_key].status_lock:
@@ -3811,7 +3773,6 @@ class SmartThread:
         request_block = self._request_setup(
             remotes=waiters,
             process_rtn=self._process_resume,
-            cleanup_rtn=None,
             completion_count=len(self._get_set(waiters)),
             timeout=timeout,
             log_msg=log_msg)
@@ -3875,6 +3836,7 @@ class SmartThread:
                         f'{self.name} smart_resume resumed '
                         f'{pk_remote.remote}')
                     self.resumed_targets |= {pk_remote.remote}
+                    self.num_targets_completed += 1
                     return True
         else:
             if remote_state == ThreadState.Stopped:
@@ -4102,6 +4064,7 @@ class SmartThread:
                     f'{self.name} smart_sync achieved with '
                     f'{pk_remote.remote}')
                 self.synced_targets |= {pk_remote.remote}
+                self.num_targets_completed += 1
                 # exit, we are done with this remote
                 return True
 
@@ -4323,21 +4286,22 @@ class SmartThread:
                         self._clean_pair_array()
                     request_block.do_refresh = False
 
-            if ((self.request == ReqType.Smart_send
-                    and request_block.completion_count
-                    <= len(self.sent_targets))
-                    or (self.request == ReqType.Smart_recv
-                        and request_block.completion_count
-                        <= len(self.recvd_msgs.keys()))
-                    or (self.request == ReqType.Smart_resume
-                        and request_block.completion_count
-                        <= len(self.resumed_targets))
-                    or (self.request == ReqType.Smart_wait
-                        and request_block.completion_count
-                        <= len(self.resumed_by))
-                    or (self.request == ReqType.Smart_sync
-                        and request_block.completion_count
-                        <= len(self.synced_targets))):
+            # if ((self.request == ReqType.Smart_send
+            #         and request_block.completion_count
+            #         <= len(self.sent_targets))
+            #         or (self.request == ReqType.Smart_recv
+            #             and request_block.completion_count
+            #             <= len(self.recvd_msgs.keys()))
+            #         or (self.request == ReqType.Smart_resume
+            #             and request_block.completion_count
+            #             <= len(self.resumed_targets))
+            #         or (self.request == ReqType.Smart_wait
+            #             and request_block.completion_count
+            #             <= len(self.resumed_by))
+            #         or (self.request == ReqType.Smart_sync
+            #             and request_block.completion_count
+            #             <= len(self.synced_targets))):
+            if request_block.completion_count <= self.num_targets_completed:
                 # clear request_pending for remaining work remotes
                 for pair_key, remote, _ in self.work_pk_remotes:
                     if pair_key in SmartThread._pair_array:
@@ -4689,11 +4653,12 @@ class SmartThread:
     # _request_setup
     ####################################################################
     def _request_setup(self, *,
-                       process_rtn: Callable[
-                           ["RequestBlock",
-                            PairKeyRemote,
-                            "SmartThread.ConnectionStatusBlock"], bool],
-                       cleanup_rtn: Optional[Callable[[set[str]], None]],
+                       process_rtn: ProcessRtn = None,
+                       # process_rtn: Callable[
+                       #     ["RequestBlock",
+                       #      PairKeyRemote,
+                       #      "SmartThread.ConnectionStatusBlock"], bool],
+                       cleanup_rtn: CleanupRtn = None,
                        remotes: Optional[Iterable] = None,
                        completion_count: int = 0,
                        timeout: OptIntFloat = None,
@@ -4728,6 +4693,8 @@ class SmartThread:
 
         remotes = self._get_set(remotes)
 
+        self.num_targets_completed = 0
+
         if not remotes:
             error_msg = (
                 f'SmartThread {threading.current_thread().name} raising '
@@ -4761,8 +4728,7 @@ class SmartThread:
             timeout_value=timer.timeout_value(),
             log_msg=log_msg)
 
-        if (remotes and self.request != ReqType.Smart_start
-                and self.cmd_runner in remotes):
+        if self.cmd_runner in remotes and self.request != ReqType.Smart_start:
             error_msg = (
                 f'SmartThread {threading.current_thread().name} raising '
                 f'SmartThreadInvalidInput error while processing request '
