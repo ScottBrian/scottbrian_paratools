@@ -29283,7 +29283,6 @@ class TestSmartBasicScenarios:
     @pytest.mark.parametrize("num_resumers_arg", [1, 2, 3])
     @pytest.mark.parametrize("num_waiters_arg", [1, 2, 3])
     @pytest.mark.parametrize("num_reg_waiters_arg", [1, 2])
-    @pytest.mark.cover2
     def test_resume_basic_scenario(
             self,
             num_resumers_arg: int,
@@ -29730,7 +29729,6 @@ class TestSmartBasicScenarios:
     @pytest.mark.parametrize("sync_1_targets_arg", [1, 4, 5, 8, 9, 12, 13])
     @pytest.mark.parametrize("sync_2_targets_arg", [1, 2, 3, 8, 9, 10, 11])
     @pytest.mark.parametrize("sync_3_targets_arg", [1, 2, 3, 4, 5, 6, 7])
-    @pytest.mark.seltest
     def test_sync_partial_scenario(
             self,
             sync_0_targets_arg: int,
@@ -30233,7 +30231,7 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_unreg_after_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_stop_after_ok_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_stop_after_err_arg", [0, 1, 2])
-    @pytest.mark.seltest
+    # @pytest.mark.seltest
     def test_resume_scenarios(
             self,
             num_resumers_arg: int,

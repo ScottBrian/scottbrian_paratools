@@ -683,8 +683,9 @@ class SmartThread:
             try:
                 self._target(*self._args, **self._kwargs)
             finally:
-                # Avoid a refcycle if the thread is running a function with
-                # an argument that has a member that points to the thread.
+                # Avoid a refcycle if the thread is running a function
+                # with an argument that has a member that points to the
+                # thread.
                 del self._target, self._args, self._kwargs
 
     ####################################################################
@@ -694,18 +695,18 @@ class SmartThread:
     # request.
     #
     # Notes:
-    #     1) target_create_timee is used to ensure that a catch type
-    #        request (smart_recv or wait) or handshake request (sync)
-    #        are satisfied by the remote that was in the configuration
-    #        when the request was initiated. Normally, each request will
-    #        periodically check the remote state and will raise an error
-    #        if the remote has stopped. There is, however, the
-    #        possibility that the remote will be started again
-    #        (resurrected) and could potentially complete the request
-    #        before the current thread notices that the remote had been
-    #        stopped. We don't want a resurrected remote to complete the
-    #        request, so the remote will check to ensure its create time
-    #        is equal target_create_time before completing the request.
+    #     1) target_create_timee is used to ensure that a smart_recv,
+    #        smart_wait, or smart_sync request is satisfied by the
+    #        remote that was in the configuration when the request was
+    #        initiated. Normally, each request will periodically check
+    #        the remote state and will raise an error if the remote has
+    #        stopped. There is, however, the possibility that the remote
+    #        will be started again (resurrected) and could potentially
+    #        complete the request before the current thread notices that
+    #        the remote had been stopped. We don't want a resurrected
+    #        remote to complete the request, so the remote will check to
+    #        ensure its create time is equal target_create_time before
+    #        completing the request.
     #     2) request_pending is used to prevent the pair array item from
     #        being removed, and this is needed to ensure that the
     #        target_create_time remains valid.
@@ -720,7 +721,6 @@ class SmartThread:
         wait_event: threading.Event
         sync_event: threading.Event
         msg_q: queue.Queue[Any]
-        code: Any = None
         request: ReqType = ReqType.NoReq
         remote_deadlock_request: ReqType = ReqType.NoReq
         del_deferred: bool = False
@@ -941,8 +941,6 @@ class SmartThread:
         self.auto_start = auto_start
 
         self.default_timeout = default_timeout
-
-        self.code = None
 
         self.max_msgs = max_msgs
         self.request_max_interval = request_max_interval
@@ -1215,8 +1213,9 @@ class SmartThread:
                             f'the same thread {item.thread} for name {key}.')
                         logger.error(error_msg)
                         raise SmartThreadAlreadyExists(error_msg)
+
                 # get a unique time stamp for create_time
-                self.create_time = time.time()
+                self.create_time = SmartThread._create_pair_array_entry_time
                 while self.create_time == (
                         SmartThread._create_pair_array_entry_time):
                     self.create_time = time.time()
