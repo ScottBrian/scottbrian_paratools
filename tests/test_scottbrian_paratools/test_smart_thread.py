@@ -14476,37 +14476,60 @@ class ConfigVerifier:
     def build_resume_basic_scenario(
             self,
             num_resumers: int,
-            num_waiters: int) -> None:
+            num_waiters: int,
+            num_reg_waiters: int) -> None:
         """Add cmds to run scenario.
 
         Args:
             num_resumers: number of resumer threads
             num_waiters: number of waiter threads
+            num_reg_waiters: number of waiters to be registered at first
 
         """
-        resumers: set[str] = set()
-        for idx in range(num_resumers):
-            resumers |= {'resumer_' + str(idx)}
+        resumers: set[str] = get_names('resumer_', num_resumers)
 
-        waiters: set[str] = set()
-        for idx in range(num_waiters):
-            waiters |= {'waiter_' + str(idx)}
+        waiters: set[str] = get_names('waiter_', num_waiters)
 
-        self.create_config(active_names=resumers | waiters)
+        reg_waiters: set[str] = get_names('reg_waiter_', num_reg_waiters)
+
+        self.create_config(reg_names=reg_waiters,
+                           active_names=resumers | waiters)
+
+        targets: set[str] = waiters | reg_waiters
 
         ################################################################
         # resume
         ################################################################
         resume_serial_num = self.add_cmd(Resume(
             cmd_runners=resumers,
-            targets=waiters,
-            exp_resumed_targets=waiters))
+            targets=targets,
+            exp_resumed_targets=targets))
+
+        # make sure resume is running and sees that reg_waiters are not
+        # there yet. Note that we can't include waiters in the list of
+        # timeout names because resume will set the wait_event when it
+        # sees that the targets (waiters) are alive - they don't need
+        # to be waiting.
+        self.add_cmd(WaitForRequestTimeouts(
+            cmd_runners=self.commander_name,
+            actor_names=resumers,
+            timeout_names=reg_waiters))
 
         ################################################################
-        # receive messages
+        # wait
         ################################################################
         wait_serial_num = self.add_cmd(Wait(
             cmd_runners=waiters,
+            resumers=resumers,
+            exp_resumers=resumers))
+
+        ################################################################
+        # reg_wait
+        ################################################################
+        self.build_start_suite(start_names=reg_waiters,
+                               validate_config=False)
+        reg_wait_serial_num = self.add_cmd(Wait(
+            cmd_runners=reg_waiters,
             resumers=resumers,
             exp_resumers=resumers))
 
@@ -14526,6 +14549,64 @@ class ConfigVerifier:
                 confirm_cmd='Wait',
                 confirm_serial_num=wait_serial_num,
                 confirmers=waiters))
+
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='Wait',
+                confirm_serial_num=reg_wait_serial_num,
+                confirmers=reg_waiters))
+
+        ################################################################
+        # repeat in reverse
+        ################################################################
+        ################################################################
+        # reg_wait
+        ################################################################
+        reg_wait_serial_num = self.add_cmd(Wait(
+            cmd_runners=reg_waiters,
+            resumers=resumers,
+            exp_resumers=resumers))
+
+        ################################################################
+        # wait
+        ################################################################
+        wait_serial_num = self.add_cmd(Wait(
+            cmd_runners=waiters,
+            resumers=resumers,
+            exp_resumers=resumers))
+
+        ################################################################
+        # resume
+        ################################################################
+        resume_serial_num = self.add_cmd(Resume(
+            cmd_runners=resumers,
+            targets=targets,
+            exp_resumed_targets=targets))
+
+        ################################################################
+        # confirm response
+        ################################################################
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='Wait',
+                confirm_serial_num=reg_wait_serial_num,
+                confirmers=reg_waiters))
+
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='Wait',
+                confirm_serial_num=wait_serial_num,
+                confirmers=waiters))
+
+        self.add_cmd(
+            ConfirmResponse(
+                cmd_runners=self.commander_name,
+                confirm_cmd='Resume',
+                confirm_serial_num=resume_serial_num,
+                confirmers=resumers))
 
     ####################################################################
     # build_wait_basic_scenario
@@ -29201,10 +29282,13 @@ class TestSmartBasicScenarios:
     ####################################################################
     @pytest.mark.parametrize("num_resumers_arg", [1, 2, 3])
     @pytest.mark.parametrize("num_waiters_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_reg_waiters_arg", [1, 2])
+    @pytest.mark.cover2
     def test_resume_basic_scenario(
             self,
             num_resumers_arg: int,
             num_waiters_arg: int,
+            num_reg_waiters_arg: int,
             caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test meta configuration scenarios.
@@ -29212,12 +29296,14 @@ class TestSmartBasicScenarios:
         Args:
             num_resumers_arg: number of resumers
             num_waiters_arg: number of waiters
+            num_reg_waiters_arg: number waiters start out as registered
             caplog: pytest fixture to capture log output
 
         """
         args_for_scenario_builder: dict[str, Any] = {
             'num_resumers': num_resumers_arg,
             'num_waiters': num_waiters_arg,
+            'num_reg_waiters': num_reg_waiters_arg
         }
 
         scenario_driver(
@@ -29303,10 +29389,6 @@ class TestSmartBasicScenarios:
     @pytest.mark.parametrize("pending_request_tf_arg", [True, False])
     @pytest.mark.parametrize("pending_msg_count_arg", [0, 1, 2])
     @pytest.mark.parametrize("pending_wait_tf_arg", [True, False])
-    # @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_resume])
-    # @pytest.mark.parametrize("pending_request_tf_arg", [True])
-    # @pytest.mark.parametrize("pending_msg_count_arg", [0])
-    # @pytest.mark.parametrize("pending_wait_tf_arg", [True])
     def test_pending_sans_sync_scenario(
             self,
             request_type_arg: st.ReqType,
