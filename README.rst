@@ -16,6 +16,36 @@ Example: Create a SmartThread configuration for threads named
          Note the use of auto_start=True and passing the SmartThread
          instance to the target via the thread_parm_name.
 
+.. code-block:: python
+    from scottbrian_paratools.smart_thread import SmartThread
+    def f1(smart_thread: SmartThread) -> None:
+        print('f1 beta entered')
+        smart_thread.smart_send(receivers='alpha',
+                                msg='hi alpha, this is beta')
+        smart_thread.smart_wait(resumers='alpha')
+        print('f1 beta exiting')
+    print('mainline alpha entered')
+
+    alpha_smart_thread = SmartThread(name='alpha')
+    beta_smart_thread = SmartThread(name='beta',
+                                    target=f1,
+                                    auto_start=True,
+                                    thread_parm_name='smart_thread')
+    msg_from_beta = alpha_smart_thread.smart_recv(senders='beta')
+    print(msg_from_beta)
+
+    alpha_smart_thread.smart_resume(waiters='beta')
+    alpha_smart_thread.smart_join(targets='beta')
+    print('mainline alpha exiting')
+
+
+Expected output for Example 1::
+    mainline alpha entered
+    {'beta': ['hi alpha, this is beta']}
+    mainline alpha exiting
+
+
+
 >>> from scottbrian_paratools.smart_thread import SmartThread
 >>> def f1(smart_thread: SmartThread) -> None:
 ...     print('f1 beta entered')

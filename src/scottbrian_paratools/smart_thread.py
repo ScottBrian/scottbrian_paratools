@@ -10,28 +10,13 @@ and resume/wait/sync methods. It will also detect various error
 conditions, such as when a thread becomes unresponsive because it has
 ended.
 
-SmartThread makes use of the Python threading services, such as Thread,
-Event, and Lock classes.
+SmartThread makes use of classes Thread, Event, and lock in the Python
+threading module, and the Queue class in the Python queue module.
 
-There are three cases where SmartThread can be instantiated:
-
-    1) SmartThread is instantiated for the current thread. Internal
-       variable *thread* is set from ''threading.current_thread()''.
-    2) SmartThread is instantiated with a *target* argument that
-       specifies a routine that is to get control in a new thread.
-       Internal variable *thread* is set from ''threading.Thread()''
-       with the *target* argument. The remote thread can be started
-       immediately when *auto_start* is True (the default), or later by
-       issuing ''smart_start()'' for the SmartThread object.
-    3) SmartThread is instantiated with a *thread* argument that
-       specifies an instance of threading.Thread that is to be bound to
-       the internal *thread* variable. This can be useful for a remote
-       thread that was created via ''threading.Thread()'' and now
-       wishes to use the SmartThread requests.
-
-Each SmartThread instance has a name as provided during instantiation
+Each SmartThread instance has a name specified during instantiation
 with the *name* argument. The name is used on the various SmartThread
-methods to identify the specific instance.
+methods to identify a specific instance and is also used to provide the
+name for the threading Thread class instance.
 
 A SmartThread configuration is composed of class variables that include
 a dictionary for a registry, and another dictionary called a pair array
@@ -40,28 +25,36 @@ two items, one for each of two SmartThread instances, and is used to
 coordinate the SmartThread requests between them. There is a status
 block for each combination of SmartThread instances.
 
-Each SmartThread is in a specific state at any one time. These states
-are described as a ThreadState as follows:
+The configuration methods are:
+
+    1) ''__init__()'': used to create, initialize, and register a
+       SmartThread instance.
+    2) ''smart_start()'': used to start the thread if not already
+       active.
+    3) ''smart_unreg()'': used to unregister a SmartThread instance that
+        was never started.
+    4) ''smart_join()'': used to join a thread that has ended.
+
+Note that for consistency the SmartThread ''__init__()'' methods appears
+in log messages as ''smart_init()''.
+
+During its life cycle, each SmartThread instance will be in one of the
+ThreadState states per the following:
 
     1) ThreadState.Unregistered: the Unregistered state is both the
-       starting and ending state in the life cycle of a SmartThread.
-       When the SmartThread __init__ method gets control, it initially
-       sets the state to Unregistered just before setting the state to
-       Initializing. Later, the thread will enter the Unregistered state
-       either via ''smart_unreg()'' or ''smart_join()''.
+       starting and ending state in the life cycle of a SmartThread
+       instance. When the SmartThread ''__init__()'' method gets control
+       it initially sets the state to Unregistered. When the thread
+       ends, ''smart_join()'' will result in the state being set to
+       Unregistered. If the SmartThread instance was registered but
+       never started, ''smart_unreg()'' can be called to unregister the
+       instance and the state will be set to Unregistered.
     2) ThreadState.Initializing: the SmartThread instance is moved from
-       the Unregistered state to the Initializing state by the __init__
-       method on its way toward registration. Note that the
-       initialization done in __init__ is also referred to as
-       ''smart_init()'' in the log messages even though a
-       ''smart_init()'' method does not exist.
+       the Unregistered state to the Initializing state by
+       ''__init__()''.
     3) ThreadState.Registered: the SmartThread instance is moved from
        the Initializing state to the Registered state as soon as it is
-       placed into the registry. It will immediately move to the Alive
-       state from here if the threading ''is_alive()'' method returns
-       true. Otherwise, the SmartThread instance will stay in the
-       Registered state until it is either started via ''smart_start()''
-       or unregistered via ''smart_unreg()''.
+       placed into the registry.
     4) ThreadState.Starting: the SmartThread instance is moved from
        the Registered state to the Starting state via 'smart_start()''.
     5) ThreadState.Alive: the SmartThread instance is immediately moved
@@ -73,7 +66,7 @@ are described as a ThreadState as follows:
     6) Threading.Stopped: the SmartThread instance is moved from the
        Alive state to the Stopped state when it is detected that the
        thread has ended (i.e., the threading ''is_alive()'' method
-        returns False).
+       returns False).
     7) Threading.Unregistering: the SmartThread instance is moved from
        the Registered state to the Unregistering state via
        ''smart_unreg()'', or from the Stopped state to the Unregistering
@@ -81,8 +74,8 @@ are described as a ThreadState as follows:
        ''smart_join()'' removes the SmartThread instance from the
        registry, the state is moved from Unregistering to Unregistered.
 
-The SmartThread instantiation process and the configuration
-commands require various ThreadState states and affect the configuration
+The SmartThread instantiation process and the configuration methods
+require various ThreadState states and affect the configuration
 and ThreadState transitions:
 
     1) SmartThread instantiation:
@@ -131,6 +124,22 @@ and ThreadState transitions:
         e) the SmartThread instance may remain is scope, but it can
            not be started or enacted upon by any command at this point.
            The name can be used again for a newly created instance.
+
+There are three cases where SmartThread can be instantiated:
+
+    1) SmartThread is instantiated for the current thread. Internal
+       variable *thread* is set from ''threading.current_thread()''.
+    2) SmartThread is instantiated with a *target* argument that
+       specifies a routine that is to get control in a new thread.
+       Internal variable *thread* is set from ''threading.Thread()''
+       with the *target* argument. The remote thread can be started
+       immediately when *auto_start* is True (the default), or later by
+       issuing ''smart_start()'' for the SmartThread object.
+    3) SmartThread is instantiated with a *thread* argument that
+       specifies an instance of threading.Thread that is to be bound to
+       the internal *thread* variable. This can be useful for a remote
+       thread that was created via ''threading.Thread()'' and now
+       wishes to use the SmartThread requests.
 
 The SmartThread paired and handshake requests require that their targets
 be in state ThreadState.Alive before completing the request. Each of
@@ -396,7 +405,7 @@ Expected output for Example5::
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
-from enum import auto, Enum, Flag, StrEnum
+from enum import auto, Flag, StrEnum
 import logging
 import queue
 import threading
@@ -1055,40 +1064,18 @@ class SmartThread:
             The thread status
 
         Notes:
-            Must be called holding the registry lock either shared or
-            exclusive
+            1) Must be called holding the registry lock either shared or
+               exclusive
+            2) When a thread has ended, the threading is_alive method
+               will return False. The state in st_state will still be
+               Alive until _clean_registry is called to change the
+               state to Stopped. This method will return the state found
+               in st_state, meaning Alive if _clean_registry has not
+               yet changed it, and Stopped if _clean_registry has
+               changed changed it.
         """
         if name not in SmartThread._registry:
             return ThreadState.Unregistered
-
-        # When we start the thread, we set the state to Starting and
-        # then call threading start which sets is_alive to true. When we
-        # get back we immediately set the state Alive. If the started
-        # thread were to call _get_state, we would want it to see itself
-        # as Alive. Thus, if is_alive is true here and the state is
-        # Starting, return Alive.
-
-        # $$$ @sbt: this can't happen since the lock must be held, so
-        # the started thread will not be able to see Starting - only
-        # will be able to see Alive. Comment out the following code and
-        # see if any error show up while testing:
-        # if (SmartThread._registry[name].thread.is_alive()
-        #         and SmartThread._registry[name].st_state
-        #         == ThreadState.Starting):
-        #     return ThreadState.Alive
-
-        # is_alive will be False when the thread has not yet been
-        # started or after the thread has ended. For the former, the
-        # ThreadState will probably be Registered. For the latter it
-        # will be Alive, in which case we can safely return Stopped.
-
-        # $$$ @sbt: we are no longer returning Stopped - code commented
-        # out for now - will see what happens after testing with other
-        # changes in _register which will set the state to Stopped when
-        # it sees Alive and is_alive=False
-        # if (not SmartThread._registry[name].thread.is_alive() and
-        #         SmartThread._registry[name].st_state == ThreadState.Alive):
-        #     return ThreadState.Stopped
 
         # For all other cases, we can rely on the state being correct
         return SmartThread._registry[name].st_state
@@ -4654,10 +4641,6 @@ class SmartThread:
     ####################################################################
     def _request_setup(self, *,
                        process_rtn: ProcessRtn = None,
-                       # process_rtn: Callable[
-                       #     ["RequestBlock",
-                       #      PairKeyRemote,
-                       #      "SmartThread.ConnectionStatusBlock"], bool],
                        cleanup_rtn: CleanupRtn = None,
                        remotes: Optional[Iterable] = None,
                        completion_count: int = 0,
