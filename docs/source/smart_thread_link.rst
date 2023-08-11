@@ -1,2 +1,2 @@
 .. automodule:: smart_thread
-   :members:
+   :members: SmartThread

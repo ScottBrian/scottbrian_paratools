@@ -10,8 +10,8 @@ and resume/wait/sync methods. It will also detect various error
 conditions, such as when a thread becomes unresponsive because it has
 ended.
 
-SmartThread makes use of classes Thread, Event, and lock in the Python
-threading module, and the Queue class in the Python queue module.
+SmartThread makes use of Thread, Event, and Lock in the Python threading
+module, and Queue in the Python queue module.
 
 Each SmartThread instance has a name specified during instantiation
 with the *name* argument. The name is used on the various SmartThread
@@ -35,17 +35,51 @@ The configuration methods are:
         was never started.
     4) ''smart_join()'': used to join a thread that has ended.
 
-Note that for consistency the SmartThread ''__init__()'' methods appears
-in log messages as ''smart_init()''.
+Note that the SmartThread ''__init__()'' method appears in log messages
+as ''smart_init()''.
 
 During its life cycle, each SmartThread instance will be in one of the
-ThreadState states per the following:
+states enumerated in the ThreadState class. The following table depicts
+the state transitions:
+
++-----------------+-----------------+----------------------+
+| current state | cmd or event  | result state               |
++===============+=================+======================+
+| undefined     | ''__init__()'' | Unregistered           |
+| Unregistered  | ''__init__()'' | Initializing           |
+| Initializing  | ''__init__()'' | Registered | no timeout           |
+| Registered    | ''smart_start()'' | Starting  |
+|               | ''smart_unreg()'' | Unregistered
+| Starting      | None, zero, neg | no timeout           |
+| Alive         | None, zero, neg | no timeout           |
+| Stopped       | None, zero, neg | no timeout           |
++---------------+-----------------+----------------------+
+
+
+
+
+
+Unregistered -> Initializing -> Registered
+
+ -> Starting -> Alive -> Stopped
+
+
+The following state diagram shows the life cycle of each SmartThread
+instance:
+the
+ThreadState
+
+During its life cycle, each SmartThread instance will be in one of the
+following ThreadStates:
 
     1) ThreadState.Unregistered: the Unregistered state is both the
        starting and ending state in the life cycle of a SmartThread
-       instance. When the SmartThread ''__init__()'' method gets control
-       it initially sets the state to Unregistered. When the thread
-       ends, ''smart_join()'' will result in the state being set to
+       instance:
+
+       a) ''__init__()'' initially sets the state to Unregistered
+       b)  '__init__()'' sets the state from Unregistered to
+           Initializing
+       c) when the thread ends, ''smart_join()'' will result in the state being set to
        Unregistered. If the SmartThread instance was registered but
        never started, ''smart_unreg()'' can be called to unregister the
        instance and the state will be set to Unregistered.
@@ -940,10 +974,11 @@ class SmartThread:
 
         self.cmd_lock = threading.Lock()
 
-        self.st_state: ThreadState = ThreadState.Unregistered
-        self._set_state(
-            target_thread=self,
-            new_state=ThreadState.Initializing)
+        # self.st_state: ThreadState = ThreadState.Unregistered
+        self.st_state: ThreadState = ThreadState.Initializing
+        # self._set_state(
+        #     target_thread=self,
+        #     new_state=ThreadState.Initializing)
 
         self.auto_start = auto_start
 
@@ -1307,11 +1342,7 @@ class SmartThread:
             changed = True
             logger.debug(f'{self.cmd_runner} removed {key} from registry for '
                          f'request: {self.request.value}')
-            # logger.debug(
-            #     f'{self.cmd_runner} set '
-            #     f'state for thread {key} from '
-            #     f'{ThreadState.Unregistering} to '
-            #     f'{ThreadState.Unregistered}', stacklevel=1)
+
             self._set_state(target_thread=del_thread,
                             new_state=ThreadState.Unregistered)
 

@@ -3423,6 +3423,9 @@ class UpdatePairArrayUtcLogSearchItem(LogSearchItem):
                 f'log message: {self.found_log_msg}')
 
         pe[PE.update_pair_array_utc_msg] -= 1
+        self.config_ver.log_test_msg(
+            f'UpdatePairArrayUtcLogSearchItem for {cmd_runner=} '
+            f'decremented {pe[PE.update_pair_array_utc_msg]=}')
 
         self.config_ver.add_log_msg(re.escape(self.found_log_msg))
 
@@ -4740,10 +4743,6 @@ class MockGetTargetState:
             Must be called holding the registry lock either shared or
             exclusive
         """
-        # MockGetTargetState.config_ver.log_test_msg(
-        #     f'mock_get_target_state entered by {self=} with '
-        #     f'{MockGetTargetState.targets=}')
-
         ret_state = st.ThreadState.Unregistered
         if pk_remote.remote not in st.SmartThread._registry:
             if pk_remote.create_time != 0.0:
@@ -4752,11 +4751,6 @@ class MockGetTargetState:
                 ret_state = st.ThreadState.Unregistered
 
         else:
-            # MockGetTargetState.config_ver.log_test_msg(
-            #     f'mock {self.name} for {pk_remote.remote=} with '
-            #     f'{st.SmartThread._registry[pk_remote.remote].thread
-            #     .is_alive()=} '
-            #     f'{st.SmartThread._registry[pk_remote.remote].st_state=}')
             if (not st.SmartThread._registry[
                 pk_remote.remote].thread.is_alive()
                     and st.SmartThread._registry[
@@ -17534,7 +17528,8 @@ class ConfigVerifier:
                 exp_init_thread_state=st.ThreadState.Registered,
                 thread_create=thread_create,
                 auto_start_decision=auto_start_decision,
-                st_state=st.ThreadState.Unregistered,
+                # st_state=st.ThreadState.Unregistered,
+                st_state=st.ThreadState.Initializing,
                 found_del_pairs=defaultdict(int)
             )
 
@@ -18343,7 +18338,7 @@ class ConfigVerifier:
                                   target,
                                   st.ThreadState.Unregistered,
                                   st.ThreadState.Initializing)
-        pe[PE.set_state_msg][state_key] += 1
+        # pe[PE.set_state_msg][state_key] += 1  @sbt
 
         add_key: AddRegKey = (cmd_runner, target)
         pe[PE.add_reg_msg][add_key] += 1
@@ -18544,7 +18539,7 @@ class ConfigVerifier:
                     # know that eventually it will become alive if it
                     # is an eligible target
                     if self.expected_registered[target].st_state in (
-                            st.ThreadState.Unregistered,
+                            # st.ThreadState.Unregistered,
                             st.ThreadState.Initializing,
                             st.ThreadState.Registered,
                             st.ThreadState.Starting,
@@ -19400,8 +19395,8 @@ class ConfigVerifier:
         ################################################################
         actions: dict[tuple[st.ThreadState, st.ThreadState],
                       Callable[..., None]] = {
-            (st.ThreadState.Unregistered, st.ThreadState.Initializing):
-                self.handle_set_state_unreg_to_init,
+            # (st.ThreadState.Unregistered, st.ThreadState.Initializing):
+            #     self.handle_set_state_unreg_to_init,
             (st.ThreadState.Initializing, st.ThreadState.Registered):
                 self.handle_set_state_init_to_reg,
             (st.ThreadState.Registered, st.ThreadState.Starting):
@@ -19445,8 +19440,8 @@ class ConfigVerifier:
     # handle_set_state_init_to_reg
     ####################################################################
     def handle_set_state_init_to_reg(self,
-                                     cmd_runner: str,
-                                     target: str) -> None:
+                                      cmd_runner: str,
+                                      target: str) -> None:
         """Determine next step for set state.
 
         Args:
@@ -20038,6 +20033,9 @@ class ConfigVerifier:
         if self.add_to_pair_array(cmd_runner=cmd_runner,
                                   add_name=target):
             pe[PE.update_pair_array_utc_msg] += 1
+            self.log_test_msg(f'handle_subprocess_add_to_pair_array_entry '
+                              f'for {cmd_runner=}, {target=} '
+                              f'bumped {pe[PE.update_pair_array_utc_msg]=}')
 
         ################################################################
         # determine next step
@@ -21003,10 +21001,15 @@ class ConfigVerifier:
             )
         changed = False
         for other_name in self.expected_registered.keys():
-            if ((other_name == add_name)
+            # if ((other_name == add_name)
+            #         or self.expected_registered[
+            #             other_name].st_state == st.ThreadState.Unregistered):
+            #     continue
+            if((other_name == add_name)
                     or self.expected_registered[
-                        other_name].st_state == st.ThreadState.Unregistered):
+                        other_name].st_state == st.ThreadState.Initializing):
                 continue
+
             self.log_test_msg(f'add_to_pair_array proceeding with '
                               f'{add_name=}, {other_name=}')
             changed = True
@@ -26874,7 +26877,8 @@ def scenario_driver(
             exp_init_thread_state=exp_state,
             thread_create=thread_create,
             auto_start_decision=auto_start_decision,
-            st_state=st.ThreadState.Unregistered,
+            # st_state=st.ThreadState.Unregistered,
+            st_state=st.ThreadState.Initializing,
             found_del_pairs=defaultdict(int)
         )
 
@@ -31200,8 +31204,8 @@ class TestSmartThreadComboScenarios:
              r"\['alpha'\] timeout value: None "
              "test_smart_thread.py::TestSmartThreadComboScenarios."
              "test_smart_thread_log_msg:[0-9]+"),
-            ('alpha set state for thread alpha from '
-             'ThreadState.Unregistered to ThreadState.Initializing'),
+            # ('alpha set state for thread alpha from '
+            #  'ThreadState.Unregistered to ThreadState.Initializing'),
             ('smart_init _register entry: cmd_runner: alpha, '
              'target: alpha'),
             ('smart_init _clean_registry entry: '
@@ -31246,8 +31250,8 @@ class TestSmartThreadComboScenarios:
              r"\['beta'\] timeout value: None "
              "test_smart_thread.py::TestSmartThreadComboScenarios."
              "test_smart_thread_log_msg:[0-9]+"),
-            ('alpha set state for thread beta from '
-             'ThreadState.Unregistered to ThreadState.Initializing'),
+            # ('alpha set state for thread beta from '
+            #  'ThreadState.Unregistered to ThreadState.Initializing'),
             ('smart_init _register entry: cmd_runner: alpha, '
              'target: beta'),
             ('smart_init _clean_registry entry: '
@@ -31439,8 +31443,8 @@ class TestSmartThreadComboScenarios:
              r"\['beta'\] timeout value: None "
              "test_smart_thread.py::TestSmartThreadComboScenarios."
              "test_smart_thread_log_msg:[0-9]+"),
-            ('alpha set state for thread beta from '
-             'ThreadState.Unregistered to ThreadState.Initializing'),
+            # ('alpha set state for thread beta from '
+            #  'ThreadState.Unregistered to ThreadState.Initializing'),
             ('smart_init _register entry: cmd_runner: alpha, '
              'target: beta'),
             ('smart_init _clean_registry entry: '
