@@ -39,7 +39,8 @@ release = '1.0.0'
 extensions = ['sphinx.ext.autodoc',
               'sphinx.ext.napoleon',
               'sphinx_autodoc_typehints',
-              'sphinx_rtd_theme']
+              'sphinx_rtd_theme',
+              'sphinxcontrib.plantuml']
 
 autoclass_content = 'both'
 

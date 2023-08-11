@@ -42,66 +42,61 @@ During its life cycle, each SmartThread instance will be in one of the
 states enumerated in the ThreadState class. The following table depicts
 the state transitions:
 
-+-----------------+-----------------+----------------------+
-| current state | cmd or event  | result state               |
-+===============+=================+======================+
-| undefined     | ''__init__()'' | Unregistered           |
-| Unregistered  | ''__init__()'' | Initializing           |
-| Initializing  | ''__init__()'' | Registered | no timeout           |
-| Registered    | ''smart_start()'' | Starting  |
-|               | ''smart_unreg()'' | Unregistered
-| Starting      | None, zero, neg | no timeout           |
-| Alive         | None, zero, neg | no timeout           |
-| Stopped       | None, zero, neg | no timeout           |
-+---------------+-----------------+----------------------+
++---------------+----------------+----------------------+
+| current state | cmd or event   | result state         |
++===============+================+======================+
+| undefined     | ''__init__()'' | Unregistered         |
++---------------+----------------+----------------------+
+| Unregistered  | ''__init__()'' | Initializing         |
++---------------+----------------+----------------------+
 
 
+.. plantuml::
+    :caption: SmartThread Life Cycle
+    :align: center
 
+    @startuml
+    [*] -> Initializing
+    Initializing -> Registered
+    Initializing: __init__()
 
+    Registered -> Starting
+    Starting -> Alive
+    Alive -> Stopped
+    Stopped -> Unregistering
+    Unregistering -> Unregistered
 
-Unregistered -> Initializing -> Registered
+    Registered -> Unregistering
 
- -> Starting -> Alive -> Stopped
+    Registered -> Alive
 
+    Unregistered-> [*]
 
-The following state diagram shows the life cycle of each SmartThread
-instance:
-the
-ThreadState
+    @enduml
+
 
 During its life cycle, each SmartThread instance will be in one of the
 following ThreadStates:
 
-    1) ThreadState.Unregistered: the Unregistered state is both the
-       starting and ending state in the life cycle of a SmartThread
-       instance:
-
-       a) ''__init__()'' initially sets the state to Unregistered
-       b)  '__init__()'' sets the state from Unregistered to
-           Initializing
-       c) when the thread ends, ''smart_join()'' will result in the state being set to
-       Unregistered. If the SmartThread instance was registered but
-       never started, ''smart_unreg()'' can be called to unregister the
-       instance and the state will be set to Unregistered.
-    2) ThreadState.Initializing: the SmartThread instance is moved from
-       the Unregistered state to the Initializing state by
-       ''__init__()''.
-    3) ThreadState.Registered: the SmartThread instance is moved from
+    1) ThreadState.Initializing: the SmartThread instance starts out in
+       the Initializing state when the instance is created by the
+       ``__init__()`` method.
+    2) ThreadState.Registered: the SmartThread instance is moved from
        the Initializing state to the Registered state as soon as it is
        placed into the registry.
-    4) ThreadState.Starting: the SmartThread instance is moved from
+    3) ThreadState.Starting: the SmartThread instance is moved from
        the Registered state to the Starting state via 'smart_start()''.
-    5) ThreadState.Alive: the SmartThread instance is immediately moved
+    4) ThreadState.Alive: the SmartThread instance is immediately moved
        from the Registered state to the Alive state if the threading
        ''is_alive()'' method returns true just after the SmartThread
        instance is registered. Otherwise, the SmartThread instance is
        moved from the Starting state to the Alive state when the thread
        is started via ''smart_start()''.
-    6) Threading.Stopped: the SmartThread instance is moved from the
+    5) Threading.Stopped: the SmartThread instance is moved from the
        Alive state to the Stopped state when it is detected that the
        thread has ended (i.e., the threading ''is_alive()'' method
        returns False).
-    7) Threading.Unregistering: the SmartThread instance is moved from
+    6) Threading.Unregistering: the SmartThread instance is moved from
        the Registered state to the Unregistering state via
        ''smart_unreg()'', or from the Stopped state to the Unregistering
        state via ''smart_join()''. As soon as ''smart_unreg()'' or
