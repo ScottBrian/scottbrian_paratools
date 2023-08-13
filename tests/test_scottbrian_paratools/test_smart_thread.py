@@ -28119,7 +28119,7 @@ class TestSmartThreadErrors:
         ################################################################
         # f1
         ################################################################
-        def f1():
+        def f1() -> None:
             logger.debug('f1 entered')
             with pytest.raises(st.SmartThreadWorkDataException) as exc:
                 beta_thread.smart_wait(resumers=('alpha', 'charlie'))
@@ -28251,7 +28251,7 @@ class TestSmartThreadErrors:
         ################################################################
         # f1
         ################################################################
-        def f1(action: str):
+        def f1(action: str) -> None:
             logger.debug('f1 entered')
             if action == 'wait':
                 beta_thread.smart_wait(resumers='alpha')
@@ -28354,7 +28354,7 @@ class TestSmartThreadErrors:
         ################################################################
         # SmartThreadRemoteThreadNotRegistered
         ################################################################
-        with pytest.raises(st.SmartThreadRemoteThreadNotRegistered) as exc:
+        with pytest.raises(st.SmartThreadRemoteThreadNotRegistered) as exc1:
             alpha_thread.smart_start(targets=targets)
 
         targets_msg = re.escape(
@@ -28380,12 +28380,12 @@ class TestSmartThreadErrors:
             f'SmartThreadRemoteThreadNotRegistered {msg_suite}')
 
         logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
+        assert re.fullmatch(exp_error_msg, str(exc1.value))
 
-        print('\n', exc.value)
+        print('\n', exc1.value)
 
         ################################################################
-        with pytest.raises(st.SmartThreadRemoteThreadNotRegistered) as exc:
+        with pytest.raises(st.SmartThreadRemoteThreadNotRegistered) as exc1:
             alpha_thread.smart_unreg(targets=targets)
 
         targets_msg = re.escape(
@@ -28411,9 +28411,9 @@ class TestSmartThreadErrors:
             f'SmartThreadRemoteThreadNotRegistered {msg_suite}')
 
         logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
+        assert re.fullmatch(exp_error_msg, str(exc1.value))
 
-        print('\n', exc.value)
+        print('\n', exc1.value)
 
         ################################################################
         # SmartThreadDeadlockDetected
@@ -28424,7 +28424,7 @@ class TestSmartThreadErrors:
                                      kwargs={'action': 'deadlock'},
                                      auto_start=False)
         beta_thread.smart_start()
-        with pytest.raises(st.SmartThreadDeadlockDetected) as exc:
+        with pytest.raises(st.SmartThreadDeadlockDetected) as exc2:
             alpha_thread.smart_recv(senders=targets)
 
         targets_msg = re.escape(
@@ -28453,9 +28453,9 @@ class TestSmartThreadErrors:
             f'SmartThreadDeadlockDetected {msg_suite}')
 
         logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
+        assert re.fullmatch(exp_error_msg, str(exc2.value))
 
-        print('\n', exc.value)
+        print('\n', exc2.value)
 
         ################################################################
         # SmartThreadRequestTimedOut not responsive
@@ -28466,7 +28466,7 @@ class TestSmartThreadErrors:
                                      kwargs={'action': 'msg_wait'},
                                      auto_start=False)
         beta_thread.smart_start()
-        with pytest.raises(st.SmartThreadRequestTimedOut) as exc:
+        with pytest.raises(st.SmartThreadRequestTimedOut) as exc3:
             alpha_thread.smart_recv(senders=targets, timeout=1)
 
         targets_msg = re.escape(
@@ -28491,9 +28491,9 @@ class TestSmartThreadErrors:
             f'SmartThreadRequestTimedOut {msg_suite}')
 
         logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
+        assert re.fullmatch(exp_error_msg, str(exc3.value))
 
-        print('\n', exc.value)
+        print('\n', exc3.value)
 
         ################################################################
         # join beta
@@ -28512,7 +28512,7 @@ class TestSmartThreadErrors:
                                      max_msgs=1)
         beta_thread.smart_start()
         alpha_thread.smart_send(receivers='beta', msg='hi beta')
-        with pytest.raises(st.SmartThreadRequestTimedOut) as exc:
+        with pytest.raises(st.SmartThreadRequestTimedOut) as exc3:
             alpha_thread.smart_send(receivers=targets,
                                     msg='hello again',
                                     timeout=1)
@@ -28539,9 +28539,9 @@ class TestSmartThreadErrors:
             f'SmartThreadRequestTimedOut {msg_suite}')
 
         logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
+        assert re.fullmatch(exp_error_msg, str(exc3.value))
 
-        print('\n', exc.value)
+        print('\n', exc3.value)
 
         ################################################################
         # join beta
@@ -28675,8 +28675,8 @@ class TestSmartThreadErrors:
         ################################################################
         # SmartThreadInvalidInput - not a string
         ################################################################
-        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc:
-            alpha_thread.smart_start(targets=[42.2])
+        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc1:
+            alpha_thread.smart_start(targets=[42.2])  # type: ignore
 
         exp_error_msg = (
             'SmartThread alpha '
@@ -28686,13 +28686,13 @@ class TestSmartThreadErrors:
             'for a remote thread is not a string. Please '
             'specify a non-empty string for the thread name.')
 
-        assert re.fullmatch(exp_error_msg, str(exc.value))
+        assert re.fullmatch(exp_error_msg, str(exc1.value))
 
-        print('\n', exc.value)
+        print('\n', exc1.value)
 
         ################################################################
-        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc:
-            alpha_thread.smart_unreg(targets=[42, ''])
+        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc1:
+            alpha_thread.smart_unreg(targets=[42, ''])  # type: ignore
 
         exp_error_msg = (
             'SmartThread alpha '
@@ -28702,14 +28702,14 @@ class TestSmartThreadErrors:
             'for a remote thread is (not a|an empty) string. Please '
             'specify a non-empty string for the thread name.')
 
-        assert re.fullmatch(exp_error_msg, str(exc.value))
+        assert re.fullmatch(exp_error_msg, str(exc1.value))
 
-        print('\n', exc.value)
+        print('\n', exc1.value)
 
         ################################################################
 
-        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc:
-            alpha_thread.smart_join(targets=(43, ))
+        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc1:
+            alpha_thread.smart_join(targets=(43, ))  # type: ignore
 
         exp_error_msg = (
             'SmartThread alpha '
@@ -28719,14 +28719,14 @@ class TestSmartThreadErrors:
             'for a remote thread is not a string. Please '
             'specify a non-empty string for the thread name.')
 
-        assert re.fullmatch(exp_error_msg, str(exc.value))
+        assert re.fullmatch(exp_error_msg, str(exc1.value))
 
-        print('\n', exc.value)
+        print('\n', exc1.value)
 
         ################################################################
 
-        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc:
-            alpha_thread.smart_send(receivers=(43.7, ),
+        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc1:
+            alpha_thread.smart_send(receivers=(43.7, ),   # type: ignore
                                     msg='hello')
 
         exp_error_msg = (
@@ -28737,13 +28737,13 @@ class TestSmartThreadErrors:
             'for a remote thread is not a string. Please '
             'specify a non-empty string for the thread name.')
 
-        assert re.fullmatch(exp_error_msg, str(exc.value))
+        assert re.fullmatch(exp_error_msg, str(exc1.value))
 
-        print('\n', exc.value)
+        print('\n', exc1.value)
 
         ################################################################
         msgs_to_send = {42: 'msg1'}
-        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc:
+        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc1:
             alpha_thread.smart_send(msg_dict=msgs_to_send)  # type: ignore
 
         exp_error_msg = (
@@ -28754,14 +28754,14 @@ class TestSmartThreadErrors:
             'for a remote thread is not a string. Please '
             'specify a non-empty string for the thread name.')
 
-        assert re.fullmatch(exp_error_msg, str(exc.value))
+        assert re.fullmatch(exp_error_msg, str(exc1.value))
 
-        print('\n', exc.value)
+        print('\n', exc1.value)
 
         ################################################################
-        msgs_to_send = {'': 'msg2'}
-        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc:
-            alpha_thread.smart_send(msg_dict=msgs_to_send)  # type: ignore
+        msgs_to_send1 = {'': 'msg2'}
+        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc1:
+            alpha_thread.smart_send(msg_dict=msgs_to_send1)
 
         exp_error_msg = (
             'SmartThread alpha '
@@ -28771,14 +28771,14 @@ class TestSmartThreadErrors:
             'for a remote thread is an empty string. Please '
             'specify a non-empty string for the thread name.')
 
-        assert re.fullmatch(exp_error_msg, str(exc.value))
+        assert re.fullmatch(exp_error_msg, str(exc1.value))
 
-        print('\n', exc.value)
+        print('\n', exc1.value)
 
         ################################################################
 
-        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc:
-            alpha_thread.smart_recv(senders={'', 44})
+        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc1:
+            alpha_thread.smart_recv(senders={'', 44})  # type: ignore
 
         exp_error_msg = (
             'SmartThread alpha '
@@ -28788,14 +28788,14 @@ class TestSmartThreadErrors:
             'for a remote thread is (not a|an empty) string. Please '
             'specify a non-empty string for the thread name.')
 
-        assert re.fullmatch(exp_error_msg, str(exc.value))
+        assert re.fullmatch(exp_error_msg, str(exc1.value))
 
-        print('\n', exc.value)
+        print('\n', exc1.value)
 
         ################################################################
 
-        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc:
-            alpha_thread.smart_wait(resumers=[45, 'beta'])
+        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc1:
+            alpha_thread.smart_wait(resumers=[45, 'beta'])  # type: ignore
 
         exp_error_msg = (
             'SmartThread alpha '
@@ -28805,13 +28805,13 @@ class TestSmartThreadErrors:
             'for a remote thread is not a string. Please '
             'specify a non-empty string for the thread name.')
 
-        assert re.fullmatch(exp_error_msg, str(exc.value))
+        assert re.fullmatch(exp_error_msg, str(exc1.value))
 
-        print('\n', exc.value)
+        print('\n', exc1.value)
 
         ################################################################
 
-        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc:
+        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc1:
             alpha_thread.smart_resume(waiters='')
 
         exp_error_msg = (
@@ -28822,14 +28822,14 @@ class TestSmartThreadErrors:
             'for a remote thread is an empty string. Please '
             'specify a non-empty string for the thread name.')
 
-        assert re.fullmatch(exp_error_msg, str(exc.value))
+        assert re.fullmatch(exp_error_msg, str(exc1.value))
 
-        print('\n', exc.value)
+        print('\n', exc1.value)
 
         ################################################################
 
-        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc:
-            alpha_thread.smart_sync(targets=('a', 47, 48, ''))
+        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc1:
+            alpha_thread.smart_sync(targets=('a', 47, 48, ''))  # type: ignore
 
         exp_error_msg = (
             'SmartThread alpha '
@@ -28839,9 +28839,9 @@ class TestSmartThreadErrors:
             'for a remote thread is (not a|an empty) string. Please '
             'specify a non-empty string for the thread name.')
 
-        assert re.fullmatch(exp_error_msg, str(exc.value))
+        assert re.fullmatch(exp_error_msg, str(exc1.value))
 
-        print('\n', exc.value)
+        print('\n', exc1.value)
 
         ################################################################
         # SmartThreadInvalidInput - caller also a remote
@@ -28966,7 +28966,7 @@ class TestSmartThreadErrors:
         ################################################################
         # f1
         ################################################################
-        def f1(f1_name: str):
+        def f1(f1_name: str) -> None:
             logger.debug(f'f1 entered for {f1_name}')
             msgs.get_msg(f1_name)
             logger.debug(f'f1 exit for {f1_name}')
@@ -31036,7 +31036,7 @@ class TestSmartThreadComboScenarios:
         ################################################################
         # f1
         ################################################################
-        def f1(thread_name: str):
+        def f1(thread_name: str) -> None:
             """F1 routine.
 
             Args:
@@ -31073,8 +31073,21 @@ class TestSmartThreadComboScenarios:
         # our purpose to test that the log messages are being issued or
         # suppressed correctly based on logging levels.
         ################################################################
-        my_root = logging.Logger.manager.loggerDict[
-            'scottbrian_paratools'].parent
+        manager_logger = logging.Logger.manager.loggerDict[
+            'scottbrian_paratools']
+
+        if isinstance(manager_logger, logging.PlaceHolder):
+            raise InvalidConfigurationDetected(
+                f'test_smart_thread_log_msg detected that the manager '
+                f'logger for scottbrian_paratoold is a PlaceHolder')
+
+        my_root = manager_logger.parent
+
+        if my_root is None:
+            raise InvalidConfigurationDetected(
+                f'test_smart_thread_log_msg failed to find logger for '
+                f'scottbrian_paratools parent')
+
         my_root.setLevel(log_level_arg)
 
         commander_name = 'alpha'
