@@ -13,11 +13,6 @@ ended.
 SmartThread makes use of Thread, Event, and Lock in the Python threading
 module, and Queue in the Python queue module.
 
-Each SmartThread instance has a name specified during instantiation
-with the *name* argument. The name is used on the various SmartThread
-methods to identify a specific instance and is also used to provide the
-name for the threading Thread class instance.
-
 A SmartThread configuration is composed of class variables that include
 a dictionary for a registry, and another dictionary called a pair array
 for an array of status blocks. Each status block has a dictionary with
@@ -33,126 +28,39 @@ The configuration methods are:
        active.
     3) ''smart_unreg()'': used to unregister a SmartThread instance that
         was never started.
-    4) ''smart_join()'': used to join a thread that has ended.
+    4) ''smart_join()'': used to join and unregister a thread that has
+        ended.
 
 Note that the SmartThread ''__init__()'' method appears in log messages
 as ''smart_init()''.
 
 During its life cycle, each SmartThread instance will be in one of the
-states enumerated in the ThreadState class. The following table depicts
-the state transitions:
-
-+---------------+----------------+----------------------+
-| current state | cmd or event   | result state         |
-+===============+================+======================+
-| undefined     | ''__init__()'' | Unregistered         |
-+---------------+----------------+----------------------+
-| Unregistered  | ''__init__()'' | Initializing         |
-+---------------+----------------+----------------------+
-
+states enumerated in the ThreadState class:ram
+shows the state transitions:
 
 .. plantuml::
     :caption: SmartThread Life Cycle
     :align: center
 
     @startuml
-    [*] -> Initializing
-    Initializing -> Registered
-    Initializing: __init__()
+    hide empty description
+    [*] --> Initializing
+    Initializing --> Registered : __init__
 
-    Registered -> Starting
+    Registered --> Starting : smart_start
     Starting -> Alive
-    Alive -> Stopped
-    Stopped -> Unregistering
-    Unregistering -> Unregistered
+    Alive -> Stopped : is_alive is False
+    Stopped -> Unregistering : smart_join
+    Unregistering --> Unregistered
 
-    Registered -> Unregistering
+    Registered -> Unregistering : smart_unreg
 
-    Registered -> Alive
+    Registered -> Alive : is_alive is True
 
-    Unregistered-> [*]
+    Unregistered --> [*]
 
     @enduml
 
-
-During its life cycle, each SmartThread instance will be in one of the
-following ThreadStates:
-
-    1) ThreadState.Initializing: the SmartThread instance starts out in
-       the Initializing state when the instance is created by the
-       ``__init__()`` method.
-    2) ThreadState.Registered: the SmartThread instance is moved from
-       the Initializing state to the Registered state as soon as it is
-       placed into the registry.
-    3) ThreadState.Starting: the SmartThread instance is moved from
-       the Registered state to the Starting state via 'smart_start()''.
-    4) ThreadState.Alive: the SmartThread instance is immediately moved
-       from the Registered state to the Alive state if the threading
-       ''is_alive()'' method returns true just after the SmartThread
-       instance is registered. Otherwise, the SmartThread instance is
-       moved from the Starting state to the Alive state when the thread
-       is started via ''smart_start()''.
-    5) Threading.Stopped: the SmartThread instance is moved from the
-       Alive state to the Stopped state when it is detected that the
-       thread has ended (i.e., the threading ''is_alive()'' method
-       returns False).
-    6) Threading.Unregistering: the SmartThread instance is moved from
-       the Registered state to the Unregistering state via
-       ''smart_unreg()'', or from the Stopped state to the Unregistering
-       state via ''smart_join()''. As soon as ''smart_unreg()'' or
-       ''smart_join()'' removes the SmartThread instance from the
-       registry, the state is moved from Unregistering to Unregistered.
-
-The SmartThread instantiation process and the configuration methods
-require various ThreadState states and affect the configuration
-and ThreadState transitions:
-
-    1) SmartThread instantiation:
-        a) requires ThreadState.Unregistered. An error is raised if a
-           different SmartThread instance of the same name is found in
-           the registry
-        b) sets the state to ThreadState.Initializing
-        c) creates a dictionary entry in the registry and sets the state
-           to ThreadState.Registered. If the thread is already alive
-           as determined by the threading ''is_alive()'' method, the
-           state is set ThreadState.Alive
-        d) if other SmartThread instances exist, builds pairs of
-           status blocks in the pair array
-        e) if the thread is not yet alive and *auto_start* is True,
-           ''smart_start()'' is called.
-    2) ''smart_start()'':
-        a) requires ThreadState.Registered. An error is raised if the
-           SmartThread instance is in any other state
-        b) sets the state to ThreadState.Starting
-        c) invokes threading ''start()''
-        d) sets the state to ThreadState.Alive.
-    3) ''smart_unreg()'':
-        a) requires ThreadState.Registered. An error is raised if the
-           SmartThread instance is in any other state
-        b) sets the state to ThreadState.Unregistering
-        c) removes the SmartThread instance from the registry and
-           removes the status blocks from the pair array for any an all
-           combinations involving the SmartThread being unregistered
-        d) by virtue of being removed from the registry, the state
-           becomes ThreadState.Unregistered
-        e) the SmartThread instance may remain is scope, but it can
-           not be started or enacted upon by any command at this point.
-           The name can be used again for a newly created instance.
-    4) ''smart_join()'':
-        a) requires ThreadState.Registered, ThreadState.Starting,
-           ThreadState.Alive, or ThreadState.Stopped. An error is raised
-           if the SmartThread instance is in any other state. If needed,
-           ''smart_join()'' will loop until the SmartThread instance
-           enters ThreadState.Stopped or a timeout is recognized
-        b) sets the state to ThreadState.Unregistering
-        c) removes the SmartThread instance from the registry and
-           removes the status blocks from the pair array for any an all
-           combinations involving the SmartThread being unregistered
-        d) by virtue of being removed from the registry, the state
-           becomes ThreadState.Unregistered
-        e) the SmartThread instance may remain is scope, but it can
-           not be started or enacted upon by any command at this point.
-           The name can be used again for a newly created instance.
 
 There are three cases where SmartThread can be instantiated:
 
@@ -168,18 +76,19 @@ There are three cases where SmartThread can be instantiated:
        specifies an instance of threading.Thread that is to be bound to
        the internal *thread* variable. This can be useful for a remote
        thread that was created via ''threading.Thread()'' and now
-       wishes to use the SmartThread requests.
+       wishes to use the SmartThread services.
 
-The SmartThread paired and handshake requests require that their targets
-be in state ThreadState.Alive before completing the request. Each of
-request will allow their targets to initially be in states
-ThreadState.Unregistered, ThreadState.Starting, or
-ThreadState.Registered and will loop until the SmartThread instance
-enters ThreadState.Alive or a timeout is recognized. An error is raised
-if the SmartThread instance is recognized to be in state
-ThreadState.Stopped, whether explicitly or by virtue of having
-transitioned to ThreadState.Stopped and then resurrected as a new
-instance with the same SmartThread name.
+The service methods are:
+
+    1) ''smart_send()'': sends messages to the other threads
+    2) ''smart_recv()'': receives messages from the other threads
+    3) ''smart_wait()'': pauses execution until resumed by another
+       thread
+    4) ''smart_resume()'': resumes other threads that have invoked
+       ``smart_wait()``
+    5) ``smart_sync()``: pauses execution until other threads have
+       also paused execution with matching ``smart_sync()`` request, at
+       which point all participating threads are resumed
 
 
 :Example 1: Create a SmartThread configuration for threads named
@@ -465,11 +374,10 @@ logger = logging.getLogger(__name__)
 IntFloat: TypeAlias = Union[int, float]
 OptIntFloat: TypeAlias = Optional[IntFloat]
 
-ProcessRtn: TypeAlias = Optional[
-    Callable[
-        ["RequestBlock",
-         "PairKeyRemote",
-         "SmartThread.ConnectionStatusBlock"], bool]]
+ProcessRtn: TypeAlias = Callable[[
+    "RequestBlock",
+    "PairKeyRemote",
+    "SmartThread.ConnectionStatusBlock"], bool]
 
 CleanupRtn: TypeAlias = Optional[Callable[[set[str], str], None]]
 
@@ -525,11 +433,6 @@ class SmartThreadMutuallyExclusiveTargetThreadSpecified(SmartThreadError):
 
 class SmartThreadArgsSpecificationWithoutTarget(SmartThreadError):
     """SmartThread exception args specified without target."""
-    pass
-
-
-class SmartThreadInvalidUnregister(SmartThreadError):
-    """SmartThread exception for invalid smart_unreg request."""
     pass
 
 
@@ -607,6 +510,8 @@ class PairKeyRemote(NamedTuple):
 class RequestBlock:
     """Setup block."""
     request: ReqType
+    process_rtn: ProcessRtn
+    cleanup_rtn: CleanupRtn
     remotes: set[str]
     completion_count: int
     pk_remotes: list[PairKeyRemote]
@@ -618,8 +523,6 @@ class RequestBlock:
     not_registered_remotes: set[str]
     deadlock_remotes: set[str]
     full_send_q_remotes: set[str]
-    process_rtn: ProcessRtn = None
-    cleanup_rtn: CleanupRtn = None
     request_max_interval: IntFloat = 0.0
     remote_deadlock_request: ReqType = ReqType.NoReq
 
@@ -1025,7 +928,7 @@ class SmartThread:
                     f'{self.name}: {self.thread_create}, '
                     f'{self.st_state}, {extra_text}.')
 
-        self.request: ReqType = ReqType.NoReq
+        self.request = ReqType.NoReq
 
         if self.auto_started:
             self.smart_start(self.name)
@@ -1703,7 +1606,7 @@ class SmartThread:
     # start
     ####################################################################
     def smart_start(self,
-                    targets: Optional[Iterable] = None,
+                    targets: Optional[Iterable[str]] = None,
                     log_msg: Optional[str] = None) -> set[str]:
         """Start the smart thread.
 
@@ -1714,6 +1617,14 @@ class SmartThread:
 
         Returns:
             A set of thread names that were successfully started.
+
+        Raises:
+            SmartThreadAlreadyStarted: Unable to start the target thread
+                because it has already been started.
+            SmartThreadMultipleTargetsForSelfStart: Request smart_start
+                can not be done for multiple targets when one of the
+                targets is the smart_thread instance processing the
+                smart_start.
 
         **Example 1:** Create and start a SmartThread
 
@@ -1837,12 +1748,13 @@ class SmartThread:
             self.request = ReqType.Smart_start
             self.started_targets = set()
             request_block = self._request_setup(
+                process_rtn=self._dummy_process_rtn,
                 remotes=targets,
                 completion_count=0,
                 timeout=0,
                 log_msg=log_msg)
 
-            self.work_remotes: set[str] = request_block.remotes.copy()
+            self.work_remotes = request_block.remotes.copy()
             for remote in self.work_remotes.copy():
                 with sel.SELockExcl(SmartThread._registry_lock):
                     if self._process_start(request_block,
@@ -1924,7 +1836,7 @@ class SmartThread:
     # smart_unreg
     ####################################################################
     def smart_unreg(self, *,
-                    targets: Iterable,
+                    targets: Iterable[str],
                     log_msg: Optional[str] = None) -> set[str]:
         """Unregister threads that were never started.
 
@@ -1984,6 +1896,7 @@ class SmartThread:
         self.request = ReqType.Smart_unreg
         self.unreged_targets = set()
         request_block = self._request_setup(
+            process_rtn=self._dummy_process_rtn,
             remotes=targets,
             completion_count=0,
             timeout=0,
@@ -2033,7 +1946,7 @@ class SmartThread:
     # join
     ####################################################################
     def smart_join(self, *,
-                   targets: Iterable,
+                   targets: Iterable[str],
                    timeout: OptIntFloat = None,
                    log_msg: Optional[str] = None) -> set[str]:
         """Wait for target thread to end.
@@ -2095,6 +2008,7 @@ class SmartThread:
         self.joined_targets = set()
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
+            process_rtn=self._dummy_process_rtn,
             remotes=targets,
             completion_count=0,
             timeout=timeout,
@@ -2102,8 +2016,8 @@ class SmartThread:
 
         # self._config_cmd_loop(request_block=request_block)
         with self.cmd_lock:
-            self.joined_targets: set[str] = set()
-            self.work_remotes: set[str] = request_block.remotes.copy()
+            self.joined_targets = set()
+            self.work_remotes = request_block.remotes.copy()
             while self.work_remotes:
                 joined_remotes: set[str] = set()
                 with sel.SELockExcl(SmartThread._registry_lock):
@@ -2209,7 +2123,7 @@ class SmartThread:
     ####################################################################
     def smart_send(self,
                    msg: Optional[Any] = None,
-                   receivers: Optional[Iterable] = None,
+                   receivers: Optional[Iterable[str]] = None,
                    msg_dict: Optional[dict[str, Any]] = None,
                    timeout: OptIntFloat = None,
                    log_msg: Optional[str] = None) -> set[str]:
@@ -2689,7 +2603,7 @@ class SmartThread:
     # smart_recv
     ####################################################################
     def smart_recv(self,
-                   senders: Iterable,
+                   senders: Iterable[str],
                    sender_count: Optional[int] = None,
                    timeout: OptIntFloat = None,
                    log_msg: Optional[str] = None) -> dict[str, list[Any]]:
@@ -3157,7 +3071,7 @@ class SmartThread:
     # wait
     ####################################################################
     def smart_wait(self, *,
-                   resumers: Optional[Iterable] = None,
+                   resumers: Optional[Iterable[str]] = None,
                    resumer_count: Optional[int] = None,
                    timeout: OptIntFloat = None,
                    log_msg: Optional[str] = None) -> set[str]:
@@ -3575,7 +3489,7 @@ class SmartThread:
     # resume
     ####################################################################
     def smart_resume(self, *,
-                     waiters: Iterable,
+                     waiters: Iterable[str],
                      timeout: OptIntFloat = None,
                      log_msg: Optional[str] = None) -> set[str]:
         """Resume a waiting or soon to be waiting thread.
@@ -3867,7 +3781,7 @@ class SmartThread:
     # smart_sync
     ####################################################################
     def smart_sync(self, *,
-                   targets: Iterable,
+                   targets: Iterable[str],
                    timeout: OptIntFloat = None,
                    log_msg: Optional[str] = None) -> set[str]:
         """Sync up with remote threads.
@@ -4223,12 +4137,13 @@ class SmartThread:
         continue_request_loop = True
         while continue_request_loop:
             # determine timeout_value to use for request
-            if request_block.timer.is_specified():
+            if (request_block.timer.is_specified()
+                    and (rem_time := request_block.timer.remaining_time())
+                    is not None):
+
                 request_block.request_max_interval = min(
                     self.request_max_interval,
-                    (request_block.timer.remaining_time()
-                     / max(1, len(self.work_pk_remotes)))
-                )
+                    (rem_time / max(1, len(self.work_pk_remotes))))
             else:
                 request_block.request_max_interval = (
                     self.request_max_interval)
@@ -4364,7 +4279,7 @@ class SmartThread:
                     #     f'{self.name} {self.request.value} calling refresh, '
                     #     f'remaining remotes: {self.work_pk_remotes}')
                     self.work_pk_remotes = []
-                    self.missing_remotes = []
+                    self.missing_remotes = set()
                     # self._clean_registry()
                     # self._clean_pair_array()
 
@@ -4395,7 +4310,7 @@ class SmartThread:
         pk_remotes: list[PairKeyRemote] = []
 
         with sel.SELockExcl(SmartThread._registry_lock):
-            self.missing_remotes: set[str] = set()
+            self.missing_remotes = set()
             for remote in remotes:
                 if remote in SmartThread._registry:
                     target_create_time = SmartThread._registry[
@@ -4425,9 +4340,8 @@ class SmartThread:
             # we need to set the work remotes before releasing the
             # lock - any starts or deletes need to be accounted for
             # starting now
-            self.work_pk_remotes: list[PairKeyRemote] = (
-                pk_remotes.copy())
-            self.found_pk_remotes: list[PairKeyRemote] = []
+            self.work_pk_remotes = pk_remotes.copy()
+            self.found_pk_remotes = []
             logger.debug(f'{self.name} {self.request.value} setup complete '
                          f'for targets: {pk_remotes}')
 
@@ -4666,9 +4580,9 @@ class SmartThread:
     # _request_setup
     ####################################################################
     def _request_setup(self, *,
-                       process_rtn: ProcessRtn = None,
+                       process_rtn: ProcessRtn,
                        cleanup_rtn: CleanupRtn = None,
-                       remotes: Optional[Iterable] = None,
+                       remotes: Optional[Iterable[str]] = None,
                        completion_count: int = 0,
                        timeout: OptIntFloat = None,
                        log_msg: Optional[str] = None,
@@ -4700,11 +4614,11 @@ class SmartThread:
 
         self.cmd_runner = threading.current_thread().name
 
-        remotes = self._get_set(remotes)
+        targets: set[str] = self._get_set(remotes)
 
         self.num_targets_completed = 0
 
-        if not remotes:
+        if not targets:
             error_msg = (
                 f'SmartThread {threading.current_thread().name} raising '
                 'SmartThreadInvalidInput error while processing '
@@ -4714,7 +4628,7 @@ class SmartThread:
             logger.error(error_msg)
             raise SmartThreadInvalidInput(error_msg)
         else:
-            for name in remotes:
+            for name in targets:
                 if not (isinstance(name, str) and name):
                     if not isinstance(name, str):
                         fillin_text = 'not a string'
@@ -4733,16 +4647,16 @@ class SmartThread:
 
         exit_log_msg = self._issue_entry_log_msg(
             request=self.request,
-            remotes=remotes,
+            remotes=targets,
             timeout_value=timer.timeout_value(),
             log_msg=log_msg)
 
-        if self.cmd_runner in remotes and self.request != ReqType.Smart_start:
+        if self.cmd_runner in targets and self.request != ReqType.Smart_start:
             error_msg = (
                 f'SmartThread {threading.current_thread().name} raising '
                 f'SmartThreadInvalidInput error while processing request '
                 f'{self.request.value}. '
-                f'Targets {sorted(remotes)} includes {self.cmd_runner} '
+                f'Targets {sorted(targets)} includes {self.cmd_runner} '
                 f'which is not permitted except for request smart_start.'
             )
             logger.error(error_msg)
@@ -4753,13 +4667,13 @@ class SmartThread:
         if self.request in (ReqType.Smart_send, ReqType.Smart_recv,
                             ReqType.Smart_resume, ReqType.Smart_sync,
                             ReqType.Smart_wait):
-            self._set_work_pk_remotes(remotes=remotes)
+            self._set_work_pk_remotes(remotes=targets)
 
         request_block = RequestBlock(
             request=self.request,
             process_rtn=process_rtn,
             cleanup_rtn=cleanup_rtn,
-            remotes=remotes,
+            remotes=targets,
             completion_count=completion_count,
             pk_remotes=pk_remotes,
             timer=timer,
@@ -4840,6 +4754,28 @@ class SmartThread:
                 f'caller thread {threading.current_thread()} as required.')
             logger.error(error_msg)
             raise SmartThreadDetectedOpFromForeignThread(error_msg)
+
+    ####################################################################
+    # _dummy_process_rtn
+    ####################################################################
+    def _dummy_process_rtn(self,
+                           request_block: RequestBlock,
+                           pk_remote: PairKeyRemote,
+                           local_sb: ConnectionStatusBlock,
+                           ) -> bool:
+        """Process the smart_send request.
+
+        Args:
+            request_block: contains request related data
+            pk_remote: the pair_key and remote name
+            local_sb: connection block for this thread
+
+        Returns:
+            True when request completed, False otherwise
+
+        """
+        raise SmartThreadInvalidInput(
+            f'_dummy_process_rtn was incorrectly called')
 
     ####################################################################
     # _connection_block_lock

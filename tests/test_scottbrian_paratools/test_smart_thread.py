@@ -8672,7 +8672,6 @@ class ConfigVerifier:
     ####################################################################
     def build_send_unreg_receiver_scenario(self) -> None:
         """Return a list of ConfigCmd items for test scenario."""
-
         sender_names = get_names('sender_', 1)
         receiver_names = get_names('receiver_', 1)
 
@@ -8754,7 +8753,6 @@ class ConfigVerifier:
     ####################################################################
     def build_join_simple_timeout_scenario(self) -> None:
         """Return a list of ConfigCmd items for test scenario."""
-
         target_names = get_names('target_', 1)
         joiner_names = get_names('joiner_', 1)
 
@@ -8794,7 +8792,6 @@ class ConfigVerifier:
     ####################################################################
     def build_wait_simple_deadlock_scenario(self) -> None:
         """Return a list of ConfigCmd items for test scenario."""
-
         waiter_names = get_names('waiter_', 2)
 
         self.create_config(active_names=waiter_names)
@@ -8816,7 +8813,6 @@ class ConfigVerifier:
                  resumers='waiter_0',
                  exp_resumers=set(),
                  deadlock_remotes='waiter_0'))
-
 
         ################################################################
         # confirm the wait_0 is done
@@ -8851,7 +8847,6 @@ class ConfigVerifier:
     ####################################################################
     def build_sync_unreg_simple_scenario(self) -> None:
         """Return a list of ConfigCmd items for test scenario."""
-
         self.create_config(reg_names={'sync_0'},
                            active_names={'sync_1'})
 
@@ -9347,7 +9342,6 @@ class ConfigVerifier:
                                     sync_2_targets: int,
                                     sync_3_targets: int) -> None:
         """Return a list of ConfigCmd items for test scenario."""
-
         sync_names = ['sync_0', 'sync_1', 'sync_2', 'sync_3']
 
         self.create_config(active_names=sync_names)
@@ -18334,12 +18328,6 @@ class ConfigVerifier:
 
         target = list(pe[PE.current_request].targets)[0]
 
-        state_key: SetStateKey = (cmd_runner,
-                                  target,
-                                  st.ThreadState.Unregistered,
-                                  st.ThreadState.Initializing)
-        # pe[PE.set_state_msg][state_key] += 1  @sbt
-
         add_key: AddRegKey = (cmd_runner, target)
         pe[PE.add_reg_msg][add_key] += 1
 
@@ -19440,8 +19428,8 @@ class ConfigVerifier:
     # handle_set_state_init_to_reg
     ####################################################################
     def handle_set_state_init_to_reg(self,
-                                      cmd_runner: str,
-                                      target: str) -> None:
+                                     cmd_runner: str,
+                                     target: str) -> None:
         """Determine next step for set state.
 
         Args:
@@ -19728,55 +19716,6 @@ class ConfigVerifier:
 
         self.log_test_msg(f'{cmd_runner=} handle_start exiting '
                           f'for {start_names=}')
-
-    ####################################################################
-    # handle_start_request_log_msg
-    ####################################################################
-    # def handle_start_request_log_msg(self,
-    #                                  cmd_runner: str,
-    #                                  req_start_item: StartRequest) -> None:
-    #     """Process the start request event.
-    #
-    #     Args:
-    #         cmd_runner: thread name doing the request
-    #         req_start_item: contains the request specifics
-    #
-    #     """
-    #     self.log_test_msg(f'handle_start_request_log_msg entered, '
-    #                       f'{cmd_runner=}, {req_start_item=}')
-    #     eligible_targets: set[str] = set()
-    #     self.pending_events[cmd_runner][PE.current_request] = req_start_item
-    #     if req_start_item.req_type == st.ReqType.Smart_start:
-    #         eligible_targets = (req_start_item.targets.copy()
-    #                             - req_start_item.not_registered_remotes.copy())
-    #         from_state = st.ThreadState.Registered
-    #         to_state = st.ThreadState.Alive
-    #     elif req_start_item.req_type == st.ReqType.Smart_unreg:
-    #         eligible_targets = (req_start_item.targets.copy()
-    #                             - req_start_item.not_registered_remotes.copy())
-    #         from_state = st.ThreadState.Registered
-    #         to_state = st.ThreadState.Stopped
-    #
-    #     elif req_start_item.req_type == st.ReqType.Smart_join:
-    #         pre_eligible_targets = (req_start_item.targets.copy()
-    #                                 - req_start_item.timeout_remotes.copy())
-    #         for name in pre_eligible_targets:
-    #             if (name in self.expected_registered
-    #                     and self.expected_registered[name].is_TargetThread):
-    #                 eligible_targets |= {name}
-    #
-    #         from_state = st.ThreadState.Alive
-    #         to_state = st.ThreadState.Stopped
-    #     else:
-    #         raise UnrecognizedCmd('handle_start_request_log_msg does not '
-    #                               f'recognize {req_start_item.req_type=}')
-    #
-    #     for name in eligible_targets:
-    #         key: SetStateKey = (cmd_runner,
-    #                             name,
-    #                             from_state,
-    #                             to_state)
-    #         self.pending_events[cmd_runner][PE.set_state_msg][key] += 1
 
     ####################################################################
     # handle_subprocess_entry_exit_log_msg
@@ -21001,11 +20940,7 @@ class ConfigVerifier:
             )
         changed = False
         for other_name in self.expected_registered.keys():
-            # if ((other_name == add_name)
-            #         or self.expected_registered[
-            #             other_name].st_state == st.ThreadState.Unregistered):
-            #     continue
-            if((other_name == add_name)
+            if ((other_name == add_name)
                     or self.expected_registered[
                         other_name].st_state == st.ThreadState.Initializing):
                 continue
@@ -27571,12 +27506,12 @@ class TestSmartThreadErrors:
             alpha_thread.smart_start(targets=42)  # type: ignore
 
         exp_error_msg = (
-            f'SmartThread alpha raising '
+            'SmartThread alpha raising '
             'SmartThreadInvalidInput error while processing '
-            f'request smart_start. '
-            f'It was detected that an argument for remote thread names '
-            f'is not of type Iterable. Please specify an iterable, '
-            f'such as a list of thread names.')
+            'request smart_start. '
+            'It was detected that an argument for remote thread names '
+            'is not of type Iterable. Please specify an iterable, '
+            'such as a list of thread names.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
@@ -27588,12 +27523,12 @@ class TestSmartThreadErrors:
             alpha_thread.smart_unreg(targets=42)  # type: ignore
 
         exp_error_msg = (
-            f'SmartThread alpha raising '
+            'SmartThread alpha raising '
             'SmartThreadInvalidInput error while processing '
-            f'request smart_unreg. '
-            f'It was detected that an argument for remote thread names '
-            f'is not of type Iterable. Please specify an iterable, '
-            f'such as a list of thread names.')
+            'request smart_unreg. '
+            'It was detected that an argument for remote thread names '
+            'is not of type Iterable. Please specify an iterable, '
+            'such as a list of thread names.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
@@ -27605,12 +27540,12 @@ class TestSmartThreadErrors:
             alpha_thread.smart_join(targets=43)  # type: ignore
 
         exp_error_msg = (
-            f'SmartThread alpha raising '
+            'SmartThread alpha raising '
             'SmartThreadInvalidInput error while processing '
-            f'request smart_join. '
-            f'It was detected that an argument for remote thread names '
-            f'is not of type Iterable. Please specify an iterable, '
-            f'such as a list of thread names.')
+            'request smart_join. '
+            'It was detected that an argument for remote thread names '
+            'is not of type Iterable. Please specify an iterable, '
+            'such as a list of thread names.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
@@ -27623,12 +27558,12 @@ class TestSmartThreadErrors:
                                     msg='hello')
 
         exp_error_msg = (
-            f'SmartThread alpha raising '
+            'SmartThread alpha raising '
             'SmartThreadInvalidInput error while processing '
-            f'request smart_send. '
-            f'It was detected that an argument for remote thread names '
-            f'is not of type Iterable. Please specify an iterable, '
-            f'such as a list of thread names.')
+            'request smart_send. '
+            'It was detected that an argument for remote thread names '
+            'is not of type Iterable. Please specify an iterable, '
+            'such as a list of thread names.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
@@ -27640,12 +27575,12 @@ class TestSmartThreadErrors:
             alpha_thread.smart_recv(senders=44)  # type: ignore
 
         exp_error_msg = (
-            f'SmartThread alpha raising '
+            'SmartThread alpha raising '
             'SmartThreadInvalidInput error while processing '
-            f'request smart_recv. '
-            f'It was detected that an argument for remote thread names '
-            f'is not of type Iterable. Please specify an iterable, '
-            f'such as a list of thread names.')
+            'request smart_recv. '
+            'It was detected that an argument for remote thread names '
+            'is not of type Iterable. Please specify an iterable, '
+            'such as a list of thread names.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
@@ -27657,12 +27592,12 @@ class TestSmartThreadErrors:
             alpha_thread.smart_wait(resumers=45)  # type: ignore
 
         exp_error_msg = (
-            f'SmartThread alpha raising '
+            'SmartThread alpha raising '
             'SmartThreadInvalidInput error while processing '
-            f'request smart_wait. '
-            f'It was detected that an argument for remote thread names '
-            f'is not of type Iterable. Please specify an iterable, '
-            f'such as a list of thread names.')
+            'request smart_wait. '
+            'It was detected that an argument for remote thread names '
+            'is not of type Iterable. Please specify an iterable, '
+            'such as a list of thread names.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
@@ -27674,12 +27609,12 @@ class TestSmartThreadErrors:
             alpha_thread.smart_resume(waiters=46)  # type: ignore
 
         exp_error_msg = (
-            f'SmartThread alpha raising '
+            'SmartThread alpha raising '
             'SmartThreadInvalidInput error while processing '
-            f'request smart_resume. '
-            f'It was detected that an argument for remote thread names '
-            f'is not of type Iterable. Please specify an iterable, '
-            f'such as a list of thread names.')
+            'request smart_resume. '
+            'It was detected that an argument for remote thread names '
+            'is not of type Iterable. Please specify an iterable, '
+            'such as a list of thread names.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
@@ -27691,12 +27626,12 @@ class TestSmartThreadErrors:
             alpha_thread.smart_sync(targets=47)  # type: ignore
 
         exp_error_msg = (
-            f'SmartThread alpha raising '
+            'SmartThread alpha raising '
             'SmartThreadInvalidInput error while processing '
-            f'request smart_sync. '
-            f'It was detected that an argument for remote thread names '
-            f'is not of type Iterable. Please specify an iterable, '
-            f'such as a list of thread names.')
+            'request smart_sync. '
+            'It was detected that an argument for remote thread names '
+            'is not of type Iterable. Please specify an iterable, '
+            'such as a list of thread names.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
@@ -28744,12 +28679,12 @@ class TestSmartThreadErrors:
             alpha_thread.smart_start(targets=[42.2])
 
         exp_error_msg = (
-            f'SmartThread alpha '
-            f'raising SmartThreadIncorrectNameSpecified error while '
-            f'processing request smart_start. '
-            f'It was detected that the name=42.2 specified '
-            f'for a remote thread is not a string. Please '
-            f'specify a non-empty string for the thread name.')
+            'SmartThread alpha '
+            'raising SmartThreadIncorrectNameSpecified error while '
+            'processing request smart_start. '
+            'It was detected that the name=42.2 specified '
+            'for a remote thread is not a string. Please '
+            'specify a non-empty string for the thread name.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
@@ -28760,12 +28695,12 @@ class TestSmartThreadErrors:
             alpha_thread.smart_unreg(targets=[42, ''])
 
         exp_error_msg = (
-            f'SmartThread alpha '
-            f'raising SmartThreadIncorrectNameSpecified error while '
-            f'processing request smart_unreg. '
-            f"It was detected that the name=(42|'') specified "
-            f'for a remote thread is (not a|an empty) string. Please '
-            f'specify a non-empty string for the thread name.')
+            'SmartThread alpha '
+            'raising SmartThreadIncorrectNameSpecified error while '
+            'processing request smart_unreg. '
+            "It was detected that the name=(42|'') specified "
+            'for a remote thread is (not a|an empty) string. Please '
+            'specify a non-empty string for the thread name.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
@@ -28777,12 +28712,12 @@ class TestSmartThreadErrors:
             alpha_thread.smart_join(targets=(43, ))
 
         exp_error_msg = (
-            f'SmartThread alpha '
-            f'raising SmartThreadIncorrectNameSpecified error while '
-            f'processing request smart_join. '
-            f'It was detected that the name=43 specified '
-            f'for a remote thread is not a string. Please '
-            f'specify a non-empty string for the thread name.')
+            'SmartThread alpha '
+            'raising SmartThreadIncorrectNameSpecified error while '
+            'processing request smart_join. '
+            'It was detected that the name=43 specified '
+            'for a remote thread is not a string. Please '
+            'specify a non-empty string for the thread name.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
@@ -28795,12 +28730,12 @@ class TestSmartThreadErrors:
                                     msg='hello')
 
         exp_error_msg = (
-            f'SmartThread alpha '
-            f'raising SmartThreadIncorrectNameSpecified error while '
-            f'processing request smart_send. '
-            f'It was detected that the name=43.7 specified '
-            f'for a remote thread is not a string. Please '
-            f'specify a non-empty string for the thread name.')
+            'SmartThread alpha '
+            'raising SmartThreadIncorrectNameSpecified error while '
+            'processing request smart_send. '
+            'It was detected that the name=43.7 specified '
+            'for a remote thread is not a string. Please '
+            'specify a non-empty string for the thread name.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
@@ -28812,12 +28747,12 @@ class TestSmartThreadErrors:
             alpha_thread.smart_send(msg_dict=msgs_to_send)  # type: ignore
 
         exp_error_msg = (
-            f'SmartThread alpha '
-            f'raising SmartThreadIncorrectNameSpecified error while '
-            f'processing request smart_send. '
-            f'It was detected that the name=42 specified '
-            f'for a remote thread is not a string. Please '
-            f'specify a non-empty string for the thread name.')
+            'SmartThread alpha '
+            'raising SmartThreadIncorrectNameSpecified error while '
+            'processing request smart_send. '
+            'It was detected that the name=42 specified '
+            'for a remote thread is not a string. Please '
+            'specify a non-empty string for the thread name.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
@@ -28829,12 +28764,12 @@ class TestSmartThreadErrors:
             alpha_thread.smart_send(msg_dict=msgs_to_send)  # type: ignore
 
         exp_error_msg = (
-            f'SmartThread alpha '
-            f'raising SmartThreadIncorrectNameSpecified error while '
-            f'processing request smart_send. '
-            f"It was detected that the name='' specified "
-            f'for a remote thread is an empty string. Please '
-            f'specify a non-empty string for the thread name.')
+            'SmartThread alpha '
+            'raising SmartThreadIncorrectNameSpecified error while '
+            'processing request smart_send. '
+            "It was detected that the name='' specified "
+            'for a remote thread is an empty string. Please '
+            'specify a non-empty string for the thread name.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
@@ -28846,12 +28781,12 @@ class TestSmartThreadErrors:
             alpha_thread.smart_recv(senders={'', 44})
 
         exp_error_msg = (
-            f'SmartThread alpha '
-            f'raising SmartThreadIncorrectNameSpecified error while '
-            f'processing request smart_recv. '
-            f"It was detected that the name=(''|44) specified "
-            f'for a remote thread is (not a|an empty) string. Please '
-            f'specify a non-empty string for the thread name.')
+            'SmartThread alpha '
+            'raising SmartThreadIncorrectNameSpecified error while '
+            'processing request smart_recv. '
+            "It was detected that the name=(''|44) specified "
+            'for a remote thread is (not a|an empty) string. Please '
+            'specify a non-empty string for the thread name.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
@@ -28863,12 +28798,12 @@ class TestSmartThreadErrors:
             alpha_thread.smart_wait(resumers=[45, 'beta'])
 
         exp_error_msg = (
-            f'SmartThread alpha '
-            f'raising SmartThreadIncorrectNameSpecified error while '
-            f'processing request smart_wait. '
-            f'It was detected that the name=45 specified '
-            f'for a remote thread is not a string. Please '
-            f'specify a non-empty string for the thread name.')
+            'SmartThread alpha '
+            'raising SmartThreadIncorrectNameSpecified error while '
+            'processing request smart_wait. '
+            'It was detected that the name=45 specified '
+            'for a remote thread is not a string. Please '
+            'specify a non-empty string for the thread name.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
@@ -28880,12 +28815,12 @@ class TestSmartThreadErrors:
             alpha_thread.smart_resume(waiters='')
 
         exp_error_msg = (
-            f'SmartThread alpha '
-            f'raising SmartThreadIncorrectNameSpecified error while '
-            f'processing request smart_resume. '
-            f"It was detected that the name='' specified "
-            f'for a remote thread is an empty string. Please '
-            f'specify a non-empty string for the thread name.')
+            'SmartThread alpha '
+            'raising SmartThreadIncorrectNameSpecified error while '
+            'processing request smart_resume. '
+            "It was detected that the name='' specified "
+            'for a remote thread is an empty string. Please '
+            'specify a non-empty string for the thread name.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
@@ -28897,12 +28832,12 @@ class TestSmartThreadErrors:
             alpha_thread.smart_sync(targets=('a', 47, 48, ''))
 
         exp_error_msg = (
-            f'SmartThread alpha '
-            f'raising SmartThreadIncorrectNameSpecified error while '
-            f'processing request smart_sync. '
-            f"It was detected that the name=(47|48|'') specified "
-            f'for a remote thread is (not a|an empty) string. Please '
-            f'specify a non-empty string for the thread name.')
+            'SmartThread alpha '
+            'raising SmartThreadIncorrectNameSpecified error while '
+            'processing request smart_sync. '
+            "It was detected that the name=(47|48|'') specified "
+            'for a remote thread is (not a|an empty) string. Please '
+            'specify a non-empty string for the thread name.')
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
@@ -29669,8 +29604,8 @@ class TestSmartBasicScenarios:
         args_for_scenario_builder: dict[str, Any] = {}
 
         scenario_driver(
-            scenario_builder=
-            ConfigVerifier.build_wait_simple_deadlock_scenario,
+            scenario_builder=ConfigVerifier.
+            build_wait_simple_deadlock_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 
@@ -29695,8 +29630,7 @@ class TestSmartBasicScenarios:
         args_for_scenario_builder: dict[str, Any] = {}
 
         scenario_driver(
-            scenario_builder=
-            ConfigVerifier.build_sync_unreg_simple_scenario,
+            scenario_builder=ConfigVerifier.build_sync_unreg_simple_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 
@@ -29721,8 +29655,7 @@ class TestSmartBasicScenarios:
         args_for_scenario_builder: dict[str, Any] = {}
 
         scenario_driver(
-            scenario_builder=
-            ConfigVerifier.build_sync_init_delay_scenario,
+            scenario_builder=ConfigVerifier.build_sync_init_delay_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 
@@ -29763,8 +29696,7 @@ class TestSmartBasicScenarios:
         }
 
         scenario_driver(
-            scenario_builder=
-            ConfigVerifier.build_sync_partial_scenario,
+            scenario_builder=ConfigVerifier.build_sync_partial_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog)
 
