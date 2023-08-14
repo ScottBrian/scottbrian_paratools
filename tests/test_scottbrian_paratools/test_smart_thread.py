@@ -274,7 +274,7 @@ class SendRecvMsgs:
     def clear_exp_msgs_received(self,
                                 receiver_name: str,
                                 sender_names: Iterable[str],
-                                num_msgs: int):
+                                num_msgs: int) -> None:
         """Clear expected messages for a receiver and its senders.
 
         Args:
@@ -2761,7 +2761,7 @@ class RequestEntryExitLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         request_name = split_msg[0]
@@ -2828,7 +2828,7 @@ class SetupCompleteLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
@@ -2899,7 +2899,7 @@ class SubProcessEntryExitLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         request_name = split_msg[0]
@@ -2965,7 +2965,7 @@ class SetStateLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
@@ -3035,7 +3035,7 @@ class InitCompleteLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
@@ -3123,7 +3123,7 @@ class F1AppExitLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         target = split_msg[2]
@@ -3181,7 +3181,7 @@ class AlreadyUnregLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
@@ -3296,7 +3296,7 @@ class AddPairArrayEntryLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
@@ -3354,7 +3354,7 @@ class AddStatusBlockEntryLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
@@ -3412,7 +3412,7 @@ class UpdatePairArrayUtcLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         cmd_runner = self.found_log_msg.split(maxsplit=1)[0]
 
@@ -3474,7 +3474,7 @@ class RegistryStatusLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         target = split_msg[0][5:-1]
@@ -3553,7 +3553,7 @@ class RemRegEntryLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
@@ -3610,7 +3610,7 @@ class DidCleanRegLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
@@ -3674,7 +3674,7 @@ class RemStatusBlockEntryLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
@@ -3781,7 +3781,7 @@ class RemStatusBlockEntryDefLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
@@ -3877,7 +3877,7 @@ class RemPairArrayEntryLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
@@ -3944,7 +3944,7 @@ class DidCleanPairArrayUtcLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         cmd_runner = self.found_log_msg.split(maxsplit=1)[0]
 
@@ -4014,7 +4014,7 @@ class RequestAckLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
@@ -4138,7 +4138,7 @@ class DetectedStoppedRemoteLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
@@ -4201,7 +4201,7 @@ class RequestRefreshLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
@@ -4269,7 +4269,7 @@ class UnregJoinSuccessLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
@@ -4341,7 +4341,7 @@ class JoinWaitingLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
@@ -4416,7 +4416,7 @@ class StoppedLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
 
@@ -4481,7 +4481,7 @@ class CmdWaitingLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0].split(sep='=')[1]
@@ -4534,7 +4534,7 @@ class DebugLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         self.config_ver.add_log_msg(re.escape(self.found_log_msg),
                                     log_level=logging.DEBUG)
@@ -4589,7 +4589,7 @@ class CRunnerRaisesLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
@@ -4654,7 +4654,7 @@ class MonitorCheckpointLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         verify_name = split_msg[2]
@@ -17637,7 +17637,7 @@ class ConfigVerifier:
     ####################################################################
     # dec_recv_timeout
     ####################################################################
-    def dec_recv_timeout(self):
+    def dec_recv_timeout(self) -> None:
         """Decrement the receive timeout count."""
         with self.ops_lock:
             self.expected_num_recv_timeouts -= 1
@@ -17670,7 +17670,7 @@ class ConfigVerifier:
     ####################################################################
     def exit_thread(self,
                     cmd_runner: str,
-                    stopped_by: str):
+                    stopped_by: str) -> None:
         """Drive the commands received on the command queue.
 
         Args:
@@ -17685,7 +17685,7 @@ class ConfigVerifier:
     # f1_driver
     ####################################################################
     def f1_driver(self,
-                  f1_name: str):
+                  f1_name: str) -> None:
         """Drive the commands received on the command queue.
 
         Args:
@@ -21296,7 +21296,7 @@ class ConfigVerifier:
     # verify_config
     ####################################################################
     def verify_config(self,
-                      verify_idx: int):
+                      verify_idx: int) -> None:
         """Verify that the SmartThread config is correct.
 
         Args:
@@ -23626,7 +23626,7 @@ class ConfigVerifier:
     # wait_for_recv_msg_timeouts
     ####################################################################
     def wait_for_recv_msg_timeouts(self,
-                                   cmd_runner: str):
+                                   cmd_runner: str) -> None:
         """Verify that the receivers have timed out.
 
         Args:
@@ -23906,7 +23906,7 @@ class OuterF1ThreadApp(threading.Thread):
 ########################################################################
 # outer_f1
 ########################################################################
-def outer_f1(f1_name: str, f1_config_ver: ConfigVerifier):
+def outer_f1(f1_name: str, f1_config_ver: ConfigVerifier) -> None:
     """Target routine in the outer scope.
 
     Args:
@@ -25302,7 +25302,7 @@ class TestSmartThreadInterface:
         """
         from scottbrian_paratools.smart_thread import SmartThread, ThreadState
 
-        def f1(*args,
+        def f1(*args: tuple[Union[int, str, list[int]], ...],
                kwarg1: Optional[int] = None,
                kwarg2: Optional[str] = None,
                kwarg3: Optional[list[int]] = None,
@@ -25316,10 +25316,20 @@ class TestSmartThreadInterface:
                           }
             args_str = ''
             comma = ''
-            for idx, arg in enumerate(args, 1):
+            # for idx, arg in enumerate(args, 1):
+            #     args_str = f'{args_str}{comma}arg{idx}={arg}'
+            #     comma = ', '
+            #     assert arg == exp_args[idx]
+            # if args_str:
+            #     logger.debug(args_str)
+
+            idx = 0
+            for arg in args:
+                idx += 1
                 args_str = f'{args_str}{comma}arg{idx}={arg}'
                 comma = ', '
-                assert arg == exp_args[idx]
+                # assert arg == exp_args[idx]
+                assert args[idx-1] == exp_args[idx]
             if args_str:
                 logger.debug(args_str)
 
@@ -25347,17 +25357,19 @@ class TestSmartThreadInterface:
         alpha_smart_thread = SmartThread(name='alpha')
 
         smart_thread_name_to_specify = None
-        args_to_specify = None
-        kwargs_to_specify = None
+        args_to_specify: Optional[tuple[Any, ...]] = None
+        kwargs_to_specify: Optional[dict[str, Any]]
         if num_f1_args[0] == 1:
             smart_thread_name_to_specify = 'smart_thread'
 
-        if num_f1_args[1] >= 1:
+        if num_f1_args[1] == 0:
+            kwargs_to_specify = None
+        else:
             kwargs_to_specify = {'kwarg1': 13}
-        if num_f1_args[1] >= 2:
-            kwargs_to_specify['kwarg2'] = "second kwarg"
-        if num_f1_args[1] == 3:
-            kwargs_to_specify['kwarg3'] = [11, 22, 33]
+            if num_f1_args[1] >= 2:
+                kwargs_to_specify['kwarg2'] = "second kwarg"
+            if num_f1_args[1] == 3:
+                kwargs_to_specify['kwarg3'] = [11, 22, 33]
 
         if num_f1_args[2] == 1:
             args_to_specify = (42, )
@@ -26723,7 +26735,7 @@ def scenario_driver(
     ################################################################
     # f1
     ################################################################
-    def f1(f1_name: str, f1_config_ver: ConfigVerifier):
+    def f1(f1_name: str, f1_config_ver: ConfigVerifier) -> None:
         log_msg_f1 = f'f1 entered for {f1_name}'
         log_ver.add_msg(log_level=logging.DEBUG,
                         log_msg=log_msg_f1)
@@ -26847,6 +26859,8 @@ def scenario_driver(
     # start commander
     ################################################################
     config_ver.monitor_pause = True
+    outer_thread_app: Union[
+        OuterThreadApp, OuterSmartThreadApp, OuterSmartThreadApp2]
     if commander_config == AppConfig.ScriptStyle:
         commander_thread = st.SmartThread(
             name=commander_name)
@@ -26948,13 +26962,10 @@ def scenario_driver(
                          exp_senders=set(),
                          exp_resumers=set()))
 
-        req_key_entry: RequestKey = ('smart_start',
-                                     'entry')
-
+        req_key_entry = ('smart_start', 'entry')
         pe[PE.request_msg][req_key_entry] += 1
 
-        req_key_exit: RequestKey = ('smart_start',
-                                    'exit')
+        req_key_exit = ('smart_start', 'exit')
         pe[PE.request_msg][req_key_exit] += 1
 
         outer_thread_app.smart_start(commander_name)
@@ -26990,13 +27001,10 @@ def scenario_driver(
                          exp_senders=set(),
                          exp_resumers=set()))
 
-        req_key_entry: RequestKey = ('smart_start',
-                                     'entry')
-
+        req_key_entry = ('smart_start', 'entry')
         pe[PE.request_msg][req_key_entry] += 1
 
-        req_key_exit: RequestKey = ('smart_start',
-                                    'exit')
+        req_key_exit = ('smart_start', 'exit')
         pe[PE.request_msg][req_key_exit] += 1
 
         outer_thread_app.smart_start(commander_name)
@@ -27136,7 +27144,7 @@ class TestSmartThreadErrors:
         ################################################################
         # f1
         ################################################################
-        def f1():
+        def f1() -> None:
             logger.debug('f1 entered')
             logger.debug('f1 exiting')
 
@@ -27148,7 +27156,7 @@ class TestSmartThreadErrors:
         logger.debug('mainline creating bad name thread')
 
         with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc:
-            st.SmartThread(name='')  # type: ignore
+            st.SmartThread(name='')
 
         exp_error_msg = (
             f'SmartThread {threading.current_thread().name} '
@@ -27187,7 +27195,7 @@ class TestSmartThreadErrors:
         test_thread = threading.Thread(target=f1)
 
         with pytest.raises(
-                st.SmartThreadMutuallyExclusiveTargetThreadSpecified) as exc:
+                st.SmartThreadMutuallyExclusiveTargetThreadSpecified) as exc1:
 
             st.SmartThread(name='alpha', target=f1, thread=test_thread)
 
@@ -27200,14 +27208,14 @@ class TestSmartThreadErrors:
             'target or thread.')
 
         logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
+        assert re.fullmatch(exp_error_msg, str(exc1.value))
 
-        print('\n', exc.value)
+        print('\n', exc1.value)
 
         ################################################################
 
         with pytest.raises(
-                st.SmartThreadArgsSpecificationWithoutTarget) as exc:
+                st.SmartThreadArgsSpecificationWithoutTarget) as exc2:
             st.SmartThread(name='alpha', args=(1,))
 
         exp_error_msg = (
@@ -27220,14 +27228,14 @@ class TestSmartThreadErrors:
             'kwargs.')
 
         logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
+        assert re.fullmatch(exp_error_msg, str(exc2.value))
 
-        print('\n', exc.value)
+        print('\n', exc2.value)
 
         ################################################################
 
         with pytest.raises(
-                st.SmartThreadArgsSpecificationWithoutTarget) as exc:
+                st.SmartThreadArgsSpecificationWithoutTarget) as exc2:
             st.SmartThread(name='alpha', kwargs={'arg1': 1})
 
         assert re.fullmatch(exp_error_msg, str(exc.value))
@@ -27235,12 +27243,12 @@ class TestSmartThreadErrors:
         print('\n', exc.value)
 
         with pytest.raises(
-                st.SmartThreadArgsSpecificationWithoutTarget) as exc:
+                st.SmartThreadArgsSpecificationWithoutTarget) as exc2:
             st.SmartThread(name='alpha', args=(1,), kwargs={'arg1': 1})
 
-        assert re.fullmatch(exp_error_msg, str(exc.value))
+        assert re.fullmatch(exp_error_msg, str(exc2.value))
 
-        print('\n', exc.value)
+        print('\n', exc2.value)
 
         logger.debug('mainline exiting')
 
@@ -27274,7 +27282,7 @@ class TestSmartThreadErrors:
 
         ################################################################
 
-        with pytest.raises(st.SmartThreadNameAlreadyInUse) as exc:
+        with pytest.raises(st.SmartThreadNameAlreadyInUse) as exc1:
             st.SmartThread(name='alpha')
 
         existing_id = id(alpha_smart_thread)
@@ -27289,9 +27297,9 @@ class TestSmartThreadErrors:
             f'with name alpha but a different ID of '
             f'{existing_id}.')
 
-        assert re.fullmatch(exp_error_msg, str(exc.value))
+        assert re.fullmatch(exp_error_msg, str(exc1.value))
 
-        print('\n', exc.value)
+        print('\n', exc1.value)
 
         logger.debug('mainline exiting')
 
@@ -27335,7 +27343,7 @@ class TestSmartThreadErrors:
         ################################################################
         # f1
         ################################################################
-        def f1():
+        def f1() -> None:
             logger.debug('f1 entered')
             logger.debug('f1 exiting')
 
@@ -27647,7 +27655,7 @@ class TestSmartThreadErrors:
         ################################################################
         # f1
         ################################################################
-        def f1():
+        def f1() -> None:
             logger.debug('f1 entered')
             beta_thread.smart_wait(resumers='alpha')
             logger.debug('f1 exiting')
@@ -27677,7 +27685,7 @@ class TestSmartThreadErrors:
         ################################################################
         beta_thread.smart_start()
 
-        with pytest.raises(st.SmartThreadAlreadyStarted) as exc:
+        with pytest.raises(st.SmartThreadAlreadyStarted) as exc1:
             beta_thread.smart_start()
 
         exp_error_msg = (
@@ -27687,9 +27695,9 @@ class TestSmartThreadErrors:
             'Unable to start beta because beta '
             'has already been started.')
 
-        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc1.value))
 
-        print('\n', exc.value)
+        print('\n', exc1.value)
 
         ################################################################
         alpha_thread.smart_resume(waiters='beta')
@@ -27706,7 +27714,7 @@ class TestSmartThreadErrors:
                                   f'{timeout_value} seconds waiting for beta '
                                   'to exit and become inactive.')
 
-        with pytest.raises(st.SmartThreadRemoteThreadNotRegistered) as exc:
+        with pytest.raises(st.SmartThreadRemoteThreadNotRegistered) as exc2:
             beta_thread.smart_start()
 
         exp_error_msg = (
@@ -27716,9 +27724,9 @@ class TestSmartThreadErrors:
             'Unable to start beta because beta '
             'is not registered.')
 
-        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc2.value))
 
-        print('\n', exc.value)
+        print('\n', exc2.value)
 
         logger.debug('mainline exiting')
 
@@ -27730,7 +27738,7 @@ class TestSmartThreadErrors:
         ################################################################
         # f1
         ################################################################
-        def f1():
+        def f1() -> None:
             logger.debug('f1 entered')
             beta_thread.smart_wait(resumers='alpha')
             logger.debug('f1 exiting')
@@ -27757,8 +27765,8 @@ class TestSmartThreadErrors:
         print('\n', exc.value)
 
         ################################################################
-        receivers = set()
-        with pytest.raises(st.SmartThreadNoRemoteTargets) as exc:
+        receivers: set[str] = set()
+        with pytest.raises(st.SmartThreadNoRemoteTargets) as exc1:
             alpha_thread.smart_send(msg='hi beta',
                                     receivers=receivers)
 
@@ -27770,9 +27778,9 @@ class TestSmartThreadErrors:
             'any receivers.')
 
         logger.debug(exp_error_msg)
-        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+        assert re.fullmatch(re.escape(exp_error_msg), str(exc1.value))
 
-        print('\n', exc.value)
+        print('\n', exc1.value)
 
         ################################################################
 
@@ -27812,7 +27820,7 @@ class TestSmartThreadErrors:
 
         ################################################################
 
-        with pytest.raises(st.SmartThreadNoRemoteTargets) as exc:
+        with pytest.raises(st.SmartThreadNoRemoteTargets) as exc1:
             alpha_thread.smart_send(msg_dict={})
 
         exp_error_msg = (
@@ -27822,9 +27830,9 @@ class TestSmartThreadErrors:
             'Argument msg_dict={} was specified with no items.')
 
         logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
+        assert re.fullmatch(exp_error_msg, str(exc1.value))
 
-        print('\n', exc.value)
+        print('\n', exc1.value)
 
         ################################################################
 
@@ -27893,7 +27901,7 @@ class TestSmartThreadErrors:
         ################################################################
         # f1
         ################################################################
-        def f1():
+        def f1() -> None:
             logger.debug('f1 entered')
             beta_thread.smart_wait(resumers='alpha')
             logger.debug('f1 exiting')
@@ -27976,7 +27984,7 @@ class TestSmartThreadErrors:
         ################################################################
         # f1
         ################################################################
-        def f1():
+        def f1() -> None:
             logger.debug('f1 entered')
             beta_thread.smart_wait(resumers='alpha')
             logger.debug('f1 exiting')
@@ -28089,31 +28097,34 @@ class TestSmartThreadErrors:
                 logger.debug('mock_request_loop entered')
                 delta_added = False
                 while True:
-                    work_pk_remotes_copy = self.work_pk_remotes.copy()
+                    work_pk_remotes_copy = (
+                        self.work_pk_remotes.copy())  # type: ignore
                     for pk_remote in work_pk_remotes_copy:
                         # we need to hold the lock to ensure the pair_array
                         # remains stable while getting local_sb. The
                         # request_pending flag in our entry will prevent our
                         # entry for being removed (but not the remote)
                         with sel.SELockShare(st.SmartThread._registry_lock):
-                            if self.found_pk_remotes:
+                            if self.found_pk_remotes:  # type: ignore
                                 if MockRequestLoop.mock_action == 'action2':
                                     MockRequestLoop.mock_exp_pk_remotes = (
                                         work_pk_remotes_copy
                                     )
-                                    mock_pair_key = self._get_pair_key('beta',
-                                                                       'delta')
+                                    mock_pair_key = self._get_pair_key(  # type: ignore
+                                        'beta',
+                                        'delta')
                                     if not delta_added:
                                         delta_added = True
-                                        self.work_pk_remotes.append(
+                                        self.work_pk_remotes.append(  # type: ignore
                                             st.PairKeyRemote(
                                                 mock_pair_key,
                                                 'delta',
                                                 0.0))
-                                pk_remote = self._handle_found_pk_remotes(
-                                    pk_remote=pk_remote,
-                                    work_pk_remotes=work_pk_remotes_copy
-                                )
+                                pk_remote = (
+                                    self._handle_found_pk_remotes(  # type: ignore
+                                        pk_remote=pk_remote,
+                                        work_pk_remotes=work_pk_remotes_copy
+                                ))
                     time.sleep(0.5)
 
         ################################################################
