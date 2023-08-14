@@ -21,7 +21,8 @@ import re
 from sys import _getframe
 import time
 from typing import (Any, Callable, ClassVar, NamedTuple, Type, TypeAlias,
-                    TYPE_CHECKING, Optional, Union)
+                    TypedDict, TYPE_CHECKING, Optional, Union)
+from typing_extensions import Unpack, NotRequired
 import threading
 
 ########################################################################
@@ -4819,8 +4820,8 @@ class MockCleanPairArray:
 class PaLogMsgsFound:
     """Pair array log message info."""
     entered_rpa: bool
-    removed_sb_entry: list[tuple[str, str]]
-    removed_pa_entry: list[tuple[str, str]]
+    removed_sb_entry: list[st.PairKey]
+    removed_pa_entry: list[st.PairKey]
     updated_pa: bool
 
 # class TransitionType(Enum):
@@ -17766,7 +17767,7 @@ class ConfigVerifier:
                     skip_num: int = 0,
                     start_idx: int = 0,
                     end_idx: int = -1,
-                    reverse_search: bool = False) -> str:
+                    reverse_search: bool = False) -> tuple[str, int]:
         """Search for a log message and return it.
 
         Args:
@@ -22570,7 +22571,7 @@ class ConfigVerifier:
                     f'{del_pa_msgs_found.removed_pa_entry=}, '
                     f'\n{add_pa_msgs_found.removed_sb_entry=}, '
                     f'{add_pa_msgs_found.removed_pa_entry=}')
-            exp_pair_keys: list[tuple[str, str]] = []
+            exp_pair_keys: list[st.PairKey] = []
             pair_key = st.SmartThread._get_pair_key(name0=sender_names[0],
                                                     name1=receiver_names[0])
             exp_pair_keys.append(pair_key)
@@ -22673,7 +22674,7 @@ class ConfigVerifier:
                     f'{del_pa_msgs_found.removed_pa_entry=}, '
                     f'{add_pa_msgs_found.removed_sb_entry=}, '
                     f'{add_pa_msgs_found.removed_pa_entry=}')
-            exp_pair_keys: list[tuple[str, str]] = []
+            exp_pair_keys = []
             pair_key = st.SmartThread._get_pair_key(name0=sender_names[0],
                                                     name1=receiver_names[0])
             exp_pair_keys.append(pair_key)
@@ -22775,7 +22776,7 @@ class ConfigVerifier:
                     f'{del_pa_msgs_found.removed_pa_entry=}, '
                     f'{add_pa_msgs_found.removed_sb_entry=}, '
                     f'{add_pa_msgs_found.removed_pa_entry=}')
-            exp_pair_keys: list[tuple[str, str]] = []
+            exp_pair_keys = []
             pair_key = st.SmartThread._get_pair_key(name0=resumer_names[0],
                                                     name1=waiter_names[0])
             exp_pair_keys.append(pair_key)
@@ -22877,7 +22878,7 @@ class ConfigVerifier:
                     f'{del_pa_msgs_found.removed_pa_entry=}, '
                     f'{add_pa_msgs_found.removed_sb_entry=}, '
                     f'{add_pa_msgs_found.removed_pa_entry=}')
-            exp_pair_keys: list[tuple[str, str]] = []
+            exp_pair_keys = []
             pair_key = st.SmartThread._get_pair_key(name0=resumer_names[0],
                                                     name1=waiter_names[0])
             exp_pair_keys.append(pair_key)
@@ -22979,7 +22980,7 @@ class ConfigVerifier:
                     f'{del_pa_msgs_found.removed_pa_entry=}, '
                     f'{add_pa_msgs_found.removed_sb_entry=}, '
                     f'{add_pa_msgs_found.removed_pa_entry=}')
-            exp_pair_keys: list[tuple[str, str]] = []
+            exp_pair_keys = []
             pair_key = st.SmartThread._get_pair_key(name0=sender_names[0],
                                                     name1=receiver_names[0])
             exp_pair_keys.append(pair_key)
@@ -23081,7 +23082,7 @@ class ConfigVerifier:
                     f'{del_pa_msgs_found.removed_pa_entry=}, '
                     f'{add_pa_msgs_found.removed_sb_entry=}, '
                     f'{add_pa_msgs_found.removed_pa_entry=}')
-            exp_pair_keys: list[tuple[str, str]] = []
+            exp_pair_keys = []
             pair_key = st.SmartThread._get_pair_key(name0=sender_names[0],
                                                     name1=receiver_names[0])
             exp_pair_keys.append(pair_key)
@@ -23184,7 +23185,7 @@ class ConfigVerifier:
                     f'{del_pa_msgs_found.removed_pa_entry=}, '
                     f'{add_pa_msgs_found.removed_sb_entry=}, '
                     f'{add_pa_msgs_found.removed_pa_entry=}')
-            exp_pair_keys: list[tuple[str, str]] = []
+            exp_pair_keys = []
             pair_key = st.SmartThread._get_pair_key(name0=sender_names[0],
                                                     name1=receiver_names[0])
 
@@ -23285,7 +23286,7 @@ class ConfigVerifier:
                     f'{del_pa_msgs_found.removed_pa_entry=}, '
                     f'{add_pa_msgs_found.removed_sb_entry=}, '
                     f'{add_pa_msgs_found.removed_pa_entry=}')
-            exp_pair_keys: list[tuple[str, str]] = []
+            exp_pair_keys = []
             pair_key = st.SmartThread._get_pair_key(name0=sender_names[0],
                                                     name1=receiver_names[0])
 
@@ -23385,7 +23386,7 @@ class ConfigVerifier:
                     f'{del_pa_msgs_found.removed_pa_entry=}, '
                     f'{add_pa_msgs_found.removed_sb_entry=}, '
                     f'{add_pa_msgs_found.removed_pa_entry=}')
-            exp_pair_keys: list[tuple[str, str]] = []
+            exp_pair_keys = []
             pair_key = st.SmartThread._get_pair_key(name0=resumer_names[0],
                                                     name1=waiter_names[0])
 
@@ -23486,7 +23487,7 @@ class ConfigVerifier:
                     f'{del_pa_msgs_found.removed_pa_entry=}, '
                     f'{add_pa_msgs_found.removed_sb_entry=}, '
                     f'{add_pa_msgs_found.removed_pa_entry=}')
-            exp_pair_keys: list[tuple[str, str]] = []
+            exp_pair_keys = []
             pair_key = st.SmartThread._get_pair_key(name0=resumer_names[0],
                                                     name1=waiter_names[0])
 
@@ -23562,8 +23563,8 @@ class ConfigVerifier:
         ################################################################
         # find removed status_blocks entry log msgs
         ################################################################
-        found_removed_status_block_msgs: list[tuple[str, str]] = []
-        found_removed_pa_entry_msgs: list[tuple[str, str]] = []
+        found_removed_status_block_msgs: list[st.PairKey] = []
+        found_removed_pa_entry_msgs: list[st.PairKey] = []
         for deleted_name in deleted_names:
             for def_del_name in def_del_names:
                 pair_key = st.SmartThread._get_pair_key(name0=deleted_name,
@@ -24947,17 +24948,21 @@ class TestSmartThreadInterface:
                                 f'{num_f1_args[2]}')
 
         smart_thread_name_to_specify = None
-        args_to_specify = None
-        kwargs_to_specify = None
+        # args_to_specify = None
+        # kwargs_to_specify = None
+        args_to_specify: Optional[tuple[Any, ...]] = None
+        kwargs_to_specify: Optional[dict[str, Any]]
         if num_f1_args[0] == 1:
             smart_thread_name_to_specify = 'smart_thread'
 
-        if num_f1_args[1] >= 1:
+        if num_f1_args[1] == 0:
+            kwargs_to_specify = None
+        else:
             kwargs_to_specify = {'kwarg1': 13}
-        if num_f1_args[1] >= 2:
-            kwargs_to_specify['kwarg2'] = "second kwarg"
-        if num_f1_args[1] == 3:
-            kwargs_to_specify['kwarg3'] = [11, 22, 33]
+            if num_f1_args[1] >= 2:
+                kwargs_to_specify['kwarg2'] = "second kwarg"
+            if num_f1_args[1] == 3:
+                kwargs_to_specify['kwarg3'] = [11, 22, 33]
 
         if num_f1_args[2] == 1:
             args_to_specify = (42, )
@@ -25049,7 +25054,15 @@ class TestSmartThreadInterface:
         """
         from scottbrian_paratools.smart_thread import SmartThread, ThreadState
 
-        def f1(*args, **kwargs) -> None:
+        class ReqParms(TypedDict):
+            kwarg1: NotRequired[int]
+            kwarg2: NotRequired[str]
+            kwarg3: NotRequired[list[int]]
+            smart_thread: NotRequired[SmartThread]
+
+        def f1(*args: Union[int, str, list[int]],
+               **kwargs: Unpack[ReqParms]) -> None:
+
             logger.debug('f1 beta entry')
 
             exp_args = (0, 42, "my arg 2", [1, 2, 3])
@@ -25069,10 +25082,13 @@ class TestSmartThreadInterface:
             smart_thread_arg = False
             kwargs_str = ''
             comma = ''
+            a_smart_thread: SmartThread
+            if 'smart_thread' in kwargs:
+                a_smart_thread = kwargs['smart_thread']
             for key, value in kwargs.items():
                 if key == 'smart_thread':
                     smart_thread_arg = True
-                    smart_thread = value
+                    # smart_thread = value
                 else:
                     kwargs_str = f'{kwargs_str}{comma}{key}={value}'
                     comma = ', '
@@ -25081,8 +25097,8 @@ class TestSmartThreadInterface:
                 logger.debug(kwargs_str)
 
             if smart_thread_arg:
-                logger.debug(f'{smart_thread=}')
-                assert smart_thread._get_state('beta') == ThreadState.Alive
+                logger.debug(f'{a_smart_thread=}')
+                assert a_smart_thread._get_state('beta') == ThreadState.Alive
 
             logger.debug('f1 beta exit')
 
@@ -25302,7 +25318,7 @@ class TestSmartThreadInterface:
         """
         from scottbrian_paratools.smart_thread import SmartThread, ThreadState
 
-        def f1(*args: tuple[Union[int, str, list[int]], ...],
+        def f1(*args: Union[int, str, list[int]],
                kwarg1: Optional[int] = None,
                kwarg2: Optional[str] = None,
                kwarg3: Optional[list[int]] = None,
@@ -25316,20 +25332,13 @@ class TestSmartThreadInterface:
                           }
             args_str = ''
             comma = ''
-            # for idx, arg in enumerate(args, 1):
-            #     args_str = f'{args_str}{comma}arg{idx}={arg}'
-            #     comma = ', '
-            #     assert arg == exp_args[idx]
-            # if args_str:
-            #     logger.debug(args_str)
-
-            idx = 0
-            for arg in args:
-                idx += 1
+            # The first element in exp_args is ignored so we start idx
+            # at 1. This make the log message look better since it will
+            # show arg2 as "my arg 2".
+            for idx, arg in enumerate(args, 1):
                 args_str = f'{args_str}{comma}arg{idx}={arg}'
                 comma = ', '
-                # assert arg == exp_args[idx]
-                assert args[idx-1] == exp_args[idx]
+                assert arg == exp_args[idx]
             if args_str:
                 logger.debug(args_str)
 
