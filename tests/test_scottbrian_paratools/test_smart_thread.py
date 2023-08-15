@@ -16,6 +16,7 @@ import queue
 import logging
 
 from more_itertools import roundrobin
+from pprint import pprint
 import random
 import re
 from sys import _getframe
@@ -6884,6 +6885,9 @@ class ConfigVerifier:
         pend_req_serial_num: int = 0
         join_serial_num: int = 0
 
+        stopped_remotes: Union[str, set[str]] = set()
+        exp_senders: Union[str, set[str]] = set()
+        exp_resumers: Union[str, set[str]] = set()
         ################################################################
         # verify all flags off
         ################################################################
@@ -6983,7 +6987,6 @@ class ConfigVerifier:
             # before: lock_0
             # after : lock_0|smart_req
             ############################################################
-            stopped_remotes = set()
             if request_type == st.ReqType.Smart_send:
                 stopped_remotes = remote_names[0]
                 msgs_pending_to_remote = SendRecvMsgs(
@@ -7002,9 +7005,8 @@ class ConfigVerifier:
 
                 if pending_msg_count == 0:
                     stopped_remotes = remote_names[0]
-                    exp_senders: set[str] = set()
                 else:
-                    exp_senders: set[str] = {remote_names[0]}
+                    exp_senders = remote_names[0]
                 pend_req_serial_num = self.add_cmd(
                     RecvMsg(cmd_runners=pending_names[0],
                             senders=remote_names[0],
@@ -7014,9 +7016,8 @@ class ConfigVerifier:
             elif request_type == st.ReqType.Smart_wait:
                 if not pending_wait_tf:
                     stopped_remotes = remote_names[0]
-                    exp_resumers: set[str] = set()
                 else:
-                    exp_resumers: set[str] = {remote_names[0]}
+                    exp_resumers = remote_names[0]
                 pend_req_serial_num = self.add_cmd(
                     Wait(cmd_runners=pending_names[0],
                          resumers=remote_names[0],
@@ -7047,12 +7048,12 @@ class ConfigVerifier:
                     pe[PE.calling_refresh_msg][ref_key] += 1
             elif request_type == st.ReqType.Smart_wait:
                 if pending_msg_count == 0:
-                    ref_key: CallRefKey = 'smart_wait'
+                    ref_key = 'smart_wait'
                     pe[PE.calling_refresh_msg][ref_key] += 1
             else:
                 if (pending_msg_count == 0
                         and not pending_wait_tf):
-                    ref_key: CallRefKey = request_type.value
+                    ref_key = request_type.value
                     pe[PE.calling_refresh_msg][ref_key] += 1
 
             ############################################################
@@ -7414,8 +7415,8 @@ class ConfigVerifier:
         # after : lock_0|pend_sync
         ################################################################
         if pending_sync_tf:
-            stopped_remotes: set[str] = set()
-            sync_set_ack_remotes: set[str] = {remote_names[0]}
+            stopped_remotes: Union[str, set[str]] = set()
+            sync_set_ack_remotes: Union[str, set[str]] = remote_names[0]
         else:
             stopped_remotes = remote_names[0]
             sync_set_ack_remotes = set()
@@ -8353,6 +8354,9 @@ class ConfigVerifier:
 
         lock_positions: list[str] = []
 
+        timeout_time: IntOrFloat = 2
+        pause_time: IntOrFloat = timeout_time * 1.5
+
         ################################################################
         # verify all flags off
         ################################################################
@@ -8388,9 +8392,8 @@ class ConfigVerifier:
                        exp_positions=lock_positions.copy()))
 
         ################################################################
-        # remote_sync will get behind lock_0 in request_setup
-        # locks held:
         # before: lock_0
+        # remote_sync will get behind lock_0 in request_setup
         # after : lock_0|remote_sync
         ################################################################
         remote_sync_serial_num = self.add_cmd(
@@ -8398,7 +8401,7 @@ class ConfigVerifier:
                 cmd_runners=remote_name,
                 targets=pending_name,
                 sync_set_ack_remotes=pending_name,
-                timeout=1.5,
+                timeout=timeout_time,
                 timeout_remotes=pending_name))
 
         lock_positions.append(remote_name)
@@ -8545,11 +8548,11 @@ class ConfigVerifier:
                        exp_positions=lock_positions.copy()))
 
         ################################################################
-        # pause for 1.5 seconds to cause remote_sync to timeout
+        # pause to cause remote_sync to timeout
         ################################################################
         self.add_cmd(Pause(
             cmd_runners=self.commander_name,
-            pause_seconds=2.0))
+            pause_seconds=pause_time))
 
         ################################################################
         # release lock_2 to allow remote_sync to enter the request loop
@@ -9541,9 +9544,9 @@ class ConfigVerifier:
                 f'check_sync_zero_create_time {sync_1=} not in '
                 'expected_registered')
 
-        if self.expected_registered[sync_0].thread.work_pk_remotes:
-            if pk_remote in self.expected_registered[
-                    sync_0].thread.work_pk_remotes:
+        smart_thread = self.expected_registered[sync_0].thread
+        if smart_thread is not None:
+            if pk_remote in smart_thread.work_pk_remotes:
                 return True
 
         return False
@@ -27158,9 +27161,9 @@ class TestSmartThreadErrors:
                 st.SmartThreadArgsSpecificationWithoutTarget) as exc2:
             st.SmartThread(name='alpha', kwargs={'arg1': 1})
 
-        assert re.fullmatch(exp_error_msg, str(exc.value))
+        assert re.fullmatch(exp_error_msg, str(exc2.value))
 
-        print('\n', exc.value)
+        pprint(exc2.value)
 
         with pytest.raises(
                 st.SmartThreadArgsSpecificationWithoutTarget) as exc2:
