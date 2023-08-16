@@ -146,8 +146,21 @@ def get_ptime() -> str:
 ########################################################################
 # wait_for
 ########################################################################
-def wait_for(condition: Callable[[Any], bool],
+def wait_for(condition: Callable[..., bool],
              timeout_value: IntOrFloat = 15) -> None:
+    """Wait for a condition with timeout.
+
+    Args:
+        condition: function to call that returns True when the condition
+            is satisfied
+        timeout_value: the number of seconds to allow the condition to
+            be satisfied before raising a timeout error
+
+    Raises:
+        CmdTimedOut: wait_for called from line_num took longer than '
+            timeout_value seconds waiting for condition.
+
+    """
     start_time = time.time()
     logging.debug(f'wait_for entered with {condition=}')
     while not condition():
@@ -4818,7 +4831,6 @@ class MockGetTargetState:
 
             else:
                 ret_state = st.SmartThread._registry[pk_remote.remote].st_state
-
 
         name = self.name  # type: ignore
         if name in MockGetTargetState.targets:
@@ -9592,8 +9604,8 @@ class ConfigVerifier:
         #     if pk_remote in smart_thread.work_pk_remotes:
         #         return True
         if pk_remote in self.expected_registered[
-            sync_0].thread.work_pk_remotes:
-                return True
+                sync_0].thread.work_pk_remotes:
+            return True
 
         return False
 
@@ -21768,6 +21780,7 @@ class ConfigVerifier:
             self.verify_paired(real_reg_items=real_reg_items,
                                real_pair_array_items=real_pair_array_items,
                                verify_data=verify_data)
+
     ####################################################################
     # get_pair_keys
     ####################################################################
@@ -25375,7 +25388,7 @@ class TestSmartThreadInterface:
             if smart_thread:
                 logger.debug(f'{smart_thread=}')
                 wait_for(lambda: smart_thread._get_state('beta')
-                     == ThreadState.Alive)
+                         == ThreadState.Alive)
 
             logger.debug('f1 beta exit')
 
@@ -28104,27 +28117,27 @@ class TestSmartThreadErrors:
                         # remains stable while getting local_sb. The
                         # request_pending flag in our entry will prevent our
                         # entry for being removed (but not the remote)
-                        with sel.SELockShare(st.SmartThread._registry_lock):
+                        with (sel.SELockShare(st.SmartThread._registry_lock)):
                             if self.found_pk_remotes:  # type: ignore
+                                wpr = self.work_pk_remotes  # type: ignore
                                 if MockRequestLoop.mock_action == 'action2':
                                     MockRequestLoop.mock_exp_pk_remotes = (
                                         work_pk_remotes_copy
                                     )
-                                    mock_pair_key = self._get_pair_key(  # type: ignore
-                                        'beta',
-                                        'delta')
+                                    mock_pair_key = (
+                                        self._get_pair_key(  # type: ignore
+                                            'beta',
+                                            'delta'))
                                     if not delta_added:
                                         delta_added = True
-                                        self.work_pk_remotes.append(  # type: ignore
+                                        wpr.append(
                                             st.PairKeyRemote(
                                                 mock_pair_key,
                                                 'delta',
                                                 0.0))
-                                pk_remote = (
-                                    self._handle_found_pk_remotes(  # type: ignore
+                                self._handle_found_pk_remotes(  # type: ignore
                                         pk_remote=pk_remote,
-                                        work_pk_remotes=work_pk_remotes_copy
-                                ))
+                                        work_pk_remotes=work_pk_remotes_copy)
                     time.sleep(0.5)
 
         ################################################################
@@ -31089,15 +31102,15 @@ class TestSmartThreadComboScenarios:
 
         if isinstance(manager_logger, logging.PlaceHolder):
             raise InvalidConfigurationDetected(
-                f'test_smart_thread_log_msg detected that the manager '
-                f'logger for scottbrian_paratoold is a PlaceHolder')
+                'test_smart_thread_log_msg detected that the manager '
+                'logger for scottbrian_paratoold is a PlaceHolder')
 
         my_root = manager_logger.parent
 
         if my_root is None:
             raise InvalidConfigurationDetected(
-                f'test_smart_thread_log_msg failed to find logger for '
-                f'scottbrian_paratools parent')
+                'test_smart_thread_log_msg failed to find logger for '
+                'scottbrian_paratools parent')
 
         my_root.setLevel(log_level_arg)
 

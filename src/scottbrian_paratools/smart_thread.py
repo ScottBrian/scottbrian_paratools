@@ -4725,7 +4725,7 @@ class SmartThread:
 
         """
         raise SmartThreadInvalidInput(
-            f'_dummy_process_rtn was incorrectly called')
+            '_dummy_process_rtn was incorrectly called')
 
     ####################################################################
     # _connection_block_lock
