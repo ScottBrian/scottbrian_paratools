@@ -144,6 +144,25 @@ def get_ptime() -> str:
 
 
 ########################################################################
+# wait_for
+########################################################################
+def wait_for(condition: Callable[[Any], bool],
+             timeout_value: IntOrFloat = 15) -> None:
+    start_time = time.time()
+    logging.debug(f'wait_for entered with {condition=}')
+    while not condition():
+        time.sleep(.2)
+        if time.time() - start_time > timeout_value:
+            frame = _getframe(1)
+            caller_info = get_caller_info(frame)
+            line_num = caller_info.line_num
+            del frame
+            raise CmdTimedOut(
+                f'wait_for called from {line_num=} took longer than '
+                f'{timeout_value} seconds waiting for {condition=}.')
+
+
+########################################################################
 # SendRecvMsgs
 ########################################################################
 class SendType(Enum):
@@ -5073,7 +5092,7 @@ class ConfigVerifier:
 
         self.monitor_event: threading.Event = threading.Event()
         self.monitor_condition: threading.Condition = threading.Condition()
-        self.monitor_pause: bool = False
+        self.monitor_pause: int = 0
         self.check_pending_events_complete_event: threading.Event = (
             threading.Event())
         self.verify_config_complete_event: threading.Event = (
@@ -5196,8 +5215,11 @@ class ConfigVerifier:
             self.monitor_event.wait(timeout=0.25)
             self.monitor_event.clear()
 
-            if self.monitor_pause:
+            if self.monitor_pause > 0:
+                with self.monitor_condition:
+                    self.monitor_condition.notify_all()
                 continue
+
             if self.monitor_bail:
                 break
 
@@ -5216,9 +5238,6 @@ class ConfigVerifier:
 
                     found_log_item.run_process()
                     # self.log_test_msg(f'monitor completed msg: {semi_msg}')
-
-            with self.monitor_condition:
-                self.monitor_condition.notify_all()
 
         self.log_test_msg(f'monitor exiting: {self.monitor_bail=},'
                           f'{self.monitor_exit=}')
@@ -6742,15 +6761,15 @@ class ConfigVerifier:
         ################################################################
         # make sure smart_join sees the timeout_names as pending
         ################################################################
-        if (timeout_type != TimeoutType.TimeoutNone
-                and all_timeout_names):
-            self.add_cmd(
-                WaitForRequestTimeouts(
-                    cmd_runners=self.commander_name,
-                    actor_names=active_no_target_names[0],
-                    timeout_names=all_timeout_names,
-                    use_work_remotes=True,
-                    as_subset=True))
+        # if (timeout_type != TimeoutType.TimeoutNone
+        #         and all_timeout_names):
+        #     self.add_cmd(
+        #         WaitForRequestTimeouts(
+        #             cmd_runners=self.commander_name,
+        #             actor_names=active_no_target_names[0],
+        #             timeout_names=all_timeout_names,
+        #             use_work_remotes=True,
+        #             as_subset=True))
 
         ################################################################
         # handle delay_exit_names
@@ -17529,7 +17548,10 @@ class ConfigVerifier:
                           f'{name=}')
         self.f1_process_cmds[name] = True
 
-        self.monitor_pause = True
+        with self.ops_lock:
+            self.monitor_pause += 1
+        with self.monitor_condition:
+            self.monitor_condition.wait()
 
         is_thread_target = False
         if app_config == AppConfig.ScriptStyle:
@@ -17623,7 +17645,8 @@ class ConfigVerifier:
                 found_del_pairs=defaultdict(int)
             )
 
-        self.monitor_pause = False
+        with self.ops_lock:
+            self.monitor_pause -= 1
 
         self.cmd_waiting_event_items[cmd_runner] = threading.Event()
 
@@ -24090,7 +24113,8 @@ class TestSmartThreadInterface:
         def f1_1_0_0(smart_thread: SmartThread) -> None:
             logger.debug('f1 beta entry')
             logger.debug(f'{smart_thread=}')
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 0, 0)
             logger.debug('f1 beta exit')
 
@@ -24100,7 +24124,8 @@ class TestSmartThreadInterface:
             logger.debug(f'{arg1=}')
             assert arg1 == 42
             logger.debug(f'{smart_thread=}')
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 0, 1)
             logger.debug('f1 beta exit')
 
@@ -24111,7 +24136,8 @@ class TestSmartThreadInterface:
             logger.debug(f'{smart_thread=}')
             assert arg1 == 42
             assert arg2 == "my arg 2"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 0, 2)
             logger.debug('f1 beta exit')
 
@@ -24123,7 +24149,8 @@ class TestSmartThreadInterface:
             assert arg1 == 42
             assert arg2 == "my arg 2"
             assert arg3 == [1, 2, 3]
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 0, 3)
             logger.debug('f1 beta exit')
 
@@ -24133,7 +24160,8 @@ class TestSmartThreadInterface:
             logger.debug(f'{kwarg1=}')
             logger.debug(f'{smart_thread=}')
             assert kwarg1 == 13
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 1, 0)
             logger.debug('f1 beta exit')
 
@@ -24146,7 +24174,8 @@ class TestSmartThreadInterface:
             logger.debug(f'{smart_thread=}')
             assert arg1 == 42
             assert kwarg1 == 13
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 1, 1)
             logger.debug('f1 beta exit')
 
@@ -24160,7 +24189,8 @@ class TestSmartThreadInterface:
             assert arg1 == 42
             assert arg2 == "my arg 2"
             assert kwarg1 == 13
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 1, 2)
             logger.debug('f1 beta exit')
 
@@ -24175,7 +24205,8 @@ class TestSmartThreadInterface:
             assert arg2 == "my arg 2"
             assert arg3 == [1, 2, 3]
             assert kwarg1 == 13
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 1, 3)
             logger.debug('f1 beta exit')
 
@@ -24186,7 +24217,8 @@ class TestSmartThreadInterface:
             logger.debug(f'{smart_thread=}')
             assert kwarg1 == 13
             assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 2, 0)
             logger.debug('f1 beta exit')
 
@@ -24201,7 +24233,8 @@ class TestSmartThreadInterface:
             assert arg1 == 42
             assert kwarg1 == 13
             assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 2, 1)
             logger.debug('f1 beta exit')
 
@@ -24216,7 +24249,8 @@ class TestSmartThreadInterface:
             assert arg2 == "my arg 2"
             assert kwarg1 == 13
             assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 2, 2)
             logger.debug('f1 beta exit')
 
@@ -24232,7 +24266,8 @@ class TestSmartThreadInterface:
             assert arg3 == [1, 2, 3]
             assert kwarg1 == 13
             assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 2, 3)
             logger.debug('f1 beta exit')
 
@@ -24246,7 +24281,8 @@ class TestSmartThreadInterface:
             assert kwarg1 == 13
             assert kwarg2 == "second kwarg"
             assert kwarg3 == [11, 22, 33]
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 3, 0)
             logger.debug('f1 beta exit')
 
@@ -24263,7 +24299,8 @@ class TestSmartThreadInterface:
             assert kwarg1 == 13
             assert kwarg2 == "second kwarg"
             assert kwarg3 == [11, 22, 33]
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 3, 1)
             logger.debug('f1 beta exit')
 
@@ -24281,8 +24318,9 @@ class TestSmartThreadInterface:
             assert kwarg1 == 13
             assert kwarg2 == "second kwarg"
             assert kwarg3 == [11, 22, 33]
-            assert smart_thread._get_state('beta') == ThreadState.Alive
             assert num_f1_args == (1, 3, 2)
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             logger.debug('f1 beta exit')
 
         def f1_1_3_3(arg1: int, arg2: str, arg3: list[int],
@@ -24298,11 +24336,13 @@ class TestSmartThreadInterface:
             assert kwarg1 == 13
             assert kwarg3 == [11, 22, 33]
             assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 3, 3)
             logger.debug('f1 beta exit')
 
         logger.debug('mainline entered')
+
         alpha_smart_thread = SmartThread(name='alpha')
         if num_f1_args == (0, 0, 0):
             beta_smart_thread = SmartThread(name='beta',
@@ -24489,8 +24529,9 @@ class TestSmartThreadInterface:
                                                     'kwarg2': "second kwarg",
                                                     'kwarg3': [11, 22, 33]})
 
-        time.sleep(0.5)
-        assert beta_smart_thread._get_state('beta') == ThreadState.Alive
+        wait_for(lambda: beta_smart_thread._get_state('beta')
+                 == ThreadState.Alive)
+
         alpha_smart_thread.smart_join(targets='beta')
         assert beta_smart_thread._get_state('beta') == ThreadState.Unregistered
         logger.debug('mainline exiting')
@@ -24683,7 +24724,8 @@ class TestSmartThreadInterface:
         def f1_1_0_0(smart_thread: SmartThread) -> None:
             logger.debug('f1 beta entry')
             logger.debug(f'{smart_thread=}')
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 0, 0)
             logger.debug('f1 beta exit')
 
@@ -24693,7 +24735,8 @@ class TestSmartThreadInterface:
             logger.debug(f'{arg1=}')
             assert arg1 == 42
             logger.debug(f'{smart_thread=}')
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 0, 1)
             logger.debug('f1 beta exit')
 
@@ -24704,7 +24747,8 @@ class TestSmartThreadInterface:
             logger.debug(f'{smart_thread=}')
             assert arg1 == 42
             assert arg2 == "my arg 2"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 0, 2)
             logger.debug('f1 beta exit')
 
@@ -24716,7 +24760,8 @@ class TestSmartThreadInterface:
             assert arg1 == 42
             assert arg2 == "my arg 2"
             assert arg3 == [1, 2, 3]
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 0, 3)
             logger.debug('f1 beta exit')
 
@@ -24726,7 +24771,8 @@ class TestSmartThreadInterface:
             logger.debug(f'{kwarg1=}')
             logger.debug(f'{smart_thread=}')
             assert kwarg1 == 13
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 1, 0)
             logger.debug('f1 beta exit')
 
@@ -24739,7 +24785,8 @@ class TestSmartThreadInterface:
             logger.debug(f'{smart_thread=}')
             assert arg1 == 42
             assert kwarg1 == 13
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 1, 1)
             logger.debug('f1 beta exit')
 
@@ -24753,7 +24800,8 @@ class TestSmartThreadInterface:
             assert arg1 == 42
             assert arg2 == "my arg 2"
             assert kwarg1 == 13
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 1, 2)
             logger.debug('f1 beta exit')
 
@@ -24768,7 +24816,8 @@ class TestSmartThreadInterface:
             assert arg2 == "my arg 2"
             assert arg3 == [1, 2, 3]
             assert kwarg1 == 13
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 1, 3)
             logger.debug('f1 beta exit')
 
@@ -24779,7 +24828,8 @@ class TestSmartThreadInterface:
             logger.debug(f'{smart_thread=}')
             assert kwarg1 == 13
             assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 2, 0)
             logger.debug('f1 beta exit')
 
@@ -24794,7 +24844,8 @@ class TestSmartThreadInterface:
             assert arg1 == 42
             assert kwarg1 == 13
             assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 2, 1)
             logger.debug('f1 beta exit')
 
@@ -24809,7 +24860,8 @@ class TestSmartThreadInterface:
             assert arg2 == "my arg 2"
             assert kwarg1 == 13
             assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 2, 2)
             logger.debug('f1 beta exit')
 
@@ -24825,7 +24877,8 @@ class TestSmartThreadInterface:
             assert arg3 == [1, 2, 3]
             assert kwarg1 == 13
             assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 2, 3)
             logger.debug('f1 beta exit')
 
@@ -24839,7 +24892,8 @@ class TestSmartThreadInterface:
             assert kwarg1 == 13
             assert kwarg2 == "second kwarg"
             assert kwarg3 == [11, 22, 33]
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 3, 0)
             logger.debug('f1 beta exit')
 
@@ -24856,7 +24910,8 @@ class TestSmartThreadInterface:
             assert kwarg1 == 13
             assert kwarg2 == "second kwarg"
             assert kwarg3 == [11, 22, 33]
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 3, 1)
             logger.debug('f1 beta exit')
 
@@ -24874,7 +24929,8 @@ class TestSmartThreadInterface:
             assert kwarg1 == 13
             assert kwarg2 == "second kwarg"
             assert kwarg3 == [11, 22, 33]
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 3, 2)
             logger.debug('f1 beta exit')
 
@@ -24891,7 +24947,8 @@ class TestSmartThreadInterface:
             assert kwarg1 == 13
             assert kwarg3 == [11, 22, 33]
             assert kwarg2 == "second kwarg"
-            assert smart_thread._get_state('beta') == ThreadState.Alive
+            wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
             assert num_f1_args == (1, 3, 3)
             logger.debug('f1 beta exit')
 
@@ -24981,8 +25038,10 @@ class TestSmartThreadInterface:
                         target=eval(f1_target_to_specify))
 
         logger.debug(f'After: {kwargs_to_specify}')
-        time.sleep(0.5)
-        assert beta_smart_thread._get_state('beta') == ThreadState.Alive
+
+        wait_for(lambda: beta_smart_thread._get_state('beta')
+                 == ThreadState.Alive)
+
         alpha_smart_thread.smart_join(targets='beta')
         assert beta_smart_thread._get_state('beta') == ThreadState.Unregistered
         logger.debug('mainline exiting')
@@ -25245,8 +25304,9 @@ class TestSmartThreadInterface:
                                                     'kwarg2': "second kwarg",
                                                     'kwarg3': [11, 22, 33]})
 
-        time.sleep(0.5)
-        assert beta_smart_thread._get_state('beta') == ThreadState.Alive
+        wait_for(lambda: beta_smart_thread._get_state('beta')
+                 == ThreadState.Alive)
+
         alpha_smart_thread.smart_join(targets='beta')
         assert beta_smart_thread._get_state('beta') == ThreadState.Unregistered
         logger.debug('mainline exiting')
@@ -25314,7 +25374,8 @@ class TestSmartThreadInterface:
 
             if smart_thread:
                 logger.debug(f'{smart_thread=}')
-                assert smart_thread._get_state('beta') == ThreadState.Alive
+                wait_for(lambda: smart_thread._get_state('beta')
+                     == ThreadState.Alive)
 
             logger.debug('f1 beta exit')
 
@@ -25350,8 +25411,9 @@ class TestSmartThreadInterface:
             args=args_to_specify,
             kwargs=kwargs_to_specify)
 
-        time.sleep(0.5)
-        assert beta_smart_thread._get_state('beta') == ThreadState.Alive
+        wait_for(lambda: beta_smart_thread._get_state('beta')
+                 == ThreadState.Alive)
+
         alpha_smart_thread.smart_join(targets='beta')
         assert beta_smart_thread._get_state('beta') == ThreadState.Unregistered
         logger.debug('mainline exiting')
@@ -26558,23 +26620,10 @@ class TestSmartThreadExamples:
             print('f1_beta back from wait')
 
         def f2_charlie(smart_thread: SmartThread) -> None:
-            time.sleep(1)
+            time.sleep(4)
             print('f2_charlie about to wait')
             smart_thread.smart_wait(resumers='alpha')
-            time.sleep(1)
             print('f2_charlie back from wait')
-
-        def f3_delta(smart_thread: SmartThread) -> None:
-            time.sleep(5)
-            print('f3_delta about to wait')
-            smart_thread.smart_wait(resumers='alpha')
-            print('f3_delta back from wait')
-
-        def f4_echo(smart_thread: SmartThread) -> None:
-            time.sleep(7)
-            print('f4_echo about to wait')
-            smart_thread.smart_wait(resumers='alpha')
-            print('f4_echo back from wait')
 
         print('mainline alpha entered')
         alpha_smart_thread = SmartThread(name='alpha')
@@ -26584,34 +26633,20 @@ class TestSmartThreadExamples:
         SmartThread(name='charlie',
                     target=f2_charlie,
                     thread_parm_name='smart_thread')
-        SmartThread(name='delta',
-                    target=f3_delta,
-                    thread_parm_name='smart_thread')
-        SmartThread(name='echo',
-                    target=f4_echo,
-                    thread_parm_name='smart_thread')
         time.sleep(2)
         print('alpha about to resume threads')
-        alpha_smart_thread.smart_resume(waiters=('beta',
-                                                 'charlie',
-                                                 'delta',
-                                                 'echo'))
+        alpha_smart_thread.smart_resume(waiters=['beta',
+                                                 'charlie'])
         alpha_smart_thread.smart_join(targets=['beta',
-                                               'charlie',
-                                               'delta',
-                                               'echo'])
+                                               'charlie'])
         print('mainline alpha exiting')
 
         expected_result = 'mainline alpha entered\n'
         expected_result += 'f1_beta about to wait\n'
-        expected_result += 'f2_charlie about to wait\n'
         expected_result += "alpha about to resume threads\n"
         expected_result += 'f1_beta back from wait\n'
+        expected_result += 'f2_charlie about to wait\n'
         expected_result += 'f2_charlie back from wait\n'
-        expected_result += 'f3_delta about to wait\n'
-        expected_result += 'f3_delta back from wait\n'
-        expected_result += 'f4_echo about to wait\n'
-        expected_result += 'f4_echo back from wait\n'
         expected_result += 'mainline alpha exiting\n'
 
         captured = capsys.readouterr().out

@@ -3561,53 +3561,30 @@ class SmartThread:
             import time
 
             def f1_beta(smart_thread: SmartThread) -> None:
-                print(f'f1_beta about to wait')
+                print('f1_beta about to wait')
                 smart_thread.smart_wait(resumers='alpha')
-                print(f'f1_beta back from wait')
+                print('f1_beta back from wait')
 
             def f2_charlie(smart_thread: SmartThread) -> None:
-                time.sleep(1)
-                print(f'f2_charlie about to wait')
-                smart_thread.smart_wait(resumers='alpha')
-                time.sleep(1)
-                print(f'f2_charlie back from wait')
-
-            def f3_delta(smart_thread: SmartThread) -> None:
                 time.sleep(4)
-                print(f'f3_delta about to wait')
+                print('f2_charlie about to wait')
                 smart_thread.smart_wait(resumers='alpha')
-                print(f'f3_delta back from wait')
-
-            def f4_echo(smart_thread: SmartThread) -> None:
-                time.sleep(5)
-                print(f'f4_echo about to wait')
-                smart_thread.smart_wait(resumers='alpha')
-                print(f'f4_echo back from wait')
+                print('f2_charlie back from wait')
 
             print('mainline alpha entered')
             alpha_smart_thread = SmartThread(name='alpha')
-            beta_smart_thread = SmartThread(name='beta',
-                                            target=f1_beta,
-                                            thread_parm_name='smart_thread')
-            charlie_smart_thread = SmartThread(name='charlie',
-                                               target=f2_charlie,
-                                               thread_parm_name='smart_thread')
-            delta_smart_thread = SmartThread(name='delta',
-                                             target=f3_delta,
-                                             thread_parm_name='smart_thread')
-            echo_smart_thread = SmartThread(name='echo',
-                                            target=f4_echo,
-                                            thread_parm_name='smart_thread')
+            SmartThread(name='beta',
+                        target=f1_beta,
+                        thread_parm_name='smart_thread')
+            SmartThread(name='charlie',
+                        target=f2_charlie,
+                        thread_parm_name='smart_thread')
             time.sleep(2)
             print('alpha about to resume threads')
-            alpha_smart_thread.smart_resume(waiters=('beta',
-                                                     'charlie',
-                                                     'delta',
-                                                     'echo'))
+            alpha_smart_thread.smart_resume(waiters=['beta',
+                                                     'charlie'])
             alpha_smart_thread.smart_join(targets=['beta',
-                                                   'charlie',
-                                                   'delta',
-                                                   'echo'])
+                                                   'charlie'])
             print('mainline alpha exiting')
 
         .. invisible-code-block: python
@@ -3618,14 +3595,10 @@ class SmartThread:
 
             mainline alpha entered
             f1_beta about to wait
-            f2_charlie about to wait
             alpha about to resume threads
             f1_beta back from wait
+            f2_charlie about to wait
             f2_charlie back from wait
-            f3_delta about to wait
-            f3_delta back from wait
-            f4_echo about to wait
-            f4_echo back from wait
             mainline alpha exiting
 
         """
