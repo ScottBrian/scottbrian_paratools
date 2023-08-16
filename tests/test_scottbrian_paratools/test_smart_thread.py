@@ -21,8 +21,8 @@ import random
 import re
 from sys import _getframe
 import time
-from typing import (Any, Callable, ClassVar, cast, NamedTuple, Type, TypeAlias,
-                    TypedDict, TYPE_CHECKING, Optional, Union)
+from typing import (Any, Callable, ClassVar, cast, Generator, NamedTuple,
+                    Type, TypeAlias, TypedDict, TYPE_CHECKING, Optional, Union)
 from typing_extensions import Unpack, NotRequired
 import threading
 
@@ -34,6 +34,8 @@ from scottbrian_utils.msgs import Msgs
 from scottbrian_utils.log_verifier import LogVer
 from scottbrian_utils.diag_msg import (get_formatted_call_sequence,
                                        get_caller_info)
+from scottbrian_locking import se_lock as sel
+
 
 ########################################################################
 # Local
@@ -161,8 +163,8 @@ class RecvType(Enum):
 class SendRecvMsgs:
     """SendRecvMsgs used for testing smart_send and smart_recv."""
     def __init__(self,
-                 sender_names: Iterable,
-                 receiver_names: Iterable,
+                 sender_names: Iterable[str],
+                 receiver_names: Iterable[str],
                  num_msgs: int,
                  text: str = '') -> None:
         """Initialize the SendRecvMsg object used for test messages.
@@ -187,7 +189,7 @@ class SendRecvMsgs:
         self.msg_lock = threading.Lock()
         self.build_msgs()
 
-    def build_msgs(self):
+    def build_msgs(self) -> None:
         """Create the messages that will be sent and received."""
         for msg_idx in range(self.num_msgs):
             self.broadcast_msgs.append({})
@@ -205,8 +207,8 @@ class SendRecvMsgs:
 
     def get_broadcast_msg(self,
                           sender_name: str,
-                          exp_receivers: Iterable,
-                          msg_idx: int) -> str:
+                          exp_receivers: Iterable[str],
+                          msg_idx: int) -> Any:
         """Return a single message that is to be sent to receivers.
 
         Args:
@@ -230,8 +232,8 @@ class SendRecvMsgs:
 
     def get_send_msgs(self,
                       sender_name: str,
-                      receiver_names: Iterable,
-                      exp_receivers: Iterable,
+                      receiver_names: Iterable[str],
+                      exp_receivers: Iterable[str],
                       msg_idx: int) -> dict[str, Any]:
         """Return the messages that are to be sent.
 
@@ -262,7 +264,7 @@ class SendRecvMsgs:
     def add_exp_msg_received(self,
                              receiver_name: str,
                              sender_name: str,
-                             msg: Any):
+                             msg: Any) -> None:
         """Add sent message to the expected received messages list.
 
         Args:
@@ -286,7 +288,7 @@ class SendRecvMsgs:
             num_msgs: number of messages to be cleared
 
         """
-        sender_names: set[str] = get_set(sender_names)
+        sender_names = get_set(sender_names)
         with self.msg_lock:
             for sender in sender_names:
                 for idx in range(num_msgs):
@@ -295,7 +297,7 @@ class SendRecvMsgs:
                     else:
                         break
     def clear_all_exp_msgs_received(self,
-                                    receiver_name: str):
+                                    receiver_name: str) -> None:
         """Clear the expected messages in the SendRecvMsgs object.
 
         Args:
@@ -394,27 +396,51 @@ class SnapShotDataItem:
     verify_data: VerifyData
 
 
+# @contextmanager
+# def conditional_registry_lock(*args, **kwds) -> None:
+#     """Obtain the connection_block lock.
+#
+#     This method is called to conditionally obtain a lock using a with
+#     statement.
+#
+#     Args:
+#         args: the lock to obtain
+#         kwds: whether to obtain the lock
+#
+#     """
+#     # if request needs the lock
+#     if kwds['obtain_tf']:
+#         kwds['lock'].obtain_excl()
+#     try:
+#         yield
+#     finally:
+#         # release the lock if it was obtained
+#         if kwds['obtain_tf']:
+#             kwds['lock'].release()
+
+
 @contextmanager
-def conditional_registry_lock(*args, **kwds) -> None:
+def conditional_registry_lock(lock: sel.SELock,
+                              obtain_tf: bool) -> Generator[None, None, None]:
     """Obtain the connection_block lock.
 
     This method is called to conditionally obtain a lock using a with
     statement.
 
     Args:
-        args: the lock to obtain
-        kwds: whether to obtain the lock
+        lock: the lock to obtain
+        obtain_tf: whether to obtain the lock
 
     """
     # if request needs the lock
-    if kwds['obtain_tf']:
-        kwds['lock'].obtain_excl()
+    if obtain_tf:
+        lock.obtain_excl()
     try:
         yield
     finally:
         # release the lock if it was obtained
-        if kwds['obtain_tf']:
-            kwds['lock'].release()
+        if obtain_tf:
+            lock.release()
 
 
 ########################################################################
@@ -595,7 +621,7 @@ def get_names(stem: str,
 ########################################################################
 # get_set
 ########################################################################
-def get_set(item: Optional[Iterable] = None) -> set[Any]:
+def get_set(item: Optional[Iterable[str]] = None) -> set[Any]:
     """Return a set given the iterable input.
 
     Args:
@@ -614,7 +640,7 @@ def get_set(item: Optional[Iterable] = None) -> set[Any]:
 class ConfigCmd(ABC):
     """Configuration command base class."""
     def __init__(self,
-                 cmd_runners: Iterable):
+                 cmd_runners: Iterable[str]) -> None:
         """Initialize the instance.
 
         Args:
@@ -626,7 +652,7 @@ class ConfigCmd(ABC):
         # the command.
         self.serial_num: int = 0
         self.line_num: int = 0
-        self.config_ver: Optional["ConfigVerifier"] = None
+        self.config_ver: "ConfigVerifier"
 
         # specified_args are set in each subclass
         self.specified_args: dict[str, Any] = {}
@@ -637,7 +663,7 @@ class ConfigCmd(ABC):
                                     'serial_num',
                                     'line_num']
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Method to provide repr."""
         if TYPE_CHECKING:
             __class__: Type[ConfigVerifier]  # noqa: F842
@@ -677,10 +703,10 @@ class ConfigCmd(ABC):
 class ConfirmResponse(ConfigCmd):
     """Confirm that an earlier command has completed."""
     def __init__(self,
-                 cmd_runners: Iterable,
+                 cmd_runners: Iterable[str],
                  confirm_cmd: str,
                  confirm_serial_num: int,
-                 confirmers: Iterable
+                 confirmers: Iterable[str]
                  ) -> None:
         """Initialize the instance.
 
@@ -741,10 +767,10 @@ class ConfirmResponse(ConfigCmd):
 class ConfirmResponseNot(ConfirmResponse):
     """Confirm that an earlier command has not yet completed."""
     def __init__(self,
-                 cmd_runners: Iterable,
+                 cmd_runners: Iterable[str],
                  confirm_cmd: str,
                  confirm_serial_num: int,
-                 confirmers: Iterable
+                 confirmers: Iterable[str]
                  ) -> None:
         """Initialize the instance.
 
@@ -784,7 +810,7 @@ class ConfirmResponseNot(ConfirmResponse):
 class CreateF1AutoStart(ConfigCmd):
     """Create an f1 thread with autostart."""
     def __init__(self,
-                 cmd_runners: Iterable,
+                 cmd_runners: Iterable[str],
                  f1_create_items: list["F1CreateItem"],
                  ) -> None:
         """Initialize the instance.
@@ -822,7 +848,7 @@ class CreateF1AutoStart(ConfigCmd):
 class CreateF1NoStart(CreateF1AutoStart):
     """Create an f1 thread with no autostart."""
     def __init__(self,
-                 cmd_runners: Iterable,
+                 cmd_runners: Iterable[str],
                  f1_create_items: list["F1CreateItem"],
                  ) -> None:
         """Initialize the instance.
@@ -857,7 +883,7 @@ class CreateF1NoStart(CreateF1AutoStart):
 class ExitThread(ConfigCmd):
     """Cause thread to exit its command loop."""
     def __init__(self,
-                 cmd_runners: Iterable,
+                 cmd_runners: Iterable[str],
                  stopped_by: str) -> None:
         """Initialize the instance.
 
@@ -887,9 +913,9 @@ class ExitThread(ConfigCmd):
 class Join(ConfigCmd):
     """Do smart_join."""
     def __init__(self,
-                 cmd_runners: Iterable,
-                 join_names: Iterable,
-                 unreg_names: Optional[Iterable] = None,
+                 cmd_runners: Iterable[str],
+                 join_names: Iterable[str],
+                 unreg_names: Optional[Iterable[str]] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
@@ -928,10 +954,10 @@ class Join(ConfigCmd):
 class JoinTimeoutFalse(Join):
     """Do smart_join with timeout false."""
     def __init__(self,
-                 cmd_runners: Iterable,
-                 join_names: Iterable,
+                 cmd_runners: Iterable[str],
+                 join_names: Iterable[str],
                  timeout: IntOrFloat,
-                 unreg_names: Optional[Iterable] = None,
+                 unreg_names: Optional[Iterable[str]] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
@@ -971,11 +997,11 @@ class JoinTimeoutFalse(Join):
 class JoinTimeoutTrue(JoinTimeoutFalse):
     """Do smart_join with timeout true."""
     def __init__(self,
-                 cmd_runners: Iterable,
-                 join_names: Iterable,
+                 cmd_runners: Iterable[str],
+                 join_names: Iterable[str],
                  timeout: IntOrFloat,
-                 timeout_names: Iterable,
-                 unreg_names: Optional[Iterable] = None,
+                 timeout_names: Iterable[str],
+                 unreg_names: Optional[Iterable[str]] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
@@ -1026,7 +1052,7 @@ class JoinTimeoutTrue(JoinTimeoutFalse):
 class LockObtain(ConfigCmd):
     """Obtain the registry lock."""
     def __init__(self,
-                 cmd_runners: Iterable) -> None:
+                 cmd_runners: Iterable[str]) -> None:
         """Initialize the instance.
 
         Args:
@@ -1051,7 +1077,7 @@ class LockObtain(ConfigCmd):
 class LockRelease(ConfigCmd):
     """Release the registry lock."""
     def __init__(self,
-                 cmd_runners: Iterable) -> None:
+                 cmd_runners: Iterable[str]) -> None:
         """Initialize the instance.
 
         Args:
@@ -1076,7 +1102,7 @@ class LockRelease(ConfigCmd):
 class LockSwap(ConfigCmd):
     """Swap the lock positions."""
     def __init__(self,
-                 cmd_runners: Iterable,
+                 cmd_runners: Iterable[str],
                  new_positions: list[str]) -> None:
         """Initialize the instance.
 
@@ -1106,7 +1132,7 @@ class LockSwap(ConfigCmd):
 class LockVerify(ConfigCmd):
     """Verify the registry lock has the expected owners and waiters."""
     def __init__(self,
-                 cmd_runners: Iterable,
+                 cmd_runners: Iterable[str],
                  exp_positions: list[str]) -> None:
         """Initialize the instance.
 
@@ -1137,7 +1163,7 @@ class LockVerify(ConfigCmd):
 class Pause(ConfigCmd):
     """Pause the commands."""
     def __init__(self,
-                 cmd_runners: Iterable,
+                 cmd_runners: Iterable[str],
                  pause_seconds: IntOrFloat) -> None:
         """Initialize the instance.
 
@@ -1167,13 +1193,13 @@ class Pause(ConfigCmd):
 class RecvMsg(ConfigCmd):
     """Do smart_recv."""
     def __init__(self,
-                 cmd_runners: Iterable,
-                 senders: Iterable,
-                 exp_senders: Iterable,
+                 cmd_runners: Iterable[str],
+                 senders: Iterable[str],
+                 exp_senders: Iterable[str],
                  exp_msgs: SendRecvMsgs,
                  sender_count: Optional[int] = None,
-                 stopped_remotes: Optional[Iterable] = None,
-                 deadlock_remotes: Optional[Iterable] = None,
+                 stopped_remotes: Optional[Iterable[str]] = None,
+                 deadlock_remotes: Optional[Iterable[str]] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
@@ -1238,14 +1264,14 @@ class RecvMsg(ConfigCmd):
 class RecvMsgTimeoutFalse(RecvMsg):
     """Do smart_recv with timeout false."""
     def __init__(self,
-                 cmd_runners: Iterable,
-                 senders: Iterable,
-                 exp_senders: Iterable,
+                 cmd_runners: Iterable[str],
+                 senders: Iterable[str],
+                 exp_senders: Iterable[str],
                  exp_msgs: SendRecvMsgs,
                  timeout: IntOrFloat,
                  sender_count: Optional[int] = None,
-                 stopped_remotes: Optional[Iterable] = None,
-                 deadlock_remotes: Optional[Iterable] = None,
+                 stopped_remotes: Optional[Iterable[str]] = None,
+                 deadlock_remotes: Optional[Iterable[str]] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
@@ -1302,15 +1328,15 @@ class RecvMsgTimeoutFalse(RecvMsg):
 class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
     """Do smart_recv with timeout true."""
     def __init__(self,
-                 cmd_runners: Iterable,
-                 senders: Iterable,
-                 exp_senders: Iterable,
+                 cmd_runners: Iterable[str],
+                 senders: Iterable[str],
+                 exp_senders: Iterable[str],
                  exp_msgs: SendRecvMsgs,
                  timeout: IntOrFloat,
-                 timeout_names: Iterable,
+                 timeout_names: Iterable[str],
                  sender_count: Optional[int] = None,
-                 stopped_remotes: Optional[Iterable] = None,
-                 deadlock_remotes: Optional[Iterable] = None,
+                 stopped_remotes: Optional[Iterable[str]] = None,
+                 deadlock_remotes: Optional[Iterable[str]] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
@@ -1370,10 +1396,10 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
 class Resume(ConfigCmd):
     """Do smart_resume."""
     def __init__(self,
-                 cmd_runners: Iterable,
-                 targets: Iterable,
-                 exp_resumed_targets: Iterable,
-                 stopped_remotes: Optional[Iterable] = None,
+                 cmd_runners: Iterable[str],
+                 targets: Iterable[str],
+                 exp_resumed_targets: Iterable[str],
+                 stopped_remotes: Optional[Iterable[str]] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
@@ -1422,11 +1448,11 @@ class Resume(ConfigCmd):
 class ResumeTimeoutFalse(Resume):
     """Do smart_resume with timeout false."""
     def __init__(self,
-                 cmd_runners: Iterable,
-                 targets: Iterable,
-                 exp_resumed_targets: Iterable,
+                 cmd_runners: Iterable[str],
+                 targets: Iterable[str],
+                 exp_resumed_targets: Iterable[str],
                  timeout: IntOrFloat,
-                 stopped_remotes: Optional[Iterable] = None,
+                 stopped_remotes: Optional[Iterable[str]] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
@@ -1472,12 +1498,12 @@ class ResumeTimeoutFalse(Resume):
 class ResumeTimeoutTrue(ResumeTimeoutFalse):
     """Do smart_resume with timeout true."""
     def __init__(self,
-                 cmd_runners: Iterable,
-                 targets: Iterable,
-                 exp_resumed_targets: Iterable,
+                 cmd_runners: Iterable[str],
+                 targets: Iterable[str],
+                 exp_resumed_targets: Iterable[str],
                  timeout: IntOrFloat,
-                 timeout_names: Iterable,
-                 stopped_remotes: Optional[Iterable] = None,
+                 timeout_names: Iterable[str],
+                 stopped_remotes: Optional[Iterable[str]] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
@@ -1525,13 +1551,13 @@ class ResumeTimeoutTrue(ResumeTimeoutFalse):
 class SendMsg(ConfigCmd):
     """Do smart_send."""
     def __init__(self,
-                 cmd_runners: Iterable,
-                 receivers: Iterable,
-                 exp_receivers: Iterable,
+                 cmd_runners: Iterable[str],
+                 receivers: Iterable[str],
+                 exp_receivers: Iterable[str],
                  msgs_to_send: SendRecvMsgs,
                  msg_idx: int,
                  send_type: SendType = SendType.ToRemotes,
-                 stopped_remotes: Optional[Iterable] = None,
+                 stopped_remotes: Optional[Iterable[str]] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
@@ -1592,9 +1618,9 @@ class SendMsg(ConfigCmd):
 class SendMsgTimeoutFalse(SendMsg):
     """Do smart_send with timeout false."""
     def __init__(self,
-                 cmd_runners: Iterable,
-                 receivers: Iterable,
-                 exp_receivers: Iterable,
+                 cmd_runners: Iterable[str],
+                 receivers: Iterable[str],
+                 exp_receivers: Iterable[str],
                  msgs_to_send: SendRecvMsgs,
                  msg_idx: int,
                  timeout: IntOrFloat,
@@ -1656,14 +1682,14 @@ class SendMsgTimeoutFalse(SendMsg):
 class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
     """Do smart_send with timeout true."""
     def __init__(self,
-                 cmd_runners: Iterable,
-                 receivers: Iterable,
-                 exp_receivers: Iterable,
+                 cmd_runners: Iterable[str],
+                 receivers: Iterable[str],
+                 exp_receivers: Iterable[str],
                  msgs_to_send: SendRecvMsgs,
                  msg_idx: int,
                  timeout: IntOrFloat,
-                 unreg_timeout_names: Iterable,
-                 fullq_timeout_names: Iterable,
+                 unreg_timeout_names: Iterable[str],
+                 fullq_timeout_names: Iterable[str],
                  send_type: SendType = SendType.ToRemotes,
                  stopped_remotes: Optional[StrOrSet] = None,
                  log_msg: Optional[str] = None) -> None:
@@ -1728,9 +1754,9 @@ class SendMsgTimeoutTrue(SendMsgTimeoutFalse):
 class StartThread(ConfigCmd):
     """Start a thread with smart_start."""
     def __init__(self,
-                 cmd_runners: Iterable,
-                 start_names: Iterable,
-                 unreg_remotes: Optional[Iterable] = None,
+                 cmd_runners: Iterable[str],
+                 start_names: Iterable[str],
+                 unreg_remotes: Optional[Iterable[str]] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
@@ -1771,8 +1797,8 @@ class StartThread(ConfigCmd):
 class StopThread(ConfigCmd):
     """Stop a thread."""
     def __init__(self,
-                 cmd_runners: Iterable,
-                 stop_names: Iterable,
+                 cmd_runners: Iterable[str],
+                 stop_names: Iterable[str],
                  reset_ops_count: bool = False,
                  send_recv_msgs: Optional[SendRecvMsgs] = None) -> None:
         """Initialize the instance.
@@ -1814,13 +1840,13 @@ class StopThread(ConfigCmd):
 class Sync(ConfigCmd):
     """Do smart_sync."""
     def __init__(self,
-                 cmd_runners: Iterable,
-                 targets: Iterable,
+                 cmd_runners: Iterable[str],
+                 targets: Iterable[str],
                  timeout: IntOrFloat = 0,
-                 timeout_remotes: Optional[Iterable] = None,
-                 stopped_remotes: Optional[Iterable] = None,
-                 deadlock_remotes: Optional[Iterable] = None,
-                 sync_set_ack_remotes: Optional[Iterable] = None,
+                 timeout_remotes: Optional[Iterable[str]] = None,
+                 stopped_remotes: Optional[Iterable[str]] = None,
+                 deadlock_remotes: Optional[Iterable[str]] = None,
+                 sync_set_ack_remotes: Optional[Iterable[str]] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
@@ -1886,13 +1912,13 @@ class Sync(ConfigCmd):
 class SyncTimeoutFalse(Sync):
     """Do smart_sync with timeout of false."""
     def __init__(self,
-                 cmd_runners: Iterable,
-                 targets: Iterable,
+                 cmd_runners: Iterable[str],
+                 targets: Iterable[str],
                  timeout: IntOrFloat,
-                 stopped_remotes: Optional[Iterable] = None,
-                 timeout_remotes: Optional[Iterable] = None,
-                 deadlock_remotes: Optional[Iterable] = None,
-                 sync_set_ack_remotes: Optional[Iterable] = None,
+                 stopped_remotes: Optional[Iterable[str]] = None,
+                 timeout_remotes: Optional[Iterable[str]] = None,
+                 deadlock_remotes: Optional[Iterable[str]] = None,
+                 sync_set_ack_remotes: Optional[Iterable[str]] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
@@ -1946,13 +1972,13 @@ class SyncTimeoutFalse(Sync):
 class SyncTimeoutTrue(SyncTimeoutFalse):
     """Do smart_sync with timeout of true."""
     def __init__(self,
-                 cmd_runners: Iterable,
-                 targets: Iterable,
+                 cmd_runners: Iterable[str],
+                 targets: Iterable[str],
                  timeout: IntOrFloat,
-                 timeout_remotes: Iterable,
-                 stopped_remotes: Optional[Iterable] = None,
-                 deadlock_remotes: Optional[Iterable] = None,
-                 sync_set_ack_remotes: Optional[Iterable] = None,
+                 timeout_remotes: Iterable[str],
+                 stopped_remotes: Optional[Iterable[str]] = None,
+                 deadlock_remotes: Optional[Iterable[str]] = None,
+                 sync_set_ack_remotes: Optional[Iterable[str]] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
@@ -2004,9 +2030,9 @@ class SyncTimeoutTrue(SyncTimeoutFalse):
 class Unregister(ConfigCmd):
     """Do the smart_unreg."""
     def __init__(self,
-                 cmd_runners: Iterable,
-                 unregister_targets: Iterable,
-                 not_registered_remotes: Optional[Iterable] = None,
+                 cmd_runners: Iterable[str],
+                 unregister_targets: Iterable[str],
+                 not_registered_remotes: Optional[Iterable[str]] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
@@ -2079,12 +2105,12 @@ class Unregister(ConfigCmd):
 class VerifyConfig(ConfigCmd):
     """Validate the configuration."""
     def __init__(self,
-                 cmd_runners: Iterable,
+                 cmd_runners: Iterable[str],
                  verify_type: VerifyType,
-                 names_to_check: Optional[Iterable] = None,
-                 aux_names: Optional[Iterable] = None,
-                 state_to_check: Optional[st.ThreadState] = None,
-                 exp_pending_flags: Optional[PendingFlags] = None,
+                 names_to_check: Optional[Iterable[str]] = None,
+                 aux_names: Optional[Iterable[str]] = None,
+                 state_to_check: st.ThreadState = st.ThreadState.Unregistered,
+                 exp_pending_flags: PendingFlags = PendingFlags(),
                  obtain_reg_lock: bool = True) -> None:
         """Initialize the instance.
 
@@ -2145,7 +2171,7 @@ class VerifyConfig(ConfigCmd):
 class VerifyCounts(ConfigCmd):
     """Verify the number of threads at various states in the config."""
     def __init__(self,
-                 cmd_runners: Iterable,
+                 cmd_runners: Iterable[str],
                  exp_num_registered: int,
                  exp_num_active: int,
                  exp_num_stopped: int) -> None:
@@ -2199,7 +2225,7 @@ class VerifyCounts(ConfigCmd):
 class VerifyDefDel(ConfigCmd):
     """Verify deferred deletes."""
     def __init__(self,
-                 cmd_runners: Iterable,
+                 cmd_runners: Iterable[str],
                  def_del_scenario: DefDelScenario,
                  receiver_names: list[str],
                  sender_names: list[str],
@@ -2265,12 +2291,12 @@ class VerifyDefDel(ConfigCmd):
 class Wait(ConfigCmd):
     """Do smart_wait."""
     def __init__(self,
-                 cmd_runners: Iterable,
-                 resumers: Iterable,
-                 exp_resumers: Iterable,
+                 cmd_runners: Iterable[str],
+                 resumers: Iterable[str],
+                 exp_resumers: Iterable[str],
                  resumer_count: Optional[int] = None,
-                 stopped_remotes: Optional[Iterable] = None,
-                 deadlock_remotes: Optional[Iterable] = None,
+                 stopped_remotes: Optional[Iterable[str]] = None,
+                 deadlock_remotes: Optional[Iterable[str]] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
@@ -2330,13 +2356,13 @@ class Wait(ConfigCmd):
 class WaitTimeoutFalse(Wait):
     """Do smart_wait with timeout false."""
     def __init__(self,
-                 cmd_runners: Iterable,
-                 resumers: Iterable,
-                 exp_resumers: Iterable,
+                 cmd_runners: Iterable[str],
+                 resumers: Iterable[str],
+                 exp_resumers: Iterable[str],
                  timeout: IntOrFloat,
                  resumer_count: Optional[int] = None,
-                 stopped_remotes: Optional[Iterable] = None,
-                 deadlock_remotes: Optional[Iterable] = None,
+                 stopped_remotes: Optional[Iterable[str]] = None,
+                 deadlock_remotes: Optional[Iterable[str]] = None,
                  log_msg: Optional[str] = None) -> None:
         """Initialize the instance.
 
@@ -2390,14 +2416,14 @@ class WaitTimeoutFalse(Wait):
 class WaitTimeoutTrue(WaitTimeoutFalse):
     """Do smart_wait with timeout true."""
     def __init__(self,
-                 cmd_runners: Iterable,
-                 resumers: Iterable,
-                 exp_resumers: Iterable,
+                 cmd_runners: Iterable[str],
+                 resumers: Iterable[str],
+                 exp_resumers: Iterable[str],
                  timeout: IntOrFloat,
-                 timeout_remotes: Iterable,
+                 timeout_remotes: Iterable[str],
                  resumer_count: Optional[int] = None,
-                 stopped_remotes: Optional[Iterable] = None,
-                 deadlock_remotes: Optional[Iterable] = None,
+                 stopped_remotes: Optional[Iterable[str]] = None,
+                 deadlock_remotes: Optional[Iterable[str]] = None,
                  log_msg: Optional[str] = None
                  ) -> None:
         """Initialize the instance.
@@ -2454,7 +2480,7 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
 class WaitForCondition(ConfigCmd):
     """Wait for receive message timeouts."""
     def __init__(self,
-                 cmd_runners: Iterable,
+                 cmd_runners: Iterable[str],
                  check_rtn: Callable[..., bool],
                  check_args: Any) -> None:
         """Initialize the instance.
@@ -2490,7 +2516,7 @@ class WaitForCondition(ConfigCmd):
 class WaitForRecvTimeouts(ConfigCmd):
     """Wait for receive message timeouts."""
     def __init__(self,
-                 cmd_runners: Iterable) -> None:
+                 cmd_runners: Iterable[str]) -> None:
         """Initialize the instance.
 
         Args:
@@ -2515,9 +2541,9 @@ class WaitForRecvTimeouts(ConfigCmd):
 class WaitForRequestTimeouts(ConfigCmd):
     """Wait for request timeouts command."""
     def __init__(self,
-                 cmd_runners: Iterable,
-                 actor_names: Iterable,
-                 timeout_names: Iterable,
+                 cmd_runners: Iterable[str],
+                 actor_names: Iterable[str],
+                 timeout_names: Iterable[str],
                  use_work_remotes: bool = False,
                  as_subset: bool = False
                  ) -> None:
@@ -2582,7 +2608,7 @@ class F1CreateItem:
 @dataclass
 class ThreadTracker:
     """Class that tracks each thread."""
-    thread: Optional[st.SmartThread]
+    thread: st.SmartThread
     is_alive: bool
     exiting: bool
     is_auto_started: bool
@@ -3242,7 +3268,7 @@ class AddRegEntryLogSearchItem(LogSearchItem):
             found_log_idx=found_log_idx,
             config_ver=self.config_ver)
 
-    def run_process(self):
+    def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         self.config_ver.handle_add_reg_log_msg(
@@ -4743,7 +4769,6 @@ class MockGetTargetState:
             Must be called holding the registry lock either shared or
             exclusive
         """
-        ret_state = st.ThreadState.Unregistered
         if pk_remote.remote not in st.SmartThread._registry:
             if pk_remote.create_time != 0.0:
                 ret_state = st.ThreadState.Stopped
@@ -4775,21 +4800,20 @@ class MockGetTargetState:
             else:
                 ret_state = st.SmartThread._registry[pk_remote.remote].st_state
 
-        if self.name in MockGetTargetState.targets:
-            if pk_remote.remote in MockGetTargetState.targets[self.name]:
+
+        name = self.name  # type: ignore
+        if name in MockGetTargetState.targets:
+            if pk_remote.remote in MockGetTargetState.targets[name]:
                 if ret_state == MockGetTargetState.targets[
-                        self.name][pk_remote.remote][0]:
+                        name][pk_remote.remote][0]:
                     old_ret_state = ret_state
                     ret_state = MockGetTargetState.targets[
-                        self.name][pk_remote.remote][1]
+                        name][pk_remote.remote][1]
                     MockGetTargetState.config_ver.log_test_msg(
-                        f'mock {self.name} changed state for '
+                        f'mock {name} changed state for '
                         f'{pk_remote.remote=} '
                         f'from {old_ret_state= } to {ret_state=}')
 
-        # MockGetTargetState.config_ver.log_test_msg(
-        #     f'mock {self.name} returning for {pk_remote.remote=} '
-        #     f'with {ret_state=}')
         return ret_state
 
 
@@ -5086,7 +5110,7 @@ class ConfigVerifier:
     ####################################################################
     # setup_pending_events
     ####################################################################
-    def setup_pending_events(self):
+    def setup_pending_events(self) -> None:
         """Setup the pending events for all threads."""
         self.pending_events = {}
         for name in self.thread_names:
@@ -5164,7 +5188,7 @@ class ConfigVerifier:
     ####################################################################
     # monitor
     ####################################################################
-    def monitor(self):
+    def monitor(self) -> None:
         """Gather log messages and call handlers."""
         self.log_test_msg('monitor entered')
 
@@ -5474,7 +5498,7 @@ class ConfigVerifier:
     ####################################################################
     def add_log_msg(self,
                     new_log_msg: str,
-                    log_level: Optional[int] = logging.DEBUG,
+                    log_level: int = logging.DEBUG,
                     fullmatch: bool = True) -> None:
         """Add log message to log_ver for SmartThread logger.
 
@@ -5933,9 +5957,9 @@ class ConfigVerifier:
     ####################################################################
     def build_config(self,
                      cmd_runner: str,
-                     num_registered: Optional[int] = 0,
-                     num_active: Optional[int] = 1,
-                     num_stopped: Optional[int] = 0
+                     num_registered: int = 0,
+                     num_active: int = 1,
+                     num_stopped: int = 0
                      ) -> None:
         """Add ConfigCmd items to the queue.
 
@@ -6057,10 +6081,10 @@ class ConfigVerifier:
     # create_config
     ####################################################################
     def create_config(self,
-                      unreg_names: Optional[Iterable] = None,
-                      reg_names: Optional[Iterable] = None,
-                      active_names: Optional[Iterable] = None,
-                      stopped_names: Optional[Iterable] = None,
+                      unreg_names: Optional[Iterable[str]] = None,
+                      reg_names: Optional[Iterable[str]] = None,
+                      active_names: Optional[Iterable[str]] = None,
+                      stopped_names: Optional[Iterable[str]] = None,
                       ) -> None:
         """Add ConfigCmd items to the queue to create a config.
 
@@ -6071,7 +6095,7 @@ class ConfigVerifier:
             stopped_names: thread names to be in the stopped pool
 
         """
-        self.thread_names: list[str] = [self.commander_name]
+        self.thread_names = [self.commander_name]
         if unreg_names:
             self.thread_names.extend(unreg_names)
 
@@ -6082,7 +6106,7 @@ class ConfigVerifier:
         if stopped_names:
             self.thread_names.extend(stopped_names)
 
-        self.unregistered_names: set[str] = set(self.thread_names)
+        self.unregistered_names = set(self.thread_names)
         self.setup_pending_events()
         self.unregistered_names -= {self.commander_name}
 
@@ -6104,8 +6128,8 @@ class ConfigVerifier:
                                     validate_config=True)
 
         if active_names:
-            names: list[str] = sorted(active_names)
-            f1_create_items: list[F1CreateItem] = []
+            names = sorted(active_names)
+            f1_create_items = []
             for idx, name in enumerate(names):
                 if idx % 2:
                     app_config = AppConfig.ScriptStyle
@@ -6121,8 +6145,8 @@ class ConfigVerifier:
                                     validate_config=True)
 
         if stopped_names:
-            names: list[str] = sorted(stopped_names)
-            f1_create_items: list[F1CreateItem] = []
+            names = sorted(stopped_names)
+            f1_create_items = []
             for idx, name in enumerate(names):
                 if idx % 2:
                     app_config = AppConfig.ScriptStyle
@@ -6266,7 +6290,7 @@ class ConfigVerifier:
     ####################################################################
     def build_exit_suite(self,
                          cmd_runner: str,
-                         names: Iterable,
+                         names: Iterable[str],
                          validate_config: bool = True,
                          reset_ops_count: bool = False,
                          send_recv_msgs: Optional[SendRecvMsgs] = None
@@ -6366,8 +6390,8 @@ class ConfigVerifier:
     ####################################################################
     def build_f1_create_suite_num(self,
                                   num_to_create: int,
-                                  auto_start: Optional[bool] = True,
-                                  validate_config: Optional[bool] = True
+                                  auto_start: bool = True,
+                                  validate_config: bool = True
                                   ) -> None:
         """Return a list of ConfigCmd items for a create.
 
@@ -6407,8 +6431,8 @@ class ConfigVerifier:
     # build_join_suite
     ####################################################################
     def build_join_suite(self,
-                         cmd_runners: Iterable,
-                         join_target_names: Iterable,
+                         cmd_runners: Iterable[str],
+                         join_target_names: Iterable[str],
                          validate_config: Optional[bool] = True
                          ) -> None:
         """Return a list of ConfigCmd items for join.
@@ -6462,7 +6486,7 @@ class ConfigVerifier:
     # build_join_suite
     ####################################################################
     def build_join_suite_num(self,
-                             cmd_runners: Iterable,
+                             cmd_runners: Iterable[str],
                              num_to_join: int) -> None:
         """Return a list of ConfigCmd items for join.
 
@@ -9544,9 +9568,12 @@ class ConfigVerifier:
                 f'check_sync_zero_create_time {sync_1=} not in '
                 'expected_registered')
 
-        smart_thread = self.expected_registered[sync_0].thread
-        if smart_thread is not None:
-            if pk_remote in smart_thread.work_pk_remotes:
+        # smart_thread = self.expected_registered[sync_0].thread
+        # if smart_thread is not None:
+        #     if pk_remote in smart_thread.work_pk_remotes:
+        #         return True
+        if pk_remote in self.expected_registered[
+            sync_0].thread.work_pk_remotes:
                 return True
 
         return False
@@ -17519,21 +17546,21 @@ class ConfigVerifier:
         else:
             auto_start_decision = AutoStartDecision.auto_start_no
 
-        with self.ops_lock:
-            self.expected_registered[name] = ThreadTracker(
-                thread=None,
-                is_alive=False,
-                exiting=False,
-                is_auto_started=auto_start,
-                is_TargetThread=is_thread_target,
-                exp_init_is_alive=False,
-                exp_init_thread_state=st.ThreadState.Registered,
-                thread_create=thread_create,
-                auto_start_decision=auto_start_decision,
-                # st_state=st.ThreadState.Unregistered,
-                st_state=st.ThreadState.Initializing,
-                found_del_pairs=defaultdict(int)
-            )
+        # with self.ops_lock:
+        #     self.expected_registered[name] = ThreadTracker(
+        #         thread=None,
+        #         is_alive=False,
+        #         exiting=False,
+        #         is_auto_started=auto_start,
+        #         is_TargetThread=is_thread_target,
+        #         exp_init_is_alive=False,
+        #         exp_init_thread_state=st.ThreadState.Registered,
+        #         thread_create=thread_create,
+        #         auto_start_decision=auto_start_decision,
+        #         # st_state=st.ThreadState.Unregistered,
+        #         st_state=st.ThreadState.Initializing,
+        #         found_del_pairs=defaultdict(int)
+        #     )
 
         pe = self.pending_events[cmd_runner]
         pe[PE.start_request].append(StartRequest(
@@ -17579,7 +17606,22 @@ class ConfigVerifier:
                                   f'{app_config=}')
 
         self.all_threads[name] = f1_thread
-        self.expected_registered[name].thread = f1_thread
+        # self.expected_registered[name].thread = f1_thread
+        with self.ops_lock:
+            self.expected_registered[name] = ThreadTracker(
+                thread=f1_thread,
+                is_alive=False,
+                exiting=False,
+                is_auto_started=auto_start,
+                is_TargetThread=is_thread_target,
+                exp_init_is_alive=False,
+                exp_init_thread_state=st.ThreadState.Registered,
+                thread_create=thread_create,
+                auto_start_decision=auto_start_decision,
+                # st_state=st.ThreadState.Unregistered,
+                st_state=st.ThreadState.Initializing,
+                found_del_pairs=defaultdict(int)
+            )
 
         self.monitor_pause = False
 
@@ -17894,7 +17936,7 @@ class ConfigVerifier:
                     cmd_runner: str,
                     join_names: set[str],
                     unreg_names: set[str],
-                    log_msg: str,
+                    log_msg: Optional[str] = None,
                     timeout_type: TimeoutType = TimeoutType.TimeoutNone,
                     timeout: Optional[IntOrFloat] = None,
                     timeout_names: Optional[set[str]] = None
@@ -19142,7 +19184,7 @@ class ConfigVerifier:
                         msgs_to_send: SendRecvMsgs,
                         msg_idx: int,
                         send_type: SendType,
-                        log_msg: str,
+                        log_msg: Optional[str] = None,
                         timeout_type: TimeoutType = TimeoutType.TimeoutNone,
                         timeout: IntOrFloat = 0,
                         unreg_timeout_names: Optional[set[str]] = None,
@@ -27993,7 +28035,7 @@ class TestSmartThreadErrors:
             monkeypatch: pytest fixture to set up a mock routine
 
         """
-        from scottbrian_locking import se_lock as sel
+        # from scottbrian_locking import se_lock as sel
 
         ################################################################
         # mock_request_loop
