@@ -14056,7 +14056,12 @@ class ConfigVerifier:
                     deadlock_remotes=request_specific_args[
                         'deadlock_remotes']))
         else:  # timeout_type == TimeoutType.TimeoutTrue
-            timeout_time = 0.5
+            # set timeout large enough to make sure we see stopped or
+            # deadlock before we time out
+            if stopped_remotes or request_specific_args['deadlock_remotes']:
+                timeout_time = 6
+            else:
+                timeout_time = 0.2
             confirm_request_name = 'RecvMsgTimeoutTrue'
             request_serial_num = self.add_cmd(
                 RecvMsgTimeoutTrue(
