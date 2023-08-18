@@ -348,8 +348,8 @@ import logging
 import queue
 import threading
 import time
-from typing import (Any, Callable, ClassVar, NamedTuple, Optional, Type,
-                    TypeAlias, TYPE_CHECKING, Union)
+from typing import (Any, Callable, ClassVar, Final, NamedTuple, NoReturn,
+                    Optional, Type, TypeAlias, TYPE_CHECKING, Union)
 
 ########################################################################
 # Third Party
@@ -814,6 +814,7 @@ class SmartThread:
         exit_log_msg = self._issue_entry_log_msg(
             request=ReqType.Smart_init,
             remotes={name},
+            cmd_runner=self.cmd_runner,
             latest=2)
 
         if not (isinstance(name, str) and name):
@@ -832,7 +833,7 @@ class SmartThread:
             logger.error(error_msg)
             raise SmartThreadIncorrectNameSpecified(error_msg)
 
-        self.name = name
+        self.name: Final[str] = name
 
         if target and thread:
             error_msg = (
@@ -886,11 +887,7 @@ class SmartThread:
 
         self.cmd_lock = threading.Lock()
 
-        # self.st_state: ThreadState = ThreadState.Unregistered
         self.st_state: ThreadState = ThreadState.Initializing
-        # self._set_state(
-        #     target_thread=self,
-        #     new_state=ThreadState.Initializing)
 
         self.auto_start = auto_start
 
@@ -1070,12 +1067,14 @@ class SmartThread:
     ####################################################################
     def _set_state(self,
                    target_thread: "SmartThread",
-                   new_state: ThreadState) -> None:
+                   new_state: ThreadState,
+                   cmd_runner: Optional[str] = None) -> None:
         """Set the state for a thread.
 
         Args:
             target_thread: thread to set status for
             new_state: the new status to be set
+            cmd_runner: thread name doing the request
 
         Returns:
             True if status was changed, False otherwise
@@ -1084,11 +1083,13 @@ class SmartThread:
             Must be called holding the registry lock exclusive
 
         """
+        if cmd_runner is None:
+            cmd_runner = threading.current_thread().name
         saved_status = target_thread.st_state
         target_thread.st_state = new_state
 
         logger.debug(
-            f'{self.cmd_runner} set '
+            f'{cmd_runner} set '
             f'state for thread {target_thread.name} from {saved_status} to '
             f'{new_state}',
             stacklevel=2)
@@ -1166,11 +1167,13 @@ class SmartThread:
 
                 self._set_state(
                     target_thread=self,
-                    new_state=ThreadState.Registered)
+                    new_state=ThreadState.Registered,
+                    cmd_runner=self.cmd_runner)
                 if self.thread.is_alive():
                     self._set_state(
                         target_thread=self,
-                        new_state=ThreadState.Alive)
+                        new_state=ThreadState.Alive,
+                        cmd_runner=self.cmd_runner)
 
                 ########################################################
                 # add new name to the pair array
@@ -1621,7 +1624,7 @@ class SmartThread:
     ####################################################################
     def _get_targets(self,
                      targets: Optional[Iterable[str]] = None,
-                     request: Optional[str] = None) -> set[str]:
+                     request: Optional[ReqType] = None) -> set[str]:
         try:
             ret_set = set({targets} if isinstance(targets, str)
                           else targets or '')
@@ -1632,7 +1635,7 @@ class SmartThread:
             error_msg = (
                 f'SmartThread {threading.current_thread().name} raising '
                 'SmartThreadInvalidInput error while processing '
-                f'request {request}. '
+                f'request {request.value}. '
                 f'It was detected that an argument for remote thread names '
                 f'is not of type Iterable. Please specify an iterable, '
                 f'such as a list of thread names.')
@@ -1774,16 +1777,17 @@ class SmartThread:
             timer = Timer(timeout=0,
                           default_timeout=self.default_timeout)
 
-            self.cmd_runner = threading.current_thread().name
+            cmd_runner = threading.current_thread().name
             if targets is None:
                 targets = {self.name}
             else:
                 targets = self._get_targets(targets,
-                                            request='smart_start')
+                                            request=ReqType.Smart_start)
 
             exit_log_msg = self._issue_entry_log_msg(
                 request=ReqType.Smart_start,
                 remotes=targets,
+                cmd_runner=cmd_runner,
                 timeout_value=timer.timeout_value(),
                 log_msg=log_msg)
 
@@ -1821,7 +1825,6 @@ class SmartThread:
                     logger.error(error_msg)
                     raise SmartThreadRemoteThreadNotRegistered(error_msg)
 
-            self.request = ReqType.Smart_start
             self.started_targets = set()
 
             not_registered_remotes: set[str] = set()
@@ -1835,18 +1838,9 @@ class SmartThread:
             if not_registered_remotes:
                 self._handle_loop_errors2(
                     request=ReqType.Smart_start,
+                    remotes=targets,
                     timer=timer,
                     not_registered_remotes=not_registered_remotes)
-
-            if self.name not in targets:
-                # We are running under some other thread than the one
-                # that was started. If we used a smart_thread instance
-                # that is also the target, then we can't clear the
-                # request because the started thread might do a request
-                # under its thread using this same instance. So, we need
-                # to be careful to not make any changes that could
-                # affect the new thread.
-                self.request = ReqType.NoReq
 
             logger.debug(exit_log_msg)
 
@@ -4538,7 +4532,7 @@ class SmartThread:
                              not_registered_remotes: Optional[set[str]] = None,
                              deadlock_remotes: Optional[set[str]] = None,
                              full_send_q_remotes: Optional[set[str]] = None,
-                             ) -> None:
+                             ) -> NoReturn:
         """Raise an error if needed.
 
         Args:
@@ -4615,14 +4609,14 @@ class SmartThread:
             raise SmartThreadRemoteThreadNotAlive(error_msg)
 
         # If an error should be raised for unregistered threads
-        if not_registered_remotes:
+        elif not_registered_remotes:
             error_msg = (
                 f'{self.name} raising '
                 f'SmartThreadRemoteThreadNotRegistered {msg_suite}')
             logger.error(error_msg)
             raise SmartThreadRemoteThreadNotRegistered(error_msg)
 
-        if deadlock_remotes:
+        elif deadlock_remotes:
             error_msg = (
                 f'{self.name} raising '
                 f'SmartThreadDeadlockDetected {msg_suite}')
@@ -4633,12 +4627,19 @@ class SmartThread:
         # was not specified either explicitly on the smart_wait
         # call or via a default timeout established when this
         # SmartThread was instantiated.
-        if timer.is_expired():
+        elif timer.is_expired():
             error_msg = (
                 f'{self.name} raising '
                 f'SmartThreadRequestTimedOut {msg_suite}')
             logger.error(error_msg)
             raise SmartThreadRequestTimedOut(error_msg)
+
+        else:
+            error_msg = (
+                f'_handle_loop_errors {self.name} called without an '
+                'error - raising SmartThreadInvalidInput')
+            logger.error(error_msg)
+            raise SmartThreadInvalidInput(error_msg)
 
     ####################################################################
     # _check_for_deadlock
@@ -4913,6 +4914,7 @@ class SmartThread:
             self,
             request: ReqType,
             remotes: set[str],
+            cmd_runner: Optional[str] = None,
             timeout_value: Optional[IntFloat] = None,
             log_msg: Optional[str] = None,
             latest: int = 3
@@ -4929,8 +4931,10 @@ class SmartThread:
             the log message to use for the exit call
 
         """
+        if cmd_runner is None:
+            cmd_runner = threading.current_thread().name
         log_msg_body = (
-            f'requestor: {self.cmd_runner}, '
+            f'requestor: {cmd_runner}, '
             f'targets: {sorted(remotes)} '
             f'timeout value: {timeout_value} '
             f'{get_formatted_call_sequence(latest=latest, depth=1)}')
