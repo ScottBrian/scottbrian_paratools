@@ -885,8 +885,6 @@ class SmartThread:
             self.thread = threading.current_thread()
             # self.thread.name = name
 
-        self.cmd_lock = threading.Lock()
-
         self.st_state: ThreadState = ThreadState.Initializing
 
         self.auto_start = auto_start
@@ -1635,7 +1633,7 @@ class SmartThread:
             error_msg = (
                 f'SmartThread {threading.current_thread().name} raising '
                 'SmartThreadInvalidInput error while processing '
-                f'request {request.value}. '
+                f'request {request}. '
                 f'It was detected that an argument for remote thread names '
                 f'is not of type Iterable. Please specify an iterable, '
                 f'such as a list of thread names.')
@@ -1646,7 +1644,7 @@ class SmartThread:
             error_msg = (
                 f'SmartThread {threading.current_thread().name} raising '
                 'SmartThreadInvalidInput error while processing '
-                f'request {self.request}. '
+                f'request {request}. '
                 f'Remote threads are required for the request but none were '
                 f'specified.')
             logger.error(error_msg)
@@ -1661,7 +1659,7 @@ class SmartThread:
                     error_msg = (
                         f'SmartThread {threading.current_thread().name} '
                         f'raising SmartThreadIncorrectNameSpecified error '
-                        f'while processing request {self.request}. '
+                        f'while processing request {request}. '
                         f'It was detected that the {name=} specified '
                         f'for a remote thread is {fillin_text}. Please '
                         f'specify a non-empty string for the thread name.')
@@ -1767,17 +1765,25 @@ class SmartThread:
             mainline alpha exiting
 
         """
-        # smart_start is the only cmd that can be issued with itself as
-        # the target running under any other thread. That means two or
-        # more threads could be doing smart_start against the same
-        # smart_thread instance. We use the self.cmd_lock to prevent
-        # more than one start at a time. The first start will work, the
-        # others will fail with an already started error.
+        # smart_start is the only cmd where the smart thread instance
+        # can also be the target. This means that the cmd_runner has to
+        # be running under a different thread and once the target thread
+        # is started, the target can invoke a smart request with its
+        # smart thread instance with some other target. At that point we
+        # have two different threads running with the same smart thread
+        # instance. Care must be taken to prevent confusion when the
+        # instance is shared with two threads. Certain variables must
+        # must not be changed in one thread that the other thread
+        # depends on. The only instance variable used in smart_start is
+        # started_targets which is not used by any other requests. Also,
+        # the registry lock is obtained at the start of smart_start to
+        # protect started_targets in the even that the newly started
+        # thread also does a smart_start of some other target. Note also
+        # that the instance variable work_remotes is used by testing
+        # to determine progress for timeout cases. Since smart_start
+        # does not have a timeout, work_remotes as an instance variable
+        # is not used in smart_start and is instead a local variable.
         with sel.SELockExcl(SmartThread._registry_lock):
-            timer = Timer(timeout=0,
-                          default_timeout=self.default_timeout)
-
-            cmd_runner = threading.current_thread().name
             if targets is None:
                 targets = {self.name}
             else:
@@ -1787,8 +1793,6 @@ class SmartThread:
             exit_log_msg = self._issue_entry_log_msg(
                 request=ReqType.Smart_start,
                 remotes=targets,
-                cmd_runner=cmd_runner,
-                timeout_value=timer.timeout_value(),
                 log_msg=log_msg)
 
             if self.name not in targets:
@@ -1828,18 +1832,17 @@ class SmartThread:
             self.started_targets = set()
 
             not_registered_remotes: set[str] = set()
-            self.work_remotes = targets.copy()
-            for remote in self.work_remotes.copy():
+            work_remotes = targets.copy()
+            for remote in work_remotes.copy():
                 # with sel.SELockExcl(SmartThread._registry_lock):
                 if self._process_start(remote,
                                        not_registered_remotes):
-                    self.work_remotes -= {remote}
+                    work_remotes -= {remote}
 
             if not_registered_remotes:
-                self._handle_loop_errors2(
+                self._handle_loop_errors(
                     request=ReqType.Smart_start,
                     remotes=targets,
-                    timer=timer,
                     not_registered_remotes=not_registered_remotes)
 
             logger.debug(exit_log_msg)
@@ -1969,37 +1972,35 @@ class SmartThread:
             timeout=0,
             log_msg=log_msg)
 
-        # @sbt what is this doing for us? it only locks the thread
-        # against itself
-        with self.cmd_lock:
-            self.work_remotes = request_block.remotes.copy()
-            with sel.SELockExcl(SmartThread._registry_lock):
-                for remote in self.work_remotes.copy():
-                    if self._get_state(remote) != ThreadState.Registered:
-                        request_block.not_registered_remotes |= {remote}
-                        self.work_remotes -= {remote}
-                    else:
-                        self._set_state(
-                            target_thread=SmartThread._registry[remote],
-                            new_state=ThreadState.Unregistering)
+        self.work_remotes = request_block.remotes.copy()
+        with sel.SELockExcl(SmartThread._registry_lock):
+            for remote in self.work_remotes.copy():
+                if self._get_state(remote) != ThreadState.Registered:
+                    request_block.not_registered_remotes |= {remote}
+                    self.work_remotes -= {remote}
+                else:
+                    self._set_state(
+                        target_thread=SmartThread._registry[remote],
+                        new_state=ThreadState.Unregistering)
 
-                        self.work_remotes -= {remote}
-                        self.unreged_targets |= {remote}
+                    self.work_remotes -= {remote}
+                    self.unreged_targets |= {remote}
 
-                # remove threads from the registry
-                self._clean_registry()
-                self._clean_pair_array()
+            # remove threads from the registry
+            self._clean_registry()
+            self._clean_pair_array()
 
-                if self.unreged_targets:
-                    logger.info(
-                        f'{self.name} did successful smart_unreg of '
-                        f'{sorted(self.unreged_targets)}.')
+            if self.unreged_targets:
+                logger.info(
+                    f'{self.name} did successful smart_unreg of '
+                    f'{sorted(self.unreged_targets)}.')
 
-                if request_block.not_registered_remotes:
-                    self._handle_loop_errors(
-                        request_block=request_block,
-                        pending_remotes=list(
-                            self.work_remotes))
+            if request_block.not_registered_remotes:
+                self._handle_loop_errors(
+                    request=ReqType.Smart_unreg,
+                    remotes=request_block.remotes,
+                    not_registered_remotes=request_block.
+                    not_registered_remotes)
 
         self.request = ReqType.NoReq
 
@@ -2079,43 +2080,45 @@ class SmartThread:
             timeout=timeout,
             log_msg=log_msg)
 
-        with self.cmd_lock:
-            self.joined_targets = set()
-            self.work_remotes = request_block.remotes.copy()
-            while self.work_remotes:
-                joined_remotes: set[str] = set()
-                with sel.SELockExcl(SmartThread._registry_lock):
-                    for remote in self.work_remotes.copy():
-                        if remote in SmartThread._registry:
-                            if self._process_smart_join(remote):
-                                self.work_remotes -= {remote}
-                                joined_remotes |= {remote}
-                        else:
-                            logger.debug(f'{self.cmd_runner} determined that '
-                                         f'thread {remote} is already in '
-                                         f'state {ThreadState.Unregistered}')
+        self.joined_targets = set()
+        self.work_remotes = request_block.remotes.copy()
+        while self.work_remotes:
+            joined_remotes: set[str] = set()
+            with sel.SELockExcl(SmartThread._registry_lock):
+                for remote in self.work_remotes.copy():
+                    if remote in SmartThread._registry:
+                        if self._process_smart_join(remote):
                             self.work_remotes -= {remote}
                             joined_remotes |= {remote}
+                    else:
+                        logger.debug(f'{self.cmd_runner} determined that '
+                                     f'thread {remote} is already in '
+                                     f'state {ThreadState.Unregistered}')
+                        self.work_remotes -= {remote}
+                        joined_remotes |= {remote}
 
-                    # remove threads from the registry
-                    if joined_remotes:
-                        self.joined_targets |= joined_remotes
-                        # must remain under lock for these two calls
-                        self._clean_registry()
-                        self._clean_pair_array()
-                        logger.info(
-                            f'{self.name} did successful smart_join of '
-                            f'{sorted(joined_remotes)}.')
-                        logger.info(
-                            f'{self.name} smart_join completed targets: '
-                            f'{sorted(self.joined_targets)}, pending '
-                            f'targets: {sorted(self.work_remotes)}')
-                    else:  # no progress was made
-                        time.sleep(0.2)
-                        if request_block.timer.is_expired():
-                            self._handle_loop_errors(
-                                request_block=request_block,
-                                pending_remotes=list(self.work_remotes))
+                # remove threads from the registry
+                if joined_remotes:
+                    self.joined_targets |= joined_remotes
+                    # must remain under lock for these two calls
+                    self._clean_registry()
+                    self._clean_pair_array()
+                    logger.info(
+                        f'{self.name} did successful smart_join of '
+                        f'{sorted(joined_remotes)}.')
+                    logger.info(
+                        f'{self.name} smart_join completed targets: '
+                        f'{sorted(self.joined_targets)}, pending '
+                        f'targets: {sorted(self.work_remotes)}')
+                else:  # no progress was made
+                    time.sleep(0.2)
+                    if request_block.timer.is_expired():
+                        self._handle_loop_errors(
+                            request=ReqType.Smart_join,
+                            remotes=request_block.remotes,
+                            pending_remotes=self.work_remotes,
+                            timer=request_block.timer
+                                )
 
         self.request = ReqType.NoReq
 
@@ -4273,8 +4276,8 @@ class SmartThread:
                             local_sb.sync_wait = False
                             local_sb.deadlock = False
 
-                    pending_remotes = [remote for pk, remote, _ in
-                                       self.work_pk_remotes]
+                    pending_remotes = {remote for pk, remote, _ in
+                                       self.work_pk_remotes}
                     # logger.debug(
                     #     f'{self.name} {self.request.value} calling refresh, '
                     #     f'remaining remotes: {self.work_pk_remotes}')
@@ -4283,8 +4286,16 @@ class SmartThread:
                     # self._clean_registry()
                     # self._clean_pair_array()
 
-                self._handle_loop_errors(request_block=request_block,
-                                         pending_remotes=pending_remotes)
+                self._handle_loop_errors(
+                    request=self.request,
+                    remotes=request_block.remotes,
+                    timer=request_block.timer,
+                    pending_remotes=pending_remotes,
+                    stopped_remotes=request_block.stopped_remotes,
+                    not_registered_remotes=request_block
+                    .not_registered_remotes,
+                    deadlock_remotes=request_block.deadlock_remotes,
+                    full_send_q_remotes=request_block.full_send_q_remotes)
 
             time.sleep(0.2)
 
@@ -4425,114 +4436,114 @@ class SmartThread:
     ####################################################################
     # _handle_loop_errors
     ####################################################################
-    def _handle_loop_errors(self, *,
-                            request_block: RequestBlock,
-                            pending_remotes: list[str]
-                            ) -> None:
-        """Raise an error if needed.
-
-        Args:
-            request_block: contains targets, timeout, etc
-            pending_remotes: remotes that have not either not responded
-                or were found to be in an incorrect state
-
-        Raises:
-            SmartThreadRequestTimedOut: request processing timed out
-                waiting for the remote.
-            SmartThreadRemoteThreadNotAlive: request detected remote
-                thread is not alive.
-            SmartThreadDeadlockDetected: a deadlock was detected
-                between two requests.
-            SmartThreadRemoteThreadNotRegistered: the remote thread is
-                not in the ThreadState.Registered state as required.
-
-        """
-        targets_msg = (f'while processing a '
-                       f'{request_block.request.value} '
-                       f'request with targets '
-                       f'{sorted(request_block.remotes)}.')
-
-        pending_msg = (f' Remotes that are pending: '
-                       f'{sorted(pending_remotes)}.')
-
-        if request_block.stopped_remotes:
-            stopped_msg = (
-                ' Remotes that are stopped: '
-                f'{sorted(request_block.stopped_remotes)}.')
-        else:
-            stopped_msg = ''
-
-        if request_block.not_registered_remotes:
-            not_registered_msg = (
-                ' Remotes that are not registered: '
-                f'{sorted(request_block.not_registered_remotes)}.')
-        else:
-            not_registered_msg = ''
-
-        if request_block.deadlock_remotes:
-            deadlock_msg = (
-                f' Remotes that are deadlocked: '
-                f'{sorted(request_block.deadlock_remotes)}.')
-        else:
-            deadlock_msg = ''
-
-        if request_block.full_send_q_remotes:
-            full_send_q_msg = (
-                f' Remotes that have a full send_q: '
-                f'{sorted(request_block.full_send_q_remotes)}.')
-        else:
-            full_send_q_msg = ''
-
-        msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
-                     f'{not_registered_msg}{deadlock_msg}{full_send_q_msg}')
-
-        # If an error should be raised for stopped threads
-        if request_block.stopped_remotes:
-            error_msg = (
-                f'{self.name} raising '
-                f'SmartThreadRemoteThreadNotAlive {msg_suite}')
-            logger.error(error_msg)
-            raise SmartThreadRemoteThreadNotAlive(error_msg)
-
-        # If an error should be raised for unregistered threads
-        if request_block.not_registered_remotes:
-            error_msg = (
-                f'{self.name} raising '
-                f'SmartThreadRemoteThreadNotRegistered {msg_suite}')
-            logger.error(error_msg)
-            raise SmartThreadRemoteThreadNotRegistered(error_msg)
-
-        if request_block.deadlock_remotes:
-            error_msg = (
-                f'{self.name} raising '
-                f'SmartThreadDeadlockDetected {msg_suite}')
-            logger.error(error_msg)
-            raise SmartThreadDeadlockDetected(error_msg)
-
-        # Note that the timer will never be expired if timeout
-        # was not specified either explicitly on the smart_wait
-        # call or via a default timeout established when this
-        # SmartThread was instantiated.
-        if request_block.timer.is_expired():
-            error_msg = (
-                f'{self.name} raising '
-                f'SmartThreadRequestTimedOut {msg_suite}')
-            logger.error(error_msg)
-            raise SmartThreadRequestTimedOut(error_msg)
+    # def _handle_loop_errors(self, *,
+    #                         request_block: RequestBlock,
+    #                         pending_remotes: list[str]
+    #                         ) -> None:
+    #     """Raise an error if needed.
+    #
+    #     Args:
+    #         request_block: contains targets, timeout, etc
+    #         pending_remotes: remotes that have not either not responded
+    #             or were found to be in an incorrect state
+    #
+    #     Raises:
+    #         SmartThreadRequestTimedOut: request processing timed out
+    #             waiting for the remote.
+    #         SmartThreadRemoteThreadNotAlive: request detected remote
+    #             thread is not alive.
+    #         SmartThreadDeadlockDetected: a deadlock was detected
+    #             between two requests.
+    #         SmartThreadRemoteThreadNotRegistered: the remote thread is
+    #             not in the ThreadState.Registered state as required.
+    #
+    #     """
+    #     targets_msg = (f'while processing a '
+    #                    f'{request_block.request.value} '
+    #                    f'request with targets '
+    #                    f'{sorted(request_block.remotes)}.')
+    #
+    #     pending_msg = (f' Remotes that are pending: '
+    #                    f'{sorted(pending_remotes)}.')
+    #
+    #     if request_block.stopped_remotes:
+    #         stopped_msg = (
+    #             ' Remotes that are stopped: '
+    #             f'{sorted(request_block.stopped_remotes)}.')
+    #     else:
+    #         stopped_msg = ''
+    #
+    #     if request_block.not_registered_remotes:
+    #         not_registered_msg = (
+    #             ' Remotes that are not registered: '
+    #             f'{sorted(request_block.not_registered_remotes)}.')
+    #     else:
+    #         not_registered_msg = ''
+    #
+    #     if request_block.deadlock_remotes:
+    #         deadlock_msg = (
+    #             f' Remotes that are deadlocked: '
+    #             f'{sorted(request_block.deadlock_remotes)}.')
+    #     else:
+    #         deadlock_msg = ''
+    #
+    #     if request_block.full_send_q_remotes:
+    #         full_send_q_msg = (
+    #             f' Remotes that have a full send_q: '
+    #             f'{sorted(request_block.full_send_q_remotes)}.')
+    #     else:
+    #         full_send_q_msg = ''
+    #
+    #     msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
+    #                  f'{not_registered_msg}{deadlock_msg}{full_send_q_msg}')
+    #
+    #     # If an error should be raised for stopped threads
+    #     if request_block.stopped_remotes:
+    #         error_msg = (
+    #             f'{self.name} raising '
+    #             f'SmartThreadRemoteThreadNotAlive {msg_suite}')
+    #         logger.error(error_msg)
+    #         raise SmartThreadRemoteThreadNotAlive(error_msg)
+    #
+    #     # If an error should be raised for unregistered threads
+    #     if request_block.not_registered_remotes:
+    #         error_msg = (
+    #             f'{self.name} raising '
+    #             f'SmartThreadRemoteThreadNotRegistered {msg_suite}')
+    #         logger.error(error_msg)
+    #         raise SmartThreadRemoteThreadNotRegistered(error_msg)
+    #
+    #     if request_block.deadlock_remotes:
+    #         error_msg = (
+    #             f'{self.name} raising '
+    #             f'SmartThreadDeadlockDetected {msg_suite}')
+    #         logger.error(error_msg)
+    #         raise SmartThreadDeadlockDetected(error_msg)
+    #
+    #     # Note that the timer will never be expired if timeout
+    #     # was not specified either explicitly on the smart_wait
+    #     # call or via a default timeout established when this
+    #     # SmartThread was instantiated.
+    #     if request_block.timer.is_expired():
+    #         error_msg = (
+    #             f'{self.name} raising '
+    #             f'SmartThreadRequestTimedOut {msg_suite}')
+    #         logger.error(error_msg)
+    #         raise SmartThreadRequestTimedOut(error_msg)
 
     ####################################################################
     # _handle_loop_errors
     ####################################################################
-    def _handle_loop_errors2(self, *,
-                             request: ReqType,
-                             remotes: set[str],
-                             timer: Timer,
-                             pending_remotes: Optional[set[str]] = None,
-                             stopped_remotes: Optional[set[str]] = None,
-                             not_registered_remotes: Optional[set[str]] = None,
-                             deadlock_remotes: Optional[set[str]] = None,
-                             full_send_q_remotes: Optional[set[str]] = None,
-                             ) -> NoReturn:
+    def _handle_loop_errors(self, *,
+                            request: ReqType,
+                            remotes: set[str],
+                            timer: Optional[Timer] = None,
+                            pending_remotes: Optional[set[str]] = None,
+                            stopped_remotes: Optional[set[str]] = None,
+                            not_registered_remotes: Optional[set[str]] = None,
+                            deadlock_remotes: Optional[set[str]] = None,
+                            full_send_q_remotes: Optional[set[str]] = None,
+                            ) -> NoReturn:
         """Raise an error if needed.
 
         Args:
@@ -4627,7 +4638,7 @@ class SmartThread:
         # was not specified either explicitly on the smart_wait
         # call or via a default timeout established when this
         # SmartThread was instantiated.
-        elif timer.is_expired():
+        elif time is not None and timer.is_expired():
             error_msg = (
                 f'{self.name} raising '
                 f'SmartThreadRequestTimedOut {msg_suite}')
