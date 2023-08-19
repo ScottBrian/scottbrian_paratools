@@ -1063,8 +1063,8 @@ class SmartThread:
     ####################################################################
     # _set_status
     ####################################################################
-    def _set_state(self,
-                   target_thread: "SmartThread",
+    @staticmethod
+    def _set_state(target_thread: "SmartThread",
                    new_state: ThreadState,
                    cmd_runner: Optional[str] = None) -> None:
         """Set the state for a thread.
@@ -1620,13 +1620,30 @@ class SmartThread:
     def _get_targets(self,
                      targets: Optional[Iterable[str]] = None,
                      request: Optional[ReqType] = None) -> set[str]:
+        """Return the input targets as a set.
+
+        Args:
+            targets: thread names of the remote targets
+            request: the request that is being processed
+
+        Returns:
+            the set of targets
+
+        Raises:
+            SmartThreadInvalidInput: argument for remote thread names is
+                not of type Iterable, or no names were provided.
+            SmartThreadIncorrectNameSpecified: a name specified for a
+                remote thread is either not a string or is the empty
+                string.
+
+        """
+        if request is None:
+            request = self.request
+
         try:
             ret_set = set({targets} if isinstance(targets, str)
                           else targets or '')
         except TypeError:
-            if request is None:
-                request = self.request
-
             error_msg = (
                 f'SmartThread {threading.current_thread().name} raising '
                 'SmartThreadInvalidInput error while processing '
