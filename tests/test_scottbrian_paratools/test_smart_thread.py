@@ -25131,7 +25131,8 @@ class TestSmartThreadInterface:
 
             if smart_thread_arg:
                 logger.debug(f'{a_smart_thread=}')
-                assert a_smart_thread._get_state('beta') == ThreadState.Alive
+                wait_for(lambda: a_smart_thread._get_state('beta')
+                         == ThreadState.Alive)
 
             logger.debug('f1 beta exit')
 
