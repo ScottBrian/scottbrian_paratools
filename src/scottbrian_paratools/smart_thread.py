@@ -2084,14 +2084,6 @@ class SmartThread:
 
         timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
 
-        # targets = self._get_targets(targets)
-
-        # exit_log_msg = self._issue_entry_log_msg(
-        #     request=self.request,
-        #     remotes=targets,
-        #     timeout_value=timer.timeout_value(),
-        #     log_msg=log_msg)
-
         cmd_block = self._cmd_setup(
             targets=targets,
             timeout=timer.timeout_value(),
@@ -4760,11 +4752,11 @@ class SmartThread:
         self._verify_thread_is_current(request=self.request)
         self.cmd_runner = threading.current_thread().name
 
-        targets: set[str] = self._get_targets(targets)
+        targets_set: set[str] = self._get_targets(targets)
 
         exit_log_msg = self._issue_entry_log_msg(
             request=self.request,
-            remotes=targets,
+            remotes=targets_set,
             timeout_value=timeout,
             log_msg=log_msg)
 
@@ -4773,13 +4765,13 @@ class SmartThread:
                 f'SmartThread {self.cmd_runner} raising '
                 f'SmartThreadInvalidInput error while processing request '
                 f'{self.request}. '
-                f'Targets {sorted(targets)} includes {self.cmd_runner} '
+                f'Targets {sorted(targets_set)} includes {self.cmd_runner} '
                 f'which is not permitted except for request smart_start.'
             )
             logger.error(error_msg)
             raise SmartThreadInvalidInput(error_msg)
 
-        return CmdBlock(targets=targets,
+        return CmdBlock(targets=targets_set,
                         exit_log_msg=exit_log_msg)
 
     ####################################################################
