@@ -143,6 +143,12 @@ def get_ptime() -> str:
     return print_time
 
 
+@dataclass
+class CheckExpectedResponsesArgs:
+    requestors: set[str]
+    exp_response_targets: set[str]
+    request: st.ReqType
+
 ########################################################################
 # wait_for
 ########################################################################
@@ -9490,6 +9496,36 @@ class ConfigVerifier:
     ####################################################################
     # check_pending_events
     ####################################################################
+    def check_expected_responses(self,
+                                 cmd_runner: str,
+                                 check_args: CheckExpectedResponsesArgs
+                                 ) -> bool:
+        """Check that the sync event is set in the target.
+
+        Args:
+            cmd_runner: thread name doing the check
+            check_args: requestors, targets, and request type
+        """
+        for requestor in check_args.requestors:
+            if requestor not in self.expected_registered:
+                raise InvalidConfigurationDetected(
+                    f'check_expected_responses {cmd_runner=} detected '
+                    f'that {requestor=} is not in expected_registered.')
+            if check_args.request == st.ReqType.Smart_recv:
+                if (check_args.exp_response_targets
+                        != set(self.expected_registered[
+                                   requestor].thread.recvd_msgs.keys())):
+                    return False
+            else:
+                raise InvalidInputDetected(
+                    f'check_expected_responses {cmd_runner=} detected '
+                    f'unknown {check_args.request=}.')
+
+        return True
+
+    ####################################################################
+    # check_sync_event_set
+    ####################################################################
     def check_sync_event_set(self,
                              cmd_runner: str,
                              check_args: CheckPendArg) -> bool:
@@ -10770,6 +10806,16 @@ class ConfigVerifier:
         # exit the nosend_exit_senders, then resurrect and do smart_send
         ################################################################
         if nosend_exit_sender_names:
+            # make sure the senders have a chance to complete their
+            # sends before we cause the stop from being recognized
+            self.add_cmd(WaitForCondition(
+                cmd_runners=self.commander_name,
+                check_rtn=self.check_expected_responses,
+                check_args=CheckExpectedResponsesArgs(
+                    requestors=set(receiver_names),
+                    exp_response_targets=exp_senders,
+                    request=st.ReqType.Smart_recv)))
+
             self.build_exit_suite(
                 cmd_runner=self.commander_name,
                 names=nosend_exit_sender_names,
