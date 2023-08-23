@@ -145,9 +145,11 @@ def get_ptime() -> str:
 
 @dataclass
 class CheckExpectedResponsesArgs:
+    """Parameters for received responses with WaitForCondition."""
     requestors: set[str]
     exp_response_targets: set[str]
     request: st.ReqType
+
 
 ########################################################################
 # wait_for
@@ -29110,11 +29112,125 @@ class TestSmartThreadErrors:
 
         logger.debug('mainline exit')
 
+    ####################################################################
+    # Foreign Op
+    ####################################################################
+    def test_foreign_op_scenario2(self,
+                                  caplog: pytest.LogCaptureFixture
+                                  ) -> None:
+        """Test foreign op error for SmartThread.
+
+        Args:
+            caplog: pytest fixture to capture log output
+
+        """
+        # 1) create beta_1 as no start, and then unreg
+        # 2) create beta_2 as no start
+        # 3) smart_start beta_1 - should fail
+        ################################################################
+        # f1
+        ################################################################
+        def f1(f1_name: str) -> None:
+            logger.debug(f'f1 entered for {f1_name}')
+            f1_msg = msgs.get_msg('beta_1', timeout=10)
+            if f1_msg == 'RecvMsg':
+                msg1 = beta_1_s_thread.smart_recv(senders='alpha')
+                logger.debug(f'f1 received {msg1=}')
+            elif f1_msg == 'SendMsg':
+                logger.debug('f1 beta about to send')
+                beta_1_s_thread.smart_send(msg='hi alpha, this is beta_1',
+                                           receivers='alpha')
+                logger.debug('f1 beta back from send')
+
+            logger.debug(f'f1 exit for {f1_name}')
+            ############################################################
+            # exit
+            ############################################################
+
+        ################################################################
+        # f2
+        ################################################################
+        def f2(f2_name: str) -> None:
+            logger.debug(f'f2 entered for {f2_name}')
+            f2_msg = msgs.get_msg('beta_2', timeout=10)
+            if f2_msg == 'RecvMsg':
+                msg2 = beta_2_s_thread.smart_recv(senders='alpha')
+                logger.debug(f'f2 received {msg2=}')
+            elif f2_msg == 'SendMsg':
+                logger.debug('f2 beta about to send')
+                beta_2_s_thread.smart_send(msg='hi alpha, this is beta_2',
+                                           receivers='alpha')
+                logger.debug('f2 beta back from send')
+            logger.debug(f'f2 exit for {f2_name}')
+            ############################################################
+            # exit
+            ############################################################
+
+        logger.debug('mainline entry')
+        msgs = Msgs()
+        alpha_s_thread = st.SmartThread(name='alpha')
+
+        beta_1_thread = threading.Thread(target=f1,
+                                         kwargs={'f1_name': 'beta_1'})
+        beta_1_s_thread = st.SmartThread(name='beta',
+                                         auto_start=False,
+                                         thread=beta_1_thread)
+
+        alpha_s_thread.smart_unreg(targets='beta')
+
+        beta_2_s_thread = st.SmartThread(name='beta',
+                                         auto_start=False,
+                                         target=f2,
+                                         kwargs={'f2_name': 'beta_2'})
+
+        ################################################################
+        # start beta_2 using beta_1 unregistered smart thread
+        # with pytest.raises(st.SmartThreadDetectedOpFromForeignThread) as exc:
+        #     beta_1_s_thread.smart_start()
+        #
+        # exp_error_msg = (
+        #     'SmartThread alpha raising '
+        #     'SmartThreadDetectedOpFromForeignThread error '
+        #     'while processing request smart_sync. '
+        #     'The SmartThread object used for the invocation is '
+        #     f'associated with thread {beta_thread.thread} which does not '
+        #     'match '
+        #     f'caller thread {threading.current_thread()} as required.')
+        #
+        # logger.debug(exp_error_msg)
+        # assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+        # print('\n', exc.value)
+
+        beta_2_s_thread.smart_start()
+
+        # start beta_1 thread directly
+        beta_1_thread.start()
+
+        logger.debug('alpha about to sleep')
+        time.sleep(2)
+        alpha_does_send = True
+        if alpha_does_send:
+            logger.debug('alpha about to send')
+            alpha_s_thread.smart_send(msg='hi beta, this is alpha',
+                                      receivers='beta')
+            logger.debug('alpha sent message')
+            # tell beta_1 to steal beta_2 msg
+            msgs.queue_msg('beta_1', 'RecvMsg')
+        else:
+            # tell beta_1 to send msg using beta_1 unreged smart thread
+            msgs.queue_msg('beta_1', 'SendMsg')
+            logger.debug('alpha about to recv')
+            msg3 = alpha_s_thread.smart_recv(senders='beta')
+            logger.debug(f'alpha received {msg3=}')
+
+        msgs.queue_msg('beta_2', 'Exit')
+        logger.debug('mainline exit')
+
 
 ########################################################################
 # TestSmartThreadScenarios class
 ########################################################################
-@pytest.mark.cover
+# @pytest.mark.cover
 class TestSmartBasicScenarios:
     """Test class for SmartThread scenarios."""
 
@@ -29983,6 +30099,7 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_nosend_exit_senders_arg", [0, 1])
     @pytest.mark.parametrize("num_unreg_senders_arg", [0, 1])
     @pytest.mark.parametrize("num_reg_senders_arg", [0, 1])
+    # @pytest.mark.seltest
     def test_recv_msg_timeout_scenarios(
             self,
             timeout_type_arg: TimeoutType,
@@ -30069,6 +30186,7 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_unreg_no_delay_arg", [0, 1])
     @pytest.mark.parametrize("num_unreg_delay_arg", [0, 1])
     @pytest.mark.parametrize("num_stopped_arg", [0, 1])
+    # @pytest.mark.seltest
     def test_resume_timeout_scenarios(
             self,
             timeout_type_arg: TimeoutType,
@@ -30228,6 +30346,17 @@ class TestSmartThreadComboScenarios:
     ####################################################################
     # test_srrw_scenario
     ####################################################################
+    # @pytest.mark.parametrize("req_type_arg", [st.ReqType.Smart_send,
+    #                                           st.ReqType.Smart_recv,
+    #                                           st.ReqType.Smart_resume,
+    #                                           st.ReqType.Smart_wait])
+    # @pytest.mark.parametrize("num_requestors_arg", [1, 2, 3])
+    # @pytest.mark.parametrize("num_start_before_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_unreg_before_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_stop_before_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_unreg_after_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_stop_after_ok_arg", [0, 1, 2])
+    # @pytest.mark.parametrize("num_stop_after_err_arg", [0, 1, 2])
     @pytest.mark.parametrize("req_type_arg", [st.ReqType.Smart_send,
                                               st.ReqType.Smart_recv,
                                               st.ReqType.Smart_resume,
@@ -30238,15 +30367,7 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_stop_before_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_unreg_after_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_stop_after_ok_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_stop_after_err_arg", [0, 1, 2])
-    # @pytest.mark.parametrize("req_type_arg", [st.ReqType.Smart_send])
-    # @pytest.mark.parametrize("num_requestors_arg", [1])
-    # @pytest.mark.parametrize("num_start_before_arg", [0])
-    # @pytest.mark.parametrize("num_unreg_before_arg", [0])
-    # @pytest.mark.parametrize("num_stop_before_arg", [1])
-    # @pytest.mark.parametrize("num_unreg_after_arg", [0])
-    # @pytest.mark.parametrize("num_stop_after_ok_arg", [0])
-    # @pytest.mark.parametrize("num_stop_after_err_arg", [0])
+    @pytest.mark.parametrize("num_stop_after_err_arg", [2])
     @pytest.mark.seltest
     def test_srrw_scenario(
             self,
