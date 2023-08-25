@@ -29157,15 +29157,7 @@ class TestSmartThreadErrors:
         ################################################################
         def f2(f2_name: str) -> None:
             logger.debug(f'f2 entered for {f2_name}')
-            f2_msg = msgs.get_msg('beta_2', timeout=10)
-            if f2_msg == 'RecvMsg':
-                msg2 = beta_2_s_thread.smart_recv(senders='alpha')
-                logger.debug(f'f2 received {msg2=}')
-            elif f2_msg == 'SendMsg':
-                logger.debug('f2 beta about to send')
-                beta_2_s_thread.smart_send(msg='hi alpha, this is beta_2',
-                                           receivers='alpha')
-                logger.debug('f2 beta back from send')
+            # _ = msgs.get_msg('beta_2', timeout=10)
             logger.debug(f'f2 exit for {f2_name}')
             ############################################################
             # exit
@@ -29176,15 +29168,7 @@ class TestSmartThreadErrors:
         ################################################################
         def f3(f3_name: str) -> None:
             logger.debug(f'f3 entered for {f3_name}')
-            f3_msg = msgs.get_msg('charlie', timeout=10)
-            # if f3_msg == 'RecvMsg':
-            #     msg2 = beta_2_s_thread.smart_recv(senders='alpha')
-            #     logger.debug(f'f2 received {msg2=}')
-            # elif f2_msg == 'SendMsg':
-            #     logger.debug('f2 beta about to send')
-            #     beta_2_s_thread.smart_send(msg='hi alpha, this is beta_2',
-            #                                receivers='alpha')
-            #     logger.debug('f2 beta back from send')
+            # _ = msgs.get_msg('charlie', timeout=10)
             logger.debug(f'f3 exit for {f3_name}')
             ############################################################
             # exit
@@ -29208,9 +29192,9 @@ class TestSmartThreadErrors:
                                          kwargs={'f2_name': 'beta_2'})
 
         charlie_s_thread = st.SmartThread(name='charlie',
-                                         auto_start=False,
-                                         target=f3,
-                                         kwargs={'f3_name': 'charlie'})
+                                          auto_start=False,
+                                          target=f3,
+                                          kwargs={'f3_name': 'charlie'})
 
         if request_type_arg == st.ReqType.Smart_start:
             # start beta_2 using beta_1 unregistered smart thread
@@ -29236,32 +29220,27 @@ class TestSmartThreadErrors:
             # start beta_2 legitimately
             # beta_2_s_thread.smart_start()
 
-            # start beta_1 f1 rtn via threading start
             beta_1_thread.start()
-
             # start charlie using beta_1 unregistered smart thread
             msgs.queue_msg('beta_1', 'SmartStart')
 
+            alpha_s_thread.smart_join(targets=['beta', 'charlie'])
+
         elif request_type_arg == st.ReqType.Smart_unreg:
             beta_1_thread.start()
-
             # start charlie using beta_1 unregistered smart thread
             msgs.queue_msg('beta_1', 'SmartUnreg')
+
+            alpha_s_thread.smart_unreg(targets='beta')
+
         elif request_type_arg == st.ReqType.Smart_join:
+            alpha_s_thread.smart_unreg(targets='beta')
             charlie_s_thread.smart_start()
 
             beta_1_thread.start()
-
-
-            # start charlie using beta_1 unregistered smart thread
             msgs.queue_msg('beta_1', 'SmartJoin')
 
-            msgs.queue_msg('charlie', 'Exit')
-
-        msgs.queue_msg('beta_2', 'Exit')
-        msgs.queue_msg('charlie', 'Exit')
-
-        # time.sleep(1)
+        beta_1_thread.join()
 
         logger.debug('mainline exit')
 
@@ -29291,17 +29270,24 @@ class TestSmartThreadErrors:
         ################################################################
         # f1
         ################################################################
-        def f1(f1_name: str) -> None:
+        def f1(f1_name: str, action: st.ReqType) -> None:
             logger.debug(f'f1 entered for {f1_name}')
-            f1_msg = msgs.get_msg('beta_1', timeout=10)
-            if f1_msg == 'RecvMsg':
-                msg1 = beta_1_s_thread.smart_recv(senders='alpha')
-                logger.debug(f'f1 received {msg1=}')
-            elif f1_msg == 'SendMsg':
-                logger.debug('f1 beta about to send')
+            _ = msgs.get_msg('beta_1', timeout=10)
+            if action == st.ReqType.Smart_send:
                 beta_1_s_thread.smart_send(msg='hi alpha, this is beta_1',
                                            receivers='alpha')
-                logger.debug('f1 beta back from send')
+            elif action == st.ReqType.Smart_recv:
+                msg1 = beta_1_s_thread.smart_recv(senders='alpha')
+                logger.debug(f'f1 received {msg1=}')
+            elif action == st.ReqType.Smart_wait:
+                beta_1_s_thread.smart_wait(resumers='alpha')
+            elif action == st.ReqType.Smart_resume:
+                beta_1_s_thread.smart_resume(waiters='alpha')
+            elif action == st.ReqType.Smart_sync:
+                beta_1_s_thread.smart_sync(targets='alpha')
+            else:
+                raise InvalidInputDetected(
+                    f'test_foreign_op_scenario3 f1 rtn received {action=}')
 
             logger.debug(f'f1 exit for {f1_name}')
             ############################################################
@@ -29313,15 +29299,8 @@ class TestSmartThreadErrors:
         ################################################################
         def f2(f2_name: str) -> None:
             logger.debug(f'f2 entered for {f2_name}')
-            f2_msg = msgs.get_msg('beta_2', timeout=10)
-            if f2_msg == 'RecvMsg':
-                msg2 = beta_2_s_thread.smart_recv(senders='alpha')
-                logger.debug(f'f2 received {msg2=}')
-            elif f2_msg == 'SendMsg':
-                logger.debug('f2 beta about to send')
-                beta_2_s_thread.smart_send(msg='hi alpha, this is beta_2',
-                                           receivers='alpha')
-                logger.debug('f2 beta back from send')
+            msgs.queue_msg(target='alpha')
+            _ = msgs.get_msg('beta_2', timeout=10)
             logger.debug(f'f2 exit for {f2_name}')
             ############################################################
             # exit
@@ -29332,7 +29311,8 @@ class TestSmartThreadErrors:
         alpha_s_thread = st.SmartThread(name='alpha')
 
         beta_1_thread = threading.Thread(target=f1,
-                                         kwargs={'f1_name': 'beta_1'})
+                                         kwargs={'f1_name': 'beta_1',
+                                                 'action': request_type_arg})
         beta_1_s_thread = st.SmartThread(name='beta',
                                          auto_start=False,
                                          thread=beta_1_thread)
@@ -29340,7 +29320,7 @@ class TestSmartThreadErrors:
         alpha_s_thread.smart_unreg(targets='beta')
 
         beta_2_s_thread = st.SmartThread(name='beta',
-                                         auto_start=False,
+                                         auto_start=True,
                                          target=f2,
                                          kwargs={'f2_name': 'beta_2'})
 
@@ -29362,29 +29342,41 @@ class TestSmartThreadErrors:
         # assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
         # print('\n', exc.value)
 
-        beta_2_s_thread.smart_start()
-
         # start beta_1 thread directly
         beta_1_thread.start()
 
-        logger.debug('alpha about to sleep')
-        time.sleep(2)
-        alpha_does_send = True
-        if alpha_does_send:
-            logger.debug('alpha about to send')
+        _ = msgs.get_msg('alpha', timeout=10)
+
+        if request_type_arg == st.ReqType.Smart_send:
+            logger.debug('alpha about to recv from beta')
+            msg3 = alpha_s_thread.smart_recv(senders='beta')
+            logger.debug(f'alpha received {msg3=}')
+        elif request_type_arg == st.ReqType.Smart_recv:
+            logger.debug('alpha about to send to beta')
             alpha_s_thread.smart_send(msg='hi beta, this is alpha',
                                       receivers='beta')
             logger.debug('alpha sent message')
-            # tell beta_1 to steal beta_2 msg
-            msgs.queue_msg('beta_1', 'RecvMsg')
+        elif request_type_arg == st.ReqType.Smart_wait:
+            logger.debug('alpha about to resume beta')
+            alpha_s_thread.smart_resume(waiters='beta')
+            logger.debug('alpha completed resume')
+        elif request_type_arg == st.ReqType.Smart_resume:
+            logger.debug('alpha about to wait for beta')
+            alpha_s_thread.smart_wait(resumers='beta')
+            logger.debug('alpha resumed by beta')
+        elif request_type_arg == st.ReqType.Smart_sync:
+            logger.debug('alpha about to sync with beta')
+            alpha_s_thread.smart_sync(targets='beta')
+            logger.debug('alpha synced with beta')
         else:
-            # tell beta_1 to send msg using beta_1 unreged smart thread
-            msgs.queue_msg('beta_1', 'SendMsg')
-            logger.debug('alpha about to recv')
-            msg3 = alpha_s_thread.smart_recv(senders='beta')
-            logger.debug(f'alpha received {msg3=}')
+            raise InvalidInputDetected(
+                'test_foreign_op_scenario3 mainline received '
+                f'{request_type_arg=}')
 
         msgs.queue_msg('beta_2', 'Exit')
+
+        alpha_s_thread.smart_join(targets='beta')
+
         logger.debug('mainline exit')
 
 
