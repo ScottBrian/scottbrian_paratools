@@ -22,21 +22,20 @@ block for each combination of SmartThread instances.
 
 The configuration methods are:
 
-    1) ''__init__()'': used to create, initialize, and register a
+    1) ``__init__()``: used to create, initialize, and register a
        SmartThread instance.
-    2) ''smart_start()'': used to start the thread if not already
+    2) ``smart_start()``: used to start the thread if not already
        active.
-    3) ''smart_unreg()'': used to unregister a SmartThread instance that
-        was never started.
-    4) ''smart_join()'': used to join and unregister a thread that has
-        ended.
+    3) ``smart_unreg()``: used to unregister a SmartThread instance that
+       was never started.
+    4) ``smart_join()``: used to join and unregister a thread that has
+       ended.
 
-Note that the SmartThread ''__init__()'' method appears in log messages
-as ''smart_init()''.
+Note that the SmartThread *__init__* method will appear in log
+messages as *smart_init*.
 
 During its life cycle, each SmartThread instance will be in one of the
-states enumerated in the ThreadState class:ram
-shows the state transitions:
+states enumerated in the ThreadState class:
 
 .. plantuml::
     :caption: SmartThread Life Cycle
@@ -62,39 +61,62 @@ shows the state transitions:
     @enduml
 
 
-There are three cases where SmartThread can be instantiated:
+There are three configurations where SmartThread can be instantiated:
 
-    1) SmartThread is instantiated for the current thread. Internal
-       variable *thread* is set from ''threading.current_thread()''.
-    2) SmartThread is instantiated with a *target* argument that
-       specifies a routine that is to get control in a new thread.
-       Internal variable *thread* is set from ''threading.Thread()''
-       with the *target* argument. The remote thread can be started
-       immediately when *auto_start* is True (the default), or later by
-       issuing ''smart_start()'' for the SmartThread object.
-    3) SmartThread is instantiated with a *thread* argument that
-       specifies an instance of threading.Thread that is to be bound to
-       the internal *thread* variable. This can be useful for a remote
-       thread that was created via ''threading.Thread()'' and now
-       wishes to use the SmartThread services.
+:Example 1: Instantiate a SmartThread for the current thread:
+
+.. code-block:: python
+
+    from scottbrian_paratools.smart_thread import SmartThread
+    alpha_smart_thread = SmartThread(name='alpha')
+
+
+:Example 2: Instantiate a SmartThread with a *target* argument to create
+            a new thread that will execute under the *target* routine:
+
+.. code-block:: python
+
+    from scottbrian_paratools.smart_thread import SmartThread
+    def f1() -> None:
+        pass
+
+    beta_smart_thread = SmartThread(name='beta',
+                                    target=f1)
+
+
+:Example 3: Instantiate a SmartThread with a *thread* argument while
+            running under an already established thread that was
+            created via ``threading.Thread()``:
+
+.. code-block:: python
+
+    from scottbrian_paratools.smart_thread import SmartThread
+    def f1() -> None:
+        pass
+
+    beta_thread = threading.Thread(target=f1)
+    beta_smart_thread = SmartThread(name='beta',
+                                    thread=beta_thread,
+                                    auto_start=False)
+    beta_smart_thread.smart_start()
+
 
 The service methods are:
 
-    1) ''smart_send()'': sends messages to the other threads
-    2) ''smart_recv()'': receives messages from the other threads
-    3) ''smart_wait()'': pauses execution until resumed by another
+    1) ``smart_send()``: sends messages to the other threads
+    2) ``smart_recv()``: receives messages from the other threads
+    3) ``smart_wait()``: pauses execution until resumed by another
        thread
-    4) ''smart_resume()'': resumes other threads that have invoked
-       ``smart_wait()``
+    4) ``smart_resume()``: resumes other threads that have paused
     5) ``smart_sync()``: pauses execution until other threads have
-       also paused execution with matching ``smart_sync()`` request, at
+       also paused execution with matching ``smart_sync()`` requests, at
        which point all participating threads are resumed
 
 
 :Example 1: Create a SmartThread configuration for threads named
             alpha and beta, send and receive a message, and resume a
             wait. Note the use of auto_start=False and invoking
-            ''smart_start()''.
+            ``smart_start()``.
 
 .. code-block:: python
 
@@ -1002,7 +1024,7 @@ class SmartThread:
         Returns:
             The thread status
 
-        Notes:
+        Note:
             1) Must be called holding the registry lock either shared or
                exclusive
             2) When a thread has ended, the threading is_alive method
@@ -1032,7 +1054,7 @@ class SmartThread:
         Returns:
             The thread status
 
-        Notes:
+        Note:
             Must be called holding the registry lock either shared or
             exclusive
         """
@@ -1071,7 +1093,7 @@ class SmartThread:
             new_state: the new status to be set
             cmd_runner: thread name doing the request
 
-        Notes:
+        Note:
             Must be called holding the registry lock exclusive
 
         """
@@ -1100,7 +1122,7 @@ class SmartThread:
                 name = *name* is already registered for a different
                 thread.
 
-        Notes:
+        Note:
             1) Any old entries for SmartThreads whose threads are not
                alive are removed when this method is called by calling
                _clean_registry().
@@ -1199,7 +1221,7 @@ class SmartThread:
             SmartThreadErrorInRegistry: Registry item with key {key} has
                 non-matching item.name of {item.name}.
 
-        Notes:
+        Note:
             1) Must be called holding _registry_lock exclusive
 
         """
@@ -1381,7 +1403,7 @@ class SmartThread:
             SmartThreadIncorrectData: the pair array data structures are
                 incorrect.
 
-        Notes:
+        Note:
             1) A thread is registered during initialization and will
                initially not be alive until started.
             2) If a request is made that includes a yet to be registered
@@ -1934,7 +1956,7 @@ class SmartThread:
         Returns:
             A set of thread names that were successfully unregistered.
 
-        Notes:
+        Note:
             1) A thread that is created but not started remains in the
                registered state until it is either started or
                unregistered.
@@ -3183,7 +3205,7 @@ class SmartThread:
 
         .. # noqa DAR402
 
-        Notes:
+        Note:
 
             1) A deadlock will occur between two threads when they both
                issue a request that waits for the other thread to
@@ -3586,7 +3608,7 @@ class SmartThread:
 
         .. # noqa: DAR402
 
-        **Notes:**
+        **Note:**
 
             1) The ``smart_wait()`` and ``smart_resume()`` processing
                use a threading event to coordinate the wait and resume.
@@ -3639,8 +3661,8 @@ class SmartThread:
         and a new resume is issued. See the notes section above for a
         more thorough explanation.
 
-        **Example 1:** Invoke ''smart_resume()'' for threads that invoke
-        ''smart_wait()'' both before and after the ''smart_resume()''
+        **Example 1:** Invoke ``smart_resume()`` for threads that invoke
+        ``smart_wait()`` both before and after the ``smart_resume()``
 
         .. code-block:: python
 
@@ -3842,7 +3864,7 @@ class SmartThread:
             *synced_targets* in the SmartThread object that issued the
             *smart_sync*.
 
-        Notes:
+        Note:
             1) A deadlock will occur between two threads when they both
                issue a request that waits for the other thread to
                respond. The following combinations can lead to a
@@ -3859,7 +3881,7 @@ class SmartThread:
                and a smart_recv will not deadlock if a message was
                already delivered earlier by a smart_send.
 
-        Each thread that invokes ''smart_sync()'' first sets the sync
+        Each thread that invokes ``smart_sync()`` first sets the sync
         event for each target, and the waits on its corresponding sync
         event for each target. This ensures that every thread has
         reached the sync point before any thread moves forward from
@@ -4090,7 +4112,7 @@ class SmartThread:
             remotes: names of threads that need cleanup
             backout_request: sync or wait
 
-        Notes:
+        Note:
             1) must be holding the registry lock at least shared
             2) It is possible during cleanup to find that a request that
                had failed for timeout is now completed. We could figure
@@ -4687,7 +4709,7 @@ class SmartThread:
             local_sb: connection block for this thread
             remote_sb: connection block for remote thread
 
-        Notes:
+        Note:
             1) must be entered holding the status_lock
 
         """

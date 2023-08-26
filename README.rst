@@ -41,7 +41,7 @@ f1 via the thread_parm_name argument.
     print('mainline alpha exiting')
 
 
-Expected output for Example 1::
+Expected output for Example 1:
 
 .. code-block:: python
 

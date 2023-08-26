@@ -29298,10 +29298,10 @@ class TestSmartThreadErrors:
 
                 if action == st.ReqType.Smart_send:
                     req = 'smart_send'
-                    logger.debug(f'f1 beta_1 about to send to alpha')
+                    logger.debug('f1 beta_1 about to send to alpha')
                     beta_1_s_thread.smart_send(msg='hi alpha, this is beta_1',
                                                receivers='alpha')
-                    logger.debug(f'f1 beta_1 back from send to alpha')
+                    logger.debug('f1 beta_1 back from send to alpha')
                 elif action == st.ReqType.Smart_recv:
                     req = 'smart_recv'
                     msg1 = beta_1_s_thread.smart_recv(senders='alpha')
@@ -29351,10 +29351,10 @@ class TestSmartThreadErrors:
             msgs.queue_msg(target='alpha')
             _ = msgs.get_msg('beta_2', timeout=10)
             if action == st.ReqType.Smart_send:
-                logger.debug(f'f2 beta_2 about to send to alpha')
+                logger.debug('f2 beta_2 about to send to alpha')
                 beta_2_st.smart_send(msg='hi alpha, this is beta_1',
-                                           receivers='alpha')
-                logger.debug(f'f2 beta_2 back from send to alpha')
+                                     receivers='alpha')
+                logger.debug('f2 beta_2 back from send to alpha')
             elif action == st.ReqType.Smart_recv:
                 msg1 = beta_2_st.smart_recv(senders='alpha')
                 logger.debug(f'f2 received {msg1=}')
@@ -29385,12 +29385,12 @@ class TestSmartThreadErrors:
 
         alpha_s_thread.smart_unreg(targets='beta')
 
-        beta_2_s_thread = st.SmartThread(name='beta',
-                                         auto_start=True,
-                                         target=f2,
-                                         thread_parm_name='beta_2_st',
-                                         kwargs={'f2_name': 'beta_2',
-                                                 'action': request_type_arg})
+        st.SmartThread(name='beta',
+                       auto_start=True,
+                       target=f2,
+                       thread_parm_name='beta_2_st',
+                       kwargs={'f2_name': 'beta_2',
+                               'action': request_type_arg})
 
         # start beta_1 thread directly
         beta_1_thread.start()
