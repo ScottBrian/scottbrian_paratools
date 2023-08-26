@@ -27619,6 +27619,103 @@ class TestSmartThreadErrors:
         logger.debug('mainline exiting')
 
     ####################################################################
+    # test_get_set_errors
+    ####################################################################
+    @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_start,
+                                                  st.ReqType.Smart_unreg,
+                                                  st.ReqType.Smart_join,
+                                                  st.ReqType.Smart_send,
+                                                  st.ReqType.Smart_recv,
+                                                  st.ReqType.Smart_wait,
+                                                  st.ReqType.Smart_resume,
+                                                  st.ReqType.Smart_sync])
+    def test_get_targets_errors(self,
+                                request_type_arg: st.ReqType) -> None:
+        """Test error cases for SmartThread.
+
+        Args:
+            request_type_arg: which request type will inject the error
+
+        """
+        logger.debug('mainline entered')
+        alpha_thread = st.SmartThread(name='alpha')
+
+        ################################################################
+        # SmartThreadInvalidInput - not an iterable string
+        ################################################################
+        with pytest.raises(st.SmartThreadInvalidInput) as exc:
+            if request_type_arg == st.ReqType.Smart_start:
+                alpha_thread.smart_start(targets=42)  # type: ignore
+            elif request_type_arg == st.ReqType.Smart_unreg:
+                alpha_thread.smart_unreg(targets=42)  # type: ignore
+            elif request_type_arg == st.ReqType.Smart_join:
+                alpha_thread.smart_join(targets=42)  # type: ignore
+            elif request_type_arg == st.ReqType.Smart_send:
+                alpha_thread.smart_send(receivers=42,  # type: ignore
+                                        msg='hello')
+            elif request_type_arg == st.ReqType.Smart_recv:
+                alpha_thread.smart_recv(senders=42)  # type: ignore
+            elif request_type_arg == st.ReqType.Smart_wait:
+                alpha_thread.smart_wait(resumers=42)  # type: ignore
+            elif request_type_arg == st.ReqType.Smart_resume:
+                alpha_thread.smart_resume(waiters=42)  # type: ignore
+            elif request_type_arg == st.ReqType.Smart_sync:
+                alpha_thread.smart_sync(targets=42)  # type: ignore
+            else:
+                raise InvalidInputDetected(
+                    f'test_get_targets_errors received {request_type_arg=}')
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing '
+            f'request {request_type_arg}. '
+            'It was detected that an argument for remote thread names '
+            'is not of type Iterable. Please specify an iterable, '
+            'such as a list of thread names.')
+
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print('\n', exc.value)
+
+        ################################################################
+        # SmartThreadInvalidInput - no remotes
+        ################################################################
+        with pytest.raises(st.SmartThreadInvalidInput) as exc2:
+            if request_type_arg == st.ReqType.Smart_start:
+                alpha_thread.smart_start(targets=set())  # type: ignore
+            elif request_type_arg == st.ReqType.Smart_unreg:
+                alpha_thread.smart_unreg(targets=())  # type: ignore
+            elif request_type_arg == st.ReqType.Smart_join:
+                alpha_thread.smart_join(targets=[])  # type: ignore
+            elif request_type_arg == st.ReqType.Smart_send:
+                alpha_thread.smart_send(receivers=set(),  # type: ignore
+                                        msg='hello')
+            elif request_type_arg == st.ReqType.Smart_recv:
+                alpha_thread.smart_recv(senders={})  # type: ignore
+            elif request_type_arg == st.ReqType.Smart_wait:
+                alpha_thread.smart_wait(resumers=[])  # type: ignore
+            elif request_type_arg == st.ReqType.Smart_resume:
+                alpha_thread.smart_resume(waiters=set())  # type: ignore
+            elif request_type_arg == st.ReqType.Smart_sync:
+                alpha_thread.smart_sync(targets=())  # type: ignore
+            else:
+                raise InvalidInputDetected(
+                    f'test_get_targets_errors received {request_type_arg=}')
+
+        exp_error_msg = (
+            'SmartThread alpha raising '
+            'SmartThreadInvalidInput error while processing '
+            f'request {request_type_arg}. '
+            'Remote threads are required for the request but none were '
+            'specified.')
+
+        assert re.fullmatch(exp_error_msg, str(exc2.value))
+
+        print('\n', exc2.value)
+
+        logger.debug('mainline exiting')
+
+    ####################################################################
     # test_smart_start_errors
     ####################################################################
     def test_smart_start_errors(self) -> None:
@@ -29125,7 +29222,7 @@ class TestSmartThreadErrors:
         """Test foreign op error for SmartThread.
 
         Args:
-            request_type_arg: which request type will attempt the error
+            request_type_arg: which request type will inject the error
             caplog: pytest fixture to capture log output
 
         """
@@ -29147,6 +29244,9 @@ class TestSmartThreadErrors:
                 elif f1_msg == 'SmartJoin':
                     req = 'smart_join'
                     beta_1_s_thread.smart_join(targets='charlie')
+                else:
+                    raise InvalidInputDetected(
+                        f'test_foreign_op_scenario2 f1 rtn received {f1_msg=}')
 
             f1_exp_error_msg = (
                 'SmartThread beta raising '
@@ -29259,6 +29359,9 @@ class TestSmartThreadErrors:
 
             beta_1_thread.start()
             msgs.queue_msg('beta_1', 'SmartJoin')
+        else:
+            raise InvalidInputDetected(
+                f'test_foreign_op_scenario2 received {request_type_arg=}')
 
         beta_1_thread.join()
 
@@ -29280,7 +29383,7 @@ class TestSmartThreadErrors:
         """Test foreign op error for SmartThread.
 
         Args:
-            request_type_arg: which request type will attempt the error
+            request_type_arg: which request type will inject the error
             caplog: pytest fixture to capture log output
 
         """

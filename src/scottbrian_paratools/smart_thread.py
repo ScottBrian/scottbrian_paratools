@@ -1634,7 +1634,7 @@ class SmartThread:
             raise SmartThreadInvalidInput(error_msg)
 
     ####################################################################
-    # _get_set
+    # _get_targets
     ####################################################################
     def _get_targets(self,
                      targets: Optional[Iterable[str]] = None,
@@ -2687,7 +2687,8 @@ class SmartThread:
                     self.num_targets_completed += 1
                     return True
                 except queue.Full:
-                    # We fail this request when the msg_q is full
+                    # request fails if msg_q remains full, but only when
+                    # timeout is specified and we time out
                     request_block.full_send_q_remotes |= {pk_remote.remote}
                     return False  # give the remote some more time
         else:
