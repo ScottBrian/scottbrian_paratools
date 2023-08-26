@@ -1812,6 +1812,8 @@ class SmartThread:
             if self.name not in targets:
                 self._verify_thread_is_current(request=ReqType.Smart_start)
             else:
+                self._verify_thread_is_current(request=ReqType.Smart_start,
+                                               check_thread=False)
                 if len(targets) > 1:
                     error_msg = (
                         f'SmartThread {threading.current_thread().name} '
@@ -4909,11 +4911,13 @@ class SmartThread:
     # _verify_thread_is_current
     ####################################################################
     def _verify_thread_is_current(self,
-                                  request: ReqType) -> None:
+                                  request: ReqType,
+                                  check_thread: bool = True) -> None:
         """Verify that SmartThread is running under the current thread.
 
         Args:
             request: the request that is being processed
+            check_thread: specifies whether to do the thread check
 
         Raises:
             SmartThreadDetectedOpFromForeignThread: SmartThread services
@@ -4921,7 +4925,7 @@ class SmartThread:
                 assigned during instantiation of SmartThread.
 
         """
-        if self.thread is not threading.current_thread():
+        if check_thread and self.thread is not threading.current_thread():
             error_msg = (
                 f'SmartThread {threading.current_thread().name} raising '
                 f'SmartThreadDetectedOpFromForeignThread error '
@@ -4929,5 +4933,20 @@ class SmartThread:
                 f'The SmartThread object used for the invocation is '
                 f'associated with thread {self.thread} which does not match '
                 f'caller thread {threading.current_thread()} as required.')
+            logger.error(error_msg)
+            raise SmartThreadDetectedOpFromForeignThread(error_msg)
+
+        if (self.name not in SmartThread._registry
+                or id(self) != id(SmartThread._registry[self.name])):
+            error_msg = (
+                f'SmartThread {threading.current_thread().name} raising '
+                f'SmartThreadDetectedOpFromForeignThread error '
+                f'while processing request {request.value}. '
+                'The SmartThread object used for the invocation is not '
+                'know to the configuration. '
+                f'Name: {self.name}, '
+                f'ID: {id(self)}, '
+                f'create time: {self.create_time}, '
+                f'thread: {self.thread}.')
             logger.error(error_msg)
             raise SmartThreadDetectedOpFromForeignThread(error_msg)

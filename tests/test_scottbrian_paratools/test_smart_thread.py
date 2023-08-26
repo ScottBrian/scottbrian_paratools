@@ -29135,18 +29135,35 @@ class TestSmartThreadErrors:
         def f1(f1_name: str) -> None:
             logger.debug(f'f1 entered for {f1_name}')
             f1_msg = msgs.get_msg('beta_1', timeout=10)
-            if f1_msg == 'SmartStart':
-                # with pytest.raises(
-                #         st.SmartThreadDetectedOpFromForeignThread) as f1_exc:
-                beta_1_s_thread.smart_start(targets='charlie')
-            elif f1_msg == 'SmartUnreg':
-                # with pytest.raises(
-                #         st.SmartThreadDetectedOpFromForeignThread) as f1_exc:
-                beta_1_s_thread.smart_unreg(targets='charlie')
-            elif f1_msg == 'SmartJoin':
-                # with pytest.raises(
-                #         st.SmartThreadDetectedOpFromForeignThread) as f1_exc:
-                beta_1_s_thread.smart_join(targets='charlie')
+            req: str = ''
+            with pytest.raises(
+                    st.SmartThreadDetectedOpFromForeignThread) as f1_exc:
+                if f1_msg == 'SmartStart':
+                    req = 'smart_start'
+                    beta_1_s_thread.smart_start(targets='charlie')
+                elif f1_msg == 'SmartUnreg':
+                    req = 'smart_unreg'
+                    beta_1_s_thread.smart_unreg(targets='charlie')
+                elif f1_msg == 'SmartJoin':
+                    req = 'smart_join'
+                    beta_1_s_thread.smart_join(targets='charlie')
+
+            f1_exp_error_msg = (
+                'SmartThread beta raising '
+                'SmartThreadDetectedOpFromForeignThread error '
+                f'while processing request {req}. '
+                'The SmartThread object used for the invocation is not '
+                'know to the configuration. '
+                f'Name: {beta_1_s_thread.name}, '
+                f'ID: {id(beta_1_s_thread)}, '
+                f'create time: {beta_1_s_thread.create_time}, '
+                f'thread: {beta_1_s_thread.thread}.')
+
+            # logger.debug(exp_error_msg)
+            assert re.fullmatch(re.escape(f1_exp_error_msg), str(f1_exc.value))
+            print('\n', f1_exc.value)
+
+            msgs.queue_msg('alpha')
             logger.debug(f'f1 exit for {f1_name}')
             ############################################################
             # exit
@@ -29198,32 +29215,35 @@ class TestSmartThreadErrors:
 
         if request_type_arg == st.ReqType.Smart_start:
             # start beta_2 using beta_1 unregistered smart thread
-            # with pytest.raises(
-            #         st.SmartThreadDetectedOpFromForeignThread) as exc:
-            beta_1_s_thread.smart_start()
+            with pytest.raises(
+                    st.SmartThreadDetectedOpFromForeignThread) as exc:
+                beta_1_s_thread.smart_start()
 
-            # exp_error_msg = (
-            #     'SmartThread alpha raising '
-            #     'SmartThreadDetectedOpFromForeignThread error '
-            #     'while processing request smart_start. '
-            #     'The SmartThread object used for the invocation is not '
-            #     'know to the configuration. '
-            #     f'Name: {beta_1_s_thread.name}, '
-            #     f'ID: {id(beta_1_s_thread)}, '
-            #     f'create time: {beta_1_s_thread.create_time}, '
-            #     f'thread: {beta_1_s_thread.thread}. ')
-            #
-            # logger.debug(exp_error_msg)
-            # assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
-            # print('\n', exc.value)
+            # verify error message
+            exp_error_msg = (
+                'SmartThread alpha raising '
+                'SmartThreadDetectedOpFromForeignThread error '
+                'while processing request smart_start. '
+                'The SmartThread object used for the invocation is not '
+                'know to the configuration. '
+                f'Name: {beta_1_s_thread.name}, '
+                f'ID: {id(beta_1_s_thread)}, '
+                f'create time: {beta_1_s_thread.create_time}, '
+                f'thread: {beta_1_s_thread.thread}.')
+
+            logger.debug(exp_error_msg)
+            assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+            print('\n', exc.value)
 
             # start beta_2 legitimately
-            # beta_2_s_thread.smart_start()
+            beta_2_s_thread.smart_start()
 
             beta_1_thread.start()
             # start charlie using beta_1 unregistered smart thread
             msgs.queue_msg('beta_1', 'SmartStart')
 
+            _ = msgs.get_msg('alpha')
+            charlie_s_thread.smart_start()
             alpha_s_thread.smart_join(targets=['beta', 'charlie'])
 
         elif request_type_arg == st.ReqType.Smart_unreg:
@@ -29272,22 +29292,49 @@ class TestSmartThreadErrors:
         ################################################################
         def f1(f1_name: str, action: st.ReqType) -> None:
             logger.debug(f'f1 entered for {f1_name}')
-            _ = msgs.get_msg('beta_1', timeout=10)
-            if action == st.ReqType.Smart_send:
-                beta_1_s_thread.smart_send(msg='hi alpha, this is beta_1',
-                                           receivers='alpha')
-            elif action == st.ReqType.Smart_recv:
-                msg1 = beta_1_s_thread.smart_recv(senders='alpha')
-                logger.debug(f'f1 received {msg1=}')
-            elif action == st.ReqType.Smart_wait:
-                beta_1_s_thread.smart_wait(resumers='alpha')
-            elif action == st.ReqType.Smart_resume:
-                beta_1_s_thread.smart_resume(waiters='alpha')
-            elif action == st.ReqType.Smart_sync:
-                beta_1_s_thread.smart_sync(targets='alpha')
-            else:
-                raise InvalidInputDetected(
-                    f'test_foreign_op_scenario3 f1 rtn received {action=}')
+            req: str = ''
+            with pytest.raises(
+                    st.SmartThreadDetectedOpFromForeignThread) as f1_exc:
+
+                if action == st.ReqType.Smart_send:
+                    req = 'smart_send'
+                    logger.debug(f'f1 beta_1 about to send to alpha')
+                    beta_1_s_thread.smart_send(msg='hi alpha, this is beta_1',
+                                               receivers='alpha')
+                    logger.debug(f'f1 beta_1 back from send to alpha')
+                elif action == st.ReqType.Smart_recv:
+                    req = 'smart_recv'
+                    msg1 = beta_1_s_thread.smart_recv(senders='alpha')
+                    logger.debug(f'f1 received {msg1=}')
+                elif action == st.ReqType.Smart_wait:
+                    req = 'smart_wait'
+                    beta_1_s_thread.smart_wait(resumers='alpha')
+                elif action == st.ReqType.Smart_resume:
+                    req = 'smart_resume'
+                    beta_1_s_thread.smart_resume(waiters='alpha')
+                elif action == st.ReqType.Smart_sync:
+                    req = 'smart_sync'
+                    beta_1_s_thread.smart_sync(targets='alpha')
+                else:
+                    raise InvalidInputDetected(
+                        f'test_foreign_op_scenario3 f1 rtn received {action=}')
+
+            f1_exp_error_msg = (
+                'SmartThread beta raising '
+                'SmartThreadDetectedOpFromForeignThread error '
+                f'while processing request {req}. '
+                'The SmartThread object used for the invocation is not '
+                'know to the configuration. '
+                f'Name: {beta_1_s_thread.name}, '
+                f'ID: {id(beta_1_s_thread)}, '
+                f'create time: {beta_1_s_thread.create_time}, '
+                f'thread: {beta_1_s_thread.thread}.')
+
+            # logger.debug(exp_error_msg)
+            assert re.fullmatch(re.escape(f1_exp_error_msg), str(f1_exc.value))
+            print('\n', f1_exc.value)
+
+            msgs.queue_msg(target='beta_2')
 
             logger.debug(f'f1 exit for {f1_name}')
             ############################################################
@@ -29297,10 +29344,29 @@ class TestSmartThreadErrors:
         ################################################################
         # f2
         ################################################################
-        def f2(f2_name: str) -> None:
+        def f2(f2_name: str,
+               action: st.ReqType,
+               beta_2_st: st.SmartThread) -> None:
             logger.debug(f'f2 entered for {f2_name}')
             msgs.queue_msg(target='alpha')
             _ = msgs.get_msg('beta_2', timeout=10)
+            if action == st.ReqType.Smart_send:
+                logger.debug(f'f2 beta_2 about to send to alpha')
+                beta_2_st.smart_send(msg='hi alpha, this is beta_1',
+                                           receivers='alpha')
+                logger.debug(f'f2 beta_2 back from send to alpha')
+            elif action == st.ReqType.Smart_recv:
+                msg1 = beta_2_st.smart_recv(senders='alpha')
+                logger.debug(f'f2 received {msg1=}')
+            elif action == st.ReqType.Smart_wait:
+                beta_2_st.smart_wait(resumers='alpha')
+            elif action == st.ReqType.Smart_resume:
+                beta_2_st.smart_resume(waiters='alpha')
+            elif action == st.ReqType.Smart_sync:
+                beta_2_st.smart_sync(targets='alpha')
+            else:
+                raise InvalidInputDetected(
+                    f'test_foreign_op_scenario3 f1 rtn received {action=}')
             logger.debug(f'f2 exit for {f2_name}')
             ############################################################
             # exit
@@ -29322,25 +29388,9 @@ class TestSmartThreadErrors:
         beta_2_s_thread = st.SmartThread(name='beta',
                                          auto_start=True,
                                          target=f2,
-                                         kwargs={'f2_name': 'beta_2'})
-
-        ################################################################
-        # start beta_2 using beta_1 unregistered smart thread
-        # with pytest.raises(st.SmartThreadDetectedOpFromForeignThread) as exc:
-        #     beta_1_s_thread.smart_start()
-        #
-        # exp_error_msg = (
-        #     'SmartThread alpha raising '
-        #     'SmartThreadDetectedOpFromForeignThread error '
-        #     'while processing request smart_sync. '
-        #     'The SmartThread object used for the invocation is '
-        #     f'associated with thread {beta_thread.thread} which does not '
-        #     'match '
-        #     f'caller thread {threading.current_thread()} as required.')
-        #
-        # logger.debug(exp_error_msg)
-        # assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
-        # print('\n', exc.value)
+                                         thread_parm_name='beta_2_st',
+                                         kwargs={'f2_name': 'beta_2',
+                                                 'action': request_type_arg})
 
         # start beta_1 thread directly
         beta_1_thread.start()
