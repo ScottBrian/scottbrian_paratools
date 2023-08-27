@@ -27534,22 +27534,22 @@ class TestSmartThreadErrors:
         ################################################################
         with pytest.raises(st.SmartThreadInvalidInput) as exc2:
             if request_type_arg == st.ReqType.Smart_start:
-                alpha_thread.smart_start(targets=set())  # type: ignore
+                alpha_thread.smart_start(targets=set())
             elif request_type_arg == st.ReqType.Smart_unreg:
-                alpha_thread.smart_unreg(targets=())  # type: ignore
+                alpha_thread.smart_unreg(targets=())
             elif request_type_arg == st.ReqType.Smart_join:
-                alpha_thread.smart_join(targets=[])  # type: ignore
+                alpha_thread.smart_join(targets=[])
             elif request_type_arg == st.ReqType.Smart_send:
-                alpha_thread.smart_send(receivers=set(),  # type: ignore
+                alpha_thread.smart_send(receivers=set(),
                                         msg='hello')
             elif request_type_arg == st.ReqType.Smart_recv:
-                alpha_thread.smart_recv(senders={})  # type: ignore
+                alpha_thread.smart_recv(senders={})
             elif request_type_arg == st.ReqType.Smart_wait:
-                alpha_thread.smart_wait(resumers=[])  # type: ignore
+                alpha_thread.smart_wait(resumers=[])
             elif request_type_arg == st.ReqType.Smart_resume:
-                alpha_thread.smart_resume(waiters=set())  # type: ignore
+                alpha_thread.smart_resume(waiters=set())
             elif request_type_arg == st.ReqType.Smart_sync:
-                alpha_thread.smart_sync(targets=())  # type: ignore
+                alpha_thread.smart_sync(targets=())
             else:
                 raise InvalidInputDetected(
                     f'test_get_targets_errors received {request_type_arg=}')
@@ -28555,7 +28555,7 @@ class TestSmartThreadErrors:
     @pytest.mark.parametrize("request_type_arg", [st.ReqType.Smart_unreg,
                                                   st.ReqType.Smart_join])
     def test_cmd_setup_errors(self,
-                                  request_type_arg: st.ReqType) -> None:
+                              request_type_arg: st.ReqType) -> None:
         """Test error cases for SmartThread.
 
         Args:
@@ -29147,7 +29147,7 @@ class TestSmartThreadErrors:
 ########################################################################
 # TestSmartThreadScenarios class
 ########################################################################
-# @pytest.mark.cover
+@pytest.mark.cover
 class TestSmartBasicScenarios:
     """Test class for SmartThread scenarios."""
 

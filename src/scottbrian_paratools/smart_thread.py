@@ -71,6 +71,10 @@ There are three configurations where SmartThread can be instantiated:
     alpha_smart_thread = SmartThread(name='alpha')
 
 
+.. invisible-code-block: python
+
+    del SmartThread._registry['alpha']
+
 :Example 2: Instantiate a SmartThread with a *target* argument to create
             a new thread that will execute under the *target* routine:
 
@@ -82,6 +86,10 @@ There are three configurations where SmartThread can be instantiated:
 
     beta_smart_thread = SmartThread(name='beta',
                                     target=f1)
+
+.. invisible-code-block: python
+
+    del SmartThread._registry['beta']
 
 
 :Example 3: Instantiate a SmartThread with a *thread* argument while
@@ -101,6 +109,10 @@ There are three configurations where SmartThread can be instantiated:
     beta_smart_thread.smart_start()
 
 
+.. invisible-code-block: python
+
+    del SmartThread._registry['beta']
+
 The service methods are:
 
     1) ``smart_send()``: sends messages to the other threads
@@ -113,7 +125,7 @@ The service methods are:
        which point all participating threads are resumed
 
 
-:Example 1: Create a SmartThread configuration for threads named
+:Example 4: Create a SmartThread configuration for threads named
             alpha and beta, send and receive a message, and resume a
             wait. Note the use of auto_start=False and invoking
             ``smart_start()``.
@@ -146,7 +158,7 @@ The service methods are:
 
     del SmartThread._registry['alpha']
 
-Expected output for Example 1::
+Expected output for Example 4::
 
     mainline alpha entered
     f1 beta entered\
@@ -161,7 +173,7 @@ Expected output for Example 1::
     mainline alpha exiting
 
 
-:Example 2: Create a SmartThread configuration for threads named
+:Example 5: Create a SmartThread configuration for threads named
             alpha and beta, send and receive a message, and resume a
             wait. Note the use of auto_start=True and passing the
             SmartThread instance to the target via the thread_parm_name.
@@ -193,7 +205,7 @@ Expected output for Example 1::
 
     del SmartThread._registry['alpha']
 
-Expected output for Example 2::
+Expected output for Example 5::
 
     mainline alpha entered
     f1 beta entered
@@ -202,7 +214,7 @@ Expected output for Example 2::
     mainline alpha exiting
 
 
-:Example 3: Create a SmartThread configuration for threads named
+:Example 6: Create a SmartThread configuration for threads named
             alpha and beta, send and receive a message, and resume a
             wait. Note the use of threading.Thread to create and start
             the beta thread and having the target thread instantiate the
@@ -235,7 +247,7 @@ Expected output for Example 2::
 
     del SmartThread._registry['alpha']
 
-Expected output for Example 3::
+Expected output for Example 6::
 
     mainline alpha entered
     f1 beta entered
@@ -244,7 +256,7 @@ Expected output for Example 3::
     mainline alpha exiting
 
 
-:Example 4: Create a SmartThread configuration for threads named alpha
+:Example 7: Create a SmartThread configuration for threads named alpha
             and beta, send and receive a message, and resume a wait.
             Note the use of the ThreadApp class that inherits
             threading.Thread as a base and uses a run method. This
@@ -290,7 +302,7 @@ Expected output for Example 3::
 
     del SmartThread._registry['alpha']
 
-Expected output for Example 4::
+Expected output for Example 7::
 
     mainline alpha entered
     beta entry to run method
@@ -301,7 +313,7 @@ Expected output for Example 4::
     mainline alpha exiting
 
 
-:Example 5: Create a SmartThread configuration for threads named alpha
+:Example 8: Create a SmartThread configuration for threads named alpha
             and beta, send and receive a message, and resume a wait. Note
             the use of the SmartThreadApp class that multiplicatively
             inherits threading.Thread and SmartThread and uses a run
@@ -347,7 +359,7 @@ Expected output for Example 4::
 
     del SmartThread._registry['alpha']
 
-Expected output for Example5::
+Expected output for Example8::
 
     mainline alpha entered
     beta entry to run method
@@ -370,7 +382,7 @@ import logging
 import queue
 import threading
 import time
-from typing import (Any, Callable, cast, ClassVar, NamedTuple, NoReturn,
+from typing import (Any, Callable, ClassVar, NamedTuple, NoReturn,
                     Optional, Type, TypeAlias, TYPE_CHECKING, Union)
 
 ########################################################################
@@ -3101,10 +3113,6 @@ class SmartThread:
                     request_block.deadlock_remotes |= {pk_remote.remote}
                     request_block.remote_deadlock_request = (
                         local_sb.remote_deadlock_request)
-                    logger.debug(
-                        f'TestDebug {self.name} recv set '
-                        f'{pk_remote.remote=}'
-                        f'{request_block.deadlock_remotes=}')
                     return True
 
                 if self._get_target_state(
@@ -3521,9 +3529,6 @@ class SmartThread:
                 local_sb.deadlock = False
                 local_sb.wait_wait = False
                 request_block.deadlock_remotes |= {pk_remote.remote}
-                logger.debug(
-                    f'TestDebug {self.name} wait set {pk_remote.remote=}'
-                    f'{request_block.deadlock_remotes=}')
                 return True
 
             if self._get_target_state(pk_remote) == ThreadState.Stopped:
@@ -4046,9 +4051,6 @@ class SmartThread:
                 local_sb.deadlock = False
                 local_sb.sync_wait = False
                 request_block.deadlock_remotes |= {pk_remote.remote}
-                logger.debug(
-                    f'TestDebug {self.name} sync set '
-                    f'{request_block.deadlock_remotes=}')
                 return True  # we are done with this remote
 
             if self._get_target_state(pk_remote) == ThreadState.Stopped:
@@ -4159,20 +4161,7 @@ class SmartThread:
 
         """
         do_refresh: bool = False
-        continue_request_loop = True
-        while continue_request_loop:
-            # determine timeout_value to use for request
-            # if (request_block.timer.is_specified()
-            #         and (rem_time := request_block.timer.remaining_time())
-            #         is not None):
-            #
-            #     request_block.request_max_interval = min(
-            #         self.request_max_interval,
-            #         (rem_time / (max(1, len(self.work_pk_remotes)) * 8)))
-            # else:
-            #     request_block.request_max_interval = (
-            #         self.request_max_interval)
-
+        while True:
             work_pk_remotes_copy = self.work_pk_remotes.copy()
             for pk_remote in work_pk_remotes_copy:
                 # we need to hold the lock to ensure the pair_array
@@ -4285,13 +4274,8 @@ class SmartThread:
 
                     pending_remotes = {remote for pk, remote, _ in
                                        self.work_pk_remotes}
-                    # logger.debug(
-                    #     f'{self.name} {self.request.value} calling refresh, '
-                    #     f'remaining remotes: {self.work_pk_remotes}')
                     self.work_pk_remotes = []
                     self.missing_remotes = set()
-                    # self._clean_registry()
-                    # self._clean_pair_array()
 
                 self._handle_loop_errors(
                     request=self.request,
@@ -4443,104 +4427,6 @@ class SmartThread:
     ####################################################################
     # _handle_loop_errors
     ####################################################################
-    # def _handle_loop_errors(self, *,
-    #                         request_block: RequestBlock,
-    #                         pending_remotes: list[str]
-    #                         ) -> None:
-    #     """Raise an error if needed.
-    #
-    #     Args:
-    #         request_block: contains targets, timeout, etc
-    #         pending_remotes: remotes that have not either not responded
-    #             or were found to be in an incorrect state
-    #
-    #     Raises:
-    #         SmartThreadRequestTimedOut: request processing timed out
-    #             waiting for the remote.
-    #         SmartThreadRemoteThreadNotAlive: request detected remote
-    #             thread is not alive.
-    #         SmartThreadDeadlockDetected: a deadlock was detected
-    #             between two requests.
-    #         SmartThreadRemoteThreadNotRegistered: the remote thread is
-    #             not in the ThreadState.Registered state as required.
-    #
-    #     """
-    #     targets_msg = (f'while processing a '
-    #                    f'{request_block.request.value} '
-    #                    f'request with targets '
-    #                    f'{sorted(request_block.remotes)}.')
-    #
-    #     pending_msg = (f' Remotes that are pending: '
-    #                    f'{sorted(pending_remotes)}.')
-    #
-    #     if request_block.stopped_remotes:
-    #         stopped_msg = (
-    #             ' Remotes that are stopped: '
-    #             f'{sorted(request_block.stopped_remotes)}.')
-    #     else:
-    #         stopped_msg = ''
-    #
-    #     if request_block.not_registered_remotes:
-    #         not_registered_msg = (
-    #             ' Remotes that are not registered: '
-    #             f'{sorted(request_block.not_registered_remotes)}.')
-    #     else:
-    #         not_registered_msg = ''
-    #
-    #     if request_block.deadlock_remotes:
-    #         deadlock_msg = (
-    #             f' Remotes that are deadlocked: '
-    #             f'{sorted(request_block.deadlock_remotes)}.')
-    #     else:
-    #         deadlock_msg = ''
-    #
-    #     if request_block.full_send_q_remotes:
-    #         full_send_q_msg = (
-    #             f' Remotes that have a full send_q: '
-    #             f'{sorted(request_block.full_send_q_remotes)}.')
-    #     else:
-    #         full_send_q_msg = ''
-    #
-    #     msg_suite = (f'{targets_msg}{pending_msg}{stopped_msg}'
-    #                  f'{not_registered_msg}{deadlock_msg}{full_send_q_msg}')
-    #
-    #     # If an error should be raised for stopped threads
-    #     if request_block.stopped_remotes:
-    #         error_msg = (
-    #             f'{self.name} raising '
-    #             f'SmartThreadRemoteThreadNotAlive {msg_suite}')
-    #         logger.error(error_msg)
-    #         raise SmartThreadRemoteThreadNotAlive(error_msg)
-    #
-    #     # If an error should be raised for unregistered threads
-    #     if request_block.not_registered_remotes:
-    #         error_msg = (
-    #             f'{self.name} raising '
-    #             f'SmartThreadRemoteThreadNotRegistered {msg_suite}')
-    #         logger.error(error_msg)
-    #         raise SmartThreadRemoteThreadNotRegistered(error_msg)
-    #
-    #     if request_block.deadlock_remotes:
-    #         error_msg = (
-    #             f'{self.name} raising '
-    #             f'SmartThreadDeadlockDetected {msg_suite}')
-    #         logger.error(error_msg)
-    #         raise SmartThreadDeadlockDetected(error_msg)
-    #
-    #     # Note that the timer will never be expired if timeout
-    #     # was not specified either explicitly on the smart_wait
-    #     # call or via a default timeout established when this
-    #     # SmartThread was instantiated.
-    #     if request_block.timer.is_expired():
-    #         error_msg = (
-    #             f'{self.name} raising '
-    #             f'SmartThreadRequestTimedOut {msg_suite}')
-    #         logger.error(error_msg)
-    #         raise SmartThreadRequestTimedOut(error_msg)
-
-    ####################################################################
-    # _handle_loop_errors
-    ####################################################################
     def _handle_loop_errors(self, *,
                             request: ReqType,
                             remotes: set[str],
@@ -4664,8 +4550,8 @@ class SmartThread:
     ####################################################################
     # _check_for_deadlock
     ####################################################################
-    def _check_for_deadlock(self, *,
-                            local_sb: ConnectionStatusBlock,
+    @staticmethod
+    def _check_for_deadlock(local_sb: ConnectionStatusBlock,
                             remote_sb: ConnectionStatusBlock) -> None:
         """Check the remote thread for deadlock requests.
 
@@ -4690,10 +4576,6 @@ class SmartThread:
                 remote_sb.remote_deadlock_request = local_sb.request
                 local_sb.deadlock = True
                 local_sb.remote_deadlock_request = ReqType.Smart_sync
-                logger.debug(
-                    f'TestDebug {self.name} {self.request=} '
-                    f'set remote (sync_wait) and local '
-                    f'deadlock flags {remote_sb.name=}')
             elif (remote_sb.wait_wait
                     and not (remote_sb.wait_event.is_set()
                              or remote_sb.deadlock)):
@@ -4701,10 +4583,6 @@ class SmartThread:
                 remote_sb.remote_deadlock_request = local_sb.request
                 local_sb.deadlock = True
                 local_sb.remote_deadlock_request = ReqType.Smart_wait
-                logger.debug(
-                    f'TestDebug {self.name} {self.request=} '
-                    f'set remote (wait) and local '
-                    f'deadlock flags {remote_sb.name=}')
             elif (remote_sb.recv_wait
                     and not (not remote_sb.msg_q.empty()
                              or remote_sb.deadlock)):
@@ -4712,10 +4590,6 @@ class SmartThread:
                 remote_sb.remote_deadlock_request = local_sb.request
                 local_sb.deadlock = True
                 local_sb.remote_deadlock_request = ReqType.Smart_recv
-                logger.debug(
-                    f'TestDebug {self.name} {self.request=} '
-                    f'set remote (recv_wait) and local '
-                    f'deadlock flags {remote_sb.name=}')
 
     ####################################################################
     # _cmd_setup
