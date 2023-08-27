@@ -28258,9 +28258,9 @@ class TestSmartThreadErrors:
             elif action == 'deadlock':
                 f1_senders = ['alpha']
                 f1_pending_targets = []
-                for idx in range(num_pending_arg):
-                    f1_senders.append(f'pending_{idx}')
-                    f1_pending_targets.append(f'pending_{idx}')
+                for f1_idx in range(num_pending_arg):
+                    f1_senders.append(f'pending_{f1_idx}')
+                    f1_pending_targets.append(f'pending_{f1_idx}')
                 with pytest.raises(st.SmartThreadDeadlockDetected) as f1_exc:
                     beta_thread.smart_recv(senders=f1_senders)
                 f1_targets_msg = re.escape(
@@ -28540,6 +28540,23 @@ class TestSmartThreadErrors:
         assert re.fullmatch(exp_error_msg, str(exc3.value))
 
         print('\n', exc3.value)
+
+        ################################################################
+        # SmartThreadInvalidInput
+        ################################################################
+        with pytest.raises(st.SmartThreadInvalidInput) as exc4:
+            alpha_thread._handle_loop_errors(
+                request=st.ReqType.Smart_sync,
+                remotes={'beta'})
+
+        exp_error_msg = (
+            f'_handle_loop_errors alpha called without an '
+            'error - raising SmartThreadInvalidInput')
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc4.value))
+
+        print('\n', exc4.value)
 
         ################################################################
         # join beta
