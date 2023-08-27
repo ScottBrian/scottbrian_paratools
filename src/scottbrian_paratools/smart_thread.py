@@ -370,7 +370,7 @@ import logging
 import queue
 import threading
 import time
-from typing import (Any, Callable, ClassVar, NamedTuple, NoReturn,
+from typing import (Any, Callable, cast, ClassVar, NamedTuple, NoReturn,
                     Optional, Type, TypeAlias, TYPE_CHECKING, Union)
 
 ########################################################################
@@ -550,7 +550,7 @@ class RequestBlock:
     pk_remotes: list[PairKeyRemote]
     timer: Timer
     exit_log_msg: str
-    msg_to_send: Any
+    msg_to_send: dict[str, Any]
     stopped_remotes: set[str]
     not_registered_remotes: set[str]
     deadlock_remotes: set[str]
@@ -1612,28 +1612,6 @@ class SmartThread:
             return PairKey(name1, name0)
 
     ####################################################################
-    # _get_set
-    ####################################################################
-    def _get_set(self,
-                 item: Optional[Iterable[str]] = None,
-                 request: Optional[str] = None) -> set[str]:
-        try:
-            return set({item} if isinstance(item, str) else item or '')
-        except TypeError:
-            if request is None:
-                request = self.request
-
-            error_msg = (
-                f'SmartThread {threading.current_thread().name} raising '
-                'SmartThreadInvalidInput error while processing '
-                f'request {request}. '
-                f'It was detected that an argument for remote thread names '
-                f'is not of type Iterable. Please specify an iterable, '
-                f'such as a list of thread names.')
-            logger.error(error_msg)
-            raise SmartThreadInvalidInput(error_msg)
-
-    ####################################################################
     # _get_targets
     ####################################################################
     def _get_targets(self,
@@ -2553,17 +2531,7 @@ class SmartThread:
                     'specified. Please specify only one of msg or msg_dict.')
                 logger.error(error_msg)
                 raise SmartThreadInvalidInput(error_msg)
-            remotes = self._get_set(receivers)
-            if not remotes:
-                error_msg = (
-                    f'SmartThread {threading.current_thread().name} raising '
-                    'SmartThreadNoRemoteTargets error while processing '
-                    'request smart_send. '
-                    f'The receivers argument {receivers=} does not specify '
-                    'any receivers.'
-                )
-                logger.error(error_msg)
-                raise SmartThreadNoRemoteTargets(error_msg)
+            remotes = self._get_targets(receivers)
             work_msgs = {remote: msg for remote in remotes}
         elif msg_dict is not None:
             if msg is not None or receivers is not None:
@@ -2577,16 +2545,7 @@ class SmartThread:
                 logger.error(error_msg)
                 raise SmartThreadInvalidInput(error_msg)
 
-            remotes = self._get_set(msg_dict.keys())
-            if not remotes:
-                error_msg = (
-                    f'SmartThread {threading.current_thread().name} raising '
-                    'SmartThreadNoRemoteTargets error while processing '
-                    'request smart_send. '
-                    f'Argument {msg_dict=} was specified with no items.'
-                )
-                logger.error(error_msg)
-                raise SmartThreadNoRemoteTargets(error_msg)
+            remotes = self._get_targets(msg_dict)
             work_msgs = msg_dict
         else:
             error_msg = (
@@ -2599,14 +2558,16 @@ class SmartThread:
             logger.error(error_msg)
             raise SmartThreadInvalidInput(error_msg)
 
-        # get RequestBlock with targets in a set and a timer object
+        # get RequestBlock with get_targets False since we already did
+        # the _get_targets code above
         request_block = self._request_setup(
-            remotes=remotes,
+            targets=remotes,
             process_rtn=self._process_send_msg,
             completion_count=len(remotes),
             timeout=timeout,
-            msg_to_send=work_msgs,
             log_msg=log_msg)
+
+        request_block.msg_to_send = work_msgs
 
         self._request_loop(request_block=request_block)
 
@@ -2992,20 +2953,20 @@ class SmartThread:
         self._verify_thread_is_current(request=ReqType.Smart_recv)
         self.request = ReqType.Smart_recv
         self.recvd_msgs = {}
-
+        remotes = self._get_targets(senders)
         if sender_count is None:
-            completion_count = len(self._get_set(senders))
+            completion_count = len(remotes)
         else:
             if (not isinstance(sender_count, int)
                     or sender_count < 1
-                    or len(self._get_set(senders)) < sender_count):
+                    or len(remotes) < sender_count):
                 error_msg = (
                     f'SmartThread {threading.current_thread().name} raising '
                     'SmartThreadInvalidInput error while processing request '
                     'smart_recv. '
                     f'The value specified for {sender_count=} is not valid. '
                     'The number of specified senders is '
-                    f'{len(self._get_set(senders))}. The value for '
+                    f'{len(remotes)}. The value for '
                     'sender_count must be an integer between 1 and the '
                     'number of specified senders, inclusive.')
                 logger.error(error_msg)
@@ -3014,7 +2975,7 @@ class SmartThread:
 
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
-            remotes=senders,
+            targets=remotes,
             process_rtn=self._process_recv_msg,
             completion_count=completion_count,
             timeout=timeout,
@@ -3432,20 +3393,20 @@ class SmartThread:
         self._verify_thread_is_current(request=ReqType.Smart_wait)
         self.request = ReqType.Smart_wait
         self.resumed_by = set()
-
+        remotes = self._get_targets(resumers)
         if resumer_count is None:
-            completion_count = len(self._get_set(resumers))
+            completion_count = len(remotes)
         else:
             if (not isinstance(resumer_count, int)
                     or resumer_count < 1
-                    or len(self._get_set(resumers)) < resumer_count):
+                    or len(remotes) < resumer_count):
                 error_msg = (
                     f'SmartThread {threading.current_thread().name} raising '
                     'SmartThreadInvalidInput error while processing request '
                     'smart_wait. '
                     f'The value specified for {resumer_count=} is not valid. '
                     'The number of specified resumers is '
-                    f'{len(self._get_set(resumers))}. The value for '
+                    f'{len(remotes)}. The value for '
                     'resumer_count must be an integer between 1 and the '
                     'number of specified resumers, inclusive.')
                 logger.error(error_msg)
@@ -3454,7 +3415,7 @@ class SmartThread:
 
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
-            remotes=resumers,
+            targets=remotes,
             process_rtn=self._process_wait,
             cleanup_rtn=self._sync_wait_error_cleanup,
             completion_count=completion_count,
@@ -3762,11 +3723,12 @@ class SmartThread:
         self._verify_thread_is_current(request=ReqType.Smart_resume)
         self.request = ReqType.Smart_resume
         self.resumed_targets = set()
+        remotes = self._get_targets(waiters)
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
-            remotes=waiters,
+            targets=remotes,
             process_rtn=self._process_resume,
-            completion_count=len(self._get_set(waiters)),
+            completion_count=len(remotes),
             timeout=timeout,
             log_msg=log_msg)
 
@@ -3942,12 +3904,13 @@ class SmartThread:
         self._verify_thread_is_current(request=ReqType.Smart_sync)
         self.request = ReqType.Smart_sync
         self.synced_targets = set()
+        remotes = self._get_targets(targets)
         # get RequestBlock with targets in a set and a timer object
         request_block = self._request_setup(
-            remotes=targets,
+            targets=remotes,
             process_rtn=self._process_sync,
             cleanup_rtn=self._sync_wait_error_cleanup,
-            completion_count=len(self._get_set(targets)),
+            completion_count=len(remotes),
             timeout=timeout,
             log_msg=log_msg)
 
@@ -4809,11 +4772,10 @@ class SmartThread:
     def _request_setup(self, *,
                        process_rtn: ProcessRtn,
                        cleanup_rtn: CleanupRtn = None,
-                       remotes: Optional[Iterable[str]] = None,
+                       targets: set[str],
                        completion_count: int = 0,
                        timeout: OptIntFloat = None,
                        log_msg: Optional[str] = None,
-                       msg_to_send: Optional[dict[str, Any]] = None
                        ) -> RequestBlock:
         """Do common setup for each request.
 
@@ -4821,27 +4783,23 @@ class SmartThread:
             process_rtn: method to process the request for each
                 iteration of the request loop
             cleanup_rtn: method to back out a failed request
-            remotes: remote threads for the request
+            targets: remote threads for the request
             completion_count: how many request need to succeed
             timeout: number of seconds to allow for request completion
             log_msg: caller log message to issue
-            msg_to_send: smart_send message to send
-
 
         Returns:
             A RequestBlock is returned that contains the timer and the
             set of threads to be processed
 
         Raises:
-            SmartThreadInvalidInput: {name} {request.value} request with
-                no targets specified.
+            SmartThreadInvalidInput: Targets include cmd_runner which is
+                not permitted except for request smart_start.
 
         """
         timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
 
         self.cmd_runner = threading.current_thread().name
-
-        targets: set[str] = self._get_targets(remotes)
 
         self.num_targets_completed = 0
 
@@ -4875,7 +4833,7 @@ class SmartThread:
             pk_remotes=pk_remotes,
             timer=timer,
             exit_log_msg=exit_log_msg,
-            msg_to_send=msg_to_send,
+            msg_to_send={},
             stopped_remotes=set(),
             not_registered_remotes=set(),
             deadlock_remotes=set(),
