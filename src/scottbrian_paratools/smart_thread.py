@@ -43,8 +43,8 @@ states enumerated in the ThreadState class:
 
     @startuml
     hide empty description
-    [*] --> Initializing
-    Initializing --> Registered : __init__
+    [*] --> Initialized
+    Initialized --> Registered : __init__
 
     Registered --> Starting : smart_start
     Starting -> Alive
@@ -586,7 +586,7 @@ class ThreadCreate(Flag):
 ########################################################################
 # ThreadState Flags Class
 # These flags are used to indicate the life cycle of a SmartThread.
-# Initializing is set in the __init__ method. The __init__ method calls
+# Initialized is set in the __init__ method. The __init__ method calls
 # _register and upon return the state of Registered is set. When
 # the start method is called, the state is set to Starting, and after
 # the start is done and the thread is alive, the state is set to Alive.
@@ -597,7 +597,7 @@ class ThreadCreate(Flag):
 class ThreadState(Flag):
     """Thread state flags."""
     Unregistered = auto()
-    Initializing = auto()
+    Initialized = auto()
     Registered = auto()
     Starting = auto()
     Alive = auto()
@@ -916,7 +916,7 @@ class SmartThread:
             self.thread = threading.current_thread()
             # self.thread.name = name
 
-        self.st_state: ThreadState = ThreadState.Initializing
+        self.st_state: ThreadState = ThreadState.Initialized
 
         self.auto_start = auto_start
 
@@ -1895,9 +1895,9 @@ class SmartThread:
 
         """
         if self._get_state(remote) == ThreadState.Registered:
-            self._set_state(
-                target_thread=SmartThread._registry[remote],
-                new_state=ThreadState.Starting)
+            # self._set_state(
+            #     target_thread=SmartThread._registry[remote],
+            #     new_state=ThreadState.Starting)
             SmartThread._registry[remote].thread.start()
             # At this point, the thread was started and the threading
             # start bootstrap method received control and set the Event
@@ -2238,7 +2238,7 @@ class SmartThread:
                 complete. The *smart_send* will send messages to the
                 remote threads only when they are alive. If any of the
                 threads to be sent messages to are in states
-                ThreadState.Unregistered, ThreadState.Initializing,
+                ThreadState.Unregistered, ThreadState.Initialized,
                 ThreadState.Registered, or ThreadState.Starting, then
                 *smart_send* will wait and send the message to the
                 thread as soon as it enters state ThreadState.Alive.
