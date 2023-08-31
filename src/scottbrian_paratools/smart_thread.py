@@ -437,8 +437,8 @@ class SmartThreadIncorrectNameSpecified(SmartThreadError):
     """SmartThread exception for a name that is not a str."""
 
 
-class SmartThreadNameAlreadyInUse(SmartThreadError):
-    """SmartThread exception for using a name already in use."""
+class SmartThreadRegistrationError(SmartThreadError):
+    """SmartThread exception for duplicate registry item detected."""
     pass
 
 
@@ -497,11 +497,6 @@ class SmartThreadAlreadyStarted(SmartThreadError):
 
 class SmartThreadMultipleTargetsForSelfStart(SmartThreadError):
     """SmartThread exception for smart_start with multiple targets."""
-    pass
-
-
-class SmartThreadAlreadyExists(SmartThreadError):
-    """SmartThread exception for smart_init of same thread."""
     pass
 
 
@@ -602,7 +597,7 @@ class ThreadState(Flag):
     Starting = auto()
     Alive = auto()
     Stopped = auto()
-    Unregistering = auto()
+    # Unregistering = auto()
 
 
 ########################################################################
@@ -916,8 +911,6 @@ class SmartThread:
             self.thread = threading.current_thread()
             # self.thread.name = name
 
-        self.st_state: ThreadState = ThreadState.Initialized
-
         self.auto_start = auto_start
 
         self.default_timeout = default_timeout
@@ -941,9 +934,15 @@ class SmartThread:
         self.missing_remotes: set[str] = set()
         self.found_pk_remotes: list[PairKeyRemote] = []
 
+        self.auto_started = False
+
         # set create time to zero - we will update create_time in
         # the _register method under lock
         self.create_time: float = 0.0
+
+        self.unregister = False
+
+        self.st_state: ThreadState = ThreadState.Initialized
 
         # register this new SmartThread so others can find us
         self._register()
@@ -952,8 +951,6 @@ class SmartThread:
         # avoid having to restore the name in the case of a duplicate
         # thread error
         self.thread.name = name
-
-        self.auto_started = False
 
         if self.auto_start:
             if self.thread.is_alive():
@@ -1127,12 +1124,10 @@ class SmartThread:
         """Register SmartThread in the class registry.
 
         Raises:
-            SmartThreadAlreadyExists: While attempting to register a
+            SmartThreadRegistrationError: While attempting to register a
                 new thread, it was discovered that the thread already
-                exists in the registry for a different thread name.
-            SmartThreadNameAlreadyInUse: An entry for a SmartThread with
-                name = *name* is already registered for a different
-                thread.
+                exists in the registry with the same name and/or the
+                same threading thread.
 
         Note:
             1) Any old entries for SmartThreads whose threads are not
@@ -1154,70 +1149,65 @@ class SmartThread:
             self._clean_pair_array()
 
             ############################################################
+            # Verify OK to add new entry
+            ############################################################
+            for key, item in SmartThread._registry.items():
+                if self.name == key or self.thread is item.thread:
+                    error_msg = (
+                        f'SmartThread {threading.current_thread().name} '
+                        'raising SmartThreadRegistrationError error while '
+                        f'processing request {self.request.value}. '
+                        'While attempting to register a new SmartThread '
+                        'instance, it was detected that another instance '
+                        'already in the SmartThread registry has the same '
+                        'name or is associated with the same threading '
+                        'thread. '
+                        f'New instance: name = {self.name}, '
+                        f'id = {id(self)}, '
+                        f'associated thread = {self.thread}. '
+                        f'Existing instance: name = {item.name}, '
+                        f'id = {id(item)}, '
+                        f'associated thread = {item.thread}.')
+                    logger.error(error_msg)
+                    raise SmartThreadRegistrationError(error_msg)
+
+            ############################################################
             # Add new name to registry
             ############################################################
-            if self.name not in SmartThread._registry:
-                # verify that the new instance is not already in the
-                # registry under a different name
-                for key, item in SmartThread._registry.items():
-                    if item.thread is self.thread:
-                        error_msg = (
-                            f'SmartThread {threading.current_thread().name} '
-                            f'raising SmartThreadAlreadyExists error while '
-                            f'processing request {self.request.value}. '
-                            'While attempting to register a new SmartThread '
-                            f'with name {self.name} and thread '
-                            f'{self.thread}, it was detected that a registry '
-                            'entry already exists for a SmartThread with '
-                            f'the same thread {item.thread} for name {key}.')
-                        logger.error(error_msg)
-                        raise SmartThreadAlreadyExists(error_msg)
+            # get a unique time stamp for create_time
+            self.create_time = SmartThread._create_pair_array_entry_time
+            while self.create_time == (
+                    SmartThread._create_pair_array_entry_time):
+                self.create_time = time.time()
 
-                # get a unique time stamp for create_time
-                self.create_time = SmartThread._create_pair_array_entry_time
-                while self.create_time == (
-                        SmartThread._create_pair_array_entry_time):
-                    self.create_time = time.time()
+            # update last create time
+            SmartThread._create_pair_array_entry_time = self.create_time
 
-                # update last create time
-                SmartThread._create_pair_array_entry_time = self.create_time
+            # place new entry into registry
+            SmartThread._registry[self.name] = self
 
-                SmartThread._registry[self.name] = self
+            SmartThread._registry_last_update = datetime.utcnow()
+            print_time = (SmartThread._registry_last_update
+                          .strftime("%H:%M:%S.%f"))
+            logger.debug(
+                f'{self.cmd_runner} added {self.name} '
+                f'to SmartThread registry at UTC {print_time}')
 
-                SmartThread._registry_last_update = datetime.utcnow()
-                print_time = (SmartThread._registry_last_update
-                              .strftime("%H:%M:%S.%f"))
-                logger.debug(
-                    f'{self.cmd_runner} added {self.name} '
-                    f'to SmartThread registry at UTC {print_time}')
+            self._set_state(
+                target_thread=self,
+                new_state=ThreadState.Registered,
+                cmd_runner=self.cmd_runner)
 
+            if self.thread.is_alive():
                 self._set_state(
                     target_thread=self,
-                    new_state=ThreadState.Registered,
+                    new_state=ThreadState.Alive,
                     cmd_runner=self.cmd_runner)
-                if self.thread.is_alive():
-                    self._set_state(
-                        target_thread=self,
-                        new_state=ThreadState.Alive,
-                        cmd_runner=self.cmd_runner)
 
-                ########################################################
-                # add new name to the pair array
-                ########################################################
-                self._add_to_pair_array()
-
-            elif SmartThread._registry[self.name] != self:
-                error_msg = (
-                    f'SmartThread {threading.current_thread().name} raising '
-                    f'SmartThreadNameAlreadyInUse error while processing '
-                    f'request {self.request.value}. '
-                    f'While attempting to register a new SmartThread with '
-                    f'name {self.name} and ID {id(self)}, it was detected '
-                    'that a registry entry already exists for a SmartThread '
-                    f'with name {self.name} but a different ID of '
-                    f'{id(SmartThread._registry[self.name])}.')
-                logger.error(error_msg)
-                raise SmartThreadNameAlreadyInUse(error_msg)
+            ############################################################
+            # add new name to the pair array
+            ############################################################
+            self._add_to_pair_array()
 
         logger.debug(f'{self.request.value} _register exit: '
                      f'cmd_runner: {self.cmd_runner}, '
@@ -1263,7 +1253,9 @@ class SmartThread:
             logger.debug(
                 f'name={key}, {is_alive=}, state={state}, '
                 f'smart_thread={item}')
-            if item.st_state == ThreadState.Unregistering:
+            # if item.st_state == ThreadState.Unregistering:
+            #     keys_to_del.append(key)
+            if item.unregister:
                 keys_to_del.append(key)
 
             if key != item.name:
@@ -2005,9 +1997,10 @@ class SmartThread:
                     not_registered_remotes |= {remote}
                     self.work_remotes -= {remote}
                 else:
-                    self._set_state(
-                        target_thread=SmartThread._registry[remote],
-                        new_state=ThreadState.Unregistering)
+                    # self._set_state(
+                    #     target_thread=SmartThread._registry[remote],
+                    #     new_state=ThreadState.Unregistering)
+                    SmartThread._registry[remote].unregister = True
 
                     self.work_remotes -= {remote}
                     self.unreged_targets |= {remote}
@@ -2201,9 +2194,10 @@ class SmartThread:
                 self._set_state(
                     target_thread=SmartThread._registry[remote],
                     new_state=ThreadState.Stopped)
-            self._set_state(
-                target_thread=SmartThread._registry[remote],
-                new_state=ThreadState.Unregistering)
+            # self._set_state(
+            #     target_thread=SmartThread._registry[remote],
+            #     new_state=ThreadState.Unregistering)
+            SmartThread._registry[remote].unregister = True
 
         # restart while loop with one less remote
         return True

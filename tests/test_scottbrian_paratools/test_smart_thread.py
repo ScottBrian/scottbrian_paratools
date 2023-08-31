@@ -2660,6 +2660,7 @@ class ThreadTracker:
     st_state: st.ThreadState
     found_del_pairs: dict[tuple[str, str, str], int]
     stopped_by: str = ''
+    unregister: bool = False
 
 
 @dataclass
@@ -2712,8 +2713,8 @@ list_of_thread_states = ('(ThreadState.Unregistered'
                          '|ThreadState.Registered'
                          # '|ThreadState.Starting'
                          '|ThreadState.Alive'
-                         '|ThreadState.Stopped'
-                         '|ThreadState.Unregistering)')
+                         '|ThreadState.Stopped)')
+                         # '|ThreadState.Unregistering)')
 
 list_of_smart_requests = ('(smart_init'
                           '|smart_start'
@@ -18488,15 +18489,20 @@ class ConfigVerifier:
         pe[PE.current_request].completed_targets = set()
 
         for target in eligible_targets:
-            state_key: SetStateKey = (cmd_runner,
-                                      target,
-                                      st.ThreadState.Registered,
-                                      st.ThreadState.Unregistering)
-            pe[PE.set_state_msg][state_key] += 1
-
+            # state_key: SetStateKey = (cmd_runner,
+            #                           target,
+            #                           st.ThreadState.Registered,
+            #                           st.ThreadState.Unregistering)
+            # pe[PE.set_state_msg][state_key] += 1
+            #
+            # state_key = (cmd_runner,
+            #              target,
+            #              st.ThreadState.Unregistering,
+            #              st.ThreadState.Unregistered)
+            # pe[PE.set_state_msg][state_key] += 1
             state_key = (cmd_runner,
                          target,
-                         st.ThreadState.Unregistering,
+                         st.ThreadState.Registered,
                          st.ThreadState.Unregistered)
             pe[PE.set_state_msg][state_key] += 1
 
@@ -18584,15 +18590,21 @@ class ConfigVerifier:
                         self.log_test_msg(f'handle_request_smart_join_entry '
                                           f'bumped set_state '
                                           f'pending for {state_key=} ')
-                state_key = (cmd_runner,
-                             target,
-                             st.ThreadState.Stopped,
-                             st.ThreadState.Unregistering)
-                pe[PE.set_state_msg][state_key] += 1
+                # state_key = (cmd_runner,
+                #              target,
+                #              st.ThreadState.Stopped,
+                #              st.ThreadState.Unregistering)
+                # pe[PE.set_state_msg][state_key] += 1
+                #
+                # state_key = (cmd_runner,
+                #              target,
+                #              st.ThreadState.Unregistering,
+                #              st.ThreadState.Unregistered)
+                # pe[PE.set_state_msg][state_key] += 1
 
                 state_key = (cmd_runner,
                              target,
-                             st.ThreadState.Unregistering,
+                             st.ThreadState.Stopped,
                              st.ThreadState.Unregistered)
                 pe[PE.set_state_msg][state_key] += 1
 
@@ -19430,14 +19442,18 @@ class ConfigVerifier:
                 self.handle_set_state_reg_to_alive,
             # (st.ThreadState.Starting, st.ThreadState.Alive):
             #     self.handle_set_state_start_to_alive,
-            (st.ThreadState.Registered, st.ThreadState.Unregistering):
-                self.handle_set_state_reg_to_unregistering,
+            # (st.ThreadState.Registered, st.ThreadState.Unregistering):
+            #     self.handle_set_state_reg_to_unregistering,
             (st.ThreadState.Alive, st.ThreadState.Stopped):
                 self.handle_set_state_alive_to_stop,
-            (st.ThreadState.Stopped, st.ThreadState.Unregistering):
-                self.handle_set_state_stop_to_unreging,
-            (st.ThreadState.Unregistering, st.ThreadState.Unregistered):
-                self.handle_set_state_unreging_to_unreg,
+            # (st.ThreadState.Stopped, st.ThreadState.Unregistering):
+            #     self.handle_set_state_stop_to_unreging,
+            # (st.ThreadState.Unregistering, st.ThreadState.Unregistered):
+            #     self.handle_set_state_unreging_to_unreg,
+            (st.ThreadState.Registered, st.ThreadState.Unregistered):
+                self.handle_set_state_reg_to_unreg,
+            (st.ThreadState.Stopped, st.ThreadState.Unregistered):
+                self.handle_set_state_stop_to_unreg,
         }
 
         actions[(from_state, to_state)](cmd_runner=cmd_runner,
@@ -19595,6 +19611,21 @@ class ConfigVerifier:
         # pe[PE.subprocess_msg][sub_key] += 1
 
     ####################################################################
+    # handle_set_state_reg_to_unreg
+    ####################################################################
+    def handle_set_state_reg_to_unreg(self,
+                                      cmd_runner: str,
+                                      target: str) -> None:
+        """Determine next step for set state.
+
+        Args:
+            cmd_runner: thread name doing the state change
+            target: thread name getting its state changed
+
+        """
+        pass
+
+    ####################################################################
     # handle_set_state_alive_to_stop
     ####################################################################
     def handle_set_state_alive_to_stop(self,
@@ -19627,6 +19658,21 @@ class ConfigVerifier:
     def handle_set_state_stop_to_unreging(self,
                                           cmd_runner: str,
                                           target: str) -> None:
+        """Determine next step for set state.
+
+        Args:
+            cmd_runner: thread name doing the state change
+            target: thread name getting its state changed
+
+        """
+        pass
+
+    ####################################################################
+    # handle_set_state_alive_to_stop
+    ####################################################################
+    def handle_set_state_stop_to_unreg(self,
+                                       cmd_runner: str,
+                                       target: str) -> None:
         """Determine next step for set state.
 
         Args:
@@ -27231,51 +27277,107 @@ class TestSmartThreadErrors:
     ####################################################################
     # test_smart_thread_register_errors
     ####################################################################
-    def test_smart_thread_register_errors(self) -> None:
-        """Test error cases for SmartThread."""
+    @pytest.mark.parametrize("existing_name_arg", ['alpha', 'beta', 'charlie'])
+    @pytest.mark.parametrize("existing_thread_arg", [st.ThreadCreate.Current,
+                                                     st.ThreadCreate.Target,
+                                                     st.ThreadCreate.Thread])
+    @pytest.mark.parametrize("new_name_arg", ['alpha', 'beta', 'charlie'])
+    @pytest.mark.parametrize("new_same_thread_arg", [True, False])
+    def test_smart_thread_register_errors(self,
+                                          existing_name_arg: str,
+                                          existing_thread_arg: st.ThreadCreate,
+                                          new_name_arg: str,
+                                          new_same_thread_arg: bool
+                                          ) -> None:
+        """Test error cases for SmartThread.
+
+        Args:
+            existing_name_arg: thread name for first smart_thread
+            existing_thread_arg: first smart_thread type of thread
+            new_name_arg: thread name for second smart_thread
+            new_same_thread_arg: new smart_thread will use same thread
+
+        """
         ################################################################
-        # Create smart thread with duplicate name
+        # SmartThreadRegistrationError cases
         ################################################################
+        def f1():
+            pass
 
         logger.debug('mainline entered')
-        alpha_smart_thread = st.SmartThread(name='alpha')
 
-        with pytest.raises(st.SmartThreadAlreadyExists) as exc:
-            st.SmartThread(name='beta')
+        same_name = False
+        if existing_name_arg == new_name_arg:
+            same_name = True
 
-        exp_error_msg = (
-            f'SmartThread {threading.current_thread().name} '
-            'raising SmartThreadAlreadyExists error while '
-            'processing request smart_init. '
-            'While attempting to register a new SmartThread '
-            'with name beta and thread '
-            f'{alpha_smart_thread.thread}, it was detected that a registry '
-            'entry already exists for a SmartThread with '
-            f'the same thread {alpha_smart_thread.thread} for name alpha.')
-        assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
+        check_msg = False
 
-        print('\n', exc.value)
+        if existing_thread_arg == st.ThreadCreate.Current:
+            existing_smart_thread = st.SmartThread(name=existing_name_arg)
+            if same_name or new_same_thread_arg:
+                check_msg = True
+                with pytest.raises(st.SmartThreadRegistrationError) as exc:
+                    if new_same_thread_arg:
+                        st.SmartThread(name=new_name_arg)
+                    else:
+                        st.SmartThread(name=new_name_arg,
+                                       target=f1)
+            else:
+                st.SmartThread(name=new_name_arg,
+                               target=f1)
+        elif existing_thread_arg == st.ThreadCreate.Target:
+            existing_smart_thread = st.SmartThread(name=existing_name_arg,
+                                                   target=f1)
+            if same_name or new_same_thread_arg:
+                check_msg = True
+                with pytest.raises(st.SmartThreadRegistrationError) as exc:
+                    if new_same_thread_arg:
+                        st.SmartThread(name=new_name_arg,
+                                       thread=existing_smart_thread.thread)
+                    else:
+                        st.SmartThread(name=new_name_arg,
+                                       target=f1)
+            else:
+                st.SmartThread(name=new_name_arg,
+                               target=f1)
+        else:  # existing_thread_arg == st.ThreadCreate.Thread:
+            existing_thread = threading.Thread(target=f1)
+            existing_smart_thread = st.SmartThread(name=existing_name_arg,
+                                                   thread=existing_thread)
+            if same_name or new_same_thread_arg:
+                check_msg = True
+                with pytest.raises(st.SmartThreadRegistrationError) as exc:
+                    if new_same_thread_arg:
+                        st.SmartThread(name=new_name_arg,
+                                       thread=existing_thread)
+                    else:
+                        st.SmartThread(name=new_name_arg,
+                                       target=f1)
+            else:
+                st.SmartThread(name=new_name_arg,
+                               target=f1)
 
-        ################################################################
+        if check_msg:
+            exp_error_msg = (
+                f'SmartThread {existing_name_arg} '
+                'raising SmartThreadRegistrationError error while '
+                f'processing request smart_init. '
+                'While attempting to register a new SmartThread '
+                'instance, it was detected that another instance '
+                'already in the SmartThread registry has the same '
+                'name or is associated with the same threading '
+                'thread. '
+                f'New instance: name = {new_name_arg}, '
+                f'thread = {re.escape(existing_smart_thread.thread)}, '
+                f'id = [0-9]+.'
+                f'Existing instance: name = {existing_name_arg}, '
+                f'id = {id(existing_smart_thread)}'
+                'associated thread = '
+                f'{re.escape(existing_smart_thread.thread)}.')
 
-        with pytest.raises(st.SmartThreadNameAlreadyInUse) as exc1:
-            st.SmartThread(name='alpha')
+            assert re.fullmatch(exp_error_msg, str(exc.value))
 
-        existing_id = id(alpha_smart_thread)
-
-        exp_error_msg = (
-            'SmartThread alpha raising '
-            'SmartThreadNameAlreadyInUse error while processing '
-            'request smart_init. '
-            f'While attempting to register a new SmartThread with '
-            f'name alpha and ID [0-9]+, it was detected '
-            'that a registry entry already exists for a SmartThread '
-            f'with name alpha but a different ID of '
-            f'{existing_id}.')
-
-        assert re.fullmatch(exp_error_msg, str(exc1.value))
-
-        print('\n', exc1.value)
+            print('\n', exc.value)
 
         logger.debug('mainline exiting')
 
