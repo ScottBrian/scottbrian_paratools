@@ -46,13 +46,11 @@ states enumerated in the ThreadState class:
     [*] --> Initialized
     Initialized --> Registered : __init__
 
-    Registered --> Starting : smart_start
-    Starting -> Alive
+    Registered --> Alive : smart_start
     Alive -> Stopped : is_alive is False
-    Stopped -> Unregistering : smart_join
-    Unregistering --> Unregistered
+    Stopped -> Unregistered : smart_join
 
-    Registered -> Unregistering : smart_unreg
+    Registered -> Unregistered : smart_unreg
 
     Registered -> Alive : is_alive is True
 
@@ -581,23 +579,25 @@ class ThreadCreate(Flag):
 ########################################################################
 # ThreadState Flags Class
 # These flags are used to indicate the life cycle of a SmartThread.
-# Initialized is set in the __init__ method. The __init__ method calls
-# _register and upon return the state of Registered is set. When
-# the start method is called, the state is set to Starting, and after
-# the start is done and the thread is alive, the state is set to Alive.
-# When the join method is called and the thread becomes not alive,
-# the state is set to Stopped which then allows the _clean_registry
-# method to remove the SmartThread.
+#
+#     1) Initialized is set in the __init__ method.
+#     2) The __init__ method calls _register which sets the state to
+#        Registered
+#     3) The smart_start method starts the threading thread and sets
+#        the state is set to Alive.
+#     4) The smart_join method is sets the state from Alive to Stopped
+#        and then calls clean_registry which sets the state from Stopped
+#        to Unregistered.
+#     5) The smart_unreg method calls clean_registry which sets the
+#        state from Registered to Unregistered.
 ########################################################################
 class ThreadState(Flag):
     """Thread state flags."""
-    Unregistered = auto()
     Initialized = auto()
     Registered = auto()
-    Starting = auto()
     Alive = auto()
     Stopped = auto()
-    # Unregistering = auto()
+    Unregistered = auto()
 
 
 ########################################################################
@@ -627,7 +627,7 @@ class SmartThread:
     # TargetThread is used to override the threading.Thread run
     # method so that we can set the ThreadState directly and avoid some
     # of the asynchronous effects of starting the thread and having it
-    # finish before we can set the state from Starting to Alive
+    # finish before we can set the state to Alive
     ####################################################################
     class TargetThread(threading.Thread):
         """Thread class used for SmartThread target."""
@@ -1253,8 +1253,7 @@ class SmartThread:
             logger.debug(
                 f'name={key}, {is_alive=}, state={state}, '
                 f'smart_thread={item}')
-            # if item.st_state == ThreadState.Unregistering:
-            #     keys_to_del.append(key)
+
             if item.unregister:
                 keys_to_del.append(key)
 
@@ -1887,9 +1886,6 @@ class SmartThread:
 
         """
         if self._get_state(remote) == ThreadState.Registered:
-            # self._set_state(
-            #     target_thread=SmartThread._registry[remote],
-            #     new_state=ThreadState.Starting)
             SmartThread._registry[remote].thread.start()
             # At this point, the thread was started and the threading
             # start bootstrap method received control and set the Event
@@ -1997,9 +1993,6 @@ class SmartThread:
                     not_registered_remotes |= {remote}
                     self.work_remotes -= {remote}
                 else:
-                    # self._set_state(
-                    #     target_thread=SmartThread._registry[remote],
-                    #     new_state=ThreadState.Unregistering)
                     SmartThread._registry[remote].unregister = True
 
                     self.work_remotes -= {remote}
@@ -2194,9 +2187,7 @@ class SmartThread:
                 self._set_state(
                     target_thread=SmartThread._registry[remote],
                     new_state=ThreadState.Stopped)
-            # self._set_state(
-            #     target_thread=SmartThread._registry[remote],
-            #     new_state=ThreadState.Unregistering)
+
             SmartThread._registry[remote].unregister = True
 
         # restart while loop with one less remote
@@ -2228,32 +2219,32 @@ class SmartThread:
                 *msg_dict* allows different message to be sent to each
                 thread. *msg_dict* is mutually exclusive with *msg* and
                 *receivers*.
-            timeout: number of seconds allowed for the *smart_send* to
-                complete. The *smart_send* will send messages to the
-                remote threads only when they are alive. If any of the
-                threads to be sent messages to are in states
-                ThreadState.Unregistered, ThreadState.Initialized,
-                ThreadState.Registered, or ThreadState.Starting, then
-                *smart_send* will wait and send the message to the
-                thread as soon as it enters state ThreadState.Alive.
-                *smart_send* will raise an error if any one target
-                thread fails to achieve state ThreadState.Alive within
-                the number of seconds specified in *timeout*.
-                If *timeout* is not specified, *smart_send* will
-                continue to wait and will not raise a timeout error.
-                Note that is any target thread enters the state
-                ThreadState.Stopped, *smart_send* will raise an error
-                regardless of whether *timeout* was specified and
-                regardless of how much time has passed.
+            timeout: number of seconds allowed for the ``smart_send()``
+                to complete. The ``smart_send()`` will send messages to
+                the remote threads only when they are alive. If any of
+                the threads to be sent messages to are in states
+                ThreadState.Initialized, ThreadState.Registered, or
+                ThreadState.Unregistered, then ``smart_send()`` will
+                wait and send the message to the thread as soon as it
+                enters state ThreadState.Alive. If a timeout value
+                is in effect, ``smart_send()`` will raise an error if
+                any one target thread fails to achieve state
+                ThreadState.Alive within the timeout value.
+                If a timeout value is not in effect, ``smart_send()``
+                will continue to wait and will not raise a timeout
+                error. Note that if any target thread enters the
+                ThreadState.Stopped state before the message can be
+                sent, ``smart_send()`` will raise an error
+                immediately upon detection.
             log_msg: additional text to append to the debug log message
                 that is issued on request entry and exit
 
         Returns:
             A set of the thread names that were sent a message. Note
-            that if *smart_send* raises an error, the thread names that
-            were sent a message thus far can be recovered from field
-            *sent_targets* in the SmartThread object that issued the
-            *smart_send*.
+            that if ``smart_send()`` raises an error, the thread names
+            that were sent a message thus far can be recovered from
+            field *sent_targets* in the SmartThread object that issued
+            the ``smart_send()``.
 
         Raises:
             SmartThreadRemoteThreadNotAlive: target thread was
@@ -2268,10 +2259,11 @@ class SmartThread:
 
         .. # noqa: DAR402
 
-        *smart_send* can be used to send a single message or multiple
-        messages to single or to multiple remote threads. A message can
-        be of any type (e.g., text, int, float, list, set, dict, or
-        class object). Note that the item being sent is not copied.
+        ``smart_send()`` can be used to send a single message or
+        multiple messages to single or to multiple remote threads. A
+        message can be of any type (e.g., text, int, float, list, set,
+        dict, or class object). Note that the item being sent is not
+        copied.
 
         Examples in this section cover the following cases:
 
