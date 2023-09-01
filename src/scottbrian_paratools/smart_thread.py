@@ -822,7 +822,7 @@ class SmartThread:
         """
         self.specified_args = locals()  # used for __repr__, see below
 
-        self.debug_logging_enabled = logger.isEnabledFor(logging.DEBUG)
+        # self.debug_logging_enabled = logger.isEnabledFor(logging.DEBUG)
 
         # set the cmd_runner name if it is valid (if not valid, we raise
         # an error after we issue the smart_init entry log message with
@@ -1169,6 +1169,17 @@ class SmartThread:
                         f'id = {id(item)}, '
                         f'associated thread = {item.thread}.')
                     logger.error(error_msg)
+
+                    # If we created a new thread, then release resource.
+                    # Note that we check to ensure that the thread we
+                    # created and are about to delete is not the same
+                    # thread found in the registry, but this should
+                    # never be the case unless something like _register
+                    # was called directly instead of from __init__.
+                    if (self.thread_create == ThreadCreate.Target
+                            and self.thread is not item.thread):
+                        del self.thread
+
                     raise SmartThreadRegistrationError(error_msg)
 
             ############################################################

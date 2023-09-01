@@ -27321,13 +27321,17 @@ class TestSmartThreadErrors:
             same_name = True
 
         check_msg = False
-
+        new_thread = re.escape(f'<TargetThread({new_name_arg}, initial)>')
+        cmd_runner = threading.current_thread().name
         if existing_thread_arg == st.ThreadCreate.Current:
+            cmd_runner = existing_name_arg
             existing_smart_thread = st.SmartThread(name=existing_name_arg)
             if same_name or new_same_thread_arg:
                 check_msg = True
                 with pytest.raises(st.SmartThreadRegistrationError) as exc:
                     if new_same_thread_arg:
+                        new_thread = re.escape(
+                            str(existing_smart_thread.thread))
                         st.SmartThread(name=new_name_arg)
                     else:
                         st.SmartThread(name=new_name_arg,
@@ -27342,6 +27346,8 @@ class TestSmartThreadErrors:
                 check_msg = True
                 with pytest.raises(st.SmartThreadRegistrationError) as exc:
                     if new_same_thread_arg:
+                        new_thread = re.escape(
+                            str(existing_smart_thread.thread))
                         st.SmartThread(name=new_name_arg,
                                        thread=existing_smart_thread.thread)
                     else:
@@ -27358,6 +27364,7 @@ class TestSmartThreadErrors:
                 check_msg = True
                 with pytest.raises(st.SmartThreadRegistrationError) as exc:
                     if new_same_thread_arg:
+                        new_thread = re.escape(str(existing_thread))
                         st.SmartThread(name=new_name_arg,
                                        thread=existing_thread)
                     else:
@@ -27368,11 +27375,10 @@ class TestSmartThreadErrors:
                                target=f1)
 
         if check_msg:
-            new_thread = re.escape(str(existing_smart_thread.thread))
             existing_thread = re.escape(str(existing_smart_thread.thread))
 
             exp_error_msg = (
-                f'SmartThread {existing_name_arg} '
+                f'SmartThread {cmd_runner} '
                 'raising SmartThreadRegistrationError error while '
                 'processing request smart_init. '
                 'While attempting to register a new SmartThread '
@@ -27388,6 +27394,9 @@ class TestSmartThreadErrors:
                 f'associated thread = {existing_thread}.')
 
             logger.debug(f'{exp_error_msg=}')
+
+            act_error_msg = str(exc.value)
+            logger.debug(f'{act_error_msg=}')
 
             assert re.fullmatch(exp_error_msg, str(exc.value))
 
