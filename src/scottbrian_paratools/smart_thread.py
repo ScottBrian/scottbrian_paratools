@@ -822,8 +822,6 @@ class SmartThread:
         """
         self.specified_args = locals()  # used for __repr__, see below
 
-        # self.debug_logging_enabled = logger.isEnabledFor(logging.DEBUG)
-
         # set the cmd_runner name if it is valid (if not valid, we raise
         # an error after we issue the smart_init entry log message with
         # the current thread name)
@@ -4736,9 +4734,13 @@ class SmartThread:
                 get_formatted_call_sequence
 
         Returns:
-            the log message to use for the exit call
+            the log message to use for the exit call or empty string if
+            logging is not enabled for debug
 
         """
+        if not logger.isEnabledFor(logging.DEBUG):
+            return ''
+
         if cmd_runner is None:
             cmd_runner = threading.current_thread().name
         log_msg_body = (

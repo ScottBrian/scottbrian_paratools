@@ -2712,10 +2712,8 @@ time_match = (fr'{hour_match}:{min_sec_match}:{min_sec_match}\.'
 list_of_thread_states = ('(ThreadState.Unregistered'
                          '|ThreadState.Initialized'
                          '|ThreadState.Registered'
-                         # '|ThreadState.Starting'
                          '|ThreadState.Alive'
                          '|ThreadState.Stopped)')
-                         # '|ThreadState.Unregistering)')
 
 list_of_smart_requests = ('(smart_init'
                           '|smart_start'
@@ -18438,13 +18436,6 @@ class ConfigVerifier:
 
         pe[PE.num_targets_remaining] = len(eligible_targets)
 
-        # for target in eligible_targets:
-        #     state_key: SetStateKey = (cmd_runner,
-        #                               target,
-        #                               st.ThreadState.Registered,
-        #                               st.ThreadState.Starting)
-        #     pe[PE.set_state_msg][state_key] += 1
-
         for target in eligible_targets:
             state_key: SetStateKey = (cmd_runner,
                                       target,
@@ -18490,17 +18481,6 @@ class ConfigVerifier:
         pe[PE.current_request].completed_targets = set()
 
         for target in eligible_targets:
-            # state_key: SetStateKey = (cmd_runner,
-            #                           target,
-            #                           st.ThreadState.Registered,
-            #                           st.ThreadState.Unregistering)
-            # pe[PE.set_state_msg][state_key] += 1
-            #
-            # state_key = (cmd_runner,
-            #              target,
-            #              st.ThreadState.Unregistering,
-            #              st.ThreadState.Unregistered)
-            # pe[PE.set_state_msg][state_key] += 1
             state_key = (cmd_runner,
                          target,
                          st.ThreadState.Registered,
@@ -18581,7 +18561,6 @@ class ConfigVerifier:
                             # st.ThreadState.Unregistered,
                             st.ThreadState.Initialized,
                             st.ThreadState.Registered,
-                            # st.ThreadState.Starting,
                             st.ThreadState.Alive):
                         # either smart_join will do the _set_state or
                         # _clean_registry will do the _set_state
@@ -18593,17 +18572,6 @@ class ConfigVerifier:
                         self.log_test_msg(f'handle_request_smart_join_entry '
                                           f'bumped set_state '
                                           f'pending for {state_key=} ')
-                # state_key = (cmd_runner,
-                #              target,
-                #              st.ThreadState.Stopped,
-                #              st.ThreadState.Unregistering)
-                # pe[PE.set_state_msg][state_key] += 1
-                #
-                # state_key = (cmd_runner,
-                #              target,
-                #              st.ThreadState.Unregistering,
-                #              st.ThreadState.Unregistered)
-                # pe[PE.set_state_msg][state_key] += 1
 
                 state_key = (cmd_runner,
                              target,
@@ -19441,20 +19409,10 @@ class ConfigVerifier:
             #     self.handle_set_state_unreg_to_init,
             (st.ThreadState.Initialized, st.ThreadState.Registered):
                 self.handle_set_state_init_to_reg,
-            # (st.ThreadState.Registered, st.ThreadState.Starting):
-            #     self.handle_set_state_reg_to_start,
             (st.ThreadState.Registered, st.ThreadState.Alive):
                 self.handle_set_state_reg_to_alive,
-            # (st.ThreadState.Starting, st.ThreadState.Alive):
-            #     self.handle_set_state_start_to_alive,
-            # (st.ThreadState.Registered, st.ThreadState.Unregistering):
-            #     self.handle_set_state_reg_to_unregistering,
             (st.ThreadState.Alive, st.ThreadState.Stopped):
                 self.handle_set_state_alive_to_stop,
-            # (st.ThreadState.Stopped, st.ThreadState.Unregistering):
-            #     self.handle_set_state_stop_to_unreging,
-            # (st.ThreadState.Unregistering, st.ThreadState.Unregistered):
-            #     self.handle_set_state_unreging_to_unreg,
             (st.ThreadState.Registered, st.ThreadState.Unregistered):
                 self.handle_set_state_reg_to_unreg,
             (st.ThreadState.Stopped, st.ThreadState.Unregistered):
@@ -19529,16 +19487,6 @@ class ConfigVerifier:
         ################################################################
         # determine next step
         ################################################################
-        # @sbt - need to think about non-ThreadTarget cases ending
-        # before we get back control from the threading start method,
-        # in which case we will need to expected a set state from
-        # starting to stopped
-        # pe = self.pending_events[cmd_runner]
-        # key: SetStateKey = (cmd_runner,
-        #                     target,
-        #                     st.ThreadState.Starting,
-        #                     st.ThreadState.Alive)
-        # pe[PE.set_state_msg][key] += 1
         pass
 
     ####################################################################
@@ -21176,37 +21124,23 @@ class ConfigVerifier:
                                       f'pending for {state_key=} ')
                 else:
                     state_to_use = item.st_state
-                # if (not item.is_alive
-                #         and item.st_state == st.ThreadState.Alive):
-                #     if (pe[PE.current_request].req_type in (
-                #             st.ReqType.Smart_unreg,
-                #             st.ReqType.Smart_join)
-                #             and key in pe[PE.current_request].targets):
-                #         state_to_use = st.ThreadState.Unregistering
-                #     else:
-                #         state_to_use = st.ThreadState.Stopped
-                # else:
-                #     state_to_use = item.st_state
+
                 if (state_to_use != st.ThreadState.Unregistered
                         and state_to_use != st.ThreadState.Initialized):
                     self.pending_events[key][PE.status_msg][
                         (item.is_alive, state_to_use)] += 1
-                    # self.log_test_msg(
-                    #     f'clean_registry status key {key=}'
-                    #     f'{(item.is_alive, state_to_use)=}')
-                # if (not item.is_alive
-                #         and item.st_state == st.ThreadState.Unregistering):
+
                 if (not item.is_alive
                         and ((item.reg_to_unreg
                              and item.st_state == st.ThreadState.Registered)
                              or (item.stopped_to_unreg
-                                 and item.st_state == st.ThreadState.Stopped))):
+                                 and item.st_state
+                                 == st.ThreadState.Stopped))):
                     rem_key: RemRegKey = (
                         key,
                         request)
                     pe[PE.rem_reg_msg][rem_key] += 1
                     rem_targets.append(key)
-                    # self.log_test_msg(f'clean_registry deleting {key=}')
 
             completed: set[str] = set()
             if pe[PE.current_request].req_type in (st.ReqType.Smart_unreg,
@@ -27311,7 +27245,7 @@ class TestSmartThreadErrors:
         ################################################################
         # SmartThreadRegistrationError cases
         ################################################################
-        def f1():
+        def f1() -> None:
             pass
 
         logger.debug('mainline entered')
@@ -27375,7 +27309,7 @@ class TestSmartThreadErrors:
                                target=f1)
 
         if check_msg:
-            existing_thread = re.escape(str(existing_smart_thread.thread))
+            existing_thread_str = re.escape(str(existing_smart_thread.thread))
 
             exp_error_msg = (
                 f'SmartThread {cmd_runner} '
@@ -27391,7 +27325,7 @@ class TestSmartThreadErrors:
                 f'associated thread = {new_thread}. '
                 f'Existing instance: name = {existing_name_arg}, '
                 f'id = {id(existing_smart_thread)}, '
-                f'associated thread = {existing_thread}.')
+                f'associated thread = {existing_thread_str}.')
 
             logger.debug(f'{exp_error_msg=}')
 
@@ -31386,10 +31320,6 @@ class TestSmartThreadComboScenarios:
              "smart_thread.py::SmartThread.__init__:[0-9]+"),
             ('alpha set state for thread beta from '
              'ThreadState.Registered to ThreadState.Alive'),
-            # ('alpha set state for thread beta from '
-            #  'ThreadState.Registered to ThreadState.Starting'),
-            # ('alpha set state for thread beta from '
-            #  'ThreadState.Starting to ThreadState.Alive'),
             ("smart_start exit: requestor: alpha, targets: "
              r"\['beta'\] timeout value: None "
              "smart_thread.py::SmartThread.__init__:[0-9]+"),
@@ -31496,18 +31426,11 @@ class TestSmartThreadComboScenarios:
              'cmd_runner: alpha'),
             (r"name=alpha, is_alive=True, state=ThreadState.Alive, "
              r"smart_thread=SmartThread\(name='alpha'\)"),
-            # (r"name=beta, is_alive=False, state=ThreadState.Unregistering, "
-            #  r"smart_thread=SmartThread\(name='beta', "
-            #  r"target=f1, args=\('beta',\)\)"),
             (r"name=beta, is_alive=False, state=ThreadState.Stopped, "
              r"smart_thread=SmartThread\(name='beta', "
              r"target=f1, args=\('beta',\)\)"),
             ("alpha removed beta from registry for "
              "request: smart_join"),
-            # ('alpha set state for thread beta from '
-            #  'ThreadState.Stopped to ThreadState.Unregistering'),
-            # ('alpha set state for thread beta from '
-            #  'ThreadState.Unregistering to ThreadState.Unregistered'),
             ('alpha set state for thread beta from '
              'ThreadState.Stopped to ThreadState.Unregistered'),
             ("alpha did cleanup of registry at UTC "
@@ -31602,22 +31525,15 @@ class TestSmartThreadComboScenarios:
              "timeout value: None "
              "test_smart_thread.py::TestSmartThreadComboScenarios."
              "test_smart_thread_log_msg:[0-9]+"),
-            # ('alpha set state for thread beta from '
-            #  'ThreadState.Registered to ThreadState.Unregistering'),
             ('smart_unreg _clean_registry entry: '
              'cmd_runner: alpha'),
             (r"name=alpha, is_alive=True, state=ThreadState.Alive, "
              r"smart_thread=SmartThread\(name='alpha'\)"),
-            # (r"name=beta, is_alive=False, state=ThreadState.Unregistering, "
-            #  r"smart_thread=SmartThread\(name='beta', "
-            #  r"target=f1, args=\('beta',\)\)"),
             (r"name=beta, is_alive=False, state=ThreadState.Registered, "
              r"smart_thread=SmartThread\(name='beta', "
              r"target=f1, args=\('beta',\)\)"),
             ("alpha removed beta from registry for "
              "request: smart_unreg"),
-            # ('alpha set state for thread beta from '
-            #  'ThreadState.Unregistering to ThreadState.Unregistered'),
             ('alpha set state for thread beta from '
              'ThreadState.Registered to ThreadState.Unregistered'),
             ("alpha did cleanup of registry at UTC "
