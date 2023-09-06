@@ -43,7 +43,6 @@ from scottbrian_locking import se_lock as sel
 import scottbrian_paratools.smart_thread as st
 
 logger = logging.getLogger(__name__)
-# logger.debug('about to start the tests')
 
 
 ########################################################################
@@ -53,8 +52,6 @@ IntOrFloat: TypeAlias = Union[int, float]
 
 StrOrList: TypeAlias = Union[str, list[str]]
 StrOrSet: TypeAlias = Union[str, set[str]]
-
-ThreadStatePair: TypeAlias = tuple[st.ThreadState, st.ThreadState]
 
 SetStateKey: TypeAlias = tuple[str, str, st.ThreadState, st.ThreadState]
 
@@ -71,8 +68,6 @@ SubProcessKey: TypeAlias = tuple[str, str, str, str, str]
 RemRegKey: TypeAlias = tuple[str, str]
 
 AckKey: TypeAlias = tuple[str, str]
-
-ConfirmStopKey: TypeAlias = tuple[str, str]
 
 AlreadyUnregKey: TypeAlias = tuple[str, str]
 
@@ -436,29 +431,6 @@ class SnapShotDataItem:
     verify_data: VerifyData
 
 
-# @contextmanager
-# def conditional_registry_lock(*args, **kwds) -> None:
-#     """Obtain the connection_block lock.
-#
-#     This method is called to conditionally obtain a lock using a with
-#     statement.
-#
-#     Args:
-#         args: the lock to obtain
-#         kwds: whether to obtain the lock
-#
-#     """
-#     # if request needs the lock
-#     if kwds['obtain_tf']:
-#         kwds['lock'].obtain_excl()
-#     try:
-#         yield
-#     finally:
-#         # release the lock if it was obtained
-#         if kwds['obtain_tf']:
-#             kwds['lock'].release()
-
-
 @contextmanager
 def conditional_registry_lock(lock: sel.SELock,
                               obtain_tf: bool) -> Generator[None, None, None]:
@@ -614,11 +586,6 @@ class CmdTimedOut(ErrorTstSmartThread):
 
 class CmdFailed(ErrorTstSmartThread):
     """The cmd failed."""
-    pass
-
-
-class FailedToFindLogMsg(ErrorTstSmartThread):
-    """An expected log message was not found."""
     pass
 
 
@@ -2111,37 +2078,6 @@ class Unregister(ConfigCmd):
 ########################################################################
 # ValidateConfig
 ########################################################################
-# class ValidateConfig(ConfigCmd):
-#     """Validate the configuration."""
-#     def __init__(self,
-#                  cmd_runners: Iterable) -> None:
-#         """Initialize the instance.
-#
-#         Args:
-#             cmd_runners: thread names that will execute the command
-#         """
-#         super().__init__(cmd_runners=cmd_runners)
-#         self.specified_args = locals()  # used for __repr__
-#
-#     def run_process(self, cmd_runner: str) -> None:
-#         """Run the command.
-#
-#         Args:
-#             cmd_runner: name of thread running the command
-#         """
-#         self.config_ver.create_snapshot_data(verify_name='verify_config',
-#                                              verify_idx=self.serial_num)
-#         # self.config_ver.log_test_msg('Monitor Checkpoint: validate_config')
-#
-#         self.config_ver.verify_config_complete_event.wait()
-#         self.config_ver.verify_config_complete_event.clear()
-#
-#         # self.config_ver.validate_config()
-
-
-########################################################################
-# ValidateConfig
-########################################################################
 class VerifyConfig(ConfigCmd):
     """Validate the configuration."""
     def __init__(self,
@@ -3198,11 +3134,6 @@ class F1AppExitLogSearchItem(LogSearchItem):
 
         self.config_ver.last_thread_stop_msg_idx[target] = self.found_log_idx
 
-        # self.config_ver.log_test_msg(
-        #     f'F1AppExitLogSearchItem set {target} is_alive to False')
-
-        # self.config_ver.add_log_msg(re.escape(self.found_log_msg))
-
 
 ########################################################################
 # AlreadyUnregLogSearchItem
@@ -3791,12 +3722,6 @@ class RemStatusBlockEntryLogSearchItem(LogSearchItem):
         if pe[PE.notify_rem_status_block_msg][rem_sb_key] > 0:
             pe[PE.notify_rem_status_block_msg][rem_sb_key] -= 1
 
-        # self.config_ver.log_test_msg(
-        #     'RemStatusBlockEntryLogSearchItem decremented: new value: '
-        #     f'{pe[PE.rem_status_block_msg][rem_sb_key]=} for '
-        #     f'{cmd_runner=}, {rem_sb_key=}'
-        # )
-
         self.config_ver.add_log_msg(re.escape(self.found_log_msg),
                                     log_level=logging.DEBUG)
 
@@ -4209,10 +4134,6 @@ class DetectedStoppedRemoteLogSearchItem(LogSearchItem):
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
         remote = split_msg[4]
-
-        # pe = self.config_ver.pending_events[cmd_runner]
-
-        # ack_key: AckKey = (remote, request)
 
         self.config_ver.set_request_pending_flag(
             cmd_runner=cmd_runner,
@@ -4886,14 +4807,6 @@ class PaLogMsgsFound:
     removed_pa_entry: list[st.PairKey]
     updated_pa: bool
 
-# class TransitionType(Enum):
-#     Unreg = auto()
-#     Init = auto()
-#     Start = auto()
-#     Reg = auto()
-#     Alive = auto()
-#     Stop = auto()
-
 
 @dataclass
 class StartRequest:
@@ -4998,9 +4911,6 @@ class ConfigVerifier:
         self.specified_args = locals()  # used for __repr__, see below
         self.commander_name = commander_name
         self.commander_thread_config_built = False
-        # self.cmd_thread_alive = False
-        # self.cmd_thread_auto_start = False
-        self.create_commander_event: threading.Event = threading.Event()
 
         self.monitor_thread = threading.Thread(target=self.monitor)
         self.monitor_exit = False
@@ -5031,31 +4941,15 @@ class ConfigVerifier:
         self.caplog_to_use = caplog_to_use
         self.msgs = msgs
         self.ops_lock = threading.RLock()
-        # self.commander_thread: Optional[st.SmartThread] = None
+
         self.all_threads: dict[str, st.SmartThread] = {}
+
         self.max_msgs = max_msgs
 
         self.expected_num_recv_timeouts: int = 0
 
-        # self.del_def_pairs_count: dict[
-        #     tuple[str, str, str], int] = defaultdict(int)
-        # self.del_def_pairs_msg_count: dict[
-        #     tuple[str, str, str], int] = defaultdict(int)
-        # self.del_def_pairs_msg_ind_count: dict[
-        #     tuple[str, str, str, str], int] = defaultdict(int)
-
-        self.del_deferred_list: list[tuple[tuple[str, str], str]] = []
-
-        # self.found_utc_log_msgs: dict[tuple[str, str], int]= defaultdict(int)
-        self.found_update_pair_array_log_msgs: dict[str, int] = defaultdict(
-            int)
-        # self.recv_msg_event_items: dict[str, MonitorEventItem] = {}
-        # self.join_event_items: dict[str, MonitorEventItem] = {}
-        # self.unreg_event_items: dict[str, MonitorEventItem] = {}
-        # self.started_event_items: dict[str, MonitorEventItem] = {}
         self.stopped_event_items: dict[str, MonitorEventItem] = {}
         self.cmd_waiting_event_items: dict[str, threading.Event] = {}
-        self.request_pending_pair_keys: dict[str, list[st.PairKey]] = {}
 
         self.stopping_names: list[str] = []
 
@@ -5092,7 +4986,6 @@ class ConfigVerifier:
             CRunnerRaisesLogSearchItem(config_ver=self),
             MonitorCheckpointLogSearchItem(config_ver=self)
         )
-        self.last_update_pair_array_log_msg: str = ''
 
         self.log_found_items: deque[LogSearchItem] = deque()
 
@@ -5291,16 +5184,7 @@ class ConfigVerifier:
 
             cb = pae[cmd_runner]
             pot_key: PotentialDefDelKey = (pair_key, cmd_runner)
-            # self.log_test_msg(f'set_request_pending_flag {cmd_runner=}, '
-            #                   f'{pair_key=}, {target=}, '
-            #                   f'{self.auto_calling_refresh_msg=}, '
-            #                   f'{cb.pending_request=}, '
-            #                   f'{pending_request_flag=}, '
-            #                   f'{cb.pending_msg_count=}, '
-            #                   f'{cb.pending_wait=}, '
-            #                   f'{cb.pending_sync=}, '
-            #                   f'{pot_key=}, '
-            #                   f'{self.potential_def_del_pairs[pot_key]=} ')
+
             if (self.auto_calling_refresh_msg
                     and cb.pending_request
                     and not pending_request_flag
@@ -5478,14 +5362,10 @@ class ConfigVerifier:
         self.monitor_bail = True
         self.monitor_exit = True
         self.monitor_event.set()
-        # self.log_test_msg('abort_all_f1_threads about to join1')
-        # self.log_test_msg(f'abort_all_f1_threads '
-        #                   f'{threading.current_thread()=}')
-        # self.log_test_msg(f'abort_all_f1_threads '
-        #                   f'{self.monitor_thread=}')
+
         if threading.current_thread() is not self.monitor_thread:
-            # self.log_test_msg('abort_all_f1_threads about to join2')
             self.monitor_thread.join()
+
         self.log_test_msg('abort_all_f1_threads exit')
 
     ####################################################################
@@ -6248,7 +6128,6 @@ class ConfigVerifier:
     def build_create_suite(
             self,
             cmd_runner: Optional[str] = None,
-            commander_auto_start: Optional[bool] = True,
             f1_create_items: Optional[list[F1CreateItem]] = None,
             validate_config: Optional[bool] = True
             ) -> None:
@@ -6256,10 +6135,6 @@ class ConfigVerifier:
 
         Args:
             cmd_runner: name of thread to do the creates
-            commander_name: specifies that a commander thread is to be
-                created with this name
-            commander_auto_start: specifies whether to start the
-                commander thread during create
             f1_create_items: contain f1_names to create
             validate_config: indicates whether to do config validation
 
@@ -6375,22 +6250,15 @@ class ConfigVerifier:
                     names_to_check=names,
                     state_to_check=st.ThreadState.Alive))
         if active_names and validate_config:
-            # self.add_cmd(VerifyAlive(cmd_runners=cmd_runner,
-            #                          exp_alive_names=active_names))
             self.add_cmd(VerifyConfig(cmd_runners=cmd_runner,
                                       verify_type=VerifyType.VerifyAlive,
                                       names_to_check=active_names))
-            # self.add_cmd(VerifyState(
-            #     cmd_runners=cmd_runner,
-            #     check_state_names=active_names,
-            #     expected_state=st.ThreadState.Alive))
             self.add_cmd(VerifyConfig(cmd_runners=cmd_runner,
                                       verify_type=VerifyType.VerifyState,
                                       names_to_check=active_names,
                                       state_to_check=st.ThreadState.Alive))
 
         if validate_config:
-            # self.add_cmd(ValidateConfig(cmd_runners=cmd_runner))
             self.add_cmd(VerifyConfig(
                 cmd_runners=cmd_runner,
                 verify_type=VerifyType.VerifyStructures))
@@ -6496,24 +6364,18 @@ class ConfigVerifier:
             self.add_cmd(Join(
                 cmd_runners=cmd_runners,
                 join_names=join_target_names))
-            # self.add_cmd(VerifyInRegistryNot(
-            #     cmd_runners=cmd_runners,
-            #     exp_not_in_registry_names=join_target_names))
+
             self.add_cmd(VerifyConfig(
                 cmd_runners=cmd_runners,
                 verify_type=VerifyType.VerifyNotInRegistry,
                 names_to_check=join_target_names))
 
-            # self.add_cmd(VerifyPairedNot(
-            #     cmd_runners=cmd_runners,
-            #     exp_not_paired_names=join_target_names))
             self.add_cmd(VerifyConfig(
                 cmd_runners=cmd_runners,
                 verify_type=VerifyType.VerifyNotPaired,
                 names_to_check=join_target_names))
 
         if validate_config:
-            # self.add_cmd(ValidateConfig(cmd_runners=cmd_runners))
             self.add_cmd(VerifyConfig(
                 cmd_runners=cmd_runners,
                 verify_type=VerifyType.VerifyStructures))
@@ -6777,19 +6639,6 @@ class ConfigVerifier:
         self.add_cmd(
             Pause(cmd_runners=self.commander_name,
                   pause_seconds=pause_time))
-
-        ################################################################
-        # make sure smart_join sees the timeout_names as pending
-        ################################################################
-        # if (timeout_type != TimeoutType.TimeoutNone
-        #         and all_timeout_names):
-        #     self.add_cmd(
-        #         WaitForRequestTimeouts(
-        #             cmd_runners=self.commander_name,
-        #             actor_names=active_no_target_names[0],
-        #             timeout_names=all_timeout_names,
-        #             use_work_remotes=True,
-        #             as_subset=True))
 
         ################################################################
         # handle delay_exit_names
@@ -7376,8 +7225,6 @@ class ConfigVerifier:
         self.create_config(active_names=active_names)
 
         lock_positions: list[str] = []
-        pend_req_serial_num: int = 0
-        join_serial_num: int = 0
 
         ################################################################
         # verify all flags off
@@ -9537,8 +9384,6 @@ class ConfigVerifier:
             cmd_runner: thread name doing the check
             check_args: target name and pair_key to be checked
         """
-        # self.log_test_msg(f'check_sync_event_set entry: {cmd_runner=} '
-        #                   f'{check_args=}')
         target = check_args[0]
         pair_key = check_args[1]
         if target not in self.expected_registered:
@@ -9571,8 +9416,6 @@ class ConfigVerifier:
             cmd_runner: thread name doing the check
             check_args: target name and pair_key to be checked
         """
-        # self.log_test_msg(f'check_sync_zero_create_time: {cmd_runner=} '
-        #                   f'{check_args=}')
         sync_0 = check_args[0]
         sync_1 = check_args[1]
 
@@ -9589,10 +9432,6 @@ class ConfigVerifier:
                 f'check_sync_zero_create_time {sync_1=} not in '
                 'expected_registered')
 
-        # smart_thread = self.expected_registered[sync_0].thread
-        # if smart_thread is not None:
-        #     if pk_remote in smart_thread.work_pk_remotes:
-        #         return True
         if pk_remote in self.expected_registered[
                 sync_0].thread.work_pk_remotes:
             return True
@@ -9734,15 +9573,6 @@ class ConfigVerifier:
             var_name_for_log='resumer_names')
 
         ################################################################
-        # choose syncer_names
-        ################################################################
-        # syncer_names = self.choose_names(
-        #     name_collection=active_names_copy,
-        #     num_names_needed=num_syncers,
-        #     update_collection=True,
-        #     var_name_for_log='syncer_names')
-
-        ################################################################
         # choose del_names
         ################################################################
         del_names = self.choose_names(
@@ -9809,7 +9639,6 @@ class ConfigVerifier:
         cmd_0_name: str = ''
         cmd_0_smart_name = ''
         cmd_0_confirmer: str = ''
-        cmd_0_serial_num: int = 0
         recv_0_name: str = ''
         wait_0_name: str = ''
 
@@ -10790,20 +10619,6 @@ class ConfigVerifier:
                 join_target_names=send_exit_sender_names,
                 validate_config=False)
 
-            # if timeout_type != TimeoutType.TimeoutTrue:
-            #     for receiver in receiver_names:
-            #         for exit_name in send_exit_sender_names:
-            #             pair_key = st.SmartThread._get_pair_key(receiver,
-            #                                                     exit_name)
-            #             pe = self.pending_events[receiver]
-            #             ref_key: RefPendKey = ('smart_recv', pair_key)
-            #             pe[PE.refresh_pending_needed][ref_key] += 1
-            #             self.log_test_msg(
-            #                 'build_recv_msg_timeout_suite '
-            #                 f'{send_exit_sender_names=} set '
-            #                 f'refresh_pending_needed for {pair_key=} '
-            #                 f'{pe[PE.refresh_pending_needed][ref_key]=}')
-
         ################################################################
         # exit the nosend_exit_senders, then resurrect and do smart_send
         ################################################################
@@ -10826,20 +10641,6 @@ class ConfigVerifier:
                 cmd_runners=self.commander_name,
                 join_target_names=nosend_exit_sender_names,
                 validate_config=False)
-
-            # if timeout_type != TimeoutType.TimeoutTrue:
-            #     for receiver in receiver_names:
-            #         for exit_name in nosend_exit_sender_names:
-            #             pair_key = st.SmartThread._get_pair_key(receiver,
-            #                                                     exit_name)
-            #             pe = self.pending_events[receiver]
-            #             ref_key: RefPendKey = ('smart_recv', pair_key)
-            #             pe[PE.refresh_pending_needed][ref_key] += 1
-            #             self.log_test_msg(
-            #                 'build_recv_msg_timeout_suite '
-            #                 f'{nosend_exit_sender_names=} set '
-            #                 f'refresh_pending_needed for {pair_key=} '
-            #                 f'{pe[PE.refresh_pending_needed][ref_key]=}')
 
             f1_create_items: list[F1CreateItem] = []
             for idx, name in enumerate(nosend_exit_sender_names):
@@ -11183,10 +10984,6 @@ class ConfigVerifier:
                     join_target_names=actor_names)
 
                 for resumer_name in actor_names:
-                    # self.add_cmd(VerifyPairedHalf(
-                    #     cmd_runners=self.commander_name,
-                    #     removed_names=resumer_name,
-                    #     exp_half_paired_names=target_names))
                     self.add_cmd(VerifyConfig(
                         cmd_runners=self.commander_name,
                         verify_type=VerifyType.VerifyHalfPaired,
@@ -11493,8 +11290,6 @@ class ConfigVerifier:
         ################################################################
         for target_names in self.powerset(waiter_names.copy()):
             if target_names:
-                # target_names = list(target_names)
-
                 ########################################################
                 # get actors into reg state
                 ########################################################
@@ -12140,29 +11935,6 @@ class ConfigVerifier:
                             confirm_cmd=confirm_req,
                             confirm_serial_num=confirm_serial,
                             confirmers=target))
-                # if req_type == st.ReqType.Smart_resume:
-                #     wait_serial_num = self.add_cmd(
-                #         Wait(cmd_runners=target,
-                #              resumers=requestors,
-                #              exp_resumers=requestors))
-                #     wait_confirms.append(
-                #         ConfirmResponse(
-                #             cmd_runners=[self.commander_name],
-                #             confirm_cmd='Wait',
-                #             confirm_serial_num=wait_serial_num,
-                #             confirmers=target))
-                # elif req_type == st.ReqType.Smart_wait:
-                #     resume_serial_num = self.add_cmd(
-                #         Resume(cmd_runners=resumer,
-                #                targets=waiter_names,
-                #                exp_resumed_targets=waiter_names,
-                #                stopped_remotes=set()))
-                #     resume_confirms_before.append(
-                #         ConfirmResponse(
-                #             cmd_runners=[self.commander_name],
-                #             confirm_cmd='Resume',
-                #             confirm_serial_num=resume_serial_num,
-                #             confirmers=resumer))
             elif target in unreg_before_names:
                 self.build_create_suite(
                     f1_create_items=[F1CreateItem(name=target,
@@ -12222,19 +11994,6 @@ class ConfigVerifier:
             stopped_targets=stopped_remotes
         )
 
-        # if req_type == st.ReqType.Smart_resume:
-        #     resume_serial_num_1 = self.add_cmd(
-        #         Resume(cmd_runners=requestors,
-        #                targets=all_targets,
-        #                exp_resumed_targets=exp_resumed_targets,
-        #                stopped_remotes=stopped_remotes))
-        # elif req_type == st.ReqType.Smart_wait:
-        #     wait_serial_num_1 = self.add_cmd(
-        #         Wait(cmd_runners=waiter_names,
-        #              resumers=all_targets,
-        #              exp_resumers=exp_resumers,
-        #              stopped_remotes=stopped_remotes))
-
         ################################################################
         # confirm response now if we should have raised error for
         # stopped remotes
@@ -12260,18 +12019,6 @@ class ConfigVerifier:
                     exp_targets=exp_targets,
                     stopped_targets=stopped_remotes
                 )
-                # if req_type == st.ReqType.Smart_resume:
-                #     resume_serial_num_2 = self.add_cmd(
-                #         Resume(cmd_runners=requestors,
-                #                targets=after_targets,
-                #                exp_resumed_targets=exp_resumed_targets,
-                #                stopped_remotes=stopped_remotes))
-                # elif req_type == st.ReqType.Smart_wait:
-                #     wait_serial_num_2 = self.add_cmd(
-                #         Wait(cmd_runners=waiter_names,
-                #              resumers=after_targets,
-                #              exp_resumers=exp_resumers,
-                #              stopped_remotes=stopped_remotes))
 
         ################################################################
         # Create and start unreg_before and stop_after_ok and issue the
@@ -12302,29 +12049,6 @@ class ConfigVerifier:
                 confirm_cmd=confirm_req,
                 confirm_serial_num=confirm_serial,
                 confirmers=target))
-            # if req_type == st.ReqType.Smart_resume:
-            #     wait_serial_num = self.add_cmd(
-            #         Wait(cmd_runners=target,
-            #              resumers=requestors,
-            #              exp_resumers=requestors))
-            #     wait_confirms.append(
-            #         ConfirmResponse(
-            #             cmd_runners=[self.commander_name],
-            #             confirm_cmd='Wait',
-            #             confirm_serial_num=wait_serial_num,
-            #             confirmers=target))
-            # elif req_type == st.ReqType.Smart_wait:
-            #     resume_serial_num = self.add_cmd(
-            #         Resume(cmd_runners=resumer,
-            #                targets=waiter_names,
-            #                exp_resumed_targets=waiter_names,
-            #                stopped_remotes=set()))
-            #     resume_confirms_after.append(
-            #         ConfirmResponse(
-            #             cmd_runners=[self.commander_name],
-            #             confirm_cmd='Resume',
-            #             confirm_serial_num=resume_serial_num,
-            #             confirmers=resumer))
 
         ################################################################
         # build unreg_after and stop_after_err
@@ -12611,11 +12335,6 @@ class ConfigVerifier:
         if stop_before_names:
             stopped_remotes = stop_before_names
             exp_resumers = set(start_before_names)
-            # stopped_remotes = (stop_before_names
-            #                    + unreg_before_names
-            #                    + unreg_after_names
-            #                    + stop_after_ok_names
-            #                    + stop_after_err_names)
         else:
             stopped_remotes = (unreg_after_names
                                + stop_after_err_names)
@@ -12956,9 +12675,6 @@ class ConfigVerifier:
                 join_target_names=stopped_waiters)
 
             for stopped_no_delay_name in stopped_waiters:
-                # self.add_cmd(VerifyPairedNot(
-                #     cmd_runners=self.commander_name,
-                #     exp_not_paired_names=stopped_no_delay_name))
                 self.add_cmd(VerifyConfig(
                     cmd_runners=self.commander_name,
                     verify_type=VerifyType.VerifyNotPaired,
@@ -12987,12 +12703,6 @@ class ConfigVerifier:
         ################################################################
         # wait for resume timeouts to be known
         ################################################################
-        # if not stopped_waiters:
-        #     self.add_cmd(WaitForRequestTimeouts(
-        #         cmd_runners=self.commander_name,
-        #         actor_names=resumers,
-        #         timeout_names=timeout_names))
-
         self.add_cmd(Pause(
             cmd_runners=self.commander_name,
             pause_seconds=pause_time))
@@ -13030,16 +12740,6 @@ class ConfigVerifier:
                 Wait(cmd_runners=unreg_delay_waiters,
                      resumers=resumers,
                      exp_resumers=resumers))
-
-        ################################################################
-        # build unreg_delay_waiters smart_wait
-        ################################################################
-        # if unreg_delay_waiters:
-        #     self.build_start_suite(start_names=unreg_delay_waiters)
-        #     wait_unreg_delay_serial_num = self.add_cmd(
-        #         Wait(cmd_runners=unreg_delay_waiters,
-        #              resumers=resumers,
-        #              exp_resumers=resumers))
 
         ####################################################
         # confirm the active target waits
@@ -16895,63 +16595,42 @@ class ConfigVerifier:
                              target_rtn=outer_f1,
                              app_config=AppConfig.RemoteThreadApp)
             ]))
-        # self.add_cmd(VerifyInRegistry(
-        #     cmd_runners='alpha',
-        #     exp_in_registry_names=['alpha', 'beta', 'charlie', 'delta',
-        #                            'echo', 'fox', 'george']))
         self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
             verify_type=VerifyType.VerifyInRegistry,
             names_to_check=['alpha', 'beta', 'charlie', 'delta', 'echo',
                             'fox', 'george']))
-        # self.add_cmd(VerifyAlive(
-        #     cmd_runners='alpha',
-        #     exp_alive_names=['alpha', 'beta', 'charlie']))
+
         self.add_cmd(VerifyConfig(cmd_runners='alpha',
                                   verify_type=VerifyType.VerifyAlive,
                                   names_to_check=['alpha', 'beta', 'charlie']))
-        # self.add_cmd(VerifyAliveNot(
-        #     cmd_runners='alpha',
-        #     exp_not_alive_names=['delta', 'echo', 'fox', 'george']))
+
         self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
             verify_type=VerifyType.VerifyNotAlive,
             names_to_check=['delta', 'echo', 'fox', 'george']))
-        # self.add_cmd(VerifyActive(
-        #     cmd_runners='alpha',
-        #     exp_active_names=['alpha', 'beta', 'charlie']))
+
         self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
             verify_type=VerifyType.VerifyAliveState,
             names_to_check=['alpha', 'beta', 'charlie']))
-        # self.add_cmd(VerifyRegistered(
-        #     cmd_runners='alpha',
-        #     exp_registered_names=['delta', 'echo', 'fox', 'george']))
+
         self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
             verify_type=VerifyType.VerifyRegisteredState,
             names_to_check=['delta', 'echo', 'fox', 'george']))
-        # self.add_cmd(VerifyState(
-        #     cmd_runners='alpha',
-        #     check_state_names=['alpha', 'beta', 'charlie'],
-        #     expected_state=st.ThreadState.Alive))
+
         self.add_cmd(VerifyConfig(cmd_runners='alpha',
                                   verify_type=VerifyType.VerifyState,
                                   names_to_check=['alpha', 'beta', 'charlie'],
                                   state_to_check=st.ThreadState.Alive))
-        # self.add_cmd(VerifyState(
-        #     cmd_runners='alpha',
-        #     check_state_names=['delta', 'echo', 'fox', 'george'],
-        #     expected_state=st.ThreadState.Registered))
+
         self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
             verify_type=VerifyType.VerifyState,
             names_to_check=['delta', 'echo', 'fox', 'george'],
             state_to_check=st.ThreadState.Registered))
-        # self.add_cmd(VerifyPaired(
-        #     cmd_runners='alpha',
-        #     exp_paired_names=['alpha', 'beta', 'charlie', 'delta', 'echo',
-        #                       'fox', 'george']))
+
         self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
             verify_type=VerifyType.VerifyPaired,
@@ -16960,31 +16639,23 @@ class ConfigVerifier:
         self.add_cmd(StartThread(
             cmd_runners='alpha',
             start_names=['delta', 'echo']))
-        # self.add_cmd(VerifyAlive(
-        #     cmd_runners='alpha',
-        #     exp_alive_names=['alpha', 'beta', 'charlie', 'delta', 'echo']))
+
         self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
             verify_type=VerifyType.VerifyAlive,
             names_to_check=['alpha', 'beta', 'charlie', 'delta', 'echo']))
-        # self.add_cmd(VerifyActive(
-        #     cmd_runners='alpha',
-        #     exp_active_names=['alpha', 'beta', 'charlie', 'delta', 'echo']))
+
         self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
             verify_type=VerifyType.VerifyAliveState,
             names_to_check=['alpha', 'beta', 'charlie', 'delta', 'echo']))
-        # self.add_cmd(VerifyState(
-        #     cmd_runners='alpha',
-        #     check_state_names=['alpha', 'beta', 'charlie', 'delta', 'echo'],
-        #     expected_state=st.ThreadState.Alive))
+
         self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
             verify_type=VerifyType.VerifyState,
             names_to_check=['alpha', 'beta', 'charlie', 'delta', 'echo'],
             state_to_check=st.ThreadState.Alive))
-        # self.add_cmd(ValidateConfig(
-        #     cmd_runners='alpha'))
+
         self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
             verify_type=VerifyType.VerifyStructures))
@@ -17072,17 +16743,13 @@ class ConfigVerifier:
         self.add_cmd(StopThread(cmd_runners='alpha',
                                 stop_names=['beta', 'charlie',
                                             'delta', 'echo']))
-        # self.add_cmd(VerifyAliveNot(
-        #     cmd_runners='alpha',
-        #     exp_not_alive_names=['beta', 'charlie', 'delta', 'echo',
-        #                          'fox', 'george']))
+
         self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
             verify_type=VerifyType.VerifyNotAlive,
             names_to_check=['beta', 'charlie', 'delta', 'echo', 'fox',
                             'george']))
-        # self.add_cmd(ValidateConfig(
-        #     cmd_runners='alpha'))
+
         self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
             verify_type=VerifyType.VerifyStructures))
@@ -17090,8 +16757,7 @@ class ConfigVerifier:
             cmd_runners='alpha',
             join_names=['beta', 'charlie', 'delta', 'echo'],
             log_msg='Join test log message 7'))
-        # self.add_cmd(ValidateConfig(
-        #     cmd_runners='alpha'))
+
         self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
             verify_type=VerifyType.VerifyStructures))
@@ -17099,15 +16765,12 @@ class ConfigVerifier:
             cmd_runners='alpha',
             unregister_targets=['fox', 'george'],
             log_msg='Unregister test log message 8'))
-        # self.add_cmd(VerifyInRegistryNot(
-        #     cmd_runners='alpha',
-        #     exp_not_in_registry_names=['fox', 'george']))
+
         self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
             verify_type=VerifyType.VerifyNotInRegistry,
             names_to_check=['fox', 'george']))
-        # self.add_cmd(ValidateConfig(
-        #     cmd_runners='alpha'))
+
         self.add_cmd(VerifyConfig(
             cmd_runners='alpha',
             verify_type=VerifyType.VerifyStructures))
@@ -17203,9 +16866,7 @@ class ConfigVerifier:
         self.add_cmd(
             StartThread(cmd_runners=self.commander_name,
                         start_names=start_names))
-        # self.add_cmd(VerifyActive(
-        #         cmd_runners=self.commander_name,
-        #         exp_active_names=start_names))
+
         self.add_cmd(VerifyConfig(
             cmd_runners=self.commander_name,
             verify_type=VerifyType.VerifyAliveState,
@@ -17413,23 +17074,18 @@ class ConfigVerifier:
 
         self.add_cmd(Unregister(cmd_runners=self.commander_name,
                                 unregister_targets=names))
-        # self.add_cmd(VerifyInRegistryNot(
-        #     cmd_runners=self.commander_name,
-        #     exp_not_in_registry_names=names))
+
         self.add_cmd(VerifyConfig(
             cmd_runners=self.commander_name,
             verify_type=VerifyType.VerifyNotInRegistry,
             names_to_check=names))
-        # self.add_cmd(VerifyPairedNot(
-        #     cmd_runners=self.commander_name,
-        #     exp_not_paired_names=names))
+
         self.add_cmd(VerifyConfig(
             cmd_runners=self.commander_name,
             verify_type=VerifyType.VerifyNotPaired,
             names_to_check=names))
 
         if validate_config:
-            # self.add_cmd(ValidateConfig(cmd_runners=self.commander_name))
             self.add_cmd(VerifyConfig(
                 cmd_runners=self.commander_name,
                 verify_type=VerifyType.VerifyStructures))
@@ -17536,22 +17192,6 @@ class ConfigVerifier:
                 AutoStartDecision.auto_start_yes)
         else:
             auto_start_decision = AutoStartDecision.auto_start_no
-
-        # with self.ops_lock:
-        #     self.expected_registered[name] = ThreadTracker(
-        #         thread=None,
-        #         is_alive=False,
-        #         exiting=False,
-        #         is_auto_started=auto_start,
-        #         is_TargetThread=is_thread_target,
-        #         exp_init_is_alive=False,
-        #         exp_init_thread_state=st.ThreadState.Registered,
-        #         thread_create=thread_create,
-        #         auto_start_decision=auto_start_decision,
-        #         # st_state=st.ThreadState.Unregistered,
-        #         st_state=st.ThreadState.Initialized,
-        #         found_del_pairs=defaultdict(int)
-        #     )
 
         pe = self.pending_events[cmd_runner]
         pe[PE.start_request].append(StartRequest(
@@ -17752,55 +17392,6 @@ class ConfigVerifier:
 
             self.completed_cmds[f1_name].append(cmd.serial_num)
 
-    # ####################################################################
-    # # find_log_msgs
-    # ####################################################################
-    # def find_log_msgs(self,
-    #                   search_msgs: StrOrList,
-    #                   num_instances: int = 1) -> bool:
-    #     """Find the requested log message in the log.
-    #
-    #     Args:
-    #         search_msgs: list of message to be found
-    #         num_instances: number of instances to be found
-    #
-    #     """
-    #     if isinstance(search_msgs, str):
-    #         search_msgs = [search_msgs]
-    #     work_msgs: list[re.Pattern] = []
-    #     for msg in search_msgs:
-    #         work_msgs.append(re.compile(re.escape(msg)))
-    #     num_tries_remaining = 2
-    #     while num_tries_remaining:
-    #         num_tries_remaining -= 1
-    #         found_idxes: list[int] = []
-    #         for idx in range(len(work_msgs)):
-    #             found_idxes.append(0)
-    #         for log_tuple in self.caplog_to_use.record_tuples:
-    #             for idx, msg in enumerate(work_msgs):
-    #                 if msg.match(log_tuple[2]):
-    #                     found_idxes[idx] += 1
-    #                     # if len(found_idxes) == len(work_msgs):
-    #                     #     return True
-    #         failed_instance_count = False
-    #         for cnt in found_idxes:
-    #             if cnt != num_instances:
-    #                 failed_instance_count = True
-    #                 break
-    #
-    #         if failed_instance_count:
-    #             if num_tries_remaining:
-    #                 time.sleep(1.5)
-    #                 continue
-    #             return False
-    #
-    #         if num_tries_remaining == 1:
-    #             return True
-    #         else:
-    #             assert False
-    #
-    #     return True
-
     ####################################################################
     # get_log_msg
     ####################################################################
@@ -17822,7 +17413,6 @@ class ConfigVerifier:
         Returns:
             the log message if found, otherwise an empty string
         """
-        # search_pattern: re.Pattern = re.compile(search_msg)
         search_pattern = re.compile(search_msg)
         num_skipped = 0
         work_log = self.caplog_to_use.record_tuples.copy()
@@ -18162,7 +17752,7 @@ class ConfigVerifier:
             true_senders = list(recvd_msgs.keys())
             timeout_senders = senders - set(true_senders)
 
-            for reset_sender in timeout_senders:
+            for _ in timeout_senders:
                 self.dec_recv_timeout()
 
             self.add_log_msg(
@@ -18264,22 +17854,6 @@ class ConfigVerifier:
                     f'log msg: {log_msg}')
 
             pe[PE.current_request] = req_start_item
-
-            # self.log_test_msg(
-            #     'handle_request_entry_exit_log_msg looking at '
-            #     f'{req_start_item.req_type.value=}')
-            # if req_start_item.req_type.value in ('smart_send',
-            #                                      'smart_recv',
-            #                                      'smart_wait',
-            #                                      'smart_resume',
-            #                                      'smart_sync'):
-            #     # self.log_test_msg(
-            #     #     'handle_request_entry_exit_log_msg calling '
-            #     #     f'set_request_pending_flag for {cmd_runner=}, '
-            #     #     f'{targets=}, {set(targets)=}')
-            #     self.set_request_pending_flag(cmd_runner=cmd_runner,
-            #                                   targets=set(targets),
-            #                                   pending_request_flag=True)
 
         ################################################################
         # call handler for request
@@ -18547,11 +18121,6 @@ class ConfigVerifier:
         pe[PE.current_request].completed_targets = set()
         for target in eligible_targets:
             if target in self.expected_registered:
-                # if self.expected_registered[
-                #         target].st_state == st.ThreadState.Stopped:
-                #     stop_key: ConfirmStopKey = (cmd_runner, target)
-                #     pe[PE.confirm_stop_msg][stop_key] += 1
-                # else:
                 if self.expected_registered[
                         target].st_state != st.ThreadState.Stopped:
                     # the thread may have not yet been started, but we
@@ -18643,15 +18212,6 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
 
-        # if pe[PE.current_request].timeout_type == TimeoutType.TimeoutTrue:
-        #     timeout_remotes = pe[PE.current_request].timeout_remotes
-        # else:
-        #     timeout_remotes = set()
-        #
-        # eligible_targets = (pe[PE.current_request].targets.copy()
-        #                     - timeout_remotes
-        #                     - pe[PE.current_request].stopped_remotes)
-
         for target in pe[PE.current_request].exp_receivers:
             ack_key: AckKey = (target, 'smart_send')
 
@@ -18689,19 +18249,9 @@ class ConfigVerifier:
         ################################################################
         pe = self.pending_events[cmd_runner]
 
-        # if pe[PE.current_request].timeout_type == TimeoutType.TimeoutTrue:
-        #     timeout_remotes = pe[PE.current_request].timeout_remotes
-        # else:
-        #     timeout_remotes = set()
-
-        # eligible_targets = (pe[PE.current_request].targets.copy()
-        #                     - timeout_remotes
-        #                     - pe[PE.current_request].stopped_remotes)
         eligible_targets = pe[PE.current_request].exp_senders.copy()
-        # self.log_test_msg(
-        #     f'handle_request_smart_recv_entry {eligible_targets=}')
+
         for target in eligible_targets:
-            # self.log_test_msg(f'handle_request_smart_recv_entry {target=}')
             ack_key: AckKey = (target, 'smart_recv')
 
             pe[PE.ack_msg][ack_key] += 1
@@ -18737,16 +18287,6 @@ class ConfigVerifier:
         # determine next step
         ################################################################
         pe = self.pending_events[cmd_runner]
-
-        # if pe[PE.current_request].timeout_type == TimeoutType.TimeoutTrue:
-        #     timeout_remotes = pe[PE.current_request].timeout_remotes
-        # else:
-        #     timeout_remotes = set()
-
-        # eligible_targets = (pe[PE.current_request].targets.copy()
-        #                     - timeout_remotes
-        #                     - pe[PE.current_request].stopped_remotes
-        #                     - pe[PE.current_request].deadlock_remotes)
 
         eligible_targets = pe[PE.current_request].exp_resumers.copy()
         for target in eligible_targets:
@@ -18945,9 +18485,6 @@ class ConfigVerifier:
 
         pe[PE.rem_reg_msg][rem_key] -= 1
         self.add_log_msg(re.escape(log_msg))
-
-        # @sbt
-        # del self.expected_registered[rem_name]
 
     ####################################################################
     # handle_add_pair_array_log_msg
@@ -19508,12 +19045,6 @@ class ConfigVerifier:
         # next step is to add entry to pair array
         ################################################################
         pe = self.pending_events[cmd_runner]
-        # sub_key: SubProcessKey = (cmd_runner,
-        #                           'smart_init',
-        #                           '_add_to_pair_array',
-        #                           'entry',
-        #                           target)
-        # pe[PE.subprocess_msg][sub_key] += 1
         if pe[PE.current_request].req_type == st.ReqType.Smart_start:
             pe[PE.num_targets_remaining] -= 1
 
@@ -19552,16 +19083,6 @@ class ConfigVerifier:
 
         """
         pass
-        ################################################################
-        # next step is register
-        ################################################################
-        # pe = self.pending_events[cmd_runner]
-        # sub_key: SubProcessKey = (cmd_runner,
-        #                           'smart_unreg',
-        #                           '_clean_registry',
-        #                           'entry',
-        #                           target)
-        # pe[PE.subprocess_msg][sub_key] += 1
 
     ####################################################################
     # handle_set_state_reg_to_unreg
@@ -19592,18 +19113,6 @@ class ConfigVerifier:
 
         """
         self.expected_registered[target].is_alive = False
-
-        ################################################################
-        # next step is register
-        ################################################################
-        # pe = self.pending_events[cmd_runner]
-        # if pe[PE.current_request].req_type == st.ReqType.Smart_join:
-        #     sub_key: SubProcessKey = (cmd_runner,
-        #                               'smart_join',
-        #                               '_clean_registry',
-        #                               'entry',
-        #                               target)
-        #     pe[PE.subprocess_msg][sub_key] += 1
 
     ####################################################################
     # handle_set_state_alive_to_stop
@@ -20273,13 +19782,6 @@ class ConfigVerifier:
         pending_msg = (
             r" Remotes that are pending: \[([a-z0-9_]*|,|'| )*\].")
 
-        # if stopped_remotes:
-        #     stopped_msg = re.escape(
-        #         ' Remotes that are stopped: '
-        #         f'{sorted(stopped_remotes)}.')
-        # else:
-        #     stopped_msg = ''
-
         if stopped_remotes:
             sp_search = r"\[(,| "
             for name in stopped_remotes:
@@ -20289,9 +19791,6 @@ class ConfigVerifier:
                            f'{sp_search}.')
         else:
             stopped_msg = ''
-
-        # stopped_msg = (
-        #     r" Remotes that are stopped: \[([a-z0-9_]*|,|'| )*\].")
 
         if unreg_remotes:
             unreg_msg = re.escape(
@@ -20740,23 +20239,6 @@ class ConfigVerifier:
                 cmd.run_process(cmd_runner=self.commander_name)
                 self.completed_cmds[self.commander_name].append(cmd.serial_num)
 
-    # ####################################################################
-    # # set_pending_status_msgs
-    # ####################################################################
-    # def set_pending_status_msgs(self) -> None:
-    #     """Set the expected status msgs displayed from reg cleanup."""
-    #     self.log_test_msg('set_pending_status_msgs entered with '
-    #                       f'{self.expected_registered=}')
-    #     for name, item in self.expected_registered.items():
-    #         if name == self.commander_name:
-    #             continue
-    #         if not item.is_alive and item.st_state == st.ThreadState.Alive:
-    #             state_to_use = st.ThreadState.Stopped
-    #         else:
-    #             state_to_use = item.st_state
-    #         self.pending_events[name].status_msg[
-    #             (item.is_alive, state_to_use)] += 1
-
     ####################################################################
     # set_recv_timeout
     ####################################################################
@@ -20987,8 +20469,6 @@ class ConfigVerifier:
 
             # one or both need to be removed from pair_array
             pae = self.expected_pairs[pair_key]
-            # self.log_test_msg('clean_pair_array processing '
-            #                   f'{pair_key=}')
 
             for name in pair_key:
                 pending_request = False
@@ -21030,11 +20510,6 @@ class ConfigVerifier:
 
                     else:
                         del pae[name]
-                        # self.log_test_msg(
-                        #     f'clean_pair_array about to increment '
-                        #     f'{pe[PE.rem_status_block_msg][rem_sb_key]=} '
-                        #     f'for {cmd_runner=} with {rem_sb_key=}'
-                        # )
                         pe[PE.rem_status_block_msg][rem_sb_key] += 1
                         self.log_test_msg('clean_pair_array removed '
                                           f'{pair_key=}, {name=}, '
@@ -21088,17 +20563,6 @@ class ConfigVerifier:
                         and not item.is_alive):
                     state_to_use = st.ThreadState.Stopped
 
-                    # we need to set pending set_state since the current
-                    # cmd_runner will be doing a set state for this
-                    # item. But, smart_join processing will normally
-                    # do the set_state, if no one else does it first.
-                    # So, we need to find any smart_joins that
-                    # already added a pending set_state and back it out
-                    # since this cmd_runner beat them to it.
-                    # if not (pe[PE.current_request].req_type
-                    #         == st.ReqType.Smart_join
-                    #         and key in pe[
-                    #             PE.current_request].eligible_targets):
                     target = key
 
                     state_key: SetStateKey = (cmd_runner,
@@ -21165,18 +20629,12 @@ class ConfigVerifier:
 
             if pe[PE.current_request].req_type in (st.ReqType.Smart_unreg,
                                                    st.ReqType.Smart_join):
-                # if pe[PE.current_request].first_round_completed:
-                #     pe[PE.current_request].first_round_completed = set()
-                # else:
                 s_com = sorted(completed)
 
                 uj_key: UnregJoinSuccessKey = (
                     pe[PE.current_request].req_type.value,
                     s_com[0])
                 pe[PE.unreg_join_success_msg][uj_key] += 1
-                # self.log_test_msg(
-                #     'clean_registry added '
-                #     f'unreg_join_success_msg with {uj_key=}')
 
                 if pe[PE.current_request].req_type == st.ReqType.Smart_join:
                     all_targets = pe[PE.current_request].targets.copy()
@@ -21185,18 +20643,6 @@ class ConfigVerifier:
 
                     prog_key: JoinProgKey = (len(completed), len(remaining))
                     pe[PE.join_progress_msg][prog_key] += 1
-                    # self.log_test_msg(
-                    #     'clean_registry added '
-                    #     f'join_progress_msg with {prog_key=}')
-
-            # self.log_test_msg(
-            #     f'clean_registry has '
-            #     f'{len(pe[PE.current_request].completed_targets)=} and '
-            #     f'{len(pe[PE.current_request].targets)=}')
-            # self.log_test_msg(
-            #     f'clean_registry has '
-            #     f'{pe[PE.current_request].completed_targets=} and '
-            #     f'{pe[PE.current_request].targets=}')
 
             if (len(pe[PE.current_request].completed_targets)
                     < len(pe[PE.current_request].eligible_targets)):
@@ -21245,16 +20691,6 @@ class ConfigVerifier:
             VerifyType.VerifyPendingFlags: self.verify_pending_flags,
 
         }
-
-        # actions[verify_data.verify_type](
-        #     cmd_runner=verify_data.cmd_runner,
-        #     names_to_check=verify_data.names_to_check,
-        #     aux_names=verify_data.aux_names,
-        #     state_to_check=verify_data.state_to_check,
-        #     real_reg_items=self.snap_shot_data[verify_idx].registry_items,
-        #     real_pair_array_items=self.snap_shot_data[
-        #         verify_idx].pair_array_items
-        # )
         actions[verify_data.verify_type](
             real_reg_items=self.snap_shot_data[verify_idx].registry_items,
             real_pair_array_items=self.snap_shot_data[
@@ -21772,7 +21208,6 @@ class ConfigVerifier:
             mismatch between the real and mock configuration
 
         """
-        # pair_keys = combinations(sorted(verify_data.names_to_check), 2)
         pair_keys = self.get_pair_keys(verify_data.names_to_check)
         for pair_key in pair_keys:
             if pair_key not in real_pair_array_items:
@@ -27016,6 +26451,634 @@ class TestSmartThreadSmokeTest:
     """Test class for SmartThread scenarios."""
 
     ####################################################################
+    # test_smart_thread_log_msg
+    ####################################################################
+    @pytest.mark.parametrize("log_level_arg", [logging.DEBUG,
+                                               logging.INFO,
+                                               logging.WARNING,
+                                               logging.ERROR,
+                                               logging.CRITICAL,
+                                               logging.NOTSET])
+    # @pytest.mark.seltest
+    def test_smart_thread_log_msg(
+            self,
+            log_level_arg: int,
+            caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test smart_thread logging.
+
+        Args:
+            log_level_arg: logging level to set
+            caplog: pytest fixture to capture log output
+
+        Notes:
+            1) pytest.ini log_cli_level sets the root level - it
+               overrides the level set by basicConfig in conftest
+            2) if pytest.ini log_cli_level is not set, conftest sets the
+               level
+            3) if conftest is not specified, the level defaults to
+               WARNING
+            4) logging.getLogger('scottbrian_paratools').setLevel(
+               logging.DEBUG) overrides the root setting, whether the
+               default set by conftest or set by pytest.ini
+            5) logging.getLogger('scottbrian_paratools.smart_thread')
+               .setLevel(logging.INFO) overrides all of the above.
+            6) Basic strategy is to not specify the level with 4 or 5 -
+               just let the application set the level using basicConfig
+
+        """
+        ################################################################
+        # add_log_msgs
+        ################################################################
+        def add_log_msgs(log_msgs: StrOrList,
+                         log_name: str,
+                         log_level: int) -> None:
+            """Add log message to log ver if log level is active.
+
+            Args:
+                log_msgs: messages to add
+                log_name: name of log it is associated with
+                log_level: log level of the msg
+            """
+            if isinstance(log_msgs, str):
+                log_msgs = [log_msgs]
+
+            if log_level_arg <= log_level:
+                for a_log_msg in log_msgs:
+                    log_ver.add_msg(log_level=log_level,
+                                    log_msg=a_log_msg,
+                                    log_name=log_name,
+                                    fullmatch=True)
+
+        ################################################################
+        # f1
+        ################################################################
+        def f1(thread_name: str) -> None:
+            """F1 routine.
+
+            Args:
+                thread_name: name of f1
+            """
+            log_msg_f1 = f'f1 entered for {thread_name}'
+            add_log_msgs(log_msgs=log_msg_f1,
+                         log_level=logging.DEBUG,
+                         log_name=test_log_name)
+            logger.debug(log_msg_f1)
+
+            time.sleep(1)
+
+            f1_st.smart_recv(senders='alpha')
+
+            f1_st.smart_wait(resumers='alpha')
+
+            f1_st.smart_sync(targets='alpha')
+
+            ############################################################
+            # exit
+            ############################################################
+            log_msg_f1 = f'f1 exiting for {thread_name}'
+            add_log_msgs(log_msgs=log_msg_f1,
+                         log_level=logging.DEBUG,
+                         log_name=test_log_name)
+            logger.debug(log_msg_f1)
+
+        ################################################################
+        # Set up log verification and start tests
+        # The following code gets the root logger from the
+        # logging Manager dictionary using the parent of smart_thread.
+        # This is not the way it would normally be done, but it suits
+        # our purpose to test that the log messages are being issued or
+        # suppressed correctly based on logging levels.
+        ################################################################
+        manager_logger = logging.Logger.manager.loggerDict[
+            'scottbrian_paratools']
+
+        if isinstance(manager_logger, logging.PlaceHolder):
+            raise InvalidConfigurationDetected(
+                'test_smart_thread_log_msg detected that the manager '
+                'logger for scottbrian_paratoold is a PlaceHolder')
+
+        my_root = manager_logger.parent
+
+        if my_root is None:
+            raise InvalidConfigurationDetected(
+                'test_smart_thread_log_msg failed to find logger for '
+                'scottbrian_paratools parent')
+
+        my_root.setLevel(log_level_arg)
+
+        commander_name = 'alpha'
+        f1_name = 'beta'
+        log_ver = LogVer(log_name=__name__)
+        log_ver.add_call_seq(name=commander_name,
+                             seq=get_formatted_call_sequence())
+
+        test_log_name = __name__
+        smart_thread_log_name = 'scottbrian_paratools.smart_thread'
+
+        log_msg = f'{my_root.name=}, {my_root.level=}'
+        add_log_msgs(log_msgs=log_msg,
+                     log_level=max(log_level_arg, logging.DEBUG),
+                     log_name=test_log_name)
+        logger.log(level=max(log_level_arg, logging.DEBUG), msg=log_msg)
+
+        log_msg = 'mainline entered'
+        add_log_msgs(log_msgs=log_msg,
+                     log_level=logging.WARN,
+                     log_name=test_log_name)
+        logger.warning(log_msg)
+
+        ################################################################
+        # start commander
+        ################################################################
+        commander_thread = st.SmartThread(
+            name=commander_name,
+            max_msgs=10)
+
+        f1_st = st.SmartThread(
+            name=f1_name,
+            target=f1,
+            args=(f1_name, ),
+            max_msgs=10)
+
+        commander_thread.smart_send(receivers='beta',
+                                    msg='alpha sends to beta')
+
+        commander_thread.smart_resume(waiters='beta')
+
+        commander_thread.smart_sync(targets='beta')
+
+        commander_thread.smart_join(targets='beta')
+
+        f1_st = st.SmartThread(
+            name=f1_name,
+            target=f1,
+            args=(f1_name,),
+            auto_start=False)
+
+        commander_thread.smart_unreg(targets='beta')
+
+        ################################################################
+        # alpha_smart_init_alpha_debug_log_msgs
+        ################################################################
+        alpha_smart_init_alpha_debug_log_msgs = [
+            ("smart_init entry: requestor: alpha, targets: "
+             r"\['alpha'\] timeout value: None "
+             "test_smart_thread.py::TestSmartThreadSmokeTest."
+             "test_smart_thread_log_msg:[0-9]+"),
+            # ('alpha set state for thread alpha from '
+            #  'ThreadState.Unregistered to ThreadState.Initialized'),
+            ('smart_init _register entry: cmd_runner: alpha, '
+             'target: alpha'),
+            ('smart_init _clean_registry entry: '
+             'cmd_runner: alpha'),
+            ('smart_init _clean_registry exit: '
+             'cmd_runner: alpha'),
+            ('smart_init _clean_pair_array entry: '
+             'cmd_runner: alpha'),
+            ('smart_init _clean_pair_array exit: '
+             'cmd_runner: alpha'),
+            ('alpha added alpha to SmartThread registry at UTC '
+             f'{time_match}'),
+            ('alpha set state for thread alpha from '
+             'ThreadState.Initialized to ThreadState.Registered'),
+            ('alpha set state for thread alpha from '
+             'ThreadState.Registered to ThreadState.Alive'),
+            ('smart_init _add_to_pair_array entry: '
+             'cmd_runner: alpha, target: alpha'),
+            ('smart_init _add_to_pair_array exit: '
+             'cmd_runner: alpha, target: alpha'),
+            ('smart_init _register exit: cmd_runner: alpha, '
+             'target: alpha'),
+            ("smart_init exit: requestor: alpha, targets: "
+             r"\['alpha'\] timeout value: None "
+             "test_smart_thread.py::TestSmartThreadSmokeTest."
+             "test_smart_thread_log_msg:[0-9]+")
+        ]
+
+        ################################################################
+        # alpha_smart_init_alpha_debug_log_msgs
+        ################################################################
+        alpha_smart_init_alpha_info_log_msgs = [
+            ('alpha completed initialization of alpha: ThreadCreate.Current, '
+             'ThreadState.Alive, auto_start obviated.')
+        ]
+
+        ################################################################
+        # alpha_first_smart_init_beta_debug_log_msgs
+        ################################################################
+        alpha_first_smart_init_beta_debug_log_msgs = [
+            ("smart_init entry: requestor: alpha, targets: "
+             r"\['beta'\] timeout value: None "
+             "test_smart_thread.py::TestSmartThreadSmokeTest."
+             "test_smart_thread_log_msg:[0-9]+"),
+            # ('alpha set state for thread beta from '
+            #  'ThreadState.Unregistered to ThreadState.Initialized'),
+            ('smart_init _register entry: cmd_runner: alpha, '
+             'target: beta'),
+            ('smart_init _clean_registry entry: '
+             'cmd_runner: alpha'),
+            (r"name=alpha, is_alive=True, state=ThreadState.Alive, "
+             r"smart_thread=SmartThread\(name='alpha'\)"),
+            ('smart_init _clean_registry exit: '
+             'cmd_runner: alpha'),
+            ('smart_init _clean_pair_array entry: '
+             'cmd_runner: alpha'),
+            ('smart_init _clean_pair_array exit: '
+             'cmd_runner: alpha'),
+            ('alpha added beta to SmartThread registry at UTC '
+             f'{time_match}'),
+            ('alpha set state for thread beta from '
+             'ThreadState.Initialized to ThreadState.Registered'),
+            ('smart_init _add_to_pair_array entry: '
+             'cmd_runner: alpha, target: beta'),
+            (r"alpha added PairKey\(name0='alpha', name1='beta'\) to the "
+             "_pair_array"),
+            ("alpha added status_blocks entry "
+             r"for PairKey\(name0='alpha', name1='beta'\), name = alpha"),
+            ("alpha added status_blocks entry "
+             r"for PairKey\(name0='alpha', name1='beta'\), name = beta"),
+            ('alpha updated _pair_array at UTC '
+             f'{time_match}'),
+            ('smart_init _add_to_pair_array exit: '
+             'cmd_runner: alpha, target: beta'),
+            ('smart_init _register exit: cmd_runner: alpha, '
+             'target: beta'),
+            ("smart_start entry: requestor: alpha, targets: "
+             r"\['beta'\] timeout value: None "
+             "smart_thread.py::SmartThread.__init__:[0-9]+"),
+            ('alpha set state for thread beta from '
+             'ThreadState.Registered to ThreadState.Alive'),
+            ("smart_start exit: requestor: alpha, targets: "
+             r"\['beta'\] timeout value: None "
+             "smart_thread.py::SmartThread.__init__:[0-9]+"),
+            ("smart_init exit: requestor: alpha, targets: "
+             r"\['beta'\] timeout value: None "
+             "test_smart_thread.py::TestSmartThreadSmokeTest."
+             "test_smart_thread_log_msg:[0-9]+")
+        ]
+
+        ################################################################
+        # alpha_first_smart_init_beta_info_log_msgs
+        ################################################################
+        alpha_first_smart_init_beta_info_log_msgs = [
+            ('alpha completed initialization of beta: ThreadCreate.Target, '
+             'ThreadState.Registered, auto_start will proceed.')
+        ]
+
+        ################################################################
+        # alpha_smart_send_debug_log_msgs
+        ################################################################
+        alpha_smart_send_debug_log_msgs = [
+            ("smart_send entry: requestor: alpha, targets: "
+             r"\['beta'\] timeout value: None "
+             "test_smart_thread.py::TestSmartThreadSmokeTest."
+             "test_smart_thread_log_msg:[0-9]+"),
+            ("alpha smart_send setup complete for targets: "
+             r"\[PairKeyRemote\(pair_key=PairKey\(name0='alpha', "
+             r"name1='beta'\), remote='beta', "
+             r"create_time=[0-9]+\.[0-9]+\)\]"),
+            ("smart_send exit: requestor: alpha, targets: "
+             r"\['beta'\] timeout value: None "
+             "test_smart_thread.py::TestSmartThreadSmokeTest."
+             "test_smart_thread_log_msg:[0-9]+")
+        ]
+
+        ################################################################
+        # alpha_smart_send_info_log_msgs
+        ################################################################
+        alpha_smart_send_info_log_msgs = [
+            'alpha smart_send sent message to beta'
+        ]
+
+        ################################################################
+        # alpha_smart_resume_debug_log_msgs
+        ################################################################
+        alpha_smart_resume_debug_log_msgs = [
+            (r"smart_resume entry: requestor: alpha, targets: \['beta'\] "
+             "timeout value: None "
+             "test_smart_thread.py::TestSmartThreadSmokeTest"
+             ".test_smart_thread_log_msg:[0-9]+"),
+            ("alpha smart_resume setup complete for targets: "
+             r"\[PairKeyRemote\(pair_key=PairKey\(name0='alpha', "
+             r"name1='beta'\), remote='beta', "
+             r"create_time=[0-9]+\.[0-9]+\)\]"),
+            (r"smart_resume exit: requestor: alpha, targets: \['beta'\] "
+             "timeout value: None "
+             "test_smart_thread.py::TestSmartThreadSmokeTest"
+             ".test_smart_thread_log_msg:[0-9]+")
+        ]
+
+        ################################################################
+        # alpha_smart_resume_info_log_msgs
+        ################################################################
+        alpha_smart_resume_info_log_msgs = [
+            'alpha smart_resume resumed beta',
+        ]
+
+        ################################################################
+        # alpha_smart_sync_debug_log_msgs
+        ################################################################
+        alpha_smart_sync_debug_log_msgs = [
+            (r"smart_sync entry: requestor: alpha, targets: \['beta'\] "
+             "timeout value: None "
+             "test_smart_thread.py::TestSmartThreadSmokeTest."
+             "test_smart_thread_log_msg:[0-9]+"),
+            ("alpha smart_sync setup complete for targets: "
+             r"\[PairKeyRemote\(pair_key=PairKey\(name0='alpha', "
+             r"name1='beta'\), remote='beta', "
+             r"create_time=[0-9]+\.[0-9]+\)\]"),
+            (r"smart_sync exit: requestor: alpha, targets: \['beta'\] timeout "
+             "value: None test_smart_thread.py::TestSmartThreadSmokeTest."
+             "test_smart_thread_log_msg:[0-9]+")
+        ]
+        ################################################################
+        # alpha_smart_sync_info_log_msgs
+        ################################################################
+        alpha_smart_sync_info_log_msgs = [
+            'alpha smart_sync set event for beta',
+            'alpha smart_sync achieved with beta'
+        ]
+
+        ################################################################
+        # alpha_smart_join_debug_log_msgs
+        ################################################################
+        alpha_smart_join_debug_log_msgs = [
+            ("smart_join entry: requestor: alpha, targets: "
+             r"\['beta'\] timeout value: None "
+             "test_smart_thread.py::TestSmartThreadSmokeTest."
+             "test_smart_thread_log_msg:[0-9]+"),
+            ('alpha set state for thread beta from '
+             'ThreadState.Alive to '
+             'ThreadState.Stopped'),
+            ('smart_join _clean_registry entry: '
+             'cmd_runner: alpha'),
+            (r"name=alpha, is_alive=True, state=ThreadState.Alive, "
+             r"smart_thread=SmartThread\(name='alpha'\)"),
+            (r"name=beta, is_alive=False, state=ThreadState.Stopped, "
+             r"smart_thread=SmartThread\(name='beta', "
+             r"target=f1, args=\('beta',\)\)"),
+            ("alpha removed beta from registry for "
+             "request: smart_join"),
+            ('alpha set state for thread beta from '
+             'ThreadState.Stopped to ThreadState.Unregistered'),
+            ("alpha did cleanup of registry at UTC "
+             fr"{time_match}, deleted \['beta'\]"),
+            ('smart_join _clean_registry exit: '
+             'cmd_runner: alpha'),
+            ('smart_join _clean_pair_array entry: '
+             'cmd_runner: alpha'),
+            ("alpha removed status_blocks entry for "
+             r"PairKey\(name0='alpha', name1='beta'\), name = alpha"),
+            ("alpha removed status_blocks entry for "
+             r"PairKey\(name0='alpha', name1='beta'\), name = beta"),
+            ("alpha removed _pair_array entry for "
+             r"PairKey\(name0='alpha', name1='beta'\)"),
+            ('alpha did cleanup of _pair_array at UTC '
+             f'{time_match}'),
+            ('smart_join _clean_pair_array exit: '
+             'cmd_runner: alpha'),
+            ("smart_join exit: requestor: alpha, targets: "
+             r"\['beta'\] timeout value: None "
+             "test_smart_thread.py::TestSmartThreadSmokeTest."
+             "test_smart_thread_log_msg:[0-9]+")
+        ]
+
+        ################################################################
+        # alpha_smart_join_info_log_msgs
+        ################################################################
+        alpha_smart_join_info_log_msgs = [
+            r"alpha did successful smart_join of \['beta'\].",
+            ("alpha smart_join completed targets: "
+             r"\['beta'\], pending targets: \[\]")
+        ]
+
+        ################################################################
+        # alpha_second_smart_init_beta_debug_log_msgs
+        ################################################################
+        alpha_second_smart_init_beta_debug_log_msgs = [
+            ("smart_init entry: requestor: alpha, targets: "
+             r"\['beta'\] timeout value: None "
+             "test_smart_thread.py::TestSmartThreadSmokeTest."
+             "test_smart_thread_log_msg:[0-9]+"),
+            # ('alpha set state for thread beta from '
+            #  'ThreadState.Unregistered to ThreadState.Initialized'),
+            ('smart_init _register entry: cmd_runner: alpha, '
+             'target: beta'),
+            ('smart_init _clean_registry entry: '
+             'cmd_runner: alpha'),
+            (r"name=alpha, is_alive=True, state=ThreadState.Alive, "
+             r"smart_thread=SmartThread\(name='alpha'\)"),
+            ('smart_init _clean_registry exit: '
+             'cmd_runner: alpha'),
+            ('smart_init _clean_pair_array entry: '
+             'cmd_runner: alpha'),
+            ('smart_init _clean_pair_array exit: '
+             'cmd_runner: alpha'),
+            ('alpha added beta to SmartThread registry at UTC '
+             f'{time_match}'),
+            ('alpha set state for thread beta from '
+             'ThreadState.Initialized to ThreadState.Registered'),
+            ('smart_init _add_to_pair_array entry: '
+             'cmd_runner: alpha, target: beta'),
+            (r"alpha added PairKey\(name0='alpha', name1='beta'\) to the "
+             "_pair_array"),
+            ("alpha added status_blocks entry "
+             r"for PairKey\(name0='alpha', name1='beta'\), name = alpha"),
+            ("alpha added status_blocks entry "
+             r"for PairKey\(name0='alpha', name1='beta'\), name = beta"),
+            ('alpha updated _pair_array at UTC '
+             f'{time_match}'),
+            ('smart_init _add_to_pair_array exit: '
+             'cmd_runner: alpha, target: beta'),
+            ('smart_init _register exit: cmd_runner: alpha, '
+             'target: beta'),
+            ("smart_init exit: requestor: alpha, targets: "
+             r"\['beta'\] timeout value: None "
+             "test_smart_thread.py::TestSmartThreadSmokeTest."
+             "test_smart_thread_log_msg:[0-9]+")
+        ]
+
+        ################################################################
+        # alpha_second_smart_init_beta_debug_log_msgs
+        ################################################################
+        alpha_second_smart_init_beta_info_log_msgs = [
+            ('alpha completed initialization of beta: ThreadCreate.Target, '
+             'ThreadState.Registered, auto_start not requested.')
+        ]
+        ################################################################
+        # alpha_smart_unreg_beta_debug_log_msgs
+        ################################################################
+        alpha_smart_unreg_beta_debug_log_msgs = [
+            (r"smart_unreg entry: requestor: alpha, targets: \['beta'\] "
+             "timeout value: None "
+             "test_smart_thread.py::TestSmartThreadSmokeTest."
+             "test_smart_thread_log_msg:[0-9]+"),
+            ('smart_unreg _clean_registry entry: '
+             'cmd_runner: alpha'),
+            (r"name=alpha, is_alive=True, state=ThreadState.Alive, "
+             r"smart_thread=SmartThread\(name='alpha'\)"),
+            (r"name=beta, is_alive=False, state=ThreadState.Registered, "
+             r"smart_thread=SmartThread\(name='beta', "
+             r"target=f1, args=\('beta',\)\)"),
+            ("alpha removed beta from registry for "
+             "request: smart_unreg"),
+            ('alpha set state for thread beta from '
+             'ThreadState.Registered to ThreadState.Unregistered'),
+            ("alpha did cleanup of registry at UTC "
+             fr"{time_match}, deleted \['beta'\]"),
+            ('smart_unreg _clean_registry exit: '
+             'cmd_runner: alpha'),
+            ('smart_unreg _clean_pair_array entry: '
+             'cmd_runner: alpha'),
+            ("alpha removed status_blocks entry for "
+             r"PairKey\(name0='alpha', name1='beta'\), name = alpha"),
+            ("alpha removed status_blocks entry for "
+             r"PairKey\(name0='alpha', name1='beta'\), name = beta"),
+            ("alpha removed _pair_array entry for "
+             r"PairKey\(name0='alpha', name1='beta'\)"),
+            ('alpha did cleanup of _pair_array at UTC '
+             f'{time_match}'),
+            ('smart_unreg _clean_pair_array exit: '
+             'cmd_runner: alpha'),
+            (r"smart_unreg exit: requestor: alpha, targets: \['beta'\] "
+             "timeout value: None "
+             "test_smart_thread.py::TestSmartThreadSmokeTest."
+             "test_smart_thread_log_msg:[0-9]+")
+        ]
+
+        ################################################################
+        # alpha_smart_unreg_info_log_msgs
+        ################################################################
+        alpha_smart_unreg_info_log_msgs = [
+            ("alpha did successful smart_unreg of "
+             r"\['beta'\].")
+        ]
+
+        ################################################################
+        # add all alpha debug and info log msgs
+        ################################################################
+        add_log_msgs(
+            log_msgs=(alpha_smart_init_alpha_debug_log_msgs
+                      + alpha_first_smart_init_beta_debug_log_msgs
+                      + alpha_smart_send_debug_log_msgs
+                      + alpha_smart_resume_debug_log_msgs
+                      + alpha_smart_sync_debug_log_msgs
+                      + alpha_smart_join_debug_log_msgs
+                      + alpha_second_smart_init_beta_debug_log_msgs
+                      + alpha_smart_unreg_beta_debug_log_msgs
+                      ),
+            log_level=logging.DEBUG,
+            log_name=smart_thread_log_name)
+
+        add_log_msgs(
+            log_msgs=(alpha_smart_init_alpha_info_log_msgs
+                      + alpha_first_smart_init_beta_info_log_msgs
+                      + alpha_smart_send_info_log_msgs
+                      + alpha_smart_resume_info_log_msgs
+                      + alpha_smart_sync_info_log_msgs
+                      + alpha_smart_join_info_log_msgs
+                      + alpha_second_smart_init_beta_info_log_msgs
+                      + alpha_smart_unreg_info_log_msgs
+                      ),
+            log_level=logging.INFO,
+            log_name=smart_thread_log_name)
+
+        ################################################################
+        # beta_smart_recv_debug_log_msgs
+        ################################################################
+        beta_smart_recv_debug_log_msgs = [
+            ("smart_recv entry: requestor: beta, targets: "
+             r"\['alpha'\] timeout value: None "
+             "test_smart_thread.py::f1:[0-9]+"),
+            ("beta smart_recv setup complete for targets: "
+             r"\[PairKeyRemote\(pair_key=PairKey\(name0='alpha', "
+             r"name1='beta'\), remote='alpha', "
+             r"create_time=[0-9]+\.[0-9]+\)\]"),
+            ("smart_recv exit: requestor: beta, targets: "
+             r"\['alpha'\] timeout value: None "
+             "test_smart_thread.py::f1:[0-9]+")
+        ]
+
+        ################################################################
+        # beta_smart_recv_info_log_msgs
+        ################################################################
+        beta_smart_recv_info_log_msgs = [
+            'beta smart_recv received 1 msg from alpha',
+        ]
+
+        ################################################################
+        # beta_smart_wait_debug_log_msgs
+        ################################################################
+        beta_smart_wait_debug_log_msgs = [
+            (r"smart_wait entry: requestor: beta, targets: \['alpha'\] "
+             "timeout value: None test_smart_thread.py::f1:[0-9]+"),
+            ("beta smart_wait setup complete for targets: "
+             r"\[PairKeyRemote\(pair_key=PairKey\(name0='alpha', "
+             r"name1='beta'\), remote='alpha', "
+             r"create_time=[0-9]+\.[0-9]+\)\]"),
+            (r"smart_wait exit: requestor: beta, targets: \['alpha'\] "
+             "timeout value: None test_smart_thread.py::f1:[0-9]+")
+        ]
+
+        ################################################################
+        # beta_smart_wait_info_log_msgs
+        ################################################################
+        beta_smart_wait_info_log_msgs = [
+            'beta smart_wait resumed by alpha',
+        ]
+
+        ################################################################
+        # beta_smart_sync_debug_log_msgs
+        ################################################################
+        beta_smart_sync_debug_log_msgs = [
+            (r"smart_sync entry: requestor: beta, targets: \['alpha'\] "
+             "timeout value: None test_smart_thread.py::f1:[0-9]+"),
+            ("beta smart_sync setup complete for targets: "
+             r"\[PairKeyRemote\(pair_key=PairKey\(name0='alpha', "
+             r"name1='beta'\), remote='alpha', "
+             r"create_time=[0-9]+\.[0-9]+\)\]"),
+            (r"smart_sync exit: requestor: beta, targets: \['alpha'\] timeout "
+             "value: None test_smart_thread.py::f1:[0-9]+")
+        ]
+
+        ################################################################
+        # beta_smart_sync_info_log_msgs
+        ################################################################
+        beta_smart_sync_info_log_msgs = [
+            'beta smart_sync set event for alpha',
+            'beta smart_sync achieved with alpha'
+        ]
+
+        ################################################################
+        # add all beta debug and info log msgs
+        ################################################################
+        add_log_msgs(
+            log_msgs=(beta_smart_recv_debug_log_msgs
+                      + beta_smart_wait_debug_log_msgs
+                      + beta_smart_sync_debug_log_msgs
+                      ),
+            log_level=logging.DEBUG,
+            log_name=smart_thread_log_name)
+
+        add_log_msgs(
+            log_msgs=(beta_smart_recv_info_log_msgs
+                      + beta_smart_wait_info_log_msgs
+                      + beta_smart_sync_info_log_msgs
+                      ),
+            log_level=logging.INFO,
+            log_name=smart_thread_log_name)
+
+        ################################################################
+        # check log results
+        ################################################################
+        match_results = log_ver.get_match_results(caplog=caplog)
+        log_ver.print_match_results(match_results)
+        log_ver.verify_log_results(match_results)
+
+        logger.warning('mainline exiting')
+
+    ####################################################################
     # test_smart_thread_simple_scenarios
     ####################################################################
     @pytest.mark.parametrize("commander_config_arg",
@@ -30922,14 +30985,6 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("conflict_deadlock_2_arg", deadlock_arg_list)
     @pytest.mark.parametrize("conflict_deadlock_3_arg", deadlock_arg_list)
     @pytest.mark.parametrize("num_cd_actors_arg", [3, 6, 9, 12])
-    # @pytest.mark.parametrize("conflict_deadlock_1_arg",
-    #                          [DeadlockScenario.SendSyncRecv])
-    # @pytest.mark.parametrize("conflict_deadlock_2_arg",
-    #                          [DeadlockScenario.SyncDeadlock])
-    # @pytest.mark.parametrize("conflict_deadlock_3_arg",
-    #                          [DeadlockScenario.RecvDeadlock])
-    # @pytest.mark.parametrize("num_cd_actors_arg", [8])
-    # @pytest.mark.seltest
     def test_deadlock_scenario(
             self,
             conflict_deadlock_1_arg: DeadlockScenario,
@@ -31060,634 +31115,6 @@ class TestSmartThreadComboScenarios:
             commander_config=commander_config[total_counts
                                               % num_commander_configs]
         )
-
-    ####################################################################
-    # test_smart_thread_log_msg
-    ####################################################################
-    @pytest.mark.parametrize("log_level_arg", [logging.DEBUG,
-                                               logging.INFO,
-                                               logging.WARNING,
-                                               logging.ERROR,
-                                               logging.CRITICAL,
-                                               logging.NOTSET])
-    # @pytest.mark.seltest
-    def test_smart_thread_log_msg(
-            self,
-            log_level_arg: int,
-            caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """Test smart_thread logging.
-
-        Args:
-            log_level_arg: logging level to set
-            caplog: pytest fixture to capture log output
-
-        Notes:
-            1) pytest.ini log_cli_level sets the root level - it
-               overrides the level set by basicConfig in conftest
-            2) if pytest.ini log_cli_level is not set, conftest sets the
-               level
-            3) if conftest is not specified, the level defaults to
-               WARNING
-            4) logging.getLogger('scottbrian_paratools').setLevel(
-               logging.DEBUG) overrides the root setting, whether the
-               default set by conftest or set by pytest.ini
-            5) logging.getLogger('scottbrian_paratools.smart_thread')
-               .setLevel(logging.INFO) overrides all of the above.
-            6) Basic strategy is to not specify the level with 4 or 5 -
-               just let the application set the level using basicConfig
-
-        """
-        ################################################################
-        # add_log_msgs
-        ################################################################
-        def add_log_msgs(log_msgs: StrOrList,
-                         log_name: str,
-                         log_level: int) -> None:
-            """Add log message to log ver if log level is active.
-
-            Args:
-                log_msgs: messages to add
-                log_name: name of log it is associated with
-                log_level: log level of the msg
-            """
-            if isinstance(log_msgs, str):
-                log_msgs = [log_msgs]
-
-            if log_level_arg <= log_level:
-                for a_log_msg in log_msgs:
-                    log_ver.add_msg(log_level=log_level,
-                                    log_msg=a_log_msg,
-                                    log_name=log_name,
-                                    fullmatch=True)
-
-        ################################################################
-        # f1
-        ################################################################
-        def f1(thread_name: str) -> None:
-            """F1 routine.
-
-            Args:
-                thread_name: name of f1
-            """
-            log_msg_f1 = f'f1 entered for {thread_name}'
-            add_log_msgs(log_msgs=log_msg_f1,
-                         log_level=logging.DEBUG,
-                         log_name=test_log_name)
-            logger.debug(log_msg_f1)
-
-            time.sleep(1)
-
-            f1_st.smart_recv(senders='alpha')
-
-            f1_st.smart_wait(resumers='alpha')
-
-            f1_st.smart_sync(targets='alpha')
-
-            ############################################################
-            # exit
-            ############################################################
-            log_msg_f1 = f'f1 exiting for {thread_name}'
-            add_log_msgs(log_msgs=log_msg_f1,
-                         log_level=logging.DEBUG,
-                         log_name=test_log_name)
-            logger.debug(log_msg_f1)
-
-        ################################################################
-        # Set up log verification and start tests
-        # The following code gets the root logger from the
-        # logging Manager dictionary using the parent of smart_thread.
-        # This is not the way it would normally be done, but it suits
-        # our purpose to test that the log messages are being issued or
-        # suppressed correctly based on logging levels.
-        ################################################################
-        manager_logger = logging.Logger.manager.loggerDict[
-            'scottbrian_paratools']
-
-        if isinstance(manager_logger, logging.PlaceHolder):
-            raise InvalidConfigurationDetected(
-                'test_smart_thread_log_msg detected that the manager '
-                'logger for scottbrian_paratoold is a PlaceHolder')
-
-        my_root = manager_logger.parent
-
-        if my_root is None:
-            raise InvalidConfigurationDetected(
-                'test_smart_thread_log_msg failed to find logger for '
-                'scottbrian_paratools parent')
-
-        my_root.setLevel(log_level_arg)
-
-        commander_name = 'alpha'
-        f1_name = 'beta'
-        log_ver = LogVer(log_name=__name__)
-        log_ver.add_call_seq(name=commander_name,
-                             seq=get_formatted_call_sequence())
-
-        test_log_name = __name__
-        smart_thread_log_name = 'scottbrian_paratools.smart_thread'
-
-        log_msg = f'{my_root.name=}, {my_root.level=}'
-        add_log_msgs(log_msgs=log_msg,
-                     log_level=max(log_level_arg, logging.DEBUG),
-                     log_name=test_log_name)
-        logger.log(level=max(log_level_arg, logging.DEBUG), msg=log_msg)
-
-        log_msg = 'mainline entered'
-        add_log_msgs(log_msgs=log_msg,
-                     log_level=logging.WARN,
-                     log_name=test_log_name)
-        logger.warning(log_msg)
-
-        ################################################################
-        # start commander
-        ################################################################
-        commander_thread = st.SmartThread(
-            name=commander_name,
-            max_msgs=10)
-
-        f1_st = st.SmartThread(
-            name=f1_name,
-            target=f1,
-            args=(f1_name, ),
-            max_msgs=10)
-
-        commander_thread.smart_send(receivers='beta',
-                                    msg='alpha sends to beta')
-
-        commander_thread.smart_resume(waiters='beta')
-
-        commander_thread.smart_sync(targets='beta')
-
-        commander_thread.smart_join(targets='beta')
-
-        f1_st = st.SmartThread(
-            name=f1_name,
-            target=f1,
-            args=(f1_name,),
-            auto_start=False)
-
-        commander_thread.smart_unreg(targets='beta')
-
-        ################################################################
-        # alpha_smart_init_alpha_debug_log_msgs
-        ################################################################
-        alpha_smart_init_alpha_debug_log_msgs = [
-            ("smart_init entry: requestor: alpha, targets: "
-             r"\['alpha'\] timeout value: None "
-             "test_smart_thread.py::TestSmartThreadComboScenarios."
-             "test_smart_thread_log_msg:[0-9]+"),
-            # ('alpha set state for thread alpha from '
-            #  'ThreadState.Unregistered to ThreadState.Initialized'),
-            ('smart_init _register entry: cmd_runner: alpha, '
-             'target: alpha'),
-            ('smart_init _clean_registry entry: '
-             'cmd_runner: alpha'),
-            ('smart_init _clean_registry exit: '
-             'cmd_runner: alpha'),
-            ('smart_init _clean_pair_array entry: '
-             'cmd_runner: alpha'),
-            ('smart_init _clean_pair_array exit: '
-             'cmd_runner: alpha'),
-            ('alpha added alpha to SmartThread registry at UTC '
-             f'{time_match}'),
-            ('alpha set state for thread alpha from '
-             'ThreadState.Initialized to ThreadState.Registered'),
-            ('alpha set state for thread alpha from '
-             'ThreadState.Registered to ThreadState.Alive'),
-            ('smart_init _add_to_pair_array entry: '
-             'cmd_runner: alpha, target: alpha'),
-            ('smart_init _add_to_pair_array exit: '
-             'cmd_runner: alpha, target: alpha'),
-            ('smart_init _register exit: cmd_runner: alpha, '
-             'target: alpha'),
-            ("smart_init exit: requestor: alpha, targets: "
-             r"\['alpha'\] timeout value: None "
-             "test_smart_thread.py::TestSmartThreadComboScenarios."
-             "test_smart_thread_log_msg:[0-9]+")
-        ]
-
-        ################################################################
-        # alpha_smart_init_alpha_debug_log_msgs
-        ################################################################
-        alpha_smart_init_alpha_info_log_msgs = [
-            ('alpha completed initialization of alpha: ThreadCreate.Current, '
-             'ThreadState.Alive, auto_start obviated.')
-        ]
-
-        ################################################################
-        # alpha_first_smart_init_beta_debug_log_msgs
-        ################################################################
-        alpha_first_smart_init_beta_debug_log_msgs = [
-            ("smart_init entry: requestor: alpha, targets: "
-             r"\['beta'\] timeout value: None "
-             "test_smart_thread.py::TestSmartThreadComboScenarios."
-             "test_smart_thread_log_msg:[0-9]+"),
-            # ('alpha set state for thread beta from '
-            #  'ThreadState.Unregistered to ThreadState.Initialized'),
-            ('smart_init _register entry: cmd_runner: alpha, '
-             'target: beta'),
-            ('smart_init _clean_registry entry: '
-             'cmd_runner: alpha'),
-            (r"name=alpha, is_alive=True, state=ThreadState.Alive, "
-             r"smart_thread=SmartThread\(name='alpha'\)"),
-            ('smart_init _clean_registry exit: '
-             'cmd_runner: alpha'),
-            ('smart_init _clean_pair_array entry: '
-             'cmd_runner: alpha'),
-            ('smart_init _clean_pair_array exit: '
-             'cmd_runner: alpha'),
-            ('alpha added beta to SmartThread registry at UTC '
-             f'{time_match}'),
-            ('alpha set state for thread beta from '
-             'ThreadState.Initialized to ThreadState.Registered'),
-            ('smart_init _add_to_pair_array entry: '
-             'cmd_runner: alpha, target: beta'),
-            (r"alpha added PairKey\(name0='alpha', name1='beta'\) to the "
-             "_pair_array"),
-            ("alpha added status_blocks entry "
-             r"for PairKey\(name0='alpha', name1='beta'\), name = alpha"),
-            ("alpha added status_blocks entry "
-             r"for PairKey\(name0='alpha', name1='beta'\), name = beta"),
-            ('alpha updated _pair_array at UTC '
-             f'{time_match}'),
-            ('smart_init _add_to_pair_array exit: '
-             'cmd_runner: alpha, target: beta'),
-            ('smart_init _register exit: cmd_runner: alpha, '
-             'target: beta'),
-            ("smart_start entry: requestor: alpha, targets: "
-             r"\['beta'\] timeout value: None "
-             "smart_thread.py::SmartThread.__init__:[0-9]+"),
-            ('alpha set state for thread beta from '
-             'ThreadState.Registered to ThreadState.Alive'),
-            ("smart_start exit: requestor: alpha, targets: "
-             r"\['beta'\] timeout value: None "
-             "smart_thread.py::SmartThread.__init__:[0-9]+"),
-            ("smart_init exit: requestor: alpha, targets: "
-             r"\['beta'\] timeout value: None "
-             "test_smart_thread.py::TestSmartThreadComboScenarios."
-             "test_smart_thread_log_msg:[0-9]+")
-        ]
-
-        ################################################################
-        # alpha_first_smart_init_beta_info_log_msgs
-        ################################################################
-        alpha_first_smart_init_beta_info_log_msgs = [
-            ('alpha completed initialization of beta: ThreadCreate.Target, '
-             'ThreadState.Registered, auto_start will proceed.')
-        ]
-
-        ################################################################
-        # alpha_smart_send_debug_log_msgs
-        ################################################################
-        alpha_smart_send_debug_log_msgs = [
-            ("smart_send entry: requestor: alpha, targets: "
-             r"\['beta'\] timeout value: None "
-             "test_smart_thread.py::TestSmartThreadComboScenarios."
-             "test_smart_thread_log_msg:[0-9]+"),
-            ("alpha smart_send setup complete for targets: "
-             r"\[PairKeyRemote\(pair_key=PairKey\(name0='alpha', "
-             r"name1='beta'\), remote='beta', "
-             r"create_time=[0-9]+\.[0-9]+\)\]"),
-            ("smart_send exit: requestor: alpha, targets: "
-             r"\['beta'\] timeout value: None "
-             "test_smart_thread.py::TestSmartThreadComboScenarios."
-             "test_smart_thread_log_msg:[0-9]+")
-        ]
-
-        ################################################################
-        # alpha_smart_send_info_log_msgs
-        ################################################################
-        alpha_smart_send_info_log_msgs = [
-            'alpha smart_send sent message to beta'
-        ]
-
-        ################################################################
-        # alpha_smart_resume_debug_log_msgs
-        ################################################################
-        alpha_smart_resume_debug_log_msgs = [
-            (r"smart_resume entry: requestor: alpha, targets: \['beta'\] "
-             "timeout value: None "
-             "test_smart_thread.py::TestSmartThreadComboScenarios"
-             ".test_smart_thread_log_msg:[0-9]+"),
-            ("alpha smart_resume setup complete for targets: "
-             r"\[PairKeyRemote\(pair_key=PairKey\(name0='alpha', "
-             r"name1='beta'\), remote='beta', "
-             r"create_time=[0-9]+\.[0-9]+\)\]"),
-            (r"smart_resume exit: requestor: alpha, targets: \['beta'\] "
-             "timeout value: None "
-             "test_smart_thread.py::TestSmartThreadComboScenarios"
-             ".test_smart_thread_log_msg:[0-9]+")
-        ]
-
-        ################################################################
-        # alpha_smart_resume_info_log_msgs
-        ################################################################
-        alpha_smart_resume_info_log_msgs = [
-            'alpha smart_resume resumed beta',
-        ]
-
-        ################################################################
-        # alpha_smart_sync_debug_log_msgs
-        ################################################################
-        alpha_smart_sync_debug_log_msgs = [
-            (r"smart_sync entry: requestor: alpha, targets: \['beta'\] "
-             "timeout value: None "
-             "test_smart_thread.py::TestSmartThreadComboScenarios."
-             "test_smart_thread_log_msg:[0-9]+"),
-            ("alpha smart_sync setup complete for targets: "
-             r"\[PairKeyRemote\(pair_key=PairKey\(name0='alpha', "
-             r"name1='beta'\), remote='beta', "
-             r"create_time=[0-9]+\.[0-9]+\)\]"),
-            (r"smart_sync exit: requestor: alpha, targets: \['beta'\] timeout "
-             "value: None test_smart_thread.py::TestSmartThreadComboScenarios."
-             "test_smart_thread_log_msg:[0-9]+")
-        ]
-        ################################################################
-        # alpha_smart_sync_info_log_msgs
-        ################################################################
-        alpha_smart_sync_info_log_msgs = [
-            'alpha smart_sync set event for beta',
-            'alpha smart_sync achieved with beta'
-        ]
-
-        ################################################################
-        # alpha_smart_join_debug_log_msgs
-        ################################################################
-        alpha_smart_join_debug_log_msgs = [
-            ("smart_join entry: requestor: alpha, targets: "
-             r"\['beta'\] timeout value: None "
-             "test_smart_thread.py::TestSmartThreadComboScenarios."
-             "test_smart_thread_log_msg:[0-9]+"),
-            ('alpha set state for thread beta from '
-             'ThreadState.Alive to '
-             'ThreadState.Stopped'),
-            ('smart_join _clean_registry entry: '
-             'cmd_runner: alpha'),
-            (r"name=alpha, is_alive=True, state=ThreadState.Alive, "
-             r"smart_thread=SmartThread\(name='alpha'\)"),
-            (r"name=beta, is_alive=False, state=ThreadState.Stopped, "
-             r"smart_thread=SmartThread\(name='beta', "
-             r"target=f1, args=\('beta',\)\)"),
-            ("alpha removed beta from registry for "
-             "request: smart_join"),
-            ('alpha set state for thread beta from '
-             'ThreadState.Stopped to ThreadState.Unregistered'),
-            ("alpha did cleanup of registry at UTC "
-             fr"{time_match}, deleted \['beta'\]"),
-            ('smart_join _clean_registry exit: '
-             'cmd_runner: alpha'),
-            ('smart_join _clean_pair_array entry: '
-             'cmd_runner: alpha'),
-            ("alpha removed status_blocks entry for "
-             r"PairKey\(name0='alpha', name1='beta'\), name = alpha"),
-            ("alpha removed status_blocks entry for "
-             r"PairKey\(name0='alpha', name1='beta'\), name = beta"),
-            ("alpha removed _pair_array entry for "
-             r"PairKey\(name0='alpha', name1='beta'\)"),
-            ('alpha did cleanup of _pair_array at UTC '
-             f'{time_match}'),
-            ('smart_join _clean_pair_array exit: '
-             'cmd_runner: alpha'),
-            ("smart_join exit: requestor: alpha, targets: "
-             r"\['beta'\] timeout value: None "
-             "test_smart_thread.py::TestSmartThreadComboScenarios."
-             "test_smart_thread_log_msg:[0-9]+")
-        ]
-
-        ################################################################
-        # alpha_smart_join_info_log_msgs
-        ################################################################
-        alpha_smart_join_info_log_msgs = [
-            r"alpha did successful smart_join of \['beta'\].",
-            ("alpha smart_join completed targets: "
-             r"\['beta'\], pending targets: \[\]")
-        ]
-
-        ################################################################
-        # alpha_second_smart_init_beta_debug_log_msgs
-        ################################################################
-        alpha_second_smart_init_beta_debug_log_msgs = [
-            ("smart_init entry: requestor: alpha, targets: "
-             r"\['beta'\] timeout value: None "
-             "test_smart_thread.py::TestSmartThreadComboScenarios."
-             "test_smart_thread_log_msg:[0-9]+"),
-            # ('alpha set state for thread beta from '
-            #  'ThreadState.Unregistered to ThreadState.Initialized'),
-            ('smart_init _register entry: cmd_runner: alpha, '
-             'target: beta'),
-            ('smart_init _clean_registry entry: '
-             'cmd_runner: alpha'),
-            (r"name=alpha, is_alive=True, state=ThreadState.Alive, "
-             r"smart_thread=SmartThread\(name='alpha'\)"),
-            ('smart_init _clean_registry exit: '
-             'cmd_runner: alpha'),
-            ('smart_init _clean_pair_array entry: '
-             'cmd_runner: alpha'),
-            ('smart_init _clean_pair_array exit: '
-             'cmd_runner: alpha'),
-            ('alpha added beta to SmartThread registry at UTC '
-             f'{time_match}'),
-            ('alpha set state for thread beta from '
-             'ThreadState.Initialized to ThreadState.Registered'),
-            ('smart_init _add_to_pair_array entry: '
-             'cmd_runner: alpha, target: beta'),
-            (r"alpha added PairKey\(name0='alpha', name1='beta'\) to the "
-             "_pair_array"),
-            ("alpha added status_blocks entry "
-             r"for PairKey\(name0='alpha', name1='beta'\), name = alpha"),
-            ("alpha added status_blocks entry "
-             r"for PairKey\(name0='alpha', name1='beta'\), name = beta"),
-            ('alpha updated _pair_array at UTC '
-             f'{time_match}'),
-            ('smart_init _add_to_pair_array exit: '
-             'cmd_runner: alpha, target: beta'),
-            ('smart_init _register exit: cmd_runner: alpha, '
-             'target: beta'),
-            ("smart_init exit: requestor: alpha, targets: "
-             r"\['beta'\] timeout value: None "
-             "test_smart_thread.py::TestSmartThreadComboScenarios."
-             "test_smart_thread_log_msg:[0-9]+")
-        ]
-
-        ################################################################
-        # alpha_second_smart_init_beta_debug_log_msgs
-        ################################################################
-        alpha_second_smart_init_beta_info_log_msgs = [
-            ('alpha completed initialization of beta: ThreadCreate.Target, '
-             'ThreadState.Registered, auto_start not requested.')
-        ]
-        ################################################################
-        # alpha_smart_unreg_beta_debug_log_msgs
-        ################################################################
-        alpha_smart_unreg_beta_debug_log_msgs = [
-            (r"smart_unreg entry: requestor: alpha, targets: \['beta'\] "
-             "timeout value: None "
-             "test_smart_thread.py::TestSmartThreadComboScenarios."
-             "test_smart_thread_log_msg:[0-9]+"),
-            ('smart_unreg _clean_registry entry: '
-             'cmd_runner: alpha'),
-            (r"name=alpha, is_alive=True, state=ThreadState.Alive, "
-             r"smart_thread=SmartThread\(name='alpha'\)"),
-            (r"name=beta, is_alive=False, state=ThreadState.Registered, "
-             r"smart_thread=SmartThread\(name='beta', "
-             r"target=f1, args=\('beta',\)\)"),
-            ("alpha removed beta from registry for "
-             "request: smart_unreg"),
-            ('alpha set state for thread beta from '
-             'ThreadState.Registered to ThreadState.Unregistered'),
-            ("alpha did cleanup of registry at UTC "
-             fr"{time_match}, deleted \['beta'\]"),
-            ('smart_unreg _clean_registry exit: '
-             'cmd_runner: alpha'),
-            ('smart_unreg _clean_pair_array entry: '
-             'cmd_runner: alpha'),
-            ("alpha removed status_blocks entry for "
-             r"PairKey\(name0='alpha', name1='beta'\), name = alpha"),
-            ("alpha removed status_blocks entry for "
-             r"PairKey\(name0='alpha', name1='beta'\), name = beta"),
-            ("alpha removed _pair_array entry for "
-             r"PairKey\(name0='alpha', name1='beta'\)"),
-            ('alpha did cleanup of _pair_array at UTC '
-             f'{time_match}'),
-            ('smart_unreg _clean_pair_array exit: '
-             'cmd_runner: alpha'),
-            (r"smart_unreg exit: requestor: alpha, targets: \['beta'\] "
-             "timeout value: None "
-             "test_smart_thread.py::TestSmartThreadComboScenarios."
-             "test_smart_thread_log_msg:[0-9]+")
-        ]
-
-        ################################################################
-        # alpha_smart_unreg_info_log_msgs
-        ################################################################
-        alpha_smart_unreg_info_log_msgs = [
-            ("alpha did successful smart_unreg of "
-             r"\['beta'\].")
-        ]
-
-        ################################################################
-        # add all alpha debug and info log msgs
-        ################################################################
-        add_log_msgs(
-            log_msgs=(alpha_smart_init_alpha_debug_log_msgs
-                      + alpha_first_smart_init_beta_debug_log_msgs
-                      + alpha_smart_send_debug_log_msgs
-                      + alpha_smart_resume_debug_log_msgs
-                      + alpha_smart_sync_debug_log_msgs
-                      + alpha_smart_join_debug_log_msgs
-                      + alpha_second_smart_init_beta_debug_log_msgs
-                      + alpha_smart_unreg_beta_debug_log_msgs
-                      ),
-            log_level=logging.DEBUG,
-            log_name=smart_thread_log_name)
-
-        add_log_msgs(
-            log_msgs=(alpha_smart_init_alpha_info_log_msgs
-                      + alpha_first_smart_init_beta_info_log_msgs
-                      + alpha_smart_send_info_log_msgs
-                      + alpha_smart_resume_info_log_msgs
-                      + alpha_smart_sync_info_log_msgs
-                      + alpha_smart_join_info_log_msgs
-                      + alpha_second_smart_init_beta_info_log_msgs
-                      + alpha_smart_unreg_info_log_msgs
-                      ),
-            log_level=logging.INFO,
-            log_name=smart_thread_log_name)
-
-        ################################################################
-        # beta_smart_recv_debug_log_msgs
-        ################################################################
-        beta_smart_recv_debug_log_msgs = [
-            ("smart_recv entry: requestor: beta, targets: "
-             r"\['alpha'\] timeout value: None "
-             "test_smart_thread.py::f1:[0-9]+"),
-            ("beta smart_recv setup complete for targets: "
-             r"\[PairKeyRemote\(pair_key=PairKey\(name0='alpha', "
-             r"name1='beta'\), remote='alpha', "
-             r"create_time=[0-9]+\.[0-9]+\)\]"),
-            ("smart_recv exit: requestor: beta, targets: "
-             r"\['alpha'\] timeout value: None "
-             "test_smart_thread.py::f1:[0-9]+")
-        ]
-
-        ################################################################
-        # beta_smart_recv_info_log_msgs
-        ################################################################
-        beta_smart_recv_info_log_msgs = [
-            'beta smart_recv received 1 msg from alpha',
-        ]
-
-        ################################################################
-        # beta_smart_wait_debug_log_msgs
-        ################################################################
-        beta_smart_wait_debug_log_msgs = [
-            (r"smart_wait entry: requestor: beta, targets: \['alpha'\] "
-             "timeout value: None test_smart_thread.py::f1:[0-9]+"),
-            ("beta smart_wait setup complete for targets: "
-             r"\[PairKeyRemote\(pair_key=PairKey\(name0='alpha', "
-             r"name1='beta'\), remote='alpha', "
-             r"create_time=[0-9]+\.[0-9]+\)\]"),
-            (r"smart_wait exit: requestor: beta, targets: \['alpha'\] "
-             "timeout value: None test_smart_thread.py::f1:[0-9]+")
-        ]
-
-        ################################################################
-        # beta_smart_wait_info_log_msgs
-        ################################################################
-        beta_smart_wait_info_log_msgs = [
-            'beta smart_wait resumed by alpha',
-        ]
-
-        ################################################################
-        # beta_smart_sync_debug_log_msgs
-        ################################################################
-        beta_smart_sync_debug_log_msgs = [
-            (r"smart_sync entry: requestor: beta, targets: \['alpha'\] "
-             "timeout value: None test_smart_thread.py::f1:[0-9]+"),
-            ("beta smart_sync setup complete for targets: "
-             r"\[PairKeyRemote\(pair_key=PairKey\(name0='alpha', "
-             r"name1='beta'\), remote='alpha', "
-             r"create_time=[0-9]+\.[0-9]+\)\]"),
-            (r"smart_sync exit: requestor: beta, targets: \['alpha'\] timeout "
-             "value: None test_smart_thread.py::f1:[0-9]+")
-        ]
-
-        ################################################################
-        # beta_smart_sync_info_log_msgs
-        ################################################################
-        beta_smart_sync_info_log_msgs = [
-            'beta smart_sync set event for alpha',
-            'beta smart_sync achieved with alpha'
-        ]
-
-        ################################################################
-        # add all beta debug and info log msgs
-        ################################################################
-        add_log_msgs(
-            log_msgs=(beta_smart_recv_debug_log_msgs
-                      + beta_smart_wait_debug_log_msgs
-                      + beta_smart_sync_debug_log_msgs
-                      ),
-            log_level=logging.DEBUG,
-            log_name=smart_thread_log_name)
-
-        add_log_msgs(
-            log_msgs=(beta_smart_recv_info_log_msgs
-                      + beta_smart_wait_info_log_msgs
-                      + beta_smart_sync_info_log_msgs
-                      ),
-            log_level=logging.INFO,
-            log_name=smart_thread_log_name)
-
-        ################################################################
-        # check log results
-        ################################################################
-        match_results = log_ver.get_match_results(caplog=caplog)
-        log_ver.print_match_results(match_results)
-        log_ver.verify_log_results(match_results)
-
-        logger.warning('mainline exiting')
 
     # ##################################################################
     # # test_smart_thread_scenarios

@@ -13,5 +13,3 @@ recursive-include src *.py
 recursive-include src *.pyi
 recursive-include src *.typed
 recursive-include tests *.py
-recursive-include type_stubs *.py
-recursive-include type_stubs *.pyi

@@ -43,16 +43,16 @@ states enumerated in the ThreadState class:
 
     @startuml
     hide empty description
-    [*] --> Initialized
-    Initialized --> Registered : __init__
+    [*] --> Initialized : __init__
+    Initialized --> Registered : _register
 
     Registered --> Alive : smart_start
-    Alive -> Stopped : is_alive is False
+    Alive -> Stopped : thread ends
     Stopped -> Unregistered : smart_join
 
     Registered -> Unregistered : smart_unreg
 
-    Registered -> Alive : is_alive is True
+    Registered -> Alive : thread running
 
     Unregistered --> [*]
 
