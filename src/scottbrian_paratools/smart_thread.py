@@ -1019,6 +1019,24 @@ class SmartThread:
         return f'{classname}({parms})'
 
     ####################################################################
+    # get_current_smart_thread
+    ####################################################################
+    @staticmethod
+    def get_current_smart_thread() -> Optional["SmartThread"]:
+        """Get the smart thread for the current thread or None.
+
+        Returns:
+             If the current thread is a SmartThread, then the
+                 SmartThread instance is returned. Otherwise, None is
+                 returned.
+        """
+        current_thread = threading.current_thread()
+        with sel.SELockShare(SmartThread._registry_lock):
+            for name, smart_thread in SmartThread._registry.items():
+                if smart_thread.thread is current_thread:
+                    return smart_thread
+
+    ####################################################################
     # _get_state
     ####################################################################
     @staticmethod

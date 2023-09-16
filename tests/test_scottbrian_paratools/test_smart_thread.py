@@ -29296,6 +29296,37 @@ class TestSmartBasicScenarios:
     """Test class for SmartThread scenarios."""
 
     ####################################################################
+    # test_get_current_smart_thread
+    ####################################################################
+    # @pytest.mark.seltest
+    def test_get_current_smart_thread(self) -> None:
+        """Test smart_sync scenarios."""
+        def f1():
+            """Target for thread only."""
+            f1_smart_thread = st.SmartThread.get_current_smart_thread()
+            assert f1_smart_thread is None
+
+        def f2():
+            """Target for smart thread."""
+            f2_smart_thread = st.SmartThread.get_current_smart_thread()
+            assert f2_smart_thread.name == 'charlie'
+
+        logger.debug('mainline entered')
+
+        current_smart_thread = st.SmartThread.get_current_smart_thread()
+        assert current_smart_thread is None
+
+        alpha_smart_thread = st.SmartThread(name='alpha')
+
+        current_smart_thread = st.SmartThread.get_current_smart_thread()
+        assert current_smart_thread is alpha_smart_thread
+
+        beta_thread = threading.Thread(name='beta', target=f1)
+        beta_thread.start()
+
+        st.SmartThread(name='charlie',target=f2)
+
+    ####################################################################
     # test_send_scenario
     ####################################################################
     @pytest.mark.parametrize("num_senders_arg", [1, 2, 3])
@@ -31115,6 +31146,7 @@ class TestSmartThreadComboScenarios:
             commander_config=commander_config[total_counts
                                               % num_commander_configs]
         )
+
 
     # ##################################################################
     # # test_smart_thread_scenarios
