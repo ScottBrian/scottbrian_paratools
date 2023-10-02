@@ -6,6 +6,12 @@
 
 .. include:: ../../README.rst
 
+.. image:: FoodOrderSystem.svg
+
+.. image:: UseCaseDiagram1.svg
+
+.. image:: myfirstprojectUseCasediagram.png
+
 .. toctree::
    :maxdepth: 2
    :caption: API Reference:

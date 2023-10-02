@@ -645,7 +645,8 @@ class SmartThread:
     # The _registry is a dictionary of SmartClass instances keyed by the
     # SmartThread name.
     _registry_lock: ClassVar[sel.SELock] = sel.SELock()
-    _registry: ClassVar[dict[str, "SmartThread"]] = {}
+    # _registry: ClassVar[dict[str, "SmartThread"]] = {}
+    _registry: ClassVar[dict[str, dict[str, "SmartThread"]]] = {}
 
     # init update time used in log messages when registry is changed
     _registry_last_update: datetime = datetime(2000, 1, 1, 12, 0, 1)
@@ -766,6 +767,7 @@ class SmartThread:
     def __init__(
         self,
         *,
+        group_name: str,
         name: str,
         target: Optional[Callable[..., Any]] = None,
         args: Optional[tuple[Any, ...]] = None,
@@ -780,6 +782,8 @@ class SmartThread:
         """Initialize an instance of the SmartThread class.
 
         Args:
+            group_name: name of the thread group that the new thread
+                will be associated with
             name: name to be used to refer to this SmartThread. The name
                 will be used to set the threading.Thread name. If it is
                 desired that threading.Thread.name remain unchanged,
@@ -871,6 +875,25 @@ class SmartThread:
             cmd_runner=self.cmd_runner,
             latest=2,
         )
+
+        if not (isinstance(group_name, str) and group_name):
+            if not isinstance(group_name, str):
+                fillin_text = "not a string"
+            else:
+                fillin_text = "an empty string"
+            error_msg = (
+                f"SmartThread {threading.current_thread().name} "
+                f"raising SmartThreadIncorrectNameSpecified error while "
+                f"processing request smart_init. "
+                f"It was detected that the {group_name=} specified "
+                f"for the new thread is {fillin_text}. Please "
+                f"specify a non-empty string for the group name."
+            )
+
+            logger.error(error_msg)
+            raise SmartThreadIncorrectNameSpecified(error_msg)
+
+        self.group_name: str = group_name
 
         if not (isinstance(name, str) and name):
             if not isinstance(name, str):
@@ -1060,19 +1083,24 @@ class SmartThread:
     # get_current_smart_thread
     ####################################################################
     @staticmethod
-    def get_current_smart_thread() -> Optional["SmartThread"]:
+    def get_current_smart_thread(group_name: str) -> Optional["SmartThread"]:
         """Get the smart thread for the current thread or None.
+
+        Args:
+            group_name: name of group to search
 
         Returns:
              If the current thread is a SmartThread, then the
                  SmartThread instance is returned. Otherwise, None is
                  returned.
         """
-        current_thread = threading.current_thread()
-        with sel.SELockShare(SmartThread._registry_lock):
-            for name, smart_thread in SmartThread._registry.items():
-                if smart_thread.thread is current_thread:
-                    return smart_thread
+        if group_name in SmartThread._registry:
+            inner_reg = SmartThread._registry[group_name]
+            current_thread = threading.current_thread()
+            with sel.SELockShare(SmartThread._registry_lock):
+                for name, smart_thread in inner_reg.items():
+                    if smart_thread.thread is current_thread:
+                        return smart_thread
 
         return None
 
@@ -1080,18 +1108,23 @@ class SmartThread:
     # get_active_names
     ####################################################################
     @staticmethod
-    def get_active_names() -> set[str]:
+    def get_active_names(group_name: str) -> set[str]:
         """Get the smart thread names for alive threads.
+
+        Args:
+            group_name: name of group to search
 
         Returns:
              A (possibly empty) list of thread names.
 
         """
         ret_names: set[str] = set()
-        with sel.SELockShare(SmartThread._registry_lock):
-            for name, smart_thread in SmartThread._registry.items():
-                if smart_thread.st_state == ThreadState.Alive:
-                    ret_names |= {name}
+        if group_name in SmartThread._registry:
+            inner_reg = SmartThread._registry[group_name]
+            with sel.SELockShare(SmartThread._registry_lock):
+                for name, smart_thread in inner_reg.items():
+                    if smart_thread.st_state == ThreadState.Alive:
+                        ret_names |= {name}
 
         return ret_names
 
@@ -1099,11 +1132,13 @@ class SmartThread:
     # _get_state
     ####################################################################
     @staticmethod
-    def _get_state(name: str) -> ThreadState:
+    def _get_state(group_name: str, name: str) -> ThreadState:
         """Get the status of a thread.
 
         Args:
+            group_name: name of group to check state
             name: name of thread to get status for
+
 
         Returns:
             The thread status
@@ -1119,17 +1154,19 @@ class SmartThread:
                yet changed it, and Stopped if _clean_registry has
                changed changed it.
         """
-        if name not in SmartThread._registry:
+        if group_name not in SmartThread._registry:
+            return ThreadState.Unregistered
+
+        if name not in SmartThread._registry[group_name]:
             return ThreadState.Unregistered
 
         # For all other cases, we can rely on the state being correct
-        return SmartThread._registry[name].st_state
+        return SmartThread._registry[group_name][name].st_state
 
     ####################################################################
     # _get_target_state
     ####################################################################
-    @staticmethod
-    def _get_target_state(pk_remote: PairKeyRemote) -> ThreadState:
+    def _get_target_state(self, pk_remote: PairKeyRemote) -> ThreadState:
         """Get status of thread that is target of a request.
 
         Args:
@@ -1142,7 +1179,7 @@ class SmartThread:
             Must be called holding the registry lock either shared or
             exclusive
         """
-        if pk_remote.remote not in SmartThread._registry:
+        if pk_remote.remote not in SmartThread._registry[self.group_name]:
             # if this remote was created before, then it was stopped
             if pk_remote.create_time > 0.0:
                 return ThreadState.Stopped
@@ -1150,8 +1187,11 @@ class SmartThread:
                 return ThreadState.Unregistered
 
         if (
-            not SmartThread._registry[pk_remote.remote].thread.is_alive()
-            and SmartThread._registry[pk_remote.remote].st_state == ThreadState.Alive
+            not SmartThread._registry[self.group_name][
+                pk_remote.remote
+            ].thread.is_alive()
+            and SmartThread._registry[self.group_name][pk_remote.remote].st_state
+            == ThreadState.Alive
         ):
             return ThreadState.Stopped
 
@@ -1166,7 +1206,7 @@ class SmartThread:
         ):
             return ThreadState.Stopped
 
-        return SmartThread._registry[pk_remote.remote].st_state
+        return SmartThread._registry[self.group_name][pk_remote.remote].st_state
 
     ####################################################################
     # _set_status
@@ -1236,53 +1276,57 @@ class SmartThread:
             ############################################################
             # Verify OK to add new entry
             ############################################################
-            for key, item in SmartThread._registry.items():
-                if self.name == key or self.thread is item.thread:
-                    error_msg = (
-                        f"SmartThread {threading.current_thread().name} "
-                        "raising SmartThreadRegistrationError error while "
-                        f"processing request {self.request.value}. "
-                        "While attempting to register a new SmartThread "
-                        "instance, it was detected that another instance "
-                        "already in the SmartThread registry has the same "
-                        "name or is associated with the same threading "
-                        "thread. "
-                        f"New instance: name = {self.name}, "
-                        f"id = {id(self)}, "
-                        f"associated thread = {self.thread}. "
-                        f"Existing instance: name = {item.name}, "
-                        f"id = {id(item)}, "
-                        f"associated thread = {item.thread}."
-                    )
-                    logger.error(error_msg)
+            if self.group_name in SmartThread._registry:
+                inner_reg = SmartThread._registry[self.group_name]
+                for key, item in inner_reg.items():
+                    if self.name == key or self.thread is item.thread:
+                        error_msg = (
+                            f"SmartThread {threading.current_thread().name} "
+                            "raising SmartThreadRegistrationError error while "
+                            f"processing request {self.request.value}. "
+                            "While attempting to register a new SmartThread "
+                            "instance, it was detected that another instance "
+                            "already in the SmartThread registry has the same "
+                            "name or is associated with the same threading "
+                            "thread. "
+                            f"New instance: name = {self.name}, "
+                            f"id = {id(self)}, "
+                            f"associated thread = {self.thread}. "
+                            f"Existing instance: name = {item.name}, "
+                            f"id = {id(item)}, "
+                            f"associated thread = {item.thread}."
+                        )
+                        logger.error(error_msg)
 
-                    # If we created a new thread, then release resource.
-                    # Note that we check to ensure that the thread we
-                    # created and are about to delete is not the same
-                    # thread found in the registry, but this should
-                    # never be the case unless something like _register
-                    # was called directly instead of from __init__.
-                    if (
-                        self.thread_create == ThreadCreate.Target
-                        and self.thread is not item.thread
-                    ):
-                        del self.thread
+                        # If we created a new thread, then release resource.
+                        # Note that we check to ensure that the thread we
+                        # created and are about to delete is not the same
+                        # thread found in the registry, but this should
+                        # never be the case unless something like _register
+                        # was called directly instead of from __init__.
+                        if (
+                            self.thread_create == ThreadCreate.Target
+                            and self.thread is not item.thread
+                        ):
+                            del self.thread
 
-                    raise SmartThreadRegistrationError(error_msg)
+                        raise SmartThreadRegistrationError(error_msg)
 
             ############################################################
             # Add new name to registry
             ############################################################
             # get a unique time stamp for create_time
             self.create_time = SmartThread._create_pair_array_entry_time
-            while self.create_time == (SmartThread._create_pair_array_entry_time):
+            while self.create_time == SmartThread._create_pair_array_entry_time:
                 self.create_time = time.time()
 
             # update last create time
             SmartThread._create_pair_array_entry_time = self.create_time
 
             # place new entry into registry
-            SmartThread._registry[self.name] = self
+            if self.group_name not in SmartThread._registry:
+                SmartThread._registry[self.group_name] = {}
+            SmartThread._registry[self.group_name][self.name] = self
 
             SmartThread._registry_last_update = datetime.utcnow()
             print_time = SmartThread._registry_last_update.strftime("%H:%M:%S.%f")
@@ -1321,6 +1365,9 @@ class SmartThread:
     def _clean_registry(self) -> None:
         """Clean up any old not alive items in the registry.
 
+        Args:
+            group_name: name of group whose registry is to be cleaned
+
         Raises:
             SmartThreadErrorInRegistry: Registry item with key {key} has
                 non-matching item.name of {item.name}.
@@ -1334,68 +1381,69 @@ class SmartThread:
             f"cmd_runner: {self.cmd_runner}"
         )
         # Remove any old entries
-        keys_to_del = []
-        for key, item in SmartThread._registry.items():
-            # Note that for display purposes _get_state will return
-            # stopped instead of alive when the thread is not alive and
-            # state is alive. The decision to delete this item, however,
-            # is done only when the st_state is stopped as that
-            # indicates that a smart_unreg or smart_join has been
-            # requested. We could have designed _clean_registry to go
-            # ahead and delete entries when they are not alive with
-            # ThreadState.Alive, meaning that any request other than
-            # smart_unreg or smart_join could cause the "stopped"
-            # entries to be deleted, but this would have led to
-            # unpredictable and inconsistent behavior depending on the
-            # mix of requests.
-            is_alive = item.thread.is_alive()
-            state = self._get_state(name=key)
-            if state == ThreadState.Alive and not is_alive:
+        for group_name, inner_reg in SmartThread._registry.items():
+            keys_to_del = []
+            for key, item in inner_reg.items():
+                # Note that for display purposes _get_state will return
+                # stopped instead of alive when the thread is not alive and
+                # state is alive. The decision to delete this item, however,
+                # is done only when the st_state is stopped as that
+                # indicates that a smart_unreg or smart_join has been
+                # requested. We could have designed _clean_registry to go
+                # ahead and delete entries when they are not alive with
+                # ThreadState.Alive, meaning that any request other than
+                # smart_unreg or smart_join could cause the "stopped"
+                # entries to be deleted, but this would have led to
+                # unpredictable and inconsistent behavior depending on the
+                # mix of requests.
+                is_alive = item.thread.is_alive()
+                state = self._get_state(group_name=group_name, name=key)
+                if state == ThreadState.Alive and not is_alive:
+                    self._set_state(
+                        target_thread=item,
+                        new_state=ThreadState.Stopped,
+                    )
+                    state = ThreadState.Stopped
+                logger.debug(
+                    f"name={key}, {is_alive=}, state={state}, " f"smart_thread={item}"
+                )
+
+                if item.unregister:
+                    keys_to_del.append(key)
+
+                if key != item.name:
+                    error_msg = (
+                        f"SmartThread {threading.current_thread().name} raising "
+                        f"SmartThreadErrorInRegistry error while processing "
+                        f"request {self.request.value}. "
+                        f"Registry item with key {key} has non-matching "
+                        f"item.name of {item.name}."
+                    )
+                    logger.error(error_msg)
+                    raise SmartThreadErrorInRegistry(error_msg)
+
+            changed = False
+            for key in keys_to_del:
+                del_thread = inner_reg[key]
+                del inner_reg[key]
+                changed = True
+                logger.debug(
+                    f"{self.cmd_runner} removed {key} from registry for "
+                    f"request: {self.request.value}"
+                )
+
                 self._set_state(
-                    target_thread=SmartThread._registry[key],
-                    new_state=ThreadState.Stopped,
+                    target_thread=del_thread, new_state=ThreadState.Unregistered
                 )
-                state = ThreadState.Stopped
-            logger.debug(
-                f"name={key}, {is_alive=}, state={state}, " f"smart_thread={item}"
-            )
 
-            if item.unregister:
-                keys_to_del.append(key)
-
-            if key != item.name:
-                error_msg = (
-                    f"SmartThread {threading.current_thread().name} raising "
-                    f"SmartThreadErrorInRegistry error while processing "
-                    f"request {self.request.value}. "
-                    f"Registry item with key {key} has non-matching "
-                    f"item.name of {item.name}."
+            # update time only when we made a change
+            if changed:
+                SmartThread._registry_last_update = datetime.utcnow()
+                print_time = SmartThread._registry_last_update.strftime("%H:%M:%S.%f")
+                logger.debug(
+                    f"{self.cmd_runner} did cleanup of registry at UTC "
+                    f"{print_time}, deleted {sorted(keys_to_del)}"
                 )
-                logger.error(error_msg)
-                raise SmartThreadErrorInRegistry(error_msg)
-
-        changed = False
-        for key in keys_to_del:
-            del_thread = SmartThread._registry[key]
-            del SmartThread._registry[key]
-            changed = True
-            logger.debug(
-                f"{self.cmd_runner} removed {key} from registry for "
-                f"request: {self.request.value}"
-            )
-
-            self._set_state(
-                target_thread=del_thread, new_state=ThreadState.Unregistered
-            )
-
-        # update time only when we made a change
-        if changed:
-            SmartThread._registry_last_update = datetime.utcnow()
-            print_time = SmartThread._registry_last_update.strftime("%H:%M:%S.%f")
-            logger.debug(
-                f"{self.cmd_runner} did cleanup of registry at UTC "
-                f"{print_time}, deleted {sorted(keys_to_del)}"
-            )
 
         logger.debug(
             f"{self.request.value} _clean_registry exit: "
@@ -1419,7 +1467,7 @@ class SmartThread:
             # remove thread(s) from status_blocks if not registered
             for thread_name in pair_key:
                 if (
-                    thread_name not in SmartThread._registry
+                    thread_name not in SmartThread._registry[self.group_name]
                     and thread_name in SmartThread._pair_array[pair_key].status_blocks
                 ):
                     rem_entry = SmartThread._pair_array[pair_key].status_blocks[
@@ -1555,7 +1603,7 @@ class SmartThread:
         )
 
         changed = False
-        for existing_name in SmartThread._registry:
+        for existing_name in SmartThread._registry[self.group_name]:
             if existing_name == self.name:
                 continue
             changed = True  # we will add the new name
@@ -1652,7 +1700,10 @@ class SmartThread:
             # Check for existing_name doing a request and is
             # waiting for the new thread to be added as
             # indicated by being in the missing_remotes set
-            if self.name in SmartThread._registry[existing_name].missing_remotes:
+            if (
+                self.name
+                in SmartThread._registry[self.group_name][existing_name].missing_remotes
+            ):
                 # we need to erase the name from the missing
                 # list in case the new thread becomes stopped,
                 # and then is started again with a new create
@@ -1661,13 +1712,19 @@ class SmartThread:
                 # same pair_key and name, but a different
                 # create time which would likely lead to an
                 # error
-                SmartThread._registry[existing_name].missing_remotes.remove(self.name)
+                SmartThread._registry[self.group_name][
+                    existing_name
+                ].missing_remotes.remove(self.name)
 
                 # update the found_pk_remotes so that other_name
                 # will see that we have a new entry and add
                 # it to its work_pk_remotes
-                create_time = SmartThread._registry[self.name].create_time
-                SmartThread._registry[existing_name].found_pk_remotes.append(
+                create_time = SmartThread._registry[self.group_name][
+                    self.name
+                ].create_time
+                SmartThread._registry[self.group_name][
+                    existing_name
+                ].found_pk_remotes.append(
                     PairKeyRemote(pair_key, self.name, create_time)
                 )
 
@@ -1676,7 +1733,9 @@ class SmartThread:
                 ].request_pending = True
                 SmartThread._pair_array[pair_key].status_blocks[
                     existing_name
-                ].request = SmartThread._registry[existing_name].request
+                ].request = SmartThread._registry[self.group_name][
+                    existing_name
+                ].request
 
         if changed:
             SmartThread._pair_array_last_update = datetime.utcnow()
@@ -1703,7 +1762,7 @@ class SmartThread:
             add_name: new name to add
 
         """
-        create_time = SmartThread._registry[add_name].create_time
+        create_time = SmartThread._registry[self.group_name][add_name].create_time
         SmartThread._pair_array[pair_key].status_blocks[
             add_name
         ] = SmartThread.ConnectionStatusBlock(
@@ -1965,7 +2024,13 @@ class SmartThread:
                     )
                     logger.error(error_msg)
                     raise SmartThreadAlreadyStarted(error_msg)
-                if self._get_state(self.name) != ThreadState.Registered:
+                if (
+                    self._get_state(
+                        group_name=self.group_name,
+                        name=self.name,
+                    )
+                    != ThreadState.Registered
+                ):
                     error_msg = (
                         f"SmartThread {threading.current_thread().name} "
                         "raising SmartThreadRemoteThreadNotRegistered "
@@ -2010,8 +2075,11 @@ class SmartThread:
             True when request completed, False otherwise
 
         """
-        if self._get_state(remote) == ThreadState.Registered:
-            SmartThread._registry[remote].thread.start()
+        if (
+            self._get_state(group_name=self.group_name, name=remote)
+            == ThreadState.Registered
+        ):
+            SmartThread._registry[self.group_name][remote].thread.start()
             # At this point, the thread was started and the threading
             # start bootstrap method received control and set the Event
             # that threading start waits on. The bootstrap method will
@@ -2034,7 +2102,8 @@ class SmartThread:
             # instead means that the thread started and already ended.
 
             self._set_state(
-                target_thread=SmartThread._registry[remote], new_state=ThreadState.Alive
+                target_thread=SmartThread._registry[self.group_name][remote],
+                new_state=ThreadState.Alive,
             )
             self.started_targets |= {remote}
         else:
@@ -2112,11 +2181,14 @@ class SmartThread:
         self.work_remotes = cmd_block.targets.copy()
         with sel.SELockExcl(SmartThread._registry_lock):
             for remote in self.work_remotes.copy():
-                if self._get_state(remote) != ThreadState.Registered:
+                if (
+                    self._get_state(group_name=self.group_name, name=remote)
+                    != ThreadState.Registered
+                ):
                     not_registered_remotes |= {remote}
                     self.work_remotes -= {remote}
                 else:
-                    SmartThread._registry[remote].unregister = True
+                    SmartThread._registry[self.group_name][remote].unregister = True
 
                     self.work_remotes -= {remote}
                     self.unreged_targets |= {remote}
@@ -2223,7 +2295,7 @@ class SmartThread:
             joined_remotes: set[str] = set()
             with sel.SELockExcl(SmartThread._registry_lock):
                 for remote in self.work_remotes.copy():
-                    if remote in SmartThread._registry:
+                    if remote in SmartThread._registry[self.group_name]:
                         if self._process_smart_join(remote):
                             self.work_remotes -= {remote}
                             joined_remotes |= {remote}
@@ -2303,7 +2375,7 @@ class SmartThread:
         # deadlock with any of the other requests (e.g., smart_recv)
         # which could prevent the thread from ending.
         try:
-            SmartThread._registry[remote].thread.join(timeout=0.2)
+            SmartThread._registry[self.group_name][remote].thread.join(timeout=0.2)
         except RuntimeError:
             # If here, the thread has not yet been started. We know the
             # thread is registered, so we will skip it for now and come
@@ -2313,16 +2385,19 @@ class SmartThread:
 
         # we need to check to make sure the thread is not alive in case
         # we timed out on the threading join above
-        if SmartThread._registry[remote].thread.is_alive():
+        if SmartThread._registry[self.group_name][remote].thread.is_alive():
             return False  # give thread more time to end
         else:
-            if SmartThread._registry[remote].st_state == ThreadState.Alive:
+            if (
+                SmartThread._registry[self.group_name][remote].st_state
+                == ThreadState.Alive
+            ):
                 self._set_state(
-                    target_thread=SmartThread._registry[remote],
+                    target_thread=SmartThread._registry[self.group_name][remote],
                     new_state=ThreadState.Stopped,
                 )
 
-            SmartThread._registry[remote].unregister = True
+            SmartThread._registry[self.group_name][remote].unregister = True
 
         # restart while loop with one less remote
         return True
@@ -2755,7 +2830,7 @@ class SmartThread:
         # a log entry is written.
         ################################################################
 
-        remote_state = self._get_target_state(pk_remote)
+        remote_state = self._get_target_state(pk_remote=pk_remote)
 
         if remote_state == ThreadState.Alive:
             # If here, remote is in registry and is alive. This also
@@ -3253,7 +3328,7 @@ class SmartThread:
                     )
                     return True
 
-                if self._get_target_state(pk_remote) == ThreadState.Stopped:
+                if self._get_target_state(pk_remote=pk_remote) == ThreadState.Stopped:
                     request_block.stopped_remotes |= {pk_remote.remote}
                     logger.debug(
                         f"{self.name} smart_recv detected remote "
@@ -3676,7 +3751,7 @@ class SmartThread:
                 request_block.deadlock_remotes |= {pk_remote.remote}
                 return True
 
-            if self._get_target_state(pk_remote) == ThreadState.Stopped:
+            if self._get_target_state(pk_remote=pk_remote) == ThreadState.Stopped:
                 request_block.stopped_remotes |= {pk_remote.remote}
                 logger.debug(
                     f"{self.name} smart_wait detected remote "
@@ -3915,7 +3990,7 @@ class SmartThread:
             True when request completed, False otherwise
 
         """
-        remote_state = self._get_target_state(pk_remote)
+        remote_state = self._get_target_state(pk_remote=pk_remote)
 
         if remote_state == ThreadState.Alive:
             # If here, remote is in registry and is alive. This also
@@ -4107,7 +4182,7 @@ class SmartThread:
         # set remote sync_event
         ####################################################
         if not local_sb.sync_wait:
-            remote_state = self._get_target_state(pk_remote)
+            remote_state = self._get_target_state(pk_remote=pk_remote)
             if remote_state != ThreadState.Alive:
                 if remote_state == ThreadState.Stopped:
                     request_block.stopped_remotes |= {pk_remote.remote}
@@ -4201,7 +4276,8 @@ class SmartThread:
 
                 if (
                     local_sb.deadlock
-                    or self._get_target_state(pk_remote) == ThreadState.Stopped
+                    or self._get_target_state(pk_remote=pk_remote)
+                    == ThreadState.Stopped
                 ):
                     remote_sb.sync_event.clear()
                     logger.info(
@@ -4215,7 +4291,7 @@ class SmartThread:
                 request_block.deadlock_remotes |= {pk_remote.remote}
                 return True  # we are done with this remote
 
-            if self._get_target_state(pk_remote) == ThreadState.Stopped:
+            if self._get_target_state(pk_remote=pk_remote) == ThreadState.Stopped:
                 request_block.stopped_remotes |= {pk_remote.remote}
                 logger.debug(
                     f"{self.name} smart_sync detected remote "
@@ -4484,8 +4560,10 @@ class SmartThread:
         with sel.SELockExcl(SmartThread._registry_lock):
             self.missing_remotes = set()
             for remote in remotes:
-                if remote in SmartThread._registry:
-                    target_create_time = SmartThread._registry[remote].create_time
+                if remote in SmartThread._registry[self.group_name]:
+                    target_create_time = SmartThread._registry[self.group_name][
+                        remote
+                    ].create_time
                 else:
                     target_create_time = 0.0
 
@@ -4985,8 +5063,10 @@ class SmartThread:
             logger.error(error_msg)
             raise SmartThreadDetectedOpFromForeignThread(error_msg)
 
-        if self.name not in SmartThread._registry or id(self) != id(
-            SmartThread._registry[self.name]
+        if (
+            self.group_name not in SmartThread._registry
+            or self.name not in SmartThread._registry[self.group_name]
+            or id(self) != id(SmartThread._registry[self.group_name][self.name])
         ):
             error_msg = (
                 f"SmartThread {threading.current_thread().name} raising "
@@ -4994,6 +5074,7 @@ class SmartThread:
                 f"while processing request {request.value}. "
                 "The SmartThread object used for the invocation is not "
                 "know to the configuration. "
+                f"Group_name: {self.group_name}, "
                 f"Name: {self.name}, "
                 f"ID: {id(self)}, "
                 f"create time: {self.create_time}, "

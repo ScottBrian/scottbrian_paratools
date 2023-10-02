@@ -5022,7 +5022,7 @@ class MockGetTargetState:
             Must be called holding the registry lock either shared or
             exclusive
         """
-        if pk_remote.remote not in st.SmartThread._registry:
+        if pk_remote.remote not in st.SmartThread._registry[self.group_name]:
             if pk_remote.create_time != 0.0:
                 ret_state = st.ThreadState.Stopped
             else:
@@ -5030,8 +5030,10 @@ class MockGetTargetState:
 
         else:
             if (
-                not st.SmartThread._registry[pk_remote.remote].thread.is_alive()
-                and st.SmartThread._registry[pk_remote.remote].st_state
+                not st.SmartThread._registry[self.group_name][
+                    pk_remote.remote
+                ].thread.is_alive()
+                and st.SmartThread._registry[self.group_name][pk_remote.remote].st_state
                 == st.ThreadState.Alive
             ):
                 ret_state = st.ThreadState.Stopped
@@ -5048,14 +5050,18 @@ class MockGetTargetState:
                 ret_state = st.ThreadState.Stopped
 
             elif (
-                not st.SmartThread._registry[pk_remote.remote].thread.is_alive()
-                and st.SmartThread._registry[pk_remote.remote].st_state
+                not st.SmartThread._registry[self.group_name][
+                    pk_remote.remote
+                ].thread.is_alive()
+                and st.SmartThread._registry[self.group_name][pk_remote.remote].st_state
                 == st.ThreadState.Alive
             ):
                 ret_state = st.ThreadState.Stopped
 
             else:
-                ret_state = st.SmartThread._registry[pk_remote.remote].st_state
+                ret_state = st.SmartThread._registry[self.group_name][
+                    pk_remote.remote
+                ].st_state
 
         name = self.name  # type: ignore
         if name in MockGetTargetState.targets:
@@ -5194,6 +5200,7 @@ class ConfigVerifier:
 
     def __init__(
         self,
+        group_name: str,
         commander_name: str,
         log_ver: LogVer,
         caplog_to_use: pytest.LogCaptureFixture,
@@ -5203,6 +5210,7 @@ class ConfigVerifier:
         """Initialize the ConfigVerifier.
 
         Args:
+            group_name: name of group for this ConfigVerifier
             commander_name: name of the thread running the commands
             log_ver: the log verifier to track and verify log msgs
             caplog_to_use: pytest fixture to capture log messages
@@ -5211,6 +5219,7 @@ class ConfigVerifier:
 
         """
         self.specified_args = locals()  # used for __repr__, see below
+        self.group_name = group_name
         self.commander_name = commander_name
         self.commander_thread_config_built = False
 
@@ -19154,6 +19163,7 @@ class ConfigVerifier:
 
         if app_config == AppConfig.ScriptStyle:
             f1_thread = st.SmartThread(
+                group_name=self.group_name,
                 name=name,
                 target=target,
                 args=(name, self),
@@ -19224,7 +19234,7 @@ class ConfigVerifier:
             lock=st.SmartThread._registry_lock, obtain_tf=verify_data.obtain_reg_lock
         ):
             registry_items: dict[str, RegistrySnapshotItem] = {}
-            for name, item in st.SmartThread._registry.items():
+            for name, item in st.SmartThread._registry[self.group_name].items():
                 registry_items[name] = RegistrySnapshotItem(
                     is_alive=item.thread.is_alive(), state=item.st_state
                 )
@@ -25392,7 +25402,10 @@ class CommanderCurrentApp:
         """
         self.config_ver = config_ver
         self.smart_thread = st.SmartThread(
-            name=name, auto_start=False, max_msgs=max_msgs
+            group_name=config_ver.group_name,
+            name=name,
+            auto_start=False,
+            max_msgs=max_msgs,
         )
 
         # self.config_ver.commander_thread = self.smart_thread
@@ -25427,7 +25440,11 @@ class OuterThreadApp(threading.Thread):
         threading.current_thread().name = name
         self.config_ver = config_ver
         self.smart_thread = st.SmartThread(
-            name=name, thread=self, auto_start=False, max_msgs=max_msgs
+            group_name=config_ver.group_name,
+            name=name,
+            thread=self,
+            auto_start=False,
+            max_msgs=max_msgs,
         )
 
         # self.config_ver.commander_thread = self.smart_thread
@@ -25523,6 +25540,7 @@ class OuterF1ThreadApp(threading.Thread):
         self.config_ver = config_ver
         self.name = name
         self.smart_thread = st.SmartThread(
+            group_name=config_ver.group_name,
             name=name,
             thread=self,
             # auto_start=False,
@@ -26029,29 +26047,41 @@ class TestSmartThreadInterface:
 
         logger.debug("mainline entered")
 
-        alpha_smart_thread = SmartThread(name="alpha")
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         if num_f1_args == (0, 0, 0):
-            beta_smart_thread = SmartThread(name="beta", target=f1_0_0_0)
+            beta_smart_thread = SmartThread(
+                group_name="test1", name="beta", target=f1_0_0_0
+            )
         elif num_f1_args == (0, 0, 1):
-            beta_smart_thread = SmartThread(name="beta", target=f1_0_0_1, args=(42,))
+            beta_smart_thread = SmartThread(
+                group_name="test1", name="beta", target=f1_0_0_1, args=(42,)
+            )
         elif num_f1_args == (0, 0, 2):
             beta_smart_thread = SmartThread(
-                name="beta", target=f1_0_0_2, args=(42, "my arg 2")
+                group_name="test1", name="beta", target=f1_0_0_2, args=(42, "my arg 2")
             )
         elif num_f1_args == (0, 0, 3):
             beta_smart_thread = SmartThread(
-                name="beta", target=f1_0_0_3, args=(42, "my arg 2", [1, 2, 3])
+                group_name="test1",
+                name="beta",
+                target=f1_0_0_3,
+                args=(42, "my arg 2", [1, 2, 3]),
             )
         elif num_f1_args == (0, 1, 0):
             beta_smart_thread = SmartThread(
-                name="beta", target=f1_0_1_0, kwargs={"kwarg1": 13}
+                group_name="test1", name="beta", target=f1_0_1_0, kwargs={"kwarg1": 13}
             )
         elif num_f1_args == (0, 1, 1):
             beta_smart_thread = SmartThread(
-                name="beta", target=f1_0_1_1, args=(42,), kwargs={"kwarg1": 13}
+                group_name="test1",
+                name="beta",
+                target=f1_0_1_1,
+                args=(42,),
+                kwargs={"kwarg1": 13},
             )
         elif num_f1_args == (0, 1, 2):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1_0_1_2,
                 args=(42, "my arg 2"),
@@ -26059,6 +26089,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (0, 1, 3):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1_0_1_3,
                 args=(42, "my arg 2", [1, 2, 3]),
@@ -26066,12 +26097,14 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (0, 2, 0):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1_0_2_0,
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
             )
         elif num_f1_args == (0, 2, 1):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1_0_2_1,
                 args=(42,),
@@ -26079,6 +26112,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (0, 2, 2):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1_0_2_2,
                 args=(42, "my arg 2"),
@@ -26086,6 +26120,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (0, 2, 3):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1_0_2_3,
                 args=(42, "my arg 2", [1, 2, 3]),
@@ -26093,12 +26128,14 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (0, 3, 0):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1_0_3_0,
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg", "kwarg3": [11, 22, 33]},
             )
         elif num_f1_args == (0, 3, 1):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1_0_3_1,
                 args=(42,),
@@ -26106,6 +26143,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (0, 3, 2):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1_0_3_2,
                 args=(42, "my arg 2"),
@@ -26113,6 +26151,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (0, 3, 3):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1_0_3_3,
                 args=(42, "my arg 2", [1, 2, 3]),
@@ -26120,10 +26159,14 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 0, 0):
             beta_smart_thread = SmartThread(
-                name="beta", target=f1_1_0_0, thread_parm_name="smart_thread"
+                group_name="test1",
+                name="beta",
+                target=f1_1_0_0,
+                thread_parm_name="smart_thread",
             )
         elif num_f1_args == (1, 0, 1):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1_1_0_1,
                 thread_parm_name="smart_thread",
@@ -26131,6 +26174,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 0, 2):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1_1_0_2,
                 thread_parm_name="smart_thread",
@@ -26138,6 +26182,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 0, 3):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1_1_0_3,
                 thread_parm_name="smart_thread",
@@ -26145,6 +26190,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 1, 0):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1_1_1_0,
                 thread_parm_name="smart_thread",
@@ -26152,6 +26198,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 1, 1):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1_1_1_1,
                 thread_parm_name="smart_thread",
@@ -26160,6 +26207,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 1, 2):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1_1_1_2,
                 thread_parm_name="smart_thread",
@@ -26168,6 +26216,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 1, 3):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1_1_1_3,
                 thread_parm_name="smart_thread",
@@ -26176,6 +26225,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 2, 0):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1_1_2_0,
                 thread_parm_name="smart_thread",
@@ -26183,6 +26233,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 2, 1):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1_1_2_1,
                 thread_parm_name="smart_thread",
@@ -26191,6 +26242,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 2, 2):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1_1_2_2,
                 thread_parm_name="smart_thread",
@@ -26199,6 +26251,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 2, 3):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1_1_2_3,
                 thread_parm_name="smart_thread",
@@ -26207,6 +26260,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 3, 0):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1_1_3_0,
                 thread_parm_name="smart_thread",
@@ -26214,6 +26268,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 3, 1):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1_1_3_1,
                 thread_parm_name="smart_thread",
@@ -26222,6 +26277,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 3, 2):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1_1_3_2,
                 thread_parm_name="smart_thread",
@@ -26230,6 +26286,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 3, 3):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1_1_3_3,
                 thread_parm_name="smart_thread",
@@ -26684,7 +26741,7 @@ class TestSmartThreadInterface:
             logger.debug("f1 beta exit")
 
         logger.debug("mainline entered")
-        alpha_smart_thread = SmartThread(name="alpha")
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
 
         f1_target_to_specify = (
             f"f1_" f"{num_f1_args[0]}_" f"{num_f1_args[1]}_" f"{num_f1_args[2]}"
@@ -26720,6 +26777,7 @@ class TestSmartThreadInterface:
             if args_to_specify:
                 if kwargs_to_specify:
                     beta_smart_thread = SmartThread(
+                        group_name="test1",
                         name="beta",
                         target=eval(f1_target_to_specify),
                         thread_parm_name=smart_thread_name_to_specify,
@@ -26728,6 +26786,7 @@ class TestSmartThreadInterface:
                     )
                 else:
                     beta_smart_thread = SmartThread(
+                        group_name="test1",
                         name="beta",
                         target=eval(f1_target_to_specify),
                         thread_parm_name=smart_thread_name_to_specify,
@@ -26736,6 +26795,7 @@ class TestSmartThreadInterface:
             else:
                 if kwargs_to_specify:
                     beta_smart_thread = SmartThread(
+                        group_name="test1",
                         name="beta",
                         target=eval(f1_target_to_specify),
                         thread_parm_name=smart_thread_name_to_specify,
@@ -26743,6 +26803,7 @@ class TestSmartThreadInterface:
                     )
                 else:
                     beta_smart_thread = SmartThread(
+                        group_name="test1",
                         name="beta",
                         target=eval(f1_target_to_specify),
                         thread_parm_name=smart_thread_name_to_specify,
@@ -26751,6 +26812,7 @@ class TestSmartThreadInterface:
             if args_to_specify:
                 if kwargs_to_specify:
                     beta_smart_thread = SmartThread(
+                        group_name="test1",
                         name="beta",
                         target=eval(f1_target_to_specify),
                         args=args_to_specify,
@@ -26758,6 +26820,7 @@ class TestSmartThreadInterface:
                     )
                 else:
                     beta_smart_thread = SmartThread(
+                        group_name="test1",
                         name="beta",
                         target=eval(f1_target_to_specify),
                         args=args_to_specify,
@@ -26765,13 +26828,16 @@ class TestSmartThreadInterface:
             else:
                 if kwargs_to_specify:
                     beta_smart_thread = SmartThread(
+                        group_name="test1",
                         name="beta",
                         target=eval(f1_target_to_specify),
                         kwargs=kwargs_to_specify,
                     )
                 else:
                     beta_smart_thread = SmartThread(
-                        name="beta", target=eval(f1_target_to_specify)
+                        group_name="test1",
+                        name="beta",
+                        target=eval(f1_target_to_specify),
                     )
 
         logger.debug(f"After: {kwargs_to_specify}")
@@ -26878,33 +26944,47 @@ class TestSmartThreadInterface:
             logger.debug("f1 beta exit")
 
         logger.debug("mainline entered")
-        alpha_smart_thread = SmartThread(name="alpha")
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         if num_f1_args == (0, 0, 0):
-            beta_smart_thread = SmartThread(name="beta", target=f1)
+            beta_smart_thread = SmartThread(group_name="test1", name="beta", target=f1)
         elif num_f1_args == (0, 0, 1):
-            beta_smart_thread = SmartThread(name="beta", target=f1, args=(42,))
+            beta_smart_thread = SmartThread(
+                group_name="test1", name="beta", target=f1, args=(42,)
+            )
         elif num_f1_args == (0, 0, 2):
             beta_smart_thread = SmartThread(
-                name="beta", target=f1, args=(42, "my arg 2")
+                group_name="test1", name="beta", target=f1, args=(42, "my arg 2")
             )
         elif num_f1_args == (0, 0, 3):
             beta_smart_thread = SmartThread(
-                name="beta", target=f1, args=(42, "my arg 2", [1, 2, 3])
+                group_name="test1",
+                name="beta",
+                target=f1,
+                args=(42, "my arg 2", [1, 2, 3]),
             )
         elif num_f1_args == (0, 1, 0):
             beta_smart_thread = SmartThread(
-                name="beta", target=f1, kwargs={"kwarg1": 13}
+                group_name="test1", name="beta", target=f1, kwargs={"kwarg1": 13}
             )
         elif num_f1_args == (0, 1, 1):
             beta_smart_thread = SmartThread(
-                name="beta", target=f1, args=(42,), kwargs={"kwarg1": 13}
+                group_name="test1",
+                name="beta",
+                target=f1,
+                args=(42,),
+                kwargs={"kwarg1": 13},
             )
         elif num_f1_args == (0, 1, 2):
             beta_smart_thread = SmartThread(
-                name="beta", target=f1, args=(42, "my arg 2"), kwargs={"kwarg1": 13}
+                group_name="test1",
+                name="beta",
+                target=f1,
+                args=(42, "my arg 2"),
+                kwargs={"kwarg1": 13},
             )
         elif num_f1_args == (0, 1, 3):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1,
                 args=(42, "my arg 2", [1, 2, 3]),
@@ -26912,10 +26992,14 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (0, 2, 0):
             beta_smart_thread = SmartThread(
-                name="beta", target=f1, kwargs={"kwarg1": 13, "kwarg2": "second kwarg"}
+                group_name="test1",
+                name="beta",
+                target=f1,
+                kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
             )
         elif num_f1_args == (0, 2, 1):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1,
                 args=(42,),
@@ -26923,6 +27007,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (0, 2, 2):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1,
                 args=(42, "my arg 2"),
@@ -26930,6 +27015,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (0, 2, 3):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1,
                 args=(42, "my arg 2", [1, 2, 3]),
@@ -26937,12 +27023,14 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (0, 3, 0):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1,
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg", "kwarg3": [11, 22, 33]},
             )
         elif num_f1_args == (0, 3, 1):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1,
                 args=(42,),
@@ -26950,6 +27038,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (0, 3, 2):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1,
                 args=(42, "my arg 2"),
@@ -26957,6 +27046,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (0, 3, 3):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1,
                 args=(42, "my arg 2", [1, 2, 3]),
@@ -26964,14 +27054,22 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 0, 0):
             beta_smart_thread = SmartThread(
-                name="beta", target=f1, thread_parm_name="smart_thread"
+                group_name="test1",
+                name="beta",
+                target=f1,
+                thread_parm_name="smart_thread",
             )
         elif num_f1_args == (1, 0, 1):
             beta_smart_thread = SmartThread(
-                name="beta", target=f1, thread_parm_name="smart_thread", args=(42,)
+                group_name="test1",
+                name="beta",
+                target=f1,
+                thread_parm_name="smart_thread",
+                args=(42,),
             )
         elif num_f1_args == (1, 0, 2):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1,
                 thread_parm_name="smart_thread",
@@ -26979,6 +27077,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 0, 3):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1,
                 thread_parm_name="smart_thread",
@@ -26986,6 +27085,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 1, 0):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1,
                 thread_parm_name="smart_thread",
@@ -26993,6 +27093,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 1, 1):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1,
                 thread_parm_name="smart_thread",
@@ -27001,6 +27102,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 1, 2):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1,
                 thread_parm_name="smart_thread",
@@ -27009,6 +27111,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 1, 3):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1,
                 thread_parm_name="smart_thread",
@@ -27017,6 +27120,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 2, 0):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1,
                 thread_parm_name="smart_thread",
@@ -27024,6 +27128,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 2, 1):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1,
                 thread_parm_name="smart_thread",
@@ -27032,6 +27137,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 2, 2):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1,
                 thread_parm_name="smart_thread",
@@ -27040,6 +27146,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 2, 3):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1,
                 thread_parm_name="smart_thread",
@@ -27048,6 +27155,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 3, 0):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1,
                 thread_parm_name="smart_thread",
@@ -27055,6 +27163,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 3, 1):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1,
                 thread_parm_name="smart_thread",
@@ -27063,6 +27172,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 3, 2):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1,
                 thread_parm_name="smart_thread",
@@ -27071,6 +27181,7 @@ class TestSmartThreadInterface:
             )
         elif num_f1_args == (1, 3, 3):
             beta_smart_thread = SmartThread(
+                group_name="test1",
                 name="beta",
                 target=f1,
                 thread_parm_name="smart_thread",
@@ -27180,7 +27291,7 @@ class TestSmartThreadInterface:
             logger.debug("f1 beta exit")
 
         logger.debug("mainline entered")
-        alpha_smart_thread = SmartThread(name="alpha")
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
 
         smart_thread_name_to_specify = None
         args_to_specify: Optional[tuple[Any, ...]] = None
@@ -27205,6 +27316,7 @@ class TestSmartThreadInterface:
             args_to_specify = (42, "my arg 2", [1, 2, 3])
 
         beta_smart_thread = SmartThread(
+            group_name="test1",
             name="beta",
             target=f1,
             thread_parm_name=smart_thread_name_to_specify,
@@ -27250,8 +27362,10 @@ class TestSmartThreadExamples:
             print("f1 beta exiting")
 
         print("mainline alpha entered")
-        alpha_smart_thread = SmartThread(name="alpha")
-        beta_smart_thread = SmartThread(name="beta", target=f1, auto_start=False)
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
+        beta_smart_thread = SmartThread(
+            group_name="test1", name="beta", target=f1, auto_start=False
+        )
         beta_smart_thread.smart_start()
 
         recvd_msgs = alpha_smart_thread.smart_recv(senders="beta")
@@ -27295,9 +27409,13 @@ class TestSmartThreadExamples:
             print("f1 beta exiting")
 
         print("mainline alpha entered")
-        alpha_smart_thread = SmartThread(name="alpha")
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         SmartThread(
-            name="beta", target=f1, auto_start=True, thread_parm_name="smart_thread"
+            group_name="test1",
+            name="beta",
+            target=f1,
+            auto_start=True,
+            thread_parm_name="smart_thread",
         )
         recvd_msgs = alpha_smart_thread.smart_recv(senders="beta")
         print(recvd_msgs["beta"])
@@ -27336,7 +27454,7 @@ class TestSmartThreadExamples:
 
         def f1() -> None:
             print("f1 beta entered")
-            beta_smart_thread = SmartThread(name="beta")
+            beta_smart_thread = SmartThread(group_name="test1", name="beta")
             beta_smart_thread.smart_send(
                 receivers="alpha", msg="hi alpha, this is beta"
             )
@@ -27344,7 +27462,7 @@ class TestSmartThreadExamples:
             print("f1 beta exiting")
 
         print("mainline alpha entered")
-        alpha_smart_thread = SmartThread(name="alpha")
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         beta_thread = threading.Thread(target=f1, name="beta")
         beta_thread.start()
         recvd_msgs = alpha_smart_thread.smart_recv(senders="beta")
@@ -27396,7 +27514,7 @@ class TestSmartThreadExamples:
                 """
                 super().__init__(name=name)
                 self.smart_thread = SmartThread(
-                    name=name, thread=self, auto_start=False
+                    group_name="test1", name=name, thread=self, auto_start=False
                 )
                 self.smart_thread.smart_start()
 
@@ -27412,7 +27530,7 @@ class TestSmartThreadExamples:
                 print(f"{self.smart_thread.name} exiting run method")
 
         print("mainline alpha entered")
-        alpha_smart_thread = SmartThread(name="alpha")
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         ThreadApp(name="beta")
         recvd_msgs = alpha_smart_thread.smart_recv(senders="beta")
         print(recvd_msgs["beta"])
@@ -27479,7 +27597,7 @@ class TestSmartThreadExamples:
                 print(f"{self.name} exiting run method")
 
         print("mainline alpha entered")
-        alpha_smart_thread = SmartThread(name="alpha")
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         SmartThreadApp(name="beta")
         recvd_msgs = alpha_smart_thread.smart_recv(senders="beta")
         print(recvd_msgs["beta"])
@@ -27521,8 +27639,10 @@ class TestSmartThreadExamples:
             print("f1 beta exiting")
 
         print("mainline alpha entered")
-        alpha_smart_thread = SmartThread(name="alpha")
-        beta_smart_thread = SmartThread(name="beta", target=f1, auto_start=False)
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
+        beta_smart_thread = SmartThread(
+            group_name="test1", name="beta", target=f1, auto_start=False
+        )
         print("alpha about to start beta")
         beta_smart_thread.smart_start()
         alpha_smart_thread.smart_join(targets="beta")
@@ -27564,9 +27684,11 @@ class TestSmartThreadExamples:
             print("f2_charlie exiting")
 
         print("mainline alpha entered")
-        alpha_smart_thread = SmartThread(name="alpha")
-        SmartThread(name="beta", target=f1_beta, auto_start=False)
-        SmartThread(name="charlie", target=f2_charlie, auto_start=False)
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
+        SmartThread(group_name="test1", name="beta", target=f1_beta, auto_start=False)
+        SmartThread(
+            group_name="test1", name="charlie", target=f2_charlie, auto_start=False
+        )
         print("alpha about to start beta and charlie")
         alpha_smart_thread.smart_start(targets=["beta", "charlie"])
         alpha_smart_thread.smart_join(targets=["beta", "charlie"])
@@ -27604,9 +27726,9 @@ class TestSmartThreadExamples:
             print("f1_beta exiting")
 
         print("mainline alpha entered")
-        alpha_smart_thread = SmartThread(name="alpha")
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         print("alpha about to create beta")
-        SmartThread(name="beta", target=f1_beta, auto_start=False)
+        SmartThread(group_name="test1", name="beta", target=f1_beta, auto_start=False)
         print("alpha about to unregister beta")
         alpha_smart_thread.smart_unreg(targets="beta")
         print("mainline alpha exiting")
@@ -27641,9 +27763,9 @@ class TestSmartThreadExamples:
             print("f1_beta exiting")
 
         print("mainline alpha entered")
-        alpha_smart_thread = SmartThread(name="alpha")
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         print("alpha about to create beta")
-        SmartThread(name="beta", target=f1_beta)
+        SmartThread(group_name="test1", name="beta", target=f1_beta)
         time.sleep(1)
         print("alpha about to join beta")
         alpha_smart_thread.smart_join(targets="beta")
@@ -27683,8 +27805,10 @@ class TestSmartThreadExamples:
 
         print("mainline alpha entered")
         logger.debug("mainline entered")
-        alpha_smart_thread = SmartThread(name="alpha")
-        SmartThread(name="beta", target=f1, thread_parm_name="smart_thread")
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
+        SmartThread(
+            group_name="test1", name="beta", target=f1, thread_parm_name="smart_thread"
+        )
         alpha_smart_thread.smart_send(msg="hello beta", receivers="beta")
         alpha_smart_thread.smart_join(targets="beta")
         print("mainline alpha exiting")
@@ -27724,9 +27848,16 @@ class TestSmartThreadExamples:
             print(f"f1 {smart_thread.name} exiting")
 
         print("mainline alpha entered")
-        alpha_smart_thread = SmartThread(name="alpha")
-        SmartThread(name="beta", target=f1, thread_parm_name="smart_thread")
-        SmartThread(name="charlie", target=f1, thread_parm_name="smart_thread")
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
+        SmartThread(
+            group_name="test1", name="beta", target=f1, thread_parm_name="smart_thread"
+        )
+        SmartThread(
+            group_name="test1",
+            name="charlie",
+            target=f1,
+            thread_parm_name="smart_thread",
+        )
         alpha_smart_thread.smart_send(
             msg="hello remotes", receivers=("beta", "charlie")
         )
@@ -27768,8 +27899,10 @@ class TestSmartThreadExamples:
             print(f"f1 {smart_thread.name} exiting")
 
         print("mainline alpha entered")
-        alpha_smart_thread = SmartThread(name="alpha")
-        SmartThread(name="beta", target=f1, thread_parm_name="smart_thread")
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
+        SmartThread(
+            group_name="test1", name="beta", target=f1, thread_parm_name="smart_thread"
+        )
         alpha_smart_thread.smart_send(
             msg=("hello beta", "have a great day", 42), receivers="beta"
         )
@@ -27816,20 +27949,23 @@ class TestSmartThreadExamples:
                 smart_thread.smart_resume(waiters=resume_target)
 
         print("mainline alpha entered")
-        alpha_smart_thread = SmartThread(name="alpha")
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         SmartThread(
+            group_name="test1",
             name="beta",
             target=f1,
             thread_parm_name="smart_thread",
             kwargs={"resume_target": "charlie"},
         )
         SmartThread(
+            group_name="test1",
             name="charlie",
             target=f1,
             thread_parm_name="smart_thread",
             kwargs={"wait_for": "beta", "resume_target": "delta"},
         )
         SmartThread(
+            group_name="test1",
             name="delta",
             target=f1,
             thread_parm_name="smart_thread",
@@ -27890,20 +28026,23 @@ class TestSmartThreadExamples:
                 smart_thread.smart_resume(waiters=resume_target)
 
         print("mainline alpha entered")
-        alpha_smart_thread = SmartThread(name="alpha")
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         SmartThread(
+            group_name="test1",
             name="beta",
             target=f1,
             thread_parm_name="smart_thread",
             kwargs={"resume_target": "charlie"},
         )
         SmartThread(
+            group_name="test1",
             name="charlie",
             target=f1,
             thread_parm_name="smart_thread",
             kwargs={"wait_for": "beta", "resume_target": "delta"},
         )
         SmartThread(
+            group_name="test1",
             name="delta",
             target=f1,
             thread_parm_name="smart_thread",
@@ -27956,8 +28095,10 @@ class TestSmartThreadExamples:
             print("f1 beta exiting")
 
         print("mainline alpha entered")
-        alpha_smart_thread = SmartThread(name="alpha")
-        SmartThread(name="beta", target=f1, thread_parm_name="smart_thread")
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
+        SmartThread(
+            group_name="test1", name="beta", target=f1, thread_parm_name="smart_thread"
+        )
         recvd_msgs = alpha_smart_thread.smart_recv(senders="beta")
         print(recvd_msgs["beta"])
         alpha_smart_thread.smart_join(targets="beta")
@@ -27997,10 +28138,17 @@ class TestSmartThreadExamples:
             print(f"f1 {smart_thread.name} exiting")
 
         print("mainline alpha entered")
-        alpha_smart_thread = SmartThread(name="alpha")
-        SmartThread(name="beta", target=f1, thread_parm_name="smart_thread")
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
+        SmartThread(
+            group_name="test1", name="beta", target=f1, thread_parm_name="smart_thread"
+        )
         time.sleep(0.2)
-        SmartThread(name="charlie", target=f1, thread_parm_name="smart_thread")
+        SmartThread(
+            group_name="test1",
+            name="charlie",
+            target=f1,
+            thread_parm_name="smart_thread",
+        )
         time.sleep(0.2)
         recvd_msgs = alpha_smart_thread.smart_recv(senders=("beta", "charlie"))
         print(recvd_msgs["beta"])
@@ -28049,9 +28197,13 @@ class TestSmartThreadExamples:
             print(f"f1 {smart_thread.name} exiting")
 
         print("mainline alpha entered")
-        alpha_smart_thread = SmartThread(name="alpha")
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         SmartThread(
-            name="beta", target=f1, thread_parm_name="smart_thread", args=("hi",)
+            group_name="test1",
+            name="beta",
+            target=f1,
+            thread_parm_name="smart_thread",
+            args=("hi",),
         )
         time.sleep(1)  # give enough time to allow all sends to complete
         recvd_msgs = alpha_smart_thread.smart_recv(senders="beta")
@@ -28112,8 +28264,9 @@ class TestSmartThreadExamples:
                 smart_thread.smart_resume(waiters=resume_target)
 
         print("mainline alpha entered")
-        alpha_smart_thread = SmartThread(name="alpha")
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         SmartThread(
+            group_name="test1",
             name="beta",
             target=f1,
             thread_parm_name="smart_thread",
@@ -28121,6 +28274,7 @@ class TestSmartThreadExamples:
             kwargs={"resume_target": "charlie"},
         )
         SmartThread(
+            group_name="test1",
             name="charlie",
             target=f1,
             thread_parm_name="smart_thread",
@@ -28128,6 +28282,7 @@ class TestSmartThreadExamples:
             kwargs={"wait_for": "beta", "resume_target": "delta"},
         )
         SmartThread(
+            group_name="test1",
             name="delta",
             target=f1,
             thread_parm_name="smart_thread",
@@ -28183,8 +28338,10 @@ class TestSmartThreadExamples:
             print(f"f1 {smart_thread.name} resumed by {resumed_by}")
 
         print("mainline alpha entered")
-        alpha_smart_thread = SmartThread(name="alpha")
-        SmartThread(name="beta", target=f1, thread_parm_name="smart_thread")
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
+        SmartThread(
+            group_name="test1", name="beta", target=f1, thread_parm_name="smart_thread"
+        )
         time.sleep(1)  # allow time for smart_wait to be issued
         print("alpha about to resume beta")
         alpha_smart_thread.smart_resume(waiters="beta")
@@ -28224,8 +28381,10 @@ class TestSmartThreadExamples:
             print(f"f1 {smart_thread.name} resumed by {resumed_by}")
 
         print("mainline alpha entered")
-        alpha_smart_thread = SmartThread(name="alpha")
-        SmartThread(name="beta", target=f1, thread_parm_name="smart_thread")
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
+        SmartThread(
+            group_name="test1", name="beta", target=f1, thread_parm_name="smart_thread"
+        )
         print("alpha about to resume beta")
         alpha_smart_thread.smart_resume(waiters="beta")
 
@@ -28263,12 +28422,21 @@ class TestSmartThreadExamples:
             smart_thread.smart_resume(waiters="alpha")
 
         print("mainline alpha entered")
-        alpha_smart_thread = SmartThread(name="alpha")
-        SmartThread(name="beta", target=f1, thread_parm_name="smart_thread")
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
+        SmartThread(
+            group_name="test1", name="beta", target=f1, thread_parm_name="smart_thread"
+        )
         time.sleep(1)  # allow time for alpha to wait
-        SmartThread(name="charlie", target=f1, thread_parm_name="smart_thread")
+        SmartThread(
+            group_name="test1",
+            name="charlie",
+            target=f1,
+            thread_parm_name="smart_thread",
+        )
         time.sleep(1)  # allow time for alpha to wait
-        SmartThread(name="delta", target=f1, thread_parm_name="smart_thread")
+        SmartThread(
+            group_name="test1", name="delta", target=f1, thread_parm_name="smart_thread"
+        )
         time.sleep(1)  # allow time for alpha to wait
         print("alpha about to wait for all threads")
         resumed_by = alpha_smart_thread.smart_wait(
@@ -28312,17 +28480,26 @@ class TestSmartThreadExamples:
             smart_thread.smart_resume(waiters="alpha")
 
         print("mainline alpha entered")
-        alpha_smart_thread = SmartThread(name="alpha")
-        SmartThread(name="beta", target=f1, thread_parm_name="smart_thread")
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
+        SmartThread(
+            group_name="test1", name="beta", target=f1, thread_parm_name="smart_thread"
+        )
         time.sleep(1)
-        SmartThread(name="charlie", target=f1, thread_parm_name="smart_thread")
+        SmartThread(
+            group_name="test1",
+            name="charlie",
+            target=f1,
+            thread_parm_name="smart_thread",
+        )
         time.sleep(1)
         print("alpha about to wait for any threads")
         resumed_by = alpha_smart_thread.smart_wait(
             resumers=["beta", "charlie", "delta"], resumer_count=1
         )
         print(f"alpha resumed by resumers={sorted(resumed_by)}")
-        SmartThread(name="delta", target=f1, thread_parm_name="smart_thread")
+        SmartThread(
+            group_name="test1", name="delta", target=f1, thread_parm_name="smart_thread"
+        )
         time.sleep(1)  # allow time for alpha to wait
         print("alpha about to wait for any threads")
         resumed_by = alpha_smart_thread.smart_wait(
@@ -28376,9 +28553,19 @@ class TestSmartThreadExamples:
             print("f2_charlie back from wait")
 
         print("mainline alpha entered")
-        alpha_smart_thread = SmartThread(name="alpha")
-        SmartThread(name="beta", target=f1_beta, thread_parm_name="smart_thread")
-        SmartThread(name="charlie", target=f2_charlie, thread_parm_name="smart_thread")
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
+        SmartThread(
+            group_name="test1",
+            name="beta",
+            target=f1_beta,
+            thread_parm_name="smart_thread",
+        )
+        SmartThread(
+            group_name="test1",
+            name="charlie",
+            target=f2_charlie,
+            thread_parm_name="smart_thread",
+        )
         time.sleep(2)
         print("alpha about to resume threads")
         alpha_smart_thread.smart_resume(waiters=["beta", "charlie"])
@@ -28425,10 +28612,20 @@ class TestSmartThreadExamples:
             print("f2_charlie back from sync")
 
         print("mainline alpha entered")
-        alpha_smart_thread = SmartThread(name="alpha")
-        SmartThread(name="beta", target=f1_beta, thread_parm_name="smart_thread")
+        alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
+        SmartThread(
+            group_name="test1",
+            name="beta",
+            target=f1_beta,
+            thread_parm_name="smart_thread",
+        )
         time.sleep(1)
-        SmartThread(name="charlie", target=f2_charlie, thread_parm_name="smart_thread")
+        SmartThread(
+            group_name="test1",
+            name="charlie",
+            target=f2_charlie,
+            thread_parm_name="smart_thread",
+        )
         time.sleep(1)
         print("alpha about to sync with beta and charlie")
         alpha_smart_thread.smart_sync(targets=["beta", "charlie"])
@@ -28500,6 +28697,7 @@ def scenario_driver(
     msgs = Msgs()
 
     config_ver = ConfigVerifier(
+        group_name="group1",
         commander_name=commander_name,
         log_ver=log_ver,
         caplog_to_use=caplog_to_use,
@@ -28603,7 +28801,7 @@ def scenario_driver(
     config_ver.monitor_pause = True
     outer_thread_app: Union[OuterThreadApp, OuterSmartThreadApp, OuterSmartThreadApp2]
     if commander_config == AppConfig.ScriptStyle:
-        commander_thread = st.SmartThread(name=commander_name)
+        commander_thread = st.SmartThread(group_name="test1", name=commander_name)
 
         initialize_config_ver(
             cmd_thread=commander_thread,
@@ -28942,9 +29140,13 @@ class TestSmartThreadSmokeTest:
         ################################################################
         # start commander
         ################################################################
-        commander_thread = st.SmartThread(name=commander_name, max_msgs=10)
+        commander_thread = st.SmartThread(
+            group_name="test1", name=commander_name, max_msgs=10
+        )
 
-        f1_st = st.SmartThread(name=f1_name, target=f1, args=(f1_name,), max_msgs=10)
+        f1_st = st.SmartThread(
+            group_name="test1", name=f1_name, target=f1, args=(f1_name,), max_msgs=10
+        )
 
         commander_thread.smart_send(receivers="beta", msg="alpha sends to beta")
 
@@ -28955,7 +29157,11 @@ class TestSmartThreadSmokeTest:
         commander_thread.smart_join(targets="beta")
 
         f1_st = st.SmartThread(
-            name=f1_name, target=f1, args=(f1_name,), auto_start=False
+            group_name="test1",
+            name=f1_name,
+            target=f1,
+            args=(f1_name,),
+            auto_start=False,
         )
 
         commander_thread.smart_unreg(targets="beta")
@@ -29624,7 +29830,7 @@ class TestSmartThreadErrors:
         logger.debug("mainline creating bad name thread")
 
         with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc:
-            st.SmartThread(name="")
+            st.SmartThread(group_name="test1", name="")
 
         exp_error_msg = (
             f"SmartThread {threading.current_thread().name} "
@@ -29644,7 +29850,7 @@ class TestSmartThreadErrors:
         # Create smart thread with bad name
         ################################################################
         with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc:
-            st.SmartThread(name=1)  # type: ignore
+            st.SmartThread(group_name="test1", name=1)  # type: ignore
 
         exp_error_msg = (
             f"SmartThread {threading.current_thread().name} "
@@ -29667,7 +29873,9 @@ class TestSmartThreadErrors:
         with pytest.raises(
             st.SmartThreadMutuallyExclusiveTargetThreadSpecified
         ) as exc1:
-            st.SmartThread(name="alpha", target=f1, thread=test_thread)
+            st.SmartThread(
+                group_name="test1", name="alpha", target=f1, thread=test_thread
+            )
 
         exp_error_msg = (
             f"SmartThread {threading.current_thread().name} raising "
@@ -29686,7 +29894,7 @@ class TestSmartThreadErrors:
         ################################################################
 
         with pytest.raises(st.SmartThreadArgsSpecificationWithoutTarget) as exc2:
-            st.SmartThread(name="alpha", args=(1,))
+            st.SmartThread(group_name="test1", name="alpha", args=(1,))
 
         exp_error_msg = (
             f"SmartThread {threading.current_thread().name} raising "
@@ -29706,14 +29914,16 @@ class TestSmartThreadErrors:
         ################################################################
 
         with pytest.raises(st.SmartThreadArgsSpecificationWithoutTarget) as exc2:
-            st.SmartThread(name="alpha", kwargs={"arg1": 1})
+            st.SmartThread(group_name="test1", name="alpha", kwargs={"arg1": 1})
 
         assert re.fullmatch(exp_error_msg, str(exc2.value))
 
         pprint(exc2.value)
 
         with pytest.raises(st.SmartThreadArgsSpecificationWithoutTarget) as exc2:
-            st.SmartThread(name="alpha", args=(1,), kwargs={"arg1": 1})
+            st.SmartThread(
+                group_name="test1", name="alpha", args=(1,), kwargs={"arg1": 1}
+            )
 
         assert re.fullmatch(exp_error_msg, str(exc2.value))
 
@@ -29765,46 +29975,56 @@ class TestSmartThreadErrors:
         cmd_runner = threading.current_thread().name
         if existing_thread_arg == st.ThreadCreate.Current:
             cmd_runner = existing_name_arg
-            existing_smart_thread = st.SmartThread(name=existing_name_arg)
+            existing_smart_thread = st.SmartThread(
+                group_name="test1", name=existing_name_arg
+            )
             if same_name or new_same_thread_arg:
                 check_msg = True
                 with pytest.raises(st.SmartThreadRegistrationError) as exc:
                     if new_same_thread_arg:
                         new_thread = re.escape(str(existing_smart_thread.thread))
-                        st.SmartThread(name=new_name_arg)
+                        st.SmartThread(group_name="test1", name=new_name_arg)
                     else:
-                        st.SmartThread(name=new_name_arg, target=f1)
+                        st.SmartThread(group_name="test1", name=new_name_arg, target=f1)
             else:
-                st.SmartThread(name=new_name_arg, target=f1)
+                st.SmartThread(group_name="test1", name=new_name_arg, target=f1)
         elif existing_thread_arg == st.ThreadCreate.Target:
-            existing_smart_thread = st.SmartThread(name=existing_name_arg, target=f1)
+            existing_smart_thread = st.SmartThread(
+                group_name="test1", name=existing_name_arg, target=f1
+            )
             if same_name or new_same_thread_arg:
                 check_msg = True
                 with pytest.raises(st.SmartThreadRegistrationError) as exc:
                     if new_same_thread_arg:
                         new_thread = re.escape(str(existing_smart_thread.thread))
                         st.SmartThread(
-                            name=new_name_arg, thread=existing_smart_thread.thread
+                            group_name="test1",
+                            name=new_name_arg,
+                            thread=existing_smart_thread.thread,
                         )
                     else:
-                        st.SmartThread(name=new_name_arg, target=f1)
+                        st.SmartThread(group_name="test1", name=new_name_arg, target=f1)
             else:
-                st.SmartThread(name=new_name_arg, target=f1)
+                st.SmartThread(group_name="test1", name=new_name_arg, target=f1)
         else:  # existing_thread_arg == st.ThreadCreate.Thread:
             existing_thread = threading.Thread(target=f1)
             existing_smart_thread = st.SmartThread(
-                name=existing_name_arg, thread=existing_thread
+                group_name="test1", name=existing_name_arg, thread=existing_thread
             )
             if same_name or new_same_thread_arg:
                 check_msg = True
                 with pytest.raises(st.SmartThreadRegistrationError) as exc:
                     if new_same_thread_arg:
                         new_thread = re.escape(str(existing_thread))
-                        st.SmartThread(name=new_name_arg, thread=existing_thread)
+                        st.SmartThread(
+                            group_name="test1",
+                            name=new_name_arg,
+                            thread=existing_thread,
+                        )
                     else:
-                        st.SmartThread(name=new_name_arg, target=f1)
+                        st.SmartThread(group_name="test1", name=new_name_arg, target=f1)
             else:
-                st.SmartThread(name=new_name_arg, target=f1)
+                st.SmartThread(group_name="test1", name=new_name_arg, target=f1)
 
         if check_msg:
             existing_thread_str = re.escape(str(existing_smart_thread.thread))
@@ -29843,10 +30063,10 @@ class TestSmartThreadErrors:
     def test_smart_thread_clean_registry_errors(self) -> None:
         """Test error cases for SmartThread."""
         logger.debug("mainline entered")
-        alpha_thread = st.SmartThread(name="alpha")
+        alpha_thread = st.SmartThread(group_name="test1", name="alpha")
         alpha_thread.name = "bad_name"
         with pytest.raises(st.SmartThreadErrorInRegistry) as exc:
-            st.SmartThread(name="beta")
+            st.SmartThread(group_name="test1", name="beta")
 
         exp_error_msg = (
             "SmartThread alpha raising "
@@ -29894,7 +30114,7 @@ class TestSmartThreadErrors:
             MockCleanPairArray.mock_clean_pair_array,
         )
 
-        alpha_st = st.SmartThread(name="alpha")
+        alpha_st = st.SmartThread(group_name="test1", name="alpha")
 
         # create an empty pair array entry_
         pair_key = st.SmartThread._get_pair_key("alpha", "beta")
@@ -29903,7 +30123,7 @@ class TestSmartThreadErrors:
         )
 
         with pytest.raises(st.SmartThreadIncorrectData) as exc:
-            st.SmartThread(name="beta", target=f1)
+            st.SmartThread(group_name="test1", name="beta", target=f1)
 
         exp_error_msg = (
             "SmartThread alpha "
@@ -29938,7 +30158,7 @@ class TestSmartThreadErrors:
         )
 
         with pytest.raises(st.SmartThreadIncorrectData) as exc:
-            st.SmartThread(name="beta", target=f1)
+            st.SmartThread(group_name="test1", name="beta", target=f1)
 
         exp_error_msg = (
             "SmartThread alpha "
@@ -29973,7 +30193,7 @@ class TestSmartThreadErrors:
         )
 
         with pytest.raises(st.SmartThreadIncorrectData) as exc:
-            st.SmartThread(name="beta", target=f1)
+            st.SmartThread(group_name="test1", name="beta", target=f1)
 
         exp_error_msg = (
             f"SmartThread alpha "
@@ -30017,7 +30237,7 @@ class TestSmartThreadErrors:
         )
 
         with pytest.raises(st.SmartThreadIncorrectData) as exc:
-            st.SmartThread(name="beta", target=f1)
+            st.SmartThread(group_name="test1", name="beta", target=f1)
 
         existing_names = st.SmartThread._pair_array[pair_key].status_blocks.keys()
 
@@ -30064,7 +30284,7 @@ class TestSmartThreadErrors:
 
         """
         logger.debug("mainline entered")
-        alpha_thread = st.SmartThread(name="alpha")
+        alpha_thread = st.SmartThread(group_name="test1", name="alpha")
 
         ################################################################
         # SmartThreadInvalidInput - not an iterable string
@@ -30261,9 +30481,11 @@ class TestSmartThreadErrors:
             logger.debug("f1 exiting")
 
         logger.debug("mainline entered")
-        alpha_thread = st.SmartThread(name="alpha")
+        alpha_thread = st.SmartThread(group_name="test1", name="alpha")
 
-        beta_thread = st.SmartThread(name="beta", target=f1, auto_start=False)
+        beta_thread = st.SmartThread(
+            group_name="test1", name="beta", target=f1, auto_start=False
+        )
 
         with pytest.raises(st.SmartThreadMultipleTargetsForSelfStart) as exc:
             beta_thread.smart_start(targets=("beta", "charlie"))
@@ -30350,8 +30572,10 @@ class TestSmartThreadErrors:
             logger.debug("f1 exiting")
 
         logger.debug("mainline entered")
-        alpha_thread = st.SmartThread(name="alpha")
-        beta_thread = st.SmartThread(name="beta", target=f1, auto_start=False)
+        alpha_thread = st.SmartThread(group_name="test1", name="alpha")
+        beta_thread = st.SmartThread(
+            group_name="test1", name="beta", target=f1, auto_start=False
+        )
         beta_thread.smart_start()
 
         with pytest.raises(st.SmartThreadInvalidInput) as exc:
@@ -30485,8 +30709,10 @@ class TestSmartThreadErrors:
             logger.debug("f1 exiting")
 
         logger.debug("mainline entered")
-        alpha_thread = st.SmartThread(name="alpha")
-        beta_thread = st.SmartThread(name="beta", target=f1, auto_start=False)
+        alpha_thread = st.SmartThread(group_name="test1", name="alpha")
+        beta_thread = st.SmartThread(
+            group_name="test1", name="beta", target=f1, auto_start=False
+        )
         beta_thread.smart_start()
 
         with pytest.raises(st.SmartThreadInvalidInput) as exc:
@@ -30570,8 +30796,10 @@ class TestSmartThreadErrors:
             logger.debug("f1 exiting")
 
         logger.debug("mainline entered")
-        alpha_thread = st.SmartThread(name="alpha")
-        beta_thread = st.SmartThread(name="beta", target=f1, auto_start=False)
+        alpha_thread = st.SmartThread(group_name="test1", name="alpha")
+        beta_thread = st.SmartThread(
+            group_name="test1", name="beta", target=f1, auto_start=False
+        )
         beta_thread.smart_start()
 
         with pytest.raises(st.SmartThreadInvalidInput) as exc:
@@ -30763,8 +30991,10 @@ class TestSmartThreadErrors:
 
         msgs = Msgs()
 
-        alpha_thread = st.SmartThread(name="alpha")
-        beta_thread = st.SmartThread(name="beta", target=f1, auto_start=False)
+        alpha_thread = st.SmartThread(group_name="test1", name="alpha")
+        beta_thread = st.SmartThread(
+            group_name="test1", name="beta", target=f1, auto_start=False
+        )
         beta_thread.smart_start()
 
         start_time = time.time()
@@ -30781,7 +31011,9 @@ class TestSmartThreadErrors:
         exp_work_remotes = beta_thread.work_pk_remotes
         beta_thread.missing_remotes |= {"delta"}
 
-        delta_thread = st.SmartThread(name="delta", target=f1, auto_start=False)
+        delta_thread = st.SmartThread(
+            group_name="test1", name="delta", target=f1, auto_start=False
+        )
         msgs.queue_msg(target="beta", msg="action1")
 
         ################################################################
@@ -30793,7 +31025,9 @@ class TestSmartThreadErrors:
         ################################################################
         # part 2
         ################################################################
-        beta_thread = st.SmartThread(name="beta", target=f1, auto_start=False)
+        beta_thread = st.SmartThread(
+            group_name="test1", name="beta", target=f1, auto_start=False
+        )
 
         monkeypatch.setattr(
             st.SmartThread, "_request_loop", MockRequestLoop.mock_request_loop
@@ -30815,7 +31049,9 @@ class TestSmartThreadErrors:
         exp_work_remotes = beta_thread.work_pk_remotes
         beta_thread.missing_remotes |= {"delta"}
 
-        delta_thread = st.SmartThread(name="delta", target=f1, auto_start=False)
+        delta_thread = st.SmartThread(
+            group_name="test1", name="delta", target=f1, auto_start=False
+        )
 
         msgs.queue_msg(target="beta", msg="action2")
 
@@ -30898,9 +31134,13 @@ class TestSmartThreadErrors:
 
         msgs = Msgs()
 
-        alpha_thread = st.SmartThread(name="alpha")
+        alpha_thread = st.SmartThread(group_name="test1", name="alpha")
         beta_thread = st.SmartThread(
-            name="beta", target=f1, kwargs={"action": "wait"}, auto_start=False
+            group_name="test1",
+            name="beta",
+            target=f1,
+            kwargs={"action": "wait"},
+            auto_start=False,
         )
         beta_thread.smart_start()
         alpha_thread.smart_resume(waiters="beta")
@@ -31014,7 +31254,11 @@ class TestSmartThreadErrors:
         ################################################################
         alpha_thread.smart_join(targets="beta", timeout=5)
         beta_thread = st.SmartThread(
-            name="beta", target=f1, kwargs={"action": "deadlock"}, auto_start=False
+            group_name="test1",
+            name="beta",
+            target=f1,
+            kwargs={"action": "deadlock"},
+            auto_start=False,
         )
         beta_thread.smart_start()
         with pytest.raises(st.SmartThreadDeadlockDetected) as exc2:
@@ -31054,7 +31298,11 @@ class TestSmartThreadErrors:
         ################################################################
         alpha_thread.smart_join(targets="beta", timeout=5)
         beta_thread = st.SmartThread(
-            name="beta", target=f1, kwargs={"action": "msg_wait"}, auto_start=False
+            group_name="test1",
+            name="beta",
+            target=f1,
+            kwargs={"action": "msg_wait"},
+            auto_start=False,
         )
         beta_thread.smart_start()
         with pytest.raises(st.SmartThreadRequestTimedOut) as exc3:
@@ -31097,6 +31345,7 @@ class TestSmartThreadErrors:
         ################################################################
         alpha_thread.smart_join(targets="beta", timeout=5)
         beta_thread = st.SmartThread(
+            group_name="test1",
             name="beta",
             target=f1,
             kwargs={"action": "msg_wait"},
@@ -31174,7 +31423,7 @@ class TestSmartThreadErrors:
 
         """
         logger.debug("mainline entered")
-        alpha_thread = st.SmartThread(name="alpha")
+        alpha_thread = st.SmartThread(group_name="test1", name="alpha")
 
         ################################################################
         # SmartThreadInvalidInput - caller also a remote
@@ -31224,7 +31473,7 @@ class TestSmartThreadErrors:
 
         """
         logger.debug("mainline entered")
-        alpha_thread = st.SmartThread(name="alpha")
+        alpha_thread = st.SmartThread(group_name="test1", name="alpha")
 
         ################################################################
         # SmartThreadInvalidInput - caller also a remote
@@ -31283,10 +31532,16 @@ class TestSmartThreadErrors:
 
         logger.debug("mainline entry")
         msgs = Msgs()
-        alpha_thread = st.SmartThread(name="alpha")
-        beta_thread = st.SmartThread(name="beta", target=f1, kwargs={"f1_name": "beta"})
+        alpha_thread = st.SmartThread(group_name="test1", name="alpha")
+        beta_thread = st.SmartThread(
+            group_name="test1", name="beta", target=f1, kwargs={"f1_name": "beta"}
+        )
         st.SmartThread(
-            name="charlie", target=f1, kwargs={"f1_name": "charlie"}, auto_start=False
+            group_name="test1",
+            name="charlie",
+            target=f1,
+            kwargs={"f1_name": "charlie"},
+            auto_start=False,
         )
 
         ################################################################
@@ -31528,21 +31783,29 @@ class TestSmartThreadErrors:
 
         logger.debug("mainline entry")
         msgs = Msgs()
-        alpha_s_thread = st.SmartThread(name="alpha")
+        alpha_s_thread = st.SmartThread(group_name="test1", name="alpha")
 
         beta_1_thread = threading.Thread(target=f1, kwargs={"f1_name": "beta_1"})
         beta_1_s_thread = st.SmartThread(
-            name="beta", auto_start=False, thread=beta_1_thread
+            group_name="test1", name="beta", auto_start=False, thread=beta_1_thread
         )
 
         alpha_s_thread.smart_unreg(targets="beta")
 
         beta_2_s_thread = st.SmartThread(
-            name="beta", auto_start=False, target=f2, kwargs={"f2_name": "beta_2"}
+            group_name="test1",
+            name="beta",
+            auto_start=False,
+            target=f2,
+            kwargs={"f2_name": "beta_2"},
         )
 
         charlie_s_thread = st.SmartThread(
-            name="charlie", auto_start=False, target=f3, kwargs={"f3_name": "charlie"}
+            group_name="test1",
+            name="charlie",
+            auto_start=False,
+            target=f3,
+            kwargs={"f3_name": "charlie"},
         )
 
         if request_type_arg == st.ReqType.Smart_start:
@@ -31713,18 +31976,19 @@ class TestSmartThreadErrors:
 
         logger.debug("mainline entry")
         msgs = Msgs()
-        alpha_s_thread = st.SmartThread(name="alpha")
+        alpha_s_thread = st.SmartThread(group_name="test1", name="alpha")
 
         beta_1_thread = threading.Thread(
             target=f1, kwargs={"f1_name": "beta_1", "action": request_type_arg}
         )
         beta_1_s_thread = st.SmartThread(
-            name="beta", auto_start=False, thread=beta_1_thread
+            group_name="test1", name="beta", auto_start=False, thread=beta_1_thread
         )
 
         alpha_s_thread.smart_unreg(targets="beta")
 
         st.SmartThread(
+            group_name="test1",
             name="beta",
             auto_start=True,
             target=f2,
@@ -31785,29 +32049,37 @@ class TestSmartBasicScenarios:
 
         def f1() -> None:
             """Target for thread only."""
-            f1_smart_thread = st.SmartThread.get_current_smart_thread()
+            f1_smart_thread = st.SmartThread.get_current_smart_thread(
+                group_name="test1"
+            )
             assert f1_smart_thread is None
 
         def f2() -> None:
             """Target for smart thread."""
-            f2_smart_thread = st.SmartThread.get_current_smart_thread()
+            f2_smart_thread = st.SmartThread.get_current_smart_thread(
+                group_name="test1"
+            )
             assert f2_smart_thread.name is not None
             assert f2_smart_thread.name == "charlie"
 
         logger.debug("mainline entered")
 
-        current_smart_thread = st.SmartThread.get_current_smart_thread()
+        current_smart_thread = st.SmartThread.get_current_smart_thread(
+            group_name="test1"
+        )
         assert current_smart_thread is None
 
-        alpha_smart_thread = st.SmartThread(name="alpha")
+        alpha_smart_thread = st.SmartThread(group_name="test1", name="alpha")
 
-        current_smart_thread = st.SmartThread.get_current_smart_thread()
+        current_smart_thread = st.SmartThread.get_current_smart_thread(
+            group_name="test1"
+        )
         assert current_smart_thread is alpha_smart_thread
 
         beta_thread = threading.Thread(name="beta", target=f1)
         beta_thread.start()
 
-        st.SmartThread(name="charlie", target=f2)
+        st.SmartThread(group_name="test1", name="charlie", target=f2)
 
     ####################################################################
     # test_get_current_smart_thread
@@ -31851,13 +32123,19 @@ class TestSmartBasicScenarios:
 
         reg_names = get_names("reg_", num_registered_names_arg)
 
-        alpha_smart_thread = st.SmartThread(name="alpha")
+        alpha_smart_thread = st.SmartThread(group_name="test1", name="alpha")
 
         for name in active_names:
-            st.SmartThread(name=name, target=f1, thread_parm_name="f1_smart_thread")
+            st.SmartThread(
+                group_name="test1",
+                name=name,
+                target=f1,
+                thread_parm_name="f1_smart_thread",
+            )
 
         for name in reg_names:
             st.SmartThread(
+                group_name="test1",
                 name=name,
                 target=f1,
                 thread_parm_name="f1_smart_thread",
