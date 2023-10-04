@@ -31842,13 +31842,18 @@ class TestSmartThreadErrors:
         "request_type_arg",
         [st.ReqType.Smart_start, st.ReqType.Smart_unreg, st.ReqType.Smart_join],
     )
+    @pytest.mark.parametrize("group_name_arg", ["test1", "test2", "test3"])
     def test_foreign_op_scenario2(
-        self, request_type_arg: st.ReqType, caplog: pytest.LogCaptureFixture
+        self,
+        request_type_arg: st.ReqType,
+        group_name_arg: str,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Test foreign op error for SmartThread.
 
         Args:
             request_type_arg: which request type will inject the error
+            group_name_arg: group to use for beta1 thread
             caplog: pytest fixture to capture log output
 
         """
@@ -31881,6 +31886,7 @@ class TestSmartThreadErrors:
                 f"while processing request {req}. "
                 "The SmartThread object used for the invocation is not "
                 "know to the configuration. "
+                f"Group name: {group_name_arg}, "
                 f"Name: {beta_1_s_thread.name}, "
                 f"ID: {id(beta_1_s_thread)}, "
                 f"create time: {beta_1_s_thread.create_time}, "
@@ -31923,12 +31929,24 @@ class TestSmartThreadErrors:
         msgs = Msgs()
         alpha_s_thread = st.SmartThread(group_name="test1", name="alpha")
 
+        if group_name_arg != "test1":
+            alpha_s_2_thread = st.SmartThread(group_name=group_name_arg, name="alpha")
+
         beta_1_thread = threading.Thread(target=f1, kwargs={"f1_name": "beta_1"})
         beta_1_s_thread = st.SmartThread(
-            group_name="test1", name="beta", auto_start=False, thread=beta_1_thread
+            group_name=group_name_arg,
+            name="beta",
+            auto_start=False,
+            thread=beta_1_thread,
         )
 
-        alpha_s_thread.smart_unreg(targets="beta")
+        if group_name_arg == "test1":
+            alpha_s_thread.smart_unreg(targets="beta")
+        elif group_name_arg == "test2":
+            alpha_s_2_thread.smart_unreg(targets="beta")
+        else:
+            alpha_s_2_thread.smart_unreg(targets="beta")
+            del st.SmartThread._registry[group_name_arg]
 
         beta_2_s_thread = st.SmartThread(
             group_name="test1",
@@ -31958,6 +31976,7 @@ class TestSmartThreadErrors:
                 "while processing request smart_start. "
                 "The SmartThread object used for the invocation is not "
                 "know to the configuration. "
+                f"Group name: {group_name_arg}, "
                 f"Name: {beta_1_s_thread.name}, "
                 f"ID: {id(beta_1_s_thread)}, "
                 f"create time: {beta_1_s_thread.create_time}, "
@@ -31969,8 +31988,10 @@ class TestSmartThreadErrors:
             print("\n", exc.value)
 
             # start beta_2 legitimately
+            logger.debug("starting beta2 legit")
             beta_2_s_thread.smart_start()
 
+            logger.debug("starting beta1 threading thread")
             beta_1_thread.start()
             # start charlie using beta_1 unregistered smart thread
             msgs.queue_msg("beta_1", "SmartStart")
@@ -32066,6 +32087,7 @@ class TestSmartThreadErrors:
                 f"while processing request {req}. "
                 "The SmartThread object used for the invocation is not "
                 "know to the configuration. "
+                "Group name: test1, "
                 f"Name: {beta_1_s_thread.name}, "
                 f"ID: {id(beta_1_s_thread)}, "
                 f"create time: {beta_1_s_thread.create_time}, "
@@ -32220,7 +32242,7 @@ class TestSmartBasicScenarios:
         st.SmartThread(group_name="test1", name="charlie", target=f2)
 
     ####################################################################
-    # test_get_current_smart_thread
+    # test_get_active_names
     ####################################################################
     @pytest.mark.parametrize("num_active_names_arg", [0, 1, 2, 3])
     @pytest.mark.parametrize("num_registered_names_arg", [0, 1, 2, 3])
@@ -32245,7 +32267,7 @@ class TestSmartBasicScenarios:
             logger.debug(f"{f1_smart_thread.name} entered")
             f1_smart_thread.smart_wait(resumers="alpha")
 
-            assert st.SmartThread.get_active_names() - {"alpha"} == (
+            assert st.SmartThread.get_active_names(group_name="test1") - {"alpha"} == (
                 active_names | reg_names
             )
 
@@ -32281,14 +32303,18 @@ class TestSmartBasicScenarios:
             )
 
         # get actives names - might only contain alpha
-        ret_active_names = st.SmartThread.get_active_names() - {"alpha"}
+        ret_active_names = st.SmartThread.get_active_names(group_name="test1") - {
+            "alpha"
+        }
 
         assert ret_active_names == active_names
 
         if reg_names:
             alpha_smart_thread.smart_start(targets=reg_names)
 
-        ret_active_names = st.SmartThread.get_active_names() - {"alpha"}
+        ret_active_names = st.SmartThread.get_active_names(group_name="test1") - {
+            "alpha"
+        }
 
         assert ret_active_names == (active_names | reg_names)
 
@@ -32300,6 +32326,153 @@ class TestSmartBasicScenarios:
             alpha_smart_thread.smart_resume(waiters=active_names | reg_names)
 
             alpha_smart_thread.smart_join(targets=active_names | reg_names)
+
+        logger.debug("mainline exiting")
+
+    ####################################################################
+    # test_multiple_groups
+    ####################################################################
+    @pytest.mark.parametrize("num_groups_arg", [1, 2, 3, 4, 5, 16])
+    @pytest.mark.parametrize("random_seed_arg", [1, 2, 3, 4, 5])
+    def test_multiple_groups(
+        self,
+        num_groups_arg: int,
+        random_seed_arg: int,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            num_groups_arg: number of groups to create
+            random_seed_arg: random seed
+            caplog: pytest fixture to capture log output
+
+        """
+
+        def f1(f1_smart_thread: st.SmartThread, f1_group_name: str) -> None:
+            """Target for thread only.
+
+            Args:
+               f1_smart_thread: smart thread for this invocation
+               f1_group_name: the group that this thread is in
+
+            """
+            logger.debug(f"{f1_smart_thread.name} entered for group {f1_group_name}")
+            f1_smart_thread.smart_wait(resumers="alpha")
+
+            assert st.SmartThread.get_active_names(group_name="test1") - {"alpha"} == (
+                active_names
+            )
+
+            assert f1_group_name == f1_smart_thread.group_name
+
+            my_msg_target_name = f"{f1_group_name} {f1_smart_thread.name}"
+
+            while True:
+                my_msg = msg.get_msg(my_msg_target_name)
+                if my_msg == "exit":
+                    break
+
+                if my_msg == "smart_recv":
+                    my_smart_msg = f1_smart_thread.smart_recv(senders="alpha")
+                    assert my_smart_msg["alpha"] == my_msg_target_name
+                elif my_msg == "smart_send":
+                    f1_smart_thread.smart_send(
+                        msg=my_msg_target_name, receivers="alpha"
+                    )
+                elif my_msg == "smart_wait":
+                    f1_smart_thread.smart_wait(resumers="alpha")
+                elif my_msg == "smart_resume":
+                    f1_smart_thread.smart_resume(waiters="alpha")
+                elif my_msg == "smart_sync":
+                    f1_smart_thread.smart_sync(targets="alpha")
+                else:
+                    raise UnrecognizedCmd(f"{my_msg=} is unrecognized")
+
+            logger.debug(f"{f1_smart_thread.name} exiting")
+
+        logger.debug("mainline entered")
+
+        num_smart_reqs = 64
+
+        max_active_names = 16
+
+        max_reg_names = 3
+
+        random.seed(random_seed_arg)
+
+        msg = Msgs()
+
+        group_names = get_names("group_", num_groups_arg)
+
+        active_names = get_names("active_", max_active_names)
+
+        reg_names = get_names("reg_", max_reg_names)
+
+        alpha_threads: dict[str, st.SmartThread] = {}
+        f1_names_in_group: dict[str, list[str]] = {}
+        smart_reqs_to_do: dict[str, list[str]] = {}
+
+        for group_name in group_names:
+            alpha_threads[group_name] = st.SmartThread(
+                group_name=group_name, name="alpha"
+            )
+
+            num_active = random.randint(1, max_active_names)
+            f1_names_in_group[group_name] = random.sample(
+                sorted(active_names), num_active
+            )
+            for name in f1_names_in_group[group_name]:
+                st.SmartThread(
+                    group_name=group_name,
+                    name=name,
+                    target=f1,
+                    kwargs={"f1_group_name": group_name},
+                    thread_parm_name="f1_smart_thread",
+                )
+
+            # for name in reg_names:
+            #     st.SmartThread(
+            #         group_name=group_name,
+            #         name=name,
+            #         target=f1,
+            #         kwargs={"f1_group_name": group_name},
+            #         thread_parm_name="f1_smart_thread",
+            #         auto_start=False,
+            #     )
+
+        for _ in range(num_smart_reqs):
+            group_name = random.sample(sorted(group_names), 1)[0]
+            smart_req = random.sample(smart_reqs, 1)
+            num_potential_targets = len(f1_names_in_group[group_name])
+            num_targets = random.randint(1, num_potential_targets)
+            targets = random.sample(f1_names_in_group[group_name], num_targets)
+
+            for target in targets:
+                target_msg_name = f"{group_name} {target}"
+                msg.queue_msg(target=target_msg_name, msg=smart_req[0])
+
+                if smart_req[0] == "smart_recv":
+                    alpha_threads[group_name].smart_send(
+                        msg=target_msg_name, receivers=target
+                    )
+                elif smart_req[0] == "smart_send":
+                    alpha_msg = alpha_threads[group_name].smart_recv(senders=target)
+                    assert alpha_msg[target] == target_msg_name
+                elif smart_req[0] == "smart_wait":
+                    alpha_threads[group_name].smart_resume(waiters=target)
+                elif smart_req[0] == "smart_resume":
+                    alpha_threads[group_name].smart_wait(resumers=target)
+                elif smart_req[0] == "smart_sync":
+                    alpha_threads[group_name].smart_sync(targets=target)
+                else:
+                    raise UnrecognizedCmd(f"{smart_req[0]=} is unrecognized")
+
+        for group_name in group_names:
+            for target in f1_names_in_group[group_name]:
+                target_msg_name = f"{group_name} {target}"
+                msg.queue_msg(target=target_msg_name, msg="exit")
+                alpha_threads[group_name].smart_join(target=target)
 
         logger.debug("mainline exiting")
 

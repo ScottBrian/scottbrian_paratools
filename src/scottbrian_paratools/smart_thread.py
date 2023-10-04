@@ -5074,7 +5074,7 @@ class SmartThread:
                 f"while processing request {request.value}. "
                 "The SmartThread object used for the invocation is not "
                 "know to the configuration. "
-                f"Group_name: {self.group_name}, "
+                f"Group name: {self.group_name}, "
                 f"Name: {self.name}, "
                 f"ID: {id(self)}, "
                 f"create time: {self.create_time}, "
