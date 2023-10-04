@@ -2922,6 +2922,7 @@ class RequestEntryExitLogSearchItem(LogSearchItem):
             search_str=(
                 f"{list_of_smart_requests} (entry|exit): "
                 r"requestor: [a-z0-9_]+, "
+                r"group: [a-z0-9_]+, "
                 r"targets: \[([a-z0-9_]*|,|'| )*\]"
             ),
             config_ver=config_ver,
@@ -5039,10 +5040,12 @@ class MockGetTargetState:
                 ret_state = st.ThreadState.Stopped
 
             elif (
-                pk_remote.pair_key in st.SmartThread._pair_array
+                pk_remote.pair_key in st.SmartThread._pair_array[self.group_name]
                 and pk_remote.remote
-                in st.SmartThread._pair_array[pk_remote.pair_key].status_blocks
-                and st.SmartThread._pair_array[pk_remote.pair_key]
+                in st.SmartThread._pair_array[self.group_name][
+                    pk_remote.pair_key
+                ].status_blocks
+                and st.SmartThread._pair_array[self.group_name][pk_remote.pair_key]
                 .status_blocks[pk_remote.remote]
                 .create_time
                 != pk_remote.create_time
@@ -19240,7 +19243,9 @@ class ConfigVerifier:
                 )
 
             pair_array_items: dict[st.PairKey, dict[str, StatusBlockSnapshotItem]] = {}
-            for pair_key, connection_pair in st.SmartThread._pair_array.items():
+            for pair_key, connection_pair in st.SmartThread._pair_array[
+                self.group_name
+            ].items():
                 pair_array_items[pair_key] = {}
                 for name, sb_item in connection_pair.status_blocks.items():
                     pair_array_items[pair_key][name] = StatusBlockSnapshotItem(
@@ -23839,7 +23844,7 @@ class ConfigVerifier:
                 pair_key = st.SmartThread._get_pair_key(
                     name0=deleted_name, name1=def_del_name
                 )
-                if pair_key in st.SmartThread._pair_array:
+                if pair_key in st.SmartThread._pair_array[self.group_name]:
                     pair_key_exists[pair_key] = True
                     if pair_key not in self.expected_pairs:
                         raise InvalidConfigurationDetected(
@@ -29309,7 +29314,7 @@ class TestSmartThreadSmokeTest:
         ################################################################
         alpha_smart_init_alpha_debug_log_msgs = [
             (
-                "smart_init entry: requestor: alpha, targets: "
+                "smart_init entry: requestor: alpha, group: test1, targets: "
                 r"\['alpha'\] timeout value: None "
                 "test_smart_thread.py::TestSmartThreadSmokeTest."
                 "test_smart_thread_log_msg:[0-9]+"
@@ -29337,7 +29342,7 @@ class TestSmartThreadSmokeTest:
             ("smart_init _add_to_pair_array exit: " "cmd_runner: alpha, target: alpha"),
             ("smart_init _register exit: cmd_runner: alpha, " "target: alpha"),
             (
-                "smart_init exit: requestor: alpha, targets: "
+                "smart_init exit: requestor: alpha, group: test1, targets: "
                 r"\['alpha'\] timeout value: None "
                 "test_smart_thread.py::TestSmartThreadSmokeTest."
                 "test_smart_thread_log_msg:[0-9]+"
@@ -29359,7 +29364,7 @@ class TestSmartThreadSmokeTest:
         ################################################################
         alpha_first_smart_init_beta_debug_log_msgs = [
             (
-                "smart_init entry: requestor: alpha, targets: "
+                "smart_init entry: requestor: alpha, group: test1, targets: "
                 r"\['beta'\] timeout value: None "
                 "test_smart_thread.py::TestSmartThreadSmokeTest."
                 "test_smart_thread_log_msg:[0-9]+"
@@ -29397,7 +29402,7 @@ class TestSmartThreadSmokeTest:
             ("smart_init _add_to_pair_array exit: " "cmd_runner: alpha, target: beta"),
             ("smart_init _register exit: cmd_runner: alpha, " "target: beta"),
             (
-                "smart_start entry: requestor: alpha, targets: "
+                "smart_start entry: requestor: alpha, group: test1, targets: "
                 r"\['beta'\] timeout value: None "
                 "smart_thread.py::SmartThread.__init__:[0-9]+"
             ),
@@ -29406,12 +29411,12 @@ class TestSmartThreadSmokeTest:
                 "ThreadState.Registered to ThreadState.Alive"
             ),
             (
-                "smart_start exit: requestor: alpha, targets: "
+                "smart_start exit: requestor: alpha, group: test1, targets: "
                 r"\['beta'\] timeout value: None "
                 "smart_thread.py::SmartThread.__init__:[0-9]+"
             ),
             (
-                "smart_init exit: requestor: alpha, targets: "
+                "smart_init exit: requestor: alpha, group: test1, targets: "
                 r"\['beta'\] timeout value: None "
                 "test_smart_thread.py::TestSmartThreadSmokeTest."
                 "test_smart_thread_log_msg:[0-9]+"
@@ -29433,7 +29438,7 @@ class TestSmartThreadSmokeTest:
         ################################################################
         alpha_smart_send_debug_log_msgs = [
             (
-                "smart_send entry: requestor: alpha, targets: "
+                "smart_send entry: requestor: alpha, group: test1, targets: "
                 r"\['beta'\] timeout value: None "
                 "test_smart_thread.py::TestSmartThreadSmokeTest."
                 "test_smart_thread_log_msg:[0-9]+"
@@ -29445,7 +29450,7 @@ class TestSmartThreadSmokeTest:
                 r"create_time=[0-9]+\.[0-9]+\)\]"
             ),
             (
-                "smart_send exit: requestor: alpha, targets: "
+                "smart_send exit: requestor: alpha, group: test1, targets: "
                 r"\['beta'\] timeout value: None "
                 "test_smart_thread.py::TestSmartThreadSmokeTest."
                 "test_smart_thread_log_msg:[0-9]+"
@@ -29462,7 +29467,8 @@ class TestSmartThreadSmokeTest:
         ################################################################
         alpha_smart_resume_debug_log_msgs = [
             (
-                r"smart_resume entry: requestor: alpha, targets: \['beta'\] "
+                r"smart_resume entry: requestor: alpha, group: test1, targets: \["
+                r"'beta'\] "
                 "timeout value: None "
                 "test_smart_thread.py::TestSmartThreadSmokeTest"
                 ".test_smart_thread_log_msg:[0-9]+"
@@ -29474,7 +29480,8 @@ class TestSmartThreadSmokeTest:
                 r"create_time=[0-9]+\.[0-9]+\)\]"
             ),
             (
-                r"smart_resume exit: requestor: alpha, targets: \['beta'\] "
+                r"smart_resume exit: requestor: alpha, group: test1, targets: \["
+                r"'beta'\] "
                 "timeout value: None "
                 "test_smart_thread.py::TestSmartThreadSmokeTest"
                 ".test_smart_thread_log_msg:[0-9]+"
@@ -29493,7 +29500,8 @@ class TestSmartThreadSmokeTest:
         ################################################################
         alpha_smart_sync_debug_log_msgs = [
             (
-                r"smart_sync entry: requestor: alpha, targets: \['beta'\] "
+                r"smart_sync entry: requestor: alpha, group: test1, targets: \["
+                r"'beta'\] "
                 "timeout value: None "
                 "test_smart_thread.py::TestSmartThreadSmokeTest."
                 "test_smart_thread_log_msg:[0-9]+"
@@ -29505,7 +29513,8 @@ class TestSmartThreadSmokeTest:
                 r"create_time=[0-9]+\.[0-9]+\)\]"
             ),
             (
-                r"smart_sync exit: requestor: alpha, targets: \['beta'\] timeout "
+                r"smart_sync exit: requestor: alpha, group: test1, targets: \["
+                r"'beta'\] timeout "
                 "value: None test_smart_thread.py::TestSmartThreadSmokeTest."
                 "test_smart_thread_log_msg:[0-9]+"
             ),
@@ -29523,7 +29532,7 @@ class TestSmartThreadSmokeTest:
         ################################################################
         alpha_smart_join_debug_log_msgs = [
             (
-                "smart_join entry: requestor: alpha, targets: "
+                "smart_join entry: requestor: alpha, group: test1, targets: "
                 r"\['beta'\] timeout value: None "
                 "test_smart_thread.py::TestSmartThreadSmokeTest."
                 "test_smart_thread_log_msg:[0-9]+"
@@ -29569,7 +29578,7 @@ class TestSmartThreadSmokeTest:
             ("alpha did cleanup of _pair_array at UTC " f"{time_match}"),
             ("smart_join _clean_pair_array exit: " "cmd_runner: alpha"),
             (
-                "smart_join exit: requestor: alpha, targets: "
+                "smart_join exit: requestor: alpha, group: test1, targets: "
                 r"\['beta'\] timeout value: None "
                 "test_smart_thread.py::TestSmartThreadSmokeTest."
                 "test_smart_thread_log_msg:[0-9]+"
@@ -29592,7 +29601,7 @@ class TestSmartThreadSmokeTest:
         ################################################################
         alpha_second_smart_init_beta_debug_log_msgs = [
             (
-                "smart_init entry: requestor: alpha, targets: "
+                "smart_init entry: requestor: alpha, group: test1, targets: "
                 r"\['beta'\] timeout value: None "
                 "test_smart_thread.py::TestSmartThreadSmokeTest."
                 "test_smart_thread_log_msg:[0-9]+"
@@ -29630,7 +29639,7 @@ class TestSmartThreadSmokeTest:
             ("smart_init _add_to_pair_array exit: " "cmd_runner: alpha, target: beta"),
             ("smart_init _register exit: cmd_runner: alpha, " "target: beta"),
             (
-                "smart_init exit: requestor: alpha, targets: "
+                "smart_init exit: requestor: alpha, group: test1, targets: "
                 r"\['beta'\] timeout value: None "
                 "test_smart_thread.py::TestSmartThreadSmokeTest."
                 "test_smart_thread_log_msg:[0-9]+"
@@ -29651,7 +29660,8 @@ class TestSmartThreadSmokeTest:
         ################################################################
         alpha_smart_unreg_beta_debug_log_msgs = [
             (
-                r"smart_unreg entry: requestor: alpha, targets: \['beta'\] "
+                r"smart_unreg entry: requestor: alpha, group: test1, targets: \["
+                r"'beta'\] "
                 "timeout value: None "
                 "test_smart_thread.py::TestSmartThreadSmokeTest."
                 "test_smart_thread_log_msg:[0-9]+"
@@ -29692,7 +29702,8 @@ class TestSmartThreadSmokeTest:
             ("alpha did cleanup of _pair_array at UTC " f"{time_match}"),
             ("smart_unreg _clean_pair_array exit: " "cmd_runner: alpha"),
             (
-                r"smart_unreg exit: requestor: alpha, targets: \['beta'\] "
+                r"smart_unreg exit: requestor: alpha, group: test1, targets: \["
+                r"'beta'\] "
                 "timeout value: None "
                 "test_smart_thread.py::TestSmartThreadSmokeTest."
                 "test_smart_thread_log_msg:[0-9]+"
@@ -29744,7 +29755,7 @@ class TestSmartThreadSmokeTest:
         ################################################################
         beta_smart_recv_debug_log_msgs = [
             (
-                "smart_recv entry: requestor: beta, targets: "
+                "smart_recv entry: requestor: beta, group: test1, targets: "
                 r"\['alpha'\] timeout value: None "
                 "test_smart_thread.py::f1:[0-9]+"
             ),
@@ -29755,7 +29766,7 @@ class TestSmartThreadSmokeTest:
                 r"create_time=[0-9]+\.[0-9]+\)\]"
             ),
             (
-                "smart_recv exit: requestor: beta, targets: "
+                "smart_recv exit: requestor: beta, group: test1, targets: "
                 r"\['alpha'\] timeout value: None "
                 "test_smart_thread.py::f1:[0-9]+"
             ),
@@ -29773,7 +29784,8 @@ class TestSmartThreadSmokeTest:
         ################################################################
         beta_smart_wait_debug_log_msgs = [
             (
-                r"smart_wait entry: requestor: beta, targets: \['alpha'\] "
+                r"smart_wait entry: requestor: beta, group: test1, targets: \["
+                r"'alpha'\] "
                 "timeout value: None test_smart_thread.py::f1:[0-9]+"
             ),
             (
@@ -29783,7 +29795,7 @@ class TestSmartThreadSmokeTest:
                 r"create_time=[0-9]+\.[0-9]+\)\]"
             ),
             (
-                r"smart_wait exit: requestor: beta, targets: \['alpha'\] "
+                r"smart_wait exit: requestor: beta, group: test1, targets: \['alpha'\] "
                 "timeout value: None test_smart_thread.py::f1:[0-9]+"
             ),
         ]
@@ -29800,7 +29812,8 @@ class TestSmartThreadSmokeTest:
         ################################################################
         beta_smart_sync_debug_log_msgs = [
             (
-                r"smart_sync entry: requestor: beta, targets: \['alpha'\] "
+                r"smart_sync entry: requestor: beta, group: test1, targets: \["
+                r"'alpha'\] "
                 "timeout value: None test_smart_thread.py::f1:[0-9]+"
             ),
             (
@@ -29810,7 +29823,8 @@ class TestSmartThreadSmokeTest:
                 r"create_time=[0-9]+\.[0-9]+\)\]"
             ),
             (
-                r"smart_sync exit: requestor: beta, targets: \['alpha'\] timeout "
+                r"smart_sync exit: requestor: beta, group: test1, targets: \["
+                r"'alpha'\] timeout "
                 "value: None test_smart_thread.py::f1:[0-9]+"
             ),
         ]
@@ -30256,7 +30270,7 @@ class TestSmartThreadErrors:
 
         # create an empty pair array entry_
         pair_key = st.SmartThread._get_pair_key("alpha", "beta")
-        st.SmartThread._pair_array[pair_key] = st.SmartThread.ConnectionPair(
+        st.SmartThread._pair_array["test1"][pair_key] = st.SmartThread.ConnectionPair(
             status_lock=threading.Lock(), status_blocks={}
         )
 
@@ -30281,7 +30295,9 @@ class TestSmartThreadErrors:
 
         ################################################################
 
-        st.SmartThread._pair_array[pair_key] = st.SmartThread.ConnectionPair(
+        st.SmartThread._pair_array[self.group_name][
+            pair_key
+        ] = st.SmartThread.ConnectionPair(
             status_lock=threading.Lock(),
             status_blocks={
                 "beta": st.SmartThread.ConnectionStatusBlock(
@@ -30316,7 +30332,9 @@ class TestSmartThreadErrors:
 
         ################################################################
 
-        st.SmartThread._pair_array[pair_key] = st.SmartThread.ConnectionPair(
+        st.SmartThread._pair_array[self.group_name][
+            pair_key
+        ] = st.SmartThread.ConnectionPair(
             status_lock=threading.Lock(),
             status_blocks={
                 "alpha": st.SmartThread.ConnectionStatusBlock(
@@ -30352,7 +30370,9 @@ class TestSmartThreadErrors:
 
         ################################################################
 
-        st.SmartThread._pair_array[pair_key] = st.SmartThread.ConnectionPair(
+        st.SmartThread._pair_array[self.group_name][
+            pair_key
+        ] = st.SmartThread.ConnectionPair(
             status_lock=threading.Lock(),
             status_blocks={
                 "alpha": st.SmartThread.ConnectionStatusBlock(
@@ -30377,7 +30397,9 @@ class TestSmartThreadErrors:
         with pytest.raises(st.SmartThreadIncorrectData) as exc:
             st.SmartThread(group_name="test1", name="beta", target=f1)
 
-        existing_names = st.SmartThread._pair_array[pair_key].status_blocks.keys()
+        existing_names = st.SmartThread._pair_array[self.group_name][
+            pair_key
+        ].status_blocks.keys()
 
         exp_error_msg = re.escape(
             "SmartThread alpha "
@@ -32332,8 +32354,8 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_multiple_groups
     ####################################################################
-    @pytest.mark.parametrize("num_groups_arg", [1, 2, 3, 4, 5, 16])
-    @pytest.mark.parametrize("random_seed_arg", [1, 2, 3, 4, 5])
+    @pytest.mark.parametrize("num_groups_arg", [1, 2, 4, 8, 16])
+    @pytest.mark.parametrize("random_seed_arg", [1, 2, 3, 4, 5, 6, 7, 8])
     def test_multiple_groups(
         self,
         num_groups_arg: int,
@@ -32358,24 +32380,17 @@ class TestSmartBasicScenarios:
 
             """
             logger.debug(f"{f1_smart_thread.name} entered for group {f1_group_name}")
-            f1_smart_thread.smart_wait(resumers="alpha")
-
-            assert st.SmartThread.get_active_names(group_name="test1") - {"alpha"} == (
-                active_names
-            )
-
-            assert f1_group_name == f1_smart_thread.group_name
 
             my_msg_target_name = f"{f1_group_name} {f1_smart_thread.name}"
 
             while True:
-                my_msg = msg.get_msg(my_msg_target_name)
+                my_msg = msg.get_msg(my_msg_target_name, timeout=60)
                 if my_msg == "exit":
                     break
 
                 if my_msg == "smart_recv":
                     my_smart_msg = f1_smart_thread.smart_recv(senders="alpha")
-                    assert my_smart_msg["alpha"] == my_msg_target_name
+                    assert my_smart_msg["alpha"][0] == my_msg_target_name
                 elif my_msg == "smart_send":
                     f1_smart_thread.smart_send(
                         msg=my_msg_target_name, receivers="alpha"
@@ -32393,11 +32408,9 @@ class TestSmartBasicScenarios:
 
         logger.debug("mainline entered")
 
-        num_smart_reqs = 64
+        num_smart_reqs = 256
 
         max_active_names = 16
-
-        max_reg_names = 3
 
         random.seed(random_seed_arg)
 
@@ -32407,11 +32420,8 @@ class TestSmartBasicScenarios:
 
         active_names = get_names("active_", max_active_names)
 
-        reg_names = get_names("reg_", max_reg_names)
-
         alpha_threads: dict[str, st.SmartThread] = {}
         f1_names_in_group: dict[str, list[str]] = {}
-        smart_reqs_to_do: dict[str, list[str]] = {}
 
         for group_name in group_names:
             alpha_threads[group_name] = st.SmartThread(
@@ -32431,48 +32441,44 @@ class TestSmartBasicScenarios:
                     thread_parm_name="f1_smart_thread",
                 )
 
-            # for name in reg_names:
-            #     st.SmartThread(
-            #         group_name=group_name,
-            #         name=name,
-            #         target=f1,
-            #         kwargs={"f1_group_name": group_name},
-            #         thread_parm_name="f1_smart_thread",
-            #         auto_start=False,
-            #     )
-
-        for _ in range(num_smart_reqs):
-            group_name = random.sample(sorted(group_names), 1)[0]
-            smart_req = random.sample(smart_reqs, 1)
+        for idx in range(num_smart_reqs):
+            if idx < len(group_names):
+                group_name = sorted(group_names)[idx]
+            else:
+                group_name = random.sample(sorted(group_names), 1)[0]
+            if idx < len(smart_reqs):
+                smart_req = smart_reqs[idx]
+            else:
+                smart_req = random.sample(smart_reqs, 1)[0]
             num_potential_targets = len(f1_names_in_group[group_name])
             num_targets = random.randint(1, num_potential_targets)
             targets = random.sample(f1_names_in_group[group_name], num_targets)
 
             for target in targets:
                 target_msg_name = f"{group_name} {target}"
-                msg.queue_msg(target=target_msg_name, msg=smart_req[0])
+                msg.queue_msg(target=target_msg_name, msg=smart_req)
 
-                if smart_req[0] == "smart_recv":
+                if smart_req == "smart_recv":
                     alpha_threads[group_name].smart_send(
                         msg=target_msg_name, receivers=target
                     )
-                elif smart_req[0] == "smart_send":
+                elif smart_req == "smart_send":
                     alpha_msg = alpha_threads[group_name].smart_recv(senders=target)
-                    assert alpha_msg[target] == target_msg_name
-                elif smart_req[0] == "smart_wait":
+                    assert alpha_msg[target][0] == target_msg_name
+                elif smart_req == "smart_wait":
                     alpha_threads[group_name].smart_resume(waiters=target)
-                elif smart_req[0] == "smart_resume":
+                elif smart_req == "smart_resume":
                     alpha_threads[group_name].smart_wait(resumers=target)
-                elif smart_req[0] == "smart_sync":
+                elif smart_req == "smart_sync":
                     alpha_threads[group_name].smart_sync(targets=target)
                 else:
-                    raise UnrecognizedCmd(f"{smart_req[0]=} is unrecognized")
+                    raise UnrecognizedCmd(f"{smart_req=} is unrecognized")
 
         for group_name in group_names:
             for target in f1_names_in_group[group_name]:
                 target_msg_name = f"{group_name} {target}"
                 msg.queue_msg(target=target_msg_name, msg="exit")
-                alpha_threads[group_name].smart_join(target=target)
+                alpha_threads[group_name].smart_join(targets=target)
 
         logger.debug("mainline exiting")
 

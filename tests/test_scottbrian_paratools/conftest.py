@@ -3,6 +3,7 @@
 ########################################################################
 # Standard Library
 ########################################################################
+from collections import defaultdict
 import logging
 import re
 import queue
@@ -44,6 +45,7 @@ logger = logging.getLogger(__name__)
 # Thread exceptions
 # The following fixture depends on the following pytest specification:
 # -p no:threadexception
+
 
 # For PyCharm, the above specification goes into field Additional
 # Arguments found at Run -> edit configurations
@@ -89,13 +91,13 @@ def thread_exc(monkeypatch: Any) -> "ExcHook":
 
     class ExcHook:
         def __init__(self):
-            self.exc_err_msg1 = ''
+            self.exc_err_msg1 = ""
 
         def raise_exc_if_one(self):
             if self.exc_err_msg1:
                 exc_msg = self.exc_err_msg1
-                self.exc_err_msg1 = ''
-                raise Exception(f'{exc_msg}')
+                self.exc_err_msg1 = ""
+                raise Exception(f"{exc_msg}")
 
     # logger.debug(f'hook before: {threading.excepthook}')
     exc_hook = ExcHook()
@@ -104,14 +106,15 @@ def thread_exc(monkeypatch: Any) -> "ExcHook":
         # exc_err_msg = (f'SmartEvent excepthook: {args.exc_type}, '
         #                f'{args.exc_value}, {args.exc_traceback},'
         #                f' {args.thread}')
-        exc_err_msg = (f'SmartEvent excepthook: {args.exc_type}, '
-                       f'{args.exc_traceback}')
+        exc_err_msg = (
+            f"SmartEvent excepthook: {args.exc_type}, " f"{args.exc_traceback}"
+        )
         current_thread = threading.current_thread()
-        logging.exception(f'exception caught for {current_thread}')
-        logger.debug(f'excepthook current thread is {current_thread}')
+        logging.exception(f"exception caught for {current_thread}")
+        logger.debug(f"excepthook current thread is {current_thread}")
         # ExcHook.exc_err_msg1 = exc_err_msg
         exc_hook.exc_err_msg1 = exc_err_msg
-        raise Exception(f'SmartEvent thread test error: {exc_err_msg}')
+        raise Exception(f"SmartEvent thread test error: {exc_err_msg}")
 
     monkeypatch.setattr(threading, "excepthook", mock_threading_excepthook)
     # logger.debug(f'hook after: {threading.excepthook}')
@@ -121,9 +124,9 @@ def thread_exc(monkeypatch: Any) -> "ExcHook":
 
     # clean the registry in SmartThread class
     SmartThread._registry = {}
-    SmartThread._pair_array = {}
+    SmartThread._pair_array = defaultdict(dict)
     # assert threading.current_thread().name == 'alpha'
-    threading.current_thread().name = 'MainThread'  # restore name
+    threading.current_thread().name = "MainThread"  # restore name
 
     # surface any remote thread uncaught exceptions
     exc_hook.raise_exc_if_one()
@@ -132,12 +135,12 @@ def thread_exc(monkeypatch: Any) -> "ExcHook":
     # any started threads to come home
     if threading.active_count() > 1:
         for thread in threading.enumerate():
-            print(f'conftest thread: {thread}')
+            print(f"conftest thread: {thread}")
     assert threading.active_count() == 1
 
     # the following assert ensures -p no:threadexception was specified
     assert threading.excepthook == new_hook
-    print(f'conftest is OK')
+    print(f"conftest is OK")
 
 
 # ###############################################################################
