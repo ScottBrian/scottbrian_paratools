@@ -30295,9 +30295,7 @@ class TestSmartThreadErrors:
 
         ################################################################
 
-        st.SmartThread._pair_array[self.group_name][
-            pair_key
-        ] = st.SmartThread.ConnectionPair(
+        st.SmartThread._pair_array["test1"][pair_key] = st.SmartThread.ConnectionPair(
             status_lock=threading.Lock(),
             status_blocks={
                 "beta": st.SmartThread.ConnectionStatusBlock(
@@ -30332,9 +30330,7 @@ class TestSmartThreadErrors:
 
         ################################################################
 
-        st.SmartThread._pair_array[self.group_name][
-            pair_key
-        ] = st.SmartThread.ConnectionPair(
+        st.SmartThread._pair_array["test1"][pair_key] = st.SmartThread.ConnectionPair(
             status_lock=threading.Lock(),
             status_blocks={
                 "alpha": st.SmartThread.ConnectionStatusBlock(
@@ -30370,9 +30366,7 @@ class TestSmartThreadErrors:
 
         ################################################################
 
-        st.SmartThread._pair_array[self.group_name][
-            pair_key
-        ] = st.SmartThread.ConnectionPair(
+        st.SmartThread._pair_array["test1"][pair_key] = st.SmartThread.ConnectionPair(
             status_lock=threading.Lock(),
             status_blocks={
                 "alpha": st.SmartThread.ConnectionStatusBlock(
@@ -30397,7 +30391,7 @@ class TestSmartThreadErrors:
         with pytest.raises(st.SmartThreadIncorrectData) as exc:
             st.SmartThread(group_name="test1", name="beta", target=f1)
 
-        existing_names = st.SmartThread._pair_array[self.group_name][
+        existing_names = st.SmartThread._pair_array["test1"][
             pair_key
         ].status_blocks.keys()
 
@@ -32260,8 +32254,10 @@ class TestSmartBasicScenarios:
 
         beta_thread = threading.Thread(name="beta", target=f1)
         beta_thread.start()
+        beta_thread.join()
 
         st.SmartThread(group_name="test1", name="charlie", target=f2)
+        alpha_smart_thread.smart_join(targets="charlie")
 
     ####################################################################
     # test_get_active_names
@@ -32354,10 +32350,19 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_multiple_groups
     ####################################################################
+    @pytest.mark.parametrize(
+        "log_level_arg",
+        [
+            logging.DEBUG,
+            logging.CRITICAL,
+            logging.NOTSET,
+        ],
+    )
     @pytest.mark.parametrize("num_groups_arg", [1, 2, 4, 8, 16])
     @pytest.mark.parametrize("random_seed_arg", [1, 2, 3, 4, 5, 6, 7, 8])
     def test_multiple_groups(
         self,
+        log_level_arg: int,
         num_groups_arg: int,
         random_seed_arg: int,
         caplog: pytest.LogCaptureFixture,
@@ -32383,14 +32388,21 @@ class TestSmartBasicScenarios:
 
             my_msg_target_name = f"{f1_group_name} {f1_smart_thread.name}"
 
+            msgs_owed: int = 0
             while True:
-                my_msg = msg.get_msg(my_msg_target_name, timeout=60)
+                my_msg = msg.get_msg(my_msg_target_name, timeout=120)
                 if my_msg == "exit":
                     break
 
                 if my_msg == "smart_recv":
-                    my_smart_msg = f1_smart_thread.smart_recv(senders="alpha")
-                    assert my_smart_msg["alpha"][0] == my_msg_target_name
+                    msgs_owed += 1
+                    if msgs_owed > 0:
+                        my_smart_msg = f1_smart_thread.smart_recv(senders="alpha")
+
+                        for a_msg in my_smart_msg["alpha"]:
+                            assert a_msg == my_msg_target_name
+                            msgs_owed -= 1
+
                 elif my_msg == "smart_send":
                     f1_smart_thread.smart_send(
                         msg=my_msg_target_name, receivers="alpha"
@@ -32406,6 +32418,24 @@ class TestSmartBasicScenarios:
 
             logger.debug(f"{f1_smart_thread.name} exiting")
 
+        start_time = time.time()
+        manager_logger = logging.Logger.manager.loggerDict["scottbrian_paratools"]
+
+        if isinstance(manager_logger, logging.PlaceHolder):
+            raise InvalidConfigurationDetected(
+                "test_smart_thread_log_msg detected that the manager "
+                "logger for scottbrian_paratoold is a PlaceHolder"
+            )
+
+        my_root = manager_logger.parent
+
+        if my_root is None:
+            raise InvalidConfigurationDetected(
+                "test_smart_thread_log_msg failed to find logger for "
+                "scottbrian_paratools parent"
+            )
+
+        my_root.setLevel(log_level_arg)
         logger.debug("mainline entered")
 
         num_smart_reqs = 256
@@ -32480,7 +32510,8 @@ class TestSmartBasicScenarios:
                 msg.queue_msg(target=target_msg_name, msg="exit")
                 alpha_threads[group_name].smart_join(targets=target)
 
-        logger.debug("mainline exiting")
+        elapsed_time = time.time() - start_time
+        logger.debug(f"mainline exiting elapsed time: {elapsed_time}")
 
     ####################################################################
     # test_send_scenario

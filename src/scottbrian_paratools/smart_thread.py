@@ -4838,10 +4838,10 @@ class SmartThread:
             logger.error(error_msg)
             raise SmartThreadDeadlockDetected(error_msg)
 
-        # Note that the timer will never be expired if timeout
-        # was not specified either explicitly on the smart_wait
-        # call or via a default timeout established when this
-        # SmartThread was instantiated.
+        # Note that the timer will never be expired if timeout was not
+        # in effect, meaning is was not specified on the smart_wait and
+        # was not specified as the default timeout when this SmartThread
+        # was instantiated.
         elif timer is not None and timer.is_expired():
             error_msg = (
                 f"{self.name} raising " f"SmartThreadRequestTimedOut {msg_suite}"
@@ -4878,26 +4878,22 @@ class SmartThread:
         # the remote, then the remote will have set local_sb.deadlock
         # to let us know. No need to analyse this side. Just
         # drop down to the code below and return.
-        if not local_sb.deadlock:
+        if not (local_sb.deadlock or remote_sb.deadlock):
             if (
                 remote_sb.sync_wait
                 and not local_sb.request == ReqType.Smart_sync
-                and not (remote_sb.sync_event.is_set() or remote_sb.deadlock)
+                and not remote_sb.sync_event.is_set()
             ):
                 remote_sb.deadlock = True
                 remote_sb.remote_deadlock_request = local_sb.request
                 local_sb.deadlock = True
                 local_sb.remote_deadlock_request = ReqType.Smart_sync
-            elif remote_sb.wait_wait and not (
-                remote_sb.wait_event.is_set() or remote_sb.deadlock
-            ):
+            elif remote_sb.wait_wait and not remote_sb.wait_event.is_set():
                 remote_sb.deadlock = True
                 remote_sb.remote_deadlock_request = local_sb.request
                 local_sb.deadlock = True
                 local_sb.remote_deadlock_request = ReqType.Smart_wait
-            elif remote_sb.recv_wait and not (
-                not remote_sb.msg_q.empty() or remote_sb.deadlock
-            ):
+            elif remote_sb.recv_wait and remote_sb.msg_q.empty():
                 remote_sb.deadlock = True
                 remote_sb.remote_deadlock_request = local_sb.request
                 local_sb.deadlock = True
