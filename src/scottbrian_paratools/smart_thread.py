@@ -377,6 +377,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import auto, Flag, StrEnum
+
 import logging
 import queue
 import threading
@@ -411,6 +412,24 @@ from scottbrian_locking import se_lock as sel
 logger = logging.getLogger(__name__)
 
 
+class MyLogger:
+    def __init__(self):
+        self.my_prints: int = 0
+
+    def debug(self, instr: Any, stacklevel=1):
+        pass
+
+    def info(self, instr: Any, stacklevel=1):
+        pass
+
+    def error(self, instr: Any, stacklevel=1):
+        pass
+
+    def isEnabledFor(self, instr: Any) -> bool:
+        return False
+
+
+# logger = MyLogger()
 ########################################################################
 # TypeAlias
 ########################################################################
@@ -588,7 +607,6 @@ class RequestBlock:
     not_registered_remotes: set[str]
     deadlock_remotes: set[str]
     full_send_q_remotes: set[str]
-    request_max_interval: IntFloat = 0.0
     remote_deadlock_request: ReqType = ReqType.NoReq
 
 
@@ -758,12 +776,12 @@ class SmartThread:
     # the following constant is the amount of time we will allow
     # for a request to complete while holding the registry lock before
     # checking the remote state
-    K_REQUEST_MIN_INTERVAL: IntFloat = 0.01
 
     # the following constant is the default amount of time we will allow
     # for a request to complete while holding the registry lock after
     # determining that the remote state is alive
-    K_REQUEST_MAX_INTERVAL: IntFloat = 1.0
+    K_REQUEST_WAIT_TIME: IntFloat = 0.01
+    K_LOOP_IDLE_TIME: IntFloat = 1.0
 
     ####################################################################
     # __init__
@@ -781,7 +799,6 @@ class SmartThread:
         auto_start: Optional[bool] = True,
         default_timeout: OptIntFloat = None,
         max_msgs: int = 0,
-        request_max_interval: IntFloat = K_REQUEST_MAX_INTERVAL,
     ) -> None:
         """Initialize an instance of the SmartThread class.
 
@@ -820,8 +837,6 @@ class SmartThread:
             max_msgs: specifies the maximum number of messages that can
                 occupy the message queue. Zero (the default) specifies
                 no limit.
-            request_max_interval: used to control the sleep time when
-                waiting for a request to complete
 
         Raises:
             SmartThreadIncorrectNameSpecified: Attempted SmartThread
@@ -975,12 +990,13 @@ class SmartThread:
             self.thread = threading.current_thread()
             # self.thread.name = name
 
+        self.loop_idle_event = threading.Event()
+
         self.auto_start = auto_start
 
         self.default_timeout = default_timeout
 
         self.max_msgs = max_msgs
-        self.request_max_interval = request_max_interval
 
         self.started_targets: set[str] = set()
         self.unreged_targets: set[str] = set()
@@ -2886,6 +2902,10 @@ class SmartThread:
                     logger.info(
                         f"{self.name} smart_send sent message to " f"{pk_remote.remote}"
                     )
+                    # notify remote that a message has been queued
+                    SmartThread._registry[self.group_name][
+                        pk_remote.remote
+                    ].loop_idle_event.set()
 
                     self.sent_targets |= {pk_remote.remote}
                     self.num_targets_completed += 1
@@ -3259,24 +3279,16 @@ class SmartThread:
             True when request completed, False otherwise
 
         """
-        # We start off assuming the remote is alive and we have a msg,
-        # meaning we make the timeout_value very small just to test
-        # the msg_q. If there is no msg, we check the remote state
-        # and to decide whether to fail the smart_recv (remote
-        # stopped), try to retrieve the msg again with a longer
-        # timeout_value (remote alive), or return False to give
-        # the remote more time (remote is not alive, but not stopped)
-
-        # for timeout_value in (SmartThread.K_REQUEST_MIN_INTERVAL,
-        #                       request_block.request_max_interval):
+        # We first try to get the message with a short timeout time. If
+        # the message is not obtained (we exceed the timeout), we check
+        # for error conditions, and if none we return to allow more time
+        # for the message to be sent.
         try:
             # recv message from remote
             with SmartThread._pair_array[self.group_name][
                 pk_remote.pair_key
             ].status_lock:
-                recvd_msg = local_sb.msg_q.get(
-                    timeout=SmartThread.K_REQUEST_MIN_INTERVAL
-                )
+                recvd_msg = local_sb.msg_q.get(timeout=SmartThread.K_REQUEST_WAIT_TIME)
                 self.recvd_msgs[pk_remote.remote] = [recvd_msg]
                 while not local_sb.msg_q.empty():
                     recvd_msg = local_sb.msg_q.get()
@@ -3714,19 +3726,11 @@ class SmartThread:
             True when request completed, False otherwise
 
         """
-        # We don't check to ensure remote is alive since it may have
-        # resumed us and then ended. So, we check the wait_event first,
-        # and then we will check to see whether the remote is alive.
-        # We start off assuming remote has set our wait event,
-        # meaning we make the timeout_value very small just to test
-        # the event. If the event is not set, we check the remote state
-        # and to decide whether to fail the smart_wait (remote
-        # stopped), try again with a longer
-        # timeout_value (remote alive), or return False to give
-        # the remote more time (remote is not alive, but no stopped)
-        # for timeout_value in (SmartThread.K_REQUEST_MIN_INTERVAL,
-        #                       request_block.request_max_interval):
-        if local_sb.wait_event.wait(timeout=SmartThread.K_REQUEST_MIN_INTERVAL):
+        # We first wait on the event with a short timeout time. If the
+        # event is not set (we exceed the timeout), we check for error
+        # conditions, and if none we return to allow more time for the
+        # resume to occur.
+        if local_sb.wait_event.wait(timeout=SmartThread.K_REQUEST_WAIT_TIME):
             # We need the lock to coordinate with the remote
             # deadlock detection code to prevent:
             # 1) the remote sees that the wait_wait flag is True
@@ -3741,6 +3745,13 @@ class SmartThread:
 
                 # be ready for next wait
                 local_sb.wait_event.clear()
+
+            # notify remote that a wait was cleared in case it was
+            # waiting to do another resume
+            if pk_remote.remote in SmartThread._registry[self.group_name]:
+                SmartThread._registry[self.group_name][
+                    pk_remote.remote
+                ].loop_idle_event.set()
 
             logger.info(f"{self.name} smart_wait resumed by " f"{pk_remote.remote}")
             self.resumed_by |= {pk_remote.remote}
@@ -4058,9 +4069,16 @@ class SmartThread:
                     # the while loop again with one
                     # less remote
                     remote_sb.wait_event.set()
+
+                    # notify remote that a wait has been resumed
+                    SmartThread._registry[self.group_name][
+                        pk_remote.remote
+                    ].loop_idle_event.set()
+
                     logger.info(
                         f"{self.name} smart_resume resumed " f"{pk_remote.remote}"
                     )
+
                     self.resumed_targets |= {pk_remote.remote}
                     self.num_targets_completed += 1
                     return True
@@ -4262,6 +4280,12 @@ class SmartThread:
                         ):
                             # sync resume remote thread
                             remote_sb.sync_event.set()
+
+                            # notify remote that a sync has been resumed
+                            SmartThread._registry[self.group_name][
+                                pk_remote.remote
+                            ].loop_idle_event.set()
+
                             local_sb.sync_wait = True
                             logger.info(
                                 f"{self.name} smart_sync set event for "
@@ -4278,9 +4302,7 @@ class SmartThread:
         # This is OK, but if the sync_event is not set and the remote is
         # stopped, that is not OK.
         ################################################################
-        # for timeout_value in (SmartThread.K_REQUEST_MIN_INTERVAL,
-        #                       request_block.request_max_interval):
-        if local_sb.sync_event.wait(timeout=SmartThread.K_REQUEST_MIN_INTERVAL):
+        if local_sb.sync_event.wait(timeout=SmartThread.K_REQUEST_WAIT_TIME):
             # We need the lock to coordinate with the remote
             # deadlock detection code to prevent:
             # 1) the remote sees that the sync_wait flag is True
@@ -4295,6 +4317,13 @@ class SmartThread:
 
                 # be ready for next sync wait
                 local_sb.sync_event.clear()
+
+            # notify remote that a sync was cleared in case it was
+            # waiting to do another sync
+            if pk_remote.remote in SmartThread._registry[self.group_name]:
+                SmartThread._registry[self.group_name][
+                    pk_remote.remote
+                ].loop_idle_event.set()
 
             logger.info(f"{self.name} smart_sync achieved with " f"{pk_remote.remote}")
             self.synced_targets |= {pk_remote.remote}
@@ -4456,6 +4485,8 @@ class SmartThread:
         do_refresh: bool = False
         while True:
             work_pk_remotes_copy = self.work_pk_remotes.copy()
+            # notify remote that a wait has been resumed
+            self.loop_idle_event.clear()
             for pk_remote in work_pk_remotes_copy:
                 # we need to hold the lock to ensure the pair_array
                 # remains stable while getting local_sb. The
@@ -4585,7 +4616,7 @@ class SmartThread:
                     full_send_q_remotes=request_block.full_send_q_remotes,
                 )
 
-            time.sleep(0.2)
+            self.loop_idle_event.wait(timeout=SmartThread.K_LOOP_IDLE_TIME)
 
         ################################################################
         # cleanup

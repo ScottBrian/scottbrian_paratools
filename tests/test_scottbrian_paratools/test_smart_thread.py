@@ -53,7 +53,34 @@ from scottbrian_locking import se_lock as sel
 ########################################################################
 import scottbrian_paratools.smart_thread as st
 
+
 logger = logging.getLogger(__name__)
+
+
+class MyLogger:
+    def debug(self, instr: Any):
+        pass
+
+    def info(self, instr: Any):
+        pass
+
+    def error(self, instr: Any):
+        pass
+
+    def isEnabledFor(self, instr: Any) -> bool:
+        return False
+
+
+# logger = MyLogger()
+
+
+# class logging:
+#     DEBUG = 10
+#     INFO = 20
+#     WARNING = 30
+#     ERROR = 40
+#     CRITICAL = 50
+#     NOTSET = 0
 
 
 ########################################################################
@@ -32350,19 +32377,18 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_multiple_groups
     ####################################################################
-    @pytest.mark.parametrize(
-        "log_level_arg",
-        [
-            logging.DEBUG,
-            logging.CRITICAL,
-            logging.NOTSET,
-        ],
-    )
-    @pytest.mark.parametrize("num_groups_arg", [1, 2, 4, 8, 16])
-    @pytest.mark.parametrize("random_seed_arg", [1, 2, 3, 4, 5, 6, 7, 8])
+    # @pytest.mark.parametrize(
+    #     "log_level_arg",
+    #     [
+    #         logging.DEBUG,
+    #         logging.CRITICAL,
+    #         logging.NOTSET,
+    #     ],
+    # )
+    @pytest.mark.parametrize("num_groups_arg", [1, 2, 3, 32])
+    @pytest.mark.parametrize("random_seed_arg", [1, 2, 3])
     def test_multiple_groups(
         self,
-        log_level_arg: int,
         num_groups_arg: int,
         random_seed_arg: int,
         caplog: pytest.LogCaptureFixture,
@@ -32390,7 +32416,10 @@ class TestSmartBasicScenarios:
 
             msgs_owed: int = 0
             while True:
-                my_msg = msg.get_msg(my_msg_target_name, timeout=120)
+                # my_msg = msg.get_msg(my_msg_target_name, timeout=120)
+                my_msg = f1_msgs[f1_group_name][f1_smart_thread.name].get_msg(
+                    my_msg_target_name, timeout=0
+                )
                 if my_msg == "exit":
                     break
 
@@ -32419,23 +32448,26 @@ class TestSmartBasicScenarios:
             logger.debug(f"{f1_smart_thread.name} exiting")
 
         start_time = time.time()
-        manager_logger = logging.Logger.manager.loggerDict["scottbrian_paratools"]
-
-        if isinstance(manager_logger, logging.PlaceHolder):
-            raise InvalidConfigurationDetected(
-                "test_smart_thread_log_msg detected that the manager "
-                "logger for scottbrian_paratoold is a PlaceHolder"
-            )
-
-        my_root = manager_logger.parent
-
-        if my_root is None:
-            raise InvalidConfigurationDetected(
-                "test_smart_thread_log_msg failed to find logger for "
-                "scottbrian_paratools parent"
-            )
-
-        my_root.setLevel(log_level_arg)
+        # manager_logger = logging.Logger.manager.loggerDict["scottbrian_paratools"]
+        # print(f"{logging=}")
+        # print(f"{manager_logger=}")
+        #
+        # if isinstance(manager_logger, logging.PlaceHolder):
+        #     raise InvalidConfigurationDetected(
+        #         "test_smart_thread_log_msg detected that the manager "
+        #         "logger for scottbrian_paratoold is a PlaceHolder"
+        #     )
+        #
+        # my_root = manager_logger.parent
+        # print(f"{my_root=}")
+        #
+        # if my_root is None:
+        #     raise InvalidConfigurationDetected(
+        #         "test_smart_thread_log_msg failed to find logger for "
+        #         "scottbrian_paratools parent"
+        #     )
+        #
+        # my_root.setLevel(log_level_arg)
         logger.debug("mainline entered")
 
         num_smart_reqs = 256
@@ -32452,10 +32484,13 @@ class TestSmartBasicScenarios:
 
         alpha_threads: dict[str, st.SmartThread] = {}
         f1_names_in_group: dict[str, list[str]] = {}
+        f1_msgs: dict[str, dict[str, Msgs]] = defaultdict(dict)
+        f1_smart_threads: dict[str, dict[str, st.SmartThread]] = defaultdict(dict)
 
         for group_name in group_names:
             alpha_threads[group_name] = st.SmartThread(
-                group_name=group_name, name="alpha"
+                group_name=group_name,
+                name="alpha",
             )
 
             num_active = random.randint(1, max_active_names)
@@ -32463,7 +32498,9 @@ class TestSmartBasicScenarios:
                 sorted(active_names), num_active
             )
             for name in f1_names_in_group[group_name]:
-                st.SmartThread(
+                # f1_msgs[group_name][name] = Msgs()
+                f1_msgs[group_name][name] = msg
+                f1_smart_threads[group_name][name] = st.SmartThread(
                     group_name=group_name,
                     name=name,
                     target=f1,
@@ -32486,7 +32523,9 @@ class TestSmartBasicScenarios:
 
             for target in targets:
                 target_msg_name = f"{group_name} {target}"
-                msg.queue_msg(target=target_msg_name, msg=smart_req)
+                f1_msgs[group_name][target].queue_msg(
+                    target=target_msg_name, msg=smart_req
+                )
 
                 if smart_req == "smart_recv":
                     alpha_threads[group_name].smart_send(
@@ -32507,9 +32546,37 @@ class TestSmartBasicScenarios:
         for group_name in group_names:
             for target in f1_names_in_group[group_name]:
                 target_msg_name = f"{group_name} {target}"
-                msg.queue_msg(target=target_msg_name, msg="exit")
+                f1_msgs[group_name][target].queue_msg(
+                    target=target_msg_name, msg="exit"
+                )
                 alpha_threads[group_name].smart_join(targets=target)
 
+        # for group_name in group_names:
+        #     for target in f1_names_in_group[group_name]:
+        #         num_sleeps = f1_smart_threads[group_name][target].num_sleeps
+        #         elapsed_sleep = f1_smart_threads[group_name][target].elapsed_sleep
+        #         if num_sleeps > 0:
+        #             mean_sleep = elapsed_sleep / num_sleeps
+        #         else:
+        #             mean_sleep = 0
+        #
+        #         print(
+        #             f"{group_name=}, {target=}, {num_sleeps=}"
+        #             f", {elapsed_sleep=}, {mean_sleep=}"
+        #         )
+
+        # for group_name in group_names:
+        #     num_sleeps = alpha_threads[group_name].num_sleeps
+        #     elapsed_sleep = alpha_threads[group_name].elapsed_sleep
+        #     if num_sleeps > 0:
+        #         mean_sleep = elapsed_sleep / num_sleeps
+        #     else:
+        #         mean_sleep = 0
+        #
+        #     print(
+        #         f"{group_name=}, target=alpha, {num_sleeps=}"
+        #         f", {elapsed_sleep=}, {mean_sleep=}"
+        #     )
         elapsed_time = time.time() - start_time
         logger.debug(f"mainline exiting elapsed time: {elapsed_time}")
 

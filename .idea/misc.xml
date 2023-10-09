@@ -3,7 +3,10 @@
   <component name="Black">
     <option name="enabledOnReformat" value="true" />
     <option name="enabledOnSave" value="true" />
-    <option name="sdkUUID" value="1e4f4794-37dc-47b5-8c89-7c96c53e1d04" />
+    <option name="sdkName" value="Python 3.11 (scottbrian_paratools)" />
   </component>
   <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.11 (scottbrian_paratools)" project-jdk-type="Python SDK" />
+  <component name="PythonCompatibilityInspectionAdvertiser">
+    <option name="version" value="3" />
+  </component>
 </project>

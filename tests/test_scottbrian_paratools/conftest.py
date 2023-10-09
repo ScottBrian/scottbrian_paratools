@@ -4,6 +4,7 @@
 # Standard Library
 ########################################################################
 from collections import defaultdict
+
 import logging
 import re
 import queue
@@ -41,6 +42,21 @@ from scottbrian_paratools.smart_thread import SmartThread
 logger = logging.getLogger(__name__)
 
 
+# class MyLogger:
+#     def debug(self, instr: Any, stacklevel=1):
+#         pass
+#
+#     def info(self, instr: Any, stacklevel=1):
+#         pass
+#
+#     def error(self, instr: Any, stacklevel=1):
+#         pass
+#
+#     def isEnabledFor(self, instr: Any) -> bool:
+#         return False
+#
+#
+# logger = MyLogger()
 ########################################################################
 # Thread exceptions
 # The following fixture depends on the following pytest specification:
