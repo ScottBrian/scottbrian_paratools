@@ -14337,7 +14337,7 @@ class ConfigVerifier:
         """Add cmds to run scenario.
 
         Args:
-            timeout_type: specifies whether the smart_recv should
+            timeout_type: specifies whether the SmartRequest should
                 be coded with timeout, and whether it be False or True
             req0: the SmartRequest that req0 will make
             req1: the SmartRequest that req1 will make
@@ -33349,9 +33349,9 @@ class TestSmartThreadComboScenarios:
         """Test meta configuration scenarios.
 
         Args:
-            timeout_type_arg: specifies whether the smart_recv should
-                be coded with timeout and whether the smart_recv should
-                succeed or fail with a timeout
+            timeout_type_arg: specifies whether the SmartRequest should
+                be coded with timeout and whether the SmartRequest
+                should succeed or fail with a timeout
             req0_arg: the SmartRequest that req0 will make
             req1_arg: the SmartRequest that req1 will make
             req0_when_req1_state_arg: req0 will issue SmartRequest when

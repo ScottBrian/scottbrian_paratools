@@ -4616,7 +4616,13 @@ class SmartThread:
                     full_send_q_remotes=request_block.full_send_q_remotes,
                 )
 
-            self.loop_idle_event.wait(timeout=SmartThread.K_LOOP_IDLE_TIME)
+            if request_block.timer.is_specified():
+                idle_loop_timeout = min(
+                    SmartThread.K_LOOP_IDLE_TIME, request_block.timer.remaining_time()
+                )
+            else:
+                idle_loop_timeout = SmartThread.K_LOOP_IDLE_TIME
+            self.loop_idle_event.wait(timeout=idle_loop_timeout)
 
         ################################################################
         # cleanup
