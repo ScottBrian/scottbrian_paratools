@@ -724,7 +724,7 @@ class SmartThread:
     # request.
     #
     # Notes:
-    #     1) target_create_timee is used to ensure that a smart_recv,
+    #     1) target_create_time is used to ensure that a smart_recv,
     #        smart_wait, or smart_sync request is satisfied by the
     #        remote that was in the configuration when the request was
     #        initiated. Normally, each request will periodically check
@@ -748,11 +748,12 @@ class SmartThread:
         name: str
         create_time: float
         target_create_time: float
-        wait_event: threading.Event
+        # wait_event: threading.Event
         sync_event: threading.Event
         msg_q: queue.Queue[Any]
         request: ReqType = ReqType.NoReq
         remote_deadlock_request: ReqType = ReqType.NoReq
+        wait_event: bool = False
         del_deferred: bool = False
         recv_wait: bool = False
         wait_wait: bool = False
@@ -1502,7 +1503,9 @@ class SmartThread:
                     extra_msg = ""
                     if not rem_entry.msg_q.empty():
                         extra_msg += ", with non-empty msg_q"
-                    if rem_entry.wait_event.is_set():
+                    # if rem_entry.wait_event.is_set():
+                    #     extra_msg += ", with wait event set"
+                    if rem_entry.wait_event:
                         extra_msg += ", with wait event set"
                     if rem_entry.sync_event.is_set():
                         extra_msg += ", with sync event set"
@@ -1543,7 +1546,8 @@ class SmartThread:
                 if (
                     not remaining_sb.request_pending
                     and remaining_sb.msg_q.empty()
-                    and not remaining_sb.wait_event.is_set()
+                    # and not remaining_sb.wait_event.is_set()
+                    and not remaining_sb.wait_event
                     and not remaining_sb.sync_event.is_set()
                 ):
                     SmartThread._pair_array[self.group_name][
@@ -1566,7 +1570,10 @@ class SmartThread:
                     if not remaining_sb.msg_q.empty():
                         extra_msg += f"{comma} non-empty msg_q"
                         comma = ","
-                    if remaining_sb.wait_event.is_set():
+                    # if remaining_sb.wait_event.is_set():
+                    #     extra_msg += f"{comma} wait event set"
+                    #     comma = ","
+                    if remaining_sb.wait_event:
                         extra_msg += f"{comma} wait event set"
                         comma = ","
                     if remaining_sb.sync_event.is_set():
@@ -1815,7 +1822,8 @@ class SmartThread:
             name=add_name,
             create_time=create_time,
             target_create_time=0.0,
-            wait_event=threading.Event(),
+            # wait_event=threading.Event(),
+            wait_event=False,
             sync_event=threading.Event(),
             msg_q=queue.Queue(maxsize=self.max_msgs),
         )
@@ -2152,6 +2160,24 @@ class SmartThread:
                 new_state=ThreadState.Alive,
             )
             self.started_targets |= {remote}
+
+            # wake up existing threads that are waiting for this target
+            # to become alive
+            for pair_key, item in SmartThread._pair_array[self.group_name].items():
+                if remote in pair_key:
+                    if remote == pair_key[0]:
+                        req_name = pair_key[1]
+                    else:
+                        req_name = pair_key[0]
+                    if (
+                        SmartThread._pair_array[self.group_name][pair_key]
+                        .status_blocks[req_name]
+                        .request_pending
+                    ):
+                        SmartThread._registry[self.group_name][
+                            req_name
+                        ].loop_idle_event.set()
+
         else:
             # if here, the remote is not registered
             not_registered_remotes |= {remote}
@@ -3730,7 +3756,8 @@ class SmartThread:
         # event is not set (we exceed the timeout), we check for error
         # conditions, and if none we return to allow more time for the
         # resume to occur.
-        if local_sb.wait_event.wait(timeout=SmartThread.K_REQUEST_WAIT_TIME):
+        # if local_sb.wait_event.wait(timeout=SmartThread.K_REQUEST_WAIT_TIME):
+        if local_sb.wait_event:
             # We need the lock to coordinate with the remote
             # deadlock detection code to prevent:
             # 1) the remote sees that the wait_wait flag is True
@@ -3744,7 +3771,8 @@ class SmartThread:
                 local_sb.wait_wait = False
 
                 # be ready for next wait
-                local_sb.wait_event.clear()
+                # local_sb.wait_event.clear()
+                local_sb.wait_event = False
 
             # notify remote that a wait was cleared in case it was
             # waiting to do another resume
@@ -4060,7 +4088,8 @@ class SmartThread:
             # previous wait is still in progress as indicated by the
             # wait event being set, or if it has yet to recognize a
             # deadlock.
-            if not (remote_sb.wait_event.is_set() or remote_sb.deadlock):
+            # if not (remote_sb.wait_event.is_set() or remote_sb.deadlock):
+            if not (remote_sb.wait_event or remote_sb.deadlock):
                 if (
                     remote_sb.target_create_time == 0.0
                     or remote_sb.target_create_time == local_sb.create_time
@@ -4068,7 +4097,8 @@ class SmartThread:
                     # wake remote thread and start
                     # the while loop again with one
                     # less remote
-                    remote_sb.wait_event.set()
+                    # remote_sb.wait_event.set()
+                    remote_sb.wait_event = True
 
                     # notify remote that a wait has been resumed
                     SmartThread._registry[self.group_name][
@@ -4447,7 +4477,8 @@ class SmartThread:
 
                     if backout_request == "smart_wait" and local_sb.wait_wait:
                         local_sb.wait_wait = False
-                        local_sb.wait_event.clear()
+                        # local_sb.wait_event.clear()
+                        local_sb.wait_event = False
 
                     local_sb.deadlock = False
 
@@ -4539,7 +4570,8 @@ class SmartThread:
                             if (
                                 local_sb.del_deferred
                                 and local_sb.msg_q.empty()
-                                and not local_sb.wait_event.is_set()
+                                # and not local_sb.wait_event.is_set()
+                                and not local_sb.wait_event
                                 and not local_sb.sync_event.is_set()
                             ):
                                 do_refresh = True
@@ -4925,7 +4957,8 @@ class SmartThread:
                 remote_sb.remote_deadlock_request = local_sb.request
                 local_sb.deadlock = True
                 local_sb.remote_deadlock_request = ReqType.Smart_sync
-            elif remote_sb.wait_wait and not remote_sb.wait_event.is_set():
+            # elif remote_sb.wait_wait and not remote_sb.wait_event.is_set():
+            elif remote_sb.wait_wait and not remote_sb.wait_event:
                 remote_sb.deadlock = True
                 remote_sb.remote_deadlock_request = local_sb.request
                 local_sb.deadlock = True
