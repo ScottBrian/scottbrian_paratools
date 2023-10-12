@@ -19281,7 +19281,8 @@ class ConfigVerifier:
                         pending_msg_count=sb_item.msg_q.qsize(),
                         # pending_wait=sb_item.wait_event.is_set(),
                         pending_wait=sb_item.wait_event,
-                        pending_sync=sb_item.sync_event.is_set(),
+                        # pending_sync=sb_item.sync_event.is_set(),
+                        pending_sync=sb_item.sync_event,
                     )
 
         self.snap_shot_data[verify_idx] = SnapShotDataItem(
@@ -30332,7 +30333,8 @@ class TestSmartThreadErrors:
                     target_create_time=0.0,
                     # wait_event=threading.Event(),
                     wait_event=False,
-                    sync_event=threading.Event(),
+                    # sync_event=threading.Event(),
+                    sync_event=False,
                     msg_q=queue.Queue(maxsize=10),
                 )
             },
@@ -30368,7 +30370,8 @@ class TestSmartThreadErrors:
                     target_create_time=0.0,
                     # wait_event=threading.Event(),
                     wait_event=False,
-                    sync_event=threading.Event(),
+                    # sync_event=threading.Event(),
+                    sync_event=False,
                     msg_q=queue.Queue(maxsize=10),
                 )
             },
@@ -30405,7 +30408,8 @@ class TestSmartThreadErrors:
                     target_create_time=0.0,
                     # wait_event=threading.Event(),
                     wait_event=False,
-                    sync_event=threading.Event(),
+                    # sync_event=threading.Event(),
+                    sync_event=False,
                     msg_q=queue.Queue(maxsize=10),
                 ),
                 "beta": st.SmartThread.ConnectionStatusBlock(
@@ -30414,7 +30418,8 @@ class TestSmartThreadErrors:
                     target_create_time=0.0,
                     # wait_event=threading.Event(),
                     wait_event=False,
-                    sync_event=threading.Event(),
+                    # sync_event=threading.Event(),
+                    sync_event=False,
                     msg_q=queue.Queue(maxsize=10),
                 ),
             },

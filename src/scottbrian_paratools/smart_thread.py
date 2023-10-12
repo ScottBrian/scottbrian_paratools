@@ -749,11 +749,12 @@ class SmartThread:
         create_time: float
         target_create_time: float
         # wait_event: threading.Event
-        sync_event: threading.Event
+        # sync_event: threading.Event
         msg_q: queue.Queue[Any]
         request: ReqType = ReqType.NoReq
         remote_deadlock_request: ReqType = ReqType.NoReq
         wait_event: bool = False
+        sync_event: bool = False
         del_deferred: bool = False
         recv_wait: bool = False
         wait_wait: bool = False
@@ -1507,7 +1508,9 @@ class SmartThread:
                     #     extra_msg += ", with wait event set"
                     if rem_entry.wait_event:
                         extra_msg += ", with wait event set"
-                    if rem_entry.sync_event.is_set():
+                    # if rem_entry.sync_event.is_set():
+                    #     extra_msg += ", with sync event set"
+                    if rem_entry.sync_event:
                         extra_msg += ", with sync event set"
                     SmartThread._pair_array[self.group_name][
                         pair_key
@@ -1548,7 +1551,8 @@ class SmartThread:
                     and remaining_sb.msg_q.empty()
                     # and not remaining_sb.wait_event.is_set()
                     and not remaining_sb.wait_event
-                    and not remaining_sb.sync_event.is_set()
+                    # and not remaining_sb.sync_event.is_set()
+                    and not remaining_sb.sync_event
                 ):
                     SmartThread._pair_array[self.group_name][
                         pair_key
@@ -1576,7 +1580,9 @@ class SmartThread:
                     if remaining_sb.wait_event:
                         extra_msg += f"{comma} wait event set"
                         comma = ","
-                    if remaining_sb.sync_event.is_set():
+                    # if remaining_sb.sync_event.is_set():
+                    #     extra_msg += f"{comma} sync event set"
+                    if remaining_sb.sync_event:
                         extra_msg += f"{comma} sync event set"
 
                     logger.debug(
@@ -1824,7 +1830,8 @@ class SmartThread:
             target_create_time=0.0,
             # wait_event=threading.Event(),
             wait_event=False,
-            sync_event=threading.Event(),
+            # sync_event=threading.Event(),
+            sync_event=False,
             msg_q=queue.Queue(maxsize=self.max_msgs),
         )
 
@@ -2922,8 +2929,8 @@ class SmartThread:
                 # put the msg on the target msg_q
                 ########################################################
                 try:
-                    remote_sb.msg_q.put(
-                        request_block.msg_to_send[pk_remote.remote], timeout=0.01
+                    remote_sb.msg_q.put_nowait(
+                        request_block.msg_to_send[pk_remote.remote]
                     )
                     logger.info(
                         f"{self.name} smart_send sent message to " f"{pk_remote.remote}"
@@ -3314,10 +3321,10 @@ class SmartThread:
             with SmartThread._pair_array[self.group_name][
                 pk_remote.pair_key
             ].status_lock:
-                recvd_msg = local_sb.msg_q.get(timeout=SmartThread.K_REQUEST_WAIT_TIME)
+                recvd_msg = local_sb.msg_q.get_nowait()
                 self.recvd_msgs[pk_remote.remote] = [recvd_msg]
                 while not local_sb.msg_q.empty():
-                    recvd_msg = local_sb.msg_q.get()
+                    recvd_msg = local_sb.msg_q.get_nowait()
                     self.recvd_msgs[pk_remote.remote].append(recvd_msg)
 
                 if (num_msgs := len(self.recvd_msgs[pk_remote.remote])) > 1:
@@ -4303,13 +4310,15 @@ class SmartThread:
                     # if not (remote_sb.sync_event.is_set()
                     #         or (remote_sb.conflict
                     #             and remote_sb.sync_wait)):
-                    if not (remote_sb.sync_event.is_set() or remote_sb.deadlock):
+                    # if not (remote_sb.sync_event.is_set() or remote_sb.deadlock):
+                    if not (remote_sb.sync_event or remote_sb.deadlock):
                         if (
                             remote_sb.target_create_time == 0.0
                             or remote_sb.target_create_time == local_sb.create_time
                         ):
                             # sync resume remote thread
-                            remote_sb.sync_event.set()
+                            # remote_sb.sync_event.set()
+                            remote_sb.sync_event = True
 
                             # notify remote that a sync has been resumed
                             SmartThread._registry[self.group_name][
@@ -4332,7 +4341,8 @@ class SmartThread:
         # This is OK, but if the sync_event is not set and the remote is
         # stopped, that is not OK.
         ################################################################
-        if local_sb.sync_event.wait(timeout=SmartThread.K_REQUEST_WAIT_TIME):
+        # if local_sb.sync_event.wait(timeout=SmartThread.K_REQUEST_WAIT_TIME):
+        if local_sb.sync_event:
             # We need the lock to coordinate with the remote
             # deadlock detection code to prevent:
             # 1) the remote sees that the sync_wait flag is True
@@ -4346,7 +4356,8 @@ class SmartThread:
                 local_sb.sync_wait = False
 
                 # be ready for next sync wait
-                local_sb.sync_event.clear()
+                # local_sb.sync_event.clear()
+                local_sb.sync_event = False
 
             # notify remote that a sync was cleared in case it was
             # waiting to do another sync
@@ -4384,7 +4395,8 @@ class SmartThread:
                     or self._get_target_state(pk_remote=pk_remote)
                     == ThreadState.Stopped
                 ):
-                    remote_sb.sync_event.clear()
+                    # remote_sb.sync_event.clear()
+                    remote_sb.sync_event = False
                     logger.info(
                         f"{self.name} smart_sync backout reset "
                         f"remote sync_event for {pk_remote.remote}"
@@ -4450,8 +4462,10 @@ class SmartThread:
                         # no longer needed since it will have reset its
                         # sync_event when it set ours
                         local_sb.sync_wait = False
-                        if local_sb.sync_event.is_set():
-                            local_sb.sync_event.clear()
+                        # if local_sb.sync_event.is_set():
+                        if local_sb.sync_event:
+                            # local_sb.sync_event.clear()
+                            local_sb.sync_event = False
                             logger.info(
                                 f"{self.name} smart_sync backout reset "
                                 f"local sync_event for {remote}"
@@ -4467,8 +4481,10 @@ class SmartThread:
                                     pair_key
                                 ].status_blocks[remote]
                                 # backout the sync resume
-                                if remote_sb.sync_event.is_set():
-                                    remote_sb.sync_event.clear()
+                                # if remote_sb.sync_event.is_set():
+                                if remote_sb.sync_event:
+                                    # remote_sb.sync_event.clear()
+                                    remote_sb.sync_event = False
                                     logger.info(
                                         f"{self.name} smart_sync backout "
                                         "reset remote sync_event for "
@@ -4572,7 +4588,8 @@ class SmartThread:
                                 and local_sb.msg_q.empty()
                                 # and not local_sb.wait_event.is_set()
                                 and not local_sb.wait_event
-                                and not local_sb.sync_event.is_set()
+                                # and not local_sb.sync_event.is_set()
+                                and not local_sb.sync_event
                             ):
                                 do_refresh = True
                             local_sb.request = ReqType.NoReq
@@ -4951,7 +4968,8 @@ class SmartThread:
             if (
                 remote_sb.sync_wait
                 and not local_sb.request == ReqType.Smart_sync
-                and not remote_sb.sync_event.is_set()
+                # and not remote_sb.sync_event.is_set()
+                and not remote_sb.sync_event
             ):
                 remote_sb.deadlock = True
                 remote_sb.remote_deadlock_request = local_sb.request
