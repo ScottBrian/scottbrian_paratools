@@ -385,6 +385,7 @@ import time
 from typing import (
     Any,
     Callable,
+    cast,
     ClassVar,
     NamedTuple,
     NoReturn,
@@ -411,25 +412,6 @@ from scottbrian_locking import se_lock as sel
 ########################################################################
 logger = logging.getLogger(__name__)
 
-
-class MyLogger:
-    def __init__(self):
-        self.my_prints: int = 0
-
-    def debug(self, instr: Any, stacklevel=1):
-        pass
-
-    def info(self, instr: Any, stacklevel=1):
-        pass
-
-    def error(self, instr: Any, stacklevel=1):
-        pass
-
-    def isEnabledFor(self, instr: Any) -> bool:
-        return False
-
-
-# logger = MyLogger()
 ########################################################################
 # TypeAlias
 ########################################################################
@@ -668,16 +650,14 @@ class SmartThread:
     _registry: ClassVar[dict[str, dict[str, "SmartThread"]]] = {}
 
     # init update time used in log messages when registry is changed
-    _registry_last_update: datetime = ClassVar[
-        datetime(
-            year=2000,
-            month=1,
-            day=1,
-            hour=12,
-            minute=0,
-            second=1,
-        )
-    ]
+    _registry_last_update: ClassVar[datetime] = datetime(
+        year=2000,
+        month=1,
+        day=1,
+        hour=12,
+        minute=0,
+        second=1,
+    )
 
     _create_pair_array_entry_time: ClassVar[float] = 0.0
 
@@ -4663,9 +4643,10 @@ class SmartThread:
                     full_send_q_remotes=request_block.full_send_q_remotes,
                 )
 
-            if request_block.timer.is_specified():
+            if request_block.timer.remaining_time():
                 idle_loop_timeout = min(
-                    SmartThread.K_LOOP_IDLE_TIME, request_block.timer.remaining_time()
+                    SmartThread.K_LOOP_IDLE_TIME,
+                    cast(float, request_block.timer.remaining_time()),
                 )
             else:
                 idle_loop_timeout = SmartThread.K_LOOP_IDLE_TIME

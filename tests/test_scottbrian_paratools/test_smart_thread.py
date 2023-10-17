@@ -57,32 +57,6 @@ import scottbrian_paratools.smart_thread as st
 logger = logging.getLogger(__name__)
 
 
-class MyLogger:
-    def debug(self, instr: Any):
-        pass
-
-    def info(self, instr: Any):
-        pass
-
-    def error(self, instr: Any):
-        pass
-
-    def isEnabledFor(self, instr: Any) -> bool:
-        return False
-
-
-# logger = MyLogger()
-
-
-# class logging:
-#     DEBUG = 10
-#     INFO = 20
-#     WARNING = 30
-#     ERROR = 40
-#     CRITICAL = 50
-#     NOTSET = 0
-
-
 ########################################################################
 # Type alias
 ########################################################################
@@ -5050,7 +5024,8 @@ class MockGetTargetState:
             Must be called holding the registry lock either shared or
             exclusive
         """
-        if pk_remote.remote not in st.SmartThread._registry[self.group_name]:
+        group_name: str = self.group_name  # type: ignore
+        if pk_remote.remote not in st.SmartThread._registry[group_name]:
             if pk_remote.create_time != 0.0:
                 ret_state = st.ThreadState.Stopped
             else:
@@ -5058,21 +5033,21 @@ class MockGetTargetState:
 
         else:
             if (
-                not st.SmartThread._registry[self.group_name][
+                not st.SmartThread._registry[group_name][
                     pk_remote.remote
                 ].thread.is_alive()
-                and st.SmartThread._registry[self.group_name][pk_remote.remote].st_state
+                and st.SmartThread._registry[group_name][pk_remote.remote].st_state
                 == st.ThreadState.Alive
             ):
                 ret_state = st.ThreadState.Stopped
 
             elif (
-                pk_remote.pair_key in st.SmartThread._pair_array[self.group_name]
+                pk_remote.pair_key in st.SmartThread._pair_array[group_name]
                 and pk_remote.remote
-                in st.SmartThread._pair_array[self.group_name][
+                in st.SmartThread._pair_array[group_name][
                     pk_remote.pair_key
                 ].status_blocks
-                and st.SmartThread._pair_array[self.group_name][pk_remote.pair_key]
+                and st.SmartThread._pair_array[group_name][pk_remote.pair_key]
                 .status_blocks[pk_remote.remote]
                 .create_time
                 != pk_remote.create_time
@@ -5080,16 +5055,16 @@ class MockGetTargetState:
                 ret_state = st.ThreadState.Stopped
 
             elif (
-                not st.SmartThread._registry[self.group_name][
+                not st.SmartThread._registry[group_name][
                     pk_remote.remote
                 ].thread.is_alive()
-                and st.SmartThread._registry[self.group_name][pk_remote.remote].st_state
+                and st.SmartThread._registry[group_name][pk_remote.remote].st_state
                 == st.ThreadState.Alive
             ):
                 ret_state = st.ThreadState.Stopped
 
             else:
-                ret_state = st.SmartThread._registry[self.group_name][
+                ret_state = st.SmartThread._registry[group_name][
                     pk_remote.remote
                 ].st_state
 
@@ -32338,6 +32313,7 @@ class TestSmartBasicScenarios:
             f2_smart_thread = st.SmartThread.get_current_smart_thread(
                 group_name="test1"
             )
+            assert f2_smart_thread is not None
             assert f2_smart_thread.name is not None
             assert f2_smart_thread.name == "charlie"
 
