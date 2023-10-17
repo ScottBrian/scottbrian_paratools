@@ -819,8 +819,8 @@ class ConfirmResponse(ConfigCmd):
             for name in work_confirmers:
                 # If the serial number is in the completed_cmds for
                 # this name then the command was completed. Remove the
-                # target name and break to start looking again with one
-                # less target until no targets remain.
+                # target_rtn name and break to start looking again with one
+                # less target_rtn until no targets remain.
                 if self.confirm_serial_num in self.config_ver.completed_cmds[name]:
                     work_confirmers.remove(name)
                     break
@@ -876,8 +876,8 @@ class ConfirmResponseNot(ConfirmResponse):
         for name in self.confirmers:
             # If the serial number is in the completed_cmds for
             # this name then the command was completed. Remove the
-            # target name and break to start looking again with one
-            # less target until no targets remain.
+            # target_rtn name and break to start looking again with one
+            # less target_rtn until no targets remain.
             if self.confirm_serial_num in self.config_ver.completed_cmds[name]:
                 raise CmdFailed(
                     "ConfirmResponseNot found that "
@@ -3096,7 +3096,7 @@ class SubProcessEntryExitLogSearchItem(LogSearchItem):
             search_str=(
                 f"{list_of_smart_requests} {list_of_sub_processes} "
                 "(entry|exit): cmd_runner: "
-                "[a-z0-9_]+(, target: [a-z0-9_]+)*"
+                "[a-z0-9_]+(, target_rtn: [a-z0-9_]+)*"
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -3128,7 +3128,7 @@ class SubProcessEntryExitLogSearchItem(LogSearchItem):
         subprocess_name = split_msg[1]
         entry_exit = split_msg[2][0:-1]  # remove trailing colon
         cmd_runner = split_msg[4]
-        if split_msg[-2] == "target:":
+        if split_msg[-2] == "target_rtn:":
             cmd_runner = cmd_runner[0:-1]  # remove trailing comma
         target = split_msg[-1]
 
@@ -4273,8 +4273,8 @@ class RequestAckLogSearchItem(LogSearchItem):
             "|smart_wait resumed by"
             "|smart_resume resumed"
             "|smart_sync set event for"
-            "|smart_sync backout reset local sync_event for"
-            "|smart_sync backout reset remote sync_event for"
+            "|smart_sync backout reset local sync_flag for"
+            "|smart_sync backout reset remote sync_flag for"
             "|smart_sync achieved with)"
         )
         super().__init__(
@@ -5025,7 +5025,7 @@ class MockGetTargetState:
     config_ver: ClassVar["ConfigVerifier"]
 
     def __init__(self, targets: TargetsDict, config_ver: "ConfigVerifier") -> None:
-        """Initialize the mock target state.
+        """Initialize the mock target_rtn state.
 
         Args:
             targets: dictionary of targets
@@ -5038,10 +5038,10 @@ class MockGetTargetState:
     # mock_get_target_state
     ####################################################################
     def mock_get_target_state(self, pk_remote: st.PairKeyRemote) -> st.ThreadState:
-        """Get the status of a thread that is the target of a request.
+        """Get the status of a thread that is the target_rtn of a request.
 
         Args:
-            pk_remote: contains target thread info
+            pk_remote: contains target_rtn thread info
 
         Returns:
             The thread status
@@ -5115,14 +5115,14 @@ class MockCleanPairArray:
     # config_ver: ClassVar["ConfigVerifier"]
 
     def __init__(self) -> None:
-        """Initialize the mock target state."""
+        """Initialize the mock target_rtn state."""
         pass
 
     ####################################################################
     # mock_clean_pair_arraye
     ####################################################################
     def mock_clean_pair_array(self) -> None:
-        """Get the status of a thread that is the target of a request.
+        """Get the status of a thread that is the target_rtn of a request.
 
         Notes:
             Must be called holding the registry lock either shared or
@@ -5523,7 +5523,7 @@ class ConfigVerifier:
             if pair_key not in self.expected_pairs:
                 # self.log_test_msg(
                 #     f'set_request_pending_flag continue {cmd_runner=}, '
-                #     f'{target=}, {pair_key=}, {self.expected_pairs=}')
+                #     f'{target_rtn=}, {pair_key=}, {self.expected_pairs=}')
                 continue
 
             pae = self.expected_pairs[pair_key]
@@ -8548,7 +8548,7 @@ class ConfigVerifier:
             )
 
             # Normally, handle_request_smart_sync_entry will set up the
-            # ack msg when the target is not included in the set of
+            # ack msg when the target_rtn is not included in the set of
             # stopped_remotes. In this case, we know the sync flag will
             # be set for the pending_name, but we include it in the set
             # of stopped_remotes. So, we need to set up the ack msg
@@ -8853,7 +8853,7 @@ class ConfigVerifier:
         )
 
         ################################################################
-        # issue the sync to set sync_event for pending_name
+        # issue the sync to set sync_flag for pending_name
         ################################################################
         sync_serial_num = self.add_cmd(
             Sync(
@@ -9984,7 +9984,7 @@ class ConfigVerifier:
         ################################################################
         # before: lock_0|sync_1a_s_r|lock_2|sync_0a_r|lock_1
         # action: drop lock_0, sync_1a_s sees sync_0 has zero create
-        #             time for sync_1, so sync_1 sets sync_0 sync_event
+        #             time for sync_1, so sync_1 sets sync_0 sync_flag
         #             and loops back to top of req loop to let sync_0
         #             sync up
         # after : lock_2|sync_0a_r|lock_1|sync_1a_s_r
@@ -10002,7 +10002,7 @@ class ConfigVerifier:
         ################################################################
         # before: lock_2|sync_0a_r|lock_1|sync_1a_s_r
         # action: drop lock_2, sync_0 sees that sync_1 is alive and
-        #             sets sync_1 sync_event, sees its sync_event is
+        #             sets sync_1 sync_flag, sees its sync_flag is
         #             set and completes the sync request
         # after : lock_1|sync_1a_s_r
         ################################################################
@@ -10237,7 +10237,7 @@ class ConfigVerifier:
     def check_expected_responses(
         self, cmd_runner: str, check_args: CheckExpectedResponsesArgs
     ) -> bool:
-        """Check that the sync event is set in the target.
+        """Check that the sync event is set in the target_rtn.
 
         Args:
             cmd_runner: thread name doing the check
@@ -10266,11 +10266,11 @@ class ConfigVerifier:
     # check_sync_event_set
     ####################################################################
     def check_sync_event_set(self, cmd_runner: str, check_args: CheckPendArg) -> bool:
-        """Check that the sync event is set in the target.
+        """Check that the sync event is set in the target_rtn.
 
         Args:
             cmd_runner: thread name doing the check
-            check_args: target name and pair_key to be checked
+            check_args: target_rtn name and pair_key to be checked
         """
         target = check_args[0]
         pair_key = check_args[1]
@@ -10301,11 +10301,11 @@ class ConfigVerifier:
     def check_sync_zero_create_time(
         self, cmd_runner: str, check_args: CheckZeroCtArg
     ) -> bool:
-        """Check that the sync event is set in the target.
+        """Check that the sync event is set in the target_rtn.
 
         Args:
             cmd_runner: thread name doing the check
-            check_args: target name and pair_key to be checked
+            check_args: target_rtn name and pair_key to be checked
         """
         sync_0 = check_args[0]
         sync_1 = check_args[1]
@@ -12519,26 +12519,26 @@ class ConfigVerifier:
 
         Args:
             num_resumers: number of threads doing resumes
-            num_start_before: number of target threads that will
+            num_start_before: number of target_rtn threads that will
                 be started and issue a wait before the resume is done,
                 and should succeed
-            num_unreg_before: number of target threads that will be
+            num_unreg_before: number of target_rtn threads that will be
                 registered and then unregistered before the resume, and
                 then started after the resume, and should succeed
-            num_stop_before: number of target threads that will
+            num_stop_before: number of target_rtn threads that will
                 be started and then stopped (but not joined) before the
                 resume, and should result in a not alive error
-            num_unreg_after: number of target threads that will be
+            num_unreg_after: number of target_rtn threads that will be
                 unregistered after the resume, and should cause an error
-            num_stop_after_ok: number of target threads that will
+            num_stop_after_ok: number of target_rtn threads that will
                 be started after the resume is issued, and will stay
-                alive long enough for the resume to set the wait_event,
+                alive long enough for the resume to set the wait_flag,
                 and will then be stopped and joined, and should result
                 in success
-            num_stop_after_err: number of target threads that will
+            num_stop_after_err: number of target_rtn threads that will
                 be started after the resume is issued, and will quickly
                 be stopped and joined before the resume has a chance to
-                see that is is alive to set the wait_event, and should
+                see that is is alive to set the wait_flag, and should
                 result in a not alive error
 
         """
@@ -12944,27 +12944,27 @@ class ConfigVerifier:
         Args:
             req_type: specifies whether to issue resume or wait
             num_requestors: number of threads doing resume/wait
-            num_start_before: number of target threads that will
+            num_start_before: number of target_rtn threads that will
                 be started and issue a wait/resume before the resume is
                 done, and should succeed
-            num_unreg_before: number of target threads that will be
+            num_unreg_before: number of target_rtn threads that will be
                 registered and then unregistered before the resume/wait,
                 and then started after the resume/wait, and should
                 succeed
-            num_stop_before: number of target threads that will
+            num_stop_before: number of target_rtn threads that will
                 be started and then stopped (but not joined) before the
                 resume, and should result in a not alive error
-            num_unreg_after: number of target threads that will be
+            num_unreg_after: number of target_rtn threads that will be
                 unregistered after the resume, and should cause an error
-            num_stop_after_ok: number of target threads that will
+            num_stop_after_ok: number of target_rtn threads that will
                 be started after the resume is issued, and will stay
-                alive long enough for the resume to set the wait_event,
+                alive long enough for the resume to set the wait_flag,
                 and will then be stopped and joined, and should result
                 in success
-            num_stop_after_err: number of target threads that will
+            num_stop_after_err: number of target_rtn threads that will
                 be started after the resume is issued, and will quickly
                 be stopped and joined before the resume has a chance to
-                see that is is alive to set the wait_event, and should
+                see that is is alive to set the wait_flag, and should
                 result in a not alive error
 
         """
@@ -13282,7 +13282,7 @@ class ConfigVerifier:
 
         ################################################################
         # Create and start unreg_before and stop_after_ok and issue the
-        # target request. Note unreg_before is used both before and
+        # target_rtn request. Note unreg_before is used both before and
         # after the request
         ################################################################
         for idx, target in enumerate(
@@ -13411,26 +13411,26 @@ class ConfigVerifier:
 
         Args:
             num_waiters: number of threads doing resumes
-            num_start_before: number of target threads that will
+            num_start_before: number of target_rtn threads that will
                 be started and issue a wait before the resume is done,
                 and should succeed
-            num_unreg_before: number of target threads that will be
+            num_unreg_before: number of target_rtn threads that will be
                 registered and then unregistered before the resume, and
                 then started after the resume, and should succeed
-            num_stop_before: number of target threads that will
+            num_stop_before: number of target_rtn threads that will
                 be started and then stopped (but not joined) before the
                 resume, and should result in a not alive error
-            num_unreg_after: number of target threads that will be
+            num_unreg_after: number of target_rtn threads that will be
                 unregistered after the resume, and should cause an error
-            num_stop_after_ok: number of target threads that will
+            num_stop_after_ok: number of target_rtn threads that will
                 be started after the resume is issued, and will stay
-                alive long enough for the resume to set the wait_event,
+                alive long enough for the resume to set the wait_flag,
                 and will then be stopped and joined, and should result
                 in success
-            num_stop_after_err: number of target threads that will
+            num_stop_after_err: number of target_rtn threads that will
                 be started after the resume is issued, and will quickly
                 be stopped and joined before the resume has a chance to
-                see that is is alive to sety the wait_event, and should
+                see that is is alive to sety the wait_flag, and should
                 result in a not alive error
 
         """
@@ -13847,10 +13847,10 @@ class ConfigVerifier:
                 targets.
             num_registered_after: number threads registered that are
                 started and wait after the resume is issued. This case
-                provides a variation of a resume target being not alive
+                provides a variation of a resume target_rtn being not alive
                 when the resume is issued, and then a configuration
                 change while the resume is running and the resume sees
-                that the target is now alive. There is no significant
+                that the target_rtn is now alive. There is no significant
                 delay between the resume and the start to expect the
                 registered_after targets to cause a timeout.
             num_unreg_no_delay: number threads unregistered before the
@@ -14128,7 +14128,7 @@ class ConfigVerifier:
             )
 
         ####################################################
-        # confirm the active target waits
+        # confirm the active target_rtn waits
         ####################################################
         if active_waiters:
             self.add_cmd(
@@ -14141,7 +14141,7 @@ class ConfigVerifier:
             )
 
         ####################################################
-        # confirm the registered target waits
+        # confirm the registered target_rtn waits
         ####################################################
         if reg_waiters:
             self.add_cmd(
@@ -14154,7 +14154,7 @@ class ConfigVerifier:
             )
 
         ####################################################
-        # confirm the registered target waits
+        # confirm the registered target_rtn waits
         ####################################################
         if reg_delay_waiters:
             if timeout_type == TimeoutType.TimeoutTrue or stopped_waiters:
@@ -15111,7 +15111,7 @@ class ConfigVerifier:
         Args:
             timeout_type: None, False, or True for timeout
             cmd_runner: name of thread that will do the request
-            target: name of thread that is the target of the request
+            target: name of thread that is the target_rtn of the request
             stopped_remotes: names of threads that are expected to be
                 detected by the request as stopped
             request_specific_args: specific args for each request
@@ -15185,7 +15185,7 @@ class ConfigVerifier:
         Args:
             timeout_type: None, False, or True for timeout
             cmd_runner: name of thread that will do the request
-            target: name of thread that is the target of the request
+            target: name of thread that is the target_rtn of the request
             stopped_remotes: names of threads that are expected to be
                 detected by the request as stopped
             request_specific_args: specific args for each request
@@ -15263,7 +15263,7 @@ class ConfigVerifier:
         Args:
             timeout_type: None, False, or True for timeout
             cmd_runner: name of thread that will do the request
-            target: name of thread that is the target of the request
+            target: name of thread that is the target_rtn of the request
             stopped_remotes: names of threads that are expected to be
                 detected by the request as stopped
             request_specific_args: specific args for each request
@@ -15778,7 +15778,7 @@ class ConfigVerifier:
 
         # make sure resume is running and sees that reg_waiters are not
         # there yet. Note that we can't include waiters in the list of
-        # timeout names because resume will set the wait_event when it
+        # timeout names because resume will set the wait_flag when it
         # sees that the targets (waiters) are alive - they don't need
         # to be waiting.
         self.add_cmd(
@@ -16071,7 +16071,7 @@ class ConfigVerifier:
         Args:
             timeout_type: None, False, or True for timeout
             cmd_runner: name of thread that will do the request
-            target: name of thread that is the target of the request
+            target: name of thread that is the target_rtn of the request
             stopped_remotes: names of threads that are expected to be
                 detected by the request as stopped
             request_specific_args: specific args for each request
@@ -16291,7 +16291,7 @@ class ConfigVerifier:
 
         ################################################################
         # before: lock_2|sync_0_r|lock_0|sync_1a_r|lock_1
-        # action: drop lock_2, sync_0 sets sync_1 sync_event, loops back
+        # action: drop lock_2, sync_0 sets sync_1 sync_flag, loops back
         #             to top of request loop
         # after : lock_0|sync_1a_r|lock_1|sync_0_r
         ################################################################
@@ -16320,8 +16320,8 @@ class ConfigVerifier:
 
         ################################################################
         # before: lock_0|sync_1a_r|lock_1|sync_0_r|lock_2
-        # action: drop lock_0, sync_1a sets sync_0 sync_event and sees
-        #             its sync_event as set and completes request
+        # action: drop lock_0, sync_1a sets sync_0 sync_flag and sees
+        #             its sync_flag as set and completes request
         # after : lock_1|sync_0_r|lock_2
         ################################################################
         self.add_cmd(LockRelease(cmd_runners=lock_names[0]))
@@ -16446,7 +16446,7 @@ class ConfigVerifier:
 
         ################################################################
         # before: lock_2|sync_1b_r|lock_0|sync_0_r|lock_1
-        # action: drop lock_2, sync_1b sees sync_0 sync_event is still
+        # action: drop lock_2, sync_1b sees sync_0 sync_flag is still
         #             set from sync_1a and gives sync_0 more time (i.e.,
         #             returns False which is the path we are trying to
         #             get sync_1b to take for proof of coverage)
@@ -16464,7 +16464,7 @@ class ConfigVerifier:
 
         ################################################################
         # before: lock_0|sync_0_r|lock_1|sync_1b_r
-        # action: drop lock_0, sync_0_r sees its sync_event is set and
+        # action: drop lock_0, sync_0_r sees its sync_flag is set and
         #             completes the request
         # after : lock_1|sync_1b_r
         ################################################################
@@ -16512,7 +16512,7 @@ class ConfigVerifier:
         ################################################################
         # before: lock_1|sync_1b_r|lock_0|sync_0b
         # action: drop lock_1, sync_1b is now able to set sync_0
-        #             sync_event and loops back to top of req loop
+        #             sync_flag and loops back to top of req loop
         # after : lock_0|sync_0b_s|sync_1b_r
         ################################################################
         self.add_cmd(LockRelease(cmd_runners=lock_names[1]))
@@ -16768,7 +16768,7 @@ class ConfigVerifier:
 
         ################################################################
         # before: lock_2|sync_0a_r|lock_0|recv_1a_r|lock_1
-        # action: drop lock_2, sync_0 sets recv_1 sync_event, loops back
+        # action: drop lock_2, sync_0 sets recv_1 sync_flag, loops back
         #             to wait at top of request loop
         # after : lock_0|recv_1a_r|lock_1|sync_0a_r
         ################################################################
@@ -17101,7 +17101,7 @@ class ConfigVerifier:
         ################################################################
         # before: lock_1|sync_1b_r|lock_2|sync_0b_s
         # action: drop lock_1, sync_1b is now able to set sync_0
-        #             sync_event and loops back to top of req loop
+        #             sync_flag and loops back to top of req loop
         #             along side of sync_0b
         # after : lock_2|sync_0b_s|sync_1b_r
         ################################################################
@@ -17730,7 +17730,7 @@ class ConfigVerifier:
         ################################################################
         # before: lock_2|sync_1a_s_r|sync_0b_s
         # action: drop lock_2, sync_1a_s is now able to set sync_0
-        #             sync_event and loops back to top of req loop
+        #             sync_flag and loops back to top of req loop
         #             along side of sync_0b_s and then they both
         #             complete the sync
         # after : none
@@ -17811,7 +17811,7 @@ class ConfigVerifier:
         Args:
             timeout_type: None, False, or True for timeout
             cmd_runner: name of thread that will do the request
-            target: name of thread that is the target of the request
+            target: name of thread that is the target_rtn of the request
             stopped_remotes: names of threads that are expected to be
                 detected by the request as stopped
             request_specific_args: specific args for each request
@@ -19195,7 +19195,7 @@ class ConfigVerifier:
             f1_thread = st.SmartThread(
                 group_name=self.group_name,
                 name=name,
-                target=target,
+                target_rtn=target,
                 args=(name, self),
                 auto_start=auto_start,
                 max_msgs=self.max_msgs,
@@ -19279,10 +19279,8 @@ class ConfigVerifier:
                         del_def_flag=sb_item.del_deferred,
                         pending_request=sb_item.request_pending,
                         pending_msg_count=sb_item.msg_q.qsize(),
-                        # pending_wait=sb_item.wait_event.is_set(),
-                        pending_wait=sb_item.wait_event,
-                        # pending_sync=sb_item.sync_event.is_set(),
-                        pending_sync=sb_item.sync_event,
+                        pending_wait=sb_item.wait_flag,
+                        pending_sync=sb_item.sync_flag,
                     )
 
         self.snap_shot_data[verify_idx] = SnapShotDataItem(
@@ -19502,7 +19500,7 @@ class ConfigVerifier:
 
         Args:
             cmd_runner: name of thread doing the cmd
-            join_names: target threads that we will join
+            join_names: target_rtn threads that we will join
             unreg_names: thread names that are already unregistered
             log_msg: log message to issue on the join (name be None)
             timeout_type: None, False, or True
@@ -20090,7 +20088,7 @@ class ConfigVerifier:
                 if self.expected_registered[target].st_state != st.ThreadState.Stopped:
                     # the thread may have not yet been started, but we
                     # know that eventually it will become alive if it
-                    # is an eligible target
+                    # is an eligible target_rtn
                     if self.expected_registered[target].st_state in (
                         # st.ThreadState.Unregistered,
                         st.ThreadState.Initialized,
@@ -20883,7 +20881,7 @@ class ConfigVerifier:
             UnexpectedEvent: handle_set_state_log_msg encountered
                 unexpected log msg
             IncorrectDataDetected: handle_set_state_log_msg detected
-                target is missing from expected_registered or current
+                target_rtn is missing from expected_registered or current
                 state does not match
         """
         pe = self.pending_events[cmd_runner]
@@ -21747,7 +21745,7 @@ class ConfigVerifier:
         Args:
             cmd_runner: thread doing the request
             smart_request: name of smart_request
-            targets: target of the smart request
+            targets: target_rtn of the smart request
             error_str: smart_thread error as string
             stopped_remotes: names of threads that are stopped
             unreg_remotes: names of threads that are not registered
@@ -26142,32 +26140,38 @@ class TestSmartThreadInterface:
         alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         if num_f1_args == (0, 0, 0):
             beta_smart_thread = SmartThread(
-                group_name="test1", name="beta", target=f1_0_0_0
+                group_name="test1", name="beta", target_rtn=f1_0_0_0
             )
         elif num_f1_args == (0, 0, 1):
             beta_smart_thread = SmartThread(
-                group_name="test1", name="beta", target=f1_0_0_1, args=(42,)
+                group_name="test1", name="beta", target_rtn=f1_0_0_1, args=(42,)
             )
         elif num_f1_args == (0, 0, 2):
             beta_smart_thread = SmartThread(
-                group_name="test1", name="beta", target=f1_0_0_2, args=(42, "my arg 2")
+                group_name="test1",
+                name="beta",
+                target_rtn=f1_0_0_2,
+                args=(42, "my arg 2"),
             )
         elif num_f1_args == (0, 0, 3):
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_0_0_3,
+                target_rtn=f1_0_0_3,
                 args=(42, "my arg 2", [1, 2, 3]),
             )
         elif num_f1_args == (0, 1, 0):
             beta_smart_thread = SmartThread(
-                group_name="test1", name="beta", target=f1_0_1_0, kwargs={"kwarg1": 13}
+                group_name="test1",
+                name="beta",
+                target_rtn=f1_0_1_0,
+                kwargs={"kwarg1": 13},
             )
         elif num_f1_args == (0, 1, 1):
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_0_1_1,
+                target_rtn=f1_0_1_1,
                 args=(42,),
                 kwargs={"kwarg1": 13},
             )
@@ -26175,7 +26179,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_0_1_2,
+                target_rtn=f1_0_1_2,
                 args=(42, "my arg 2"),
                 kwargs={"kwarg1": 13},
             )
@@ -26183,7 +26187,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_0_1_3,
+                target_rtn=f1_0_1_3,
                 args=(42, "my arg 2", [1, 2, 3]),
                 kwargs={"kwarg1": 13},
             )
@@ -26191,14 +26195,14 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_0_2_0,
+                target_rtn=f1_0_2_0,
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
             )
         elif num_f1_args == (0, 2, 1):
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_0_2_1,
+                target_rtn=f1_0_2_1,
                 args=(42,),
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
             )
@@ -26206,7 +26210,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_0_2_2,
+                target_rtn=f1_0_2_2,
                 args=(42, "my arg 2"),
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
             )
@@ -26214,7 +26218,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_0_2_3,
+                target_rtn=f1_0_2_3,
                 args=(42, "my arg 2", [1, 2, 3]),
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
             )
@@ -26222,14 +26226,14 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_0_3_0,
+                target_rtn=f1_0_3_0,
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg", "kwarg3": [11, 22, 33]},
             )
         elif num_f1_args == (0, 3, 1):
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_0_3_1,
+                target_rtn=f1_0_3_1,
                 args=(42,),
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg", "kwarg3": [11, 22, 33]},
             )
@@ -26237,7 +26241,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_0_3_2,
+                target_rtn=f1_0_3_2,
                 args=(42, "my arg 2"),
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg", "kwarg3": [11, 22, 33]},
             )
@@ -26245,7 +26249,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_0_3_3,
+                target_rtn=f1_0_3_3,
                 args=(42, "my arg 2", [1, 2, 3]),
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg", "kwarg3": [11, 22, 33]},
             )
@@ -26253,14 +26257,14 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_1_0_0,
+                target_rtn=f1_1_0_0,
                 thread_parm_name="smart_thread",
             )
         elif num_f1_args == (1, 0, 1):
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_1_0_1,
+                target_rtn=f1_1_0_1,
                 thread_parm_name="smart_thread",
                 args=(42,),
             )
@@ -26268,7 +26272,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_1_0_2,
+                target_rtn=f1_1_0_2,
                 thread_parm_name="smart_thread",
                 args=(42, "my arg 2"),
             )
@@ -26276,7 +26280,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_1_0_3,
+                target_rtn=f1_1_0_3,
                 thread_parm_name="smart_thread",
                 args=(42, "my arg 2", [1, 2, 3]),
             )
@@ -26284,7 +26288,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_1_1_0,
+                target_rtn=f1_1_1_0,
                 thread_parm_name="smart_thread",
                 kwargs={"kwarg1": 13},
             )
@@ -26292,7 +26296,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_1_1_1,
+                target_rtn=f1_1_1_1,
                 thread_parm_name="smart_thread",
                 args=(42,),
                 kwargs={"kwarg1": 13},
@@ -26301,7 +26305,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_1_1_2,
+                target_rtn=f1_1_1_2,
                 thread_parm_name="smart_thread",
                 args=(42, "my arg 2"),
                 kwargs={"kwarg1": 13},
@@ -26310,7 +26314,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_1_1_3,
+                target_rtn=f1_1_1_3,
                 thread_parm_name="smart_thread",
                 args=(42, "my arg 2", [1, 2, 3]),
                 kwargs={"kwarg1": 13},
@@ -26319,7 +26323,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_1_2_0,
+                target_rtn=f1_1_2_0,
                 thread_parm_name="smart_thread",
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
             )
@@ -26327,7 +26331,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_1_2_1,
+                target_rtn=f1_1_2_1,
                 thread_parm_name="smart_thread",
                 args=(42,),
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
@@ -26336,7 +26340,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_1_2_2,
+                target_rtn=f1_1_2_2,
                 thread_parm_name="smart_thread",
                 args=(42, "my arg 2"),
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
@@ -26345,7 +26349,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_1_2_3,
+                target_rtn=f1_1_2_3,
                 thread_parm_name="smart_thread",
                 args=(42, "my arg 2", [1, 2, 3]),
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
@@ -26354,7 +26358,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_1_3_0,
+                target_rtn=f1_1_3_0,
                 thread_parm_name="smart_thread",
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg", "kwarg3": [11, 22, 33]},
             )
@@ -26362,7 +26366,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_1_3_1,
+                target_rtn=f1_1_3_1,
                 thread_parm_name="smart_thread",
                 args=(42,),
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg", "kwarg3": [11, 22, 33]},
@@ -26371,7 +26375,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_1_3_2,
+                target_rtn=f1_1_3_2,
                 thread_parm_name="smart_thread",
                 args=(42, "my arg 2"),
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg", "kwarg3": [11, 22, 33]},
@@ -26380,7 +26384,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1_1_3_3,
+                target_rtn=f1_1_3_3,
                 thread_parm_name="smart_thread",
                 args=(42, "my arg 2", [1, 2, 3]),
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg", "kwarg3": [11, 22, 33]},
@@ -26925,7 +26929,7 @@ class TestSmartThreadInterface:
                     beta_smart_thread = SmartThread(
                         group_name="test1",
                         name="beta",
-                        target=eval(f1_target_to_specify),
+                        target_rtn=eval(f1_target_to_specify),
                         thread_parm_name=smart_thread_name_to_specify,
                         args=args_to_specify,
                         kwargs=kwargs_to_specify,
@@ -26934,7 +26938,7 @@ class TestSmartThreadInterface:
                     beta_smart_thread = SmartThread(
                         group_name="test1",
                         name="beta",
-                        target=eval(f1_target_to_specify),
+                        target_rtn=eval(f1_target_to_specify),
                         thread_parm_name=smart_thread_name_to_specify,
                         args=args_to_specify,
                     )
@@ -26943,7 +26947,7 @@ class TestSmartThreadInterface:
                     beta_smart_thread = SmartThread(
                         group_name="test1",
                         name="beta",
-                        target=eval(f1_target_to_specify),
+                        target_rtn=eval(f1_target_to_specify),
                         thread_parm_name=smart_thread_name_to_specify,
                         kwargs=kwargs_to_specify,
                     )
@@ -26951,7 +26955,7 @@ class TestSmartThreadInterface:
                     beta_smart_thread = SmartThread(
                         group_name="test1",
                         name="beta",
-                        target=eval(f1_target_to_specify),
+                        target_rtn=eval(f1_target_to_specify),
                         thread_parm_name=smart_thread_name_to_specify,
                     )
         else:
@@ -26960,7 +26964,7 @@ class TestSmartThreadInterface:
                     beta_smart_thread = SmartThread(
                         group_name="test1",
                         name="beta",
-                        target=eval(f1_target_to_specify),
+                        target_rtn=eval(f1_target_to_specify),
                         args=args_to_specify,
                         kwargs=kwargs_to_specify,
                     )
@@ -26968,7 +26972,7 @@ class TestSmartThreadInterface:
                     beta_smart_thread = SmartThread(
                         group_name="test1",
                         name="beta",
-                        target=eval(f1_target_to_specify),
+                        target_rtn=eval(f1_target_to_specify),
                         args=args_to_specify,
                     )
             else:
@@ -26976,14 +26980,14 @@ class TestSmartThreadInterface:
                     beta_smart_thread = SmartThread(
                         group_name="test1",
                         name="beta",
-                        target=eval(f1_target_to_specify),
+                        target_rtn=eval(f1_target_to_specify),
                         kwargs=kwargs_to_specify,
                     )
                 else:
                     beta_smart_thread = SmartThread(
                         group_name="test1",
                         name="beta",
-                        target=eval(f1_target_to_specify),
+                        target_rtn=eval(f1_target_to_specify),
                     )
 
         logger.debug(f"After: {kwargs_to_specify}")
@@ -27101,31 +27105,33 @@ class TestSmartThreadInterface:
         logger.debug("mainline entered")
         alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         if num_f1_args == (0, 0, 0):
-            beta_smart_thread = SmartThread(group_name="test1", name="beta", target=f1)
+            beta_smart_thread = SmartThread(
+                group_name="test1", name="beta", target_rtn=f1
+            )
         elif num_f1_args == (0, 0, 1):
             beta_smart_thread = SmartThread(
-                group_name="test1", name="beta", target=f1, args=(42,)
+                group_name="test1", name="beta", target_rtn=f1, args=(42,)
             )
         elif num_f1_args == (0, 0, 2):
             beta_smart_thread = SmartThread(
-                group_name="test1", name="beta", target=f1, args=(42, "my arg 2")
+                group_name="test1", name="beta", target_rtn=f1, args=(42, "my arg 2")
             )
         elif num_f1_args == (0, 0, 3):
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 args=(42, "my arg 2", [1, 2, 3]),
             )
         elif num_f1_args == (0, 1, 0):
             beta_smart_thread = SmartThread(
-                group_name="test1", name="beta", target=f1, kwargs={"kwarg1": 13}
+                group_name="test1", name="beta", target_rtn=f1, kwargs={"kwarg1": 13}
             )
         elif num_f1_args == (0, 1, 1):
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 args=(42,),
                 kwargs={"kwarg1": 13},
             )
@@ -27133,7 +27139,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 args=(42, "my arg 2"),
                 kwargs={"kwarg1": 13},
             )
@@ -27141,7 +27147,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 args=(42, "my arg 2", [1, 2, 3]),
                 kwargs={"kwarg1": 13},
             )
@@ -27149,14 +27155,14 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
             )
         elif num_f1_args == (0, 2, 1):
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 args=(42,),
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
             )
@@ -27164,7 +27170,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 args=(42, "my arg 2"),
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
             )
@@ -27172,7 +27178,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 args=(42, "my arg 2", [1, 2, 3]),
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
             )
@@ -27180,14 +27186,14 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg", "kwarg3": [11, 22, 33]},
             )
         elif num_f1_args == (0, 3, 1):
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 args=(42,),
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg", "kwarg3": [11, 22, 33]},
             )
@@ -27195,7 +27201,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 args=(42, "my arg 2"),
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg", "kwarg3": [11, 22, 33]},
             )
@@ -27203,7 +27209,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 args=(42, "my arg 2", [1, 2, 3]),
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg", "kwarg3": [11, 22, 33]},
             )
@@ -27211,14 +27217,14 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 thread_parm_name="smart_thread",
             )
         elif num_f1_args == (1, 0, 1):
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 thread_parm_name="smart_thread",
                 args=(42,),
             )
@@ -27226,7 +27232,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 thread_parm_name="smart_thread",
                 args=(42, "my arg 2"),
             )
@@ -27234,7 +27240,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 thread_parm_name="smart_thread",
                 args=(42, "my arg 2", [1, 2, 3]),
             )
@@ -27242,7 +27248,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 thread_parm_name="smart_thread",
                 kwargs={"kwarg1": 13},
             )
@@ -27250,7 +27256,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 thread_parm_name="smart_thread",
                 args=(42,),
                 kwargs={"kwarg1": 13},
@@ -27259,7 +27265,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 thread_parm_name="smart_thread",
                 args=(42, "my arg 2"),
                 kwargs={"kwarg1": 13},
@@ -27268,7 +27274,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 thread_parm_name="smart_thread",
                 args=(42, "my arg 2", [1, 2, 3]),
                 kwargs={"kwarg1": 13},
@@ -27277,7 +27283,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 thread_parm_name="smart_thread",
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
             )
@@ -27285,7 +27291,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 thread_parm_name="smart_thread",
                 args=(42,),
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
@@ -27294,7 +27300,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 thread_parm_name="smart_thread",
                 args=(42, "my arg 2"),
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
@@ -27303,7 +27309,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 thread_parm_name="smart_thread",
                 args=(42, "my arg 2", [1, 2, 3]),
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg"},
@@ -27312,7 +27318,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 thread_parm_name="smart_thread",
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg", "kwarg3": [11, 22, 33]},
             )
@@ -27320,7 +27326,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 thread_parm_name="smart_thread",
                 args=(42,),
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg", "kwarg3": [11, 22, 33]},
@@ -27329,7 +27335,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 thread_parm_name="smart_thread",
                 args=(42, "my arg 2"),
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg", "kwarg3": [11, 22, 33]},
@@ -27338,7 +27344,7 @@ class TestSmartThreadInterface:
             beta_smart_thread = SmartThread(
                 group_name="test1",
                 name="beta",
-                target=f1,
+                target_rtn=f1,
                 thread_parm_name="smart_thread",
                 args=(42, "my arg 2", [1, 2, 3]),
                 kwargs={"kwarg1": 13, "kwarg2": "second kwarg", "kwarg3": [11, 22, 33]},
@@ -27482,7 +27488,7 @@ class TestSmartThreadInterface:
         beta_smart_thread = SmartThread(
             group_name="test1",
             name="beta",
-            target=f1,
+            target_rtn=f1,
             thread_parm_name=smart_thread_name_to_specify,
             args=args_to_specify,
             kwargs=kwargs_to_specify,
@@ -27534,7 +27540,7 @@ class TestSmartThreadExamples:
         print("mainline alpha entered")
         alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         beta_smart_thread = SmartThread(
-            group_name="test1", name="beta", target=f1, auto_start=False
+            group_name="test1", name="beta", target_rtn=f1, auto_start=False
         )
         beta_smart_thread.smart_start()
 
@@ -27565,7 +27571,7 @@ class TestSmartThreadExamples:
         Create a SmartThread configuration for threads named alpha and
         beta, send and receive a message, and resume a wait. Note the
         use of auto_start=True and passing the SmartThread instance to
-        the target via the thread_parm_name.
+        the target_rtn via the thread_parm_name.
 
         Args:
             capsys: pytest fixture to get the print output
@@ -27583,7 +27589,7 @@ class TestSmartThreadExamples:
         SmartThread(
             group_name="test1",
             name="beta",
-            target=f1,
+            target_rtn=f1,
             auto_start=True,
             thread_parm_name="smart_thread",
         )
@@ -27614,7 +27620,7 @@ class TestSmartThreadExamples:
         Create a SmartThread configuration for threads named alpha and
         beta, send and receive a message, and resume a wait. Note the
         use of threading.Thread to create and start the beta thread and
-        having the target thread instantiate the SmartThread.
+        having the target_rtn thread instantiate the SmartThread.
 
         Args:
             capsys: pytest fixture to get the print output
@@ -27813,7 +27819,7 @@ class TestSmartThreadExamples:
         print("mainline alpha entered")
         alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         beta_smart_thread = SmartThread(
-            group_name="test1", name="beta", target=f1, auto_start=False
+            group_name="test1", name="beta", target_rtn=f1, auto_start=False
         )
         print("alpha about to start beta")
         beta_smart_thread.smart_start()
@@ -27857,9 +27863,11 @@ class TestSmartThreadExamples:
 
         print("mainline alpha entered")
         alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
-        SmartThread(group_name="test1", name="beta", target=f1_beta, auto_start=False)
         SmartThread(
-            group_name="test1", name="charlie", target=f2_charlie, auto_start=False
+            group_name="test1", name="beta", target_rtn=f1_beta, auto_start=False
+        )
+        SmartThread(
+            group_name="test1", name="charlie", target_rtn=f2_charlie, auto_start=False
         )
         print("alpha about to start beta and charlie")
         alpha_smart_thread.smart_start(targets=["beta", "charlie"])
@@ -27900,7 +27908,9 @@ class TestSmartThreadExamples:
         print("mainline alpha entered")
         alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         print("alpha about to create beta")
-        SmartThread(group_name="test1", name="beta", target=f1_beta, auto_start=False)
+        SmartThread(
+            group_name="test1", name="beta", target_rtn=f1_beta, auto_start=False
+        )
         print("alpha about to unregister beta")
         alpha_smart_thread.smart_unreg(targets="beta")
         print("mainline alpha exiting")
@@ -27937,7 +27947,7 @@ class TestSmartThreadExamples:
         print("mainline alpha entered")
         alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         print("alpha about to create beta")
-        SmartThread(group_name="test1", name="beta", target=f1_beta)
+        SmartThread(group_name="test1", name="beta", target_rtn=f1_beta)
         time.sleep(1)
         print("alpha about to join beta")
         alpha_smart_thread.smart_join(targets="beta")
@@ -27979,7 +27989,10 @@ class TestSmartThreadExamples:
         logger.debug("mainline entered")
         alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         SmartThread(
-            group_name="test1", name="beta", target=f1, thread_parm_name="smart_thread"
+            group_name="test1",
+            name="beta",
+            target_rtn=f1,
+            thread_parm_name="smart_thread",
         )
         alpha_smart_thread.smart_send(msg="hello beta", receivers="beta")
         alpha_smart_thread.smart_join(targets="beta")
@@ -28022,12 +28035,15 @@ class TestSmartThreadExamples:
         print("mainline alpha entered")
         alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         SmartThread(
-            group_name="test1", name="beta", target=f1, thread_parm_name="smart_thread"
+            group_name="test1",
+            name="beta",
+            target_rtn=f1,
+            thread_parm_name="smart_thread",
         )
         SmartThread(
             group_name="test1",
             name="charlie",
-            target=f1,
+            target_rtn=f1,
             thread_parm_name="smart_thread",
         )
         alpha_smart_thread.smart_send(
@@ -28073,7 +28089,10 @@ class TestSmartThreadExamples:
         print("mainline alpha entered")
         alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         SmartThread(
-            group_name="test1", name="beta", target=f1, thread_parm_name="smart_thread"
+            group_name="test1",
+            name="beta",
+            target_rtn=f1,
+            thread_parm_name="smart_thread",
         )
         alpha_smart_thread.smart_send(
             msg=("hello beta", "have a great day", 42), receivers="beta"
@@ -28125,21 +28144,21 @@ class TestSmartThreadExamples:
         SmartThread(
             group_name="test1",
             name="beta",
-            target=f1,
+            target_rtn=f1,
             thread_parm_name="smart_thread",
             kwargs={"resume_target": "charlie"},
         )
         SmartThread(
             group_name="test1",
             name="charlie",
-            target=f1,
+            target_rtn=f1,
             thread_parm_name="smart_thread",
             kwargs={"wait_for": "beta", "resume_target": "delta"},
         )
         SmartThread(
             group_name="test1",
             name="delta",
-            target=f1,
+            target_rtn=f1,
             thread_parm_name="smart_thread",
             kwargs={"wait_for": "charlie", "resume_target": "alpha"},
         )
@@ -28202,21 +28221,21 @@ class TestSmartThreadExamples:
         SmartThread(
             group_name="test1",
             name="beta",
-            target=f1,
+            target_rtn=f1,
             thread_parm_name="smart_thread",
             kwargs={"resume_target": "charlie"},
         )
         SmartThread(
             group_name="test1",
             name="charlie",
-            target=f1,
+            target_rtn=f1,
             thread_parm_name="smart_thread",
             kwargs={"wait_for": "beta", "resume_target": "delta"},
         )
         SmartThread(
             group_name="test1",
             name="delta",
-            target=f1,
+            target_rtn=f1,
             thread_parm_name="smart_thread",
             kwargs={"wait_for": "charlie", "resume_target": "alpha"},
         )
@@ -28269,7 +28288,10 @@ class TestSmartThreadExamples:
         print("mainline alpha entered")
         alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         SmartThread(
-            group_name="test1", name="beta", target=f1, thread_parm_name="smart_thread"
+            group_name="test1",
+            name="beta",
+            target_rtn=f1,
+            thread_parm_name="smart_thread",
         )
         recvd_msgs = alpha_smart_thread.smart_recv(senders="beta")
         print(recvd_msgs["beta"])
@@ -28312,13 +28334,16 @@ class TestSmartThreadExamples:
         print("mainline alpha entered")
         alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         SmartThread(
-            group_name="test1", name="beta", target=f1, thread_parm_name="smart_thread"
+            group_name="test1",
+            name="beta",
+            target_rtn=f1,
+            thread_parm_name="smart_thread",
         )
         time.sleep(0.2)
         SmartThread(
             group_name="test1",
             name="charlie",
-            target=f1,
+            target_rtn=f1,
             thread_parm_name="smart_thread",
         )
         time.sleep(0.2)
@@ -28373,7 +28398,7 @@ class TestSmartThreadExamples:
         SmartThread(
             group_name="test1",
             name="beta",
-            target=f1,
+            target_rtn=f1,
             thread_parm_name="smart_thread",
             args=("hi",),
         )
@@ -28440,7 +28465,7 @@ class TestSmartThreadExamples:
         SmartThread(
             group_name="test1",
             name="beta",
-            target=f1,
+            target_rtn=f1,
             thread_parm_name="smart_thread",
             args=("hi",),
             kwargs={"resume_target": "charlie"},
@@ -28448,7 +28473,7 @@ class TestSmartThreadExamples:
         SmartThread(
             group_name="test1",
             name="charlie",
-            target=f1,
+            target_rtn=f1,
             thread_parm_name="smart_thread",
             args=("hello",),
             kwargs={"wait_for": "beta", "resume_target": "delta"},
@@ -28456,7 +28481,7 @@ class TestSmartThreadExamples:
         SmartThread(
             group_name="test1",
             name="delta",
-            target=f1,
+            target_rtn=f1,
             thread_parm_name="smart_thread",
             args=("aloha",),
             kwargs={"wait_for": "charlie", "resume_target": "alpha"},
@@ -28512,7 +28537,10 @@ class TestSmartThreadExamples:
         print("mainline alpha entered")
         alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         SmartThread(
-            group_name="test1", name="beta", target=f1, thread_parm_name="smart_thread"
+            group_name="test1",
+            name="beta",
+            target_rtn=f1,
+            thread_parm_name="smart_thread",
         )
         time.sleep(1)  # allow time for smart_wait to be issued
         print("alpha about to resume beta")
@@ -28555,7 +28583,10 @@ class TestSmartThreadExamples:
         print("mainline alpha entered")
         alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         SmartThread(
-            group_name="test1", name="beta", target=f1, thread_parm_name="smart_thread"
+            group_name="test1",
+            name="beta",
+            target_rtn=f1,
+            thread_parm_name="smart_thread",
         )
         print("alpha about to resume beta")
         alpha_smart_thread.smart_resume(waiters="beta")
@@ -28596,18 +28627,24 @@ class TestSmartThreadExamples:
         print("mainline alpha entered")
         alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         SmartThread(
-            group_name="test1", name="beta", target=f1, thread_parm_name="smart_thread"
+            group_name="test1",
+            name="beta",
+            target_rtn=f1,
+            thread_parm_name="smart_thread",
         )
         time.sleep(1)  # allow time for alpha to wait
         SmartThread(
             group_name="test1",
             name="charlie",
-            target=f1,
+            target_rtn=f1,
             thread_parm_name="smart_thread",
         )
         time.sleep(1)  # allow time for alpha to wait
         SmartThread(
-            group_name="test1", name="delta", target=f1, thread_parm_name="smart_thread"
+            group_name="test1",
+            name="delta",
+            target_rtn=f1,
+            thread_parm_name="smart_thread",
         )
         time.sleep(1)  # allow time for alpha to wait
         print("alpha about to wait for all threads")
@@ -28654,13 +28691,16 @@ class TestSmartThreadExamples:
         print("mainline alpha entered")
         alpha_smart_thread = SmartThread(group_name="test1", name="alpha")
         SmartThread(
-            group_name="test1", name="beta", target=f1, thread_parm_name="smart_thread"
+            group_name="test1",
+            name="beta",
+            target_rtn=f1,
+            thread_parm_name="smart_thread",
         )
         time.sleep(1)
         SmartThread(
             group_name="test1",
             name="charlie",
-            target=f1,
+            target_rtn=f1,
             thread_parm_name="smart_thread",
         )
         time.sleep(1)
@@ -28670,7 +28710,10 @@ class TestSmartThreadExamples:
         )
         print(f"alpha resumed by resumers={sorted(resumed_by)}")
         SmartThread(
-            group_name="test1", name="delta", target=f1, thread_parm_name="smart_thread"
+            group_name="test1",
+            name="delta",
+            target_rtn=f1,
+            thread_parm_name="smart_thread",
         )
         time.sleep(1)  # allow time for alpha to wait
         print("alpha about to wait for any threads")
@@ -28729,13 +28772,13 @@ class TestSmartThreadExamples:
         SmartThread(
             group_name="test1",
             name="beta",
-            target=f1_beta,
+            target_rtn=f1_beta,
             thread_parm_name="smart_thread",
         )
         SmartThread(
             group_name="test1",
             name="charlie",
-            target=f2_charlie,
+            target_rtn=f2_charlie,
             thread_parm_name="smart_thread",
         )
         time.sleep(2)
@@ -28788,14 +28831,14 @@ class TestSmartThreadExamples:
         SmartThread(
             group_name="test1",
             name="beta",
-            target=f1_beta,
+            target_rtn=f1_beta,
             thread_parm_name="smart_thread",
         )
         time.sleep(1)
         SmartThread(
             group_name="test1",
             name="charlie",
-            target=f2_charlie,
+            target_rtn=f2_charlie,
             thread_parm_name="smart_thread",
         )
         time.sleep(1)
@@ -29317,7 +29360,11 @@ class TestSmartThreadSmokeTest:
         )
 
         f1_st = st.SmartThread(
-            group_name="test1", name=f1_name, target=f1, args=(f1_name,), max_msgs=10
+            group_name="test1",
+            name=f1_name,
+            target_rtn=f1,
+            args=(f1_name,),
+            max_msgs=10,
         )
 
         commander_thread.smart_send(receivers="beta", msg="alpha sends to beta")
@@ -29331,7 +29378,7 @@ class TestSmartThreadSmokeTest:
         f1_st = st.SmartThread(
             group_name="test1",
             name=f1_name,
-            target=f1,
+            target_rtn=f1,
             args=(f1_name,),
             auto_start=False,
         )
@@ -29350,7 +29397,7 @@ class TestSmartThreadSmokeTest:
             ),
             # ('alpha set state for thread alpha from '
             #  'ThreadState.Unregistered to ThreadState.Initialized'),
-            ("smart_init _register entry: cmd_runner: alpha, " "target: alpha"),
+            ("smart_init _register entry: cmd_runner: alpha, " "target_rtn: alpha"),
             ("smart_init _clean_registry entry: " "cmd_runner: alpha"),
             ("smart_init _clean_registry exit: " "cmd_runner: alpha"),
             ("smart_init _clean_pair_array entry: " "cmd_runner: alpha"),
@@ -29366,10 +29413,13 @@ class TestSmartThreadSmokeTest:
             ),
             (
                 "smart_init _add_to_pair_array entry: "
-                "cmd_runner: alpha, target: alpha"
+                "cmd_runner: alpha, target_rtn: alpha"
             ),
-            ("smart_init _add_to_pair_array exit: " "cmd_runner: alpha, target: alpha"),
-            ("smart_init _register exit: cmd_runner: alpha, " "target: alpha"),
+            (
+                "smart_init _add_to_pair_array exit: "
+                "cmd_runner: alpha, target_rtn: alpha"
+            ),
+            ("smart_init _register exit: cmd_runner: alpha, " "target_rtn: alpha"),
             (
                 "smart_init exit: requestor: alpha, group: test1, targets: "
                 r"\['alpha'\] timeout value: None "
@@ -29400,11 +29450,12 @@ class TestSmartThreadSmokeTest:
             ),
             # ('alpha set state for thread beta from '
             #  'ThreadState.Unregistered to ThreadState.Initialized'),
-            ("smart_init _register entry: cmd_runner: alpha, " "target: beta"),
+            ("smart_init _register entry: cmd_runner: alpha, " "target_rtn: beta"),
             ("smart_init _clean_registry entry: " "cmd_runner: alpha"),
             (
                 r"name=alpha, is_alive=True, state=ThreadState.Alive, "
-                r"smart_thread=SmartThread\(name='alpha'\)"
+                r"smart_thread=SmartThread\(name='alpha', group_name=test1, "
+                r"name=alpha, auto_start=True, max_msgs=10\)"
             ),
             ("smart_init _clean_registry exit: " "cmd_runner: alpha"),
             ("smart_init _clean_pair_array entry: " "cmd_runner: alpha"),
@@ -29414,7 +29465,10 @@ class TestSmartThreadSmokeTest:
                 "alpha set state for thread beta from "
                 "ThreadState.Initialized to ThreadState.Registered"
             ),
-            ("smart_init _add_to_pair_array entry: " "cmd_runner: alpha, target: beta"),
+            (
+                "smart_init _add_to_pair_array entry: "
+                "cmd_runner: alpha, target_rtn: beta"
+            ),
             (
                 r"alpha added PairKey\(name0='alpha', name1='beta'\) to the "
                 "_pair_array"
@@ -29428,8 +29482,11 @@ class TestSmartThreadSmokeTest:
                 r"for PairKey\(name0='alpha', name1='beta'\), name = beta"
             ),
             ("alpha updated _pair_array at UTC " f"{time_match}"),
-            ("smart_init _add_to_pair_array exit: " "cmd_runner: alpha, target: beta"),
-            ("smart_init _register exit: cmd_runner: alpha, " "target: beta"),
+            (
+                "smart_init _add_to_pair_array exit: "
+                "cmd_runner: alpha, target_rtn: beta"
+            ),
+            ("smart_init _register exit: cmd_runner: alpha, " "target_rtn: beta"),
             (
                 "smart_start entry: requestor: alpha, group: test1, targets: "
                 r"\['beta'\] timeout value: None "
@@ -29574,12 +29631,14 @@ class TestSmartThreadSmokeTest:
             ("smart_join _clean_registry entry: " "cmd_runner: alpha"),
             (
                 r"name=alpha, is_alive=True, state=ThreadState.Alive, "
-                r"smart_thread=SmartThread\(name='alpha'\)"
+                r"smart_thread=SmartThread\(name='alpha', group_name=test1, "
+                r"name=alpha, auto_start=True, max_msgs=10\)"
             ),
             (
                 r"name=beta, is_alive=False, state=ThreadState.Stopped, "
-                r"smart_thread=SmartThread\(name='beta', "
-                r"target=f1, args=\('beta',\)\)"
+                r"smart_thread=SmartThread\(name='beta', group_name=test1, "
+                r"name=beta, target_rtn=f1, args=\('beta',\), auto_start=True, "
+                r"max_msgs=10\)"
             ),
             ("alpha removed beta from registry for " "request: smart_join"),
             (
@@ -29637,11 +29696,12 @@ class TestSmartThreadSmokeTest:
             ),
             # ('alpha set state for thread beta from '
             #  'ThreadState.Unregistered to ThreadState.Initialized'),
-            ("smart_init _register entry: cmd_runner: alpha, " "target: beta"),
+            ("smart_init _register entry: cmd_runner: alpha, " "target_rtn: beta"),
             ("smart_init _clean_registry entry: " "cmd_runner: alpha"),
             (
                 r"name=alpha, is_alive=True, state=ThreadState.Alive, "
-                r"smart_thread=SmartThread\(name='alpha'\)"
+                r"smart_thread=SmartThread\(name='alpha', group_name=test1, "
+                r"name=alpha, auto_start=True, max_msgs=10\)"
             ),
             ("smart_init _clean_registry exit: " "cmd_runner: alpha"),
             ("smart_init _clean_pair_array entry: " "cmd_runner: alpha"),
@@ -29651,7 +29711,10 @@ class TestSmartThreadSmokeTest:
                 "alpha set state for thread beta from "
                 "ThreadState.Initialized to ThreadState.Registered"
             ),
-            ("smart_init _add_to_pair_array entry: " "cmd_runner: alpha, target: beta"),
+            (
+                "smart_init _add_to_pair_array entry: "
+                "cmd_runner: alpha, target_rtn: beta"
+            ),
             (
                 r"alpha added PairKey\(name0='alpha', name1='beta'\) to the "
                 "_pair_array"
@@ -29665,8 +29728,11 @@ class TestSmartThreadSmokeTest:
                 r"for PairKey\(name0='alpha', name1='beta'\), name = beta"
             ),
             ("alpha updated _pair_array at UTC " f"{time_match}"),
-            ("smart_init _add_to_pair_array exit: " "cmd_runner: alpha, target: beta"),
-            ("smart_init _register exit: cmd_runner: alpha, " "target: beta"),
+            (
+                "smart_init _add_to_pair_array exit: "
+                "cmd_runner: alpha, target_rtn: beta"
+            ),
+            ("smart_init _register exit: cmd_runner: alpha, " "target_rtn: beta"),
             (
                 "smart_init exit: requestor: alpha, group: test1, targets: "
                 r"\['beta'\] timeout value: None "
@@ -29698,12 +29764,14 @@ class TestSmartThreadSmokeTest:
             ("smart_unreg _clean_registry entry: " "cmd_runner: alpha"),
             (
                 r"name=alpha, is_alive=True, state=ThreadState.Alive, "
-                r"smart_thread=SmartThread\(name='alpha'\)"
+                r"smart_thread=SmartThread\(name='alpha', group_name=test1, "
+                r"name=alpha, auto_start=True, max_msgs=10\)"
             ),
             (
                 r"name=beta, is_alive=False, state=ThreadState.Registered, "
-                r"smart_thread=SmartThread\(name='beta', "
-                r"target=f1, args=\('beta',\)\)"
+                r"smart_thread=SmartThread\(name='beta', group_name=test1, "
+                r"name=beta, target_rtn=f1, args=\('beta',\), auto_start=False, "
+                r"max_msgs=0\)"
             ),
             ("alpha removed beta from registry for " "request: smart_unreg"),
             (
@@ -30055,16 +30123,16 @@ class TestSmartThreadErrors:
             st.SmartThreadMutuallyExclusiveTargetThreadSpecified
         ) as exc1:
             st.SmartThread(
-                group_name="test1", name="alpha", target=f1, thread=test_thread
+                group_name="test1", name="alpha", target_rtn=f1, thread=test_thread
             )
 
         exp_error_msg = (
             f"SmartThread {threading.current_thread().name} raising "
             "SmartThreadMutuallyExclusiveTargetThreadSpecified error "
             "while processing request smart_init. "
-            "Arguments for mutually exclusive parameters target and "
+            "Arguments for mutually exclusive parameters target_rtn and "
             "thread were both specified. Please specify only one or "
-            "target or thread."
+            "target_rtn or thread."
         )
 
         logger.debug(exp_error_msg)
@@ -30082,8 +30150,8 @@ class TestSmartThreadErrors:
             "SmartThreadArgsSpecificationWithoutTarget error while "
             "processing request smart_init. "
             "Arguments for parameters args or kwargs were specified, "
-            "but an argument for the target parameter was not "
-            "specified. Please specify target or remove args and "
+            "but an argument for the target_rtn parameter was not "
+            "specified. Please specify target_rtn or remove args and "
             "kwargs."
         )
 
@@ -30166,12 +30234,14 @@ class TestSmartThreadErrors:
                         new_thread = re.escape(str(existing_smart_thread.thread))
                         st.SmartThread(group_name="test1", name=new_name_arg)
                     else:
-                        st.SmartThread(group_name="test1", name=new_name_arg, target=f1)
+                        st.SmartThread(
+                            group_name="test1", name=new_name_arg, target_rtn=f1
+                        )
             else:
-                st.SmartThread(group_name="test1", name=new_name_arg, target=f1)
+                st.SmartThread(group_name="test1", name=new_name_arg, target_rtn=f1)
         elif existing_thread_arg == st.ThreadCreate.Target:
             existing_smart_thread = st.SmartThread(
-                group_name="test1", name=existing_name_arg, target=f1
+                group_name="test1", name=existing_name_arg, target_rtn=f1
             )
             if same_name or new_same_thread_arg:
                 check_msg = True
@@ -30184,9 +30254,11 @@ class TestSmartThreadErrors:
                             thread=existing_smart_thread.thread,
                         )
                     else:
-                        st.SmartThread(group_name="test1", name=new_name_arg, target=f1)
+                        st.SmartThread(
+                            group_name="test1", name=new_name_arg, target_rtn=f1
+                        )
             else:
-                st.SmartThread(group_name="test1", name=new_name_arg, target=f1)
+                st.SmartThread(group_name="test1", name=new_name_arg, target_rtn=f1)
         else:  # existing_thread_arg == st.ThreadCreate.Thread:
             existing_thread = threading.Thread(target=f1)
             existing_smart_thread = st.SmartThread(
@@ -30203,9 +30275,11 @@ class TestSmartThreadErrors:
                             thread=existing_thread,
                         )
                     else:
-                        st.SmartThread(group_name="test1", name=new_name_arg, target=f1)
+                        st.SmartThread(
+                            group_name="test1", name=new_name_arg, target_rtn=f1
+                        )
             else:
-                st.SmartThread(group_name="test1", name=new_name_arg, target=f1)
+                st.SmartThread(group_name="test1", name=new_name_arg, target_rtn=f1)
 
         if check_msg:
             existing_thread_str = re.escape(str(existing_smart_thread.thread))
@@ -30304,7 +30378,7 @@ class TestSmartThreadErrors:
         )
 
         with pytest.raises(st.SmartThreadIncorrectData) as exc:
-            st.SmartThread(group_name="test1", name="beta", target=f1)
+            st.SmartThread(group_name="test1", name="beta", target_rtn=f1)
 
         exp_error_msg = (
             "SmartThread alpha "
@@ -30331,17 +30405,15 @@ class TestSmartThreadErrors:
                     name="beta",
                     create_time=0,
                     target_create_time=0.0,
-                    # wait_event=threading.Event(),
-                    wait_event=False,
-                    # sync_event=threading.Event(),
-                    sync_event=False,
+                    wait_flag=False,
+                    sync_flag=False,
                     msg_q=queue.Queue(maxsize=10),
                 )
             },
         )
 
         with pytest.raises(st.SmartThreadIncorrectData) as exc:
-            st.SmartThread(group_name="test1", name="beta", target=f1)
+            st.SmartThread(group_name="test1", name="beta", target_rtn=f1)
 
         exp_error_msg = (
             "SmartThread alpha "
@@ -30368,17 +30440,15 @@ class TestSmartThreadErrors:
                     name="beta",
                     create_time=0,
                     target_create_time=0.0,
-                    # wait_event=threading.Event(),
-                    wait_event=False,
-                    # sync_event=threading.Event(),
-                    sync_event=False,
+                    wait_flag=False,
+                    sync_flag=False,
                     msg_q=queue.Queue(maxsize=10),
                 )
             },
         )
 
         with pytest.raises(st.SmartThreadIncorrectData) as exc:
-            st.SmartThread(group_name="test1", name="beta", target=f1)
+            st.SmartThread(group_name="test1", name="beta", target_rtn=f1)
 
         exp_error_msg = (
             f"SmartThread alpha "
@@ -30406,27 +30476,23 @@ class TestSmartThreadErrors:
                     name="beta",
                     create_time=0,
                     target_create_time=0.0,
-                    # wait_event=threading.Event(),
-                    wait_event=False,
-                    # sync_event=threading.Event(),
-                    sync_event=False,
+                    wait_flag=False,
+                    sync_flag=False,
                     msg_q=queue.Queue(maxsize=10),
                 ),
                 "beta": st.SmartThread.ConnectionStatusBlock(
                     name="beta",
                     create_time=0,
                     target_create_time=0.0,
-                    # wait_event=threading.Event(),
-                    wait_event=False,
-                    # sync_event=threading.Event(),
-                    sync_event=False,
+                    wait_flag=False,
+                    sync_flag=False,
                     msg_q=queue.Queue(maxsize=10),
                 ),
             },
         )
 
         with pytest.raises(st.SmartThreadIncorrectData) as exc:
-            st.SmartThread(group_name="test1", name="beta", target=f1)
+            st.SmartThread(group_name="test1", name="beta", target_rtn=f1)
 
         existing_names = st.SmartThread._pair_array["test1"][
             pair_key
@@ -30675,7 +30741,7 @@ class TestSmartThreadErrors:
         alpha_thread = st.SmartThread(group_name="test1", name="alpha")
 
         beta_thread = st.SmartThread(
-            group_name="test1", name="beta", target=f1, auto_start=False
+            group_name="test1", name="beta", target_rtn=f1, auto_start=False
         )
 
         with pytest.raises(st.SmartThreadMultipleTargetsForSelfStart) as exc:
@@ -30765,7 +30831,7 @@ class TestSmartThreadErrors:
         logger.debug("mainline entered")
         alpha_thread = st.SmartThread(group_name="test1", name="alpha")
         beta_thread = st.SmartThread(
-            group_name="test1", name="beta", target=f1, auto_start=False
+            group_name="test1", name="beta", target_rtn=f1, auto_start=False
         )
         beta_thread.smart_start()
 
@@ -30902,7 +30968,7 @@ class TestSmartThreadErrors:
         logger.debug("mainline entered")
         alpha_thread = st.SmartThread(group_name="test1", name="alpha")
         beta_thread = st.SmartThread(
-            group_name="test1", name="beta", target=f1, auto_start=False
+            group_name="test1", name="beta", target_rtn=f1, auto_start=False
         )
         beta_thread.smart_start()
 
@@ -30989,7 +31055,7 @@ class TestSmartThreadErrors:
         logger.debug("mainline entered")
         alpha_thread = st.SmartThread(group_name="test1", name="alpha")
         beta_thread = st.SmartThread(
-            group_name="test1", name="beta", target=f1, auto_start=False
+            group_name="test1", name="beta", target_rtn=f1, auto_start=False
         )
         beta_thread.smart_start()
 
@@ -31081,7 +31147,7 @@ class TestSmartThreadErrors:
             mock_exp_pk_remotes: ClassVar[str] = ""
 
             def __init__(self) -> None:
-                """Initialize the mock target state."""
+                """Initialize the mock target_rtn state."""
                 # self.work_pk_remotes = []
                 MockRequestLoop.mock_action = "action1"
 
@@ -31184,7 +31250,7 @@ class TestSmartThreadErrors:
 
         alpha_thread = st.SmartThread(group_name="test1", name="alpha")
         beta_thread = st.SmartThread(
-            group_name="test1", name="beta", target=f1, auto_start=False
+            group_name="test1", name="beta", target_rtn=f1, auto_start=False
         )
         beta_thread.smart_start()
 
@@ -31203,7 +31269,7 @@ class TestSmartThreadErrors:
         beta_thread.missing_remotes |= {"delta"}
 
         delta_thread = st.SmartThread(
-            group_name="test1", name="delta", target=f1, auto_start=False
+            group_name="test1", name="delta", target_rtn=f1, auto_start=False
         )
         msgs.queue_msg(target="beta", msg="action1")
 
@@ -31217,7 +31283,7 @@ class TestSmartThreadErrors:
         # part 2
         ################################################################
         beta_thread = st.SmartThread(
-            group_name="test1", name="beta", target=f1, auto_start=False
+            group_name="test1", name="beta", target_rtn=f1, auto_start=False
         )
 
         monkeypatch.setattr(
@@ -31241,7 +31307,7 @@ class TestSmartThreadErrors:
         beta_thread.missing_remotes |= {"delta"}
 
         delta_thread = st.SmartThread(
-            group_name="test1", name="delta", target=f1, auto_start=False
+            group_name="test1", name="delta", target_rtn=f1, auto_start=False
         )
 
         msgs.queue_msg(target="beta", msg="action2")
@@ -31329,7 +31395,7 @@ class TestSmartThreadErrors:
         beta_thread = st.SmartThread(
             group_name="test1",
             name="beta",
-            target=f1,
+            target_rtn=f1,
             kwargs={"action": "wait"},
             auto_start=False,
         )
@@ -31447,7 +31513,7 @@ class TestSmartThreadErrors:
         beta_thread = st.SmartThread(
             group_name="test1",
             name="beta",
-            target=f1,
+            target_rtn=f1,
             kwargs={"action": "deadlock"},
             auto_start=False,
         )
@@ -31491,7 +31557,7 @@ class TestSmartThreadErrors:
         beta_thread = st.SmartThread(
             group_name="test1",
             name="beta",
-            target=f1,
+            target_rtn=f1,
             kwargs={"action": "msg_wait"},
             auto_start=False,
         )
@@ -31538,7 +31604,7 @@ class TestSmartThreadErrors:
         beta_thread = st.SmartThread(
             group_name="test1",
             name="beta",
-            target=f1,
+            target_rtn=f1,
             kwargs={"action": "msg_wait"},
             auto_start=False,
             max_msgs=1,
@@ -31725,12 +31791,12 @@ class TestSmartThreadErrors:
         msgs = Msgs()
         alpha_thread = st.SmartThread(group_name="test1", name="alpha")
         beta_thread = st.SmartThread(
-            group_name="test1", name="beta", target=f1, kwargs={"f1_name": "beta"}
+            group_name="test1", name="beta", target_rtn=f1, kwargs={"f1_name": "beta"}
         )
         st.SmartThread(
             group_name="test1",
             name="charlie",
-            target=f1,
+            target_rtn=f1,
             kwargs={"f1_name": "charlie"},
             auto_start=False,
         )
@@ -32005,7 +32071,7 @@ class TestSmartThreadErrors:
             group_name="test1",
             name="beta",
             auto_start=False,
-            target=f2,
+            target_rtn=f2,
             kwargs={"f2_name": "beta_2"},
         )
 
@@ -32013,7 +32079,7 @@ class TestSmartThreadErrors:
             group_name="test1",
             name="charlie",
             auto_start=False,
-            target=f3,
+            target_rtn=f3,
             kwargs={"f3_name": "charlie"},
         )
 
@@ -32204,7 +32270,7 @@ class TestSmartThreadErrors:
             group_name="test1",
             name="beta",
             auto_start=True,
-            target=f2,
+            target_rtn=f2,
             thread_parm_name="beta_2_st",
             kwargs={"f2_name": "beta_2", "action": request_type_arg},
         )
@@ -32293,7 +32359,7 @@ class TestSmartBasicScenarios:
         beta_thread.start()
         beta_thread.join()
 
-        st.SmartThread(group_name="test1", name="charlie", target=f2)
+        st.SmartThread(group_name="test1", name="charlie", target_rtn=f2)
         alpha_smart_thread.smart_join(targets="charlie")
 
     ####################################################################
@@ -32344,7 +32410,7 @@ class TestSmartBasicScenarios:
             st.SmartThread(
                 group_name="test1",
                 name=name,
-                target=f1,
+                target_rtn=f1,
                 thread_parm_name="f1_smart_thread",
             )
 
@@ -32352,7 +32418,7 @@ class TestSmartBasicScenarios:
             st.SmartThread(
                 group_name="test1",
                 name=name,
-                target=f1,
+                target_rtn=f1,
                 thread_parm_name="f1_smart_thread",
                 auto_start=False,
             )
@@ -32513,7 +32579,7 @@ class TestSmartBasicScenarios:
                 f1_smart_threads[group_name][name] = st.SmartThread(
                     group_name=group_name,
                     name=name,
-                    target=f1,
+                    target_rtn=f1,
                     kwargs={"f1_group_name": group_name},
                     thread_parm_name="f1_smart_thread",
                 )
@@ -32562,16 +32628,16 @@ class TestSmartBasicScenarios:
                 alpha_threads[group_name].smart_join(targets=target)
 
         # for group_name in group_names:
-        #     for target in f1_names_in_group[group_name]:
-        #         num_sleeps = f1_smart_threads[group_name][target].num_sleeps
-        #         elapsed_sleep = f1_smart_threads[group_name][target].elapsed_sleep
+        #     for target_rtn in f1_names_in_group[group_name]:
+        #         num_sleeps = f1_smart_threads[group_name][target_rtn].num_sleeps
+        #         elapsed_sleep = f1_smart_threads[group_name][target_rtn].elapsed_sleep
         #         if num_sleeps > 0:
         #             mean_sleep = elapsed_sleep / num_sleeps
         #         else:
         #             mean_sleep = 0
         #
         #         print(
-        #             f"{group_name=}, {target=}, {num_sleeps=}"
+        #             f"{group_name=}, {target_rtn=}, {num_sleeps=}"
         #             f", {elapsed_sleep=}, {mean_sleep=}"
         #         )
 
@@ -32584,7 +32650,7 @@ class TestSmartBasicScenarios:
         #         mean_sleep = 0
         #
         #     print(
-        #         f"{group_name=}, target=alpha, {num_sleeps=}"
+        #         f"{group_name=}, target_rtn=alpha, {num_sleeps=}"
         #         f", {elapsed_sleep=}, {mean_sleep=}"
         #     )
         elapsed_time = time.time() - start_time
@@ -33664,26 +33730,26 @@ class TestSmartThreadComboScenarios:
 
         Args:
             num_resumers_arg: number of threads doing resumes
-            num_start_before_arg: number of target threads that will
+            num_start_before_arg: number of target_rtn threads that will
                 be started and issue a wait before the resume is done,
                 and should succeed
-            num_unreg_before_arg: number of target threads that will be
+            num_unreg_before_arg: number of target_rtn threads that will be
                 registered and then unregistered before the resume, and
                 then started after the resume, and should succeed
-            num_stop_before_arg: number of target threads that will
+            num_stop_before_arg: number of target_rtn threads that will
                 be started and then stopped (but not joined) before the
                 resume, and should result in a not alive error
-            num_unreg_after_arg: number of target threads that will be
+            num_unreg_after_arg: number of target_rtn threads that will be
                 unregistered after the resume, and should cause an error
-            num_stop_after_ok_arg: number of target threads that will
+            num_stop_after_ok_arg: number of target_rtn threads that will
                 be started after the resume is issued, and will stay
-                alive long enough for the resume to set the wait_event,
+                alive long enough for the resume to set the wait_flag,
                 and will then be stopped and joined, and should result
                 in success
-            num_stop_after_err_arg: number of target threads that will
+            num_stop_after_err_arg: number of target_rtn threads that will
                 be started after the resume is issued, and will quickly
                 be stopped and joined before the resume has a chance to
-                see that is is alive to sety the wait_event, and should
+                see that is is alive to sety the wait_flag, and should
                 result in a not alive error
             caplog: pytest fixture to capture log output
             monkeypatch: pytest fixture used to modify code for testing
@@ -33767,26 +33833,26 @@ class TestSmartThreadComboScenarios:
             req_type_arg: specifies whether to do resume or wait
             num_requestors_arg: number of threads doing resumes or
                 waits
-            num_start_before_arg: number of target threads that will
+            num_start_before_arg: number of target_rtn threads that will
                 be started and issue a wait before the resume is done,
                 and should succeed
-            num_unreg_before_arg: number of target threads that will be
+            num_unreg_before_arg: number of target_rtn threads that will be
                 registered and then unregistered before the resume, and
                 then started after the resume, and should succeed
-            num_stop_before_arg: number of target threads that will
+            num_stop_before_arg: number of target_rtn threads that will
                 be started and then stopped (but not joined) before the
                 resume, and should result in a not alive error
-            num_unreg_after_arg: number of target threads that will be
+            num_unreg_after_arg: number of target_rtn threads that will be
                 unregistered after the resume, and should cause an error
-            num_stop_after_ok_arg: number of target threads that will
+            num_stop_after_ok_arg: number of target_rtn threads that will
                 be started after the resume is issued, and will stay
-                alive long enough for the resume to set the wait_event,
+                alive long enough for the resume to set the wait_flag,
                 and will then be stopped and joined, and should result
                 in success
-            num_stop_after_err_arg: number of target threads that will
+            num_stop_after_err_arg: number of target_rtn threads that will
                 be started after the resume is issued, and will quickly
                 be stopped and joined before the resume has a chance to
-                see that is is alive to sety the wait_event, and should
+                see that is is alive to sety the wait_flag, and should
                 result in a not alive error
             caplog: pytest fixture to capture log output
             monkeypatch: pytest fixture used to modify code for testing
@@ -33859,26 +33925,26 @@ class TestSmartThreadComboScenarios:
 
         Args:
             num_waiters_arg: number of threads doing resumes
-            num_start_before_arg: number of target threads that will
+            num_start_before_arg: number of target_rtn threads that will
                 be started and issue a wait before the resume is done,
                 and should succeed
-            num_unreg_before_arg: number of target threads that will be
+            num_unreg_before_arg: number of target_rtn threads that will be
                 registered and then unregistered before the resume, and
                 then started after the resume, and should succeed
-            num_stop_before_arg: number of target threads that will
+            num_stop_before_arg: number of target_rtn threads that will
                 be started and then stopped (but not joined) before the
                 resume, and should result in a not alive error
-            num_unreg_after_arg: number of target threads that will be
+            num_unreg_after_arg: number of target_rtn threads that will be
                 unregistered after the resume, and should cause an error
-            num_stop_after_ok_arg: number of target threads that will
+            num_stop_after_ok_arg: number of target_rtn threads that will
                 be started after the resume is issued, and will stay
-                alive long enough for the resume to set the wait_event,
+                alive long enough for the resume to set the wait_flag,
                 and will then be stopped and joined, and should result
                 in success
-            num_stop_after_err_arg: number of target threads that will
+            num_stop_after_err_arg: number of target_rtn threads that will
                 be started after the resume is issued, and will quickly
                 be stopped and joined before the resume has a chance to
-                see that is is alive to sety the wait_event, and should
+                see that is is alive to sety the wait_flag, and should
                 result in a not alive error
             caplog: pytest fixture to capture log output
             monkeypatch: pytest fixture used to modify code for testing
