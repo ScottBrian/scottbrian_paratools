@@ -66,15 +66,16 @@ There are three configurations where SmartThread can be instantiated:
 .. code-block:: python
 
     from scottbrian_paratools.smart_thread import SmartThread
-    alpha_smart_thread = SmartThread(name='alpha')
+    alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
 
 
 .. invisible-code-block: python
 
-    del SmartThread._registry['alpha']
+    del SmartThread._registry['group_1']['alpha']
 
-:Example 2: Instantiate a SmartThread with a *target_rtn* argument to create
-            a new thread that will execute under the *target_rtn* routine:
+:Example 2: Instantiate a SmartThread with a *target_rtn* argument to
+            create a new thread that will execute under the *target_rtn*
+            routine:
 
 .. code-block:: python
 
@@ -82,12 +83,12 @@ There are three configurations where SmartThread can be instantiated:
     def f1() -> None:
         pass
 
-    beta_smart_thread = SmartThread(name='beta',
+    beta_smart_thread = SmartThread(group_name='group_1', name='beta',
                                     target_rtn=f1)
 
 .. invisible-code-block: python
 
-    del SmartThread._registry['beta']
+    del SmartThread._registry['group_1']['beta']
 
 
 :Example 3: Instantiate a SmartThread with a *thread* argument while
@@ -100,8 +101,8 @@ There are three configurations where SmartThread can be instantiated:
     def f1() -> None:
         pass
 
-    beta_thread = threading.Thread(target_rtn=f1)
-    beta_smart_thread = SmartThread(name='beta',
+    beta_thread = threading.Thread(target=f1)
+    beta_smart_thread = SmartThread(group_name='group_1', name='beta',
                                     thread=beta_thread,
                                     auto_start=False)
     beta_smart_thread.smart_start()
@@ -109,7 +110,7 @@ There are three configurations where SmartThread can be instantiated:
 
 .. invisible-code-block: python
 
-    del SmartThread._registry['beta']
+    del SmartThread._registry['group_1']['beta']
 
 The service methods are:
 
@@ -140,8 +141,9 @@ The service methods are:
         print('f1 beta exiting')
 
     print('mainline alpha entered')
-    alpha_smart_thread = SmartThread(name='alpha')
-    beta_smart_thread = SmartThread(name='beta',
+    alpha_smart_thread = SmartThread(group_name='group_1',
+                                     name='alpha')
+    beta_smart_thread = SmartThread(group_name='group_1', name='beta',
                                     target_rtn=f1,
                                     auto_start=False)
     beta_smart_thread.smart_start()
@@ -154,7 +156,7 @@ The service methods are:
 
 .. invisible-code-block: python
 
-    del SmartThread._registry['alpha']
+    del SmartThread._registry['group_1']['alpha']
 
 Expected output for Example 4::
 
@@ -174,7 +176,8 @@ Expected output for Example 4::
 :Example 5: Create a SmartThread configuration for threads named
             alpha and beta, send and receive a message, and resume a
             wait. Note the use of auto_start=True and passing the
-            SmartThread instance to the target_rtn via the thread_parm_name.
+            SmartThread instance to the target_rtn via the
+            thread_parm_name.
 
 .. code-block:: python
 
@@ -188,8 +191,8 @@ Expected output for Example 4::
         print('f1 beta exiting')
 
     print('mainline alpha entered')
-    alpha_smart_thread = SmartThread(name='alpha')
-    SmartThread(name='beta',
+    alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
+    SmartThread(group_name='group_1', name='beta',
                 target_rtn=f1,
                 auto_start=True,
                 thread_parm_name='smart_thread')
@@ -201,7 +204,7 @@ Expected output for Example 4::
 
 .. invisible-code-block: python
 
-    del SmartThread._registry['alpha']
+    del SmartThread._registry['group_1']['alpha']
 
 Expected output for Example 5::
 
@@ -215,8 +218,8 @@ Expected output for Example 5::
 :Example 6: Create a SmartThread configuration for threads named
             alpha and beta, send and receive a message, and resume a
             wait. Note the use of threading.Thread to create and start
-            the beta thread and having the target_rtn thread instantiate the
-            SmartThread.
+            the beta thread and having the target_rtn thread instantiate
+            the SmartThread.
 
 .. code-block:: python
 
@@ -225,15 +228,16 @@ Expected output for Example 5::
 
     def f1() -> None:
         print('f1 beta entered')
-        beta_smart_thread = SmartThread(name='beta')
+        beta_smart_thread = SmartThread(group_name='group_1',
+                                        name='beta')
         beta_smart_thread.smart_send(receivers='alpha',
                                      msg='hi alpha, this is beta')
         beta_smart_thread.smart_wait(resumers='alpha')
         print('f1 beta exiting')
 
     print('mainline alpha entered')
-    alpha_smart_thread = SmartThread(name='alpha')
-    beta_thread = threading.Thread(target_rtn=f1, name='beta')
+    alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
+    beta_thread = threading.Thread(target=f1, name='beta')
     beta_thread.start()
     recvd_msgs = alpha_smart_thread.smart_recv(senders='beta')
     print(recvd_msgs['beta'])
@@ -243,7 +247,7 @@ Expected output for Example 5::
 
 .. invisible-code-block: python
 
-    del SmartThread._registry['alpha']
+    del SmartThread._registry['group_1']['alpha']
 
 Expected output for Example 6::
 
@@ -268,9 +272,10 @@ Expected output for Example 6::
     import time
 
     class ThreadApp(threading.Thread):
-        def __init__(self, name: str) -> None:
+        def __init__(self, group_name: str, name: str) -> None:
             super().__init__(name=name)
             self.smart_thread = SmartThread(
+                group_name=group_name,
                 name=name,
                 thread=self,
                 auto_start=False)
@@ -286,8 +291,9 @@ Expected output for Example 6::
             print(f'{self.smart_thread.name} exiting run method')
 
     print('mainline alpha entered')
-    alpha_smart_thread = SmartThread(name='alpha')
-    ThreadApp(name='beta')
+    alpha_smart_thread = SmartThread(group_name='group_1',
+                                     name='alpha')
+    ThreadApp(group_name='group_1', name='beta')
     recvd_msgs = alpha_smart_thread.smart_recv(senders='beta')
     print(recvd_msgs['beta'])
     time.sleep(2)
@@ -298,7 +304,7 @@ Expected output for Example 6::
 
 .. invisible-code-block: python
 
-    del SmartThread._registry['alpha']
+    del SmartThread._registry['group_1']['alpha']
 
 Expected output for Example 7::
 
@@ -312,11 +318,11 @@ Expected output for Example 7::
 
 
 :Example 8: Create a SmartThread configuration for threads named alpha
-            and beta, send and receive a message, and resume a wait. Note
-            the use of the SmartThreadApp class that multiplicatively
-            inherits threading.Thread and SmartThread and uses a run
-            method. This example demonstrates the use of the *thread*
-            argument on the SmartThread instantiation.
+            and beta, send and receive a message, and resume a wait.
+            Note the use of the SmartThreadApp class that
+            multiplicatively inherits threading.Thread and SmartThread
+            and uses a run method. This example demonstrates the use of
+            the *thread* argument on the SmartThread instantiation.
 
 .. code-block:: python
 
@@ -326,9 +332,10 @@ Expected output for Example 7::
 
     class SmartThreadApp(threading.Thread, SmartThread):
 
-        def __init__(self, name: str) -> None:
+        def __init__(self, group_name: str, name: str) -> None:
             threading.Thread.__init__(self, name=name)
             SmartThread.__init__(self,
+                                 group_name=group_name,
                                  name=name,
                                  thread=self,
                                  auto_start=True)
@@ -343,8 +350,8 @@ Expected output for Example 7::
             print(f'{self.name} exiting run method')
 
     print('mainline alpha entered')
-    alpha_smart_thread = SmartThread(name='alpha')
-    SmartThreadApp(name='beta')
+    alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
+    SmartThreadApp(group_name='group_1', name='beta')
     recvd_msgs = alpha_smart_thread.smart_recv(senders='beta')
     print(recvd_msgs['beta'])
     time.sleep(2)
@@ -355,7 +362,7 @@ Expected output for Example 7::
 
 .. invisible-code-block: python
 
-    del SmartThread._registry['alpha']
+    del SmartThread._registry['group_1']['alpha']
 
 Expected output for Example8::
 
@@ -475,7 +482,7 @@ class SmartThreadRequestTimedOut(SmartThreadError):
 
 
 class SmartThreadMutuallyExclusiveTargetThreadSpecified(SmartThreadError):
-    """SmartThread exception mutually exclusive target_rtn and thread."""
+    """SmartThread exception mutually exclusive target_rtn, thread."""
 
     pass
 
@@ -688,7 +695,8 @@ class SmartThread:
                     new thread
                 name: name of thread
                 args: arguments to pass to the target_rtn routine
-                kwargs: keyword arguments to pass to the target_rtn routine
+                kwargs: keyword arguments to pass to the target_rtn
+                    routine
 
             """
             super().__init__(
@@ -837,8 +845,8 @@ class SmartThread:
                   SmartThread instantiation with both target and thread
                   specified.
             SmartThreadArgsSpecificationWithoutTarget: Attempted
-                  SmartThread instantiation with args specified and without
-                  target specified.
+                  SmartThread instantiation with args specified and
+                  without target specified.
 
 
         The various combinations of the SmartThread initialization
@@ -1067,16 +1075,17 @@ class SmartThread:
         .. code-block: python
 
             from scottbrian_paratools.smart_thread import SmartThread
-            smart_thread = SmartThread(name='alpha')
+            smart_thread = SmartThread(group_name='group_1',
+                                       name='alpha')
             repr(smart_thread)
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['alpha']
+            del SmartThread._registry['group_1']['alpha']
 
         Expected out for Example 1::
 
-            "SmartThread(name='alpha')"
+            "SmartThread(group_name='group_1', name='alpha')"
 
         """
         if TYPE_CHECKING:
@@ -1327,12 +1336,13 @@ class SmartThread:
                         )
                         logger.error(error_msg)
 
-                        # If we created a new thread, then release resource.
-                        # Note that we check to ensure that the thread we
-                        # created and are about to delete is not the same
-                        # thread found in the registry, but this should
-                        # never be the case unless something like _register
-                        # was called directly instead of from __init__.
+                        # If we created a new thread, then release
+                        # resource. Note that we check to ensure that
+                        # the thread we created and are about to delete
+                        # is not the same thread found in the registry,
+                        # but this should never be the case unless
+                        # something like _register was called directly
+                        # instead of from __init__.
                         if (
                             self.thread_create == ThreadCreate.Target
                             and self.thread is not item.thread
@@ -1411,17 +1421,17 @@ class SmartThread:
             keys_to_del = []
             for key, item in inner_reg.items():
                 # Note that for display purposes _get_state will return
-                # stopped instead of alive when the thread is not alive and
-                # state is alive. The decision to delete this item, however,
-                # is done only when the st_state is stopped as that
-                # indicates that a smart_unreg or smart_join has been
-                # requested. We could have designed _clean_registry to go
-                # ahead and delete entries when they are not alive with
-                # ThreadState.Alive, meaning that any request other than
-                # smart_unreg or smart_join could cause the "stopped"
-                # entries to be deleted, but this would have led to
-                # unpredictable and inconsistent behavior depending on the
-                # mix of requests.
+                # stopped instead of alive when the thread is not alive
+                # and state is alive. The decision to delete this item,
+                # however, is done only when the st_state is stopped as
+                # that indicates that a smart_unreg or smart_join has
+                # been requested. We could have designed _clean_registry
+                # to go ahead and delete entries when they are not alive
+                # with ThreadState.Alive, meaning that any request other
+                # than smart_unreg or smart_join could cause the
+                # "stopped" entries to be deleted, but this would have
+                # led to unpredictable and inconsistent behavior
+                # depending on the mix of requests.
                 is_alive = item.thread.is_alive()
                 state = self._get_state(group_name=group_name, name=key)
                 if state == ThreadState.Alive and not is_alive:
@@ -1476,9 +1486,9 @@ class SmartThread:
             f"cmd_runner: {self.cmd_runner}"
         )
 
-    ###########################################################################
+    ####################################################################
     # _clean_pair_array
-    ###########################################################################
+    ####################################################################
     def _clean_pair_array(self) -> None:
         """Remove pair array entries as needed."""
         logger.debug(
@@ -1937,14 +1947,15 @@ class SmartThread:
             A set of thread names that were successfully started.
 
         Raises:
-            SmartThreadAlreadyStarted: Unable to start the target_rtn thread
-                because it has already been started.
+            SmartThreadAlreadyStarted: Unable to start the target_rtn
+                thread because it has already been started.
             SmartThreadMultipleTargetsForSelfStart: Request smart_start
                 can not be done for multiple targets when one of the
                 targets is the smart_thread instance processing the
                 smart_start.
-            SmartThreadRemoteThreadNotRegistered: unable to start target_rtn
-                because target_rtn is not in Registered state.
+            SmartThreadRemoteThreadNotRegistered: unable to start
+                target_rtn because target_rtn is not in Registered
+                state.
 
         **Example 1:** Create and start a SmartThread
 
@@ -1956,8 +1967,8 @@ class SmartThread:
                 print('f1 beta exiting')
 
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(name='alpha')
-            beta_smart_thread = SmartThread(name='beta',
+            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
+            beta_smart_thread = SmartThread(group_name='group_1', name='beta',
                                             target_rtn=f1,
                                             auto_start=False)
             print('alpha about to start beta')
@@ -1967,7 +1978,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['alpha']
+            del SmartThread._registry['group_1']['alpha']
 
         Expected output for Example 1::
 
@@ -1991,11 +2002,11 @@ class SmartThread:
                 print('f2_charlie entered')
                 print('f2_charlie exiting')
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(name='alpha')
-            beta_smart_thread = SmartThread(name='beta',
+            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
+            beta_smart_thread = SmartThread(group_name='group_1', name='beta',
                                             target_rtn=f1_beta,
                                             auto_start=False)
-            charlie_smart_thread = SmartThread(name='charlie',
+            charlie_smart_thread = SmartThread(group_name='group_1', name='charlie',
                                                target_rtn=f2_charlie,
                                                auto_start=False)
             print('alpha about to start beta and charlie')
@@ -2005,7 +2016,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['alpha']
+            del SmartThread._registry['group_1']['alpha']
 
         Expected output for Example 2::
 
@@ -2019,23 +2030,24 @@ class SmartThread:
 
         """
         # smart_start is the only cmd where the smart thread instance
-        # can also be the target_rtn. This means that the cmd_runner has to
-        # be running under a different thread and once the target_rtn thread
-        # is started, the target_rtn can invoke a smart request with its
-        # smart thread instance with some other target_rtn. At that point we
-        # have two different threads running with the same smart thread
-        # instance. Care must be taken to prevent confusion when the
-        # instance is shared with two threads. Certain variables must
-        # must not be changed in one thread that the other thread
-        # depends on. The only instance variable used in smart_start is
-        # started_targets which is not used by any other requests. Also,
-        # the registry lock is obtained at the start of smart_start to
-        # protect started_targets in the even that the newly started
-        # thread also does a smart_start of some other target_rtn. Note also
-        # that the instance variable work_remotes is used by testing
-        # to determine progress for timeout cases. Since smart_start
-        # does not have a timeout, work_remotes as an instance variable
-        # is not used in smart_start and is instead a local variable.
+        # can also be the target_rtn. This means that the cmd_runner has
+        # to be running under a different thread and once the target_rtn
+        # thread is started, the target_rtn can invoke a smart request
+        # with its smart thread instance with some other target_rtn. At
+        # that point we have two different threads running with the same
+        # smart thread instance. Care must be taken to prevent confusion
+        # when the instance is shared with two threads. Certain
+        # variables must not be changed in one thread that the other
+        # thread depends on. The only instance variable used in
+        # smart_start is started_targets which is not used by any other
+        # requests. Also, the registry lock is obtained at the start of
+        # smart_start to protect started_targets in the even that the
+        # newly started thread also does a smart_start of some other
+        # target_rtn. Note also that the instance variable work_remotes
+        # is used by testing to determine progress for timeout cases.
+        # Since smart_start does not have a timeout, work_remotes as an
+        # instance variable is not used in smart_start and is instead a
+        # local variable.
         with sel.SELockExcl(SmartThread._registry_lock):
             if targets is None:
                 targets = {self.name}
@@ -2220,9 +2232,9 @@ class SmartThread:
                 print('f1_beta exiting')
 
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(name='alpha')
+            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
             print('alpha about to create beta')
-            beta_smart_thread = SmartThread(name='beta',
+            beta_smart_thread = SmartThread(group_name='group_1', name='beta',
                                             target_rtn=f1_beta,
                                             auto_start=False)
             print('alpha about to unregister beta')
@@ -2231,7 +2243,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['alpha']
+            del SmartThread._registry['group_1']['alpha']
 
         Expected output for Example 1::
 
@@ -2325,9 +2337,9 @@ class SmartThread:
                 print('f1_beta exiting')
 
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(name='alpha')
+            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
             print('alpha about to create beta')
-            beta_smart_thread = SmartThread(name='beta',
+            beta_smart_thread = SmartThread(group_name='group_1', name='beta',
                                             target_rtn=f1_beta)
             time.sleep(1)
             print('alpha about to join beta')
@@ -2337,7 +2349,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['alpha']
+            del SmartThread._registry['group_1']['alpha']
 
         Expected output for Example 1::
 
@@ -2570,8 +2582,8 @@ class SmartThread:
 
             print('mainline alpha entered')
             logger.debug('mainline entered')
-            alpha_smart_thread = SmartThread(name='alpha')
-            SmartThread(name='beta',
+            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
+            SmartThread(group_name='group_1', name='beta',
                         target_rtn=f1,
                         thread_parm_name='smart_thread')
             alpha_smart_thread.smart_send(msg='hello beta', receivers='beta')
@@ -2580,7 +2592,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['alpha']
+            del SmartThread._registry['group_1']['alpha']
 
         Expected output for Example 1::
 
@@ -2605,11 +2617,11 @@ class SmartThread:
                 print(recvd_msgs['alpha'])
                 print(f'f1 {smart_thread.name} exiting')
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(name='alpha')
-            SmartThread(name='beta',
+            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
+            SmartThread(group_name='group_1', name='beta',
                         target_rtn=f1,
                         thread_parm_name='smart_thread')
-            SmartThread(name='charlie',
+            SmartThread(group_name='group_1', name='charlie',
                         target_rtn=f1,
                         thread_parm_name='smart_thread')
             alpha_smart_thread.smart_send(msg='hello remotes',
@@ -2619,7 +2631,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['alpha']
+            del SmartThread._registry['group_1']['alpha']
 
         Expected output for Example 2::
 
@@ -2646,8 +2658,8 @@ class SmartThread:
                 print(f'f1 {smart_thread.name} exiting')
 
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(name='alpha')
-            SmartThread(name='beta',
+            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
+            SmartThread(group_name='group_1', name='beta',
                         target_rtn=f1,
                         thread_parm_name='smart_thread')
             alpha_smart_thread.smart_send(msg=('hello beta',
@@ -2658,7 +2670,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['alpha']
+            del SmartThread._registry['group_1']['alpha']
 
         Expected output for Example 3::
 
@@ -2687,17 +2699,17 @@ class SmartThread:
                     smart_thread.smart_resume(waiters=resume_target)
 
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(name='alpha')
-            SmartThread(name='beta',
+            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
+            SmartThread(group_name='group_1', name='beta',
                         target_rtn=f1,
                         thread_parm_name='smart_thread',
                         kwargs={'resume_target': 'charlie'})
-            SmartThread(name='charlie',
+            SmartThread(group_name='group_1', name='charlie',
                         target_rtn=f1,
                         thread_parm_name='smart_thread',
                         kwargs={'wait_for': 'beta',
                                 'resume_target': 'delta'})
-            SmartThread(name='delta',
+            SmartThread(group_name='group_1', name='delta',
                         target_rtn=f1,
                         thread_parm_name='smart_thread',
                         kwargs={'wait_for': 'charlie',
@@ -2713,7 +2725,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['alpha']
+            del SmartThread._registry['group_1']['alpha']
 
         Expected output for Example 4::
 
@@ -2749,17 +2761,17 @@ class SmartThread:
                     smart_thread.smart_resume(waiters=resume_target)
 
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(name='alpha')
-            SmartThread(name='beta',
+            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
+            SmartThread(group_name='group_1', name='beta',
                         target_rtn=f1,
                         thread_parm_name='smart_thread',
                         kwargs={'resume_target': 'charlie'})
-            SmartThread(name='charlie',
+            SmartThread(group_name='group_1', name='charlie',
                         target_rtn=f1,
                         thread_parm_name='smart_thread',
                         kwargs={'wait_for': 'beta',
                                 'resume_target': 'delta'})
-            SmartThread(name='delta',
+            SmartThread(group_name='group_1', name='delta',
                         target_rtn=f1,
                         thread_parm_name='smart_thread',
                         kwargs={'wait_for': 'charlie',
@@ -2775,7 +2787,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['alpha']
+            del SmartThread._registry['group_1']['alpha']
 
         Expected output for Example 5::
 
@@ -2881,22 +2893,23 @@ class SmartThread:
 
         """
         ################################################################
-        # The expected path if for the target_rtn to be alive and for the
-        # msg_q to be empty. In this case, we deliver the msg and
+        # The expected path if for the target_rtn to be alive and for
+        # the msg_q to be empty. In this case, we deliver the msg and
         # return True, and we expect the target_rtn to retrieve the msg.
         #
         # If the target_rtn msg_q is full we will raise an error.
         #
-        # If the target_rtn has not yet started and become alive, we will
-        # return False and try again after a short pause (unless and
-        # until we timeout if timeout was specified).
+        # If the target_rtn has not yet started and become alive, we
+        # will return False and try again after a short pause (unless
+        # and until we timeout if timeout was specified).
         #
         # If the target_rtn is currently stopped or was stopped since
         # starting this request and is now resurrected, we consider it
         # as stopped and return True. Even though we could deliver the
-        # msg if the target_rtn is alive now after having been stopped, we
-        # can't know whether the target_rtn expects the msg at this point.
-        # So, we simply consider the target_rtn as stopped and return True.
+        # msg if the target_rtn is alive now after having been stopped,
+        # we can't know whether the target_rtn expects the msg at this
+        # point. So, we simply consider the target_rtn as stopped and
+        # return True.
         #
         # If the target_rtn is stopped with unread msgs on its msg_q,
         # a log entry is written.
@@ -3059,8 +3072,8 @@ class SmartThread:
                 print('f1 beta exiting')
 
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(name='alpha')
-            beta_smart_thread = SmartThread(name='beta',
+            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
+            beta_smart_thread = SmartThread(group_name='group_1', name='beta',
                                             target_rtn=f1,
                                             thread_parm_name='smart_thread')
             my_msg = alpha_smart_thread.smart_recv(senders='beta')
@@ -3070,7 +3083,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['alpha']
+            del SmartThread._registry['group_1']['alpha']
 
         Expected output for Example 1::
 
@@ -3095,12 +3108,12 @@ class SmartThread:
                 print(f'f1 {smart_thread.name} exiting')
 
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(name='alpha')
-            beta_smart_thread = SmartThread(name='beta',
+            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
+            beta_smart_thread = SmartThread(group_name='group_1', name='beta',
                                             target_rtn=f1,
                                             thread_parm_name='smart_thread')
             time.sleep(0.2)
-            charlie_smart_thread = SmartThread(name='charlie',
+            charlie_smart_thread = SmartThread(group_name='group_1', name='charlie',
                                                target_rtn=f1,
                                                thread_parm_name='smart_thread')
             time.sleep(0.2)
@@ -3112,7 +3125,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['alpha']
+            del SmartThread._registry['group_1']['alpha']
 
         Expected output for Example 2::
 
@@ -3144,8 +3157,8 @@ class SmartThread:
                 print(f'f1 {smart_thread.name} exiting')
 
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(name='alpha')
-            beta_smart_thread = SmartThread(name='beta',
+            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
+            beta_smart_thread = SmartThread(group_name='group_1', name='beta',
                                             target_rtn=f1,
                                             thread_parm_name='smart_thread',
                                             args=('hi',))
@@ -3156,7 +3169,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['alpha']
+            del SmartThread._registry['group_1']['alpha']
 
         Expected output for Example 3::
             mainline alpha entered
@@ -3192,21 +3205,21 @@ class SmartThread:
                     smart_thread.smart_resume(waiters=resume_target)
 
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(name='alpha')
-            beta_smart_thread = SmartThread(name='beta',
+            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
+            beta_smart_thread = SmartThread(group_name='group_1', name='beta',
                                             target_rtn=f1,
                                             thread_parm_name='smart_thread',
                                             args=('hi',),
                                             kwargs={
                                                 'resume_target':'charlie'})
-            charlie_smart_thread = SmartThread(name='charlie',
+            charlie_smart_thread = SmartThread(group_name='group_1', name='charlie',
                                                target_rtn=f1,
                                                thread_parm_name='smart_thread',
                                                args=('hello',),
                                                kwargs={
                                                    'wait_for': 'beta',
                                                    'resume_target':'delta'})
-            delta_smart_thread = SmartThread(name='delta',
+            delta_smart_thread = SmartThread(group_name='group_1', name='delta',
                                              target_rtn=f1,
                                              thread_parm_name='smart_thread',
                                              args=('aloha',),
@@ -3225,7 +3238,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['alpha']
+            del SmartThread._registry['group_1']['alpha']
 
         Expected output for Example 4::
 
@@ -3237,7 +3250,8 @@ class SmartThread:
             f1 delta entered
             f1 delta exiting
             ['hi']
-            ['aloha', ['miles to go', (1, 2, 3)], {'forty_two': 42, 42: 42}]
+            ['aloha', ['miles to go', (1, 2, 3)], {'forty_two': 42,
+                                                    42: 42}]
             {'charlie': ['hi'], ['miles to go', (1, 2, 3)]}
             mainline alpha exiting
 
@@ -3351,37 +3365,32 @@ class SmartThread:
                 pk_remote.pair_key
             ].status_lock:
                 local_sb.recv_wait = True
-                # Check for error conditions first before
-                # checking whether the remote is alive. If the
-                # remote detects a deadlock issue,
-                # it will set the flags in our entry and then
-                # raise an error and will likely be gone when we
-                # check. We want to raise the same error on
-                # this side.
+                # Check for error conditions first before checking
+                # whether the remote is alive. If the remote detects a
+                # deadlock issue, it will set the flags in our entry and
+                # then raise an error and will likely be gone when we
+                # check. We want to raise the same error on this side.
                 #
-                # self.deadlock is set only by the remote. So,
-                # if self.deadlock is True, then remote has
-                # already detected the deadlock, set our flag,
-                # raised the deadlock on its side, and is now
-                # possibly ended or recovered and in a new wait.
-                # If self.deadlock is False, and remote is
-                # waiting and is not resumed then it will not be
-                # getting resumed by us since we are also
-                # waiting. So, we set self.remote.deadlock to
-                # tell it, and then we raise the error on our
-                # side. But, we don't do this if the
-                # self.remote.deadlock is already on as that
-                # suggests that we already told remote and
-                # raised the error, which implies that we are in
-                # a new wait and the remote has not yet woken up
-                # to deal with the earlier deadlock. We can
-                # simply ignore it for now.
-                # We could allow the deadlock to persist if timeout
-                # was specified on either request since the timeout
-                # will eventually break the deadlock, but the end
-                # result is similar in that an error will be raised.
-                # It will be better to raise the error sooner than
-                # waiting for the timeout expiration error.
+                # self.deadlock is set only by the remote. So, if
+                # self.deadlock is True, then remote has already
+                # detected the deadlock, set our flag, raised the
+                # deadlock on its side, and is now possibly ended or
+                # recovered and in a new wait. If self.deadlock is
+                # False, and remote is waiting and is not resumed then
+                # it will not be getting resumed by us since we are also
+                # waiting. So, we set self.remote.deadlock to tell it,
+                # and then we raise the error on our side. But, we don't
+                # do this if the self.remote.deadlock is already on as
+                # that suggests that we already told remote and raised
+                # the error, which implies that we are in a new wait and
+                # the remote has not yet woken up to deal with the
+                # earlier deadlock. We can simply ignore it for now.
+                # We could allow the deadlock to persist if timeout was
+                # specified on either request since the timeout will
+                # eventually break the deadlock, but the end result is
+                # similar in that an error will be raised. It will be
+                # better to raise the error sooner than waiting for the
+                # timeout expiration error.
                 if (
                     pk_remote.remote
                     in SmartThread._pair_array[self.group_name][
@@ -3528,8 +3537,9 @@ class SmartThread:
                 print(f'f1 {smart_thread.name} resumed by {resumed_by}')
 
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(name='alpha')
-            SmartThread(name='beta',
+            alpha_smart_thread = SmartThread(group_name='group_1',
+                                             name='alpha')
+            SmartThread(group_name='group_1', name='beta',
                         target_rtn=f1,
                         thread_parm_name='smart_thread')
             time.sleep(1)  # allow time for smart_wait to be issued
@@ -3540,7 +3550,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['alpha']
+            del SmartThread._registry['group_1']['alpha']
 
         Expected output for Example 1::
 
@@ -3558,14 +3568,15 @@ class SmartThread:
             import time
 
             def f1(smart_thread: SmartThread) -> None:
-                time.sleep(1)  # allow time for smart_resume to be issued
+                time.sleep(1)  # allow time for smart_resume to be done
                 print(f'f1 {smart_thread.name} about to wait')
                 resumed_by = smart_thread.smart_wait(resumers='alpha')
                 print(f'f1 {smart_thread.name} resumed by {resumed_by}')
 
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(name='alpha')
-            SmartThread(name='beta',
+            alpha_smart_thread = SmartThread(group_name='group_1',
+                                             name='alpha')
+            SmartThread(group_name='group_1', name='beta',
                         target_rtn=f1,
                         thread_parm_name='smart_thread')
             print('alpha about to resume beta')
@@ -3576,7 +3587,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['alpha']
+            del SmartThread._registry['group_1']['alpha']
 
         Expected output for Example 2::
 
@@ -3598,16 +3609,17 @@ class SmartThread:
                 smart_thread.smart_resume(waiters='alpha')
 
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(name='alpha')
-            SmartThread(name='beta',
+            alpha_smart_thread = SmartThread(group_name='group_1',
+                                             name='alpha')
+            SmartThread(group_name='group_1', name='beta',
                         target_rtn=f1,
                         thread_parm_name='smart_thread')
             time.sleep(1)  # allow time for alpha to wait
-            SmartThread(name='charlie',
+            SmartThread(group_name='group_1', name='charlie',
                         target_rtn=f1,
                         thread_parm_name='smart_thread')
             time.sleep(1)  # allow time for alpha to wait
-            SmartThread(name='delta',
+            SmartThread(group_name='group_1', name='delta',
                         target_rtn=f1,
                         thread_parm_name='smart_thread')
             time.sleep(1)  # allow time for alpha to wait
@@ -3616,12 +3628,13 @@ class SmartThread:
                 resumers=['beta', 'charlie', 'delta'])
             print(f'alpha resumed by resumers={sorted(resumed_by)}')
 
-            alpha_smart_thread.smart_join(targets=['beta', 'charlie', 'delta'])
+            alpha_smart_thread.smart_join(targets=['beta', 'charlie',
+                                                   'delta'])
             print('mainline alpha exiting')
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['alpha']
+            del SmartThread._registry['group_1']['alpha']
 
         Expected output for Example 3::
 
@@ -3645,12 +3658,13 @@ class SmartThread:
                 smart_thread.smart_resume(waiters='alpha')
 
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(name='alpha')
-            SmartThread(name='beta',
+            alpha_smart_thread = SmartThread(group_name='group_1',
+                                             name='alpha')
+            SmartThread(group_name='group_1', name='beta',
                         target_rtn=f1,
                         thread_parm_name='smart_thread')
             time.sleep(1)
-            SmartThread(name='charlie',
+            SmartThread(group_name='group_1', name='charlie',
                         target_rtn=f1,
                         thread_parm_name='smart_thread')
             time.sleep(1)
@@ -3659,7 +3673,7 @@ class SmartThread:
                 resumers=['beta', 'charlie', 'delta'],
                 resumer_count=1)
             print(f'alpha resumed by resumers={sorted(resumed_by)}')
-            SmartThread(name='delta',
+            SmartThread(group_name='group_1', name='delta',
                         target_rtn=f1,
                         thread_parm_name='smart_thread')
             time.sleep(1)  # allow time for alpha to wait
@@ -3669,12 +3683,13 @@ class SmartThread:
                 resumer_count=1)
             print(f'alpha resumed by resumers={sorted(resumed_by)}')
 
-            alpha_smart_thread.smart_join(targets=['beta', 'charlie', 'delta'])
+            alpha_smart_thread.smart_join(targets=['beta', 'charlie',
+                                                   'delta'])
             print('mainline alpha exiting')
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['alpha']
+            del SmartThread._registry['group_1']['alpha']
 
         Expected output for Example 4::
 
@@ -3788,31 +3803,25 @@ class SmartThread:
 
         with SmartThread._pair_array[self.group_name][pk_remote.pair_key].status_lock:
             local_sb.wait_wait = True
-            # Check for error conditions first before
-            # checking whether the remote is alive. If the
-            # remote detects a deadlock issue,
-            # it will set the flags in our entry and then
-            # raise an error and will likely be gone when we
-            # check. We want to raise the same error on
-            # this side.
+            # Check for error conditions first before checking whether
+            # the remote is alive. If the remote detects a deadlock
+            # issue, it will set the flags in our entry and then raise
+            # an error and will likely be gone when we check. We want to
+            # raise the same error on this side.
             #
-            # self.deadlock is set only by the remote. So,
-            # if self.deadlock is True, then remote has
-            # already detected the deadlock, set our flag,
-            # raised the deadlock on its side, and is now
-            # possibly ended or recovered and in a new wait.
-            # If self.deadlock is False, and remote is
-            # waiting and is not resumed then it will not be
-            # getting resumed by us since we are also
-            # waiting. So, we set self.remote.deadlock to
-            # tell it, and then we raise the error on our
-            # side. But, we don't do this if the
-            # self.remote.deadlock is already on as that
-            # suggests that we already told remote and
-            # raised the error, which implies that we are in
-            # a new wait and the remote has not yet woken up
-            # to deal with the earlier deadlock. We can
-            # simply ignore it for now.
+            # self.deadlock is set only by the remote. So, if
+            # self.deadlock is True, then remote has already detected
+            # the deadlock, set our flag, raised the deadlock on its
+            # side, and is now possibly ended or recovered and in a new
+            # wait. If self.deadlock is False, and remote is waiting and
+            # is not resumed then it will not be getting resumed by us
+            # since we are also waiting. So, we set self.remote.deadlock
+            # to tell it, and then we raise the error on our side. But,
+            # we don't do this if the self.remote.deadlock is already on
+            # as that suggests that we already told remote and raised
+            # the error, which implies that we are in a new wait and the
+            # remote has not yet woken up to deal with the earlier
+            # deadlock. We can simply ignore it for now.
             if (
                 pk_remote.remote
                 in SmartThread._pair_array[self.group_name][
@@ -3951,11 +3960,12 @@ class SmartThread:
                 print('f2_charlie back from wait')
 
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(name='alpha')
-            SmartThread(name='beta',
+            alpha_smart_thread = SmartThread(group_name='group_1',
+                                             name='alpha')
+            SmartThread(group_name='group_1', name='beta',
                         target_rtn=f1_beta,
                         thread_parm_name='smart_thread')
-            SmartThread(name='charlie',
+            SmartThread(group_name='group_1', name='charlie',
                         target_rtn=f2_charlie,
                         thread_parm_name='smart_thread')
             time.sleep(2)
@@ -3968,7 +3978,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['alpha']
+            del SmartThread._registry['group_1']['alpha']
 
         Expected output for Example 1:
 
@@ -4167,9 +4177,9 @@ class SmartThread:
                already delivered earlier by a smart_send.
 
         Each thread that invokes ``smart_sync()`` first sets the sync
-        event for each target_rtn, and the waits on its corresponding sync
-        event for each target_rtn. This ensures that every thread has
-        reached the sync point before any thread moves forward from
+        flag for each target_rtn, and the waits on its corresponding
+        sync flag for each target_rtn. This ensures that every thread
+        has reached the sync point before any thread moves forward from
         there.
 
         **Example 1:** Invoke ``smart_sync()`` for three threads
@@ -4191,14 +4201,19 @@ class SmartThread:
                 print('f2_charlie back from sync')
 
             print('mainline alpha entered')
-            alpha_smart_thread  = SmartThread(name='alpha')
-            beta_smart_thread = SmartThread(name='beta',
-                                            target_rtn=f1_beta,
-                                            thread_parm_name='smart_thread')
+            alpha_smart_thread  = SmartThread(group_name='group_1',
+                                              name='alpha')
+            beta_smart_thread = SmartThread(
+                group_name='group_1',
+                name='beta',
+                target_rtn=f1_beta,
+                thread_parm_name='smart_thread')
             time.sleep(1)
-            charlie_smart_thread = SmartThread(name='charlie',
-                                               target_rtn=f2_charlie,
-                                               thread_parm_name='smart_thread')
+            charlie_smart_thread = SmartThread(
+                group_name='group_1',
+                name='charlie',
+                target_rtn=f2_charlie,
+                thread_parm_name='smart_thread')
             time.sleep(1)
             print('alpha about to sync with beta and charlie')
             alpha_smart_thread.smart_sync(targets=['beta', 'charlie'])
@@ -4209,7 +4224,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['alpha']
+            del SmartThread._registry['group_1']['alpha']
 
         Expected output for Example 1:
 
@@ -4358,11 +4373,11 @@ class SmartThread:
             # exit, we are done with this remote
             return True
 
-        # Check for error conditions first before checking whether
-        # the remote is alive. If the remote detects a deadlock
-        # issue, it will set the flags in our entry and then raise
-        # an error and will likely be gone when we check. We want to
-        # raise the same error on this side.
+        # Check for error conditions first before checking whether the
+        # remote is alive. If the remote detects a deadlock issue, it
+        # will set the flags in our entry and then raise an error and
+        # will likely be gone when we check. We want to raise the same
+        # error on this side.
 
         with SmartThread._pair_array[self.group_name][pk_remote.pair_key].status_lock:
             if (
@@ -4438,8 +4453,8 @@ class SmartThread:
                 ].status_blocks[self.name]
                 with SmartThread._pair_array[self.group_name][pair_key].status_lock:
                     # if we made it as far as having set the remote sync
-                    # event, then we need to back that out, but only when
-                    # the remote did not set our event yet
+                    # event, then we need to back that out, but only
+                    # when the remote did not set our event yet
                     if backout_request == "smart_sync" and local_sb.sync_wait:
                         # if we are now set, then the remote did
                         # finally respond and this was a good sync,
