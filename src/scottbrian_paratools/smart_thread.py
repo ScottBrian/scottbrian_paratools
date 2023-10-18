@@ -1613,9 +1613,9 @@ class SmartThread:
             f"cmd_runner: {self.cmd_runner}"
         )
 
-    ###########################################################################
+    ####################################################################
     # _add_to_pair_array
-    ###########################################################################
+    ####################################################################
     def _add_to_pair_array(self) -> None:
         """Add a new thread to the pair array.
 
@@ -1808,9 +1808,9 @@ class SmartThread:
             f"target_rtn: {self.name}"
         )
 
-    ###########################################################################
+    ####################################################################
     # _add_status_block_entry
-    ###########################################################################
+    ####################################################################
     def _add_status_block_entry(
         self, cmd_runner: str, pair_key: PairKey, add_name: str
     ) -> None:
@@ -1967,8 +1967,10 @@ class SmartThread:
                 print('f1 beta exiting')
 
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
-            beta_smart_thread = SmartThread(group_name='group_1', name='beta',
+            alpha_smart_thread = SmartThread(group_name='group_1',
+                                             name='alpha')
+            beta_smart_thread = SmartThread(group_name='group_1',
+                                            name='beta',
                                             target_rtn=f1,
                                             auto_start=False)
             print('alpha about to start beta')
@@ -2002,11 +2004,14 @@ class SmartThread:
                 print('f2_charlie entered')
                 print('f2_charlie exiting')
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
-            beta_smart_thread = SmartThread(group_name='group_1', name='beta',
+            alpha_smart_thread = SmartThread(group_name='group_1',
+                                             name='alpha')
+            beta_smart_thread = SmartThread(group_name='group_1',
+                                            name='beta',
                                             target_rtn=f1_beta,
                                             auto_start=False)
-            charlie_smart_thread = SmartThread(group_name='group_1', name='charlie',
+            charlie_smart_thread = SmartThread(group_name='group_1',
+                                               name='charlie',
                                                target_rtn=f2_charlie,
                                                auto_start=False)
             print('alpha about to start beta and charlie')
@@ -2170,8 +2175,8 @@ class SmartThread:
             )
             self.started_targets |= {remote}
 
-            # wake up existing threads that are waiting for this target_rtn
-            # to become alive
+            # wake up existing threads that are waiting for this
+            # target_rtn to become alive
             for pair_key, item in SmartThread._pair_array[self.group_name].items():
                 if remote in pair_key:
                     if remote == pair_key[0]:
@@ -2232,9 +2237,11 @@ class SmartThread:
                 print('f1_beta exiting')
 
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
+            alpha_smart_thread = SmartThread(group_name='group_1',
+                                             name='alpha')
             print('alpha about to create beta')
-            beta_smart_thread = SmartThread(group_name='group_1', name='beta',
+            beta_smart_thread = SmartThread(group_name='group_1',
+                                            name='beta',
                                             target_rtn=f1_beta,
                                             auto_start=False)
             print('alpha about to unregister beta')
@@ -2337,9 +2344,11 @@ class SmartThread:
                 print('f1_beta exiting')
 
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
+            alpha_smart_thread = SmartThread(group_name='group_1',
+                                             name='alpha')
             print('alpha about to create beta')
-            beta_smart_thread = SmartThread(group_name='group_1', name='beta',
+            beta_smart_thread = SmartThread(group_name='group_1',
+                                            name='beta',
                                             target_rtn=f1_beta)
             time.sleep(1)
             print('alpha about to join beta')
@@ -2582,11 +2591,13 @@ class SmartThread:
 
             print('mainline alpha entered')
             logger.debug('mainline entered')
-            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
+            alpha_smart_thread = SmartThread(group_name='group_1',
+                                             name='alpha')
             SmartThread(group_name='group_1', name='beta',
                         target_rtn=f1,
                         thread_parm_name='smart_thread')
-            alpha_smart_thread.smart_send(msg='hello beta', receivers='beta')
+            alpha_smart_thread.smart_send(msg='hello beta',
+                                          receivers='beta')
             alpha_smart_thread.smart_join(targets='beta')
             print('mainline alpha exiting')
 
@@ -2617,7 +2628,8 @@ class SmartThread:
                 print(recvd_msgs['alpha'])
                 print(f'f1 {smart_thread.name} exiting')
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
+            alpha_smart_thread = SmartThread(group_name='group_1',
+                                             name='alpha')
             SmartThread(group_name='group_1', name='beta',
                         target_rtn=f1,
                         thread_parm_name='smart_thread')
@@ -2658,7 +2670,8 @@ class SmartThread:
                 print(f'f1 {smart_thread.name} exiting')
 
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
+            alpha_smart_thread = SmartThread(group_name='group_1',
+                                             name='alpha')
             SmartThread(group_name='group_1', name='beta',
                         target_rtn=f1,
                         thread_parm_name='smart_thread')
@@ -2699,7 +2712,8 @@ class SmartThread:
                     smart_thread.smart_resume(waiters=resume_target)
 
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
+            alpha_smart_thread = SmartThread(group_name='group_1',
+                                             name='alpha')
             SmartThread(group_name='group_1', name='beta',
                         target_rtn=f1,
                         thread_parm_name='smart_thread',
@@ -2720,7 +2734,8 @@ class SmartThread:
                                                      'charlie',
                                                      'delta'])
             alpha_smart_thread.smart_wait(resumers='delta')
-            alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
+            alpha_smart_thread.smart_join(
+                targets=('beta', 'charlie', 'delta'))
             print('mainline alpha exiting')
 
         .. invisible-code-block: python
@@ -2761,7 +2776,8 @@ class SmartThread:
                     smart_thread.smart_resume(waiters=resume_target)
 
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
+            alpha_smart_thread = SmartThread(group_name='group_1',
+                                             name='alpha')
             SmartThread(group_name='group_1', name='beta',
                         target_rtn=f1,
                         thread_parm_name='smart_thread',
@@ -2782,7 +2798,8 @@ class SmartThread:
                 'delta': [42, 'hi delta', {'nums': (1, 2, 3)}]}
             alpha_smart_thread.smart_send(msg_dict=msgs_to_send)
             alpha_smart_thread.smart_wait(resumers='delta')
-            alpha_smart_thread.smart_join(targets=('beta', 'charlie', 'delta'))
+            alpha_smart_thread.smart_join(
+                targets=('beta', 'charlie', 'delta'))
             print('mainline alpha exiting')
 
         .. invisible-code-block: python
@@ -3072,8 +3089,10 @@ class SmartThread:
                 print('f1 beta exiting')
 
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
-            beta_smart_thread = SmartThread(group_name='group_1', name='beta',
+            alpha_smart_thread = SmartThread(group_name='group_1',
+                                             name='alpha')
+            beta_smart_thread = SmartThread(group_name='group_1',
+                                            name='beta',
                                             target_rtn=f1,
                                             thread_parm_name='smart_thread')
             my_msg = alpha_smart_thread.smart_recv(senders='beta')
@@ -3103,21 +3122,26 @@ class SmartThread:
 
             def f1(smart_thread: SmartThread) -> None:
                 print(f'f1 {smart_thread.name} entered')
-                smart_thread.smart_send(msg=f'{smart_thread.name} says hi',
-                                        receivers='alpha')
+                smart_thread.smart_send(
+                    msg=f'{smart_thread.name} says hi',
+                    receivers='alpha')
                 print(f'f1 {smart_thread.name} exiting')
 
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
-            beta_smart_thread = SmartThread(group_name='group_1', name='beta',
+            alpha_smart_thread = SmartThread(group_name='group_1',
+                                             name='alpha')
+            beta_smart_thread = SmartThread(group_name='group_1',
+                                            name='beta',
                                             target_rtn=f1,
                                             thread_parm_name='smart_thread')
             time.sleep(0.2)
-            charlie_smart_thread = SmartThread(group_name='group_1', name='charlie',
+            charlie_smart_thread = SmartThread(group_name='group_1',
+                                               name='charlie',
                                                target_rtn=f1,
                                                thread_parm_name='smart_thread')
             time.sleep(0.2)
-            my_msg = alpha_smart_thread.smart_recv(senders=('beta', 'charlie'))
+            my_msg = alpha_smart_thread.smart_recv(
+                senders=('beta', 'charlie'))
             print(my_msg['beta'])
             print(my_msg['charlie'])
             alpha_smart_thread.smart_join(targets=('beta', 'charlie'))
@@ -3147,18 +3171,22 @@ class SmartThread:
 
             def f1(greeting: str, smart_thread: SmartThread) -> None:
                 print(f'f1 {smart_thread.name} entered')
-                smart_thread.smart_send(msg=f'{greeting}', receivers='alpha')
+                smart_thread.smart_send(msg=f'{greeting}',
+                                        receivers='alpha')
                 smart_thread.smart_send(msg=["great to be here",
                                              "life is good"],
                                         receivers='alpha')
-                smart_thread.smart_send(msg=("we should do lunch sometime",
-                                             "Tuesday afternoons are best"),
-                                        receivers='alpha')
+                smart_thread.smart_send(
+                    msg=("we should do lunch sometime",
+                         "Tuesday afternoons are best"),
+                    receivers='alpha')
                 print(f'f1 {smart_thread.name} exiting')
 
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
-            beta_smart_thread = SmartThread(group_name='group_1', name='beta',
+            alpha_smart_thread = SmartThread(group_name='group_1',
+                                             name='alpha')
+            beta_smart_thread = SmartThread(group_name='group_1',
+                                            name='beta',
                                             target_rtn=f1,
                                             thread_parm_name='smart_thread',
                                             args=('hi',))
@@ -3193,40 +3221,48 @@ class SmartThread:
                 if wait_for:
                    smart_thread.smart_wait(resumers=wait_for)
                 print(f'f1 {smart_thread.name} entered')
-                smart_thread.smart_send(msg=f'{greeting}', receivers='alpha')
+                smart_thread.smart_send(msg=f'{greeting}',
+                                        receivers='alpha')
                 if smart_thread.name in ('charlie', 'delta'):
-                    smart_thread.smart_send(msg=["miles to go", (1, 2, 3)],
-                                            receivers='alpha')
+                    smart_thread.smart_send(
+                        msg=["miles to go", (1, 2, 3)],
+                        receivers='alpha')
                 if smart_thread.name == 'delta':
-                    smart_thread.smart_send(msg={'forty_two': 42, 42: 42},
-                                            receivers='alpha')
+                    smart_thread.smart_send(
+                        msg={'forty_two': 42, 42: 42},
+                        receivers='alpha')
                 print(f'f1 {smart_thread.name} exiting')
                 if resume_target:
                     smart_thread.smart_resume(waiters=resume_target)
 
             print('mainline alpha entered')
-            alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
-            beta_smart_thread = SmartThread(group_name='group_1', name='beta',
+            alpha_smart_thread = SmartThread(group_name='group_1',
+                                             name='alpha')
+            beta_smart_thread = SmartThread(group_name='group_1',
+                                            name='beta',
                                             target_rtn=f1,
                                             thread_parm_name='smart_thread',
                                             args=('hi',),
                                             kwargs={
                                                 'resume_target':'charlie'})
-            charlie_smart_thread = SmartThread(group_name='group_1', name='charlie',
+            charlie_smart_thread = SmartThread(group_name='group_1',
+                                               name='charlie',
                                                target_rtn=f1,
                                                thread_parm_name='smart_thread',
                                                args=('hello',),
                                                kwargs={
                                                    'wait_for': 'beta',
                                                    'resume_target':'delta'})
-            delta_smart_thread = SmartThread(group_name='group_1', name='delta',
-                                             target_rtn=f1,
-                                             thread_parm_name='smart_thread',
-                                             args=('aloha',),
-                                             kwargs={'wait_for': 'charlie',
-                                                     'resume_target': 'alpha'})
+            delta_smart_thread = SmartThread(
+                group_name='group_1', name='delta',
+                target_rtn=f1,
+                thread_parm_name='smart_thread',
+                args=('aloha',),
+                kwargs={'wait_for': 'charlie',
+                        'resume_target': 'alpha'})
             alpha_smart_thread.smart_wait(resumers='delta')
-            my_msg = alpha_smart_thread.smart_recv(senders={'beta', 'delta'})
+            my_msg = alpha_smart_thread.smart_recv(senders={'beta',
+                                                   'delta'})
             print(my_msg['beta'])
             print(my_msg['delta'])
             my_msg = alpha_smart_thread.smart_recv(senders={'charlie'})

@@ -793,8 +793,8 @@ class ConfirmResponse(ConfigCmd):
             for name in work_confirmers:
                 # If the serial number is in the completed_cmds for
                 # this name then the command was completed. Remove the
-                # target_rtn name and break to start looking again with one
-                # less target_rtn until no targets remain.
+                # target_rtn name and break to start looking again with
+                # one less target_rtn until no targets remain.
                 if self.confirm_serial_num in self.config_ver.completed_cmds[name]:
                     work_confirmers.remove(name)
                     break
@@ -2283,7 +2283,6 @@ class VerifyConfig(ConfigCmd):
             verify_idx=self.serial_num,
             verify_data=verify_data,
         )
-        # self.config_ver.log_test_msg('Monitor Checkpoint: validate_config')
 
         self.config_ver.verify_config_complete_event.wait()
         self.config_ver.verify_config_complete_event.clear()
@@ -3510,7 +3509,8 @@ class AddPairArrayEntryLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
 
         Returns:
-            AddPairArrayEntryLogSearchItem containing found message and index
+            AddPairArrayEntryLogSearchItem containing found message and
+                index
         """
         return AddPairArrayEntryLogSearchItem(
             found_log_msg=found_log_msg,
@@ -3570,7 +3570,8 @@ class AddStatusBlockEntryLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
 
         Returns:
-            AddStatusBlockEntryLogSearchItem containing found message and index
+            AddStatusBlockEntryLogSearchItem containing found message
+                and index
         """
         return AddStatusBlockEntryLogSearchItem(
             found_log_msg=found_log_msg,
@@ -3630,7 +3631,8 @@ class UpdatePairArrayUtcLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
 
         Returns:
-            UpdatePairArrayUtcLogSearchItem containing found message and index
+            UpdatePairArrayUtcLogSearchItem containing found message
+                and index
         """
         return UpdatePairArrayUtcLogSearchItem(
             found_log_msg=found_log_msg,
@@ -3697,7 +3699,8 @@ class RegistryStatusLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
 
         Returns:
-            RegistryStatusLogSearchItem containing found message and index
+            RegistryStatusLogSearchItem containing found message and
+                index
         """
         return RegistryStatusLogSearchItem(
             found_log_msg=found_log_msg,
@@ -4124,7 +4127,8 @@ class RemPairArrayEntryLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
 
         Returns:
-            RemPairArrayEntryLogSearchItem containing found message and index
+            RemPairArrayEntryLogSearchItem containing found message
+                and index
         """
         return RemPairArrayEntryLogSearchItem(
             found_log_msg=found_log_msg,
@@ -5012,7 +5016,7 @@ class MockGetTargetState:
     # mock_get_target_state
     ####################################################################
     def mock_get_target_state(self, pk_remote: st.PairKeyRemote) -> st.ThreadState:
-        """Get the status of a thread that is the target_rtn of a request.
+        """Get the status of thread that is the target_rtn of a request.
 
         Args:
             pk_remote: contains target_rtn thread info
@@ -5097,7 +5101,7 @@ class MockCleanPairArray:
     # mock_clean_pair_arraye
     ####################################################################
     def mock_clean_pair_array(self) -> None:
-        """Get the status of a thread that is the target_rtn of a request.
+        """Get status of a thread that is the target_rtn of a request.
 
         Notes:
             Must be called holding the registry lock either shared or
@@ -5471,7 +5475,6 @@ class ConfigVerifier:
                         self.log_test_msg(f"monitor processing msg: {semi_msg}")
 
                     found_log_item.run_process()
-                    # self.log_test_msg(f'monitor completed msg: {semi_msg}')
 
         self.log_test_msg(
             f"monitor exiting: {self.monitor_bail=}," f"{self.monitor_exit=}"
@@ -5491,14 +5494,9 @@ class ConfigVerifier:
             pending_request_flag: specifies value to set for request
 
         """
-        # self.log_test_msg(f'set_request_pending_flag entry: {cmd_runner=}, '
-        #                   f'{targets=}, {pending_request_flag=}')
         for target in targets:
             pair_key = st.SmartThread._get_pair_key(cmd_runner, target)
             if pair_key not in self.expected_pairs:
-                # self.log_test_msg(
-                #     f'set_request_pending_flag continue {cmd_runner=}, '
-                #     f'{target_rtn=}, {pair_key=}, {self.expected_pairs=}')
                 continue
 
             pae = self.expected_pairs[pair_key]
@@ -5676,7 +5674,6 @@ class ConfigVerifier:
         self.log_test_msg("abort_all_f1_threads entry")
         self.log_test_msg(f"{len(self.all_threads.keys())=}")
         for name, thread in self.all_threads.items():
-            # self.log_test_msg(f'abort_all_f1_threads looking at {name=}')
             if name == self.commander_name:
                 continue
             self.log_test_msg(
@@ -6623,7 +6620,6 @@ class ConfigVerifier:
             )
 
         if validate_config:
-            # self.add_cmd(ValidateConfig(cmd_runners=cmd_runner_to_use))
             self.add_cmd(
                 VerifyConfig(
                     cmd_runners=cmd_runner_to_use,
@@ -6674,8 +6670,6 @@ class ConfigVerifier:
             )
             if validate_config:
                 self.add_cmd(Pause(cmd_runners=cmd_runner, pause_seconds=0.2))
-                # self.add_cmd(VerifyAliveNot(cmd_runners=cmd_runner,
-                #                             exp_not_alive_names=names))
                 self.add_cmd(
                     VerifyConfig(
                         cmd_runners=cmd_runner,
@@ -7540,12 +7534,12 @@ class ConfigVerifier:
                 )
             )
 
-            ################################################################
+            ############################################################
             # smart_join gets behind lock_1
             # locks held:
             # before: lock_0|smart_req|lock_1
             # after : lock_0|smart_req|lock_1|smart_join
-            ################################################################
+            ############################################################
             join_serial_num = self.add_cmd(
                 Join(cmd_runners=joiner_names[0], join_names=remote_names[0])
             )
@@ -7557,12 +7551,12 @@ class ConfigVerifier:
                 )
             )
 
-            ################################################################
+            ############################################################
             # locker_2 gets behind the smart_join
             # locks held:
             # before: lock_0|smart_req|lock_1|smart_join
             # after : lock_0|smart_req|lock_1|smart_join|lock_2
-            ################################################################
+            ############################################################
             self.add_cmd(LockObtain(cmd_runners=locker_names[2]))
             lock_positions.append(locker_names[2])
 
@@ -7572,18 +7566,18 @@ class ConfigVerifier:
                 )
             )
 
-            ################################################################
+            ############################################################
             # release lock_0 to allow smart_req to do request_set_up
             # to get pending_request set, and then wait behind lock_2
             # before going into request loop
             # locks held:
             # before: lock_0|smart_req|lock_1|smart_join|lock_2
             # after : lock_1|smart_join|lock_2|smart_req
-            ################################################################
+            ############################################################
             self.add_cmd(LockRelease(cmd_runners=locker_names[0]))
             lock_positions.remove(locker_names[0])
-            # releasing lock 0 will allow the smart_wait to do request_setup
-            # and then get behind lock_2
+            # releasing lock 0 will allow the smart_wait to do
+            # request_setup and then get behind lock_2
             lock_positions.remove(pending_names[0])
             lock_positions.append(pending_names[0])
 
@@ -8168,11 +8162,11 @@ class ConfigVerifier:
                 )
             )
 
-            ################################################################
+            ############################################################
             # locker_2 gets behind the smart_join
             # before: lock_0|pend_sync|lock_1|smart_join
             # after : lock_0|pend_sync|lock_1|smart_join|lock_2
-            ################################################################
+            ############################################################
             self.add_cmd(LockObtain(cmd_runners=locker_names[2]))
             lock_positions.append(locker_names[2])
 
@@ -8182,13 +8176,13 @@ class ConfigVerifier:
                 )
             )
 
-            ################################################################
+            ############################################################
             # release lock_0 to allow pend_sync to do request_set_up
             # to get pending_request set, and then wait behind lock_2
             # before going into request loop
             # before: lock_0|pend_sync|lock_1|smart_join|lock_2
             # after : lock_1|smart_join|lock_2|pend_sync
-            ################################################################
+            ############################################################
             self.add_cmd(LockRelease(cmd_runners=locker_names[0]))
             lock_positions.remove(locker_names[0])
             lock_positions.remove(pending_names[0])
@@ -10584,7 +10578,8 @@ class ConfigVerifier:
             waiters.append(wait_0_name)
 
         ################################################################
-        # Determine whether second request (if one) is smart_recv or wait
+        # Determine whether second request (if one) is smart_recv or
+        # wait
         ################################################################
         if (
             def_del_scenario == DefDelScenario.Recv0Recv1
@@ -10722,8 +10717,8 @@ class ConfigVerifier:
 
         ################################################################
         # For scenarios that have a second request, get lock 0 to keep
-        # the first smart_recv/wait progressing beyond the lock obtain in
-        # _request_setup where the pk_remotes list is built.
+        # the first smart_recv/wait progressing beyond the lock obtain
+        # in _request_setup where the pk_remotes list is built.
         ################################################################
         if not single_request:
             obtain_lock_serial_num_0 = self.add_cmd(
@@ -11821,7 +11816,8 @@ class ConfigVerifier:
             names: names to use to make a powerset
 
         """
-        # powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)
+        # powerset([1,2,3]) -->
+        # () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)
         return chain.from_iterable(
             combinations(names, r) for r in range(len(names) + 1)
         )
@@ -12203,9 +12199,9 @@ class ConfigVerifier:
                     )
 
                 if not stopped_remotes:
-                    ########################################################
+                    ####################################################
                     # resume the waiters that are expected to succeed
-                    ########################################################
+                    ####################################################
                     resume_cmd_serial_num = self.add_cmd(
                         Resume(
                             cmd_runners=actor_names,
@@ -13822,12 +13818,12 @@ class ConfigVerifier:
                 targets.
             num_registered_after: number threads registered that are
                 started and wait after the resume is issued. This case
-                provides a variation of a resume target_rtn being not alive
-                when the resume is issued, and then a configuration
-                change while the resume is running and the resume sees
-                that the target_rtn is now alive. There is no significant
-                delay between the resume and the start to expect the
-                registered_after targets to cause a timeout.
+                provides a variation of a resume target_rtn being not
+                alive when the resume is issued, and then a
+                configuration change while the resume is running and the
+                resume sees that the target_rtn is now alive. There is
+                no significant delay between the resume and the start to
+                expect the registered_after targets to cause a timeout.
             num_unreg_no_delay: number threads unregistered before the
                 resume is done, and are then created and started within
                 the allowed timeout
@@ -17539,8 +17535,8 @@ class ConfigVerifier:
 
         ################################################################
         # before: lock_1|sync_1a_s_s|lock_0|sync_0a_r|lock_2
-        # action: drop lock_1, sync_1a_s_s completes setup and gets behind
-        #             lock in req loop
+        # action: drop lock_1, sync_1a_s_s completes setup and gets
+        #         behind lock in req loop
         # after : lock_0|sync_0a_r|lock_2|sync_1a_s_r
         ################################################################
         self.add_cmd(LockRelease(cmd_runners=lock_names[1]))
@@ -17594,10 +17590,10 @@ class ConfigVerifier:
 
         ################################################################
         # before: lock_0|sync_1a_s_r|lock_2|sync_0a_r|lock_1
-        # action: drop lock_0, sync_1a_s sees sync_0 has different create
-        #             time for sync_1, so sync_1 loops back to top of
-        #             req loop to give sync_0 more time to recognize
-        #             that sync_1 is resurrected
+        # action: drop lock_0, sync_1a_s sees sync_0 has different
+        #         create time for sync_1, so sync_1 loops back to top of
+        #         req loop to give sync_0 more time to recognize that
+        #         sync_1 is resurrected
         # after : lock_2|sync_0a_r|lock_1|sync_1a_s_r
         ################################################################
         self.add_cmd(LockRelease(cmd_runners=lock_names[0]))
@@ -19077,8 +19073,8 @@ class ConfigVerifier:
         Args:
             name_collection: set of names to choose from
             num_names_needed: number of names to choose
-            update_collection: indicates whether to remove the chosen names
-                from the set of names
+            update_collection: indicates whether to remove the chosen
+                names from the set of names
             var_name_for_log: variable name to use for the log msg
 
         Returns:
@@ -19220,13 +19216,13 @@ class ConfigVerifier:
 
         self.log_test_msg(f"create_f1_thread exiting: {cmd_runner=}, " f"{name=}")
 
-    ########################################################################
+    ####################################################################
     # get_config_snapshot
-    ########################################################################
+    ####################################################################
     def create_snapshot_data(
         self, verify_name: str, verify_idx: int, verify_data: VerifyData
     ) -> None:
-        """Create and save a snapshot of real structures for verification.
+        """Create and save snapshot of real structures for verification.
 
         Args:
             verify_name: name of verify cmd
@@ -19397,7 +19393,6 @@ class ConfigVerifier:
         work_log = self.caplog_to_use.record_tuples.copy()
 
         end_idx = len(work_log)
-        # print(f'\n{self.log_start_idx=}, {end_idx=}, {work_log[-1]=} \n')
 
         # return if no new log message have been issued since last call
         if self.log_start_idx >= end_idx:
@@ -20536,7 +20531,8 @@ class ConfigVerifier:
         Args:
             cmd_runner: thread doing the wait
             targets: names of threads to be resumed
-            exp_resumed_targets: thread names that are expected to be resumed
+            exp_resumed_targets: thread names that are expected to be
+                resumed
             stopped_remotes: threads that are stopped and will result in
                 a not alive error being raised
             timeout: timeout value for smart_resume
@@ -20856,8 +20852,8 @@ class ConfigVerifier:
             UnexpectedEvent: handle_set_state_log_msg encountered
                 unexpected log msg
             IncorrectDataDetected: handle_set_state_log_msg detected
-                target_rtn is missing from expected_registered or current
-                state does not match
+                target_rtn is missing from expected_registered or
+                current state does not match
         """
         pe = self.pending_events[cmd_runner]
         state_key: SetStateKey = (cmd_runner, target, from_state, to_state)
@@ -21792,8 +21788,8 @@ class ConfigVerifier:
         Args:
             cmd_runner: name of thread doing the smart_unreg
             unregister_targets: names of threads to be unregistered
-            not_registered_remotes: thread names that are not is registered
-                state
+            not_registered_remotes: thread names that are not is
+                registered state
             log_msg: log msg for the smart_unreg request
 
         """
@@ -25574,9 +25570,9 @@ class OuterF1ThreadApp(threading.Thread):
         # self.config_ver.f1_driver(f1_name=self.smart_thread.name)
         self.config_ver.f1_driver(f1_name=self.name)
 
-        ####################################################################
+        ################################################################
         # exit
-        ####################################################################
+        ################################################################
         self.config_ver.log_test_msg(f"OuterF1ThreadApp.run() exit: {self.name}")
 
 
@@ -30761,7 +30757,6 @@ class TestSmartThreadErrors:
         start_time = time.time()
         timeout_value = 30
         while True:
-            # if alpha_thread._get_state('beta') != st.ThreadState.Alive:
             if not beta_thread.thread.is_alive():
                 break
             time.sleep(0.2)
@@ -31141,10 +31136,11 @@ class TestSmartThreadErrors:
                 while True:
                     work_pk_remotes_copy = self.work_pk_remotes.copy()  # type: ignore
                     for pk_remote in work_pk_remotes_copy:
-                        # we need to hold the lock to ensure the pair_array
-                        # remains stable while getting local_sb. The
-                        # request_pending flag in our entry will prevent our
-                        # entry for being removed (but not the remote)
+                        # we need to hold the lock to ensure the
+                        # pair_array remains stable while getting
+                        # local_sb. The request_pending flag in our
+                        # entry will prevent our entry for being removed
+                        # (but not the remote)
                         with sel.SELockShare(st.SmartThread._registry_lock):
                             if self.found_pk_remotes:  # type: ignore
                                 wpr = self.work_pk_remotes  # type: ignore
@@ -32500,26 +32496,7 @@ class TestSmartBasicScenarios:
             logger.debug(f"{f1_smart_thread.name} exiting")
 
         start_time = time.time()
-        # manager_logger = logging.Logger.manager.loggerDict["scottbrian_paratools"]
-        # print(f"{logging=}")
-        # print(f"{manager_logger=}")
-        #
-        # if isinstance(manager_logger, logging.PlaceHolder):
-        #     raise InvalidConfigurationDetected(
-        #         "test_smart_thread_log_msg detected that the manager "
-        #         "logger for scottbrian_paratoold is a PlaceHolder"
-        #     )
-        #
-        # my_root = manager_logger.parent
-        # print(f"{my_root=}")
-        #
-        # if my_root is None:
-        #     raise InvalidConfigurationDetected(
-        #         "test_smart_thread_log_msg failed to find logger for "
-        #         "scottbrian_paratools parent"
-        #     )
-        #
-        # my_root.setLevel(log_level_arg)
+
         logger.debug("mainline entered")
 
         num_smart_reqs = 256
@@ -32603,32 +32580,6 @@ class TestSmartBasicScenarios:
                 )
                 alpha_threads[group_name].smart_join(targets=target)
 
-        # for group_name in group_names:
-        #     for target_rtn in f1_names_in_group[group_name]:
-        #         num_sleeps = f1_smart_threads[group_name][target_rtn].num_sleeps
-        #         elapsed_sleep = f1_smart_threads[group_name][target_rtn].elapsed_sleep
-        #         if num_sleeps > 0:
-        #             mean_sleep = elapsed_sleep / num_sleeps
-        #         else:
-        #             mean_sleep = 0
-        #
-        #         print(
-        #             f"{group_name=}, {target_rtn=}, {num_sleeps=}"
-        #             f", {elapsed_sleep=}, {mean_sleep=}"
-        #         )
-
-        # for group_name in group_names:
-        #     num_sleeps = alpha_threads[group_name].num_sleeps
-        #     elapsed_sleep = alpha_threads[group_name].elapsed_sleep
-        #     if num_sleeps > 0:
-        #         mean_sleep = elapsed_sleep / num_sleeps
-        #     else:
-        #         mean_sleep = 0
-        #
-        #     print(
-        #         f"{group_name=}, target_rtn=alpha, {num_sleeps=}"
-        #         f", {elapsed_sleep=}, {mean_sleep=}"
-        #     )
         elapsed_time = time.time() - start_time
         logger.debug(f"mainline exiting elapsed time: {elapsed_time}")
 
@@ -32776,7 +32727,8 @@ class TestSmartBasicScenarios:
         Args:
             num_resumers_arg: number of resumers beyond what is
                 required for the wait_type_arg
-            resumer_count_arg: resumer_count specification for smart_wait
+            resumer_count_arg: resumer_count specification for
+                smart_wait
             wait_type_arg: type of wait to do
             caplog: pytest fixture to capture log output
 
@@ -33465,10 +33417,10 @@ class TestSmartThreadComboScenarios:
             num_active_targets_arg: number of active threads to recv
             num_registered_targets_arg: number registered thread to
                 recv
-            num_unreg_timeouts_arg: number of threads to be receivers that
-                cause a timeout by being unregistering
-            num_exit_timeouts_arg: number of threads to be receivers that
-                cause a timeout by exiting
+            num_unreg_timeouts_arg: number of threads to be receivers
+                that cause a timeout by being unregistering
+            num_exit_timeouts_arg: number of threads to be receivers
+                that cause a timeout by exiting
             num_full_q_timeouts_arg: number of threads to be receivers
                 that cause a timeout by having a full msgq
             caplog: pytest fixture to capture log output
@@ -33709,24 +33661,25 @@ class TestSmartThreadComboScenarios:
             num_start_before_arg: number of target_rtn threads that will
                 be started and issue a wait before the resume is done,
                 and should succeed
-            num_unreg_before_arg: number of target_rtn threads that will be
-                registered and then unregistered before the resume, and
-                then started after the resume, and should succeed
+            num_unreg_before_arg: number of target_rtn threads that will
+                be registered and then unregistered before the resume,
+                and then started after the resume, and should succeed
             num_stop_before_arg: number of target_rtn threads that will
                 be started and then stopped (but not joined) before the
                 resume, and should result in a not alive error
-            num_unreg_after_arg: number of target_rtn threads that will be
-                unregistered after the resume, and should cause an error
-            num_stop_after_ok_arg: number of target_rtn threads that will
-                be started after the resume is issued, and will stay
-                alive long enough for the resume to set the wait_flag,
-                and will then be stopped and joined, and should result
-                in success
-            num_stop_after_err_arg: number of target_rtn threads that will
-                be started after the resume is issued, and will quickly
-                be stopped and joined before the resume has a chance to
-                see that is is alive to sety the wait_flag, and should
-                result in a not alive error
+            num_unreg_after_arg: number of target_rtn threads that will
+                be unregistered after the resume, and should cause an
+                error
+            num_stop_after_ok_arg: number of target_rtn threads that
+                will be started after the resume is issued, and will
+                stay alive long enough for the resume to set the
+                wait_flag, and will then be stopped and joined, and
+                should result in success
+            num_stop_after_err_arg: number of target_rtn threads that
+                will be started after the resume is issued, and will
+                quickly be stopped and joined before the resume has a
+                chance to see that is is alive to sety the wait_flag,
+                and should result in a not alive error
             caplog: pytest fixture to capture log output
             monkeypatch: pytest fixture used to modify code for testing
 
@@ -33812,24 +33765,25 @@ class TestSmartThreadComboScenarios:
             num_start_before_arg: number of target_rtn threads that will
                 be started and issue a wait before the resume is done,
                 and should succeed
-            num_unreg_before_arg: number of target_rtn threads that will be
-                registered and then unregistered before the resume, and
-                then started after the resume, and should succeed
+            num_unreg_before_arg: number of target_rtn threads that will
+                be registered and then unregistered before the resume,
+                and then started after the resume, and should succeed
             num_stop_before_arg: number of target_rtn threads that will
                 be started and then stopped (but not joined) before the
                 resume, and should result in a not alive error
-            num_unreg_after_arg: number of target_rtn threads that will be
-                unregistered after the resume, and should cause an error
-            num_stop_after_ok_arg: number of target_rtn threads that will
-                be started after the resume is issued, and will stay
-                alive long enough for the resume to set the wait_flag,
-                and will then be stopped and joined, and should result
-                in success
-            num_stop_after_err_arg: number of target_rtn threads that will
-                be started after the resume is issued, and will quickly
-                be stopped and joined before the resume has a chance to
-                see that is is alive to sety the wait_flag, and should
-                result in a not alive error
+            num_unreg_after_arg: number of target_rtn threads that will
+                be unregistered after the resume, and should cause an
+                error
+            num_stop_after_ok_arg: number of target_rtn threads that
+                will be started after the resume is issued, and will
+                stay alive long enough for the resume to set the
+                wait_flag, and will then be stopped and joined, and
+                should result in success
+            num_stop_after_err_arg: number of target_rtn threads that
+                will be started after the resume is issued, and will
+                quickly be stopped and joined before the resume has a
+                chance to see that is is alive to sety the wait_flag,
+                and should result in a not alive error
             caplog: pytest fixture to capture log output
             monkeypatch: pytest fixture used to modify code for testing
 
@@ -33904,24 +33858,25 @@ class TestSmartThreadComboScenarios:
             num_start_before_arg: number of target_rtn threads that will
                 be started and issue a wait before the resume is done,
                 and should succeed
-            num_unreg_before_arg: number of target_rtn threads that will be
-                registered and then unregistered before the resume, and
-                then started after the resume, and should succeed
+            num_unreg_before_arg: number of target_rtn threads that will
+                be registered and then unregistered before the resume,
+                and then started after the resume, and should succeed
             num_stop_before_arg: number of target_rtn threads that will
                 be started and then stopped (but not joined) before the
                 resume, and should result in a not alive error
-            num_unreg_after_arg: number of target_rtn threads that will be
-                unregistered after the resume, and should cause an error
-            num_stop_after_ok_arg: number of target_rtn threads that will
-                be started after the resume is issued, and will stay
-                alive long enough for the resume to set the wait_flag,
-                and will then be stopped and joined, and should result
-                in success
-            num_stop_after_err_arg: number of target_rtn threads that will
-                be started after the resume is issued, and will quickly
-                be stopped and joined before the resume has a chance to
-                see that is is alive to sety the wait_flag, and should
-                result in a not alive error
+            num_unreg_after_arg: number of target_rtn threads that will
+                be unregistered after the resume, and should cause an
+                error
+            num_stop_after_ok_arg: number of target_rtn threads that
+                will be started after the resume is issued, and will
+                stay alive long enough for the resume to set the
+                wait_flag, and will then be stopped and joined, and
+                should result in success
+            num_stop_after_err_arg: number of target_rtn threads that
+                will be started after the resume is issued, and will
+                quickly be stopped and joined before the resume has a
+                chance to see that is is alive to sety the wait_flag,
+                and should result in a not alive error
             caplog: pytest fixture to capture log output
             monkeypatch: pytest fixture used to modify code for testing
 
