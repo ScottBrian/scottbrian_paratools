@@ -1956,7 +1956,11 @@ class SmartThread:
                     else:
                         req_name = pair_key[0]
                     if (
-                        SmartThread._pair_array[self.group_name][pair_key]
+                        req_name
+                        in SmartThread._pair_array[self.group_name][
+                            pair_key
+                        ].status_blocks
+                        and SmartThread._pair_array[self.group_name][pair_key]
                         .status_blocks[req_name]
                         .request_pending
                     ):
