@@ -29182,6 +29182,33 @@ class TestSmartThreadSmokeTest:
     """Test class for SmartThread scenarios."""
 
     ####################################################################
+    # test_smart_thread_get_state
+    ####################################################################
+    def test_smart_thread_get_state(self) -> None:
+        """Test _get_state  cases for SmartThread."""
+
+        ################################################################
+        # Variations on unknown group name and name
+        ################################################################
+        logger.debug("mainline entered")
+
+        thread_state = st.SmartThread._get_state(group_name="unknown", name="alpha")
+        assert thread_state == st.ThreadState.Unregistered
+
+        st.SmartThread(group_name="test1", name="alpha")
+
+        thread_state = st.SmartThread._get_state(group_name="unknown", name="alpha")
+        assert thread_state == st.ThreadState.Unregistered
+
+        thread_state = st.SmartThread._get_state(group_name="test1", name="unknown")
+        assert thread_state == st.ThreadState.Unregistered
+
+        thread_state = st.SmartThread._get_state(group_name="test1", name="alpha")
+        assert thread_state == st.ThreadState.Alive
+
+        logger.debug("mainline exiting")
+
+    ####################################################################
     # test_smart_thread_log_msg
     ####################################################################
     @pytest.mark.parametrize(
@@ -30041,6 +30068,50 @@ class TestSmartThreadErrors:
         def f1() -> None:
             logger.debug("f1 entered")
             logger.debug("f1 exiting")
+
+        ################################################################
+        # Create smart thread with empty group_name
+        ################################################################
+        logger.debug("mainline entered")
+
+        logger.debug("mainline creating bad group_name thread")
+
+        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc:
+            st.SmartThread(group_name="", name="alpha")
+
+        exp_error_msg = (
+            f"SmartThread {threading.current_thread().name} "
+            f"raising SmartThreadIncorrectNameSpecified error while "
+            f"processing request smart_init. "
+            f"It was detected that the group_name='' specified "
+            f"for the new thread is an empty string. Please "
+            f"specify a non-empty string for the group name."
+        )
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print("\n", exc.value)
+
+        ################################################################
+        # Create smart thread with bad group_name
+        ################################################################
+        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc:
+            st.SmartThread(group_name=1, name="alpha")  # type: ignore
+
+        exp_error_msg = (
+            f"SmartThread {threading.current_thread().name} "
+            f"raising SmartThreadIncorrectNameSpecified error while "
+            f"processing request smart_init. "
+            f"It was detected that the group_name=1 specified "
+            f"for the new thread is not a string. Please "
+            f"specify a non-empty string for the group name."
+        )
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print("\n", exc.value)
 
         ################################################################
         # Create smart thread with empty name

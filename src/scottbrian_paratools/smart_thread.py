@@ -889,7 +889,7 @@ class SmartThread:
         self.request: ReqType = ReqType.Smart_init
 
         if not (isinstance(group_name, str) and group_name):
-            self.group_name = "error"
+            self.group_name = "bad_group_name"
         else:
             self.group_name = group_name
 
