@@ -1188,16 +1188,16 @@ class SmartThread:
                state to Stopped. This method will return the state found
                in st_state, meaning Alive if _clean_registry has not
                yet changed it, and Stopped if _clean_registry has
-               changed changed it.
+               changed it.
         """
-        if group_name not in SmartThread._registry:
+        if (
+            group_name in SmartThread._registry
+            and name in SmartThread._registry[group_name]
+        ):  # if the thread for group_name and name exist
+            return SmartThread._registry[group_name][name].st_state
+        else:
+            # else, the thread is not registered
             return ThreadState.Unregistered
-
-        if name not in SmartThread._registry[group_name]:
-            return ThreadState.Unregistered
-
-        # For all other cases, we can rely on the state being correct
-        return SmartThread._registry[group_name][name].st_state
 
     ####################################################################
     # _get_target_state
@@ -1212,8 +1212,10 @@ class SmartThread:
             The thread status
 
         Note:
-            Must be called holding the registry lock either shared or
-            exclusive
+            1) Must be called holding the registry lock either shared or
+               exclusive
+            2) Unlike _get_state, _get_target_state will return Stopped
+               when thread.is_alive() is False and st_state is Alive
         """
         if pk_remote.remote not in SmartThread._registry[self.group_name]:
             # if this remote was created before, then it was stopped
@@ -1931,6 +1933,38 @@ class SmartThread:
         return ret_set
 
     ####################################################################
+    # _notify_request_processing
+    ####################################################################
+    def _notify_req_state_changes(self, remotes: Iterable[str]) -> None:
+        """Notify any requests in req_loop about state changes.
+
+        Args:
+            remotes: threads whose state has changed
+
+        """
+        # wake up existing threads that are waiting for the remotes to
+        # become alive. The remotes may now be alive or may have been
+        # stopped and will never become alive. In either case, we need
+        # to let any request processing know about the change.
+        if isinstance(remotes, str):
+            remotes = [remotes]
+        for remote in remotes:
+            for pair_key, item in SmartThread._pair_array[self.group_name].items():
+                if remote in pair_key:
+                    if remote == pair_key[0]:
+                        req_name = pair_key[1]
+                    else:
+                        req_name = pair_key[0]
+                    if (
+                        SmartThread._pair_array[self.group_name][pair_key]
+                        .status_blocks[req_name]
+                        .request_pending
+                    ):
+                        SmartThread._registry[self.group_name][
+                            req_name
+                        ].loop_idle_event.set()
+
+    ####################################################################
     # start
     ####################################################################
     def smart_start(
@@ -2173,24 +2207,12 @@ class SmartThread:
                 target_thread=SmartThread._registry[self.group_name][remote],
                 new_state=ThreadState.Alive,
             )
-            self.started_targets |= {remote}
 
-            # wake up existing threads that are waiting for this
-            # target_rtn to become alive
-            for pair_key, item in SmartThread._pair_array[self.group_name].items():
-                if remote in pair_key:
-                    if remote == pair_key[0]:
-                        req_name = pair_key[1]
-                    else:
-                        req_name = pair_key[0]
-                    if (
-                        SmartThread._pair_array[self.group_name][pair_key]
-                        .status_blocks[req_name]
-                        .request_pending
-                    ):
-                        SmartThread._registry[self.group_name][
-                            req_name
-                        ].loop_idle_event.set()
+            # wake up threads in _req_loop waiting for the remote to
+            # become alive since it is now alive
+            self._notify_req_state_changes(remotes=remote)
+
+            self.started_targets |= {remote}
 
         else:
             # if here, the remote is not registered
@@ -2286,6 +2308,11 @@ class SmartThread:
             self._clean_pair_array()
 
             if self.unreged_targets:
+                # wake up threads in _req_loop waiting for the remotes
+                # to become alive since they are now unregistered and
+                # will never become alive
+                self._notify_req_state_changes(remotes=self.unreged_targets)
+
                 logger.info(
                     f"{self.name} did successful smart_unreg of "
                     f"{sorted(self.unreged_targets)}."
@@ -2405,6 +2432,12 @@ class SmartThread:
                     # must remain under lock for these two calls
                     self._clean_registry()
                     self._clean_pair_array()
+
+                    # wake up threads in _req_loop waiting for remotes
+                    # to become alive since they are now unregistered
+                    # and will never become alive
+                    self._notify_req_state_changes(remotes=joined_remotes)
+
                     logger.info(
                         f"{self.name} did successful smart_join of "
                         f"{sorted(joined_remotes)}."

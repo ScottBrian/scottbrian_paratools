@@ -29184,6 +29184,7 @@ class TestSmartThreadSmokeTest:
     ####################################################################
     # test_smart_thread_get_state
     ####################################################################
+    # @pytest.mark.cover2
     def test_smart_thread_get_state(self) -> None:
         """Test _get_state  cases for SmartThread."""
 
@@ -29996,58 +29997,6 @@ class TestSmartThreadSmokeTest:
             commander_config=commander_config_arg,
         )
 
-    ####################################################################
-    # test_config_build_scenarios
-    ####################################################################
-    @pytest.mark.parametrize("num_registered_1_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_active_1_arg", [1, 2, 3])
-    @pytest.mark.parametrize("num_stopped_1_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_registered_2_arg", [0, 1, 2])
-    @pytest.mark.parametrize("num_active_2_arg", [1, 2, 3])
-    @pytest.mark.parametrize("num_stopped_2_arg", [0, 1, 2])
-    def test_config_build_scenarios(
-        self,
-        num_registered_1_arg: int,
-        num_active_1_arg: int,
-        num_stopped_1_arg: int,
-        num_registered_2_arg: int,
-        num_active_2_arg: int,
-        num_stopped_2_arg: int,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        """Test meta configuration scenarios.
-
-        Args:
-            num_registered_1_arg: number of threads to initially build
-                as registered
-            num_active_1_arg: number of threads to initially build as
-                active
-            num_stopped_1_arg: number of threads to initially build as
-                stopped
-            num_registered_2_arg: number of threads to reconfigure as
-                registered
-            num_active_2_arg: number of threads to reconfigure as
-                active
-            num_stopped_2_arg: number of threads to reconfigure as
-                stopped
-            caplog: pytest fixture to capture log output
-
-        """
-        args_for_scenario_builder: dict[str, Any] = {
-            "num_registered_1": num_registered_1_arg,
-            "num_active_1": num_active_1_arg,
-            "num_stopped_1": num_stopped_1_arg,
-            "num_registered_2": num_registered_2_arg,
-            "num_active_2": num_active_2_arg,
-            "num_stopped_2": num_stopped_2_arg,
-        }
-
-        scenario_driver(
-            scenario_builder=ConfigVerifier.build_config_build_suite,
-            scenario_builder_args=args_for_scenario_builder,
-            caplog_to_use=caplog,
-        )
-
 
 ########################################################################
 # TestSmartThreadErrors class
@@ -30059,6 +30008,7 @@ class TestSmartThreadErrors:
     ####################################################################
     # test_smart_thread_instantiation_errors
     ####################################################################
+    # @pytest.mark.cover2
     def test_smart_thread_instantiation_errors(self) -> None:
         """Test error cases for SmartThread."""
 
@@ -32360,6 +32310,58 @@ class TestSmartThreadErrors:
 @pytest.mark.cover
 class TestSmartBasicScenarios:
     """Test class for SmartThread scenarios."""
+
+    ####################################################################
+    # test_config_build_scenarios
+    ####################################################################
+    @pytest.mark.parametrize("num_registered_1_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_active_1_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_stopped_1_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_registered_2_arg", [0, 1, 2])
+    @pytest.mark.parametrize("num_active_2_arg", [1, 2, 3])
+    @pytest.mark.parametrize("num_stopped_2_arg", [0, 1, 2])
+    def test_config_build_scenarios(
+        self,
+        num_registered_1_arg: int,
+        num_active_1_arg: int,
+        num_stopped_1_arg: int,
+        num_registered_2_arg: int,
+        num_active_2_arg: int,
+        num_stopped_2_arg: int,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Test meta configuration scenarios.
+
+        Args:
+            num_registered_1_arg: number of threads to initially build
+                as registered
+            num_active_1_arg: number of threads to initially build as
+                active
+            num_stopped_1_arg: number of threads to initially build as
+                stopped
+            num_registered_2_arg: number of threads to reconfigure as
+                registered
+            num_active_2_arg: number of threads to reconfigure as
+                active
+            num_stopped_2_arg: number of threads to reconfigure as
+                stopped
+            caplog: pytest fixture to capture log output
+
+        """
+        args_for_scenario_builder: dict[str, Any] = {
+            "num_registered_1": num_registered_1_arg,
+            "num_active_1": num_active_1_arg,
+            "num_stopped_1": num_stopped_1_arg,
+            "num_registered_2": num_registered_2_arg,
+            "num_active_2": num_active_2_arg,
+            "num_stopped_2": num_stopped_2_arg,
+        }
+
+        scenario_driver(
+            scenario_builder=ConfigVerifier.build_config_build_suite,
+            scenario_builder_args=args_for_scenario_builder,
+            caplog_to_use=caplog,
+        )
 
     ####################################################################
     # test_get_current_smart_thread
