@@ -805,10 +805,7 @@ class SmartThread:
         Args:
             group_name: name of the thread group that the new thread
                 will be associated with
-            name: name to be used to refer to this SmartThread. The name
-                will be used to set the threading.Thread name. If it is
-                desired that threading.Thread.name remain unchanged,
-                specify the threading.Thread name.
+            name: name to be used to refer to this SmartThread.
             target_rtn: specifies that a thread is to be created and
                 started with the given target. Mutually exclusive with
                 the *thread* specification. Note that the
@@ -878,28 +875,6 @@ class SmartThread:
         """
         self.specified_args = locals()  # used for __repr__, see below
 
-        # set the cmd_runner name if it is valid (if not valid, we raise
-        # an error after we issue the smart_init entry log message with
-        # the current thread name)
-        if not thread and not target_rtn and isinstance(name, str) and name != "":
-            self.cmd_runner = name
-        else:
-            self.cmd_runner = threading.current_thread().name
-
-        self.request: ReqType = ReqType.Smart_init
-
-        if not (isinstance(group_name, str) and group_name):
-            self.group_name = "bad_group_name"
-        else:
-            self.group_name = group_name
-
-        exit_log_msg = self._issue_entry_log_msg(
-            request=ReqType.Smart_init,
-            remotes={name},
-            cmd_runner=self.cmd_runner,
-            latest=2,
-        )
-
         if not (isinstance(group_name, str) and group_name):
             if not isinstance(group_name, str):
                 fillin_text = "not a string"
@@ -916,6 +891,8 @@ class SmartThread:
 
             logger.error(error_msg)
             raise SmartThreadIncorrectNameSpecified(error_msg)
+
+        self.group_name: str = group_name
 
         if not (isinstance(name, str) and name):
             if not isinstance(name, str):
@@ -936,20 +913,30 @@ class SmartThread:
 
         self.name: str = name
 
+        self.cmd_runner = self.get_current_smart_thread_name()
+
+        self.request: ReqType = ReqType.Smart_init
+
+        exit_log_msg = self._issue_entry_log_msg(
+            request=ReqType.Smart_init,
+            remotes={name},
+            latest=2,
+        )
+
         if target_rtn and thread:
             error_msg = (
-                f"SmartThread {threading.current_thread().name} raising "
+                f"SmartThread {self.cmd_runner} raising "
                 "SmartThreadMutuallyExclusiveTargetThreadSpecified error "
                 "while processing request smart_init. "
                 "Arguments for mutually exclusive parameters target_rtn and "
-                "thread were both specified. Please specify only one or "
+                "thread were both specified. Please specify only one of "
                 "target_rtn or thread."
             )
             raise SmartThreadMutuallyExclusiveTargetThreadSpecified(error_msg)
 
         if (not target_rtn) and (args or kwargs):
             error_msg = (
-                f"SmartThread {threading.current_thread().name} raising "
+                f"SmartThread {self.cmd_runner} raising "
                 "SmartThreadArgsSpecificationWithoutTarget error while "
                 "processing request smart_init. "
                 "Arguments for parameters args or kwargs were specified, "
@@ -984,11 +971,9 @@ class SmartThread:
         elif thread:  # caller provided the thread to use
             self.thread_create = ThreadCreate.Thread
             self.thread = thread
-            # self.thread.name = name
         else:  # caller is running on the thread to be used
             self.thread_create = ThreadCreate.Current
             self.thread = threading.current_thread()
-            # self.thread.name = name
 
         self.loop_idle_event = threading.Event()
 
@@ -1026,11 +1011,6 @@ class SmartThread:
 
         # register this new SmartThread so others can find us
         self._register()
-
-        # set the thread name only after _register was successful to
-        # avoid having to restore the name in the case of a duplicate
-        # thread error
-        self.thread.name = name
 
         if self.auto_start:
             if self.thread.is_alive():
@@ -1114,6 +1094,26 @@ class SmartThread:
                     if item is not self:  # avoid recursive repr loop
                         parms += ", " + f"{key}={item}"
         return f"{classname}({parms})"
+
+    ####################################################################
+    # get_current_smart_thread_name
+    ####################################################################
+    def get_current_smart_thread_name(self) -> str:
+        """Get the smart thread name for the current thread.
+
+        Returns:
+             The name of the current smart thread.
+        """
+        current_thread = threading.current_thread()
+        with sel.SELockShare(SmartThread._registry_lock):
+            if self.group_name in SmartThread._registry:
+                for name, smart_thread in SmartThread._registry[
+                    self.group_name
+                ].items():
+                    if smart_thread.thread is current_thread:
+                        return smart_thread.name
+
+        return self.name
 
     ####################################################################
     # get_current_smart_thread
@@ -1251,30 +1251,26 @@ class SmartThread:
     ####################################################################
     # _set_status
     ####################################################################
-    @staticmethod
     def _set_state(
+        self,
         target_thread: "SmartThread",
         new_state: ThreadState,
-        cmd_runner: Optional[str] = None,
     ) -> None:
         """Set the state for a thread.
 
         Args:
             target_thread: thread to set status for
             new_state: the new status to be set
-            cmd_runner: thread name doing the request
 
         Note:
             Must be called holding the registry lock exclusive
 
         """
-        if cmd_runner is None:
-            cmd_runner = threading.current_thread().name
         saved_status = target_thread.st_state
         target_thread.st_state = new_state
 
         logger.debug(
-            f"{cmd_runner} set "
+            f"{self.cmd_runner} set "
             f"state for thread {target_thread.name} from {saved_status} to "
             f"{new_state}",
             stacklevel=2,
@@ -1321,7 +1317,7 @@ class SmartThread:
                 for key, item in inner_reg.items():
                     if self.name == key or self.thread is item.thread:
                         error_msg = (
-                            f"SmartThread {threading.current_thread().name} "
+                            f"SmartThread {self.cmd_runner} "
                             "raising SmartThreadRegistrationError error while "
                             f"processing request {self.request.value}. "
                             "While attempting to register a new SmartThread "
@@ -1379,14 +1375,12 @@ class SmartThread:
             self._set_state(
                 target_thread=self,
                 new_state=ThreadState.Registered,
-                cmd_runner=self.cmd_runner,
             )
 
             if self.thread.is_alive():
                 self._set_state(
                     target_thread=self,
                     new_state=ThreadState.Alive,
-                    cmd_runner=self.cmd_runner,
                 )
 
             ############################################################
@@ -1451,7 +1445,7 @@ class SmartThread:
 
                 if key != item.name:
                     error_msg = (
-                        f"SmartThread {threading.current_thread().name} raising "
+                        f"SmartThread {self.cmd_runner} raising "
                         f"SmartThreadErrorInRegistry error while processing "
                         f"request {self.request.value}. "
                         f"Registry item with key {key} has non-matching "
@@ -1661,7 +1655,7 @@ class SmartThread:
                 )
                 if num_status_blocks == 0:
                     error_msg = (
-                        f"SmartThread {threading.current_thread().name} "
+                        f"SmartThread {self.cmd_runner} "
                         f"raising SmartThreadIncorrectData error while "
                         f"processing request {self.request.value}. "
                         f"While attempting to add {self.name} to the pair "
@@ -1679,7 +1673,7 @@ class SmartThread:
                         ].status_blocks
                     ):
                         error_msg = (
-                            f"SmartThread {threading.current_thread().name} "
+                            f"SmartThread {self.cmd_runner} "
                             f"raising SmartThreadIncorrectData error while "
                             f"processing request {self.request.value}. "
                             f"While attempting to add {self.name} to the pair "
@@ -1699,7 +1693,7 @@ class SmartThread:
                         .del_deferred
                     ):
                         error_msg = (
-                            f"SmartThread {threading.current_thread().name} "
+                            f"SmartThread {self.cmd_runner} "
                             f"raising SmartThreadIncorrectData error while "
                             f"processing request {self.request.value}. "
                             f"While attempting to add {self.name} to the pair "
@@ -1715,7 +1709,7 @@ class SmartThread:
                         pair_key
                     ].status_blocks.keys()
                     error_msg = (
-                        f"SmartThread {threading.current_thread().name} "
+                        f"SmartThread {self.cmd_runner} "
                         f"raising SmartThreadIncorrectData error while "
                         f"processing request {self.request.value}. "
                         f"While attempting to add {self.name} to the pair "
@@ -1738,19 +1732,13 @@ class SmartThread:
                     f"{self.cmd_runner} added {pair_key} to the " f"_pair_array"
                 )
             # add status block entries
-            self._add_status_block_entry(
-                cmd_runner=self.cmd_runner, pair_key=pair_key, add_name=self.name
-            )
+            self._add_status_block_entry(pair_key=pair_key, add_name=self.name)
 
             if (
                 existing_name
                 not in SmartThread._pair_array[self.group_name][pair_key].status_blocks
             ):
-                self._add_status_block_entry(
-                    cmd_runner=self.cmd_runner,
-                    pair_key=pair_key,
-                    add_name=existing_name,
-                )
+                self._add_status_block_entry(pair_key=pair_key, add_name=existing_name)
             else:  # entry already exists
                 # reset del_deferred in case it is ON and the new name
                 # is a resurrected thread
@@ -1813,13 +1801,10 @@ class SmartThread:
     ####################################################################
     # _add_status_block_entry
     ####################################################################
-    def _add_status_block_entry(
-        self, cmd_runner: str, pair_key: PairKey, add_name: str
-    ) -> None:
+    def _add_status_block_entry(self, pair_key: PairKey, add_name: str) -> None:
         """Add a status block entry.
 
         Args:
-            cmd_runner: thread name doing the add
             pair_key: pair_key for new entry
             add_name: new name to add
 
@@ -1837,7 +1822,7 @@ class SmartThread:
         )
 
         logger.debug(
-            f"{cmd_runner} added status_blocks entry "
+            f"{self.cmd_runner} added status_blocks entry "
             f"for {pair_key}, name = {add_name}"
         )
 
@@ -1891,7 +1876,7 @@ class SmartThread:
             ret_set = set({targets} if isinstance(targets, str) else targets or "")
         except TypeError:
             error_msg = (
-                f"SmartThread {threading.current_thread().name} raising "
+                f"SmartThread {self.cmd_runner} raising "
                 "SmartThreadInvalidInput error while processing "
                 f"request {request}. "
                 f"It was detected that an argument for remote thread names "
@@ -1903,7 +1888,7 @@ class SmartThread:
 
         if not ret_set:
             error_msg = (
-                f"SmartThread {threading.current_thread().name} raising "
+                f"SmartThread {self.cmd_runner} raising "
                 "SmartThreadInvalidInput error while processing "
                 f"request {request}. "
                 f"Remote threads are required for the request but none were "
@@ -1919,7 +1904,7 @@ class SmartThread:
                     else:
                         fillin_text = "an empty string"
                     error_msg = (
-                        f"SmartThread {threading.current_thread().name} "
+                        f"SmartThread {self.cmd_runner} "
                         f"raising SmartThreadIncorrectNameSpecified error "
                         f"while processing request {request}. "
                         f"It was detected that the {name=} specified "
@@ -2084,13 +2069,14 @@ class SmartThread:
         # thread depends on. The only instance variable used in
         # smart_start is started_targets which is not used by any other
         # requests. Also, the registry lock is obtained at the start of
-        # smart_start to protect started_targets in the even that the
+        # smart_start to protect started_targets in the event that the
         # newly started thread also does a smart_start of some other
         # target_rtn. Note also that the instance variable work_remotes
         # is used by testing to determine progress for timeout cases.
         # Since smart_start does not have a timeout, work_remotes as an
         # instance variable is not used in smart_start and is instead a
         # local variable.
+        self.cmd_runner = self.get_current_smart_thread_name()
         with sel.SELockExcl(SmartThread._registry_lock):
             if targets is None:
                 targets = {self.name}
@@ -2109,7 +2095,7 @@ class SmartThread:
                 )
                 if len(targets) > 1:
                     error_msg = (
-                        f"SmartThread {threading.current_thread().name} "
+                        f"SmartThread {self.cmd_runner} "
                         f"raising SmartThreadMultipleTargetsForSelfStart "
                         f"error while processing request smart_start. "
                         "Request smart_start can not be done for multiple "
@@ -2121,7 +2107,7 @@ class SmartThread:
                 # with sel.SELockExcl(SmartThread._registry_lock):
                 if self.thread.is_alive():
                     error_msg = (
-                        f"SmartThread {threading.current_thread().name} "
+                        f"SmartThread {self.cmd_runner} "
                         "raising SmartThreadAlreadyStarted error while "
                         "processing request smart_start. "
                         f"Unable to start {self.name} because {self.name} "
@@ -2137,7 +2123,7 @@ class SmartThread:
                     != ThreadState.Registered
                 ):
                     error_msg = (
-                        f"SmartThread {threading.current_thread().name} "
+                        f"SmartThread {self.cmd_runner} "
                         "raising SmartThreadRemoteThreadNotRegistered "
                         "error while processing request smart_start. "
                         f"Unable to start {self.name} because {self.name} "
@@ -2858,6 +2844,7 @@ class SmartThread:
             mainline alpha exiting
 
         """
+        self.cmd_runner = self.name
         self._verify_thread_is_current(request=ReqType.Smart_send)
         self.request = ReqType.Smart_send
         self.sent_targets = set()
@@ -2870,7 +2857,7 @@ class SmartThread:
         if msg is not None and receivers is not None:
             if msg_dict is not None:
                 error_msg = (
-                    f"SmartThread {threading.current_thread().name} raising "
+                    f"SmartThread {self.cmd_runner} raising "
                     "SmartThreadInvalidInput error while processing request "
                     "smart_send. "
                     "Mutually exclusive arguments msg and msg_dict were both "
@@ -2883,7 +2870,7 @@ class SmartThread:
         elif msg_dict is not None:
             if msg is not None or receivers is not None:
                 error_msg = (
-                    f"SmartThread {threading.current_thread().name} raising "
+                    f"SmartThread {self.cmd_runner} raising "
                     "SmartThreadInvalidInput error while processing request "
                     "smart_send. "
                     "Mutually exclusive arguments msg_dict and msg or "
@@ -2896,7 +2883,7 @@ class SmartThread:
             work_msgs = msg_dict
         else:
             error_msg = (
-                f"SmartThread {threading.current_thread().name} raising "
+                f"SmartThread {self.cmd_runner} raising "
                 "SmartThreadInvalidInput error while processing request "
                 "smart_send. "
                 "The smart_send request failed to specify "
@@ -3329,6 +3316,7 @@ class SmartThread:
             mainline alpha exiting
 
         """
+        self.cmd_runner = self.name
         self._verify_thread_is_current(request=ReqType.Smart_recv)
         self.request = ReqType.Smart_recv
         self.recvd_msgs = {}
@@ -3342,7 +3330,7 @@ class SmartThread:
                 or len(remotes) < sender_count
             ):
                 error_msg = (
-                    f"SmartThread {threading.current_thread().name} raising "
+                    f"SmartThread {self.cmd_runner} raising "
                     "SmartThreadInvalidInput error while processing request "
                     "smart_recv. "
                     f"The value specified for {sender_count=} is not valid. "
@@ -3777,6 +3765,7 @@ class SmartThread:
             mainline alpha exiting
 
         """
+        self.cmd_runner = self.name
         self._verify_thread_is_current(request=ReqType.Smart_wait)
         self.request = ReqType.Smart_wait
         self.resumed_by = set()
@@ -3790,7 +3779,7 @@ class SmartThread:
                 or len(remotes) < resumer_count
             ):
                 error_msg = (
-                    f"SmartThread {threading.current_thread().name} raising "
+                    f"SmartThread {self.cmd_runner} raising "
                     "SmartThreadInvalidInput error while processing request "
                     "smart_wait. "
                     f"The value specified for {resumer_count=} is not valid. "
@@ -4111,6 +4100,7 @@ class SmartThread:
         #              sync
         #                                           wait
         ###############################################################
+        self.cmd_runner = self.name
         self._verify_thread_is_current(request=ReqType.Smart_resume)
         self.request = ReqType.Smart_resume
         self.resumed_targets = set()
@@ -4311,6 +4301,7 @@ class SmartThread:
             mainline alpha exiting
 
         """
+        self.cmd_runner = self.name
         self._verify_thread_is_current(request=ReqType.Smart_sync)
         self.request = ReqType.Smart_sync
         self.synced_targets = set()
@@ -4849,7 +4840,7 @@ class SmartThread:
 
             except ValueError:
                 error_msg = (
-                    f"SmartThread {threading.current_thread().name} raising "
+                    f"SmartThread {self.cmd_runner} raising "
                     "SmartThreadWorkDataException error while processing "
                     f"request {self.request}. "
                     f"An expected entry for {found_pk_remote=} was not "
@@ -4868,7 +4859,7 @@ class SmartThread:
 
             except ValueError:
                 error_msg = (
-                    f"SmartThread {threading.current_thread().name} raising "
+                    f"SmartThread {self.cmd_runner} raising "
                     "SmartThreadWorkDataException error while processing "
                     f"request {self.request}. "
                     f"An expected entry for {found_pk_remote=} was not "
@@ -5078,8 +5069,8 @@ class SmartThread:
                 no targets specified.
 
         """
+        self.cmd_runner = self.get_current_smart_thread_name()
         self._verify_thread_is_current(request=self.request)
-        self.cmd_runner = threading.current_thread().name
 
         targets_set: set[str] = self._get_targets(targets)
 
@@ -5138,7 +5129,7 @@ class SmartThread:
         """
         timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
 
-        self.cmd_runner = threading.current_thread().name
+        self.cmd_runner = self.get_current_smart_thread_name()
 
         self.num_targets_completed = 0
 
@@ -5151,7 +5142,7 @@ class SmartThread:
 
         if self.cmd_runner in targets:
             error_msg = (
-                f"SmartThread {threading.current_thread().name} raising "
+                f"SmartThread {self.cmd_runner} raising "
                 f"SmartThreadInvalidInput error while processing request "
                 f"{self.request.value}. "
                 f"Targets {sorted(targets)} includes {self.cmd_runner} "
@@ -5189,7 +5180,6 @@ class SmartThread:
         self,
         request: ReqType,
         remotes: set[str],
-        cmd_runner: Optional[str] = None,
         timeout_value: Optional[IntFloat] = None,
         log_msg: Optional[str] = None,
         latest: int = 3,
@@ -5199,7 +5189,6 @@ class SmartThread:
         Args:
             request: request being processed
             remotes: thread names of the request targets
-            cmd_runner: thread name processing the request
             timeout_value: value that will be used for request timeout
             log_msg: log message to append to the log msg
             latest: how far back in the call stack to go for
@@ -5213,10 +5202,8 @@ class SmartThread:
         if not logger.isEnabledFor(logging.DEBUG):
             return ""
 
-        if cmd_runner is None:
-            cmd_runner = threading.current_thread().name
         log_msg_body = (
-            f"requestor: {cmd_runner}, "
+            f"requestor: {self.cmd_runner}, "
             f"group: {self.group_name}, "
             f"targets: {sorted(remotes)} "
             f"timeout value: {timeout_value} "
@@ -5253,7 +5240,7 @@ class SmartThread:
         """
         if check_thread and self.thread is not threading.current_thread():
             error_msg = (
-                f"SmartThread {threading.current_thread().name} raising "
+                f"SmartThread {self.cmd_runner} raising "
                 f"SmartThreadDetectedOpFromForeignThread error "
                 f"while processing request {request.value}. "
                 f"The SmartThread object used for the invocation is "
@@ -5269,7 +5256,7 @@ class SmartThread:
             or id(self) != id(SmartThread._registry[self.group_name][self.name])
         ):
             error_msg = (
-                f"SmartThread {threading.current_thread().name} raising "
+                f"SmartThread {self.cmd_runner} raising "
                 f"SmartThreadDetectedOpFromForeignThread error "
                 f"while processing request {request.value}. "
                 "The SmartThread object used for the invocation is not "
