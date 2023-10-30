@@ -881,7 +881,7 @@ class SmartThread:
             else:
                 fillin_text = "an empty string"
             error_msg = (
-                f"SmartThread {threading.current_thread().name} "
+                f"SmartThread "
                 f"raising SmartThreadIncorrectNameSpecified error while "
                 f"processing request smart_init. "
                 f"It was detected that the {group_name=} specified "
@@ -900,7 +900,7 @@ class SmartThread:
             else:
                 fillin_text = "an empty string"
             error_msg = (
-                f"SmartThread {threading.current_thread().name} "
+                f"SmartThread "
                 f"raising SmartThreadIncorrectNameSpecified error while "
                 f"processing request smart_init. "
                 f"It was detected that the {name=} specified "
@@ -913,7 +913,7 @@ class SmartThread:
 
         self.name: str = name
 
-        self.cmd_runner = self.get_current_smart_thread_name()
+        self.log_name = f"{self.name} ({self.group_name})"
 
         self.request: ReqType = ReqType.Smart_init
 
@@ -925,7 +925,7 @@ class SmartThread:
 
         if target_rtn and thread:
             error_msg = (
-                f"SmartThread {self.cmd_runner} raising "
+                f"SmartThread {self.log_name} raising "
                 "SmartThreadMutuallyExclusiveTargetThreadSpecified error "
                 "while processing request smart_init. "
                 "Arguments for mutually exclusive parameters target_rtn and "
@@ -936,7 +936,7 @@ class SmartThread:
 
         if (not target_rtn) and (args or kwargs):
             error_msg = (
-                f"SmartThread {self.cmd_runner} raising "
+                f"SmartThread {self.log_name} raising "
                 "SmartThreadArgsSpecificationWithoutTarget error while "
                 "processing request smart_init. "
                 "Arguments for parameters args or kwargs were specified, "
@@ -1022,7 +1022,7 @@ class SmartThread:
             extra_text = "auto_start not requested"
 
         logger.info(
-            f"{self.cmd_runner} completed initialization of "
+            f"{self.log_name} completed initialization of "
             f"{self.name}: {self.thread_create}, "
             f"{self.st_state}, {extra_text}."
         )
@@ -1270,7 +1270,7 @@ class SmartThread:
         target_thread.st_state = new_state
 
         logger.debug(
-            f"{self.cmd_runner} set "
+            f"{self.log_name} set "
             f"state for thread {target_thread.name} from {saved_status} to "
             f"{new_state}",
             stacklevel=2,
@@ -1299,8 +1299,8 @@ class SmartThread:
         """
         logger.debug(
             f"{self.request.value} _register entry: "
-            f"cmd_runner: {self.cmd_runner}, "
-            f"target_rtn: {self.name}"
+            f"{self.log_name}, "
+            f"target: {self.name}"
         )
         with sel.SELockExcl(SmartThread._registry_lock):
             ############################################################
@@ -1317,7 +1317,7 @@ class SmartThread:
                 for key, item in inner_reg.items():
                     if self.name == key or self.thread is item.thread:
                         error_msg = (
-                            f"SmartThread {self.cmd_runner} "
+                            f"SmartThread {self.log_name} "
                             "raising SmartThreadRegistrationError error while "
                             f"processing request {self.request.value}. "
                             "While attempting to register a new SmartThread "
@@ -1368,7 +1368,7 @@ class SmartThread:
             SmartThread._registry_last_update = datetime.utcnow()
             print_time = SmartThread._registry_last_update.strftime("%H:%M:%S.%f")
             logger.debug(
-                f"{self.cmd_runner} added {self.name} "
+                f"{self.log_name} added {self.name} "
                 f"to SmartThread registry at UTC {print_time}"
             )
 
@@ -1390,8 +1390,8 @@ class SmartThread:
 
         logger.debug(
             f"{self.request.value} _register exit: "
-            f"cmd_runner: {self.cmd_runner}, "
-            f"target_rtn: {self.name}"
+            f"{self.log_name}, "
+            f"target: {self.name}"
         )
 
     ####################################################################
@@ -1408,10 +1408,7 @@ class SmartThread:
             1) Must be called holding _registry_lock exclusive
 
         """
-        logger.debug(
-            f"{self.request.value} _clean_registry entry: "
-            f"cmd_runner: {self.cmd_runner}"
-        )
+        logger.debug(f"{self.request.value} _clean_registry entry: " f"{self.log_name}")
         # Remove any old entries
         for group_name, inner_reg in SmartThread._registry.items():
             keys_to_del = []
@@ -1445,7 +1442,7 @@ class SmartThread:
 
                 if key != item.name:
                     error_msg = (
-                        f"SmartThread {self.cmd_runner} raising "
+                        f"SmartThread {self.log_name} raising "
                         f"SmartThreadErrorInRegistry error while processing "
                         f"request {self.request.value}. "
                         f"Registry item with key {key} has non-matching "
@@ -1460,7 +1457,7 @@ class SmartThread:
                 del inner_reg[key]
                 changed = True
                 logger.debug(
-                    f"{self.cmd_runner} removed {key} from registry for "
+                    f"{self.log_name} removed {key} from registry for "
                     f"request: {self.request.value}"
                 )
 
@@ -1473,14 +1470,11 @@ class SmartThread:
                 SmartThread._registry_last_update = datetime.utcnow()
                 print_time = SmartThread._registry_last_update.strftime("%H:%M:%S.%f")
                 logger.debug(
-                    f"{self.cmd_runner} did cleanup of registry at UTC "
+                    f"{self.log_name} did cleanup of registry at UTC "
                     f"{print_time}, deleted {sorted(keys_to_del)}"
                 )
 
-        logger.debug(
-            f"{self.request.value} _clean_registry exit: "
-            f"cmd_runner: {self.cmd_runner}"
-        )
+        logger.debug(f"{self.request.value} _clean_registry exit: " f"{self.log_name}")
 
     ####################################################################
     # _clean_pair_array
@@ -1488,8 +1482,7 @@ class SmartThread:
     def _clean_pair_array(self) -> None:
         """Remove pair array entries as needed."""
         logger.debug(
-            f"{self.request.value} _clean_pair_array entry: "
-            f"cmd_runner: {self.cmd_runner}"
+            f"{self.request.value} _clean_pair_array entry: " f"{self.log_name}"
         )
         changed = False
 
@@ -1518,7 +1511,7 @@ class SmartThread:
                     ].status_blocks.pop(thread_name, None)
 
                     logger.debug(
-                        f"{self.cmd_runner} removed status_blocks entry for "
+                        f"{self.log_name} removed status_blocks entry for "
                         f"{pair_key}, name = {thread_name}{extra_msg}"
                     )
                     changed = True
@@ -1557,7 +1550,7 @@ class SmartThread:
                         pair_key
                     ].status_blocks.pop(thread_name, None)
                     logger.debug(
-                        f"{self.cmd_runner} removed status_blocks entry for "
+                        f"{self.log_name} removed status_blocks entry for "
                         f"{pair_key}, name = {thread_name}"
                     )
                     changed = True
@@ -1583,7 +1576,7 @@ class SmartThread:
                         extra_msg += f"{comma} sync event set"
 
                     logger.debug(
-                        f"{self.cmd_runner} removal deferred for "
+                        f"{self.log_name} removal deferred for "
                         f"status_blocks entry for {pair_key}, "
                         f"name = {thread_name}, reasons: {extra_msg}"
                     )
@@ -1594,19 +1587,18 @@ class SmartThread:
 
         for pair_key in connection_array_del_list:
             del SmartThread._pair_array[self.group_name][pair_key]
-            logger.debug(f"{self.cmd_runner} removed _pair_array entry for {pair_key}")
+            logger.debug(f"{self.log_name} removed _pair_array entry for {pair_key}")
             changed = True
 
         if changed:
             SmartThread._pair_array_last_update = datetime.utcnow()
             print_time = SmartThread._pair_array_last_update.strftime("%H:%M:%S.%f")
             logger.debug(
-                f"{self.cmd_runner} did cleanup of _pair_array at UTC" f" {print_time}"
+                f"{self.log_name} did cleanup of _pair_array at UTC" f" {print_time}"
             )
 
         logger.debug(
-            f"{self.request.value} _clean_pair_array exit: "
-            f"cmd_runner: {self.cmd_runner}"
+            f"{self.request.value} _clean_pair_array exit: " f"{self.log_name}"
         )
 
     ####################################################################
@@ -1639,8 +1631,8 @@ class SmartThread:
         """
         logger.debug(
             f"{self.request.value} _add_to_pair_array entry: "
-            f"cmd_runner: {self.cmd_runner}, "
-            f"target_rtn: {self.name}"
+            f"{self.log_name}, "
+            f"target: {self.name}"
         )
 
         changed = False
@@ -1655,7 +1647,7 @@ class SmartThread:
                 )
                 if num_status_blocks == 0:
                     error_msg = (
-                        f"SmartThread {self.cmd_runner} "
+                        f"SmartThread {self.log_name} "
                         f"raising SmartThreadIncorrectData error while "
                         f"processing request {self.request.value}. "
                         f"While attempting to add {self.name} to the pair "
@@ -1673,7 +1665,7 @@ class SmartThread:
                         ].status_blocks
                     ):
                         error_msg = (
-                            f"SmartThread {self.cmd_runner} "
+                            f"SmartThread {self.log_name} "
                             f"raising SmartThreadIncorrectData error while "
                             f"processing request {self.request.value}. "
                             f"While attempting to add {self.name} to the pair "
@@ -1693,7 +1685,7 @@ class SmartThread:
                         .del_deferred
                     ):
                         error_msg = (
-                            f"SmartThread {self.cmd_runner} "
+                            f"SmartThread {self.log_name} "
                             f"raising SmartThreadIncorrectData error while "
                             f"processing request {self.request.value}. "
                             f"While attempting to add {self.name} to the pair "
@@ -1709,7 +1701,7 @@ class SmartThread:
                         pair_key
                     ].status_blocks.keys()
                     error_msg = (
-                        f"SmartThread {self.cmd_runner} "
+                        f"SmartThread {self.log_name} "
                         f"raising SmartThreadIncorrectData error while "
                         f"processing request {self.request.value}. "
                         f"While attempting to add {self.name} to the pair "
@@ -1728,9 +1720,7 @@ class SmartThread:
                 ] = SmartThread.ConnectionPair(
                     status_lock=threading.Lock(), status_blocks={}
                 )
-                logger.debug(
-                    f"{self.cmd_runner} added {pair_key} to the " f"_pair_array"
-                )
+                logger.debug(f"{self.log_name} added {pair_key} to the " f"_pair_array")
             # add status block entries
             self._add_status_block_entry(pair_key=pair_key, add_name=self.name)
 
@@ -1790,12 +1780,12 @@ class SmartThread:
         if changed:
             SmartThread._pair_array_last_update = datetime.utcnow()
             print_time = SmartThread._pair_array_last_update.strftime("%H:%M:%S.%f")
-            logger.debug(f"{self.cmd_runner} updated _pair_array at UTC {print_time}")
+            logger.debug(f"{self.log_name} updated _pair_array at UTC {print_time}")
 
         logger.debug(
             f"{self.request.value} _add_to_pair_array exit: "
-            f"cmd_runner: {self.cmd_runner}, "
-            f"target_rtn: {self.name}"
+            f"{self.log_name}, "
+            f"target: {self.name}"
         )
 
     ####################################################################
@@ -1822,7 +1812,7 @@ class SmartThread:
         )
 
         logger.debug(
-            f"{self.cmd_runner} added status_blocks entry "
+            f"{self.log_name} added status_blocks entry "
             f"for {pair_key}, name = {add_name}"
         )
 
@@ -1876,7 +1866,7 @@ class SmartThread:
             ret_set = set({targets} if isinstance(targets, str) else targets or "")
         except TypeError:
             error_msg = (
-                f"SmartThread {self.cmd_runner} raising "
+                f"SmartThread {self.log_name} raising "
                 "SmartThreadInvalidInput error while processing "
                 f"request {request}. "
                 f"It was detected that an argument for remote thread names "
@@ -1888,7 +1878,7 @@ class SmartThread:
 
         if not ret_set:
             error_msg = (
-                f"SmartThread {self.cmd_runner} raising "
+                f"SmartThread {self.log_name} raising "
                 "SmartThreadInvalidInput error while processing "
                 f"request {request}. "
                 f"Remote threads are required for the request but none were "
@@ -1904,7 +1894,7 @@ class SmartThread:
                     else:
                         fillin_text = "an empty string"
                     error_msg = (
-                        f"SmartThread {self.cmd_runner} "
+                        f"SmartThread {self.log_name} "
                         f"raising SmartThreadIncorrectNameSpecified error "
                         f"while processing request {request}. "
                         f"It was detected that the {name=} specified "
@@ -2075,9 +2065,7 @@ class SmartThread:
         # is used by testing to determine progress for timeout cases.
         # Since smart_start does not have a timeout, work_remotes as an
         # instance variable is not used in smart_start and is instead a
-        # local variable. Another variable to be careful with is
-        # cmd_runner since it could be in use for a request.
-        cmd_runner = self.get_current_smart_thread_name()
+        # local variable.
         with sel.SELockExcl(SmartThread._registry_lock):
             if targets is None:
                 targets = {self.name}
@@ -2089,22 +2077,18 @@ class SmartThread:
                 remotes=targets,
                 log_msg=log_msg,
                 latest=2,
-                cmd_runner=cmd_runner,
             )
 
             if self.name not in targets:
-                self._verify_thread_is_current(
-                    request=ReqType.Smart_start, cmd_runner=cmd_runner
-                )
+                self._verify_thread_is_current(request=ReqType.Smart_start)
             else:
                 self._verify_thread_is_current(
                     request=ReqType.Smart_start,
                     check_thread=False,
-                    cmd_runner=cmd_runner,
                 )
                 if len(targets) > 1:
                     error_msg = (
-                        f"SmartThread {cmd_runner} "
+                        f"SmartThread {self.log_name} "
                         f"raising SmartThreadMultipleTargetsForSelfStart "
                         f"error while processing request smart_start. "
                         "Request smart_start can not be done for multiple "
@@ -2116,7 +2100,7 @@ class SmartThread:
                 # with sel.SELockExcl(SmartThread._registry_lock):
                 if self.thread.is_alive():
                     error_msg = (
-                        f"SmartThread {cmd_runner} "
+                        f"SmartThread {self.log_name} "
                         "raising SmartThreadAlreadyStarted error while "
                         "processing request smart_start. "
                         f"Unable to start {self.name} because {self.name} "
@@ -2132,7 +2116,7 @@ class SmartThread:
                     != ThreadState.Registered
                 ):
                     error_msg = (
-                        f"SmartThread {cmd_runner} "
+                        f"SmartThread {self.log_name} "
                         "raising SmartThreadRemoteThreadNotRegistered "
                         "error while processing request smart_start. "
                         f"Unable to start {self.name} because {self.name} "
@@ -2313,7 +2297,7 @@ class SmartThread:
                 self._notify_req_state_changes(remotes=self.unreged_targets)
 
                 logger.info(
-                    f"{self.name} did successful smart_unreg of "
+                    f"{self.log_name} did successful smart_unreg of "
                     f"{sorted(self.unreged_targets)}."
                 )
 
@@ -2418,7 +2402,7 @@ class SmartThread:
                             joined_remotes |= {remote}
                     else:
                         logger.debug(
-                            f"{self.cmd_runner} determined that "
+                            f"{self.log_name} determined that "
                             f"thread {remote} is already in "
                             f"state {ThreadState.Unregistered}"
                         )
@@ -2438,11 +2422,11 @@ class SmartThread:
                     self._notify_req_state_changes(remotes=joined_remotes)
 
                     logger.info(
-                        f"{self.name} did successful smart_join of "
+                        f"{self.log_name} did successful smart_join of "
                         f"{sorted(joined_remotes)}."
                     )
                     logger.info(
-                        f"{self.name} smart_join completed targets: "
+                        f"{self.log_name} smart_join completed targets: "
                         f"{sorted(self.joined_targets)}, pending "
                         f"targets: {sorted(self.work_remotes)}"
                     )
@@ -2853,7 +2837,6 @@ class SmartThread:
             mainline alpha exiting
 
         """
-        self.cmd_runner = self.get_current_smart_thread_name()
         self._verify_thread_is_current(request=ReqType.Smart_send)
         self.request = ReqType.Smart_send
         self.sent_targets = set()
@@ -2866,7 +2849,7 @@ class SmartThread:
         if msg is not None and receivers is not None:
             if msg_dict is not None:
                 error_msg = (
-                    f"SmartThread {self.cmd_runner} raising "
+                    f"SmartThread {self.log_name} raising "
                     "SmartThreadInvalidInput error while processing request "
                     "smart_send. "
                     "Mutually exclusive arguments msg and msg_dict were both "
@@ -2879,7 +2862,7 @@ class SmartThread:
         elif msg_dict is not None:
             if msg is not None or receivers is not None:
                 error_msg = (
-                    f"SmartThread {self.cmd_runner} raising "
+                    f"SmartThread {self.log_name} raising "
                     "SmartThreadInvalidInput error while processing request "
                     "smart_send. "
                     "Mutually exclusive arguments msg_dict and msg or "
@@ -2892,7 +2875,7 @@ class SmartThread:
             work_msgs = msg_dict
         else:
             error_msg = (
-                f"SmartThread {self.cmd_runner} raising "
+                f"SmartThread {self.log_name} raising "
                 "SmartThreadInvalidInput error while processing request "
                 "smart_send. "
                 "The smart_send request failed to specify "
@@ -2989,7 +2972,7 @@ class SmartThread:
                         request_block.msg_to_send[pk_remote.remote]
                     )
                     logger.info(
-                        f"{self.name} smart_send sent message to " f"{pk_remote.remote}"
+                        f"{self.log_name} smart_send sent message to {pk_remote.remote}"
                     )
                     # notify remote that a message has been queued
                     SmartThread._registry[self.group_name][
@@ -3325,7 +3308,6 @@ class SmartThread:
             mainline alpha exiting
 
         """
-        self.cmd_runner = self.get_current_smart_thread_name()
         self._verify_thread_is_current(request=ReqType.Smart_recv)
         self.request = ReqType.Smart_recv
         self.recvd_msgs = {}
@@ -3339,7 +3321,7 @@ class SmartThread:
                 or len(remotes) < sender_count
             ):
                 error_msg = (
-                    f"SmartThread {self.cmd_runner} raising "
+                    f"SmartThread {self.log_name} raising "
                     "SmartThreadInvalidInput error while processing request "
                     "smart_recv. "
                     f"The value specified for {sender_count=} is not valid. "
@@ -3410,7 +3392,7 @@ class SmartThread:
                 else:
                     msg_msgs = "msg"
                 logger.info(
-                    f"{self.name} smart_recv received {num_msgs} "
+                    f"{self.log_name} smart_recv received {num_msgs} "
                     f"{msg_msgs} from {pk_remote.remote}"
                 )
                 # reset recv_wait after we get messages instead of
@@ -3774,7 +3756,6 @@ class SmartThread:
             mainline alpha exiting
 
         """
-        self.cmd_runner = self.get_current_smart_thread_name()
         self._verify_thread_is_current(request=ReqType.Smart_wait)
         self.request = ReqType.Smart_wait
         self.resumed_by = set()
@@ -3788,7 +3769,7 @@ class SmartThread:
                 or len(remotes) < resumer_count
             ):
                 error_msg = (
-                    f"SmartThread {self.cmd_runner} raising "
+                    f"SmartThread {self.log_name} raising "
                     "SmartThreadInvalidInput error while processing request "
                     "smart_wait. "
                     f"The value specified for {resumer_count=} is not valid. "
@@ -3867,7 +3848,7 @@ class SmartThread:
                     pk_remote.remote
                 ].loop_idle_event.set()
 
-            logger.info(f"{self.name} smart_wait resumed by " f"{pk_remote.remote}")
+            logger.info(f"{self.log_name} smart_wait resumed by {pk_remote.remote}")
             self.resumed_by |= {pk_remote.remote}
             self.num_targets_completed += 1
             return True
@@ -4109,7 +4090,6 @@ class SmartThread:
         #              sync
         #                                           wait
         ###############################################################
-        self.cmd_runner = self.get_current_smart_thread_name()
         self._verify_thread_is_current(request=ReqType.Smart_resume)
         self.request = ReqType.Smart_resume
         self.resumed_targets = set()
@@ -4187,7 +4167,7 @@ class SmartThread:
                     ].loop_idle_event.set()
 
                     logger.info(
-                        f"{self.name} smart_resume resumed " f"{pk_remote.remote}"
+                        f"{self.log_name} smart_resume resumed {pk_remote.remote}"
                     )
 
                     self.resumed_targets |= {pk_remote.remote}
@@ -4310,7 +4290,6 @@ class SmartThread:
             mainline alpha exiting
 
         """
-        self.cmd_runner = self.get_current_smart_thread_name()
         self._verify_thread_is_current(request=ReqType.Smart_sync)
         self.request = ReqType.Smart_sync
         self.synced_targets = set()
@@ -4403,7 +4382,7 @@ class SmartThread:
 
                             local_sb.sync_wait = True
                             logger.info(
-                                f"{self.name} smart_sync set event for "
+                                f"{self.log_name} smart_sync set flag for "
                                 f"{pk_remote.remote}"
                             )
                         else:
@@ -4440,7 +4419,7 @@ class SmartThread:
                     pk_remote.remote
                 ].loop_idle_event.set()
 
-            logger.info(f"{self.name} smart_sync achieved with " f"{pk_remote.remote}")
+            logger.info(f"{self.log_name} smart_sync achieved with {pk_remote.remote}")
             self.synced_targets |= {pk_remote.remote}
             self.num_targets_completed += 1
             # exit, we are done with this remote
@@ -4796,7 +4775,7 @@ class SmartThread:
             self.work_pk_remotes = pk_remotes.copy()
             self.found_pk_remotes = []
             logger.debug(
-                f"{self.name} {self.request.value} setup complete "
+                f"{self.log_name} {self.request.value} setup complete "
                 f"for targets: {pk_remotes}"
             )
 
@@ -4849,7 +4828,7 @@ class SmartThread:
 
             except ValueError:
                 error_msg = (
-                    f"SmartThread {self.cmd_runner} raising "
+                    f"SmartThread {self.log_name} raising "
                     "SmartThreadWorkDataException error while processing "
                     f"request {self.request}. "
                     f"An expected entry for {found_pk_remote=} was not "
@@ -4868,7 +4847,7 @@ class SmartThread:
 
             except ValueError:
                 error_msg = (
-                    f"SmartThread {self.cmd_runner} raising "
+                    f"SmartThread {self.log_name} raising "
                     "SmartThreadWorkDataException error while processing "
                     f"request {self.request}. "
                     f"An expected entry for {found_pk_remote=} was not "
@@ -5078,7 +5057,6 @@ class SmartThread:
                 no targets specified.
 
         """
-        self.cmd_runner = self.get_current_smart_thread_name()
         self._verify_thread_is_current(request=self.request)
 
         targets_set: set[str] = self._get_targets(targets)
@@ -5090,12 +5068,12 @@ class SmartThread:
             log_msg=log_msg,
         )
 
-        if self.cmd_runner in targets:
+        if self.name in targets:
             error_msg = (
-                f"SmartThread {self.cmd_runner} raising "
+                f"SmartThread {self.log_name} raising "
                 f"SmartThreadInvalidInput error while processing request "
                 f"{self.request}. "
-                f"Targets {sorted(targets_set)} includes {self.cmd_runner} "
+                f"Targets {sorted(targets_set)} includes {self.name} "
                 f"which is not permitted except for request smart_start."
             )
             logger.error(error_msg)
@@ -5138,8 +5116,6 @@ class SmartThread:
         """
         timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
 
-        self.cmd_runner = self.get_current_smart_thread_name()
-
         self.num_targets_completed = 0
 
         exit_log_msg = self._issue_entry_log_msg(
@@ -5149,12 +5125,12 @@ class SmartThread:
             log_msg=log_msg,
         )
 
-        if self.cmd_runner in targets:
+        if self.name in targets:
             error_msg = (
-                f"SmartThread {self.cmd_runner} raising "
+                f"SmartThread {self.log_name} raising "
                 f"SmartThreadInvalidInput error while processing request "
                 f"{self.request.value}. "
-                f"Targets {sorted(targets)} includes {self.cmd_runner} "
+                f"Targets {sorted(targets)} includes {self.name} "
                 f"which is not permitted except for request smart_start."
             )
             logger.error(error_msg)
@@ -5192,7 +5168,6 @@ class SmartThread:
         timeout_value: Optional[IntFloat] = None,
         log_msg: Optional[str] = None,
         latest: int = 3,
-        cmd_runner: Optional[str] = None,
     ) -> str:
         """Issue an entry log message.
 
@@ -5203,7 +5178,6 @@ class SmartThread:
             log_msg: log message to append to the log msg
             latest: how far back in the call stack to go for
                 get_formatted_call_sequence
-            cmd_runner: name of smart thread running the request
 
         Returns:
             the log message to use for the exit call or empty string if
@@ -5213,12 +5187,8 @@ class SmartThread:
         if not logger.isEnabledFor(logging.DEBUG):
             return ""
 
-        if cmd_runner is None:
-            cmd_runner = self.cmd_runner
-
         log_msg_body = (
-            f"requestor: {cmd_runner}, "
-            f"group: {self.group_name}, "
+            f"requestor: {self.log_name}, "
             f"targets: {sorted(remotes)} "
             f"timeout value: {timeout_value} "
             f"{get_formatted_call_sequence(latest=latest, depth=1)}"
@@ -5241,7 +5211,6 @@ class SmartThread:
         self,
         request: ReqType,
         check_thread: bool = True,
-        cmd_runner: Optional[str] = None,
     ) -> None:
         """Verify that SmartThread is running under the current thread.
 
@@ -5256,10 +5225,8 @@ class SmartThread:
 
         """
         if check_thread and self.thread is not threading.current_thread():
-            if cmd_runner is None:
-                cmd_runner = self.cmd_runner
             error_msg = (
-                f"SmartThread {cmd_runner} raising "
+                f"SmartThread {self.log_name} raising "
                 f"SmartThreadDetectedOpFromForeignThread error "
                 f"while processing request {request.value}. "
                 f"The SmartThread object used for the invocation is "
@@ -5274,10 +5241,8 @@ class SmartThread:
             or self.name not in SmartThread._registry[self.group_name]
             or id(self) != id(SmartThread._registry[self.group_name][self.name])
         ):
-            if cmd_runner is None:
-                cmd_runner = self.cmd_runner
             error_msg = (
-                f"SmartThread {cmd_runner} raising "
+                f"SmartThread {self.log_name} raising "
                 f"SmartThreadDetectedOpFromForeignThread error "
                 f"while processing request {request.value}. "
                 "The SmartThread object used for the invocation is not "
