@@ -2921,8 +2921,7 @@ class RequestEntryExitLogSearchItem(LogSearchItem):
         super().__init__(
             search_str=(
                 f"{list_of_smart_requests} (entry|exit): "
-                r"requestor: [a-z0-9_]+, "
-                r"group: [a-z0-9_]+, "
+                r"requestor: [a-z0-9_]+ \([a-z0-9_]+\), "
                 r"targets: \[([a-z0-9_]*|,|'| )*\]"
             ),
             config_ver=config_ver,
@@ -2953,7 +2952,7 @@ class RequestEntryExitLogSearchItem(LogSearchItem):
         split_msg = self.found_log_msg.split()
         request_name = split_msg[0]
         entry_exit = split_msg[1][0:-1]  # remove colon
-        cmd_runner = split_msg[3][0:-1]  # remove comma
+        cmd_runner = split_msg[3]
         target_msg = self.found_log_msg.split("[")[1].split("]")[0].split(", ")
 
         targets: list[str] = []
@@ -2993,7 +2992,8 @@ class SetupCompleteLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                f"[a-z0-9_]+ {list_of_smart_requests} setup complete " f"for targets: "
+                rf"[a-z0-9_]+ \([a-z0-9_]+\) {list_of_smart_requests} setup complete "
+                "for targets: "
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -3022,8 +3022,7 @@ class SetupCompleteLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
-        request_name = split_msg[1]
-        # pk_remotes = split_msg[6]
+        request_name = split_msg[2]
         target_msg = self.found_log_msg.split("[")[1].split("]")[0].split(", ")
 
         targets: list[str] = []
@@ -3068,8 +3067,8 @@ class SubProcessEntryExitLogSearchItem(LogSearchItem):
         super().__init__(
             search_str=(
                 f"{list_of_smart_requests} {list_of_sub_processes} "
-                "(entry|exit): cmd_runner: "
-                "[a-z0-9_]+(, target_rtn: [a-z0-9_]+)*"
+                "(entry|exit): "
+                r"[a-z0-9_]+ \([a-z0-9_]+\)(, target: [a-z0-9_]+)*"
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -3100,10 +3099,13 @@ class SubProcessEntryExitLogSearchItem(LogSearchItem):
         request_name = split_msg[0]
         subprocess_name = split_msg[1]
         entry_exit = split_msg[2][0:-1]  # remove trailing colon
-        cmd_runner = split_msg[4]
-        if split_msg[-2] == "target_rtn:":
-            cmd_runner = cmd_runner[0:-1]  # remove trailing comma
-        target = split_msg[-1]
+        cmd_runner = split_msg[3]
+        # if split_msg[-2] == "target:":
+        #     cmd_runner = cmd_runner[0:-1]  # remove trailing comma
+        if split_msg[-2] == "target:":
+            target = split_msg[-1]
+        else:
+            target = split_msg[-2]
 
         if subprocess_name == "_clean_registry":
             self.config_ver.last_clean_reg_msg_idx = self.found_log_idx
@@ -3139,7 +3141,7 @@ class SetStateLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                "[a-z0-9_]+ set state for thread [a-z0-9_]+ from "
+                r"[a-z0-9_]+ \([a-z0-9_]+\) set state for thread [a-z0-9_]+ from "
                 f"{list_of_thread_states} to {list_of_thread_states}"
             ),
             config_ver=config_ver,
@@ -3169,9 +3171,9 @@ class SetStateLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
-        target_name = split_msg[5]
-        from_state_str = split_msg[7]
-        to_state_str = split_msg[9]
+        target_name = split_msg[6]
+        from_state_str = split_msg[8]
+        to_state_str = split_msg[10]
 
         from_state = eval("st." + from_state_str)
         to_state = eval("st." + to_state_str)
@@ -3215,7 +3217,7 @@ class InitCompleteLogSearchItem(LogSearchItem):
         )
         super().__init__(
             search_str=(
-                "[a-z0-9_]+ completed initialization of [a-z0-9_]+: "
+                r"[a-z0-9_]+ \([a-z0-9_]+\) completed initialization of [a-z0-9_]+: "
                 f"{list_of_thread_creates}, "
                 f"{list_of_thread_states}, "
                 f"{list_of_auto_start_texts}."
@@ -3247,9 +3249,9 @@ class InitCompleteLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
-        target_name = split_msg[4][0:-1]
-        create_text = split_msg[5][0:-1]
-        state_text = split_msg[6][0:-1]
+        target_name = split_msg[5][0:-1]
+        create_text = split_msg[6][0:-1]
+        state_text = split_msg[7][0:-1]
 
         thread_create = eval("st." + create_text)
         thread_state = eval("st." + state_text)
@@ -3369,7 +3371,7 @@ class AlreadyUnregLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                "[a-z0-9_]+ determined that thread [a-z0-9_]+ is "
+                r"[a-z0-9_]+ \([a-z0-9_]+\) determined that thread [a-z0-9_]+ is "
                 "already in state ThreadState.Unregistered"
             ),
             config_ver=config_ver,
@@ -3435,7 +3437,7 @@ class AddRegEntryLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                "[a-z0-9_]+ added [a-z0-9_]+ to SmartThread registry "
+                r"[a-z0-9_]+ \([a-z0-9_]+\) added [a-z0-9_]+ to SmartThread registry "
                 f"at UTC {time_match}"
             ),
             config_ver=config_ver,
@@ -3465,7 +3467,7 @@ class AddRegEntryLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         self.config_ver.handle_add_reg_log_msg(
-            cmd_runner=split_msg[0], target=split_msg[2], log_msg=self.found_log_msg
+            cmd_runner=split_msg[0], target=split_msg[3], log_msg=self.found_log_msg
         )
 
 
@@ -3490,7 +3492,7 @@ class AddPairArrayEntryLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                "[a-z0-9_]+ added "
+                r"[a-z0-9_]+ \([a-z0-9_]+\) added "
                 r"PairKey\(name0='[a-z0-9_]+', name1='[a-z0-9_]+'\) "
                 "to the _pair_array"
             ),
@@ -3522,8 +3524,8 @@ class AddPairArrayEntryLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
-        name_0 = split_msg[2][15:-2]  # lose left paren, comma, quotes
-        name_1 = split_msg[3][7:-2]  # lose right paren, quotes
+        name_0 = split_msg[3][15:-2]  # lose left paren, comma, quotes
+        name_1 = split_msg[4][7:-2]  # lose right paren, quotes
         pair_key: st.PairKey = st.PairKey(name_0, name_1)
         self.config_ver.handle_add_pair_array_log_msg(
             cmd_runner=cmd_runner, pair_key=pair_key, log_msg=self.found_log_msg
@@ -3551,7 +3553,7 @@ class AddStatusBlockEntryLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                "[a-z0-9_]+ added status_blocks entry for "
+                r"[a-z0-9_]+ \([a-z0-9_]+\) added status_blocks entry for "
                 r"PairKey\(name0='[a-z0-9_]+', name1='[a-z0-9_]+'\), "
                 "name = [a-z0-9_]+"
             ),
@@ -3583,9 +3585,9 @@ class AddStatusBlockEntryLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
-        name_0 = split_msg[5][15:-2]  # lose left paren, comma, quotes
-        name_1 = split_msg[6][7:-3]  # lose right paren, quotes
-        target = split_msg[9]
+        name_0 = split_msg[6][15:-2]  # lose left paren, comma, quotes
+        name_1 = split_msg[7][7:-3]  # lose right paren, quotes
+        target = split_msg[10]
         pair_key: st.PairKey = st.PairKey(name_0, name_1)
         self.config_ver.handle_add_status_block_log_msg(
             cmd_runner=cmd_runner,
@@ -3615,7 +3617,8 @@ class UpdatePairArrayUtcLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str=f"[a-z0-9_]+ updated _pair_array at UTC {time_match}",
+            search_str=r"[a-z0-9_]+ \([a-z0-9_]+\) updated _pair_array at UTC "
+            f"{time_match}",
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
@@ -3774,7 +3777,7 @@ class RemRegEntryLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                "[a-z0-9_]+ removed [a-z0-9_]+ from registry for "
+                r"[a-z0-9_]+ \([a-z0-9_]+\) removed [a-z0-9_]+ from registry for "
                 f"request: {list_of_smart_requests}"
             ),
             config_ver=config_ver,
@@ -3804,8 +3807,8 @@ class RemRegEntryLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
-        rem_name = split_msg[2]
-        process = split_msg[7]
+        rem_name = split_msg[3]
+        process = split_msg[8]
 
         self.config_ver.handle_rem_reg_log_msg(
             cmd_runner=cmd_runner,
@@ -3836,7 +3839,7 @@ class DidCleanRegLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                "[a-z0-9_]+ did cleanup of registry at UTC "
+                r"[a-z0-9_]+ \([a-z0-9_]+\) did cleanup of registry at UTC "
                 f"{time_match}, "
                 r"deleted \[('[a-z0-9_]+'|, )+\]"
             ),
@@ -3904,7 +3907,7 @@ class RemStatusBlockEntryLogSearchItem(LogSearchItem):
         )
         super().__init__(
             search_str=(
-                "[a-z0-9_]+ removed status_blocks entry for "
+                r"[a-z0-9_]+ \([a-z0-9_]+\) removed status_blocks entry for "
                 r"PairKey\(name0='[a-z0-9_]+', name1='[a-z0-9_]+'\), "
                 f"name = [a-z0-9_]+{list_of_extras}"
             ),
@@ -3935,9 +3938,9 @@ class RemStatusBlockEntryLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
-        name_0 = split_msg[5][15:-2]  # lose left paren, comma, quotes
-        name_1 = split_msg[6][7:-3]  # lose right paren, quotes
-        rem_name = split_msg[9]
+        name_0 = split_msg[6][15:-2]  # lose left paren, comma, quotes
+        name_1 = split_msg[7][7:-3]  # lose right paren, quotes
+        rem_name = split_msg[10]
 
         pair_key: st.PairKey = st.PairKey(name_0, name_1)
 
@@ -4109,7 +4112,7 @@ class RemPairArrayEntryLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                "[a-z0-9_]+ removed _pair_array entry for "
+                r"[a-z0-9_]+ \([a-z0-9_]+\) removed _pair_array entry for "
                 r"PairKey\(name0='[a-z0-9_]+', name1='[a-z0-9_]+'\)"
             ),
             config_ver=config_ver,
@@ -4140,8 +4143,8 @@ class RemPairArrayEntryLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
-        name_0 = split_msg[5][15:-2]  # lose left paren, comma, quotes
-        name_1 = split_msg[6][7:-2]  # lose right paren, quotes
+        name_0 = split_msg[6][15:-2]  # lose left paren, comma, quotes
+        name_1 = split_msg[7][7:-2]  # lose right paren, quotes
         pair_key: st.PairKey = st.PairKey(name_0, name_1)
 
         pe = self.config_ver.pending_events[cmd_runner]
@@ -4180,7 +4183,8 @@ class DidCleanPairArrayUtcLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                "[a-z0-9_]+ did cleanup of _pair_array at UTC " f"{time_match}"
+                r"[a-z0-9_]+ \([a-z0-9_]+\) did cleanup of _pair_array at UTC "
+                f"{time_match}"
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -4256,7 +4260,7 @@ class RequestAckLogSearchItem(LogSearchItem):
             "|smart_sync achieved with)"
         )
         super().__init__(
-            search_str=f"[a-z0-9_]+ {list_of_acks} [a-z0-9_]+",
+            search_str=rf"[a-z0-9_]+ \([a-z0-9_]+\) {list_of_acks} [a-z0-9_]+",
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
@@ -4284,8 +4288,8 @@ class RequestAckLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
-        request = split_msg[1]
-        action = split_msg[2]
+        request = split_msg[2]
+        action = split_msg[3]
         remote = split_msg[-1]
 
         pe = self.config_ver.pending_events[cmd_runner]
@@ -4439,7 +4443,7 @@ class RequestRefreshLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                f"[a-z0-9_]+ {list_of_smart_requests} calling "
+                rf"[a-z0-9_]+ \([a-z0-9_]+\) {list_of_smart_requests} calling "
                 rf"refresh, remaining remotes: \["
             ),
             config_ver=config_ver,
@@ -4469,7 +4473,7 @@ class RequestRefreshLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
-        request = split_msg[1]
+        request = split_msg[2]
         target_msg = self.found_log_msg.split("[")[1].split("]")[0]
 
         targets: set[str] = set()
@@ -4512,7 +4516,7 @@ class UnregJoinSuccessLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                "[a-z0-9_]+ did successful (smart_unreg|smart_join) "
+                r"[a-z0-9_]+ \([a-z0-9_]+\) did successful (smart_unreg|smart_join) "
                 r"of \[([a-z0-9_]*|,|'| )*\]"
             ),
             config_ver=config_ver,
@@ -4542,7 +4546,7 @@ class UnregJoinSuccessLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
-        request = split_msg[3]
+        request = split_msg[4]
         target_msg = self.found_log_msg.split("[")[1].split("]")[0].split(", ")
 
         targets: list[str] = []
@@ -4587,7 +4591,7 @@ class JoinWaitingLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                "[a-z0-9_]+ smart_join "
+                r"[a-z0-9_]+ \([a-z0-9_]+\) smart_join "
                 r"completed targets: \[('[a-z0-9_]+'|, )*\], "
                 r"pending targets: \[('[a-z0-9_]+'|, )*\]"
             ),
@@ -4850,7 +4854,7 @@ class CRunnerRaisesLogSearchItem(LogSearchItem):
         )
         super().__init__(
             search_str=(
-                f"[a-z0-9_]+ raising {list_of_errors} while "
+                rf"[a-z0-9_]+ \([a-z0-9_]+\) raising {list_of_errors} while "
                 f"processing a {list_of_smart_requests} request with "
                 r"targets \[([a-z0-9_]*|,|'| )*\]"
             ),
