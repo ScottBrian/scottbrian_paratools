@@ -30119,11 +30119,11 @@ class TestSmartThreadErrors:
             )
 
         exp_error_msg = (
-            f"SmartThread {threading.current_thread().name} raising "
+            f"SmartThread alpha raising "
             "SmartThreadMutuallyExclusiveTargetThreadSpecified error "
             "while processing request smart_init. "
             "Arguments for mutually exclusive parameters target_rtn and "
-            "thread were both specified. Please specify only one or "
+            "thread were both specified. Please specify only one of "
             "target_rtn or thread."
         )
 
@@ -30138,7 +30138,7 @@ class TestSmartThreadErrors:
             st.SmartThread(group_name="test1", name="alpha", args=(1,))
 
         exp_error_msg = (
-            f"SmartThread {threading.current_thread().name} raising "
+            f"SmartThread alpha raising "
             "SmartThreadArgsSpecificationWithoutTarget error while "
             "processing request smart_init. "
             "Arguments for parameters args or kwargs were specified, "
@@ -30213,9 +30213,8 @@ class TestSmartThreadErrors:
 
         check_msg = False
         new_thread = re.escape(f"<TargetThread({new_name_arg}, initial)>")
-        cmd_runner = threading.current_thread().name
+        cmd_runner = existing_name_arg
         if existing_thread_arg == st.ThreadCreate.Current:
-            cmd_runner = existing_name_arg
             existing_smart_thread = st.SmartThread(
                 group_name="test1", name=existing_name_arg
             )
@@ -30237,6 +30236,7 @@ class TestSmartThreadErrors:
             )
             if same_name or new_same_thread_arg:
                 check_msg = True
+                cmd_runner = new_name_arg
                 with pytest.raises(st.SmartThreadRegistrationError) as exc:
                     if new_same_thread_arg:
                         new_thread = re.escape(str(existing_smart_thread.thread))
@@ -30258,6 +30258,7 @@ class TestSmartThreadErrors:
             )
             if same_name or new_same_thread_arg:
                 check_msg = True
+                cmd_runner = new_name_arg
                 with pytest.raises(st.SmartThreadRegistrationError) as exc:
                     if new_same_thread_arg:
                         new_thread = re.escape(str(existing_thread))
@@ -30316,7 +30317,7 @@ class TestSmartThreadErrors:
             st.SmartThread(group_name="test1", name="beta")
 
         exp_error_msg = (
-            "SmartThread alpha raising "
+            "SmartThread bad_name raising "
             "SmartThreadErrorInRegistry error while processing "
             "request smart_init. "
             "Registry item with key alpha has non-matching "
@@ -31773,7 +31774,7 @@ class TestSmartThreadErrors:
         ################################################################
         def f1(f1_name: str) -> None:
             logger.debug(f"f1 entered for {f1_name}")
-            msgs.get_msg(f1_name)
+            msgs.get_msg(f1_name, timeout=10)
             logger.debug(f"f1 exit for {f1_name}")
             ############################################################
             # exit
@@ -32081,8 +32082,12 @@ class TestSmartThreadErrors:
                 beta_1_s_thread.smart_start()
 
             # verify error message
+            if group_name_arg in ["test1", "test2"]:
+                cmd_runner = "alpha"
+            else:
+                cmd_runner = "beta"
             exp_error_msg = (
-                "SmartThread alpha raising "
+                f"SmartThread {cmd_runner} raising "
                 "SmartThreadDetectedOpFromForeignThread error "
                 "while processing request smart_start. "
                 "The SmartThread object used for the invocation is not "

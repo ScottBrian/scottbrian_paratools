@@ -2075,8 +2075,9 @@ class SmartThread:
         # is used by testing to determine progress for timeout cases.
         # Since smart_start does not have a timeout, work_remotes as an
         # instance variable is not used in smart_start and is instead a
-        # local variable.
-        self.cmd_runner = self.get_current_smart_thread_name()
+        # local variable. Another variable to be careful with is
+        # cmd_runner since it could be in use for a request.
+        cmd_runner = self.get_current_smart_thread_name()
         with sel.SELockExcl(SmartThread._registry_lock):
             if targets is None:
                 targets = {self.name}
@@ -2084,18 +2085,26 @@ class SmartThread:
                 targets = self._get_targets(targets, request=ReqType.Smart_start)
 
             exit_log_msg = self._issue_entry_log_msg(
-                request=ReqType.Smart_start, remotes=targets, log_msg=log_msg, latest=2
+                request=ReqType.Smart_start,
+                remotes=targets,
+                log_msg=log_msg,
+                latest=2,
+                cmd_runner=cmd_runner,
             )
 
             if self.name not in targets:
-                self._verify_thread_is_current(request=ReqType.Smart_start)
+                self._verify_thread_is_current(
+                    request=ReqType.Smart_start, cmd_runner=cmd_runner
+                )
             else:
                 self._verify_thread_is_current(
-                    request=ReqType.Smart_start, check_thread=False
+                    request=ReqType.Smart_start,
+                    check_thread=False,
+                    cmd_runner=cmd_runner,
                 )
                 if len(targets) > 1:
                     error_msg = (
-                        f"SmartThread {self.cmd_runner} "
+                        f"SmartThread {cmd_runner} "
                         f"raising SmartThreadMultipleTargetsForSelfStart "
                         f"error while processing request smart_start. "
                         "Request smart_start can not be done for multiple "
@@ -2107,7 +2116,7 @@ class SmartThread:
                 # with sel.SELockExcl(SmartThread._registry_lock):
                 if self.thread.is_alive():
                     error_msg = (
-                        f"SmartThread {self.cmd_runner} "
+                        f"SmartThread {cmd_runner} "
                         "raising SmartThreadAlreadyStarted error while "
                         "processing request smart_start. "
                         f"Unable to start {self.name} because {self.name} "
@@ -2123,7 +2132,7 @@ class SmartThread:
                     != ThreadState.Registered
                 ):
                     error_msg = (
-                        f"SmartThread {self.cmd_runner} "
+                        f"SmartThread {cmd_runner} "
                         "raising SmartThreadRemoteThreadNotRegistered "
                         "error while processing request smart_start. "
                         f"Unable to start {self.name} because {self.name} "
@@ -2844,7 +2853,7 @@ class SmartThread:
             mainline alpha exiting
 
         """
-        self.cmd_runner = self.name
+        self.cmd_runner = self.get_current_smart_thread_name()
         self._verify_thread_is_current(request=ReqType.Smart_send)
         self.request = ReqType.Smart_send
         self.sent_targets = set()
@@ -3316,7 +3325,7 @@ class SmartThread:
             mainline alpha exiting
 
         """
-        self.cmd_runner = self.name
+        self.cmd_runner = self.get_current_smart_thread_name()
         self._verify_thread_is_current(request=ReqType.Smart_recv)
         self.request = ReqType.Smart_recv
         self.recvd_msgs = {}
@@ -3765,7 +3774,7 @@ class SmartThread:
             mainline alpha exiting
 
         """
-        self.cmd_runner = self.name
+        self.cmd_runner = self.get_current_smart_thread_name()
         self._verify_thread_is_current(request=ReqType.Smart_wait)
         self.request = ReqType.Smart_wait
         self.resumed_by = set()
@@ -4100,7 +4109,7 @@ class SmartThread:
         #              sync
         #                                           wait
         ###############################################################
-        self.cmd_runner = self.name
+        self.cmd_runner = self.get_current_smart_thread_name()
         self._verify_thread_is_current(request=ReqType.Smart_resume)
         self.request = ReqType.Smart_resume
         self.resumed_targets = set()
@@ -4301,7 +4310,7 @@ class SmartThread:
             mainline alpha exiting
 
         """
-        self.cmd_runner = self.name
+        self.cmd_runner = self.get_current_smart_thread_name()
         self._verify_thread_is_current(request=ReqType.Smart_sync)
         self.request = ReqType.Smart_sync
         self.synced_targets = set()
@@ -5183,6 +5192,7 @@ class SmartThread:
         timeout_value: Optional[IntFloat] = None,
         log_msg: Optional[str] = None,
         latest: int = 3,
+        cmd_runner: Optional[str] = None,
     ) -> str:
         """Issue an entry log message.
 
@@ -5193,6 +5203,7 @@ class SmartThread:
             log_msg: log message to append to the log msg
             latest: how far back in the call stack to go for
                 get_formatted_call_sequence
+            cmd_runner: name of smart thread running the request
 
         Returns:
             the log message to use for the exit call or empty string if
@@ -5202,8 +5213,11 @@ class SmartThread:
         if not logger.isEnabledFor(logging.DEBUG):
             return ""
 
+        if cmd_runner is None:
+            cmd_runner = self.cmd_runner
+
         log_msg_body = (
-            f"requestor: {self.cmd_runner}, "
+            f"requestor: {cmd_runner}, "
             f"group: {self.group_name}, "
             f"targets: {sorted(remotes)} "
             f"timeout value: {timeout_value} "
@@ -5224,7 +5238,10 @@ class SmartThread:
     # _verify_thread_is_current
     ####################################################################
     def _verify_thread_is_current(
-        self, request: ReqType, check_thread: bool = True
+        self,
+        request: ReqType,
+        check_thread: bool = True,
+        cmd_runner: Optional[str] = None,
     ) -> None:
         """Verify that SmartThread is running under the current thread.
 
@@ -5239,8 +5256,10 @@ class SmartThread:
 
         """
         if check_thread and self.thread is not threading.current_thread():
+            if cmd_runner is None:
+                cmd_runner = self.cmd_runner
             error_msg = (
-                f"SmartThread {self.cmd_runner} raising "
+                f"SmartThread {cmd_runner} raising "
                 f"SmartThreadDetectedOpFromForeignThread error "
                 f"while processing request {request.value}. "
                 f"The SmartThread object used for the invocation is "
@@ -5255,8 +5274,10 @@ class SmartThread:
             or self.name not in SmartThread._registry[self.group_name]
             or id(self) != id(SmartThread._registry[self.group_name][self.name])
         ):
+            if cmd_runner is None:
+                cmd_runner = self.cmd_runner
             error_msg = (
-                f"SmartThread {self.cmd_runner} raising "
+                f"SmartThread {cmd_runner} raising "
                 f"SmartThreadDetectedOpFromForeignThread error "
                 f"while processing request {request.value}. "
                 "The SmartThread object used for the invocation is not "
