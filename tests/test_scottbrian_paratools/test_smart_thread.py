@@ -15601,13 +15601,12 @@ class ConfigVerifier:
             recv_type: type of recv to do
 
         """
-        senders: set[str] = set()
-        for idx in range(num_senders):
-            senders |= {"sender_" + str(idx)}
+        senders: set[str] = get_names(stem="sender_", count=num_senders)
 
-        non_senders: set[str] = set()
-        for idx in range(3):
-            non_senders |= {"non_sender_" + str(idx)}
+        # non_senders are used to allow the smart_recv to specify a non
+        # empty senders arg when there are no actual senders
+        num_non_senders = 3
+        non_senders: set[str] = get_names(stem="non_sender_", count=num_non_senders)
 
         receiver = "receiver_1"
 
@@ -15621,34 +15620,34 @@ class ConfigVerifier:
             text="build_recv_basic_scenario",
         )
 
-        recv_senders: set[str] = set()
+        smt_recv_senders_arg: set[str] = set()
         if recv_type == RecvType.PartialSenders:
-            num_recv_senders = len(senders) // 2
+            num_smt_recv_senders_arg = len(senders) // 2
         elif recv_type == RecvType.MatchSenders:
-            num_recv_senders = len(senders)
+            num_smt_recv_senders_arg = len(senders)
         elif recv_type == RecvType.ExtraSenders:
-            num_recv_senders = len(senders)
-            recv_senders |= non_senders
+            num_smt_recv_senders_arg = len(senders)
+            smt_recv_senders_arg |= non_senders
         else:  # recv_type == RecvType.UnmatchSenders:
-            num_recv_senders = 0
-            recv_senders |= non_senders
+            num_smt_recv_senders_arg = 0
+            smt_recv_senders_arg |= non_senders
 
         for idx, sender_name in enumerate(senders):
-            if num_recv_senders <= idx:
+            if num_smt_recv_senders_arg <= idx:
                 break
-            recv_senders |= {sender_name}
+            smt_recv_senders_arg |= {sender_name}
 
         # make sure we have a non-empty set for smart_recv in case
         # num_senders is zero or too small for PartialResumers to get
         # at least 1 sender
-        if not recv_senders:
-            recv_senders |= non_senders
-        exp_senders: set[str] = senders & recv_senders
+        if not smt_recv_senders_arg:
+            smt_recv_senders_arg |= non_senders
+        exp_senders: set[str] = senders & smt_recv_senders_arg
 
         recv_sender_count: Optional[int] = None
         if sender_count > 0:  # if we want sender_count
             # make sure we specify a legal value
-            recv_sender_count = min(sender_count, len(recv_senders))
+            recv_sender_count = min(sender_count, len(smt_recv_senders_arg))
 
         ################################################################
         # send messages
@@ -15678,13 +15677,13 @@ class ConfigVerifier:
         # receive messages
         ################################################################
         timeout: int = 0
-        timeout_remotes: set[str] = recv_senders - exp_senders
+        timeout_remotes: set[str] = smt_recv_senders_arg - exp_senders
         if exp_senders:
             if recv_sender_count:
                 if len(exp_senders) < recv_sender_count:
                     timeout = 1
             else:
-                if recv_senders != exp_senders:
+                if smt_recv_senders_arg != exp_senders:
                     timeout = 1
         else:
             timeout = 1
@@ -15693,7 +15692,7 @@ class ConfigVerifier:
             recv_msg_serial_num = self.add_cmd(
                 RecvMsg(
                     cmd_runners=receiver,
-                    senders=recv_senders,
+                    senders=smt_recv_senders_arg,
                     exp_senders=exp_senders,
                     sender_count=recv_sender_count,
                     exp_msgs=msgs_to_send,
@@ -15703,7 +15702,7 @@ class ConfigVerifier:
             recv_msg_serial_num = self.add_cmd(
                 RecvMsgTimeoutTrue(
                     cmd_runners=receiver,
-                    senders=recv_senders,
+                    senders=smt_recv_senders_arg,
                     exp_senders=exp_senders,
                     sender_count=recv_sender_count,
                     timeout=1,
@@ -21774,7 +21773,7 @@ class ConfigVerifier:
             full_send_q_msg = ""
 
         return (
-            f"{cmd_runner} raising {error_str} {targets_msg}"
+            rf"{cmd_runner} \(test1\) raising {error_str} {targets_msg}"
             f"{pending_msg}{stopped_msg}{unreg_msg}"
             f"{deadlock_msg}{full_send_q_msg}"
         )
@@ -29419,8 +29418,8 @@ class TestSmartThreadSmokeTest:
                 r"alpha \(test1\) set state for thread alpha from "
                 "ThreadState.Registered to ThreadState.Alive"
             ),
-            ("smart_init _add_to_pair_array entry: " r"alpha \(test1\), target: alpha"),
-            ("smart_init _add_to_pair_array exit: " r"alpha \(test1\), target: alpha"),
+            (r"smart_init _add_to_pair_array entry: alpha \(test1\), target: alpha"),
+            (r"smart_init _add_to_pair_array exit: alpha \(test1\), target: alpha"),
             (r"smart_init _register exit: alpha \(test1\), target: alpha"),
             (
                 r"smart_init exit: requestor: alpha \(test1\), targets: "
@@ -29468,7 +29467,7 @@ class TestSmartThreadSmokeTest:
                 r"beta \(test1\) set state for thread beta from "
                 "ThreadState.Initialized to ThreadState.Registered"
             ),
-            ("smart_init _add_to_pair_array entry: " r"beta \(test1\), target: beta"),
+            (r"smart_init _add_to_pair_array entry: beta \(test1\), target: beta"),
             (
                 r"beta \(test1\) added PairKey\(name0='alpha', name1='beta'\) to the "
                 "_pair_array"
@@ -29482,7 +29481,7 @@ class TestSmartThreadSmokeTest:
                 r"for PairKey\(name0='alpha', name1='beta'\), name = beta"
             ),
             (rf"beta \(test1\) updated _pair_array at UTC {time_match}"),
-            ("smart_init _add_to_pair_array exit: " r"beta \(test1\), target: beta"),
+            (r"smart_init _add_to_pair_array exit: beta \(test1\), target: beta"),
             (r"smart_init _register exit: beta \(test1\), target: beta"),
             (
                 r"smart_start entry: requestor: beta \(test1\), targets: "
@@ -29711,7 +29710,7 @@ class TestSmartThreadSmokeTest:
                 r"beta \(test1\) set state for thread beta from "
                 "ThreadState.Initialized to ThreadState.Registered"
             ),
-            ("smart_init _add_to_pair_array entry: " r"beta \(test1\), target: beta"),
+            (r"smart_init _add_to_pair_array entry: beta \(test1\), target: beta"),
             (
                 r"beta \(test1\) added PairKey\(name0='alpha', name1='beta'\) to the "
                 "_pair_array"
@@ -29725,7 +29724,7 @@ class TestSmartThreadSmokeTest:
                 r"for PairKey\(name0='alpha', name1='beta'\), name = beta"
             ),
             (rf"beta \(test1\) updated _pair_array at UTC {time_match}"),
-            ("smart_init _add_to_pair_array exit: " r"beta \(test1\), target: beta"),
+            (r"smart_init _add_to_pair_array exit: beta \(test1\), target: beta"),
             (r"smart_init _register exit: beta \(test1\), target: beta"),
             (
                 r"smart_init exit: requestor: beta \(test1\), targets: "
@@ -30211,7 +30210,7 @@ class TestSmartThreadErrors:
             same_name = True
 
         check_msg = False
-        new_thread = re.escape(f"<TargetThread({new_name_arg}, initial)>")
+        new_thread = r"<TargetThread\(Thread-[0-9]+ \(f1\), initial\)>"
         cmd_runner = re.escape(f"{first_name_arg} ({first_group_name_arg})")
         if first_thread_arg == st.ThreadCreate.Current:
             first_smart_thread = st.SmartThread(
@@ -30850,7 +30849,7 @@ class TestSmartThreadErrors:
             )
 
         exp_error_msg = (
-            "SmartThread alpha \(test1\) raising "
+            r"SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing request "
             "smart_send. "
             "Mutually exclusive arguments msg and msg_dict were both "
@@ -30868,7 +30867,7 @@ class TestSmartThreadErrors:
             alpha_thread.smart_send(msg_dict={"beta": "hi beta"}, receivers=set())
 
         exp_error_msg = (
-            "SmartThread alpha \(test1\) raising "
+            r"SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing request "
             "smart_send. "
             "Mutually exclusive arguments msg_dict and msg or "
@@ -30886,7 +30885,7 @@ class TestSmartThreadErrors:
             alpha_thread.smart_send(msg="hi beta", msg_dict={"beta": "hello beta"})
 
         exp_error_msg = (
-            "SmartThread alpha \(test1\) raising "
+            r"SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing request "
             "smart_send. "
             "Mutually exclusive arguments msg_dict and msg or "
@@ -30904,7 +30903,7 @@ class TestSmartThreadErrors:
             alpha_thread.smart_send()
 
         exp_error_msg = (
-            "SmartThread alpha \(test1\) raising "
+            r"SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing request "
             "smart_send. "
             "The smart_send request failed to specify "
@@ -30922,7 +30921,7 @@ class TestSmartThreadErrors:
             alpha_thread.smart_send(receivers="beta")
 
         exp_error_msg = (
-            "SmartThread alpha \(test1\) raising "
+            r"SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing request "
             "smart_send. "
             "The smart_send request failed to specify "
@@ -30940,7 +30939,7 @@ class TestSmartThreadErrors:
             alpha_thread.smart_send(msg="hi beta")
 
         exp_error_msg = (
-            "SmartThread alpha \(test1\) raising "
+            r"SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing request "
             "smart_send. "
             "The smart_send request failed to specify "
@@ -30985,7 +30984,7 @@ class TestSmartThreadErrors:
             alpha_thread.smart_recv(senders="beta", sender_count=-1)
 
         exp_error_msg = (
-            "SmartThread alpha \(test1\) raising "
+            r"SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing request "
             "smart_recv. "
             "The value specified for sender_count=-1 is not valid. "
@@ -31005,7 +31004,7 @@ class TestSmartThreadErrors:
             alpha_thread.smart_recv(senders="beta", sender_count=0)
 
         exp_error_msg = (
-            "SmartThread alpha \(test1\) raising "
+            r"SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing request "
             "smart_recv. "
             "The value specified for sender_count=0 is not valid. "
@@ -31025,7 +31024,7 @@ class TestSmartThreadErrors:
             alpha_thread.smart_recv(senders="beta", sender_count=2)
 
         exp_error_msg = (
-            "SmartThread alpha \(test1\) raising "
+            r"SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing request "
             "smart_recv. "
             "The value specified for sender_count=2 is not valid. "
@@ -31072,7 +31071,7 @@ class TestSmartThreadErrors:
             alpha_thread.smart_wait(resumers="beta", resumer_count=-1)
 
         exp_error_msg = (
-            "SmartThread alpha \(test1\) raising "
+            r"SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing request "
             "smart_wait. "
             "The value specified for resumer_count=-1 is not valid. "
@@ -31092,7 +31091,7 @@ class TestSmartThreadErrors:
             alpha_thread.smart_wait(resumers="beta", resumer_count=0)
 
         exp_error_msg = (
-            "SmartThread alpha \(test1\) raising "
+            r"SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing request "
             "smart_wait. "
             "The value specified for resumer_count=0 is not valid. "
@@ -31112,7 +31111,7 @@ class TestSmartThreadErrors:
             alpha_thread.smart_wait(resumers="beta", resumer_count=2)
 
         exp_error_msg = (
-            "SmartThread alpha \(test1\) raising "
+            r"SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing request "
             "smart_wait. "
             "The value specified for resumer_count=2 is not valid. "
@@ -31443,7 +31442,9 @@ class TestSmartThreadErrors:
             f"{not_registered_msg}{deadlock_msg}{full_send_q_msg}"
         )
 
-        exp_error_msg = f"alpha raising " f"SmartThreadRemoteThreadNotAlive {msg_suite}"
+        exp_error_msg = (
+            r"alpha \(test1\) raising SmartThreadRemoteThreadNotAlive " f"{msg_suite}"
+        )
 
         logger.debug(exp_error_msg)
         assert re.fullmatch(exp_error_msg, str(exc.value))
@@ -31706,7 +31707,7 @@ class TestSmartThreadErrors:
                 )
 
         exp_error_msg = (
-            "SmartThread alpha \(test1\) raising SmartThreadInvalidInput "
+            r"SmartThread alpha \(test1\) raising SmartThreadInvalidInput "
             f"error while processing request {request_type_arg}. "
             r"Targets \['alpha'\] includes alpha which is not "
             "permitted except for request smart_start."
@@ -31762,7 +31763,7 @@ class TestSmartThreadErrors:
                 )
 
         exp_error_msg = (
-            "SmartThread alpha \(test1\) raising SmartThreadInvalidInput "
+            r"SmartThread alpha \(test1\) raising SmartThreadInvalidInput "
             f"error while processing request {request_type_arg}. "
             r"Targets \['alpha'\] includes alpha which is not "
             "permitted except for request smart_start."
@@ -32099,10 +32100,6 @@ class TestSmartThreadErrors:
                 beta_1_s_thread.smart_start()
 
             # verify error message
-            if group_name_arg in ["test1", "test2"]:
-                cmd_runner = "alpha"
-            else:
-                cmd_runner = "beta"
             exp_error_msg = (
                 f"SmartThread beta ({group_name_arg}) raising "
                 "SmartThreadDetectedOpFromForeignThread error "

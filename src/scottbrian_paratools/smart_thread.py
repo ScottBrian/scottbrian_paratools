@@ -700,7 +700,7 @@ class SmartThread:
 
             """
             super().__init__(
-                target=target, args=args or (), kwargs=kwargs or {}, name=name
+                target=target, args=args or (), kwargs=kwargs or {}  # , name=name
             )
             self.smart_thread = smart_thread
 
@@ -4949,7 +4949,9 @@ class SmartThread:
         # If an error should be raised for stopped threads
         if stopped_remotes:
             error_msg = (
-                f"{self.name} raising " f"SmartThreadRemoteThreadNotAlive {msg_suite}"
+                f"{self.log_name} raising "
+                f"SmartThreadRemoteThreadNotAlive"
+                f" {msg_suite}"
             )
             logger.error(error_msg)
             raise SmartThreadRemoteThreadNotAlive(error_msg)
@@ -4957,7 +4959,7 @@ class SmartThread:
         # If an error should be raised for unregistered threads
         elif not_registered_remotes:
             error_msg = (
-                f"{self.name} raising "
+                f"{self.log_name} raising "
                 f"SmartThreadRemoteThreadNotRegistered {msg_suite}"
             )
             logger.error(error_msg)
@@ -4965,7 +4967,7 @@ class SmartThread:
 
         elif deadlock_remotes:
             error_msg = (
-                f"{self.name} raising " f"SmartThreadDeadlockDetected {msg_suite}"
+                f"{self.log_name} raising " f"SmartThreadDeadlockDetected {msg_suite}"
             )
             logger.error(error_msg)
             raise SmartThreadDeadlockDetected(error_msg)
@@ -4976,14 +4978,14 @@ class SmartThread:
         # was instantiated.
         elif timer is not None and timer.is_expired():
             error_msg = (
-                f"{self.name} raising " f"SmartThreadRequestTimedOut {msg_suite}"
+                f"{self.log_name} raising " f"SmartThreadRequestTimedOut {msg_suite}"
             )
             logger.error(error_msg)
             raise SmartThreadRequestTimedOut(error_msg)
 
         else:
             error_msg = (
-                f"_handle_loop_errors {self.name} called without an "
+                f"_handle_loop_errors {self.log_name} called without an "
                 "error - raising SmartThreadInvalidInput"
             )
             logger.error(error_msg)
