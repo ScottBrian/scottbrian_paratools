@@ -19139,7 +19139,8 @@ class ConfigVerifier:
         else:
             auto_start_decision = AutoStartDecision.auto_start_no
 
-        pe = self.pending_events[cmd_runner]
+        # pe = self.pending_events[cmd_runner]
+        pe = self.pending_events[name]
         pe[PE.start_request].append(
             StartRequest(
                 req_type=st.ReqType.Smart_init,
@@ -19784,6 +19785,7 @@ class ConfigVerifier:
                 f"encountered unexpected log msg: {log_msg}"
             )
             self.log_test_msg(error_msg)
+            self.log_test_msg(f"{pe}")
             raise UnexpectedEvent(error_msg)
 
         pe[PE.request_msg][req_key] -= 1
@@ -20869,7 +20871,7 @@ class ConfigVerifier:
             )
 
         pe[PE.set_state_msg][state_key] -= 1
-        self.add_log_msg(log_msg)
+        self.add_log_msg(re.escape(log_msg))
 
         if to_state != st.ThreadState.Unregistered:
             if target not in self.expected_registered:
@@ -21235,7 +21237,7 @@ class ConfigVerifier:
             raise UnexpectedEvent(error_msg)
 
         pe[PE.subprocess_msg][sub_key] -= 1
-        self.add_log_msg(log_msg)
+        self.add_log_msg(re.escape(log_msg))
 
         ################################################################
         # call handler for subprocess
@@ -30023,7 +30025,7 @@ class TestSmartThreadErrors:
             st.SmartThread(group_name="", name="alpha")
 
         exp_error_msg = (
-            f"SmartThread {threading.current_thread().name} "
+            f"SmartThread "
             f"raising SmartThreadIncorrectNameSpecified error while "
             f"processing request smart_init. "
             f"It was detected that the group_name='' specified "
@@ -30043,7 +30045,7 @@ class TestSmartThreadErrors:
             st.SmartThread(group_name=1, name="alpha")  # type: ignore
 
         exp_error_msg = (
-            f"SmartThread {threading.current_thread().name} "
+            f"SmartThread "
             f"raising SmartThreadIncorrectNameSpecified error while "
             f"processing request smart_init. "
             f"It was detected that the group_name=1 specified "
@@ -30067,7 +30069,7 @@ class TestSmartThreadErrors:
             st.SmartThread(group_name="test1", name="")
 
         exp_error_msg = (
-            f"SmartThread {threading.current_thread().name} "
+            f"SmartThread "
             f"raising SmartThreadIncorrectNameSpecified error while "
             f"processing request smart_init. "
             f"It was detected that the name='' specified "
@@ -30087,7 +30089,7 @@ class TestSmartThreadErrors:
             st.SmartThread(group_name="test1", name=1)  # type: ignore
 
         exp_error_msg = (
-            f"SmartThread {threading.current_thread().name} "
+            f"SmartThread "
             f"raising SmartThreadIncorrectNameSpecified error while "
             f"processing request smart_init. "
             f"It was detected that the name=1 specified "
@@ -30112,7 +30114,7 @@ class TestSmartThreadErrors:
             )
 
         exp_error_msg = (
-            "SmartThread alpha raising "
+            r"SmartThread alpha \(test1\) raising "
             "SmartThreadMutuallyExclusiveTargetThreadSpecified error "
             "while processing request smart_init. "
             "Arguments for mutually exclusive parameters target_rtn and "
@@ -30131,7 +30133,7 @@ class TestSmartThreadErrors:
             st.SmartThread(group_name="test1", name="alpha", args=(1,))
 
         exp_error_msg = (
-            "SmartThread alpha raising "
+            r"SmartThread alpha \(test1\) raising "
             "SmartThreadArgsSpecificationWithoutTarget error while "
             "processing request smart_init. "
             "Arguments for parameters args or kwargs were specified, "
@@ -30168,25 +30170,29 @@ class TestSmartThreadErrors:
     ####################################################################
     # test_smart_thread_register_errors
     ####################################################################
-    @pytest.mark.parametrize("existing_name_arg", ["alpha", "beta", "charlie"])
+    @pytest.mark.parametrize("first_name_arg", ["alpha", "beta", "charlie"])
+    @pytest.mark.parametrize("first_group_name_arg", ["test1"])
     @pytest.mark.parametrize(
-        "existing_thread_arg",
+        "first_thread_arg",
         [st.ThreadCreate.Current, st.ThreadCreate.Target, st.ThreadCreate.Thread],
     )
     @pytest.mark.parametrize("new_name_arg", ["alpha", "beta", "charlie"])
     @pytest.mark.parametrize("new_same_thread_arg", [True, False])
+    @pytest.mark.parametrize("new_group_name_arg", ["test1"])
     def test_smart_thread_register_errors(
         self,
-        existing_name_arg: str,
-        existing_thread_arg: st.ThreadCreate,
+        first_name_arg: str,
+        first_group_name_arg: str,
+        first_thread_arg: st.ThreadCreate,
         new_name_arg: str,
+        new_group_name_arg: str,
         new_same_thread_arg: bool,
     ) -> None:
         """Test error cases for SmartThread.
 
         Args:
-            existing_name_arg: thread name for first smart_thread
-            existing_thread_arg: first smart_thread type of thread
+            first_name_arg: thread name for first smart_thread
+            first_thread_arg: first smart_thread type of thread
             new_name_arg: thread name for second smart_thread
             new_same_thread_arg: new smart_thread will use same thread
 
@@ -30201,74 +30207,89 @@ class TestSmartThreadErrors:
         logger.debug("mainline entered")
 
         same_name = False
-        if existing_name_arg == new_name_arg:
+        if first_name_arg == new_name_arg:
             same_name = True
 
         check_msg = False
         new_thread = re.escape(f"<TargetThread({new_name_arg}, initial)>")
-        cmd_runner = existing_name_arg
-        if existing_thread_arg == st.ThreadCreate.Current:
-            existing_smart_thread = st.SmartThread(
-                group_name="test1", name=existing_name_arg
+        cmd_runner = re.escape(f"{first_name_arg} ({first_group_name_arg})")
+        if first_thread_arg == st.ThreadCreate.Current:
+            first_smart_thread = st.SmartThread(
+                group_name=first_group_name_arg, name=first_name_arg
             )
             if same_name or new_same_thread_arg:
                 check_msg = True
                 with pytest.raises(st.SmartThreadRegistrationError) as exc:
+                    cmd_runner = re.escape(f"{new_name_arg} ({new_group_name_arg})")
                     if new_same_thread_arg:
-                        new_thread = re.escape(str(existing_smart_thread.thread))
-                        st.SmartThread(group_name="test1", name=new_name_arg)
+                        new_thread = re.escape(str(first_smart_thread.thread))
+                        st.SmartThread(group_name=new_group_name_arg, name=new_name_arg)
                     else:
                         st.SmartThread(
-                            group_name="test1", name=new_name_arg, target_rtn=f1
-                        )
-            else:
-                st.SmartThread(group_name="test1", name=new_name_arg, target_rtn=f1)
-        elif existing_thread_arg == st.ThreadCreate.Target:
-            existing_smart_thread = st.SmartThread(
-                group_name="test1", name=existing_name_arg, target_rtn=f1
-            )
-            if same_name or new_same_thread_arg:
-                check_msg = True
-                cmd_runner = new_name_arg
-                with pytest.raises(st.SmartThreadRegistrationError) as exc:
-                    if new_same_thread_arg:
-                        new_thread = re.escape(str(existing_smart_thread.thread))
-                        st.SmartThread(
-                            group_name="test1",
+                            group_name=new_group_name_arg,
                             name=new_name_arg,
-                            thread=existing_smart_thread.thread,
-                        )
-                    else:
-                        st.SmartThread(
-                            group_name="test1", name=new_name_arg, target_rtn=f1
+                            target_rtn=f1,
                         )
             else:
-                st.SmartThread(group_name="test1", name=new_name_arg, target_rtn=f1)
-        else:  # existing_thread_arg == st.ThreadCreate.Thread:
-            existing_thread = threading.Thread(target=f1)
-            existing_smart_thread = st.SmartThread(
-                group_name="test1", name=existing_name_arg, thread=existing_thread
+                st.SmartThread(
+                    group_name=new_group_name_arg, name=new_name_arg, target_rtn=f1
+                )
+        elif first_thread_arg == st.ThreadCreate.Target:
+            first_smart_thread = st.SmartThread(
+                group_name=first_group_name_arg, name=first_name_arg, target_rtn=f1
             )
             if same_name or new_same_thread_arg:
                 check_msg = True
-                cmd_runner = new_name_arg
+                cmd_runner = re.escape(f"{new_name_arg} ({new_group_name_arg})")
                 with pytest.raises(st.SmartThreadRegistrationError) as exc:
                     if new_same_thread_arg:
-                        new_thread = re.escape(str(existing_thread))
+                        new_thread = re.escape(str(first_smart_thread.thread))
                         st.SmartThread(
-                            group_name="test1",
+                            group_name=new_group_name_arg,
                             name=new_name_arg,
-                            thread=existing_thread,
+                            thread=first_smart_thread.thread,
                         )
                     else:
                         st.SmartThread(
-                            group_name="test1", name=new_name_arg, target_rtn=f1
+                            group_name=new_group_name_arg,
+                            name=new_name_arg,
+                            target_rtn=f1,
                         )
             else:
-                st.SmartThread(group_name="test1", name=new_name_arg, target_rtn=f1)
+                st.SmartThread(
+                    group_name=new_group_name_arg, name=new_name_arg, target_rtn=f1
+                )
+        else:  # first_thread_arg == st.ThreadCreate.Thread:
+            first_thread = threading.Thread(target=f1)
+            first_smart_thread = st.SmartThread(
+                group_name=first_group_name_arg,
+                name=first_name_arg,
+                thread=first_thread,
+            )
+            if same_name or new_same_thread_arg:
+                check_msg = True
+                cmd_runner = re.escape(f"{new_name_arg} ({new_group_name_arg})")
+                with pytest.raises(st.SmartThreadRegistrationError) as exc:
+                    if new_same_thread_arg:
+                        new_thread = re.escape(str(first_thread))
+                        st.SmartThread(
+                            group_name=new_group_name_arg,
+                            name=new_name_arg,
+                            thread=first_thread,
+                        )
+                    else:
+                        st.SmartThread(
+                            group_name=new_group_name_arg,
+                            name=new_name_arg,
+                            target_rtn=f1,
+                        )
+            else:
+                st.SmartThread(
+                    group_name=new_group_name_arg, name=new_name_arg, target_rtn=f1
+                )
 
         if check_msg:
-            existing_thread_str = re.escape(str(existing_smart_thread.thread))
+            first_thread_str = re.escape(str(first_smart_thread.thread))
 
             exp_error_msg = (
                 f"SmartThread {cmd_runner} "
@@ -30282,9 +30303,9 @@ class TestSmartThreadErrors:
                 f"New instance: name = {new_name_arg}, "
                 "id = [0-9]+, "
                 f"associated thread = {new_thread}. "
-                f"Existing instance: name = {existing_name_arg}, "
-                f"id = {id(existing_smart_thread)}, "
-                f"associated thread = {existing_thread_str}."
+                f"Existing instance: name = {first_name_arg}, "
+                f"id = {id(first_smart_thread)}, "
+                f"associated thread = {first_thread_str}."
             )
 
             logger.debug(f"{exp_error_msg=}")
@@ -30310,7 +30331,7 @@ class TestSmartThreadErrors:
             st.SmartThread(group_name="test1", name="beta")
 
         exp_error_msg = (
-            "SmartThread bad_name raising "
+            r"SmartThread beta \(test1\) raising "
             "SmartThreadErrorInRegistry error while processing "
             "request smart_init. "
             "Registry item with key alpha has non-matching "
@@ -30367,7 +30388,7 @@ class TestSmartThreadErrors:
             st.SmartThread(group_name="test1", name="beta", target_rtn=f1)
 
         exp_error_msg = (
-            "SmartThread alpha "
+            "SmartThread beta (test1) "
             "raising SmartThreadIncorrectData error while "
             "processing request smart_init. "
             "While attempting to add beta to the pair "
@@ -30402,7 +30423,7 @@ class TestSmartThreadErrors:
             st.SmartThread(group_name="test1", name="beta", target_rtn=f1)
 
         exp_error_msg = (
-            "SmartThread alpha "
+            "SmartThread beta (test1) "
             "raising SmartThreadIncorrectData error while "
             "processing request smart_init. "
             "While attempting to add beta to the pair "
@@ -30437,14 +30458,14 @@ class TestSmartThreadErrors:
             st.SmartThread(group_name="test1", name="beta", target_rtn=f1)
 
         exp_error_msg = (
-            f"SmartThread alpha "
-            f"raising SmartThreadIncorrectData error while "
-            f"processing request smart_init. "
-            f"While attempting to add beta to the pair "
+            "SmartThread beta (test1) "
+            "raising SmartThreadIncorrectData error while "
+            "processing request smart_init. "
+            "While attempting to add beta to the pair "
             f"array, it was detected that pair_key {pair_key} "
-            f"is already in the pair array with a "
-            f"status_blocks entry containing alpha "
-            f"that is not del_deferred."
+            "is already in the pair array with a "
+            "status_blocks entry containing alpha "
+            "that is not del_deferred."
         )
 
         assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
@@ -30485,7 +30506,7 @@ class TestSmartThreadErrors:
         ].status_blocks.keys()
 
         exp_error_msg = re.escape(
-            "SmartThread alpha "
+            "SmartThread beta (test1) "
             "raising SmartThreadIncorrectData error while "
             "processing request smart_init. "
             "While attempting to add beta to the pair "
@@ -30555,7 +30576,7 @@ class TestSmartThreadErrors:
                 )
 
         exp_error_msg = (
-            "SmartThread alpha raising "
+            r"SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing "
             f"request {request_type_arg}. "
             "It was detected that an argument for remote thread names "
@@ -30593,7 +30614,7 @@ class TestSmartThreadErrors:
                 )
 
         exp_error_msg = (
-            "SmartThread alpha raising "
+            r"SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing "
             f"request {request_type_arg}. "
             "Remote threads are required for the request but none were "
@@ -30639,7 +30660,7 @@ class TestSmartThreadErrors:
                 )
 
         exp_error_msg = (
-            "SmartThread alpha "
+            r"SmartThread alpha \(test1\) "
             "raising SmartThreadIncorrectNameSpecified error while "
             f"processing request {request_type_arg}. "
             f"It was detected that the name={bad_name} specified "
@@ -30659,7 +30680,7 @@ class TestSmartThreadErrors:
                 alpha_thread.smart_send(receivers=(43.7,), msg="hello")  # type: ignore
 
             exp_error_msg = (
-                "SmartThread alpha "
+                r"SmartThread alpha \(test1\) "
                 "raising SmartThreadIncorrectNameSpecified error while "
                 "processing request smart_send. "
                 "It was detected that the name=43.7 specified "
@@ -30677,7 +30698,7 @@ class TestSmartThreadErrors:
                 alpha_thread.smart_send(msg_dict=msgs_to_send)  # type: ignore
 
             exp_error_msg = (
-                "SmartThread alpha "
+                r"SmartThread alpha \(test1\) "
                 "raising SmartThreadIncorrectNameSpecified error while "
                 "processing request smart_send. "
                 "It was detected that the name=42 specified "
@@ -30695,7 +30716,7 @@ class TestSmartThreadErrors:
                 alpha_thread.smart_send(msg_dict=msgs_to_send1)
 
             exp_error_msg = (
-                "SmartThread alpha "
+                r"SmartThread alpha \(test1\) "
                 "raising SmartThreadIncorrectNameSpecified error while "
                 "processing request smart_send. "
                 "It was detected that the name='' specified "
@@ -30736,7 +30757,7 @@ class TestSmartThreadErrors:
         targets = set(("beta", "charlie"))
 
         exp_error_msg = (
-            "SmartThread alpha "
+            "SmartThread beta (test1) "
             "raising SmartThreadMultipleTargetsForSelfStart "
             "error while processing request smart_start. "
             "Request smart_start can not be done for multiple "
@@ -30744,6 +30765,7 @@ class TestSmartThreadErrors:
             "the smart_thread instance, in this case beta."
         )
 
+        logger.debug(exp_error_msg)
         assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
 
         print("\n", exc.value)
@@ -30755,13 +30777,14 @@ class TestSmartThreadErrors:
             beta_thread.smart_start()
 
         exp_error_msg = (
-            "SmartThread alpha "
+            "SmartThread beta (test1) "
             "raising SmartThreadAlreadyStarted error while "
             "processing request smart_start. "
             "Unable to start beta because beta "
             "has already been started."
         )
 
+        logger.debug(exp_error_msg)
         assert re.fullmatch(re.escape(exp_error_msg), str(exc1.value))
 
         print("\n", exc1.value)
@@ -30786,13 +30809,14 @@ class TestSmartThreadErrors:
             beta_thread.smart_start()
 
         exp_error_msg = (
-            "SmartThread alpha "
+            "SmartThread beta (test1) "
             "raising SmartThreadRemoteThreadNotRegistered "
             "error while processing request smart_start. "
             "Unable to start beta because beta "
             "is not registered."
         )
 
+        logger.debug(exp_error_msg)
         assert re.fullmatch(re.escape(exp_error_msg), str(exc2.value))
 
         print("\n", exc2.value)
@@ -30826,7 +30850,7 @@ class TestSmartThreadErrors:
             )
 
         exp_error_msg = (
-            "SmartThread alpha raising "
+            "SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing request "
             "smart_send. "
             "Mutually exclusive arguments msg and msg_dict were both "
@@ -30844,7 +30868,7 @@ class TestSmartThreadErrors:
             alpha_thread.smart_send(msg_dict={"beta": "hi beta"}, receivers=set())
 
         exp_error_msg = (
-            "SmartThread alpha raising "
+            "SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing request "
             "smart_send. "
             "Mutually exclusive arguments msg_dict and msg or "
@@ -30862,7 +30886,7 @@ class TestSmartThreadErrors:
             alpha_thread.smart_send(msg="hi beta", msg_dict={"beta": "hello beta"})
 
         exp_error_msg = (
-            "SmartThread alpha raising "
+            "SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing request "
             "smart_send. "
             "Mutually exclusive arguments msg_dict and msg or "
@@ -30880,7 +30904,7 @@ class TestSmartThreadErrors:
             alpha_thread.smart_send()
 
         exp_error_msg = (
-            "SmartThread alpha raising "
+            "SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing request "
             "smart_send. "
             "The smart_send request failed to specify "
@@ -30898,7 +30922,7 @@ class TestSmartThreadErrors:
             alpha_thread.smart_send(receivers="beta")
 
         exp_error_msg = (
-            "SmartThread alpha raising "
+            "SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing request "
             "smart_send. "
             "The smart_send request failed to specify "
@@ -30916,7 +30940,7 @@ class TestSmartThreadErrors:
             alpha_thread.smart_send(msg="hi beta")
 
         exp_error_msg = (
-            "SmartThread alpha raising "
+            "SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing request "
             "smart_send. "
             "The smart_send request failed to specify "
@@ -30961,7 +30985,7 @@ class TestSmartThreadErrors:
             alpha_thread.smart_recv(senders="beta", sender_count=-1)
 
         exp_error_msg = (
-            "SmartThread alpha raising "
+            "SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing request "
             "smart_recv. "
             "The value specified for sender_count=-1 is not valid. "
@@ -30981,7 +31005,7 @@ class TestSmartThreadErrors:
             alpha_thread.smart_recv(senders="beta", sender_count=0)
 
         exp_error_msg = (
-            "SmartThread alpha raising "
+            "SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing request "
             "smart_recv. "
             "The value specified for sender_count=0 is not valid. "
@@ -31001,7 +31025,7 @@ class TestSmartThreadErrors:
             alpha_thread.smart_recv(senders="beta", sender_count=2)
 
         exp_error_msg = (
-            "SmartThread alpha raising "
+            "SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing request "
             "smart_recv. "
             "The value specified for sender_count=2 is not valid. "
@@ -31048,7 +31072,7 @@ class TestSmartThreadErrors:
             alpha_thread.smart_wait(resumers="beta", resumer_count=-1)
 
         exp_error_msg = (
-            "SmartThread alpha raising "
+            "SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing request "
             "smart_wait. "
             "The value specified for resumer_count=-1 is not valid. "
@@ -31068,7 +31092,7 @@ class TestSmartThreadErrors:
             alpha_thread.smart_wait(resumers="beta", resumer_count=0)
 
         exp_error_msg = (
-            "SmartThread alpha raising "
+            "SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing request "
             "smart_wait. "
             "The value specified for resumer_count=0 is not valid. "
@@ -31088,7 +31112,7 @@ class TestSmartThreadErrors:
             alpha_thread.smart_wait(resumers="beta", resumer_count=2)
 
         exp_error_msg = (
-            "SmartThread alpha raising "
+            "SmartThread alpha \(test1\) raising "
             "SmartThreadInvalidInput error while processing request "
             "smart_wait. "
             "The value specified for resumer_count=2 is not valid. "
@@ -31196,7 +31220,7 @@ class TestSmartThreadErrors:
 
             if action == "action1":
                 exp_error_msg = (
-                    "SmartThread beta raising "
+                    "SmartThread beta (test1) raising "
                     "SmartThreadWorkDataException error while processing "
                     "request smart_wait. "
                     f"An expected entry for {found_pk_remote=} was not "
@@ -31204,7 +31228,7 @@ class TestSmartThreadErrors:
                 )
             elif action == "action2":
                 exp_error_msg = (
-                    "SmartThread beta raising "
+                    "SmartThread beta (test1) raising "
                     "SmartThreadWorkDataException error while processing "
                     "request smart_wait. "
                     f"An expected entry for {found_pk_remote=} was not "
@@ -31682,7 +31706,7 @@ class TestSmartThreadErrors:
                 )
 
         exp_error_msg = (
-            "SmartThread alpha raising SmartThreadInvalidInput "
+            "SmartThread alpha \(test1\) raising SmartThreadInvalidInput "
             f"error while processing request {request_type_arg}. "
             r"Targets \['alpha'\] includes alpha which is not "
             "permitted except for request smart_start."
@@ -31738,7 +31762,7 @@ class TestSmartThreadErrors:
                 )
 
         exp_error_msg = (
-            "SmartThread alpha raising SmartThreadInvalidInput "
+            "SmartThread alpha \(test1\) raising SmartThreadInvalidInput "
             f"error while processing request {request_type_arg}. "
             r"Targets \['alpha'\] includes alpha which is not "
             "permitted except for request smart_start."
@@ -31792,7 +31816,7 @@ class TestSmartThreadErrors:
             beta_thread.smart_start(targets="charlie")
 
         exp_error_msg = (
-            "SmartThread alpha raising "
+            "SmartThread beta (test1) raising "
             "SmartThreadDetectedOpFromForeignThread error "
             "while processing request smart_start. "
             "The SmartThread object used for the invocation is "
@@ -31810,7 +31834,7 @@ class TestSmartThreadErrors:
             beta_thread.smart_unreg(targets="charlie")
 
         exp_error_msg = (
-            "SmartThread alpha raising "
+            "SmartThread beta (test1) raising "
             "SmartThreadDetectedOpFromForeignThread error "
             "while processing request smart_unreg. "
             "The SmartThread object used for the invocation is "
@@ -31828,7 +31852,7 @@ class TestSmartThreadErrors:
             beta_thread.smart_join(targets="charlie")
 
         exp_error_msg = (
-            "SmartThread alpha raising "
+            "SmartThread beta (test1) raising "
             "SmartThreadDetectedOpFromForeignThread error "
             "while processing request smart_join. "
             "The SmartThread object used for the invocation is "
@@ -31846,7 +31870,7 @@ class TestSmartThreadErrors:
             beta_thread.smart_recv(senders="alpha")
 
         exp_error_msg = (
-            "SmartThread alpha raising "
+            "SmartThread beta (test1) raising "
             "SmartThreadDetectedOpFromForeignThread error "
             "while processing request smart_recv. "
             "The SmartThread object used for the invocation is "
@@ -31864,7 +31888,7 @@ class TestSmartThreadErrors:
             beta_thread.smart_send(receivers="alpha", msg="hi alpha")
 
         exp_error_msg = (
-            "SmartThread alpha raising "
+            "SmartThread beta (test1) raising "
             "SmartThreadDetectedOpFromForeignThread error "
             "while processing request smart_send. "
             "The SmartThread object used for the invocation is "
@@ -31882,7 +31906,7 @@ class TestSmartThreadErrors:
             beta_thread.smart_wait(resumers="alpha")
 
         exp_error_msg = (
-            "SmartThread alpha raising "
+            "SmartThread beta (test1) raising "
             "SmartThreadDetectedOpFromForeignThread error "
             "while processing request smart_wait. "
             "The SmartThread object used for the invocation is "
@@ -31900,7 +31924,7 @@ class TestSmartThreadErrors:
             beta_thread.smart_resume(waiters="alpha")
 
         exp_error_msg = (
-            "SmartThread alpha raising "
+            "SmartThread beta (test1) raising "
             "SmartThreadDetectedOpFromForeignThread error "
             "while processing request smart_resume. "
             "The SmartThread object used for the invocation is "
@@ -31918,7 +31942,7 @@ class TestSmartThreadErrors:
             beta_thread.smart_sync(targets="alpha")
 
         exp_error_msg = (
-            "SmartThread alpha raising "
+            "SmartThread beta (test1) raising "
             "SmartThreadDetectedOpFromForeignThread error "
             "while processing request smart_sync. "
             "The SmartThread object used for the invocation is "
@@ -31986,7 +32010,7 @@ class TestSmartThreadErrors:
                     )
 
             f1_exp_error_msg = (
-                "SmartThread beta raising "
+                f"SmartThread beta ({group_name_arg}) raising "
                 "SmartThreadDetectedOpFromForeignThread error "
                 f"while processing request {req}. "
                 "The SmartThread object used for the invocation is not "
@@ -31998,7 +32022,7 @@ class TestSmartThreadErrors:
                 f"thread: {beta_1_s_thread.thread}."
             )
 
-            # logger.debug(exp_error_msg)
+            logger.debug(f1_exp_error_msg)
             assert re.fullmatch(re.escape(f1_exp_error_msg), str(f1_exc.value))
             print("\n", f1_exc.value)
 
@@ -32080,7 +32104,7 @@ class TestSmartThreadErrors:
             else:
                 cmd_runner = "beta"
             exp_error_msg = (
-                f"SmartThread {cmd_runner} raising "
+                f"SmartThread beta ({group_name_arg}) raising "
                 "SmartThreadDetectedOpFromForeignThread error "
                 "while processing request smart_start. "
                 "The SmartThread object used for the invocation is not "
@@ -32191,7 +32215,7 @@ class TestSmartThreadErrors:
                     )
 
             f1_exp_error_msg = (
-                "SmartThread beta raising "
+                "SmartThread beta (test1) raising "
                 "SmartThreadDetectedOpFromForeignThread error "
                 f"while processing request {req}. "
                 "The SmartThread object used for the invocation is not "
@@ -32203,7 +32227,7 @@ class TestSmartThreadErrors:
                 f"thread: {beta_1_s_thread.thread}."
             )
 
-            # logger.debug(exp_error_msg)
+            logger.debug(f1_exp_error_msg)
             assert re.fullmatch(re.escape(f1_exp_error_msg), str(f1_exc.value))
             print("\n", f1_exc.value)
 
@@ -32292,7 +32316,7 @@ class TestSmartThreadErrors:
             logger.debug("alpha synced with beta")
         else:
             raise InvalidInputDetected(
-                "test_foreign_op_scenario3 mainline received " f"{request_type_arg=}"
+                f"test_foreign_op_scenario3 mainline received {request_type_arg=}"
             )
 
         msgs.queue_msg("beta_2", "Exit")
