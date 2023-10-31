@@ -30024,12 +30024,12 @@ class TestSmartThreadErrors:
             st.SmartThread(group_name="", name="alpha")
 
         exp_error_msg = (
-            f"SmartThread "
-            f"raising SmartThreadIncorrectNameSpecified error while "
-            f"processing request smart_init. "
-            f"It was detected that the group_name='' specified "
-            f"for the new thread is an empty string. Please "
-            f"specify a non-empty string for the group name."
+            "SmartThread "
+            "raising SmartThreadIncorrectNameSpecified error while "
+            "processing request smart_init. "
+            "It was detected that the group_name='' specified "
+            "for the new thread is an empty string. Please "
+            "specify a non-empty string for the group name."
         )
 
         logger.debug(exp_error_msg)
@@ -30044,12 +30044,12 @@ class TestSmartThreadErrors:
             st.SmartThread(group_name=1, name="alpha")  # type: ignore
 
         exp_error_msg = (
-            f"SmartThread "
-            f"raising SmartThreadIncorrectNameSpecified error while "
-            f"processing request smart_init. "
-            f"It was detected that the group_name=1 specified "
-            f"for the new thread is not a string. Please "
-            f"specify a non-empty string for the group name."
+            "SmartThread "
+            "raising SmartThreadIncorrectNameSpecified error while "
+            "processing request smart_init. "
+            "It was detected that the group_name=1 specified "
+            "for the new thread is not a string. Please "
+            "specify a non-empty string for the group name."
         )
 
         logger.debug(exp_error_msg)
@@ -30068,12 +30068,12 @@ class TestSmartThreadErrors:
             st.SmartThread(group_name="test1", name="")
 
         exp_error_msg = (
-            f"SmartThread "
-            f"raising SmartThreadIncorrectNameSpecified error while "
-            f"processing request smart_init. "
-            f"It was detected that the name='' specified "
-            f"for the new thread is an empty string. Please "
-            f"specify a non-empty string for the thread name."
+            "SmartThread "
+            "raising SmartThreadIncorrectNameSpecified error while "
+            "processing request smart_init. "
+            "It was detected that the name='' specified "
+            "for the new thread is an empty string. Please "
+            "specify a non-empty string for the thread name."
         )
 
         logger.debug(exp_error_msg)
@@ -30088,12 +30088,12 @@ class TestSmartThreadErrors:
             st.SmartThread(group_name="test1", name=1)  # type: ignore
 
         exp_error_msg = (
-            f"SmartThread "
-            f"raising SmartThreadIncorrectNameSpecified error while "
-            f"processing request smart_init. "
-            f"It was detected that the name=1 specified "
-            f"for the new thread is not a string. Please "
-            f"specify a non-empty string for the thread name."
+            "SmartThread "
+            "raising SmartThreadIncorrectNameSpecified error while "
+            "processing request smart_init. "
+            "It was detected that the name=1 specified "
+            "for the new thread is not a string. Please "
+            "specify a non-empty string for the thread name."
         )
 
         logger.debug(exp_error_msg)
@@ -31383,7 +31383,8 @@ class TestSmartThreadErrors:
                 )
 
                 f1_exp_error_msg = (
-                    f"beta raising " f"SmartThreadDeadlockDetected {f1_msg_suite}"
+                    r"beta \(test1\) raising SmartThreadDeadlockDetected "
+                    f"{f1_msg_suite}"
                 )
 
                 logger.debug(f1_exp_error_msg)
@@ -31443,7 +31444,7 @@ class TestSmartThreadErrors:
         )
 
         exp_error_msg = (
-            r"alpha \(test1\) raising SmartThreadRemoteThreadNotAlive " f"{msg_suite}"
+            rf"alpha \(test1\) raising SmartThreadRemoteThreadNotAlive {msg_suite}"
         )
 
         logger.debug(exp_error_msg)
@@ -31477,7 +31478,7 @@ class TestSmartThreadErrors:
         )
 
         exp_error_msg = (
-            f"alpha raising " f"SmartThreadRemoteThreadNotRegistered {msg_suite}"
+            rf"alpha \(test1\) raising SmartThreadRemoteThreadNotRegistered {msg_suite}"
         )
 
         logger.debug(exp_error_msg)
@@ -31509,7 +31510,7 @@ class TestSmartThreadErrors:
         )
 
         exp_error_msg = (
-            f"alpha raising " f"SmartThreadRemoteThreadNotRegistered {msg_suite}"
+            rf"alpha \(test1\) raising SmartThreadRemoteThreadNotRegistered {msg_suite}"
         )
 
         logger.debug(exp_error_msg)
@@ -31554,7 +31555,9 @@ class TestSmartThreadErrors:
             f"{not_registered_msg}{deadlock_msg}{full_send_q_msg}"
         )
 
-        exp_error_msg = f"alpha raising " f"SmartThreadDeadlockDetected {msg_suite}"
+        exp_error_msg = (
+            r"alpha \(test1\) raising SmartThreadDeadlockDetected " f"{msg_suite}"
+        )
 
         logger.debug(exp_error_msg)
         assert re.fullmatch(exp_error_msg, str(exc2.value))
@@ -31595,7 +31598,9 @@ class TestSmartThreadErrors:
             f"{not_registered_msg}{deadlock_msg}{full_send_q_msg}"
         )
 
-        exp_error_msg = f"alpha raising " f"SmartThreadRequestTimedOut {msg_suite}"
+        exp_error_msg = (
+            r"alpha \(test1\) raising SmartThreadRequestTimedOut " f"{msg_suite}"
+        )
 
         logger.debug(exp_error_msg)
         assert re.fullmatch(exp_error_msg, str(exc3.value))
@@ -31644,7 +31649,9 @@ class TestSmartThreadErrors:
             f"{not_registered_msg}{deadlock_msg}{full_send_q_msg}"
         )
 
-        exp_error_msg = f"alpha raising " f"SmartThreadRequestTimedOut {msg_suite}"
+        exp_error_msg = (
+            r"alpha \(test1\) raising SmartThreadRequestTimedOut " f"{msg_suite}"
+        )
 
         logger.debug(exp_error_msg)
         assert re.fullmatch(exp_error_msg, str(exc3.value))
@@ -31660,7 +31667,7 @@ class TestSmartThreadErrors:
             )
 
         exp_error_msg = (
-            "_handle_loop_errors alpha called without an "
+            r"_handle_loop_errors alpha \(test1\) called without an "
             "error - raising SmartThreadInvalidInput"
         )
 
