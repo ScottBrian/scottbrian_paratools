@@ -1141,6 +1141,29 @@ class SmartThread:
         return None
 
     ####################################################################
+    # find_smart_threads
+    ####################################################################
+    @staticmethod
+    def find_smart_threads(search_thread: threading.Thread) -> list["SmartThread"]:
+        """Get the smart thread for the current thread or None.
+
+        Args:
+            search_thread: thread to search for
+
+        Returns:
+             A list (possibly empty) of SmartThread instances that are
+                 associated with the input search_thread.
+        """
+        ret_list: list[SmartThread] = []
+        with sel.SELockShare(SmartThread._registry_lock):
+            for group_name, registry in SmartThread._registry.items():
+                for thread_name, smart_thread in registry.items():
+                    if smart_thread.thread is search_thread:
+                        ret_list.append(smart_thread)
+
+        return ret_list
+
+    ####################################################################
     # get_active_names
     ####################################################################
     @staticmethod
@@ -2991,7 +3014,7 @@ class SmartThread:
             if remote_state == ThreadState.Stopped:
                 request_block.stopped_remotes |= {pk_remote.remote}
                 logger.debug(
-                    f"{self.name} smart_send detected remote "
+                    f"{self.log_name} smart_send detected remote "
                     f"{pk_remote.remote} is stopped"
                 )
 
@@ -3467,7 +3490,7 @@ class SmartThread:
                 if self._get_target_state(pk_remote=pk_remote) == ThreadState.Stopped:
                     request_block.stopped_remotes |= {pk_remote.remote}
                     logger.debug(
-                        f"{self.name} smart_recv detected remote "
+                        f"{self.log_name} smart_recv detected remote "
                         f"{pk_remote.remote} is stopped"
                     )
 
@@ -3894,7 +3917,7 @@ class SmartThread:
             if self._get_target_state(pk_remote=pk_remote) == ThreadState.Stopped:
                 request_block.stopped_remotes |= {pk_remote.remote}
                 logger.debug(
-                    f"{self.name} smart_wait detected remote "
+                    f"{self.log_name} smart_wait detected remote "
                     f"{pk_remote.remote} is stopped"
                 )
 
@@ -4177,7 +4200,7 @@ class SmartThread:
             if remote_state == ThreadState.Stopped:
                 request_block.stopped_remotes |= {pk_remote.remote}
                 logger.debug(
-                    f"{self.name} smart_resume detected remote "
+                    f"{self.log_name} smart_resume detected remote "
                     f"{pk_remote.remote} is stopped"
                 )
 
@@ -4342,7 +4365,7 @@ class SmartThread:
                 if remote_state == ThreadState.Stopped:
                     request_block.stopped_remotes |= {pk_remote.remote}
                     logger.debug(
-                        f"{self.name} smart_sync detected remote "
+                        f"{self.log_name} smart_sync detected remote "
                         f"{pk_remote.remote} is stopped"
                     )
 
@@ -4450,7 +4473,7 @@ class SmartThread:
                 ):
                     remote_sb.sync_flag = False
                     logger.info(
-                        f"{self.name} smart_sync backout reset "
+                        f"{self.log_name} smart_sync backout reset "
                         f"remote sync_flag for {pk_remote.remote}"
                     )
 
@@ -4463,7 +4486,7 @@ class SmartThread:
             if self._get_target_state(pk_remote=pk_remote) == ThreadState.Stopped:
                 request_block.stopped_remotes |= {pk_remote.remote}
                 logger.debug(
-                    f"{self.name} smart_sync detected remote "
+                    f"{self.log_name} smart_sync detected remote "
                     f"{pk_remote.remote} is stopped"
                 )
 
@@ -4517,7 +4540,7 @@ class SmartThread:
                         if local_sb.sync_flag:
                             local_sb.sync_flag = False
                             logger.info(
-                                f"{self.name} smart_sync backout reset "
+                                f"{self.log_name} smart_sync backout reset "
                                 f"local sync_flag for {remote}"
                             )
                         else:
@@ -4534,7 +4557,7 @@ class SmartThread:
                                 if remote_sb.sync_flag:
                                     remote_sb.sync_flag = False
                                     logger.info(
-                                        f"{self.name} smart_sync backout "
+                                        f"{self.log_name} smart_sync backout "
                                         "reset remote sync_flag for "
                                         f"{remote}"
                                     )
@@ -4641,7 +4664,7 @@ class SmartThread:
 
                 if do_refresh:
                     logger.debug(
-                        f"{self.name} {self.request.value} calling refresh, "
+                        f"{self.log_name} {self.request.value} calling refresh, "
                         f"remaining remotes: {self.work_pk_remotes}"
                     )
                     with sel.SELockExcl(SmartThread._registry_lock):

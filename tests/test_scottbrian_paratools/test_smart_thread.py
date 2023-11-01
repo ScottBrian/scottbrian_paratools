@@ -787,7 +787,7 @@ class ConfirmResponse(ConfigCmd):
         work_confirmers = self.confirmers.copy()
         if not work_confirmers:
             raise InvalidInputDetected(
-                "ConfirmResponse detected an empty set " "of confirmers"
+                "ConfirmResponse detected an empty set of confirmers"
             )
         while work_confirmers:
             for name in work_confirmers:
@@ -3974,7 +3974,7 @@ class RemStatusBlockEntryLogSearchItem(LogSearchItem):
             self.config_ver.log_test_msg(
                 f"RemStatusBlockEntryLogSearchItem using {rem_sb_key=} "
                 "encountered unexpected "
-                f"log msg: {self.found_log_msg}"
+                f"log msg: {self.found_log_msg}, {pe[PE.rem_status_block_msg]=}"
             )
             raise UnexpectedEvent(
                 f"RemStatusBlockEntryLogSearchItem using {rem_sb_key=} "
@@ -4011,10 +4011,11 @@ class RemStatusBlockEntryDefLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str="[a-z0-9_]+ removal deferred for status_blocks entry "
-            r"for PairKey\(name0='[a-z0-9_]+', "
-            r"name1='[a-z0-9_]+'\), "
-            "name = [a-z0-9_]+, reasons: ",
+            search_str=(
+                r"[a-z0-9_]+ \([a-z0-9_]+\) removal deferred for status_blocks "
+                r"entry for PairKey\(name0='[a-z0-9_]+', name1='[a-z0-9_]+'\), "
+                "name = [a-z0-9_]+, reasons: "
+            ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
@@ -4042,9 +4043,9 @@ class RemStatusBlockEntryDefLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
-        name_0 = split_msg[7][15:-2]  # lose left paren, comma, quotes
-        name_1 = split_msg[8][7:-3]  # lose right paren, quotes
-        rem_name = split_msg[11][0:-1]
+        name_0 = split_msg[8][15:-2]  # lose left paren, comma, quotes
+        name_1 = split_msg[9][7:-3]  # lose right paren, quotes
+        rem_name = split_msg[12][0:-1]
 
         pair_key: st.PairKey = st.PairKey(name_0, name_1)
 
@@ -4382,8 +4383,10 @@ class DetectedStoppedRemoteLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str=f"[a-z0-9_]+ {list_of_smart_requests} detected remote "
-            f"[a-z0-9_]+ is stopped",
+            search_str=(
+                rf"[a-z0-9_]+ \([a-z0-9_]+\) {list_of_smart_requests} detected "
+                "remote [a-z0-9_]+ is stopped"
+            ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
@@ -4411,7 +4414,7 @@ class DetectedStoppedRemoteLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
-        remote = split_msg[4]
+        remote = split_msg[5]
 
         self.config_ver.set_request_pending_flag(
             cmd_runner=cmd_runner, targets={remote}, pending_request_flag=False
@@ -8912,6 +8915,7 @@ class ConfigVerifier:
         )
 
         pe = self.pending_events[joiner_name]
+        # pe = self.pending_events[pending_name]
 
         pair_key = st.SmartThread._get_pair_key(pending_name, remote_name)
 
@@ -22098,6 +22102,32 @@ class ConfigVerifier:
                     st.SmartThread._registry_lock.owner_wait_q[idx2] = save_pos
 
     ####################################################################
+    # find_smart_threads
+    ####################################################################
+    def find_smart_threads(
+        self, search_thread: threading.Thread
+    ) -> list[st.SmartThread]:
+        """Get the smart thread for the current thread or None.
+
+        Args:
+            search_thread: thread to search for
+
+        Returns:
+             A list (possibly empty) of SmartThread instances that are
+                 associated with the input search_thread.
+
+        Note:
+            This is similar to SmartThread but without getting lock
+        """
+        ret_list: list[st.SmartThread] = []
+        for group_name, registry in st.SmartThread._registry.items():
+            for thread_name, smart_thread in registry.items():
+                if smart_thread.thread is search_thread:
+                    ret_list.append(smart_thread)
+
+        return ret_list
+
+    ####################################################################
     # lock_verify
     ####################################################################
     def lock_verify(
@@ -22132,12 +22162,16 @@ class ConfigVerifier:
                     lock_verified = False
                 else:
                     for idx, expected_name in enumerate(exp_positions):
-                        if (
-                            st.SmartThread._registry_lock.owner_wait_q[idx].thread.name
-                            != expected_name
-                        ):
+                        search_thread = st.SmartThread._registry_lock.owner_wait_q[
+                            idx
+                        ].thread
+                        smart_threads: list[st.SmartThread] = self.find_smart_threads(
+                            search_thread=search_thread
+                        )
+                        if smart_threads and smart_threads[0].name != expected_name:
                             lock_verified = False
                             break
+
             if not lock_verified:
                 if (time.time() - start_time) > timeout_value:
                     self.abort_all_f1_threads()
