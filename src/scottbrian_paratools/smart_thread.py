@@ -529,6 +529,12 @@ class SmartThreadMultipleTargetsForSelfStart(SmartThreadError):
     pass
 
 
+class SmartThreadNotFound(SmartThreadError):
+    """SmartThread exception for failure to locate smart thread."""
+
+    pass
+
+
 ########################################################################
 # ReqType
 # contains the type of request
@@ -1119,7 +1125,7 @@ class SmartThread:
     # get_current_smart_thread
     ####################################################################
     @staticmethod
-    def get_current_smart_thread(group_name: str) -> Optional["SmartThread"]:
+    def get_current_smart_thread(group_name: str) -> "SmartThread":
         """Get the smart thread for the current thread or None.
 
         Args:
@@ -1138,30 +1144,36 @@ class SmartThread:
                     if smart_thread.thread is current_thread:
                         return smart_thread
 
-        return None
+        error_msg = (
+            "SmartThread get_current_smart_thread raising SmartThreadNotFound. "
+            f"Unable to find the current smart thread for {group_name=}."
+        )
+        logger.error(error_msg)
+        raise SmartThreadNotFound(error_msg)
 
     ####################################################################
     # find_smart_threads
     ####################################################################
-    @staticmethod
-    def find_smart_threads(search_thread: threading.Thread) -> list["SmartThread"]:
-        """Get the smart thread for the current thread or None.
-
-        Args:
-            search_thread: thread to search for
-
-        Returns:
-             A list (possibly empty) of SmartThread instances that are
-                 associated with the input search_thread.
-        """
-        ret_list: list[SmartThread] = []
-        with sel.SELockShare(SmartThread._registry_lock):
-            for group_name, registry in SmartThread._registry.items():
-                for thread_name, smart_thread in registry.items():
-                    if smart_thread.thread is search_thread:
-                        ret_list.append(smart_thread)
-
-        return ret_list
+    # @staticmethod
+    # def find_smart_threads(search_thread: threading.Thread)
+    # -> list["SmartThread"]:
+    #     """Get the smart thread for the current thread or None.
+    #
+    #     Args:
+    #         search_thread: thread to search for
+    #
+    #     Returns:
+    #          A list (possibly empty) of SmartThread instances that are
+    #              associated with the input search_thread.
+    #     """
+    #     ret_list: list[SmartThread] = []
+    #     with sel.SELockShare(SmartThread._registry_lock):
+    #         for group_name, registry in SmartThread._registry.items():
+    #             for thread_name, smart_thread in registry.items():
+    #                 if smart_thread.thread is search_thread:
+    #                     ret_list.append(smart_thread)
+    #
+    #     return ret_list
 
     ####################################################################
     # get_active_names

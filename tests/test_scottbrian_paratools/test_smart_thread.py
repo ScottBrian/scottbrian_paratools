@@ -22131,7 +22131,7 @@ class ConfigVerifier:
                 if smart_thread.thread is search_thread:
                     return smart_thread.name
 
-        return None
+        return ""
 
     ####################################################################
     # lock_verify
@@ -32438,10 +32438,19 @@ class TestSmartBasicScenarios:
 
         def f1() -> None:
             """Target for thread only."""
-            f1_smart_thread = st.SmartThread.get_current_smart_thread(
-                group_name="test1"
+
+            with pytest.raises(st.SmartThreadNotFound) as f1_exc:
+                st.SmartThread.get_current_smart_thread(group_name="test1")
+
+            f1_exp_error_msg = (
+                "SmartThread get_current_smart_thread raising SmartThreadNotFound. "
+                f"Unable to find the current smart thread for group_name='test1'."
             )
-            assert f1_smart_thread is None
+
+            logger.debug(f1_exp_error_msg)
+            assert re.fullmatch(f1_exp_error_msg, str(f1_exc.value))
+
+            print("\n", f1_exc.value)
 
         def f2() -> None:
             """Target for smart thread."""
@@ -32454,10 +32463,20 @@ class TestSmartBasicScenarios:
 
         logger.debug("mainline entered")
 
-        current_smart_thread = st.SmartThread.get_current_smart_thread(
-            group_name="test1"
+        with pytest.raises(st.SmartThreadNotFound) as exc:
+            current_smart_thread = st.SmartThread.get_current_smart_thread(
+                group_name="test1"
+            )
+
+        exp_error_msg = (
+            "SmartThread get_current_smart_thread raising SmartThreadNotFound. "
+            f"Unable to find the current smart thread for group_name='test1'."
         )
-        assert current_smart_thread is None
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print("\n", exc.value)
 
         alpha_smart_thread = st.SmartThread(group_name="test1", name="alpha")
 
@@ -32465,6 +32484,21 @@ class TestSmartBasicScenarios:
             group_name="test1"
         )
         assert current_smart_thread is alpha_smart_thread
+
+        with pytest.raises(st.SmartThreadNotFound) as exc:
+            current_smart_thread = st.SmartThread.get_current_smart_thread(
+                group_name="test2"
+            )
+
+        exp_error_msg = (
+            "SmartThread get_current_smart_thread raising SmartThreadNotFound. "
+            f"Unable to find the current smart thread for group_name='test2'."
+        )
+
+        logger.debug(exp_error_msg)
+        assert re.fullmatch(exp_error_msg, str(exc.value))
+
+        print("\n", exc.value)
 
         beta_thread = threading.Thread(name="beta", target=f1)
         beta_thread.start()
