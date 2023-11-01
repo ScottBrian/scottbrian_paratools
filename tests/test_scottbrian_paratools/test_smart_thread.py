@@ -4328,7 +4328,7 @@ class RequestAckLogSearchItem(LogSearchItem):
                     waiter=cmd_runner, resumer=remote, pending_sync_flag=False
                 )
             elif action == "backout":
-                if split_msg[4] == "local":
+                if split_msg[5] == "local":
                     if self.config_ver.auto_sync_ach_or_back_msg:
                         ack_key = (remote, "smart_sync_ach_or_back")
                     else:
@@ -22081,20 +22081,24 @@ class ConfigVerifier:
         assert len(new_positions) == len(st.SmartThread._registry_lock.owner_wait_q)
         with self.ops_lock:
             for idx, pos_name in enumerate(new_positions):
-                if (
-                    st.SmartThread._registry_lock.owner_wait_q[idx].thread.name
-                    != pos_name
-                ):
+                search_thread = st.SmartThread._registry_lock.owner_wait_q[idx].thread
+                test_name = self.get_smart_thread_name(
+                    search_thread=search_thread, group_name="test1"
+                )
+                if test_name != pos_name:
                     save_pos = st.SmartThread._registry_lock.owner_wait_q[idx]
                     # find our desired position
                     new_pos = None
                     # for (idx2, owner_waiter in enumerate(
                     #            st.SmartThread._registry_lock.owner_wait_q)):
                     for idx2 in range(len(st.SmartThread._registry_lock.owner_wait_q)):
-                        if (
-                            st.SmartThread._registry_lock.owner_wait_q[idx2].thread.name
-                            == pos_name
-                        ):
+                        search_thread = st.SmartThread._registry_lock.owner_wait_q[
+                            idx2
+                        ].thread
+                        test_name = self.get_smart_thread_name(
+                            search_thread=search_thread, group_name="test1"
+                        )
+                        if test_name == pos_name:
                             new_pos = st.SmartThread._registry_lock.owner_wait_q[idx2]
                             break
                     assert new_pos is not None
@@ -22102,30 +22106,32 @@ class ConfigVerifier:
                     st.SmartThread._registry_lock.owner_wait_q[idx2] = save_pos
 
     ####################################################################
-    # find_smart_threads
+    # get_smart_thread_name
     ####################################################################
-    def find_smart_threads(
-        self, search_thread: threading.Thread
-    ) -> list[st.SmartThread]:
-        """Get the smart thread for the current thread or None.
+    @staticmethod
+    def get_smart_thread_name(
+        search_thread: threading.Thread,
+        group_name: str,
+    ) -> str:
+        """Get the smart thread for the search thread or None.
 
         Args:
             search_thread: thread to search for
+            group_name: name of group to search
 
         Returns:
              A list (possibly empty) of SmartThread instances that are
                  associated with the input search_thread.
 
         Note:
-            This is similar to SmartThread but without getting lock
+            The lock registry must be held excl or shared
         """
-        ret_list: list[st.SmartThread] = []
-        for group_name, registry in st.SmartThread._registry.items():
-            for thread_name, smart_thread in registry.items():
+        if group_name in st.SmartThread._registry:
+            for name, smart_thread in st.SmartThread._registry[group_name].items():
                 if smart_thread.thread is search_thread:
-                    ret_list.append(smart_thread)
+                    return smart_thread.name
 
-        return ret_list
+        return None
 
     ####################################################################
     # lock_verify
@@ -22165,10 +22171,10 @@ class ConfigVerifier:
                         search_thread = st.SmartThread._registry_lock.owner_wait_q[
                             idx
                         ].thread
-                        smart_threads: list[st.SmartThread] = self.find_smart_threads(
-                            search_thread=search_thread
+                        test_name = self.get_smart_thread_name(
+                            search_thread=search_thread, group_name="test1"
                         )
-                        if smart_threads and smart_threads[0].name != expected_name:
+                        if test_name != expected_name:
                             lock_verified = False
                             break
 
