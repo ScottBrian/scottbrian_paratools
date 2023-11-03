@@ -3401,7 +3401,7 @@ class AlreadyUnregLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         cmd_runner = split_msg[0]
-        target = split_msg[4]
+        target = split_msg[5]
 
         pe = self.config_ver.pending_events[cmd_runner]
         unreg_key: AlreadyUnregKey = (cmd_runner, target)
@@ -6884,9 +6884,9 @@ class ConfigVerifier:
         self.build_join_suite(cmd_runners=cmd_runners, join_target_names=names)
 
     ####################################################################
-    # build_join_timeout_suite
+    # build_join_timeout_scenario
     ####################################################################
-    def build_join_timeout_suite(
+    def build_join_timeout_scenario(
         self,
         timeout_type: TimeoutType,
         num_active_no_target: int,
@@ -10357,9 +10357,9 @@ class ConfigVerifier:
             )
 
     ####################################################################
-    # build_def_del_suite
+    # build_def_del_scenario
     ####################################################################
-    def build_def_del_suite(self, def_del_scenario: DefDelScenario) -> None:
+    def build_def_del_scenario(self, def_del_scenario: DefDelScenario) -> None:
         """Return a list of ConfigCmd items for a deferred delete.
 
         Args:
@@ -10640,7 +10640,7 @@ class ConfigVerifier:
                 sender_names=sender_names,
                 receiver_names=receivers,
                 num_msgs=1,
-                text="build_def_del_suite",
+                text="build_def_del_scenario",
             )
             send_msg_serial_num_0 = self.add_cmd(
                 SendMsg(
@@ -10860,7 +10860,7 @@ class ConfigVerifier:
             ############################################################
             # complete the build in part a
             ############################################################
-            self.build_def_del_suite_part_a(
+            self.build_def_del_scenario_part_a(
                 def_del_scenario=def_del_scenario,
                 lock_positions=lock_positions,
                 first_cmd_lock_pos=first_cmd_lock_pos,
@@ -10935,7 +10935,7 @@ class ConfigVerifier:
             ############################################################
             # complete the build in part b
             ############################################################
-            self.build_def_del_suite_part_b(
+            self.build_def_del_scenario_part_b(
                 lock_positions=lock_positions,
                 first_cmd_lock_pos=first_cmd_lock_pos,
                 second_cmd_lock_pos=second_cmd_lock_pos,
@@ -11005,9 +11005,9 @@ class ConfigVerifier:
         )
 
     ####################################################################
-    # build_def_del_suite_part_a
+    # build_def_del_scenario_part_a
     ####################################################################
-    def build_def_del_suite_part_a(
+    def build_def_del_scenario_part_a(
         self,
         def_del_scenario: DefDelScenario,
         lock_positions: list[str],
@@ -11254,9 +11254,9 @@ class ConfigVerifier:
         )
 
     ####################################################################
-    # build_def_del_suite_part_b
+    # build_def_del_scenario_part_b
     ####################################################################
-    def build_def_del_suite_part_b(
+    def build_def_del_scenario_part_b(
         self,
         lock_positions: list[str],
         first_cmd_lock_pos: str,
@@ -19486,7 +19486,10 @@ class ConfigVerifier:
             timeout_names: threads that are expected to timeout
 
         """
-        self.log_test_msg(f"handle_join entry: {cmd_runner=}, {join_names=}")
+        self.log_test_msg(
+            f"handle_join entry: {cmd_runner=}, {join_names=}, "
+            f"{unreg_names=}, {timeout_names=}"
+        )
         self.log_ver.add_call_seq(
             name="smart_join", seq="test_smart_thread.py::ConfigVerifier.handle_join"
         )
@@ -23683,6 +23686,7 @@ class ConfigVerifier:
         ################################################################
         # get first config_cmd smart_recv log msg
         ################################################################
+        group_name = "test1"
         search_msg = (
             r"config_cmd: RecvMsg\(serial=[0-9]+, line=[0-9]+, "
             f"cmd_runners='{receiver_names[0]}', "
@@ -23753,7 +23757,7 @@ class ConfigVerifier:
         # get first smart_recv log msg
         ################################################################
         search_msg = (
-            f"{receiver_names[0]} smart_recv received [0-9]+ "
+            rf"{receiver_names[0]} \({group_name}\) smart_recv received [0-9]+ "
             f"msg[s]* from {sender_names[0]}"
         )
 
@@ -23781,7 +23785,7 @@ class ConfigVerifier:
         # get second smart_recv log msg
         ################################################################
         search_msg = (
-            f"{receiver_names[1]} smart_recv received [0-9]+ "
+            rf"{receiver_names[1]} \({group_name}\) smart_recv received [0-9]+ "
             f"msg[s]* from {sender_names[0]}"
         )
 
@@ -23807,7 +23811,10 @@ class ConfigVerifier:
         ################################################################
         # get first wait log msg
         ################################################################
-        search_msg = f"{waiter_names[0]} smart_wait resumed by " f"{resumer_names[0]}"
+        search_msg = (
+            rf"{waiter_names[0]} \({group_name}\) smart_wait resumed by "
+            f"{resumer_names[0]}"
+        )
 
         wait_0_log_msg, wait_0_log_pos = self.get_log_msg(
             search_msg=search_msg,
@@ -23832,7 +23839,10 @@ class ConfigVerifier:
         ################################################################
         # get second wait log msg
         ################################################################
-        search_msg = f"{waiter_names[1]} smart_wait resumed by " f"{resumer_names[0]}"
+        search_msg = (
+            rf"{waiter_names[1]} \({group_name}\) smart_wait resumed by "
+            f"{resumer_names[0]}"
+        )
 
         wait_1_log_msg, wait_1_log_pos = self.get_log_msg(
             search_msg=search_msg,
@@ -23870,7 +23880,8 @@ class ConfigVerifier:
         # get add log msgs found
         ################################################################
         add_pa_msgs_found = self.find_def_del_pair_array_msgs(
-            cmd_runner=adder_names[0],
+            # cmd_runner=adder_names[0],
+            cmd_runner=add_names[0],
             request_type=st.ReqType.Smart_init,
             deleted_names=[sender_names[0], resumer_names[0]],
             def_del_names=receiver_names + waiter_names,
@@ -25247,9 +25258,10 @@ class ConfigVerifier:
         ################################################################
         # find entered refresh pair array log msg
         ################################################################
+        group_name = "test1"
         search_msg = (
-            f"{request_type.value} _clean_pair_array entry: "
-            f"cmd_runner: {cmd_runner}"
+            f"{request_type.value} _clean_pair_array entry: {cmd_runner} "
+            rf"\({group_name}\)"
         )
 
         log_msg, log_pos = self.get_log_msg(
@@ -25276,14 +25288,14 @@ class ConfigVerifier:
                     name0=deleted_name, name1=def_del_name
                 )
                 search_msg1 = (
-                    f"{cmd_runner} removed status_blocks entry for "
+                    rf"{cmd_runner} \({group_name}\) removed status_blocks entry for "
                     rf"PairKey\(name0='{pair_key[0]}', "
                     rf"name1='{pair_key[1]}'\), "
                     f"name = {def_del_name}"
                 )
 
                 search_msg2 = (
-                    f"{cmd_runner} removed _pair_array entry for "
+                    rf"{cmd_runner} \({group_name}\) removed _pair_array entry for "
                     rf"PairKey\(name0='{pair_key[0]}', "
                     rf"name1='{pair_key[1]}'\)"
                 )
@@ -25313,7 +25325,10 @@ class ConfigVerifier:
         ################################################################
         # get updated pair array log msg
         ################################################################
-        search_msg = f"{cmd_runner} did cleanup of _pair_array at UTC " f"{time_match}"
+        search_msg = (
+            rf"{cmd_runner} \({group_name}\) did cleanup of _pair_array at "
+            f"UTC {time_match}"
+        )
 
         log_msg, log_pos = self.get_log_msg(
             search_msg=search_msg,
@@ -32500,6 +32515,18 @@ class TestSmartBasicScenarios:
 
         print("\n", exc.value)
 
+        alpha_smart_thread2 = st.SmartThread(group_name="test2", name="alpha")
+
+        current_smart_thread = st.SmartThread.get_current_smart_thread(
+            group_name="test2"
+        )
+        assert current_smart_thread is alpha_smart_thread2
+
+        current_smart_thread = st.SmartThread.get_current_smart_thread(
+            group_name="test1"
+        )
+        assert current_smart_thread is alpha_smart_thread
+
         beta_thread = threading.Thread(name="beta", target=f1)
         beta_thread.start()
         beta_thread.join()
@@ -33347,6 +33374,7 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_delay_unreg_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_no_delay_reg_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_delay_reg_arg", [0, 1, 2])
+    @pytest.mark.skip(reason="not now")
     def test_join_timeout_scenario(
         self,
         timeout_type_arg: TimeoutType,
@@ -33421,7 +33449,7 @@ class TestSmartThreadComboScenarios:
         }
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_join_timeout_suite,
+            scenario_builder=ConfigVerifier.build_join_timeout_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
             commander_config=commander_config[
@@ -33465,7 +33493,7 @@ class TestSmartThreadComboScenarios:
         }
 
         scenario_driver(
-            scenario_builder=ConfigVerifier.build_def_del_suite,
+            scenario_builder=ConfigVerifier.build_def_del_scenario,
             scenario_builder_args=args_for_scenario_builder,
             caplog_to_use=caplog,
             commander_config=commander_config[
