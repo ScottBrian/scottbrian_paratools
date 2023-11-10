@@ -681,45 +681,35 @@ class SmartThread:
     # of the asynchronous effects of starting the thread and having it
     # finish before we can set the state to Alive
     ####################################################################
-    class TargetThread(threading.Thread):
-        """Thread class used for SmartThread target_rtn."""
-
-        def __init__(
-            self,
-            *,
-            smart_thread: "SmartThread",
-            target: Callable[..., Any],
-            name: str,
-            args: Optional[tuple[Any, ...]] = None,
-            kwargs: Optional[dict[str, Any]] = None,
-        ) -> None:
-            """Initialize the TargetThread instance.
-
-            Args:
-                smart_thread: the instance of SmartThread for this
-                    TargetThread
-                target: the target_rtn routine to be give control in a
-                    new thread
-                name: name of thread
-                args: arguments to pass to the target_rtn routine
-                kwargs: keyword arguments to pass to the target_rtn
-                    routine
-
-            """
-            super().__init__(
-                target=target, args=args or (), kwargs=kwargs or {}  # , name=name
-            )
-            self.smart_thread = smart_thread
-
-        # def run(self) -> None:
-        #     """Invoke the target_rtn when the thread is started."""
-        #     try:
-        #         self._target(*self._args, **self._kwargs)  # type: ignore
-        #     finally:
-        #         # Avoid a refcycle if the thread is running a function
-        #         # with an argument that has a member that points to the
-        #         # thread.
-        #         del self._target, self._args, self._kwargs  # type: ignore
+    # class TargetThread(threading.Thread):
+    #     """Thread class used for SmartThread target_rtn."""
+    #
+    #     def __init__(
+    #         self,
+    #         *,
+    #         smart_thread: "SmartThread",
+    #         target: Callable[..., Any],
+    #         name: str,
+    #         args: Optional[tuple[Any, ...]] = None,
+    #         kwargs: Optional[dict[str, Any]] = None,
+    #     ) -> None:
+    #         """Initialize the TargetThread instance.
+    #
+    #         Args:
+    #             smart_thread: the instance of SmartThread for this
+    #                 TargetThread
+    #             target: the target_rtn routine to be give control in a
+    #                 new thread
+    #             name: name of thread
+    #             args: arguments to pass to the target_rtn routine
+    #             kwargs: keyword arguments to pass to the target_rtn
+    #                 routine
+    #
+    #         """
+    #         super().__init__(
+    #             target=target, args=args or (), kwargs=kwargs or {}  # , name=name
+    #         )
+    #         self.smart_thread = smart_thread
 
     ####################################################################
     # ConnectionStatusBlock
@@ -966,14 +956,19 @@ class SmartThread:
                 if thread_parm_name:
                     keyword_args = {thread_parm_name: self}
 
-            self.thread: Union[
-                threading.Thread, SmartThread.TargetThread
-            ] = SmartThread.TargetThread(
-                smart_thread=self,
+            # self.thread: Union[
+            #     threading.Thread, SmartThread.TargetThread
+            # ] = SmartThread.TargetThread(
+            #     smart_thread=self,
+            #     target=target_rtn,
+            #     args=args,
+            #     kwargs=keyword_args,
+            #     name=name,
+            # )
+            self.thread: threading.Thread = threading.Thread(
                 target=target_rtn,
-                args=args,
-                kwargs=keyword_args,
-                name=name,
+                args=args or (),
+                kwargs=keyword_args or {},
             )
         elif thread:  # caller provided the thread to use
             self.thread_create = ThreadCreate.Thread
@@ -1103,26 +1098,6 @@ class SmartThread:
         return f"{classname}({parms})"
 
     ####################################################################
-    # get_current_smart_thread_name
-    ####################################################################
-    def get_current_smart_thread_name(self) -> str:
-        """Get the smart thread name for the current thread.
-
-        Returns:
-             The name of the current smart thread.
-        """
-        current_thread = threading.current_thread()
-        with sel.SELockShare(SmartThread._registry_lock):
-            if self.group_name in SmartThread._registry:
-                for name, smart_thread in SmartThread._registry[
-                    self.group_name
-                ].items():
-                    if smart_thread.thread is current_thread:
-                        return smart_thread.name
-
-        return self.name
-
-    ####################################################################
     # get_current_smart_thread
     ####################################################################
     @staticmethod
@@ -1155,26 +1130,24 @@ class SmartThread:
     ####################################################################
     # find_smart_threads
     ####################################################################
-    # @staticmethod
-    # def find_smart_threads(search_thread: threading.Thread)
-    # -> list["SmartThread"]:
-    #     """Get the smart thread for the current thread or None.
-    #
-    #     Args:
-    #         search_thread: thread to search for
-    #
-    #     Returns:
-    #          A list (possibly empty) of SmartThread instances that are
-    #              associated with the input search_thread.
-    #     """
-    #     ret_list: list[SmartThread] = []
-    #     with sel.SELockShare(SmartThread._registry_lock):
-    #         for group_name, registry in SmartThread._registry.items():
-    #             for thread_name, smart_thread in registry.items():
-    #                 if smart_thread.thread is search_thread:
-    #                     ret_list.append(smart_thread)
-    #
-    #     return ret_list
+    @staticmethod
+    def find_smart_threads(search_thread: threading.Thread) -> list["SmartThread"]:
+        """Return a list of smart threads for a given thread.
+        Args:
+            search_thread: thread to search SmartThreads for
+
+        Returns:
+             A list (possibly empty) of SmartThread instances that are
+                 associated with the input search_thread.
+        """
+        ret_list: list[SmartThread] = []
+        with sel.SELockShare(SmartThread._registry_lock):
+            for group_name, registry in SmartThread._registry.items():
+                for thread_name, smart_thread in registry.items():
+                    if smart_thread.thread is search_thread:
+                        ret_list.append(smart_thread)
+
+        return ret_list
 
     ####################################################################
     # get_active_names
@@ -1655,14 +1628,8 @@ class SmartThread:
                loop until the remote thread becomes registered and
                alive and its state becomes ThreadState.Alive.
             3) After a thread is registered and is alive, if it fails
-               and become not alive, it will remain in the registry
-               until its state is changed to Stopped to indicate it was
-               once alive. Its state is set to Stopped when a
-               TargetThread ends, when a smart_unreg is done, or when a
-               smart_join is done. This will allow a request to know
-               whether to wait for the thread to become alive, or to
-               raise an error for an attempted request on a thread that
-               is no longer alive.
+               and becomes not alive, it will remain in the registry
+               until it is removed by smart_join.
 
         """
         logger.debug(
