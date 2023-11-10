@@ -394,6 +394,7 @@ from typing import (
     Callable,
     cast,
     ClassVar,
+    Final,
     NamedTuple,
     NoReturn,
     Optional,
@@ -710,15 +711,15 @@ class SmartThread:
             )
             self.smart_thread = smart_thread
 
-        def run(self) -> None:
-            """Invoke the target_rtn when the thread is started."""
-            try:
-                self._target(*self._args, **self._kwargs)  # type: ignore
-            finally:
-                # Avoid a refcycle if the thread is running a function
-                # with an argument that has a member that points to the
-                # thread.
-                del self._target, self._args, self._kwargs  # type: ignore
+        # def run(self) -> None:
+        #     """Invoke the target_rtn when the thread is started."""
+        #     try:
+        #         self._target(*self._args, **self._kwargs)  # type: ignore
+        #     finally:
+        #         # Avoid a refcycle if the thread is running a function
+        #         # with an argument that has a member that points to the
+        #         # thread.
+        #         del self._target, self._args, self._kwargs  # type: ignore
 
     ####################################################################
     # ConnectionStatusBlock
@@ -787,7 +788,7 @@ class SmartThread:
 
     # the following constant is the amount of time we will wait during
     # request loop processing in between optioning each target_rtn
-    K_LOOP_IDLE_TIME: IntFloat = 1.0
+    K_LOOP_IDLE_TIME: Final[IntFloat] = 1.0
 
     ####################################################################
     # __init__

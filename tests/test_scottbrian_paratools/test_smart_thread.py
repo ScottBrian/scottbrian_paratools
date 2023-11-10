@@ -19142,7 +19142,6 @@ class ConfigVerifier:
         else:
             auto_start_decision = AutoStartDecision.auto_start_no
 
-        # pe = self.pending_events[cmd_runner]
         pe = self.pending_events[name]
         pe[PE.start_request].append(
             StartRequest(
@@ -19169,6 +19168,32 @@ class ConfigVerifier:
         req_key_exit: RequestKey = ("smart_init", "exit")
 
         pe[PE.request_msg][req_key_exit] += 1
+
+        if auto_start:
+            pe[PE.start_request].append(
+                StartRequest(
+                    req_type=st.ReqType.Smart_start,
+                    targets={name},
+                    unreg_remotes=set(),
+                    not_registered_remotes=set(),
+                    timeout_remotes=set(),
+                    stopped_remotes=set(),
+                    deadlock_remotes=set(),
+                    eligible_targets=set(),
+                    completed_targets=set(),
+                    first_round_completed=set(),
+                    stopped_target_threads=set(),
+                    exp_senders=set(),
+                    exp_resumers=set(),
+                )
+            )
+            req_key_entry: RequestKey = ("smart_start", "entry")
+
+            pe[PE.request_msg][req_key_entry] += 1
+
+            req_key_exit: RequestKey = ("smart_start", "exit")
+
+            pe[PE.request_msg][req_key_exit] += 1
 
         if app_config == AppConfig.ScriptStyle:
             f1_thread = st.SmartThread(
@@ -19810,8 +19835,8 @@ class ConfigVerifier:
             if req_start_item.req_type.value != request_name:
                 raise UnexpectedEvent(
                     "handle_request_entry_exit_log_msg expected "
-                    f"{req_start_item.req_type.value=} but instead received "
-                    f"log msg: {log_msg}"
+                    f"{req_start_item.req_type.value=} to match {request_name=} but "
+                    f"for log msg: {log_msg}"
                 )
 
             if not req_start_item.targets:
@@ -21308,38 +21333,39 @@ class ConfigVerifier:
         ################################################################
         # determine next step
         ################################################################
-        pe = self.pending_events[cmd_runner]
-
-        if (
-            self.expected_registered[target].auto_start_decision
-            == AutoStartDecision.auto_start_yes
-        ):
-            pe[PE.save_current_request] = pe[PE.current_request]
-            pe[PE.start_request].append(
-                StartRequest(
-                    req_type=st.ReqType.Smart_start,
-                    targets={target},
-                    unreg_remotes=set(),
-                    not_registered_remotes=set(),
-                    timeout_remotes=set(),
-                    stopped_remotes=set(),
-                    deadlock_remotes=set(),
-                    eligible_targets=set(),
-                    completed_targets=set(),
-                    first_round_completed=set(),
-                    stopped_target_threads=set(),
-                    exp_senders=set(),
-                    exp_resumers=set(),
-                )
-            )
-
-            req_key_entry: RequestKey = ("smart_start", "entry")
-
-            pe[PE.request_msg][req_key_entry] += 1
-
-            req_key_exit: RequestKey = ("smart_start", "exit")
-
-            pe[PE.request_msg][req_key_exit] += 1
+        pass
+        # pe = self.pending_events[cmd_runner]
+        #
+        # if (
+        #     self.expected_registered[target].auto_start_decision
+        #     == AutoStartDecision.auto_start_yes
+        # ):
+        #     pe[PE.save_current_request] = pe[PE.current_request]
+        #     pe[PE.start_request].append(
+        #         StartRequest(
+        #             req_type=st.ReqType.Smart_start,
+        #             targets={target},
+        #             unreg_remotes=set(),
+        #             not_registered_remotes=set(),
+        #             timeout_remotes=set(),
+        #             stopped_remotes=set(),
+        #             deadlock_remotes=set(),
+        #             eligible_targets=set(),
+        #             completed_targets=set(),
+        #             first_round_completed=set(),
+        #             stopped_target_threads=set(),
+        #             exp_senders=set(),
+        #             exp_resumers=set(),
+        #         )
+        #     )
+        #
+        #     req_key_entry: RequestKey = ("smart_start", "entry")
+        #
+        #     pe[PE.request_msg][req_key_entry] += 1
+        #
+        #     req_key_exit: RequestKey = ("smart_start", "exit")
+        #
+        #     pe[PE.request_msg][req_key_exit] += 1
 
     ####################################################################
     # handle_subprocess_clean_registry_entry
@@ -25620,8 +25646,6 @@ class OuterF1ThreadApp(threading.Thread):
             auto_start=auto_start,
             max_msgs=max_msgs,
         )
-        # if auto_start:
-        #     self.smart_thread.smart_start(name)
 
     def run(self) -> None:
         """Run the test."""
@@ -33176,6 +33200,7 @@ class TestSmartBasicScenarios:
     ####################################################################
     # test_sync_create_time_scenario
     ####################################################################
+    @pytest.mark.cover2
     def test_sync_create_time_scenario(self, caplog: pytest.LogCaptureFixture) -> None:
         """Test meta configuration scenarios.
 
