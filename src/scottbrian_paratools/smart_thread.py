@@ -382,7 +382,7 @@ Expected output for Example8::
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, UTC
 from enum import auto, Flag, StrEnum
 
 import logging
@@ -703,6 +703,7 @@ class RegistryPairArray:
     registry: dict[str, "SmartThread"]  # = field(default_factory=dict)
     pair_array: dict[PairKey, ConnectionPair]  # = field(
     # default_factory=dict)
+    registry_lock: sel.SELock
 
 
 @dataclass
@@ -771,10 +772,7 @@ class SmartThread:
     ####################################################################
     # The _registry is a dictionary of SmartClass instances keyed by the
     # SmartThread name.
-    _group_lock: threading.Lock = threading.Lock()
-    _registry_lock: ClassVar[sel.SELock] = sel.SELock()
-
-    # _registry: ClassVar[dict[str, dict[str, "SmartThread"]]] = {}
+    _group_lock: ClassVar[threading.Lock] = threading.Lock()
 
     _registry: ClassVar[dict[str, RegistryPairArray]] = {}
 
@@ -789,21 +787,6 @@ class SmartThread:
     )
 
     _create_pair_array_entry_time: ClassVar[float] = 0.0
-
-    ####################################################################
-    # pair array
-    ####################################################################
-    # _pair_array: ClassVar[dict[str, dict[PairKey, ConnectionPair]]]
-    # = defaultdict(dict)
-
-    _pair_array_last_update: datetime = datetime(
-        year=2000,
-        month=1,
-        day=1,
-        hour=12,
-        minute=0,
-        second=1,
-    )
 
     # the following constant is the amount of time we will wait during
     # request loop processing in between optioning each target_rtn
@@ -1031,25 +1014,13 @@ class SmartThread:
 
         self.unregister = False
 
-        # create a new registry and pair_array if needed, and set local
-        # references to them
-        # with SmartThread._group_lock:
-        #     if group_name not in SmartThread._registry:
-        #         SmartThread._registry[group_name] = {}
-        #         SmartThread._pair_array[group_name] = {}
-        #
-        #     self.registry: dict[str, "SmartThread"] = SmartThread._registry[group_name]
-        #
-        #     self.pair_array: dict[PairKey, ConnectionPair] = SmartThread._pair_array[
-        #         group_name
-        #     ]
         with SmartThread._group_lock:
             # if we are the first SmartThread being created for this
             # group then we need to set up the registry and pair_array
             # in the SmartThread._registry class var
             if group_name not in SmartThread._registry:
                 SmartThread._registry[group_name] = RegistryPairArray(
-                    registry={}, pair_array={}
+                    registry={}, pair_array={}, registry_lock=sel.SELock()
                 )
 
             self.registry: dict[str, "SmartThread"] = SmartThread._registry[
@@ -1059,6 +1030,10 @@ class SmartThread:
             self.pair_array: dict[PairKey, ConnectionPair] = SmartThread._registry[
                 group_name
             ].pair_array
+
+            self.registry_lock: sel.SELock = SmartThread._registry[
+                group_name
+            ].registry_lock
 
         self.st_state: ThreadState = ThreadState.Initialized
 
@@ -1167,7 +1142,7 @@ class SmartThread:
             if group_name in SmartThread._registry:
                 inner_reg = SmartThread._registry[group_name].registry
                 current_thread = threading.current_thread()
-                with sel.SELockShare(SmartThread._registry_lock):
+                with sel.SELockShare(SmartThread._registry[group_name].registry_lock):
                     for name, smart_thread in inner_reg.items():
                         if smart_thread.thread is current_thread:
                             return smart_thread
@@ -1195,7 +1170,7 @@ class SmartThread:
         ret_list: list[SmartThread] = []
         with SmartThread._group_lock:
             for group_name, registry in SmartThread._registry.items():
-                with sel.SELockShare(SmartThread._registry_lock):
+                with sel.SELockShare(SmartThread._registry[group_name].registry_lock):
                     for thread_name, smart_thread in registry.registry.items():
                         if smart_thread.thread is search_thread:
                             ret_list.append(smart_thread)
@@ -1220,7 +1195,7 @@ class SmartThread:
         with SmartThread._group_lock:
             if group_name in SmartThread._registry:
                 inner_reg = SmartThread._registry[group_name].registry
-                with sel.SELockShare(SmartThread._registry_lock):
+                with sel.SELockShare(SmartThread._registry[group_name].registry_lock):
                     for name, smart_thread in inner_reg.items():
                         if smart_thread.st_state == ThreadState.Alive:
                             ret_names |= {name}
@@ -1253,7 +1228,7 @@ class SmartThread:
         """
         with SmartThread._group_lock:
             if group_name in SmartThread._registry:
-                with sel.SELockShare(SmartThread._registry_lock):
+                with sel.SELockShare(SmartThread._registry[group_name].registry_lock):
                     if name in SmartThread._registry[group_name].registry:
                         return SmartThread._registry[group_name].registry[name].st_state
 
@@ -1386,7 +1361,7 @@ class SmartThread:
             f"{self.log_name}, "
             f"target: {self.name}"
         )
-        with sel.SELockExcl(SmartThread._registry_lock):
+        with sel.SELockExcl(self.registry_lock):
             ############################################################
             # Remove any old entries from registry and pair array
             ############################################################
@@ -1445,8 +1420,7 @@ class SmartThread:
             # place new entry into registry
             self.registry[self.name] = self
 
-            SmartThread._registry_last_update = datetime.utcnow()
-            # SmartThread._registry_last_update = datetime.now(datetime.UTC)
+            SmartThread._registry_last_update = datetime.now(UTC)
             print_time = SmartThread._registry_last_update.strftime("%H:%M:%S.%f")
             logger.debug(
                 f"{self.log_name} added {self.name} "
@@ -1549,7 +1523,7 @@ class SmartThread:
 
         # update time only when we made a change
         if changed:
-            SmartThread._registry_last_update = datetime.utcnow()
+            SmartThread._registry_last_update = datetime.now(UTC)
             print_time = SmartThread._registry_last_update.strftime("%H:%M:%S.%f")
             logger.debug(
                 f"{self.log_name} did cleanup of registry at UTC "
@@ -2091,7 +2065,7 @@ class SmartThread:
         # Since smart_start does not have a timeout, work_remotes as an
         # instance variable is not used in smart_start and is instead a
         # local variable.
-        with sel.SELockExcl(SmartThread._registry_lock):
+        with sel.SELockExcl(self.registry_lock):
             if targets is None:
                 targets = {self.name}
             else:
@@ -2122,7 +2096,7 @@ class SmartThread:
                     )
                     logger.error(error_msg)
                     raise SmartThreadMultipleTargetsForSelfStart(error_msg)
-                # with sel.SELockExcl(SmartThread._registry_lock):
+
                 if self.thread.is_alive():
                     error_msg = (
                         f"SmartThread {self.log_name} "
@@ -2149,7 +2123,6 @@ class SmartThread:
             not_registered_remotes: set[str] = set()
             work_remotes = targets.copy()
             for remote in work_remotes.copy():
-                # with sel.SELockExcl(SmartThread._registry_lock):
                 if self._process_start(remote, not_registered_remotes):
                     work_remotes -= {remote}
 
@@ -2288,7 +2261,7 @@ class SmartThread:
 
         not_registered_remotes: set[str] = set()
         self.work_remotes = cmd_block.targets.copy()
-        with sel.SELockExcl(SmartThread._registry_lock):
+        with sel.SELockExcl(self.registry_lock):
             for remote in self.work_remotes.copy():
                 if self._get_state(name=remote) != ThreadState.Registered:
                     not_registered_remotes |= {remote}
@@ -2407,7 +2380,7 @@ class SmartThread:
         self.work_remotes = cmd_block.targets.copy()
         while self.work_remotes:
             joined_remotes: set[str] = set()
-            with sel.SELockExcl(SmartThread._registry_lock):
+            with sel.SELockExcl(self.registry_lock):
                 for remote in self.work_remotes.copy():
                     if remote in self.registry:
                         if self._process_smart_join(remote):
@@ -4557,7 +4530,7 @@ class SmartThread:
                 # remains stable while getting local_sb. The
                 # request_pending flag in our entry will prevent our
                 # entry for being removed (but not the remote)
-                with sel.SELockShare(SmartThread._registry_lock):
+                with sel.SELockShare(self.registry_lock):
                     if self.found_pk_remotes:
                         pk_remote = self._handle_found_pk_remotes(
                             pk_remote=pk_remote, work_pk_remotes=work_pk_remotes_copy
@@ -4615,7 +4588,7 @@ class SmartThread:
                         f"{self.log_name} {self.request.value} calling refresh, "
                         f"remaining remotes: {self.work_pk_remotes}"
                     )
-                    with sel.SELockExcl(SmartThread._registry_lock):
+                    with sel.SELockExcl(self.registry_lock):
                         self._clean_registry()
                         self._clean_pair_array()
                     do_refresh = False
@@ -4645,7 +4618,7 @@ class SmartThread:
                 or request_block.timer.is_expired()
             ):
                 # cleanup before doing the error
-                with sel.SELockExcl(SmartThread._registry_lock):
+                with sel.SELockExcl(self.registry_lock):
                     if request_block.cleanup_rtn:
                         request_block.cleanup_rtn(
                             request_block.remotes, request_block.request.value
@@ -4694,7 +4667,7 @@ class SmartThread:
         # cleanup
         ################################################################
         if self.work_pk_remotes:
-            with sel.SELockShare(SmartThread._registry_lock):
+            with sel.SELockShare(self.registry_lock):
                 self.work_pk_remotes = []
 
     ####################################################################
@@ -4710,7 +4683,7 @@ class SmartThread:
         """
         pk_remotes: list[PairKeyRemote] = []
 
-        with sel.SELockExcl(SmartThread._registry_lock):
+        with sel.SELockExcl(self.registry_lock):
             self.missing_remotes = set()
             for remote in remotes:
                 if remote in self.registry:

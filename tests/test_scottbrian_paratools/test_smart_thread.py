@@ -19253,9 +19253,9 @@ class ConfigVerifier:
             verify_data: data to be saved with the snapshot
 
         """
-        # with sel.SELockExcl(st.SmartThread._registry_lock):
         with conditional_registry_lock(
-            lock=st.SmartThread._registry_lock, obtain_tf=verify_data.obtain_reg_lock
+            lock=st.SmartThread._registry[self.group_name].registry_lock,
+            obtain_tf=verify_data.obtain_reg_lock,
         ):
             registry_items: dict[str, RegistrySnapshotItem] = {}
             for name, item in st.SmartThread._registry[
@@ -22076,18 +22076,16 @@ class ConfigVerifier:
     ####################################################################
     # lock_obtain
     ####################################################################
-    @staticmethod
-    def lock_obtain() -> None:
+    def lock_obtain(self) -> None:
         """Obtain the registry lock exclusive."""
-        st.SmartThread._registry_lock.obtain_excl(timeout=60)
+        st.SmartThread._registry[self.group_name].registry_lock.obtain_excl(timeout=60)
 
     ####################################################################
     # lock_release
     ####################################################################
-    @staticmethod
-    def lock_release() -> None:
+    def lock_release(self) -> None:
         """Increment the pending operations count."""
-        st.SmartThread._registry_lock.release()
+        st.SmartThread._registry[self.group_name].registry_lock.release()
 
     ####################################################################
     # lock_swap
@@ -22099,32 +22097,52 @@ class ConfigVerifier:
             cmd_runner: thread name doing the cmd
             new_positions: the desired positions on the lock queue
         """
-        assert len(new_positions) == len(st.SmartThread._registry_lock.owner_wait_q)
+        assert len(new_positions) == len(
+            st.SmartThread._registry[self.group_name].registry_lock.owner_wait_q
+        )
         with self.ops_lock:
             for idx, pos_name in enumerate(new_positions):
-                search_thread = st.SmartThread._registry_lock.owner_wait_q[idx].thread
+                search_thread = (
+                    st.SmartThread._registry[self.group_name]
+                    .registry_lock.owner_wait_q[idx]
+                    .thread
+                )
                 test_name = self.get_smart_thread_name(
                     search_thread=search_thread, group_name="test1"
                 )
                 if test_name != pos_name:
-                    save_pos = st.SmartThread._registry_lock.owner_wait_q[idx]
+                    save_pos = st.SmartThread._registry[
+                        self.group_name
+                    ].registry_lock.owner_wait_q[idx]
                     # find our desired position
                     new_pos = None
-                    # for (idx2, owner_waiter in enumerate(
-                    #            st.SmartThread._registry_lock.owner_wait_q)):
-                    for idx2 in range(len(st.SmartThread._registry_lock.owner_wait_q)):
-                        search_thread = st.SmartThread._registry_lock.owner_wait_q[
-                            idx2
-                        ].thread
+                    for idx2 in range(
+                        len(
+                            st.SmartThread._registry[
+                                self.group_name
+                            ].registry_lock.owner_wait_q
+                        )
+                    ):
+                        search_thread = (
+                            st.SmartThread._registry[self.group_name]
+                            .registry_lock.owner_wait_q[idx2]
+                            .thread
+                        )
                         test_name = self.get_smart_thread_name(
                             search_thread=search_thread, group_name="test1"
                         )
                         if test_name == pos_name:
-                            new_pos = st.SmartThread._registry_lock.owner_wait_q[idx2]
+                            new_pos = st.SmartThread._registry[
+                                self.group_name
+                            ].registry_lock.owner_wait_q[idx2]
                             break
                     assert new_pos is not None
-                    st.SmartThread._registry_lock.owner_wait_q[idx] = new_pos
-                    st.SmartThread._registry_lock.owner_wait_q[idx2] = save_pos
+                    st.SmartThread._registry[
+                        self.group_name
+                    ].registry_lock.owner_wait_q[idx] = new_pos
+                    st.SmartThread._registry[
+                        self.group_name
+                    ].registry_lock.owner_wait_q[idx2] = save_pos
 
     ####################################################################
     # get_smart_thread_name
@@ -22173,7 +22191,7 @@ class ConfigVerifier:
             FailedLockVerify: lock_verify from {line_num=} timed out
                 after {timeout_value} seconds waiting for the
                 {exp_positions=} to match
-                {st.SmartThread._registry_lock.owner_wait_q=}.
+                {st.SmartThread._registry[self.group_name].registry_lock.owner_wait_q=}.
 
         """
         self.log_test_msg(
@@ -22186,14 +22204,16 @@ class ConfigVerifier:
             lock_verified = True  # assume lock will verify
             with self.ops_lock:
                 if len(exp_positions) != len(
-                    st.SmartThread._registry_lock.owner_wait_q
+                    st.SmartThread._registry[self.group_name].registry_lock.owner_wait_q
                 ):
                     lock_verified = False
                 else:
                     for idx, expected_name in enumerate(exp_positions):
-                        search_thread = st.SmartThread._registry_lock.owner_wait_q[
-                            idx
-                        ].thread
+                        search_thread = (
+                            st.SmartThread._registry[self.group_name]
+                            .registry_lock.owner_wait_q[idx]
+                            .thread
+                        )
                         test_name = self.get_smart_thread_name(
                             search_thread=search_thread, group_name="test1"
                         )
@@ -22208,7 +22228,7 @@ class ConfigVerifier:
                         f"lock_verify from {line_num=} timed out after"
                         f" {timeout_value} seconds waiting for the "
                         f"{exp_positions=} to match \n"
-                        f"{st.SmartThread._registry_lock.owner_wait_q=} "
+                        f"{st.SmartThread._registry[self.group_name].registry_lock.owner_wait_q=} "
                     )
                 time.sleep(0.2)
         self.log_test_msg(
@@ -22832,13 +22852,13 @@ class ConfigVerifier:
                 self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f"verify_config found pair_key {pair_key} in real "
-                    f"SmartThread._pair_array that has an empty status_blocks"
+                    f"SmartThread pair_array that has an empty status_blocks"
                 )
             if pair_key not in self.expected_pairs:
                 self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f"verify_config found pair_key {pair_key} in real "
-                    f"SmartThread._pair_array that is not found in "
+                    f"SmartThread pair_array that is not found in "
                     f"expected_pairs"
                 )
             for name, status_item in status_blocks.items():
@@ -22854,7 +22874,7 @@ class ConfigVerifier:
                     self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_config found {name=} in real "
-                        f"SmartThread._pair_array status_blocks for pair_key"
+                        f"SmartThread pair_array status_blocks for pair_key"
                         f" {pair_key}, but is missing in mock "
                         f"expected_registered"
                     )
@@ -22863,7 +22883,7 @@ class ConfigVerifier:
                     self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_config found {name=} in real "
-                        f"SmartThread._pair_array status_blocks for pair_key"
+                        f"SmartThread pair_array status_blocks for pair_key"
                         f" {pair_key}, but is missing in expected_pairs"
                     )
 
@@ -22878,7 +22898,7 @@ class ConfigVerifier:
                         self.abort_all_f1_threads()
                         raise InvalidConfigurationDetected(
                             f"verify_config found {name=} in real "
-                            f"SmartThread._pair_array status_blocks for "
+                            f"SmartThread pair_array status_blocks for "
                             f"pair_key {pair_key}, but it is a single "
                             f"name that has no pending reasons and is not "
                             f"del_deferred"
@@ -22888,7 +22908,7 @@ class ConfigVerifier:
                     self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_config found {name=} in real "
-                        f"SmartThread._pair_array status_blocks for "
+                        f"SmartThread pair_array status_blocks for "
                         f"pair_key {pair_key} has "
                         f"{status_item.pending_request=} which does not "
                         f"match {mock_status_item.pending_request=}"
@@ -22897,7 +22917,7 @@ class ConfigVerifier:
                     self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_config found {name=} in real "
-                        f"SmartThread._pair_array status_blocks for "
+                        f"SmartThread pair_array status_blocks for "
                         f"pair_key {pair_key} has "
                         f"{status_item.pending_msg_count=} which does not "
                         f"match {mock_status_item.pending_msg_count=}"
@@ -22906,7 +22926,7 @@ class ConfigVerifier:
                     self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_config found {name=} in real "
-                        f"SmartThread._pair_array status_blocks for "
+                        f"SmartThread pair_array status_blocks for "
                         f"pair_key {pair_key} has "
                         f"{status_item.pending_wait=} which does not "
                         f"match {mock_status_item.pending_wait=}"
@@ -22915,7 +22935,7 @@ class ConfigVerifier:
                     self.abort_all_f1_threads()
                     raise InvalidConfigurationDetected(
                         f"verify_config found {name=} in real "
-                        f"SmartThread._pair_array status_blocks for "
+                        f"SmartThread pair_array status_blocks for "
                         f"pair_key {pair_key} has "
                         f"{status_item.pending_sync=} which does not "
                         f"match {mock_status_item.pending_sync=}"
@@ -22927,7 +22947,7 @@ class ConfigVerifier:
                 self.abort_all_f1_threads()
                 raise InvalidConfigurationDetected(
                     f"verify_config found {pair_key=} in expected_pairs but "
-                    f"not in real SmartThread._pair_array"
+                    f"not in real SmartThread pair_array"
                 )
             for name, mock_status_item in mock_status_blocks.items():
                 if name not in real_reg_items:
@@ -22952,7 +22972,7 @@ class ConfigVerifier:
                     raise InvalidConfigurationDetected(
                         f"verify_config found {name=} in mock "
                         f"expected_pairs for pair_key {pair_key}, but not in "
-                        "real SmartThread._pair_array status_blocks"
+                        "real SmartThread pair_array status_blocks"
                     )
 
     ####################################################################
@@ -23918,7 +23938,7 @@ class ConfigVerifier:
                 pair_key = st.SmartThread._get_pair_key(
                     name0=deleted_name, name1=def_del_name
                 )
-                if pair_key in st.SmartThread._pair_array[self.group_name]:
+                if pair_key in st.SmartThread._registry[self.group_name].pair_array:
                     pair_key_exists[pair_key] = True
                     if pair_key not in self.expected_pairs:
                         raise InvalidConfigurationDetected(
@@ -27376,12 +27396,13 @@ class TestSmartThreadInterface:
                 )
 
         thread_state = ThreadState.Alive
+        # thread_state = ThreadState.Stopped
         for group_name in reversed(group_names_arg):
             wait_for(
                 lambda: SmartThread.get_state(group_name=group_name, name="beta")
                 == thread_state
             )
-            thread_state = ThreadState.Stopped
+            # thread_state = ThreadState.Stopped
 
         for idx, group_name in enumerate(group_names_arg):
             alpha_smart_thread[idx].smart_join(targets="beta")
@@ -28665,7 +28686,7 @@ class TestSmartThreadInterface:
                 lambda: SmartThread.get_state(group_name=group_name, name="beta")
                 == thread_state
             )
-            thread_state = ThreadState.Stopped
+            # thread_state = ThreadState.Stopped
 
         for idx, group_name in enumerate(group_names_arg):
             alpha_smart_thread[idx].smart_join(targets="beta")
@@ -31014,12 +31035,22 @@ class TestSmartThreadSmokeTest:
         # our purpose to test that the log messages are being issued or
         # suppressed correctly based on logging levels.
         ################################################################
+        lock_manager_logger = logging.Logger.manager.loggerDict["scottbrian_locking"]
+
+        if isinstance(lock_manager_logger, logging.PlaceHolder):
+            raise InvalidConfigurationDetected(
+                "test_smart_thread_log_msg detected that the manager "
+                "logger for scottbrian_locking is a PlaceHolder"
+            )
+
+        lock_manager_logger.setLevel(logging.CRITICAL)
+
         manager_logger = logging.Logger.manager.loggerDict["scottbrian_paratools"]
 
         if isinstance(manager_logger, logging.PlaceHolder):
             raise InvalidConfigurationDetected(
                 "test_smart_thread_log_msg detected that the manager "
-                "logger for scottbrian_paratoold is a PlaceHolder"
+                "logger for scottbrian_paratools is a PlaceHolder"
             )
 
         my_root = manager_logger.parent
@@ -32075,7 +32106,7 @@ class TestSmartThreadErrors:
 
         # create an empty pair array entry_
         pair_key = st.SmartThread._get_pair_key("alpha", "beta")
-        st.SmartThread._pair_array["test1"][pair_key] = st.SmartThread.ConnectionPair(
+        st.SmartThread._registry["test1"].pair_array[pair_key] = st.ConnectionPair(
             status_lock=threading.Lock(), status_blocks={}
         )
 
@@ -32100,10 +32131,10 @@ class TestSmartThreadErrors:
 
         ################################################################
 
-        st.SmartThread._pair_array["test1"][pair_key] = st.SmartThread.ConnectionPair(
+        st.SmartThread._registry["test1"].pair_array[pair_key] = st.ConnectionPair(
             status_lock=threading.Lock(),
             status_blocks={
-                "beta": st.SmartThread.ConnectionStatusBlock(
+                "beta": st.ConnectionStatusBlock(
                     name="beta",
                     create_time=0,
                     target_create_time=0.0,
@@ -32135,10 +32166,10 @@ class TestSmartThreadErrors:
 
         ################################################################
 
-        st.SmartThread._pair_array["test1"][pair_key] = st.SmartThread.ConnectionPair(
+        st.SmartThread._registry["test1"].pair_array[pair_key] = st.ConnectionPair(
             status_lock=threading.Lock(),
             status_blocks={
-                "alpha": st.SmartThread.ConnectionStatusBlock(
+                "alpha": st.ConnectionStatusBlock(
                     name="beta",
                     create_time=0,
                     target_create_time=0.0,
@@ -32171,10 +32202,10 @@ class TestSmartThreadErrors:
 
         ################################################################
 
-        st.SmartThread._pair_array["test1"][pair_key] = st.SmartThread.ConnectionPair(
+        st.SmartThread._registry["test1"].pair_array[pair_key] = st.ConnectionPair(
             status_lock=threading.Lock(),
             status_blocks={
-                "alpha": st.SmartThread.ConnectionStatusBlock(
+                "alpha": st.ConnectionStatusBlock(
                     name="beta",
                     create_time=0,
                     target_create_time=0.0,
@@ -32182,7 +32213,7 @@ class TestSmartThreadErrors:
                     sync_flag=False,
                     msg_q=queue.Queue(maxsize=10),
                 ),
-                "beta": st.SmartThread.ConnectionStatusBlock(
+                "beta": st.ConnectionStatusBlock(
                     name="beta",
                     create_time=0,
                     target_create_time=0.0,
@@ -32196,9 +32227,9 @@ class TestSmartThreadErrors:
         with pytest.raises(st.SmartThreadIncorrectData) as exc:
             st.SmartThread(group_name="test1", name="beta", target_rtn=f1)
 
-        existing_names = st.SmartThread._pair_array["test1"][
-            pair_key
-        ].status_blocks.keys()
+        existing_names = (
+            st.SmartThread._registry["test1"].pair_array[pair_key].status_blocks.keys()
+        )
 
         exp_error_msg = re.escape(
             "SmartThread beta (test1) "
@@ -32875,7 +32906,9 @@ class TestSmartThreadErrors:
                         # local_sb. The request_pending flag in our
                         # entry will prevent our entry for being removed
                         # (but not the remote)
-                        with sel.SELockShare(st.SmartThread._registry_lock):
+                        with sel.SELockShare(
+                            st.SmartThread._registry[self.group_name].registry_lock
+                        ):
                             if self.found_pk_remotes:  # type: ignore
                                 wpr = self.work_pk_remotes  # type: ignore
                                 if MockRequestLoop.mock_action == "action2":
@@ -35092,7 +35125,7 @@ class TestSmartThreadComboScenarios:
     @pytest.mark.parametrize("num_delay_unreg_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_no_delay_reg_arg", [0, 1, 2])
     @pytest.mark.parametrize("num_delay_reg_arg", [0, 1, 2])
-    @pytest.mark.skip(reason="not now")
+    # @pytest.mark.skip(reason="not now")
     def test_join_timeout_scenario(
         self,
         timeout_type_arg: TimeoutType,
