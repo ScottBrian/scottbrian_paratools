@@ -41,6 +41,8 @@ from scottbrian_paratools.smart_thread import SmartThread
 
 logger = logging.getLogger(__name__)
 
+logging.Logger.manager.loggerDict["scottbrian_locking"].setLevel(logging.CRITICAL)
+
 
 # class MyLogger:
 #     def debug(self, instr: Any, stacklevel=1):

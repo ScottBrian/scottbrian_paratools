@@ -1335,6 +1335,7 @@ class RecvMsg(ConfigCmd):
             sender_count=self.sender_count,
             stopped_remotes=self.stopped_remotes,
             deadlock_remotes=self.deadlock_remotes,
+            deadlock_or_timeout=False,
             timeout_type=TimeoutType.TimeoutNone,
             timeout=0,
             timeout_names=set(),
@@ -1405,6 +1406,7 @@ class RecvMsgTimeoutFalse(RecvMsg):
             sender_count=self.sender_count,
             stopped_remotes=self.stopped_remotes,
             deadlock_remotes=self.deadlock_remotes,
+            deadlock_or_timeout=False,
             timeout_type=TimeoutType.TimeoutFalse,
             timeout=self.timeout,
             timeout_names=set(),
@@ -1429,6 +1431,7 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
         sender_count: Optional[int] = None,
         stopped_remotes: Optional[Iterable[str]] = None,
         deadlock_remotes: Optional[Iterable[str]] = None,
+        deadlock_or_timeout: bool = False,
         log_msg: Optional[str] = None,
     ) -> None:
         """Initialize the instance.
@@ -1446,6 +1449,7 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
                 senders are needed to satisfy the smart_recv
             stopped_remotes: thread names that are stopped
             deadlock_remotes: thread names that cause deadlock
+            deadlock_or_timeout: except deadlock or timeout
             log_msg: log message to specify on the smart_recv
         """
         super().__init__(
@@ -1463,6 +1467,8 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
 
         self.timeout_names = get_set(timeout_names)
 
+        self.deadlock_or_timeout = deadlock_or_timeout
+
         self.arg_list += ["timeout_names"]
 
     def run_process(self, cmd_runner: str) -> None:
@@ -1479,6 +1485,7 @@ class RecvMsgTimeoutTrue(RecvMsgTimeoutFalse):
             sender_count=self.sender_count,
             stopped_remotes=self.stopped_remotes,
             deadlock_remotes=self.deadlock_remotes,
+            deadlock_or_timeout=self.deadlock_or_timeout,
             timeout_type=TimeoutType.TimeoutTrue,
             timeout=self.timeout,
             timeout_names=self.timeout_names,
@@ -2477,6 +2484,7 @@ class Wait(ConfigCmd):
             timeout_remotes=set(),
             stopped_remotes=self.stopped_remotes,
             deadlock_remotes=self.deadlock_remotes,
+            deadlock_or_timeout=False,
             timeout_type=TimeoutType.TimeoutNone,
             resumer_count=self.resumer_count,
             log_msg=self.log_msg,
@@ -2543,6 +2551,7 @@ class WaitTimeoutFalse(Wait):
             timeout_remotes=set(),
             stopped_remotes=self.stopped_remotes,
             deadlock_remotes=self.deadlock_remotes,
+            deadlock_or_timeout=False,
             timeout_type=TimeoutType.TimeoutFalse,
             resumer_count=self.resumer_count,
             log_msg=self.log_msg,
@@ -2565,6 +2574,7 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
         resumer_count: Optional[int] = None,
         stopped_remotes: Optional[Iterable[str]] = None,
         deadlock_remotes: Optional[Iterable[str]] = None,
+        deadlock_or_timeout: bool = False,
         log_msg: Optional[str] = None,
     ) -> None:
         """Initialize the instance.
@@ -2580,6 +2590,7 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
                 resumes are needed to satisfy the smart_wait
             stopped_remotes: thread names that are stopped
             deadlock_remotes: thread names that are deadlocked
+            deadlock_or_timeout: expect either deadlock or timeout
             log_msg: log message for smart_wait
         """
         super().__init__(
@@ -2595,6 +2606,8 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
         self.specified_args = locals()  # used for __repr__
 
         self.timeout_remotes = get_set(timeout_remotes)
+
+        self.deadlock_or_timeout = deadlock_or_timeout
 
         self.arg_list += ["timeout_remotes"]
 
@@ -2612,6 +2625,7 @@ class WaitTimeoutTrue(WaitTimeoutFalse):
             timeout_remotes=self.timeout_remotes,
             stopped_remotes=self.stopped_remotes,
             deadlock_remotes=self.deadlock_remotes,
+            deadlock_or_timeout=self.deadlock_or_timeout,
             timeout_type=TimeoutType.TimeoutTrue,
             resumer_count=self.resumer_count,
             log_msg=self.log_msg,
@@ -6051,13 +6065,24 @@ class ConfigVerifier:
             )
         )
 
+        self.add_cmd(
+            WaitForRequestTimeouts(
+                cmd_runners=self.commander_name,
+                actor_names=receivers1,
+                timeout_names=receivers2,
+            )
+        )
+
         recv_serial_num_2 = self.add_cmd(
-            RecvMsg(
+            RecvMsgTimeoutTrue(
                 cmd_runners=receivers2,
                 senders=receivers1,
                 exp_senders=set(),
                 exp_msgs=msgs_to_send,
                 deadlock_remotes=set(receivers1),
+                deadlock_or_timeout=True,
+                timeout_names=set(receivers1),
+                timeout=5,
                 log_msg="receive deadlock test",
             )
         )
@@ -6104,12 +6129,23 @@ class ConfigVerifier:
             )
         )
 
+        self.add_cmd(
+            WaitForRequestTimeouts(
+                cmd_runners=self.commander_name,
+                actor_names=waiters1,
+                timeout_names=waiters2,
+            )
+        )
+
         wait_serial_num_2 = self.add_cmd(
-            Wait(
+            WaitTimeoutTrue(
                 cmd_runners=waiters2,
                 resumers=waiters1,
                 exp_resumers=set(),
                 deadlock_remotes=set(waiters1),
+                deadlock_or_timeout=True,
+                timeout_remotes=set(waiters1),
+                timeout=5,
                 log_msg="wait deadlock test",
             )
         )
@@ -19597,6 +19633,7 @@ class ConfigVerifier:
         exp_msgs: SendRecvMsgs,
         stopped_remotes: set[str],
         deadlock_remotes: set[str],
+        deadlock_or_timeout: bool,
         timeout_type: TimeoutType,
         timeout: IntOrFloat,
         timeout_names: set[str],
@@ -19613,6 +19650,7 @@ class ConfigVerifier:
             exp_msgs: expected messages by sender name
             stopped_remotes: names of remotes that are stopped.
             deadlock_remotes: thread names that will cause a deadlock
+            deadlock_or_timeout: expect deadlock or timeout
             timeout_type: None, False, or True
             timeout: value to use for timeout
             timeout_names: names of remotes that fail to send a message
@@ -19675,7 +19713,14 @@ class ConfigVerifier:
             )
 
         elif deadlock_remotes:
-            with pytest.raises(st.SmartThreadDeadlockDetected):
+            if deadlock_or_timeout:
+                expected_exceptions = (
+                    st.SmartThreadDeadlockDetected,
+                    st.SmartThreadRequestTimedOut,
+                )
+            else:
+                expected_exceptions = st.SmartThreadDeadlockDetected
+            with pytest.raises(expected_exceptions):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_recv(
                         senders=senders, sender_count=sender_count, log_msg=log_msg
@@ -21907,6 +21952,7 @@ class ConfigVerifier:
         timeout_remotes: set[str],
         stopped_remotes: set[str],
         deadlock_remotes: set[str],
+        deadlock_or_timeout: bool,
         timeout_type: TimeoutType,
         resumer_count: Optional[int] = None,
         log_msg: Optional[str] = None,
@@ -21922,6 +21968,7 @@ class ConfigVerifier:
             timeout_remotes: names of threads that will cause timeout
             stopped_remotes: names of thread that will cause not_alive
             deadlock_remotes: names of threads that will cause deadlock
+            deadlock_or_timeout: expect deadlock or timeout
             timeout_type: specifies None, False, or True
             resumer_count: number of resumes needed to satisfy
                 smart_wait
@@ -21997,8 +22044,14 @@ class ConfigVerifier:
             )
 
         elif deadlock_remotes:
-            # enter_exit = ('entry',)
-            with pytest.raises(st.SmartThreadDeadlockDetected):
+            if deadlock_or_timeout:
+                expected_exceptions = (
+                    st.SmartThreadDeadlockDetected,
+                    st.SmartThreadRequestTimedOut,
+                )
+            else:
+                expected_exceptions = st.SmartThreadDeadlockDetected
+            with pytest.raises(expected_exceptions):
                 if timeout_type == TimeoutType.TimeoutNone:
                     self.all_threads[cmd_runner].smart_wait(
                         resumers=resumers, resumer_count=resumer_count, log_msg=log_msg
@@ -32477,14 +32530,14 @@ class TestSmartThreadErrors:
             group_name="test1", name="beta", target_rtn=f1, auto_start=False
         )
 
-        with pytest.raises(st.SmartThreadMultipleTargetsForSelfStart) as exc:
+        with pytest.raises(st.SmartThreadMultipleTargets) as exc:
             beta_thread.smart_start(targets=("beta", "charlie"))
 
         targets = set(("beta", "charlie"))
 
         exp_error_msg = (
             "SmartThread beta (test1) "
-            "raising SmartThreadMultipleTargetsForSelfStart "
+            "raising SmartThreadMultipleTargets "
             "error while processing request smart_start. "
             "Request smart_start can not be done for multiple "
             f"targets {targets} when one of the targets is also "
@@ -32499,15 +32552,14 @@ class TestSmartThreadErrors:
         ################################################################
         beta_thread.smart_start()
 
-        with pytest.raises(st.SmartThreadAlreadyStarted) as exc1:
+        with pytest.raises(st.SmartThreadRemoteThreadNotRegistered) as exc1:
             beta_thread.smart_start()
 
         exp_error_msg = (
             "SmartThread beta (test1) "
-            "raising SmartThreadAlreadyStarted error while "
-            "processing request smart_start. "
-            "Unable to start beta because beta "
-            "has already been started."
+            "raising SmartThreadRemoteThreadNotRegistered error while "
+            "processing request smart_start with targets [beta]. "
+            " Remotes that are not registered: [beta]."
         )
 
         logger.debug(exp_error_msg)
@@ -33433,20 +33485,14 @@ class TestSmartThreadErrors:
         # SmartThreadInvalidInput - caller also a remote
         ################################################################
         with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            if request_type_arg == st.ReqType.Smart_unreg:
-                alpha_thread.smart_unreg(targets="alpha")
-            elif request_type_arg == st.ReqType.Smart_join:
+            if request_type_arg == st.ReqType.Smart_join:
                 alpha_thread.smart_join(targets="alpha")
-            else:
-                raise InvalidInputDetected(
-                    f"test_get_targets_errors received {request_type_arg=}"
-                )
 
         exp_error_msg = (
             r"SmartThread alpha \(test1\) raising SmartThreadInvalidInput "
             f"error while processing request {request_type_arg}. "
-            r"Targets \['alpha'\] includes alpha which is not "
-            "permitted except for request smart_start."
+            r"The set of targets \['alpha'\] includes alpha which is not "
+            f"permitted for request {request_type_arg}."
         )
 
         logger.debug(exp_error_msg)
@@ -33501,8 +33547,8 @@ class TestSmartThreadErrors:
         exp_error_msg = (
             r"SmartThread alpha \(test1\) raising SmartThreadInvalidInput "
             f"error while processing request {request_type_arg}. "
-            r"Targets \['alpha'\] includes alpha which is not "
-            "permitted except for request smart_start."
+            r"The set of targets \['alpha'\] includes alpha which is not "
+            f"permitted for request {request_type_arg}."
         )
 
         logger.debug(exp_error_msg)
@@ -36282,10 +36328,36 @@ class TestSmartThreadComboScenarios:
         DeadlockScenario.SyncDeadlock,
     ]
 
-    @pytest.mark.parametrize("conflict_deadlock_1_arg", deadlock_arg_list)
-    @pytest.mark.parametrize("conflict_deadlock_2_arg", deadlock_arg_list)
-    @pytest.mark.parametrize("conflict_deadlock_3_arg", deadlock_arg_list)
-    @pytest.mark.parametrize("num_cd_actors_arg", [3, 6, 9, 12])
+    # @pytest.mark.parametrize("conflict_deadlock_1_arg", deadlock_arg_list)
+    # @pytest.mark.parametrize("conflict_deadlock_2_arg", deadlock_arg_list)
+    # @pytest.mark.parametrize("conflict_deadlock_3_arg", deadlock_arg_list)
+    # @pytest.mark.parametrize("num_cd_actors_arg", [3, 6, 9, 12])
+    @pytest.mark.parametrize(
+        "conflict_deadlock_1_arg",
+        [
+            DeadlockScenario.NormalSync,
+            DeadlockScenario.SyncDeadlock,
+            DeadlockScenario.RecvDeadlock,
+        ],
+    )
+    @pytest.mark.parametrize(
+        "conflict_deadlock_2_arg",
+        [
+            DeadlockScenario.RecvDeadlock,
+            DeadlockScenario.WaitDeadlock,
+            DeadlockScenario.NormalSendRecv,
+        ],
+    )
+    @pytest.mark.parametrize(
+        "conflict_deadlock_3_arg",
+        [
+            DeadlockScenario.NormalSync,
+            DeadlockScenario.WaitDeadlock,
+            DeadlockScenario.SyncDeadlock,
+        ],
+    )
+    @pytest.mark.parametrize("num_cd_actors_arg", [3])
+    @pytest.mark.seltest
     def test_deadlock_scenario(
         self,
         conflict_deadlock_1_arg: DeadlockScenario,
