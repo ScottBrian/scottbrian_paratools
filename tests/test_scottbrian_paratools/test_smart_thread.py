@@ -3155,7 +3155,8 @@ class SetStateLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                r"[a-z0-9_]+ \([a-z0-9_]+\) set state for thread [a-z0-9_]+ from "
+                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) set state for thread "
+                "[a-z0-9_]+ from "
                 f"{list_of_thread_states} to {list_of_thread_states}"
             ),
             config_ver=config_ver,
@@ -3184,10 +3185,10 @@ class SetStateLogSearchItem(LogSearchItem):
     def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
-        cmd_runner = split_msg[0]
-        target_name = split_msg[6]
-        from_state_str = split_msg[8]
-        to_state_str = split_msg[10]
+        cmd_runner = split_msg[1]
+        target_name = split_msg[7]
+        from_state_str = split_msg[9]
+        to_state_str = split_msg[11]
 
         from_state = eval("st." + from_state_str)
         to_state = eval("st." + to_state_str)
@@ -3231,7 +3232,8 @@ class InitCompleteLogSearchItem(LogSearchItem):
         )
         super().__init__(
             search_str=(
-                r"[a-z0-9_]+ \([a-z0-9_]+\) completed initialization of [a-z0-9_]+: "
+                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) completed initialization "
+                "of [a-z0-9_]+: "
                 f"{list_of_thread_creates}, "
                 f"{list_of_thread_states}, "
                 f"{list_of_auto_start_texts}."
@@ -3262,10 +3264,10 @@ class InitCompleteLogSearchItem(LogSearchItem):
     def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
-        cmd_runner = split_msg[0]
-        target_name = split_msg[5][0:-1]
-        create_text = split_msg[6][0:-1]
-        state_text = split_msg[7][0:-1]
+        cmd_runner = split_msg[1]
+        target_name = split_msg[6][0:-1]
+        create_text = split_msg[7][0:-1]
+        state_text = split_msg[8][0:-1]
 
         thread_create = eval("st." + create_text)
         thread_state = eval("st." + state_text)
@@ -3385,8 +3387,8 @@ class AlreadyUnregLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                r"[a-z0-9_]+ \([a-z0-9_]+\) determined that thread [a-z0-9_]+ is "
-                "already in state ThreadState.Unregistered"
+                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) determined that thread "
+                "[a-z0-9_]+ is already in state ThreadState.Unregistered"
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -3414,8 +3416,8 @@ class AlreadyUnregLogSearchItem(LogSearchItem):
     def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
-        cmd_runner = split_msg[0]
-        target = split_msg[5]
+        cmd_runner = split_msg[1]
+        target = split_msg[6]
 
         pe = self.config_ver.pending_events[cmd_runner]
         unreg_key: AlreadyUnregKey = (cmd_runner, target)
@@ -3451,8 +3453,8 @@ class AddRegEntryLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                r"[a-z0-9_]+ \([a-z0-9_]+\) added [a-z0-9_]+ to SmartThread registry "
-                f"at UTC {time_match}"
+                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) added [a-z0-9_]+ to "
+                f"SmartThread registry at UTC {time_match}"
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -3481,7 +3483,7 @@ class AddRegEntryLogSearchItem(LogSearchItem):
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
         self.config_ver.handle_add_reg_log_msg(
-            cmd_runner=split_msg[0], target=split_msg[3], log_msg=self.found_log_msg
+            cmd_runner=split_msg[1], target=split_msg[4], log_msg=self.found_log_msg
         )
 
 
@@ -3506,7 +3508,7 @@ class AddPairArrayEntryLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                r"[a-z0-9_]+ \([a-z0-9_]+\) added "
+                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) added "
                 r"PairKey\(name0='[a-z0-9_]+', name1='[a-z0-9_]+'\) "
                 "to the _pair_array"
             ),
@@ -3537,9 +3539,9 @@ class AddPairArrayEntryLogSearchItem(LogSearchItem):
     def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
-        cmd_runner = split_msg[0]
-        name_0 = split_msg[3][15:-2]  # lose left paren, comma, quotes
-        name_1 = split_msg[4][7:-2]  # lose right paren, quotes
+        cmd_runner = split_msg[1]
+        name_0 = split_msg[4][15:-2]  # lose left paren, comma, quotes
+        name_1 = split_msg[5][7:-2]  # lose right paren, quotes
         pair_key: st.PairKey = st.PairKey(name_0, name_1)
         self.config_ver.handle_add_pair_array_log_msg(
             cmd_runner=cmd_runner, pair_key=pair_key, log_msg=self.found_log_msg
@@ -3567,7 +3569,7 @@ class AddStatusBlockEntryLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                r"[a-z0-9_]+ \([a-z0-9_]+\) added status_blocks entry for "
+                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) added status_blocks entry for "
                 r"PairKey\(name0='[a-z0-9_]+', name1='[a-z0-9_]+'\), "
                 "name = [a-z0-9_]+"
             ),
@@ -3598,10 +3600,10 @@ class AddStatusBlockEntryLogSearchItem(LogSearchItem):
     def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
-        cmd_runner = split_msg[0]
-        name_0 = split_msg[6][15:-2]  # lose left paren, comma, quotes
-        name_1 = split_msg[7][7:-3]  # lose right paren, quotes
-        target = split_msg[10]
+        cmd_runner = split_msg[1]
+        name_0 = split_msg[7][15:-2]  # lose left paren, comma, quotes
+        name_1 = split_msg[8][7:-3]  # lose right paren, quotes
+        target = split_msg[11]
         pair_key: st.PairKey = st.PairKey(name_0, name_1)
         self.config_ver.handle_add_status_block_log_msg(
             cmd_runner=cmd_runner,
@@ -3631,8 +3633,8 @@ class UpdatePairArrayUtcLogSearchItem(LogSearchItem):
             found_log_idx: index in the log where message was found
         """
         super().__init__(
-            search_str=r"[a-z0-9_]+ \([a-z0-9_]+\) updated _pair_array at UTC "
-            f"{time_match}",
+            search_str=r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) updated _pair_array at "
+            f"UTC {time_match}",
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
@@ -3659,7 +3661,7 @@ class UpdatePairArrayUtcLogSearchItem(LogSearchItem):
 
     def run_process(self) -> None:
         """Run the process to handle the log message."""
-        cmd_runner = self.found_log_msg.split(maxsplit=1)[0]
+        cmd_runner = self.found_log_msg.split()[1]
 
         pe = self.config_ver.pending_events[cmd_runner]
         if pe[PE.update_pair_array_utc_msg] <= 0:
@@ -3791,8 +3793,8 @@ class RemRegEntryLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                r"[a-z0-9_]+ \([a-z0-9_]+\) removed [a-z0-9_]+ from registry for "
-                f"request: {list_of_smart_requests}"
+                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) removed [a-z0-9_]+ from "
+                f"registry for request: {list_of_smart_requests}"
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -3820,9 +3822,9 @@ class RemRegEntryLogSearchItem(LogSearchItem):
     def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
-        cmd_runner = split_msg[0]
-        rem_name = split_msg[3]
-        process = split_msg[8]
+        cmd_runner = split_msg[1]
+        rem_name = split_msg[4]
+        process = split_msg[9]
 
         self.config_ver.handle_rem_reg_log_msg(
             cmd_runner=cmd_runner,
@@ -3853,9 +3855,8 @@ class DidCleanRegLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                r"[a-z0-9_]+ \([a-z0-9_]+\) did cleanup of registry at UTC "
-                f"{time_match}, "
-                r"deleted \[('[a-z0-9_]+'|, )+\]"
+                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) did cleanup of registry at "
+                rf"UTC {time_match}, deleted \[('[a-z0-9_]+'|, )+\]"
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -3883,7 +3884,7 @@ class DidCleanRegLogSearchItem(LogSearchItem):
     def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
-        cmd_runner = split_msg[0]
+        cmd_runner = split_msg[1]
         target_msg = self.found_log_msg.split("[")[1].split("]")[0].split(", ")
 
         targets: list[str] = []
@@ -3921,8 +3922,8 @@ class RemStatusBlockEntryLogSearchItem(LogSearchItem):
         )
         super().__init__(
             search_str=(
-                r"[a-z0-9_]+ \([a-z0-9_]+\) removed status_blocks entry for "
-                r"PairKey\(name0='[a-z0-9_]+', name1='[a-z0-9_]+'\), "
+                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) removed status_blocks entry "
+                r"for PairKey\(name0='[a-z0-9_]+', name1='[a-z0-9_]+'\), "
                 f"name = [a-z0-9_]+{list_of_extras}"
             ),
             config_ver=config_ver,
@@ -3951,10 +3952,10 @@ class RemStatusBlockEntryLogSearchItem(LogSearchItem):
     def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
-        cmd_runner = split_msg[0]
-        name_0 = split_msg[6][15:-2]  # lose left paren, comma, quotes
-        name_1 = split_msg[7][7:-3]  # lose right paren, quotes
-        rem_name = split_msg[10]
+        cmd_runner = split_msg[1]
+        name_0 = split_msg[7][15:-2]  # lose left paren, comma, quotes
+        name_1 = split_msg[8][7:-3]  # lose right paren, quotes
+        rem_name = split_msg[11]
 
         pair_key: st.PairKey = st.PairKey(name_0, name_1)
 
@@ -4026,9 +4027,9 @@ class RemStatusBlockEntryDefLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                r"[a-z0-9_]+ \([a-z0-9_]+\) removal deferred for status_blocks "
-                r"entry for PairKey\(name0='[a-z0-9_]+', name1='[a-z0-9_]+'\), "
-                "name = [a-z0-9_]+, reasons: "
+                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) removal deferred for "
+                r"status_blocks entry for PairKey\(name0='[a-z0-9_]+', "
+                r"name1='[a-z0-9_]+'\), name = [a-z0-9_]+, reasons: "
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -4056,10 +4057,10 @@ class RemStatusBlockEntryDefLogSearchItem(LogSearchItem):
     def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
-        cmd_runner = split_msg[0]
-        name_0 = split_msg[8][15:-2]  # lose left paren, comma, quotes
-        name_1 = split_msg[9][7:-3]  # lose right paren, quotes
-        rem_name = split_msg[12][0:-1]
+        cmd_runner = split_msg[1]
+        name_0 = split_msg[9][15:-2]  # lose left paren, comma, quotes
+        name_1 = split_msg[10][7:-3]  # lose right paren, quotes
+        rem_name = split_msg[13][0:-1]
 
         pair_key: st.PairKey = st.PairKey(name_0, name_1)
 
@@ -4127,8 +4128,8 @@ class RemPairArrayEntryLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                r"[a-z0-9_]+ \([a-z0-9_]+\) removed _pair_array entry for "
-                r"PairKey\(name0='[a-z0-9_]+', name1='[a-z0-9_]+'\)"
+                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) removed _pair_array entry "
+                r"for PairKey\(name0='[a-z0-9_]+', name1='[a-z0-9_]+'\)"
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -4157,9 +4158,9 @@ class RemPairArrayEntryLogSearchItem(LogSearchItem):
     def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
-        cmd_runner = split_msg[0]
-        name_0 = split_msg[6][15:-2]  # lose left paren, comma, quotes
-        name_1 = split_msg[7][7:-2]  # lose right paren, quotes
+        cmd_runner = split_msg[1]
+        name_0 = split_msg[7][15:-2]  # lose left paren, comma, quotes
+        name_1 = split_msg[8][7:-2]  # lose right paren, quotes
         pair_key: st.PairKey = st.PairKey(name_0, name_1)
 
         pe = self.config_ver.pending_events[cmd_runner]
@@ -4198,8 +4199,8 @@ class DidCleanPairArrayUtcLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                r"[a-z0-9_]+ \([a-z0-9_]+\) did cleanup of _pair_array at UTC "
-                f"{time_match}"
+                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) did cleanup of _pair_array at "
+                f"UTC {time_match}"
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -4227,13 +4228,9 @@ class DidCleanPairArrayUtcLogSearchItem(LogSearchItem):
 
     def run_process(self) -> None:
         """Run the process to handle the log message."""
-        cmd_runner = self.found_log_msg.split(maxsplit=1)[0]
+        cmd_runner = self.found_log_msg.split()[1]
 
         pe = self.config_ver.pending_events[cmd_runner]
-        # self.config_ver.log_test_msg(
-        #     'DidCleanPairArrayUtcLogSearchItem for '
-        #     f'{cmd_runner=} checking '
-        #     f'{pe[PE.did_cleanup_pair_array_utc_msg]=}')
         if pe[PE.did_cleanup_pair_array_utc_msg] <= 0:
             raise UnexpectedEvent(
                 "DidCleanPairArrayUtcLogSearchItem encountered unexpected "
@@ -4275,7 +4272,9 @@ class RequestAckLogSearchItem(LogSearchItem):
             "|smart_sync achieved with)"
         )
         super().__init__(
-            search_str=rf"[a-z0-9_]+ \([a-z0-9_]+\) {list_of_acks} [a-z0-9_]+",
+            search_str=(
+                rf"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) {list_of_acks} " "[a-z0-9_]+"
+            ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
             found_log_idx=found_log_idx,
@@ -4302,9 +4301,9 @@ class RequestAckLogSearchItem(LogSearchItem):
     def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
-        cmd_runner = split_msg[0]
-        request = split_msg[2]
-        action = split_msg[3]
+        cmd_runner = split_msg[1]
+        request = split_msg[3]
+        action = split_msg[4]
         remote = split_msg[-1]
 
         pe = self.config_ver.pending_events[cmd_runner]
@@ -4398,8 +4397,8 @@ class DetectedStoppedRemoteLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                rf"[a-z0-9_]+ \([a-z0-9_]+\) {list_of_smart_requests} detected "
-                "remote [a-z0-9_]+ is stopped"
+                rf"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) {list_of_smart_requests} "
+                "detected remote [a-z0-9_]+ is stopped"
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -4427,8 +4426,8 @@ class DetectedStoppedRemoteLogSearchItem(LogSearchItem):
     def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
-        cmd_runner = split_msg[0]
-        remote = split_msg[5]
+        cmd_runner = split_msg[1]
+        remote = split_msg[6]
 
         self.config_ver.set_request_pending_flag(
             cmd_runner=cmd_runner, targets={remote}, pending_request_flag=False
@@ -4460,8 +4459,8 @@ class RequestRefreshLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                rf"[a-z0-9_]+ \([a-z0-9_]+\) {list_of_smart_requests} calling "
-                rf"refresh, remaining remotes: \["
+                rf"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) {list_of_smart_requests} "
+                r"calling refresh, remaining remotes: \["
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -4489,8 +4488,8 @@ class RequestRefreshLogSearchItem(LogSearchItem):
     def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
-        cmd_runner = split_msg[0]
-        request = split_msg[2]
+        cmd_runner = split_msg[1]
+        request = split_msg[3]
         target_msg = self.found_log_msg.split("[")[1].split("]")[0]
 
         targets: set[str] = set()
@@ -4533,8 +4532,8 @@ class UnregJoinSuccessLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                r"[a-z0-9_]+ \([a-z0-9_]+\) did successful (smart_unreg|smart_join) "
-                r"of \[([a-z0-9_]*|,|'| )*\]"
+                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) did successful "
+                r"(smart_unreg|smart_join) of \[([a-z0-9_]*|,|'| )*\]"
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -4562,8 +4561,8 @@ class UnregJoinSuccessLogSearchItem(LogSearchItem):
     def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
-        cmd_runner = split_msg[0]
-        request = split_msg[4]
+        cmd_runner = split_msg[1]
+        request = split_msg[5]
         target_msg = self.found_log_msg.split("[")[1].split("]")[0].split(", ")
 
         targets: list[str] = []
@@ -4608,7 +4607,7 @@ class JoinWaitingLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                r"[a-z0-9_]+ \([a-z0-9_]+\) smart_join "
+                r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) smart_join "
                 r"completed targets: \[('[a-z0-9_]+'|, )*\], "
                 r"pending targets: \[('[a-z0-9_]+'|, )*\]"
             ),
@@ -4638,7 +4637,7 @@ class JoinWaitingLogSearchItem(LogSearchItem):
     def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
-        cmd_runner = split_msg[0]
+        cmd_runner = split_msg[1]
         left_bracket_split_msg = self.found_log_msg.split("[")
         comp_targ_msg = left_bracket_split_msg[1].split("]")[0].split(", ")
 
@@ -4871,8 +4870,8 @@ class CRunnerRaisesLogSearchItem(LogSearchItem):
         )
         super().__init__(
             search_str=(
-                rf"[a-z0-9_]+ \([a-z0-9_]+\) raising {list_of_errors} while "
-                f"processing a {list_of_smart_requests} request with "
+                rf"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) raising {list_of_errors} "
+                f"while processing a {list_of_smart_requests} request with "
                 r"targets \[([a-z0-9_]*|,|'| )*\]"
             ),
             config_ver=config_ver,
@@ -4901,7 +4900,7 @@ class CRunnerRaisesLogSearchItem(LogSearchItem):
     def run_process(self) -> None:
         """Run the process to handle the log message."""
         split_msg = self.found_log_msg.split()
-        cmd_runner = split_msg[0]
+        cmd_runner = split_msg[1]
         target_msg = self.found_log_msg.split("[")[1].split("]")[0].split(", ")
 
         targets: set[str] = set()
@@ -32557,7 +32556,7 @@ class TestSmartThreadErrors:
             beta_thread.smart_start()
 
         exp_error_msg = (
-            "beta (test1) "
+            "SmartThread beta (test1) "
             "raising SmartThreadRemoteThreadNotRegistered while "
             "processing a smart_start request with targets ['beta']. "
             "Remotes that are pending: []. "
@@ -32589,7 +32588,7 @@ class TestSmartThreadErrors:
             beta_thread.smart_start()
 
         exp_error_msg = (
-            "beta (test1) "
+            "SmartThread beta (test1) "
             "raising SmartThreadRemoteThreadNotRegistered "
             "while processing a smart_start request with targets ['beta']. "
             "Remotes that are pending: []. "
@@ -33166,7 +33165,7 @@ class TestSmartThreadErrors:
                 )
 
                 f1_exp_error_msg = (
-                    r"beta \(test1\) raising SmartThreadDeadlockDetected "
+                    r"SmartThread beta \(test1\) raising SmartThreadDeadlockDetected "
                     f"{f1_msg_suite}"
                 )
 
@@ -33227,7 +33226,8 @@ class TestSmartThreadErrors:
         )
 
         exp_error_msg = (
-            rf"alpha \(test1\) raising SmartThreadRemoteThreadNotAlive {msg_suite}"
+            rf"SmartThread alpha \(test1\) raising SmartThreadRemoteThreadNotAlive "
+            f"{msg_suite}"
         )
 
         logger.debug(exp_error_msg)
@@ -33241,6 +33241,7 @@ class TestSmartThreadErrors:
         with pytest.raises(st.SmartThreadRemoteThreadNotRegistered) as exc1:
             alpha_thread.smart_start(targets=targets)
 
+        alpha_thread.smart_join(targets="beta", timeout=5)
         targets_msg = re.escape(
             f"while processing a smart_start request with targets {targets}."
         )
@@ -33261,7 +33262,8 @@ class TestSmartThreadErrors:
         )
 
         exp_error_msg = (
-            rf"alpha \(test1\) raising SmartThreadRemoteThreadNotRegistered {msg_suite}"
+            rf"SmartThread alpha \(test1\) raising "
+            f"SmartThreadRemoteThreadNotRegistered {msg_suite}"
         )
 
         logger.debug(exp_error_msg)
@@ -33270,33 +33272,50 @@ class TestSmartThreadErrors:
         print("\n", exc1.value)
 
         ################################################################
-        with pytest.raises(st.SmartThreadRemoteThreadNotRegistered) as exc1:
-            alpha_thread.smart_unreg(targets=targets)
+        beta_thread = st.SmartThread(
+            group_name="test1",
+            name="beta",
+            target_rtn=f1,
+            kwargs={"action": "wait"},
+            auto_start=False,
+        )
+        beta_thread.smart_start()
 
         targets_msg = re.escape(
             f"while processing a smart_unreg request with targets {targets}."
         )
 
-        pending_msg = re.escape(" Remotes that are pending: [].")
+        pending_msg = re.escape(" Remotes that are pending: ['beta'].")
 
         stopped_msg = ""
 
-        not_registered_msg = re.escape(f" Remotes that are not registered: {targets}.")
+        not_registered_msg = ""
 
         deadlock_msg = ""
 
         full_send_q_msg = ""
 
+        request_pending_msg = re.escape(
+            " Remotes that are processing a request: ['beta']."
+        )
+
         msg_suite = (
             f"{targets_msg}{pending_msg}{stopped_msg}"
-            f"{not_registered_msg}{deadlock_msg}{full_send_q_msg}"
+            f"{not_registered_msg}{deadlock_msg}{full_send_q_msg}{request_pending_msg}"
         )
 
         exp_error_msg = (
-            rf"alpha \(test1\) raising SmartThreadRemoteThreadNotRegistered {msg_suite}"
+            rf"SmartThread alpha \(test1\) raising SmartThreadProcessingRequest "
+            f"{msg_suite}"
         )
 
         logger.debug(exp_error_msg)
+        with pytest.raises(st.SmartThreadProcessingRequest) as exc1:
+            alpha_thread.smart_unreg(targets=targets)
+
+        alpha_thread.smart_resume(waiters="beta")
+        alpha_thread.smart_join(targets="beta", timeout=5)
+
         assert re.fullmatch(exp_error_msg, str(exc1.value))
 
         print("\n", exc1.value)
@@ -33304,7 +33323,6 @@ class TestSmartThreadErrors:
         ################################################################
         # SmartThreadDeadlockDetected
         ################################################################
-        alpha_thread.smart_join(targets="beta", timeout=5)
         beta_thread = st.SmartThread(
             group_name="test1",
             name="beta",
@@ -33339,7 +33357,8 @@ class TestSmartThreadErrors:
         )
 
         exp_error_msg = (
-            r"alpha \(test1\) raising SmartThreadDeadlockDetected " f"{msg_suite}"
+            r"SmartThread alpha \(test1\) raising SmartThreadDeadlockDetected "
+            f"{msg_suite}"
         )
 
         logger.debug(exp_error_msg)
@@ -33382,7 +33401,8 @@ class TestSmartThreadErrors:
         )
 
         exp_error_msg = (
-            r"alpha \(test1\) raising SmartThreadRequestTimedOut " f"{msg_suite}"
+            r"SmartThread alpha \(test1\) raising SmartThreadRequestTimedOut "
+            f"{msg_suite}"
         )
 
         logger.debug(exp_error_msg)
@@ -33433,7 +33453,8 @@ class TestSmartThreadErrors:
         )
 
         exp_error_msg = (
-            r"alpha \(test1\) raising SmartThreadRequestTimedOut " f"{msg_suite}"
+            r"SmartThread alpha \(test1\) raising SmartThreadRequestTimedOut "
+            f"{msg_suite}"
         )
 
         logger.debug(exp_error_msg)
@@ -33470,16 +33491,8 @@ class TestSmartThreadErrors:
     ####################################################################
     # test_cmd_setup_errors
     ####################################################################
-    @pytest.mark.parametrize(
-        "request_type_arg", [st.ReqType.Smart_unreg, st.ReqType.Smart_join]
-    )
-    def test_cmd_setup_errors(self, request_type_arg: st.ReqType) -> None:
-        """Test error cases for SmartThread.
-
-        Args:
-            request_type_arg: which request type will inject the error
-
-        """
+    def test_cmd_setup_errors(self) -> None:
+        """Test error cases for SmartThread."""
         logger.debug("mainline entered")
         alpha_thread = st.SmartThread(group_name="test1", name="alpha")
 
@@ -33487,14 +33500,13 @@ class TestSmartThreadErrors:
         # SmartThreadInvalidInput - caller also a remote
         ################################################################
         with pytest.raises(st.SmartThreadInvalidInput) as exc:
-            if request_type_arg == st.ReqType.Smart_join:
-                alpha_thread.smart_join(targets="alpha")
+            alpha_thread.smart_join(targets="alpha")
 
         exp_error_msg = (
             r"SmartThread alpha \(test1\) raising SmartThreadInvalidInput "
-            f"error while processing request {request_type_arg}. "
+            f"error while processing request smart_join. "
             r"The set of targets \['alpha'\] includes alpha which is not "
-            f"permitted for request {request_type_arg}."
+            f"permitted for request smart_join."
         )
 
         logger.debug(exp_error_msg)
@@ -34229,7 +34241,7 @@ class TestSmartBasicScenarios:
 
         exp_error_msg = (
             "SmartThread get_current_smart_thread raising SmartThreadNotFound. "
-            f"Unable to find the current smart thread for group_name='test2'."
+            "Unable to find the current smart thread for group_name='test2'."
         )
 
         logger.debug(exp_error_msg)
