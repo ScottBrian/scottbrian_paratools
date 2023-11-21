@@ -2155,277 +2155,6 @@ class SmartThread:
     ####################################################################
     # smart_unreg
     ####################################################################
-    # def smart_unreg(
-    #     self, *, targets: Iterable[str], log_msg: Optional[str] = None
-    # ) -> set[str]:
-    #     """Unregister threads that are no longer required.
-    #
-    #     Args:
-    #         targets: thread names that are to be unregistered
-    #         log_msg: additional text to append to the debug log message
-    #             that is issued on request entry and exit
-    #
-    #     Returns:
-    #         A set of thread names that were successfully unregistered.
-    #
-    #     Note:
-    #         1) A thread that is created but not started remains in the
-    #            registered state until it is either started or
-    #            unregistered.
-    #
-    #     Raises:
-    #         SmartThreadProcessingRequest: smart_unreg detected
-    #             a target that was processing a request.
-    #
-    #     **Example 1:** Create and unregister a SmartThread thread.
-    #
-    #     .. # noqa: DAR402
-    #
-    #     .. code-block:: python
-    #
-    #         from scottbrian_paratools.smart_thread import SmartThread
-    #
-    #         def f1_beta() -> None:
-    #             print('f1_beta entered')
-    #             print('f1_beta exiting')
-    #
-    #         print('mainline alpha entered')
-    #         alpha_smart_thread = SmartThread(group_name='group_1',
-    #                                          name='alpha')
-    #         print('alpha about to create beta')
-    #         beta_smart_thread = SmartThread(group_name='group_1',
-    #                                         name='beta',
-    #                                         target_rtn=f1_beta,
-    #                                         auto_start=False)
-    #         print('alpha about to unregister beta')
-    #         alpha_smart_thread.smart_unreg(targets='beta')
-    #         print('mainline alpha exiting')
-    #
-    #     .. invisible-code-block: python
-    #
-    #         del SmartThread._registry['group_1']['alpha']
-    #
-    #     Expected output for Example 1::
-    #
-    #         mainline alpha entered
-    #         alpha about to create beta
-    #         alpha about to unregister beta
-    #         mainline alpha exiting
-    #
-    #     """
-    #     self.request = ReqType.Smart_unreg
-    #     self.unreged_targets = set()
-    #
-    #     cmd_block = self._cmd_setup(
-    #         targets=targets,
-    #         log_msg=log_msg,
-    #     )
-    #
-    #     # not_registered_remotes: set[str] = set()
-    #     self.work_remotes = cmd_block.targets.copy()
-    #     with sel.SELockExcl(self.registry_lock):
-    #         for remote in self.work_remotes.copy():
-    #             # if self._get_state(name=remote) != ThreadState.Registered:
-    #             #     not_registered_remotes |= {remote}
-    #             #     self.work_remotes -= {remote}
-    #             if self._get_state(name=remote) == ThreadState.Unregistered:
-    #                 self.work_remotes -= {remote}
-    #                 continue
-    #             if (
-    #                 self.registry[remote].request != ReqType.NoReq
-    #                 and self.name != remote
-    #             ):
-    #                 error_msg = (
-    #                     f"SmartThread {self.log_name} "
-    #                     "raising SmartThreadProcessingRequest "
-    #                     "error while processing request smart_remove. "
-    #                     f"Unable to remove {remote} because {remote} "
-    #                     f"is processing smart_request {self.registry[remote].request}."
-    #                 )
-    #                 logger.error(error_msg)
-    #                 raise SmartThreadProcessingRequest(error_msg)
-    #
-    #             else:
-    #                 self.registry[remote].unregister = True
-    #
-    #                 self.work_remotes -= {remote}
-    #                 self.unreged_targets |= {remote}
-    #
-    #         # remove threads from the registry
-    #         self._clean_registry()
-    #         self._clean_pair_array()
-    #
-    #         if self.unreged_targets:
-    #             # wake up threads in _req_loop waiting for the remotes
-    #             # to become alive since they are now unregistered and
-    #             # will never become alive
-    #             self._notify_req_state_changes(remotes=self.unreged_targets)
-    #
-    #             logger.info(
-    #                 f"{self.log_name} did successful smart_unreg of "
-    #                 f"{sorted(self.unreged_targets)}."
-    #             )
-    #
-    #         # if not_registered_remotes:
-    #         #     self._handle_loop_errors(
-    #         #         request=ReqType.Smart_unreg,
-    #         #         remotes=cmd_block.targets,
-    #         #         not_registered_remotes=not_registered_remotes,
-    #         #     )
-    #
-    #     self.request = ReqType.NoReq
-    #
-    #     if cmd_block.exit_log_msg:
-    #         logger.debug(cmd_block.exit_log_msg)
-    #
-    #     return self.unreged_targets
-    #
-    # ####################################################################
-    # # smart_unreg
-    # ####################################################################
-    # def smart_unreg2(
-    #     self, *, targets: Iterable[str], log_msg: Optional[str] = None
-    # ) -> set[str]:
-    #     """Unregister threads that are no longer required.
-    #
-    #     Args:
-    #         targets: thread names that are to be unregistered
-    #         log_msg: additional text to append to the debug log message
-    #             that is issued on request entry and exit
-    #
-    #     Returns:
-    #         A set of thread names that were successfully unregistered.
-    #
-    #     Note:
-    #         1) A thread that is created but not started remains in the
-    #            registered state until it is either started or
-    #            unregistered.
-    #
-    #     Raises:
-    #         SmartThreadProcessingRequest: smart_unreg detected
-    #             a target that was processing a request.
-    #
-    #     **Example 1:** Create and unregister a SmartThread thread.
-    #
-    #     .. # noqa: DAR402
-    #
-    #     .. code-block:: python
-    #
-    #         from scottbrian_paratools.smart_thread import SmartThread
-    #
-    #         def f1_beta() -> None:
-    #             print('f1_beta entered')
-    #             print('f1_beta exiting')
-    #
-    #         print('mainline alpha entered')
-    #         alpha_smart_thread = SmartThread(group_name='group_1',
-    #                                          name='alpha')
-    #         print('alpha about to create beta')
-    #         beta_smart_thread = SmartThread(group_name='group_1',
-    #                                         name='beta',
-    #                                         target_rtn=f1_beta,
-    #                                         auto_start=False)
-    #         print('alpha about to unregister beta')
-    #         alpha_smart_thread.smart_unreg(targets='beta')
-    #         print('mainline alpha exiting')
-    #
-    #     .. invisible-code-block: python
-    #
-    #         del SmartThread._registry['group_1']['alpha']
-    #
-    #     Expected output for Example 1::
-    #
-    #         mainline alpha entered
-    #         alpha about to create beta
-    #         alpha about to unregister beta
-    #         mainline alpha exiting
-    #
-    #     """
-    #     with sel.SELockExcl(self.registry_lock):
-    #         if targets is None:
-    #             targets = {self.name}
-    #         else:
-    #             targets = self._get_targets(targets, request=ReqType.Smart_unreg)
-    #
-    #         exit_log_msg = self._issue_entry_log_msg(
-    #             request=ReqType.Smart_unreg,
-    #             remotes=targets,
-    #             log_msg=log_msg,
-    #             latest=2,
-    #         )
-    #
-    #         if self.name not in targets:
-    #             self._verify_thread_is_current(request=ReqType.Smart_start)
-    #         else:
-    #             if self.thread.is_alive():
-    #                 error_msg = (
-    #                     f"SmartThread {self.log_name} "
-    #                     "raising SmartThreadAlreadyStarted error while "
-    #                     "processing request smart_start. "
-    #                     f"Unable to start {self.name} because {self.name} "
-    #                     "has already been started."
-    #                 )
-    #                 # do not set request here since thread may be
-    #                 # processing a request
-    #                 logger.error(error_msg)
-    #                 raise SmartThreadAlreadyStarted(error_msg)
-    #
-    #             self._verify_thread_is_current(
-    #                 request=ReqType.Smart_start,
-    #                 check_thread_is_current=False,
-    #             )
-    #
-    #             if len(targets) > 1:
-    #                 error_msg = (
-    #                     f"SmartThread {self.log_name} "
-    #                     f"raising SmartThreadMultipleTargets "
-    #                     f"error while processing request smart_start. "
-    #                     "Request smart_start can not be done for multiple "
-    #                     f"targets {targets} when one of the targets is also "
-    #                     f"the smart_thread instance, in this case {self.name}."
-    #                 )
-    #                 self.request = ReqType.NoReq
-    #                 logger.error(error_msg)
-    #                 raise SmartThreadMultipleTargets(error_msg)
-    #
-    #             if self._get_state(name=self.name) != ThreadState.Registered:
-    #                 error_msg = (
-    #                     f"SmartThread {self.log_name} "
-    #                     "raising SmartThreadRemoteThreadNotRegistered "
-    #                     "error while processing request smart_start. "
-    #                     f"Unable to start {self.name} because {self.name} "
-    #                     "is not registered."
-    #                 )
-    #                 self.request = ReqType.NoReq
-    #                 logger.error(error_msg)
-    #                 raise SmartThreadRemoteThreadNotRegistered(error_msg)
-    #
-    #         self.started_targets = set()
-    #
-    #         not_registered_remotes: set[str] = set()
-    #         work_remotes = targets.copy()
-    #         for remote in work_remotes.copy():
-    #             if self._get_state(name=remote) == ThreadState.Unregistered:
-    #                 self.work_remotes -= {remote}
-    #                 continue
-    #             if self._process_start(remote, not_registered_remotes):
-    #                 work_remotes -= {remote}
-    #
-    #         if not_registered_remotes:
-    #             self._handle_loop_errors(
-    #                 request=ReqType.Smart_start,
-    #                 remotes=targets,
-    #                 not_registered_remotes=not_registered_remotes,
-    #             )
-    #
-    #         if exit_log_msg:
-    #             logger.debug(exit_log_msg)
-    #
-    #         return self.started_targets
-
-    ####################################################################
-    # smart_unreg
-    ####################################################################
     def smart_unreg(
         self, *, targets: Iterable[str], log_msg: Optional[str] = None
     ) -> set[str]:
@@ -2513,11 +2242,15 @@ class SmartThread:
                 log_msg=log_msg,
             )
 
-            self.unreged_targets = set()
+            self.unreged_targets: set[str] = set()
+            request_pending_targets: set[str] = set()
 
             work_remotes = cmd_block.targets.copy()
             for remote in work_remotes.copy():
-                if self.registry[remote].request != ReqType.NoReq:
+                if (
+                    self.registry[remote].request != ReqType.NoReq
+                    and remote != self.name
+                ):
                     error_msg = (
                         f"SmartThread {self.log_name} "
                         "raising SmartThreadProcessingRequest "
@@ -2526,13 +2259,15 @@ class SmartThread:
                         f"currently processing smart_request "
                         f"{self.registry[remote].request}."
                     )
+                    request_pending_targets |= remote
+                    self.request = ReqType.NoReq
                     logger.error(error_msg)
                     raise SmartThreadProcessingRequest(error_msg)
-
-                self.registry[remote].unregister = True
+                else:
+                    self.registry[remote].unregister = True
+                    self.unreged_targets |= {remote}
 
                 self.work_remotes -= {remote}
-                self.unreged_targets |= {remote}
 
             # remove threads from the registry
             self._clean_registry()
@@ -2548,6 +2283,16 @@ class SmartThread:
                     f"{self.log_name} did successful smart_unreg of "
                     f"{sorted(self.unreged_targets)}."
                 )
+
+            if request_pending_targets:
+                self._handle_loop_errors(
+                    request=ReqType.Smart_join,
+                    remotes=cmd_block.targets,
+                    pending_remotes=self.work_remotes,
+                    request_pending_remotes=request_pending_targets,
+                )
+
+            self.request = ReqType.NoReq
 
             if cmd_block.exit_log_msg:
                 logger.debug(cmd_block.exit_log_msg)
@@ -2620,9 +2365,6 @@ class SmartThread:
 
 
         """
-        self.request = ReqType.Smart_join
-        self.joined_targets = set()
-
         timer = Timer(timeout=timeout, default_timeout=self.default_timeout)
 
         cmd_block = self._cmd_setup(
@@ -2637,9 +2379,10 @@ class SmartThread:
                 f"SmartThread {self.log_name} raising "
                 f"SmartThreadInvalidInput error while processing request "
                 f"smart_join. "
-                f"The set of targets {sorted(targets_set)} includes {self.name} "
+                f"The set of targets {sorted(cmd_block.targets)} includes {self.name} "
                 f"which is not permitted for request smart_join."
             )
+            self.request = ReqType.NoReq
             logger.error(error_msg)
             raise SmartThreadInvalidInput(error_msg)
 
@@ -2759,121 +2502,6 @@ class SmartThread:
 
         # restart while loop with one less remote
         return True
-
-    ####################################################################
-    # smart_remove
-    ####################################################################
-    # def smart_remove(
-    #     self,
-    #     *,
-    #     targets: Iterable[str],
-    #     log_msg: Optional[str] = None,
-    # ) -> set[str]:
-    #     """Wait for target_rtn thread to end.
-    #
-    #     Args:
-    #         targets: thread names that are to be joined
-    #         log_msg: additional text to append to the debug log
-    #         message
-    #             that is issued on request entry and exit
-    #
-    #     Returns:
-    #         A set of thread names that were successfully removed.
-    #
-    #     **Example 1:** Create and remove a SmartThread thread.
-    #
-    #     .. # noqa: DAR402
-    #
-    #     .. code-block:: python
-    #
-    #         from scottbrian_paratools.smart_thread import SmartThread
-    #
-    #         print('mainline alpha entered')
-    #         alpha_smart_thread = SmartThread(group_name='group_1',
-    #                                          name='alpha')
-    #
-    #         print('alpha about to remove alpha')
-    #         alpha_smart_thread.smart_remove(targets='alpha')
-    #         print('mainline alpha exiting')
-    #
-    #
-    #     .. invisible-code-block: python
-    #
-    #         del SmartThread._registry['group_1']['alpha']
-    #
-    #     Expected output for Example 1::
-    #
-    #         mainline alpha entered
-    #         alpha about to remove alpha
-    #         mainline alpha exiting
-    #
-    #
-    #     """
-    #     self.request = ReqType.Smart_remove
-    #
-    #     self.removed_targets = set()
-    #     cmd_block = self._cmd_setup(targets=targets, log_msg=log_msg)
-    #
-    #     not_registered_remotes: set[str] = set()
-    #     self.work_remotes = cmd_block.targets.copy()
-    #     with sel.SELockExcl(self.registry_lock):
-    #         for remote in self.work_remotes.copy():
-    #             if self._get_state(name=remote) == ThreadState.
-    #             Unregistered:
-    #                 self.work_remotes -= {remote}
-    #                 continue
-    #             if (
-    #                 self.registry[remote].request != ReqType.NoReq
-    #                 and self.name != remote
-    #             ):
-    #                 error_msg = (
-    #                     f"SmartThread {self.log_name} "
-    #                     "raising SmartThreadProcessingRequest "
-    #                     "error while processing request
-    #                     smart_remove. "
-    #                     f"Unable to remove {self.name} because
-    #                     {self.name} "
-    #                     f"is processing smart_request
-    #                     {self.registry[remote].
-    #                     request}."
-    #                 )
-    #                 logger.error(error_msg)
-    #                 raise
-    #                 SmartThreadProcessingRequest(error_msg)
-    #
-    #             self.registry[remote].unregister = True
-    #
-    #             self.work_remotes -= {remote}
-    #
-    #         # remove threads from the registry
-    #         self._clean_registry()
-    #         self._clean_pair_array()
-    #
-    #         if self.unreged_targets:
-    #             # wake up threads in _req_loop waiting for the remotes
-    #             # to become alive since they are now unregistered and
-    #             # will never become alive
-    #             self._notify_req_state_changes(remotes=self.
-    #             unreged_targets)
-    #
-    #             logger.info(
-    #                 f"{self.log_name} did successful smart_unreg of "
-    #                 f"{sorted(self.unreged_targets)}."
-    #             )
-    #
-    #         if not_registered_remotes:
-    #             self._handle_loop_errors(
-    #                 request=ReqType.Smart_unreg,
-    #                 remotes=cmd_block.targets,
-    #                 not_registered_remotes=not_registered_remotes,
-    #             )
-    #
-    #     self.request = ReqType.NoReq
-    #
-    #     if cmd_block.exit_log_msg:
-    #         logger.debug(cmd_block.exit_log_msg)
-    #
-    #     return self.removed_targets
 
     ####################################################################
     # smart_send
@@ -3203,14 +2831,15 @@ class SmartThread:
 
         """
         self._verify_thread_is_current(request=ReqType.Smart_send)
-        self.request = ReqType.Smart_send
+
         self.sent_targets = set()
-        remotes: set[str]
-        work_msgs: dict[str, Any]
+        remotes: set[str] = set()
+        work_msgs: dict[str, Any] = {}
 
         # Note that we need to determine which combinations of arguments
         # were specified for mutual exclusive checks. After that we will
         # determine whether the specified arguments are valid.
+        error_msg = ""
         if msg is not None and receivers is not None:
             if msg_dict is not None:
                 error_msg = (
@@ -3220,10 +2849,9 @@ class SmartThread:
                     "Mutually exclusive arguments msg and msg_dict were both "
                     "specified. Please specify only one of msg or msg_dict."
                 )
-                logger.error(error_msg)
-                raise SmartThreadInvalidInput(error_msg)
-            remotes = self._get_targets(receivers)
-            work_msgs = {remote: msg for remote in remotes}
+            else:
+                remotes = self._get_targets(receivers)
+                work_msgs = {remote: msg for remote in remotes}
         elif msg_dict is not None:
             if msg is not None or receivers is not None:
                 error_msg = (
@@ -3233,11 +2861,9 @@ class SmartThread:
                     "Mutually exclusive arguments msg_dict and msg or "
                     "msg_dict and receivers were specified."
                 )
-                logger.error(error_msg)
-                raise SmartThreadInvalidInput(error_msg)
-
-            remotes = self._get_targets(msg_dict)
-            work_msgs = msg_dict
+            else:
+                remotes = self._get_targets(msg_dict)
+                work_msgs = msg_dict
         else:
             error_msg = (
                 f"SmartThread {self.log_name} raising "
@@ -3246,6 +2872,9 @@ class SmartThread:
                 "The smart_send request failed to specify "
                 "msg_dict, or failed to specify both msg and receivers."
             )
+
+        if error_msg:
+            self.request = ReqType.NoReq
             logger.error(error_msg)
             raise SmartThreadInvalidInput(error_msg)
 
@@ -3672,7 +3301,7 @@ class SmartThread:
 
         """
         self._verify_thread_is_current(request=ReqType.Smart_recv)
-        self.request = ReqType.Smart_recv
+
         self.recvd_msgs = {}
         remotes = self._get_targets(senders)
         if sender_count is None:
@@ -3693,6 +3322,7 @@ class SmartThread:
                     "sender_count must be an integer between 1 and the "
                     "number of specified senders, inclusive."
                 )
+                self.request = ReqType.NoReq
                 logger.error(error_msg)
                 raise SmartThreadInvalidInput(error_msg)
             completion_count = sender_count
@@ -3708,10 +3338,10 @@ class SmartThread:
 
         self._request_loop(request_block=request_block)
 
+        self.request = ReqType.NoReq
+
         if request_block.exit_log_msg:
             logger.debug(request_block.exit_log_msg)
-
-        self.request = ReqType.NoReq
 
         return self.recvd_msgs
 
@@ -4114,7 +3744,7 @@ class SmartThread:
 
         """
         self._verify_thread_is_current(request=ReqType.Smart_wait)
-        self.request = ReqType.Smart_wait
+
         self.resumed_by = set()
         remotes = self._get_targets(resumers)
         if resumer_count is None:
@@ -4135,6 +3765,7 @@ class SmartThread:
                     "resumer_count must be an integer between 1 and the "
                     "number of specified resumers, inclusive."
                 )
+                self.request = ReqType.NoReq
                 logger.error(error_msg)
                 raise SmartThreadInvalidInput(error_msg)
             completion_count = resumer_count
@@ -4151,10 +3782,10 @@ class SmartThread:
 
         self._request_loop(request_block=request_block)
 
+        self.request = ReqType.NoReq
+
         if request_block.exit_log_msg:
             logger.debug(request_block.exit_log_msg)
-
-        self.request = ReqType.NoReq
 
         return self.resumed_by
 
@@ -4439,7 +4070,7 @@ class SmartThread:
         #                                           wait
         ###############################################################
         self._verify_thread_is_current(request=ReqType.Smart_resume)
-        self.request = ReqType.Smart_resume
+
         self.resumed_targets = set()
         remotes = self._get_targets(waiters)
         # get RequestBlock with targets in a set and a timer object
@@ -4637,7 +4268,7 @@ class SmartThread:
 
         """
         self._verify_thread_is_current(request=ReqType.Smart_sync)
-        self.request = ReqType.Smart_sync
+
         self.synced_targets = set()
         remotes = self._get_targets(targets)
         # get RequestBlock with targets in a set and a timer object
@@ -5156,6 +4787,7 @@ class SmartThread:
                     f"An expected entry for {found_pk_remote=} was not "
                     f"found in {self.work_pk_remotes=}."
                 )
+                self.request = ReqType.NoReq
                 logger.error(error_msg)
                 raise SmartThreadWorkDataException(error_msg)
 
@@ -5175,6 +4807,7 @@ class SmartThread:
                     f"An expected entry for {found_pk_remote=} was not "
                     f"found in {work_pk_remotes=}."
                 )
+                self.request = ReqType.NoReq
                 logger.error(error_msg)
                 raise SmartThreadWorkDataException(error_msg)
 
@@ -5196,6 +4829,7 @@ class SmartThread:
         not_registered_remotes: Optional[set[str]] = None,
         deadlock_remotes: Optional[set[str]] = None,
         full_send_q_remotes: Optional[set[str]] = None,
+        request_pending_remotes: Optional[set[str]] = None,
         reset_request: bool = True,
     ) -> NoReturn:
         """Raise an error if needed.
@@ -5239,7 +4873,7 @@ class SmartThread:
 
         if pending_remotes is None:
             pending_remotes = set()
-        pending_msg = f" Remotes that are pending: " f"{sorted(pending_remotes)}."
+        pending_msg = f" Remotes that are pending: {sorted(pending_remotes)}."
 
         if stopped_remotes:
             stopped_msg = " Remotes that are stopped: " f"{sorted(stopped_remotes)}."
@@ -5268,9 +4902,17 @@ class SmartThread:
         else:
             full_send_q_msg = ""
 
+        if request_pending_remotes:
+            request_pending_msg = (
+                " Remotes that are processing a request: "
+                f"{sorted(request_pending_remotes)}."
+            )
+        else:
+            request_pending_msg = ""
+
         msg_suite = (
-            f"{targets_msg}{pending_msg}{stopped_msg}"
-            f"{not_registered_msg}{deadlock_msg}{full_send_q_msg}"
+            f"{targets_msg}{pending_msg}{stopped_msg}{not_registered_msg}"
+            f"{deadlock_msg}{request_pending_msg}{full_send_q_msg}"
         )
 
         # If an error should be raised for stopped threads
@@ -5294,10 +4936,17 @@ class SmartThread:
 
         elif deadlock_remotes:
             error_msg = (
-                f"{self.log_name} raising " f"SmartThreadDeadlockDetected {msg_suite}"
+                f"{self.log_name} raising SmartThreadDeadlockDetected {msg_suite}"
             )
             logger.error(error_msg)
             raise SmartThreadDeadlockDetected(error_msg)
+
+        elif request_pending_remotes:
+            error_msg = (
+                f"{self.log_name} raising SmartThreadProcessingRequest {msg_suite}"
+            )
+            logger.error(error_msg)
+            raise SmartThreadProcessingRequest(error_msg)
 
         # Note that the timer will never be expired if timeout was not
         # in effect, meaning is was not specified on the smart_wait and
@@ -5305,7 +4954,7 @@ class SmartThread:
         # was instantiated.
         elif timer is not None and timer.is_expired():
             error_msg = (
-                f"{self.log_name} raising " f"SmartThreadRequestTimedOut {msg_suite}"
+                f"{self.log_name} raising SmartThreadRequestTimedOut {msg_suite}"
             )
             logger.error(error_msg)
             raise SmartThreadRequestTimedOut(error_msg)
@@ -5387,7 +5036,7 @@ class SmartThread:
                 no targets specified.
 
         """
-        targets_set: set[str] = self._get_targets(targets)
+        targets_set: set[str] = self._get_targets(targets=targets, request=request)
 
         exit_log_msg = self._issue_entry_log_msg(
             request=request,
@@ -5466,6 +5115,7 @@ class SmartThread:
                 f"Targets {sorted(targets)} includes {self.name} "
                 f"which is not permitted except for request smart_start."
             )
+            self.request = ReqType.NoReq
             logger.error(error_msg)
             raise SmartThreadInvalidInput(error_msg)
 
@@ -5593,9 +5243,10 @@ class SmartThread:
 
             # set the request while under the lock (shared is OK)
             if request != ReqType.Smart_start:
-                # indicate that a request is being processed for
-                # smart_unreg. That also means we need to set
-                # self.request to NoReq on exit from the request,
-                # including exits via an error so that smart_unreg will
-                # be able to perform the unregister
+                # set the request being processed. self.request is used
+                # by smart_unreg to determine whether a thread is
+                # currently processing a request. We need to set
+                # self.request to NoReq on exit from each request,
+                # including exits via an error, so that smart_unreg will
+                # be able to perform the unregister.
                 self.request = request

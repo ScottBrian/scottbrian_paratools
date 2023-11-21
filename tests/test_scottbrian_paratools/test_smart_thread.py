@@ -31800,9 +31800,6 @@ class TestSmartThreadErrors:
 
         logger.debug("mainline creating bad group_name thread")
 
-        with pytest.raises(st.SmartThreadIncorrectNameSpecified) as exc:
-            st.SmartThread(group_name="", name="alpha")
-
         exp_error_msg = (
             "SmartThread "
             "raising SmartThreadIncorrectNameSpecified error while "
@@ -31811,9 +31808,13 @@ class TestSmartThreadErrors:
             "for the new thread is an empty string. Please "
             "specify a non-empty string for the group name."
         )
-
         logger.debug(exp_error_msg)
-        assert re.fullmatch(exp_error_msg, str(exc.value))
+        with pytest.raises(
+            st.SmartThreadIncorrectNameSpecified, match=exp_error_msg
+        ) as exc:
+            st.SmartThread(group_name="", name="alpha")
+
+        # assert re.fullmatch(exp_error_msg, str(exc.value))
 
         print("\n", exc.value)
 
@@ -31933,7 +31934,7 @@ class TestSmartThreadErrors:
 
         assert re.fullmatch(exp_error_msg, str(exc2.value))
 
-        pprint(exc2.value)
+        print("\n", exc2.value)
 
         with pytest.raises(st.SmartThreadArgsSpecificationWithoutTarget) as exc2:
             st.SmartThread(
@@ -32175,7 +32176,7 @@ class TestSmartThreadErrors:
             "already in the pair array with an empty "
             "status_blocks."
         )
-
+        logger.debug(exp_error_msg)
         assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
 
         print("\n", exc.value)
@@ -32210,7 +32211,7 @@ class TestSmartThreadErrors:
             "is already in the pair array with a "
             "status_blocks entry containing beta."
         )
-
+        logger.debug(exp_error_msg)
         assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
 
         alpha_st.smart_unreg(targets="beta")
@@ -32246,7 +32247,7 @@ class TestSmartThreadErrors:
             "status_blocks entry containing alpha "
             "that is not del_deferred."
         )
-
+        logger.debug(exp_error_msg)
         assert re.fullmatch(re.escape(exp_error_msg), str(exc.value))
 
         alpha_st.smart_unreg(targets="beta")
@@ -32294,7 +32295,7 @@ class TestSmartThreadErrors:
             "status_blocks entry containing entries for "
             f"{sorted(existing_names)}."
         )
-
+        logger.debug(exp_error_msg)
         assert re.match(exp_error_msg, str(exc.value))
 
         alpha_st.smart_unreg(targets="beta")
@@ -32362,7 +32363,7 @@ class TestSmartThreadErrors:
             "is not of type Iterable. Please specify an iterable, "
             "such as a list of thread names."
         )
-
+        logger.debug(exp_error_msg)
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
         print("\n", exc.value)
@@ -32399,7 +32400,7 @@ class TestSmartThreadErrors:
             "Remote threads are required for the request but none were "
             "specified."
         )
-
+        logger.debug(exp_error_msg)
         assert re.fullmatch(exp_error_msg, str(exc2.value))
 
         print("\n", exc2.value)
@@ -32446,7 +32447,7 @@ class TestSmartThreadErrors:
             "for a remote thread is (not a|an empty) string. Please "
             "specify a non-empty string for the thread name."
         )
-
+        logger.debug(exp_error_msg)
         assert re.fullmatch(exp_error_msg, str(exc3.value))
 
         print("\n", exc3.value)
@@ -32466,7 +32467,7 @@ class TestSmartThreadErrors:
                 "for a remote thread is not a string. Please "
                 "specify a non-empty string for the thread name."
             )
-
+            logger.debug(exp_error_msg)
             assert re.fullmatch(exp_error_msg, str(exc4.value))
 
             print("\n", exc4.value)
@@ -32484,7 +32485,7 @@ class TestSmartThreadErrors:
                 "for a remote thread is not a string. Please "
                 "specify a non-empty string for the thread name."
             )
-
+            logger.debug(exp_error_msg)
             assert re.fullmatch(exp_error_msg, str(exc5.value))
 
             print("\n", exc5.value)
@@ -32502,7 +32503,7 @@ class TestSmartThreadErrors:
                 "for a remote thread is an empty string. Please "
                 "specify a non-empty string for the thread name."
             )
-
+            logger.debug(exp_error_msg)
             assert re.fullmatch(exp_error_msg, str(exc6.value))
 
             print("\n", exc6.value)
@@ -32556,10 +32557,11 @@ class TestSmartThreadErrors:
             beta_thread.smart_start()
 
         exp_error_msg = (
-            "SmartThread beta (test1) "
-            "raising SmartThreadRemoteThreadNotRegistered error while "
-            "processing request smart_start with targets [beta]. "
-            " Remotes that are not registered: [beta]."
+            "beta (test1) "
+            "raising SmartThreadRemoteThreadNotRegistered while "
+            "processing a smart_start request with targets ['beta']. "
+            "Remotes that are pending: []. "
+            "Remotes that are not registered: ['beta']."
         )
 
         logger.debug(exp_error_msg)
@@ -32587,11 +32589,11 @@ class TestSmartThreadErrors:
             beta_thread.smart_start()
 
         exp_error_msg = (
-            "SmartThread beta (test1) "
+            "beta (test1) "
             "raising SmartThreadRemoteThreadNotRegistered "
-            "error while processing request smart_start. "
-            "Unable to start beta because beta "
-            "is not registered."
+            "while processing a smart_start request with targets ['beta']. "
+            "Remotes that are pending: []. "
+            "Remotes that are not registered: ['beta']."
         )
 
         logger.debug(exp_error_msg)
@@ -32772,7 +32774,7 @@ class TestSmartThreadErrors:
             "sender_count must be an integer between 1 and the "
             "number of specified senders, inclusive."
         )
-
+        logger.debug(exp_error_msg)
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
         print("\n", exc.value)
@@ -32792,7 +32794,7 @@ class TestSmartThreadErrors:
             "sender_count must be an integer between 1 and the "
             "number of specified senders, inclusive."
         )
-
+        logger.debug(exp_error_msg)
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
         print("\n", exc.value)
@@ -32812,7 +32814,7 @@ class TestSmartThreadErrors:
             "sender_count must be an integer between 1 and the "
             "number of specified senders, inclusive."
         )
-
+        logger.debug(exp_error_msg)
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
         print("\n", exc.value)
@@ -32859,7 +32861,7 @@ class TestSmartThreadErrors:
             "resumer_count must be an integer between 1 and the "
             "number of specified resumers, inclusive."
         )
-
+        logger.debug(exp_error_msg)
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
         print("\n", exc.value)
@@ -32879,7 +32881,7 @@ class TestSmartThreadErrors:
             "resumer_count must be an integer between 1 and the "
             "number of specified resumers, inclusive."
         )
-
+        logger.debug(exp_error_msg)
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
         print("\n", exc.value)
@@ -32899,7 +32901,7 @@ class TestSmartThreadErrors:
             "resumer_count must be an integer between 1 and the "
             "number of specified resumers, inclusive."
         )
-
+        logger.debug(exp_error_msg)
         assert re.fullmatch(exp_error_msg, str(exc.value))
 
         print("\n", exc.value)
