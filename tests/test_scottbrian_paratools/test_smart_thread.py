@@ -3006,8 +3006,8 @@ class SetupCompleteLogSearchItem(LogSearchItem):
         """
         super().__init__(
             search_str=(
-                rf"[a-z0-9_]+ \([a-z0-9_]+\) {list_of_smart_requests} setup complete "
-                "for targets: "
+                rf"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) {list_of_smart_requests} "
+                "setup complete for targets: "
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -3510,7 +3510,7 @@ class AddPairArrayEntryLogSearchItem(LogSearchItem):
             search_str=(
                 r"SmartThread [a-z0-9_]+ \([a-z0-9_]+\) added "
                 r"PairKey\(name0='[a-z0-9_]+', name1='[a-z0-9_]+'\) "
-                "to the _pair_array"
+                "to the pair_array"
             ),
             config_ver=config_ver,
             found_log_msg=found_log_msg,
@@ -21774,8 +21774,8 @@ class ConfigVerifier:
     ####################################################################
     # get_timeout_msg
     ####################################################################
+    @staticmethod
     def get_error_msg(
-        self,
         cmd_runner: str,
         smart_request: str,
         targets: set[str],
@@ -21842,7 +21842,7 @@ class ConfigVerifier:
             full_send_q_msg = ""
 
         return (
-            rf"{cmd_runner} \(test1\) raising {error_str} {targets_msg}"
+            rf"SmartThread {cmd_runner} \(test1\) raising {error_str} {targets_msg}"
             f"{pending_msg}{stopped_msg}{unreg_msg}"
             f"{deadlock_msg}{full_send_q_msg}"
         )
@@ -31186,15 +31186,15 @@ class TestSmartThreadSmokeTest:
             (r"smart_init _clean_pair_array entry: alpha \(test1\)"),
             (r"smart_init _clean_pair_array exit: alpha \(test1\)"),
             (
-                r"alpha \(test1\) added alpha to SmartThread registry at UTC "
-                f"{time_match}"
+                r"SmartThread alpha \(test1\) added alpha to SmartThread registry at "
+                f"UTC {time_match}"
             ),
             (
-                r"alpha \(test1\) set state for thread alpha from "
+                r"SmartThread alpha \(test1\) set state for thread alpha from "
                 "ThreadState.Initialized to ThreadState.Registered"
             ),
             (
-                r"alpha \(test1\) set state for thread alpha from "
+                r"SmartThread alpha \(test1\) set state for thread alpha from "
                 "ThreadState.Registered to ThreadState.Alive"
             ),
             (r"smart_init _add_to_pair_array entry: alpha \(test1\), target: alpha"),
@@ -31213,7 +31213,7 @@ class TestSmartThreadSmokeTest:
         ################################################################
         alpha_smart_init_alpha_info_log_msgs = [
             (
-                r"alpha \(test1\) completed initialization of alpha: "
+                r"SmartThread alpha \(test1\) completed initialization of alpha: "
                 "ThreadCreate.Current, ThreadState.Alive, auto_start obviated."
             )
         ]
@@ -31239,27 +31239,27 @@ class TestSmartThreadSmokeTest:
             (r"smart_init _clean_pair_array entry: beta \(test1\)"),
             (r"smart_init _clean_pair_array exit: beta \(test1\)"),
             (
-                r"beta \(test1\) added beta to SmartThread registry at UTC "
+                r"SmartThread beta \(test1\) added beta to SmartThread registry at UTC "
                 f"{time_match}"
             ),
             (
-                r"beta \(test1\) set state for thread beta from "
+                r"SmartThread beta \(test1\) set state for thread beta from "
                 "ThreadState.Initialized to ThreadState.Registered"
             ),
             (r"smart_init _add_to_pair_array entry: beta \(test1\), target: beta"),
             (
-                r"beta \(test1\) added PairKey\(name0='alpha', name1='beta'\) to the "
-                "_pair_array"
+                r"SmartThread beta \(test1\) added PairKey\(name0='alpha', "
+                r"name1='beta'\) to the pair_array"
             ),
             (
-                r"beta \(test1\) added status_blocks entry "
+                r"SmartThread beta \(test1\) added status_blocks entry "
                 r"for PairKey\(name0='alpha', name1='beta'\), name = alpha"
             ),
             (
-                r"beta \(test1\) added status_blocks entry "
+                r"SmartThread beta \(test1\) added status_blocks entry "
                 r"for PairKey\(name0='alpha', name1='beta'\), name = beta"
             ),
-            (rf"beta \(test1\) updated _pair_array at UTC {time_match}"),
+            (rf"SmartThread beta \(test1\) updated _pair_array at UTC {time_match}"),
             (r"smart_init _add_to_pair_array exit: beta \(test1\), target: beta"),
             (r"smart_init _register exit: beta \(test1\), target: beta"),
             (
@@ -31268,7 +31268,7 @@ class TestSmartThreadSmokeTest:
                 "smart_thread.py::SmartThread.__init__:[0-9]+"
             ),
             (
-                r"beta \(test1\) set state for thread beta from "
+                r"SmartThread beta \(test1\) set state for thread beta from "
                 "ThreadState.Registered to ThreadState.Alive"
             ),
             (
@@ -31289,7 +31289,7 @@ class TestSmartThreadSmokeTest:
         ################################################################
         alpha_first_smart_init_beta_info_log_msgs = [
             (
-                r"beta \(test1\) completed initialization of beta: "
+                r"SmartThread beta \(test1\) completed initialization of beta: "
                 "ThreadCreate.Target, ThreadState.Registered, auto_start will proceed."
             )
         ]
@@ -31305,7 +31305,7 @@ class TestSmartThreadSmokeTest:
                 "test_smart_thread_log_msg:[0-9]+"
             ),
             (
-                r"alpha \(test1\) smart_send setup complete for targets: "
+                r"SmartThread alpha \(test1\) smart_send setup complete for targets: "
                 r"\[PairKeyRemote\(pair_key=PairKey\(name0='alpha', "
                 r"name1='beta'\), remote='beta', "
                 r"create_time=[0-9]+\.[0-9]+\)\]"
@@ -31322,7 +31322,7 @@ class TestSmartThreadSmokeTest:
         # alpha_smart_send_info_log_msgs
         ################################################################
         alpha_smart_send_info_log_msgs = [
-            r"alpha \(test1\) smart_send sent message to beta"
+            r"SmartThread alpha \(test1\) smart_send sent message to beta"
         ]
 
         ################################################################
@@ -31337,7 +31337,7 @@ class TestSmartThreadSmokeTest:
                 ".test_smart_thread_log_msg:[0-9]+"
             ),
             (
-                r"alpha \(test1\) smart_resume setup complete for targets: "
+                r"SmartThread alpha \(test1\) smart_resume setup complete for targets: "
                 r"\[PairKeyRemote\(pair_key=PairKey\(name0='alpha', "
                 r"name1='beta'\), remote='beta', "
                 r"create_time=[0-9]+\.[0-9]+\)\]"
@@ -31355,7 +31355,7 @@ class TestSmartThreadSmokeTest:
         # alpha_smart_resume_info_log_msgs
         ################################################################
         alpha_smart_resume_info_log_msgs = [
-            r"alpha \(test1\) smart_resume resumed beta",
+            r"SmartThread alpha \(test1\) smart_resume resumed beta",
         ]
 
         ################################################################
@@ -31370,7 +31370,7 @@ class TestSmartThreadSmokeTest:
                 "test_smart_thread_log_msg:[0-9]+"
             ),
             (
-                r"alpha \(test1\) smart_sync setup complete for targets: "
+                r"SmartThread alpha \(test1\) smart_sync setup complete for targets: "
                 r"\[PairKeyRemote\(pair_key=PairKey\(name0='alpha', "
                 r"name1='beta'\), remote='beta', "
                 r"create_time=[0-9]+\.[0-9]+\)\]"
@@ -31386,8 +31386,8 @@ class TestSmartThreadSmokeTest:
         # alpha_smart_sync_info_log_msgs
         ################################################################
         alpha_smart_sync_info_log_msgs = [
-            r"alpha \(test1\) smart_sync set flag for beta",
-            r"alpha \(test1\) smart_sync achieved with beta",
+            r"SmartThread alpha \(test1\) smart_sync set flag for beta",
+            r"SmartThread alpha \(test1\) smart_sync achieved with beta",
         ]
 
         ################################################################
@@ -31401,7 +31401,7 @@ class TestSmartThreadSmokeTest:
                 "test_smart_thread_log_msg:[0-9]+"
             ),
             (
-                r"alpha \(test1\) set state for thread beta from "
+                r"SmartThread alpha \(test1\) set state for thread beta from "
                 "ThreadState.Alive to "
                 "ThreadState.Stopped"
             ),
@@ -31417,30 +31417,36 @@ class TestSmartThreadSmokeTest:
                 r"name=beta, target_rtn=f1, args=\('beta',\), auto_start=True, "
                 r"max_msgs=10\)"
             ),
-            (r"alpha \(test1\) removed beta from registry for request: smart_join"),
             (
-                r"alpha \(test1\) set state for thread beta from "
+                r"SmartThread alpha \(test1\) removed beta from registry for request: "
+                r"smart_join"
+            ),
+            (
+                r"SmartThread alpha \(test1\) set state for thread beta from "
                 "ThreadState.Stopped to ThreadState.Unregistered"
             ),
             (
-                r"alpha \(test1\) did cleanup of registry at UTC "
+                r"SmartThread alpha \(test1\) did cleanup of registry at UTC "
                 rf"{time_match}, deleted \['beta'\]"
             ),
             (r"smart_join _clean_registry exit: alpha \(test1\)"),
             (r"smart_join _clean_pair_array entry: alpha \(test1\)"),
             (
-                r"alpha \(test1\) removed status_blocks entry for "
+                r"SmartThread alpha \(test1\) removed status_blocks entry for "
                 r"PairKey\(name0='alpha', name1='beta'\), name = alpha"
             ),
             (
-                r"alpha \(test1\) removed status_blocks entry for "
+                r"SmartThread alpha \(test1\) removed status_blocks entry for "
                 r"PairKey\(name0='alpha', name1='beta'\), name = beta"
             ),
             (
-                r"alpha \(test1\) removed _pair_array entry for "
+                r"SmartThread alpha \(test1\) removed _pair_array entry for "
                 r"PairKey\(name0='alpha', name1='beta'\)"
             ),
-            (rf"alpha \(test1\) did cleanup of _pair_array at UTC {time_match}"),
+            (
+                r"SmartThread alpha \(test1\) did cleanup of _pair_array at UTC "
+                f"{time_match}"
+            ),
             (r"smart_join _clean_pair_array exit: alpha \(test1\)"),
             (
                 r"smart_join exit: requestor: alpha \(test1\), targets: "
@@ -31454,9 +31460,9 @@ class TestSmartThreadSmokeTest:
         # alpha_smart_join_info_log_msgs
         ################################################################
         alpha_smart_join_info_log_msgs = [
-            r"alpha \(test1\) did successful smart_join of \['beta'\].",
+            r"SmartThread alpha \(test1\) did successful smart_join of \['beta'\].",
             (
-                r"alpha \(test1\) smart_join completed targets: "
+                r"SmartThread alpha \(test1\) smart_join completed targets: "
                 r"\['beta'\], pending targets: \[\]"
             ),
         ]
@@ -31482,27 +31488,27 @@ class TestSmartThreadSmokeTest:
             (r"smart_init _clean_pair_array entry: beta \(test1\)"),
             (r"smart_init _clean_pair_array exit: beta \(test1\)"),
             (
-                r"beta \(test1\) added beta to SmartThread registry at UTC "
+                r"SmartThread beta \(test1\) added beta to SmartThread registry at UTC "
                 f"{time_match}"
             ),
             (
-                r"beta \(test1\) set state for thread beta from "
+                r"SmartThread beta \(test1\) set state for thread beta from "
                 "ThreadState.Initialized to ThreadState.Registered"
             ),
             (r"smart_init _add_to_pair_array entry: beta \(test1\), target: beta"),
             (
-                r"beta \(test1\) added PairKey\(name0='alpha', name1='beta'\) to the "
-                "_pair_array"
+                r"SmartThread beta \(test1\) added PairKey\(name0='alpha', "
+                r"name1='beta'\) to the pair_array"
             ),
             (
-                r"beta \(test1\) added status_blocks entry "
+                r"SmartThread beta \(test1\) added status_blocks entry "
                 r"for PairKey\(name0='alpha', name1='beta'\), name = alpha"
             ),
             (
-                r"beta \(test1\) added status_blocks entry "
+                r"SmartThread beta \(test1\) added status_blocks entry "
                 r"for PairKey\(name0='alpha', name1='beta'\), name = beta"
             ),
-            (rf"beta \(test1\) updated _pair_array at UTC {time_match}"),
+            (rf"SmartThread beta \(test1\) updated _pair_array at UTC {time_match}"),
             (r"smart_init _add_to_pair_array exit: beta \(test1\), target: beta"),
             (r"smart_init _register exit: beta \(test1\), target: beta"),
             (
@@ -31518,7 +31524,7 @@ class TestSmartThreadSmokeTest:
         ################################################################
         alpha_second_smart_init_beta_info_log_msgs = [
             (
-                r"beta \(test1\) completed initialization of beta: "
+                r"SmartThread beta \(test1\) completed initialization of beta: "
                 "ThreadCreate.Target, ThreadState.Registered, auto_start not requested."
             )
         ]
@@ -31545,30 +31551,36 @@ class TestSmartThreadSmokeTest:
                 r"name=beta, target_rtn=f1, args=\('beta',\), auto_start=False, "
                 r"max_msgs=0\)"
             ),
-            (r"alpha \(test1\) removed beta from registry for request: smart_unreg"),
             (
-                r"alpha \(test1\) set state for thread beta from "
+                r"SmartThread alpha \(test1\) removed beta from registry for request: "
+                r"smart_unreg"
+            ),
+            (
+                r"SmartThread alpha \(test1\) set state for thread beta from "
                 "ThreadState.Registered to ThreadState.Unregistered"
             ),
             (
-                r"alpha \(test1\) did cleanup of registry at UTC "
+                r"SmartThread alpha \(test1\) did cleanup of registry at UTC "
                 rf"{time_match}, deleted \['beta'\]"
             ),
             (r"smart_unreg _clean_registry exit: alpha \(test1\)"),
             (r"smart_unreg _clean_pair_array entry: alpha \(test1\)"),
             (
-                r"alpha \(test1\) removed status_blocks entry for "
+                r"SmartThread alpha \(test1\) removed status_blocks entry for "
                 r"PairKey\(name0='alpha', name1='beta'\), name = alpha"
             ),
             (
-                r"alpha \(test1\) removed status_blocks entry for "
+                r"SmartThread alpha \(test1\) removed status_blocks entry for "
                 r"PairKey\(name0='alpha', name1='beta'\), name = beta"
             ),
             (
-                r"alpha \(test1\) removed _pair_array entry for "
+                r"SmartThread alpha \(test1\) removed _pair_array entry for "
                 r"PairKey\(name0='alpha', name1='beta'\)"
             ),
-            (rf"alpha \(test1\) did cleanup of _pair_array at UTC {time_match}"),
+            (
+                r"SmartThread alpha \(test1\) did cleanup of _pair_array at UTC "
+                f"{time_match}"
+            ),
             (r"smart_unreg _clean_pair_array exit: alpha \(test1\)"),
             (
                 r"smart_unreg exit: requestor: alpha \(test1\), targets: \["
@@ -31583,7 +31595,7 @@ class TestSmartThreadSmokeTest:
         # alpha_smart_unreg_info_log_msgs
         ################################################################
         alpha_smart_unreg_info_log_msgs = [
-            (r"alpha \(test1\) did successful smart_unreg of \['beta'\].")
+            (r"SmartThread alpha \(test1\) did successful smart_unreg of \['beta'\].")
         ]
 
         ################################################################
@@ -31629,7 +31641,7 @@ class TestSmartThreadSmokeTest:
                 "test_smart_thread.py::f1:[0-9]+"
             ),
             (
-                r"beta \(test1\) smart_recv setup complete for targets: "
+                r"SmartThread beta \(test1\) smart_recv setup complete for targets: "
                 r"\[PairKeyRemote\(pair_key=PairKey\(name0='alpha', "
                 r"name1='beta'\), remote='alpha', "
                 r"create_time=[0-9]+\.[0-9]+\)\]"
@@ -31645,7 +31657,7 @@ class TestSmartThreadSmokeTest:
         # beta_smart_recv_info_log_msgs
         ################################################################
         beta_smart_recv_info_log_msgs = [
-            r"beta \(test1\) smart_recv received 1 msg from alpha",
+            r"SmartThread beta \(test1\) smart_recv received 1 msg from alpha",
         ]
 
         ################################################################
@@ -31658,7 +31670,7 @@ class TestSmartThreadSmokeTest:
                 "timeout value: None test_smart_thread.py::f1:[0-9]+"
             ),
             (
-                r"beta \(test1\) smart_wait setup complete for targets: "
+                r"SmartThread beta \(test1\) smart_wait setup complete for targets: "
                 r"\[PairKeyRemote\(pair_key=PairKey\(name0='alpha', "
                 r"name1='beta'\), remote='alpha', "
                 r"create_time=[0-9]+\.[0-9]+\)\]"
@@ -31673,7 +31685,7 @@ class TestSmartThreadSmokeTest:
         # beta_smart_wait_info_log_msgs
         ################################################################
         beta_smart_wait_info_log_msgs = [
-            r"beta \(test1\) smart_wait resumed by alpha",
+            r"SmartThread beta \(test1\) smart_wait resumed by alpha",
         ]
 
         ################################################################
@@ -31686,7 +31698,7 @@ class TestSmartThreadSmokeTest:
                 "timeout value: None test_smart_thread.py::f1:[0-9]+"
             ),
             (
-                r"beta \(test1\) smart_sync setup complete for targets: "
+                r"SmartThread beta \(test1\) smart_sync setup complete for targets: "
                 r"\[PairKeyRemote\(pair_key=PairKey\(name0='alpha', "
                 r"name1='beta'\), remote='alpha', "
                 r"create_time=[0-9]+\.[0-9]+\)\]"
@@ -31702,8 +31714,8 @@ class TestSmartThreadSmokeTest:
         # beta_smart_sync_info_log_msgs
         ################################################################
         beta_smart_sync_info_log_msgs = [
-            r"beta \(test1\) smart_sync set flag for alpha",
-            r"beta \(test1\) smart_sync achieved with alpha",
+            r"SmartThread beta \(test1\) smart_sync set flag for alpha",
+            r"SmartThread beta \(test1\) smart_sync achieved with alpha",
         ]
 
         ################################################################
