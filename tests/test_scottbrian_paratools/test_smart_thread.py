@@ -7928,6 +7928,10 @@ class ConfigVerifier:
         pending_names = ["pending_0"]
         remote_names = ["remote_0"]
         locker_names = ["locker_0", "locker_1", "locker_2", "locker_3", "locker_4"]
+        locker_avail_q: deque[str] = deque()
+        for locker_name in locker_names:
+            locker_avail_q.append(locker_name)
+
         joiner_names = ["joiner_0"]
 
         active_names: list[str] = (
@@ -8035,8 +8039,9 @@ class ConfigVerifier:
         # before: none
         # after : lock_0
         ################################################################
-        obtain_lock_serial_num_0 = self.add_cmd(LockObtain(cmd_runners=locker_names[0]))
-        lock_positions.append(locker_names[0])
+        locker_name = locker_avail_q.pop()
+        obtain_lock_serial_num_0 = self.add_cmd(LockObtain(cmd_runners=locker_name))
+        lock_positions.append(locker_name)
 
         # we can confirm only this first lock obtain
         self.add_cmd(
@@ -8044,7 +8049,7 @@ class ConfigVerifier:
                 cmd_runners=[self.commander_name],
                 confirm_cmd="LockObtain",
                 confirm_serial_num=obtain_lock_serial_num_0,
-                confirmers=locker_names[0],
+                confirmers=locker_name,
             )
         )
 
@@ -8095,8 +8100,9 @@ class ConfigVerifier:
         # before: lock_0|pend_sync
         # after : lock_0|pend_sync|lock_1
         ################################################################
-        self.add_cmd(LockObtain(cmd_runners=locker_names[1]))
-        lock_positions.append(locker_names[1])
+        locker_name = locker_avail_q.pop()
+        self.add_cmd(LockObtain(cmd_runners=locker_name))
+        lock_positions.append(locker_name)
 
         self.add_cmd(
             LockVerify(
@@ -8136,8 +8142,9 @@ class ConfigVerifier:
             # before: lock_0|pend_sync|lock_1|remote_sync
             # after : lock_0|pend_sync|lock_1|remote_sync|lock_4
             ############################################################
-            self.add_cmd(LockObtain(cmd_runners=locker_names[4]))
-            lock_positions.append(locker_names[4])
+            locker_name = locker_avail_q.pop()
+            self.add_cmd(LockObtain(cmd_runners=locker_name))
+            lock_positions.append(locker_name)
 
             self.add_cmd(
                 LockVerify(
@@ -8153,8 +8160,9 @@ class ConfigVerifier:
             # before: lock_0|pend_sync|lock_1|remote_sync|lock_4
             # after : lock_1|remote_sync|lock_4|pend_sync
             ############################################################
-            self.add_cmd(LockRelease(cmd_runners=locker_names[0]))
-            lock_positions.remove(locker_names[0])
+            locker_name = lock_positions.pop(0)
+            locker_avail_q.append(locker_name)
+            self.add_cmd(LockRelease(cmd_runners=locker_name))
             lock_positions.remove(pending_names[0])
 
             lock_positions.append(pending_names[0])
@@ -8171,8 +8179,9 @@ class ConfigVerifier:
             # before: lock_1|remote_sync|lock_4|pend_sync
             # after : lock_1|remote_sync|lock_4|pend_sync|lock_3
             ############################################################
-            self.add_cmd(LockObtain(cmd_runners=locker_names[3]))
-            lock_positions.append(locker_names[3])
+            locker_name = locker_avail_q.pop()
+            self.add_cmd(LockObtain(cmd_runners=locker_name))
+            lock_positions.append(locker_name)
 
             self.add_cmd(
                 LockVerify(
@@ -8188,8 +8197,9 @@ class ConfigVerifier:
             # before: lock_1|remote_sync|lock_4|pend_sync|lock_3
             # after : lock_4|pend_sync|lock_3|remote_sync
             ############################################################
-            self.add_cmd(LockRelease(cmd_runners=locker_names[1]))
-            lock_positions.remove(locker_names[1])
+            locker_name = lock_positions.pop(0)
+            locker_avail_q.append(locker_name)
+            self.add_cmd(LockRelease(cmd_runners=locker_name))
             lock_positions.remove(remote_names[0])
 
             lock_positions.append(remote_names[0])
@@ -8206,8 +8216,9 @@ class ConfigVerifier:
             # before: lock_4|pend_sync|lock_3|remote_sync
             # after : lock_4|pend_sync|lock_3|remote_sync|lock_1
             ############################################################
-            self.add_cmd(LockObtain(cmd_runners=locker_names[1]))
-            lock_positions.append(locker_names[1])
+            locker_name = locker_avail_q.pop()
+            self.add_cmd(LockObtain(cmd_runners=locker_name))
+            lock_positions.append(locker_name)
 
             self.add_cmd(
                 LockVerify(
@@ -8240,8 +8251,9 @@ class ConfigVerifier:
             # after : lock_4|pend_sync|lock_3|remote_sync|lock_1
             #         |smart_join|lock_2
             ############################################################
-            self.add_cmd(LockObtain(cmd_runners=locker_names[2]))
-            lock_positions.append(locker_names[2])
+            locker_name = locker_avail_q.pop()
+            self.add_cmd(LockObtain(cmd_runners=locker_name))
+            lock_positions.append(locker_name)
 
             self.add_cmd(
                 LockVerify(
@@ -8259,8 +8271,9 @@ class ConfigVerifier:
             # after : lock_3|remote_sync|lock_1|smart_join|lock_2
             #         |pend_sync
             ############################################################
-            self.add_cmd(LockRelease(cmd_runners=locker_names[4]))
-            lock_positions.remove(locker_names[4])
+            locker_name = lock_positions.pop(0)
+            locker_avail_q.append(locker_name)
+            self.add_cmd(LockRelease(cmd_runners=locker_name))
             lock_positions.remove(pending_names[0])
 
             lock_positions.append(pending_names[0])
@@ -8279,8 +8292,9 @@ class ConfigVerifier:
             #         |pend_sync
             # after : lock_1|smart_join|lock_2|pend_sync
             ############################################################
-            self.add_cmd(LockRelease(cmd_runners=locker_names[3]))
-            lock_positions.remove(locker_names[3])
+            locker_name = lock_positions.pop(0)
+            locker_avail_q.append(locker_name)
+            self.add_cmd(LockRelease(cmd_runners=locker_name))
             lock_positions.remove(remote_names[0])
 
             self.add_cmd(
@@ -8311,8 +8325,9 @@ class ConfigVerifier:
             # before: lock_0|pend_sync|lock_1|smart_join
             # after : lock_0|pend_sync|lock_1|smart_join|lock_2
             ############################################################
-            self.add_cmd(LockObtain(cmd_runners=locker_names[2]))
-            lock_positions.append(locker_names[2])
+            locker_name = locker_avail_q.pop()
+            self.add_cmd(LockObtain(cmd_runners=locker_name))
+            lock_positions.append(locker_name)
 
             self.add_cmd(
                 LockVerify(
@@ -8327,8 +8342,9 @@ class ConfigVerifier:
             # before: lock_0|pend_sync|lock_1|smart_join|lock_2
             # after : lock_1|smart_join|lock_2|pend_sync
             ############################################################
-            self.add_cmd(LockRelease(cmd_runners=locker_names[0]))
-            lock_positions.remove(locker_names[0])
+            locker_name = lock_positions.pop(0)
+            locker_avail_q.append(locker_name)
+            self.add_cmd(LockRelease(cmd_runners=locker_name))
             lock_positions.remove(pending_names[0])
 
             lock_positions.append(pending_names[0])
@@ -8379,8 +8395,9 @@ class ConfigVerifier:
         # before: lock_1|smart_join|lock_2|pend_sync
         # after : lock_2|pend_sync
         ############################################################
-        self.add_cmd(LockRelease(cmd_runners=locker_names[1]))
-        lock_positions.remove(locker_names[1])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         # releasing lock 1 will allow the smart_join to complete
         lock_positions.remove(joiner_names[0])
 
@@ -8434,8 +8451,9 @@ class ConfigVerifier:
             # before: lock_2|pend_sync
             # after : none
             ############################################################
-            self.add_cmd(LockRelease(cmd_runners=locker_names[2]))
-            lock_positions.remove(locker_names[2])
+            locker_name = lock_positions.pop(0)
+            locker_avail_q.append(locker_name)
+            self.add_cmd(LockRelease(cmd_runners=locker_name))
             lock_positions.remove(pending_names[0])
 
             self.add_cmd(
@@ -8704,8 +8722,9 @@ class ConfigVerifier:
             # before: lock_0|smart_sync|lock_1
             # after : lock_1|smart_sync
             ############################################################
-            self.add_cmd(LockRelease(cmd_runners=locker_names[0]))
-            lock_positions.remove(locker_names[0])
+            locker_name = lock_positions.pop(0)
+            locker_avail_q.append(locker_name)
+            self.add_cmd(LockRelease(cmd_runners=locker_name))
             lock_positions.remove(remote_name)
             lock_positions.append(remote_name)
 
@@ -8769,8 +8788,9 @@ class ConfigVerifier:
             # before: lock_1|smart_sync|lock_0|smart_join|lock_2
             # after : lock_0|smart_join|lock_2|smart_sync
             ############################################################
-            self.add_cmd(LockRelease(cmd_runners=locker_names[1]))
-            lock_positions.remove(locker_names[1])
+            locker_name = lock_positions.pop(0)
+            locker_avail_q.append(locker_name)
+            self.add_cmd(LockRelease(cmd_runners=locker_name))
             lock_positions.remove(remote_name)
 
             lock_positions.append(remote_name)
@@ -8835,8 +8855,9 @@ class ConfigVerifier:
             # before: lock_0|smart_join|lock_2|smart_sync
             # after : lock_2|smart_sync
             ############################################################
-            self.add_cmd(LockRelease(cmd_runners=locker_names[0]))
-            lock_positions.remove(locker_names[0])
+            locker_name = lock_positions.pop(0)
+            locker_avail_q.append(locker_name)
+            self.add_cmd(LockRelease(cmd_runners=locker_name))
             lock_positions.remove(joiner_name)
 
             self.add_cmd(
@@ -8850,8 +8871,9 @@ class ConfigVerifier:
             # before: lock_2|smart_sync
             # after : none
             ############################################################
-            self.add_cmd(LockRelease(cmd_runners=locker_names[2]))
-            lock_positions.remove(locker_names[2])
+            locker_name = lock_positions.pop(0)
+            locker_avail_q.append(locker_name)
+            self.add_cmd(LockRelease(cmd_runners=locker_name))
             lock_positions.remove(remote_name)
 
             self.add_cmd(
@@ -9193,9 +9215,10 @@ class ConfigVerifier:
         # locks held:
         # before: lock_0|remote_sync|lock_1
         # after : lock_1|remote_sync
-        ############################################################
-        self.add_cmd(LockRelease(cmd_runners=locker_names[0]))
-        lock_positions.remove(locker_names[0])
+        ################################################################
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(remote_name)
         lock_positions.append(remote_name)
 
@@ -9262,9 +9285,10 @@ class ConfigVerifier:
         # locks held:
         # before: lock_1|remote_sync|lock_0|pend_sync|lock_2
         # after : lock_0|pend_sync|lock_2|remote_sync
-        ############################################################
-        self.add_cmd(LockRelease(cmd_runners=locker_names[1]))
-        lock_positions.remove(locker_names[1])
+        ################################################################
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(remote_name)
         lock_positions.append(remote_name)
 
@@ -9295,9 +9319,10 @@ class ConfigVerifier:
         # locks held:
         # before: lock_0|pend_sync|lock_2|remote_sync|lock_1
         # after : lock_2|remote_sync|lock_1|pend_sync
-        ############################################################
-        self.add_cmd(LockRelease(cmd_runners=locker_names[0]))
-        lock_positions.remove(locker_names[0])
+        ################################################################
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(pending_name)
         lock_positions.append(pending_name)
 
@@ -9334,9 +9359,10 @@ class ConfigVerifier:
         # locks held:
         # before: lock_2|remote_sync|lock_1|pend_sync|lock_0
         # after : lock_1|pend_sync|lock_0|remote_sync
-        ############################################################
-        self.add_cmd(LockRelease(cmd_runners=locker_names[2]))
-        lock_positions.remove(locker_names[2])
+        ################################################################
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(remote_name)
         lock_positions.append(remote_name)
 
@@ -9353,9 +9379,10 @@ class ConfigVerifier:
         # locks held:
         # before: lock_1|pend_sync|lock_0|remote_sync
         # after : lock_0|remote_sync
-        ############################################################
-        self.add_cmd(LockRelease(cmd_runners=locker_names[1]))
-        lock_positions.remove(locker_names[1])
+        ################################################################
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(pending_name)
 
         self.add_cmd(
@@ -9378,9 +9405,10 @@ class ConfigVerifier:
         # locks held:
         # before: lock_0|remote_sync
         # after : none
-        ############################################################
-        self.add_cmd(LockRelease(cmd_runners=locker_names[0]))
-        lock_positions.remove(locker_names[0])
+        ################################################################
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(remote_name)
 
         self.add_cmd(
@@ -9810,8 +9838,9 @@ class ConfigVerifier:
         # action: drop lock_1, sync_0 does setup and wait at req loop
         # after : lock_0|sync_0a_r
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[1]))
-        lock_positions.remove(lock_names[1])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=lock_name))
         lock_positions.remove(sync_names[0])
         lock_positions.append(sync_names[0])
         self.add_cmd(
@@ -9907,8 +9936,9 @@ class ConfigVerifier:
         #             smart_start setup
         # after : lock_2|sync_0a_r|lock_1|aux_0_s
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[0]))
-        lock_positions.remove(lock_names[0])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=lock_name))
         lock_positions.remove(aux_names[0])
         lock_positions.append(aux_names[0])
         self.add_cmd(
@@ -9961,8 +9991,9 @@ class ConfigVerifier:
         # action: drop lock_2, aux_0 completes smart_start
         # after : lock_1|sync_0a_r|lock_0
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[2]))
-        lock_positions.remove(lock_names[2])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(aux_names[0])
         self.add_cmd(
             LockVerify(
@@ -10034,8 +10065,9 @@ class ConfigVerifier:
         #             behind lock in req loop
         # after : lock_0|sync_0a_r|lock_2|sync_1a_s_r
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[1]))
-        lock_positions.remove(lock_names[1])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[1])
         lock_positions.append(sync_names[1])
         self.add_cmd(
@@ -10103,8 +10135,9 @@ class ConfigVerifier:
         #             sync up
         # after : lock_2|sync_0a_r|lock_1|sync_1a_s_r
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[0]))
-        lock_positions.remove(lock_names[0])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[1])
         lock_positions.append(sync_names[1])
         self.add_cmd(
@@ -10120,8 +10153,9 @@ class ConfigVerifier:
         #             set and completes the sync request
         # after : lock_1|sync_1a_s_r
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[2]))
-        lock_positions.remove(lock_names[2])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[0])
         self.add_cmd(
             LockVerify(
@@ -10135,8 +10169,9 @@ class ConfigVerifier:
         #             sync and completes
         # after : none
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[1]))
-        lock_positions.remove(lock_names[1])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[1])
         self.add_cmd(
             LockVerify(
@@ -11011,8 +11046,9 @@ class ConfigVerifier:
             ############################################################
             # release lock_0
             ############################################################
-            self.add_cmd(LockRelease(cmd_runners=locker_names[0]))
-            lock_positions.remove(locker_names[0])
+            locker_name = lock_positions.pop(0)
+            locker_avail_q.append(locker_name)
+            self.add_cmd(LockRelease(cmd_runners=locker_name))
             # releasing lock 0 will allow the first recv/wait to go and
             # then get behind lock 2
             lock_positions.remove(first_cmd_lock_pos)
@@ -11196,8 +11232,9 @@ class ConfigVerifier:
         # release lock 0 to allow first smart_recv/wait to progress
         # to the lock obtain in _request_loop
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=locker_names[0]))
-        lock_positions.remove(locker_names[0])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         # releasing lock 0 will allow the first recv/wait to go and then
         # get behind lock 2
         lock_positions.remove(first_cmd_lock_pos)
@@ -11231,8 +11268,9 @@ class ConfigVerifier:
         # release lock 1 to allow second smart_recv/wait to progress.
         # For smart_recv/wait, to the lock obtain in _request_loop.
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=locker_names[1]))
-        lock_positions.remove(locker_names[1])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
 
         lock_positions.remove(second_cmd_lock_pos)
         lock_positions.append(second_cmd_lock_pos)
@@ -11265,10 +11303,9 @@ class ConfigVerifier:
         ################################################################
         # release lock_2 to allow first smart_recv/wait to go
         ################################################################
-        release_lock_serial_num_2 = self.add_cmd(
-            LockRelease(cmd_runners=locker_names[2])
-        )
-        lock_positions.remove(locker_names[2])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        release_lock_serial_num_2 = self.add_cmd(LockRelease(cmd_runners=locker_name))
 
         # releasing lock_2 will allow the first recv/wait to go
         lock_positions.remove(first_cmd_lock_pos)
@@ -11299,10 +11336,9 @@ class ConfigVerifier:
         ################################################################
         # release lock_3 to allow second smart_recv/wait to go
         ################################################################
-        release_lock_serial_num_3 = self.add_cmd(
-            LockRelease(cmd_runners=locker_names[3])
-        )
-        lock_positions.remove(locker_names[3])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        release_lock_serial_num_3 = self.add_cmd(LockRelease(cmd_runners=locker_name))
 
         # releasing the second lock will allow the second recv/wait to
         # go and then get the lock exclusive behind the last lock waiter
@@ -11364,19 +11400,18 @@ class ConfigVerifier:
         ################################################################
         # release lock_4 to allow both smart_recv/wait to refresh
         ################################################################
-        release_lock_serial_num_4 = self.add_cmd(
-            LockRelease(cmd_runners=locker_names[4])
-        )
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        release_lock_serial_num_4 = self.add_cmd(LockRelease(cmd_runners=locker_name))
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
                 confirm_cmd="LockRelease",
                 confirm_serial_num=release_lock_serial_num_4,
-                confirmers=locker_names[4],
+                confirmers=locker_name,
             )
         )
 
-        lock_positions.remove(locker_names[4])
         lock_positions.remove(first_cmd_lock_pos)
         lock_positions.remove(second_cmd_lock_pos)
 
@@ -11429,20 +11464,19 @@ class ConfigVerifier:
         # refresh which means the del or add request will proceed and
         # do the refresh ahead of request_0
         ################################################################
-        release_lock_serial_num_1 = self.add_cmd(
-            LockRelease(cmd_runners=locker_names[1])
-        )
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        release_lock_serial_num_1 = self.add_cmd(LockRelease(cmd_runners=locker_name))
 
         self.add_cmd(
             ConfirmResponse(
                 cmd_runners=[self.commander_name],
                 confirm_cmd="LockRelease",
                 confirm_serial_num=release_lock_serial_num_1,
-                confirmers=locker_names[1],
+                confirmers=locker_name,
             )
         )
 
-        lock_positions.remove(locker_names[1])
         lock_positions.remove(first_cmd_lock_pos)
         lock_positions.remove(second_cmd_lock_pos)
 
@@ -16352,8 +16386,9 @@ class ConfigVerifier:
         # action: drop lock_0
         # after : lock_1|sync_1a_s|lock_2|sync_0_r
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[0]))
-        lock_positions.remove(lock_names[0])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=lock_name))
         lock_positions.remove(sync_names[0])
         lock_positions.append(sync_names[0])
         self.add_cmd(
@@ -16381,8 +16416,9 @@ class ConfigVerifier:
         # action: drop lock_1
         # after : lock_2|sync_0_r|lock_0|sync_1a_r
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[1]))
-        lock_positions.remove(lock_names[1])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[1])
         lock_positions.append(sync_names[1])
         self.add_cmd(
@@ -16410,8 +16446,9 @@ class ConfigVerifier:
         #             to top of request loop
         # after : lock_0|sync_1a_r|lock_1|sync_0_r
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[2]))
-        lock_positions.remove(lock_names[2])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[0])
         lock_positions.append(sync_names[0])
         self.add_cmd(
@@ -16439,8 +16476,9 @@ class ConfigVerifier:
         #             its sync_flag as set and completes request
         # after : lock_1|sync_0_r|lock_2
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[0]))
-        lock_positions.remove(lock_names[0])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[1])
         self.add_cmd(
             LockVerify(
@@ -16510,8 +16548,9 @@ class ConfigVerifier:
         # action: drop lock_1
         # after : lock_2|sync_0_r|lock_0|sync_1b_r
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[1]))
-        lock_positions.remove(lock_names[1])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[1])
         lock_positions.append(sync_names[1])
         self.add_cmd(
@@ -16567,8 +16606,9 @@ class ConfigVerifier:
         #             get sync_1b to take for proof of coverage)
         # after : lock_0|sync_0_r|lock_1|sync_1b_r
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[2]))
-        lock_positions.remove(lock_names[2])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[1])
         lock_positions.append(sync_names[1])
         self.add_cmd(
@@ -16583,8 +16623,9 @@ class ConfigVerifier:
         #             completes the request
         # after : lock_1|sync_1b_r
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[0]))
-        lock_positions.remove(lock_names[0])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[0])
         self.add_cmd(
             LockVerify(
@@ -16630,8 +16671,9 @@ class ConfigVerifier:
         #             sync_flag and loops back to top of req loop
         # after : lock_0|sync_0b_s|sync_1b_r
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[1]))
-        lock_positions.remove(lock_names[1])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[1])
         lock_positions.append(sync_names[1])
         self.add_cmd(
@@ -16645,8 +16687,9 @@ class ConfigVerifier:
         # action: drop lock_0, sync_0b and sync_1b should now complete
         # after : none
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[0]))
-        lock_positions.remove(lock_names[0])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[0])
         lock_positions.remove(sync_names[1])
         self.add_cmd(
@@ -16829,8 +16872,9 @@ class ConfigVerifier:
         # action: drop lock_0
         # after : lock_1|recv_1a_s|lock_2|sync_0a_r
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[0]))
-        lock_positions.remove(lock_names[0])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[0])
         lock_positions.append(sync_names[0])
         self.add_cmd(
@@ -16858,8 +16902,9 @@ class ConfigVerifier:
         # action: drop lock_1, recv does setup and waits at req loop
         # after : lock_2|sync_0a_r|lock_0|recv_1a_r
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[1]))
-        lock_positions.remove(lock_names[1])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(recv_names[1])
         lock_positions.append(recv_names[1])
         self.add_cmd(
@@ -16887,8 +16932,9 @@ class ConfigVerifier:
         #             to wait at top of request loop
         # after : lock_0|recv_1a_r|lock_1|sync_0a_r
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[2]))
-        lock_positions.remove(lock_names[2])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[0])
         lock_positions.append(sync_names[0])
         self.add_cmd(
@@ -16916,8 +16962,9 @@ class ConfigVerifier:
         #             deadlock flag and gets behind lock in error path
         # after : lock_1|sync_0a_r|lock_2|recv_1a_e
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[0]))
-        lock_positions.remove(lock_names[0])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(recv_names[1])
         lock_positions.append(recv_names[1])
         self.add_cmd(
@@ -16970,8 +17017,9 @@ class ConfigVerifier:
         # action: drop lock_1, recv_1a raises deadlock and exits
         # after : lock_2|sync_0a_r|lock_0
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[1]))
-        lock_positions.remove(lock_names[1])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(recv_names[1])
         self.add_cmd(
             LockVerify(
@@ -17043,8 +17091,9 @@ class ConfigVerifier:
         #             lock in req loop
         # after : lock_0|sync_0a_r|lock_1|sync_1b_r
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[2]))
-        lock_positions.remove(lock_names[2])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[1])
         lock_positions.append(sync_names[1])
         self.add_cmd(
@@ -17099,8 +17148,9 @@ class ConfigVerifier:
         #             coverage for) and waits at top of req loop
         # after : lock_1|sync_0a_r|lock_2|sync_1b_r
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[0]))
-        lock_positions.remove(lock_names[0])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[1])
         lock_positions.append(sync_names[1])
         self.add_cmd(
@@ -17128,8 +17178,9 @@ class ConfigVerifier:
         #             waits at start of error path
         # after : lock_2|sync_1b_r|lock_0|sync_0a_e
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[1]))
-        lock_positions.remove(lock_names[1])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[0])
         lock_positions.append(sync_names[0])
         self.add_cmd(
@@ -17157,8 +17208,9 @@ class ConfigVerifier:
         #             and gives yet more time and waits in req loop
         # after : lock_0|sync_0a_e|lock_1|sync_1b_r
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[2]))
-        lock_positions.remove(lock_names[2])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[1])
         lock_positions.append(sync_names[1])
         self.add_cmd(
@@ -17185,8 +17237,9 @@ class ConfigVerifier:
         # action: drop lock_0, sync_0 raises deadlock and exits
         # after : lock_1|sync_1b_r|lock_2
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[0]))
-        lock_positions.remove(lock_names[0])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[0])
         self.add_cmd(
             LockVerify(
@@ -17220,8 +17273,9 @@ class ConfigVerifier:
         #             along side of sync_0b
         # after : lock_2|sync_0b_s|sync_1b_r
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[1]))
-        lock_positions.remove(lock_names[1])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[1])
         lock_positions.append(sync_names[1])
         self.add_cmd(
@@ -17235,8 +17289,9 @@ class ConfigVerifier:
         # action: drop lock_2, sync_0b and sync_1b should now complete
         # after : none
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[2]))
-        lock_positions.remove(lock_names[2])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[0])
         lock_positions.remove(sync_names[1])
         self.add_cmd(
@@ -17379,8 +17434,9 @@ class ConfigVerifier:
         # action: drop lock_0, sync_0 does setup and wait at req loop
         # after : lock_1|sync_0a_r
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[0]))
-        lock_positions.remove(lock_names[0])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[0])
         lock_positions.append(sync_names[0])
         self.add_cmd(
@@ -17473,8 +17529,9 @@ class ConfigVerifier:
         # action: drop lock_1, join completes
         # after : lock_0|sync_0a_r|lock_2
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[1]))
-        lock_positions.remove(lock_names[1])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(aux_names[0])
         self.add_cmd(
             LockVerify(
@@ -17556,8 +17613,9 @@ class ConfigVerifier:
         #             smart_start setup
         # after : lock_2|sync_0a_r|lock_1|aux_0_s
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[0]))
-        lock_positions.remove(lock_names[0])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(aux_names[0])
         lock_positions.append(aux_names[0])
         self.add_cmd(
@@ -17610,8 +17668,9 @@ class ConfigVerifier:
         # action: drop lock_2, aux_0 completes smart_start
         # after : lock_1|sync_0a_r|lock_0
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[2]))
-        lock_positions.remove(lock_names[2])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(aux_names[0])
         self.add_cmd(
             LockVerify(
@@ -17683,8 +17742,9 @@ class ConfigVerifier:
         #         behind lock in req loop
         # after : lock_0|sync_0a_r|lock_2|sync_1a_s_r
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[1]))
-        lock_positions.remove(lock_names[1])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[1])
         lock_positions.append(sync_names[1])
         self.add_cmd(
@@ -17740,8 +17800,9 @@ class ConfigVerifier:
         #         sync_1 is resurrected
         # after : lock_2|sync_0a_r|lock_1|sync_1a_s_r
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[0]))
-        lock_positions.remove(lock_names[0])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[1])
         lock_positions.append(sync_names[1])
         self.add_cmd(
@@ -17769,8 +17830,9 @@ class ConfigVerifier:
         #             and waits in error path
         # after : lock_1|sync_1a_s_r|lock_0|sync_0a_e
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[2]))
-        lock_positions.remove(lock_names[2])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[0])
         lock_positions.append(sync_names[0])
         self.add_cmd(
@@ -17799,8 +17861,9 @@ class ConfigVerifier:
         #             wait at top of req loop
         # after : lock_0|sync_0a_e|lock_2|sync_1a_s_r
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[1]))
-        lock_positions.remove(lock_names[1])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[1])
         lock_positions.append(sync_names[1])
         self.add_cmd(
@@ -17814,8 +17877,9 @@ class ConfigVerifier:
         # action: drop lock_0, sync_0 raises error and exits
         # after : lock_2|sync_1a_s_r
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[0]))
-        lock_positions.remove(lock_names[0])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[0])
         self.add_cmd(
             LockVerify(
@@ -17850,8 +17914,9 @@ class ConfigVerifier:
         #             complete the sync
         # after : none
         ################################################################
-        self.add_cmd(LockRelease(cmd_runners=lock_names[2]))
-        lock_positions.remove(lock_names[2])
+        locker_name = lock_positions.pop(0)
+        locker_avail_q.append(locker_name)
+        self.add_cmd(LockRelease(cmd_runners=locker_name))
         lock_positions.remove(sync_names[0])
         lock_positions.remove(sync_names[1])
         self.add_cmd(
