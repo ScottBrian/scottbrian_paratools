@@ -7627,7 +7627,7 @@ class ConfigVerifier:
             )
 
             ############################################################
-            # locker_2 gets behind the smart_join
+            # locker_0 gets behind the smart_join
             # locks held:
             # before: lock_1|smart_req|lock_2|smart_join
             # after : lock_1|smart_req|lock_2|smart_join|lock_0
@@ -7643,8 +7643,8 @@ class ConfigVerifier:
             )
 
             ############################################################
-            # release lock_0 to allow smart_req to do request_set_up
-            # to get pending_request set, and then wait behind lock_2
+            # release lock_1 to allow smart_req to do request_set_up
+            # to get pending_request set, and then wait behind lock_0
             # before going into request loop
             # locks held:
             # before: lock_1|smart_req|lock_2|smart_join|lock_0
@@ -7654,8 +7654,8 @@ class ConfigVerifier:
             locker_avail_q.append(locker_name)
             self.add_cmd(LockRelease(cmd_runners=locker_name))
 
-            # releasing lock 0 will allow the smart_wait to do
-            # request_setup and then get behind lock_2
+            # releasing lock 1 will allow the smart_wait to do
+            # request_setup and then get behind lock_0
             lock_positions.remove(pending_names[0])
             lock_positions.append(pending_names[0])
 
@@ -7702,10 +7702,72 @@ class ConfigVerifier:
 
         if pending_request_tf:
             ############################################################
-            # release lock_1 to allow smart_join to remove remotes
+            # get lock_1 after smart_req
             # locks held:
-            # before: lock_1|smart_join|lock_2|smart_req
-            # after : lock_2|smart_req
+            # before: lock_2|smart_join|lock_0|smart_req
+            # after : lock_2|smart_join|lock_0|smart_req|lock_1
+            ############################################################
+            locker_name = locker_avail_q.pop()
+            self.add_cmd(LockObtain(cmd_runners=locker_name))
+            lock_positions.append(locker_name)
+
+            self.add_cmd(
+                LockVerify(
+                    cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+                )
+            )
+            ############################################################
+            # release lock_2 to allow smart_join to progress to wait for
+            # the lock in its process loop
+            # locks held:
+            # before: lock_2|smart_join|lock_0|smart_req|lock_1
+            # after : lock_0|smart_req|lock_1|smart_join
+            ############################################################
+            locker_name = lock_positions.pop(0)
+            locker_avail_q.append(locker_name)
+            self.add_cmd(LockRelease(cmd_runners=locker_name))
+
+            # releasing lock 2 will allow the smart_join to progress
+            lock_positions.remove(joiner_names[0])
+            lock_positions.append(joiner_names[0])
+
+            self.add_cmd(
+                LockVerify(
+                    cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+                )
+            )
+
+            ############################################################
+            # swap smart_req and joiner to allow joiner to go first
+            # locks held:
+            # before: lock_0|smart_req|lock_1|smart_join
+            # after : lock_0|smart_join|lock_1|smart_req
+            ############################################################
+            lock_pos_1 = lock_positions[1]
+            lock_positions[1] = lock_positions[3]
+            lock_positions[3] = lock_pos_1
+
+            assert lock_positions[0] == locker_names[0]
+            assert lock_positions[1] == joiner_names[0]
+            assert lock_positions[2] == locker_names[1]
+            assert lock_positions[3] == pending_names[0]
+
+            self.add_cmd(
+                LockSwap(
+                    cmd_runners=self.commander_name, new_positions=lock_positions.copy()
+                )
+            )
+            self.add_cmd(
+                LockVerify(
+                    cmd_runners=self.commander_name, exp_positions=lock_positions.copy()
+                )
+            )
+
+            ############################################################
+            # release lock_0 to allow smart_join to remove remotes
+            # locks held:
+            # before: lock_0|smart_join|lock_1|smart_req
+            # after : lock_1|smart_req
             ############################################################
             locker_name = lock_positions.pop(0)
             locker_avail_q.append(locker_name)
@@ -7767,11 +7829,11 @@ class ConfigVerifier:
 
             pe[PE.notify_rem_status_block_def_msg][rem_sb_key] += 1
 
-        if lock_positions:  # if we still hold lock_2
+        if lock_positions:  # if we still hold lock_1 and smart_req
             ############################################################
-            # release lock_2 to allow smart_req to complete
+            # release lock_1 to allow smart_req to complete
             # locks held:
-            # before: lock_2|smart_req
+            # before: lock_1|smart_req
             # after:  None
             ############################################################
             locker_name = lock_positions.pop(0)
@@ -22304,33 +22366,47 @@ class ConfigVerifier:
         lock_verified = False
         while not lock_verified:
             lock_verified = True  # assume lock will verify
+            lock_positions: list[str] = []
             with self.ops_lock:
-                if len(exp_positions) != len(
-                    st.SmartThread._registry[self.group_name].registry_lock.owner_wait_q
-                ):
+                for lock_item in st.SmartThread._registry[
+                    self.group_name
+                ].registry_lock.owner_wait_q:
+                    lock_name = self.get_smart_thread_name(
+                        search_thread=lock_item.thread, group_name="test1"
+                    )
+                    lock_positions.append(lock_name)
+                if exp_positions != lock_positions:
                     lock_verified = False
-                else:
-                    for idx, expected_name in enumerate(exp_positions):
-                        search_thread = (
-                            st.SmartThread._registry[self.group_name]
-                            .registry_lock.owner_wait_q[idx]
-                            .thread
-                        )
-                        test_name = self.get_smart_thread_name(
-                            search_thread=search_thread, group_name="test1"
-                        )
-                        if test_name != expected_name:
-                            lock_verified = False
-                            break
+
+                # if len(exp_positions) != len(
+                #     st.SmartThread._registry[self.group_name].registry_lock.owner_wait_q
+                # ):
+                #     lock_verified = False
+                # else:
+                #     if exp_positions != lock_positions:
+                #         lock_verified = False
+                # for idx, expected_name in enumerate(exp_positions):
+                #     search_thread = (
+                #         st.SmartThread._registry[self.group_name]
+                #         .registry_lock.owner_wait_q[idx]
+                #         .thread
+                #     )
+                #     test_name = self.get_smart_thread_name(
+                #         search_thread=search_thread, group_name="test1"
+                #     )
+                #     if test_name != expected_name:
+                #         lock_verified = False
+                #         break
 
             if not lock_verified:
                 if (time.time() - start_time) > timeout_value:
                     self.abort_all_f1_threads()
                     raise FailedLockVerify(
                         f"lock_verify from {line_num=} timed out after"
-                        f" {timeout_value} seconds waiting for the "
-                        f"{exp_positions=} to match \n"
-                        f"{st.SmartThread._registry[self.group_name].registry_lock.owner_wait_q=} "
+                        f" {timeout_value} seconds waiting for match of \n"
+                        f"{exp_positions=}\n"
+                        f"{lock_positions=}"
+                        # f"{st.SmartThread._registry[self.group_name].registry_lock.owner_wait_q=} "
                     )
                 time.sleep(0.2)
         self.log_test_msg(
