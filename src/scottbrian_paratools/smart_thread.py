@@ -69,10 +69,6 @@ There are three configurations where SmartThread can be instantiated:
     alpha_smart_thread = SmartThread(group_name='group_1', name='alpha')
 
 
-.. invisible-code-block: python
-
-    del SmartThread._registry['group_1']['alpha']
-
 :Example 2: Instantiate a SmartThread with a *target_rtn* argument to
             create a new thread that will execute under the *target_rtn*
             routine:
@@ -88,7 +84,7 @@ There are three configurations where SmartThread can be instantiated:
 
 .. invisible-code-block: python
 
-    del SmartThread._registry['group_1']['beta']
+    alpha_smart_thread.smart_unreg(targets="beta")
 
 
 :Example 3: Instantiate a SmartThread with a *thread* argument while
@@ -110,7 +106,8 @@ There are three configurations where SmartThread can be instantiated:
 
 .. invisible-code-block: python
 
-    del SmartThread._registry['group_1']['beta']
+    alpha_smart_thread.smart_join(targets="beta")
+    alpha_smart_thread.smart_unreg()
 
 The service methods are:
 
@@ -156,7 +153,7 @@ The service methods are:
 
 .. invisible-code-block: python
 
-    del SmartThread._registry['group_1']['alpha']
+    alpha_smart_thread.smart_unreg()
 
 Expected output for Example 4::
 
@@ -204,7 +201,7 @@ Expected output for Example 4::
 
 .. invisible-code-block: python
 
-    del SmartThread._registry['group_1']['alpha']
+    alpha_smart_thread.smart_unreg()
 
 Expected output for Example 5::
 
@@ -247,7 +244,7 @@ Expected output for Example 5::
 
 .. invisible-code-block: python
 
-    del SmartThread._registry['group_1']['alpha']
+    alpha_smart_thread.smart_unreg()
 
 Expected output for Example 6::
 
@@ -304,7 +301,7 @@ Expected output for Example 6::
 
 .. invisible-code-block: python
 
-    del SmartThread._registry['group_1']['alpha']
+    alpha_smart_thread.smart_unreg()
 
 Expected output for Example 7::
 
@@ -362,7 +359,7 @@ Expected output for Example 7::
 
 .. invisible-code-block: python
 
-    del SmartThread._registry['group_1']['alpha']
+    alpha_smart_thread.smart_unreg()
 
 Expected output for Example8::
 
@@ -1046,7 +1043,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['group_1']['alpha']
+            smart_thread.smart_unreg()
 
         Expected out for Example 1::
 
@@ -1987,7 +1984,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['group_1']['alpha']
+            alpha_smart_thread.smart_unreg()
 
         Expected output for Example 1::
 
@@ -2028,7 +2025,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['group_1']['alpha']
+            alpha_smart_thread.smart_unreg()
 
         Expected output for Example 2::
 
@@ -2161,7 +2158,7 @@ class SmartThread:
     # smart_unreg
     ####################################################################
     def smart_unreg(
-        self, *, targets: Iterable[str], log_msg: Optional[str] = None
+        self, *, targets: Optional[Iterable[str]] = None, log_msg: Optional[str] = None
     ) -> set[str]:
         """Unregister threads that are no longer required.
 
@@ -2208,7 +2205,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['group_1']['alpha']
+            alpha_smart_thread.smart_unreg()
 
         Expected output for Example 1::
 
@@ -2354,7 +2351,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['group_1']['alpha']
+            alpha_smart_thread.smart_unreg()
 
         Expected output for Example 1::
 
@@ -2614,7 +2611,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['group_1']['alpha']
+            alpha_smart_thread.smart_unreg()
 
         Expected output for Example 1::
 
@@ -2654,7 +2651,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['group_1']['alpha']
+            alpha_smart_thread.smart_unreg()
 
         Expected output for Example 2::
 
@@ -2694,7 +2691,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['group_1']['alpha']
+            alpha_smart_thread.smart_unreg()
 
         Expected output for Example 3::
 
@@ -2751,7 +2748,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['group_1']['alpha']
+            alpha_smart_thread.smart_unreg()
 
         Expected output for Example 4::
 
@@ -2815,7 +2812,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['group_1']['alpha']
+            alpha_smart_thread.smart_unreg()
 
         Expected output for Example 5::
 
@@ -3113,7 +3110,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['group_1']['alpha']
+            alpha_smart_thread.smart_unreg()
 
         Expected output for Example 1::
 
@@ -3160,7 +3157,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['group_1']['alpha']
+            alpha_smart_thread.smart_unreg()
 
         Expected output for Example 2::
 
@@ -3208,7 +3205,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['group_1']['alpha']
+            alpha_smart_thread.smart_unreg()
 
         Expected output for Example 3::
             mainline alpha entered
@@ -3285,7 +3282,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['group_1']['alpha']
+            alpha_smart_thread.smart_unreg()
 
         Expected output for Example 4::
 
@@ -3592,7 +3589,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['group_1']['alpha']
+            alpha_smart_thread.smart_unreg()
 
         Expected output for Example 1::
 
@@ -3629,7 +3626,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['group_1']['alpha']
+            alpha_smart_thread.smart_unreg()
 
         Expected output for Example 2::
 
@@ -3676,7 +3673,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['group_1']['alpha']
+            alpha_smart_thread.smart_unreg()
 
         Expected output for Example 3::
 
@@ -3731,7 +3728,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['group_1']['alpha']
+            alpha_smart_thread.smart_unreg()
 
         Expected output for Example 4::
 
@@ -4015,7 +4012,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['group_1']['alpha']
+            alpha_smart_thread.smart_unreg()
 
         Expected output for Example 1:
 
@@ -4260,7 +4257,7 @@ class SmartThread:
 
         .. invisible-code-block: python
 
-            del SmartThread._registry['group_1']['alpha']
+            alpha_smart_thread.smart_unreg()
 
         Expected output for Example 1:
 
@@ -5057,7 +5054,9 @@ class SmartThread:
             log_msg=log_msg,
         )
 
-        if request == ReqType.Smart_start and self.name in targets_set:
+        if (request == ReqType.Smart_start and self.name in targets_set) or (
+            request == ReqType.Smart_unreg and self.st_state != ThreadState.Alive
+        ):
             check_thread_is_current = False
         else:
             check_thread_is_current = True

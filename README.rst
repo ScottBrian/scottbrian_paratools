@@ -22,17 +22,18 @@ f1 via the thread_parm_name argument.
     from scottbrian_paratools.smart_thread import SmartThread
     def f1(smart_thread: SmartThread) -> None:
         print('f1 beta entered')
-        beta_smart_thread.smart_send(receivers='alpha',
+        smart_thread.smart_send(receivers='alpha',
                                      msg='hi alpha, this is beta')
-        beta_smart_thread.smart_wait(resumers='alpha')
+        smart_thread.smart_wait(resumers='alpha')
         print('f1 beta exiting')
     print('mainline alpha entered')
 
-    alpha_smart_thread = SmartThread(name='alpha')
+    alpha_smart_thread = SmartThread(name='alpha', group_name='group1')
     beta_smart_thread = SmartThread(name='beta',
-                                    target=f1,
+                                    group_name='group1',
+                                    target_rtn=f1,
                                     auto_start=True,
-                                    thread_parm_name='beta_smart_thread')
+                                    thread_parm_name='smart_thread')
     msg_from_beta = alpha_smart_thread.smart_recv(senders='beta')
     print(msg_from_beta)
 
@@ -43,7 +44,7 @@ f1 via the thread_parm_name argument.
 
 Expected output for Example 1:
 
-.. code-block:: python
+.. sourcecode:: python
 
     mainline alpha entered
     {'beta': ['hi alpha, this is beta']}

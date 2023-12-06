@@ -18,6 +18,8 @@ classifiers = [
 dependencies = [
     "typing_extensions",
     "scottbrian-utils",
+#    "scottbrian-locking",
+    "scottbrian_locking @  file://C:/Users/Tiger/PycharmProjects/scottbrian_locking/dist/scottbrian_locking-2.0.0-py3-none-any.whl",
 ]
 
 [tool.setuptools]
